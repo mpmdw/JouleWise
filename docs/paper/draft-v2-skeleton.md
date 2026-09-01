@@ -33,11 +33,46 @@ ratio forbids the subtitle. -->
 4. Insert exactly one canonical outcome sentence from “Outcome sentence
    forms” in Section 4.
 5. Report the fixed Qwen3-8B-versus-Qwen3-1.7B demonstration as an application
-   of the rule, never as scaling. Fill only authenticated rows:
-   [FILL:DS-25] [FILL:DS-26] [FILL:DS-27] [FILL:DS-28]
-   [FILL:DS-29] [FILL:DS-30] [FILL:DS-31] [FILL:DS-32]
-   [FILL:DS-33] [FILL:PG-01] [FILL:PG-02] [FILL:PG-04]
-   [FILL:PG-05] [FILL:PG-06] [FILL:PG-07] [FILL:PG-08]
+   of the rule, never as scaling. Fill only authenticated rows. The stopped
+   placements read:
+   [FILL:DS-28] — “The decode sizing sum and signed clearance
+   are omitted: the claim-side bound and one-cell/two-quantity rendering are
+   unresolved (registry row DS-28).”
+   [FILL:DS-29] — “The decode claim-side bound
+   is omitted: no producing artifact field is registered, and
+   `deterministic_bounds.total` is not a substitute (registry row DS-29).”
+   [FILL:DS-30] — “The decode floor-gate outcome is omitted: no exact
+   conservative rendering token is registered (registry row DS-30).”
+   [FILL:DS-31] — “The decode direction-gate outcome is omitted: no exact
+   conservative rendering token is registered (registry row DS-31).”
+   [FILL:DS-32] — “The decode verdict is omitted: no professor-facing
+   conservative rendering token is registered (registry row DS-32).”
+   [FILL:DS-33] — “The selected `_v5` prefill claim floor is omitted:
+   `[PREFILL_LENGTH]` is unresolved until G2-a and no professor-facing prefill
+   token is registered (registry row DS-33).”
+   [FILL:PG-01] — “The selected
+   `_v5` prefill contrast estimate is omitted: `[PREFILL_LENGTH]` is unresolved
+   until G2-a and no authenticated estimate token is registered (registry row
+   PG-01).”
+   [FILL:PG-02] — “The selected `_v5` prefill interval is omitted:
+   `[PREFILL_LENGTH]` is unresolved until G2-a and no authenticated lower or
+   upper endpoint tokens are registered (registry row PG-02).”
+   [FILL:PG-04] —
+   “The selected `_v5` prefill sizing sum and signed clearance are omitted: the
+   claim-bound token family and rendering contract are not registered (registry
+   row PG-04).”
+   [FILL:PG-05] — “The selected `_v5` prefill claim-side bound is
+   omitted: no named producing field or rendering token is registered (registry
+   row PG-05).”
+   [FILL:PG-06] — “The selected `_v5` prefill floor-gate outcome
+   is omitted: no conservative rendering token is registered (registry row
+   PG-06).”
+   [FILL:PG-07] — “The selected `_v5` prefill direction-gate outcome
+   is omitted: no conservative rendering token is registered (registry row
+   PG-07).”
+   [FILL:PG-08] — “The selected `_v5` prefill verdict is omitted: no
+   authenticated professor-facing verdict token is registered (registry row
+   PG-08).”
 6. State the retained negative: [FILL:DG-067] of [FILL:DG-068] short-prompt
    phases failed the three-overlap rule; [FILL:DG-069] passed.
 7. End with the named-machine, named-software, named-counter boundary and the
@@ -64,14 +99,17 @@ ratio forbids the subtitle. -->
    component's point-only bound, both with independently moved edges and with
    the timing error shared inside each four-run comparison?
 7. Introduce the fixed identities [FILL:V5-ID-001] and [FILL:V5-ID-002] and the
-   workload pins [FILL:V5-WL-001]–[FILL:V5-WL-005]. Call the pair a
-   demonstration of the decision rule, not a scaling experiment.
+   workload pins [FILL:V5-WL-001]–[FILL:V5-WL-004]. The stopped final pin reads
+   [FILL:V5-WL-005] — “The selected prefill prompt pin is omitted: its
+   G2-a-bound `joulewise.prefill_prompt_pin.v2` record has not issued (registry
+   row V5-WL-005).” Call the pair a demonstration of the decision rule, not a
+   scaling experiment.
 8. State the short-prefill question and scope. Do not insert result prose here
    until Sections 3 and 6 are filled. -->
 
 ## 2. In-window calibration method
 
-Prompt processing (*prefill*) reads the prompt through the first output token; token generation (*decode*) emits later output tokens. A phase boundary is the runtime-recorded time separating those phases. JouleWise assigns each *powermetrics* sampling record to a phase using that boundary. A record contains the CPU, GPU, and neural-engine average power over one shared start-to-end interval; the calculation clips that interval to the phase and multiplies each channel's average power by the clipped time. A phase boundary is therefore a separate measurement problem from repeatability. If a boundary is placed a few tens of milliseconds late while power falls by tens of watts, power multiplied by misplaced time assigns about a joule to the wrong phase. The request total does not change: energy removed from one phase is added to the other. Repetition can reduce random scatter, but it cannot remove this systematic reassignment.
+Prompt processing (*prefill*) reads the prompt through the first output token; token generation (*decode*) emits later output tokens. A phase boundary is the runtime-recorded time separating those phases. macOS's built-in power sampler, *powermetrics*, emits one record containing the CPU, GPU, and neural-engine average power over one shared start-to-end interval; JouleWise assigns that sampling record to a phase using the boundary and multiplies each channel's average power by the part of the interval in that phase. A phase boundary is therefore a separate measurement problem from repeatability. If a boundary is placed a few tens of milliseconds late while power falls by tens of watts, power multiplied by misplaced time assigns about a joule to the wrong phase. The request total does not change: energy removed from one phase is added to the other. Repetition can reduce random scatter, but it cannot remove this systematic reassignment.
 
 Figure 1 shows interval-average power around the recorded boundary between prompt processing and token generation, with the allowed boundary positions marked as a band. The hatched area is the energy reassigned between phases when the boundary moves across that band; the request total does not change.
 
@@ -87,15 +125,15 @@ For each commanded pulse, the detector estimates resting GPU power from samples 
 
 The clock anchor uses five wall-clock readings, each bracketed by readings from a monotonic clock—a counter that advances but is never corrected to civil time—together with every whole-second label embedded in the native power records. It retains the complete set of straight-line clock mappings whose rate, offset, first-record endpoint, stamp brackets, native labels, and launch-to-first-parse ordering agree. The method permits the two clocks to run at slightly different fixed rates and charges the full allowed departure of a native label from that line. It refuses missing or malformed inputs, an empty or unbounded set, inadequate capture span, implausible clock rate, active automatic network-time correction, or a bound outside the accepted range. Otherwise it finds the earliest and latest allowed first-record endpoint and adds four separately named allowances. This corrected rate-aware model replaced the false equal-rate assumption, which could move every fitted edge in the same direction.
 
-Finally, the pre-window and post-window capture bounds form a bracket. A difference greater than 10.164835 ms refuses the window. Otherwise the operative bound is the larger capture bound plus the larger of their absolute difference and the 9.724-ms screen; that complete, never-zero allowance is added once. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
+Finally, the pre-window and post-window capture bounds form a bracket. The calibration policy derives two constants from its 17-capture corpus: the two-draw, 99% Student-\(t\) prediction amount—its predicted difference between two fresh capture bounds—is \(10.164834757777545\) ms, printed as the \(10.164835\)-ms maximum permitted pre/post difference, and its separately retained **minimum allowance** is \(9.724\) ms. The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. Appendix A.3.6 calls one capture's pulse-plus-anchor bound \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
 
 Commanded GPU pulses calibrate edge placement, but applying that bound to sustained mixed inference is an assumption. The before-and-after bracket tests for change across the measurement window; it does not test whether the pulse-derived bound applies to inference.
 
-Figure 2 orders the before-and-after pulse calibrations, entry check, reference runs, and science blocks within one measurement window. Each science block uses A/B/B/A order—condition A, condition B, condition B, condition A—and names the four measured energies \(A_1,B_1,B_2,A_2\) in that order. Its block difference is \((B_1+B_2-A_1-A_2)/2\); a positive value means condition B used more energy than condition A. Matching the average run time of the two A members to that of the two B members cancels steady linear drift, while curvature remains covered by the separately measured whole-window allowance.
+Figure 2 orders the before-and-after pulse calibrations, entry check, reference runs, and science blocks within one measurement window. A **stage** is one declared group of runs measured back-to-back inside that window. Each science block uses A/B/B/A order—condition A, condition B, condition B, condition A—and names its four **members**, meaning its four individual runs, \(A_1,B_1,B_2,A_2\) in that order. Its block difference is \((B_1+B_2-A_1-A_2)/2\); a positive value means condition B used more energy than condition A. Matching the average run time of the two A members to that of the two B members cancels steady linear drift. Curvature remains covered by a separately measured **whole-window allowance**: one joule amount for each **energy family**, a group reduced under one energy definition such as gross energy or idle-subtracted energy, later added once to its component bound, equal to the larger of the reference-run trajectory excursion and that family's issued repeatability bound.
 
 ![Figure 2. One measurement window and the drift-cancelling A/B/B/A order.](figures/fig2_window_timeline.svg)
 
-*Figure 2. Schematic structure of one measurement window. The upper session-time arrow orders the pre-calibration, admission gate, three opening references, two groups of A/B/B/A science stages around one midpoint reference, three closing references, and post-calibration. The blue spanning bracket joins the two pulse trains; the lower inset's axes, dashed drift line, four A/B/B/A circles, common-time line, and averaging brackets show why steady drift cancels while curvature and whole-window drift still require a measured allowance. Stage widths are not to scale, and no measured value is shown.*
+*Figure 2. Schematic structure of one measurement window. The upper session-time arrow orders the pre-calibration, admission gate, three opening references, two groups of A/B/B/A science stages around one midpoint reference, three closing references, and post-calibration. The blue spanning bracket joins the two pulse trains; the lower inset's axes, dashed drift line, four A/B/B/A circles, common-time line, and averaging brackets show why steady drift cancels while curvature still requires the measured whole-window allowance defined above. Stage widths are not to scale, and no measured value is shown.*
 
 ### One diagnostic reconstruction
 
@@ -134,9 +172,16 @@ The following table and arithmetic reconstruct one retained diagnostic capture f
    intervals fit inside an earlier comparator; they do not establish a
    population-coverage percentage.
 5. Fill the surviving characterization rows only from an issued authenticated
-   report: [FILL:DS-02] [FILL:DS-03] [FILL:DS-05] [FILL:DS-06]. If a row is
-   stopped, print its refusal and no nearby quantity. DS-04 and DS-07 are
-   retired future-work rows; DS-01 is the separate phase-cell hold. -->
+   report. Until then, [FILL:DS-02] — “The phase-consistency characterization
+   result is omitted: its named supplier is an unissued authenticated report
+   (registry row DS-02).” [FILL:DS-03] — “The workload-response characterization
+   result is omitted: its named supplier is an unissued authenticated report
+   (registry row DS-03).” [FILL:DS-05] — “The phase-accounting characterization
+   result is omitted: its named supplier is an unissued authenticated report
+   (registry row DS-05).” [FILL:DS-06] — “The drift-and-recovery
+   characterization result is omitted: its named supplier is an unissued
+   authenticated report (registry row DS-06).” DS-04 and DS-07 are retired
+   future-work rows; DS-01 is the separate phase-cell hold. -->
 
 ### Pilot observations under the retired calculation
 
@@ -160,6 +205,15 @@ The following table and arithmetic reconstruct one retained diagnostic capture f
 show one record-clipping example in joules. After it, build the guarded
 published component floors, cell maximum, Holm correction, and two directional
 claim gates. Do not move g(n) or a whole-window allowance into either ratio. -->
+
+To clip a record is to keep only the part of its time interval inside the
+phase, then multiply that duration by the record's average power. For example,
+a 30-W record from 1.000 to 1.100 s cut at a phase boundary of 1.040 s gives
+prompt processing \(30\times0.040=1.20\) J and token generation
+\(30\times0.060=1.80\) J. Moving the permitted boundary to 1.050 s would
+instead give 1.50 J to each phase. This 0.30-J movement is the physical reason
+to calculate a bound on a false phase-energy difference rather than treating
+the recorded split as exact.
 
 ### Comparing the boundary-moved and point-only bounds
 
@@ -185,9 +239,13 @@ A. The order gives the two A runs and the two B runs the same average position
 in time, which cancels steady linear drift; curved change remains covered by a
 separate whole-window allowance.
 
-For either component, first calculate a **point-only unguarded bound**. “Point
-only” means using each admitted energy at its recorded value. “Unguarded” means
-before the later small-sample multiplier and before the whole-window allowance.
+For either component, first calculate a **point-only unguarded bound**. An
+**admitted energy** is an energy from a run that passed the Section 5 entry
+checks and may therefore bear a claim. “Point only” means using each admitted
+energy at its recorded value. “Unguarded” means before the later small-sample
+multiplier and before the whole-window allowance. Here \(n\), the number of
+**independent units**, counts one repeated run for the absolute component and
+one four-run A/B/B/A block for the comparative component.
 For repeated energies \(E_i\), calculate their mean \(\bar E\), residuals
 \(r_i=E_i-\bar E\), and residual mean \(\bar r\). Calculate the sample
 standard deviation as
@@ -252,35 +310,43 @@ R=\frac{U_{\mathrm{corner}}}{U_{\mathrm{point}}}.
 
 The numerator and denominator are therefore the same complete unguarded
 formula, once after allowed edge movement and once at the recorded points.
-Neither is a timing term alone, a guarded published floor, or a floor after
-window drift is added. If \(U_{\mathrm{point}}=0\), the program refuses with
-`dominance_ratio_zero_denominator`; it does not print infinity. Exact equality
-at \(R=2\) passes. The threshold 2 is a fixed twofold safety factor chosen
-before collection: allowed boundary movement must add at least one entire
-point-only bound. A threshold merely above 1 would let any positive interval
-width do the decisive work.
+Neither is a timing term alone or a value after the multiplier or
+whole-window allowance is added. In this paper, allowed boundary movement
+**dominates** a component only when \(R\ge2\): it adds at least one entire
+point-only bound. Exact equality at \(R=2\) passes. A threshold merely above 1
+would let any positive interval width do the decisive work. If
+\(U_{\mathrm{point}}=0\), the program refuses with the fixed reason name
+`dominance_ratio_zero_denominator`; it does not print infinity.
+
+Here, **authenticated** means that the evidence, plan, and close-out records
+carry the expected SHA-256 fingerprints and their named inputs agree. A
+missing fingerprint, a mismatch, or a required input that cannot be checked is
+unauthenticated and cannot select a ratio outcome.
 
 The retained pilot arithmetic illustrates the quotient without supplying a
 campaign result. Under the retired guarded calculation, the same multiplier
 was applied to each corner value and its matching point value, so it cancels
 from their quotient. The three corner/point pairs are
 \(3.153/0.2888=10.92\), \(2.922/0.4934=5.92\), and
-\(2.184/0.3113=7.02\) after the registered rounding
+\(2.184/0.3113=7.02\) after rounding fixed before collection in a plan whose
+SHA-256 fingerprint identifies its exact bytes (the plan's **registered
+rounding**)
 ([FILL:DG-044]–[FILL:DG-052]). They show the numerical effect of recalculating
 the complete formula at the worst joint endpoint choice, but they are pilot
 evidence and cannot fill a current campaign ratio.
 
 Independent movement is deliberately conservative, but some timing error is
 shared by all four members of one A/B/B/A block. Rebuild that physical split
-before the producer combines it into one width. For a block \(j\), start with its admitted
-point difference \(\delta_j\). Reintegrate the four retained power traces after
-moving all four phase starts by the same shift while holding their ends fixed.
-The shift candidates are \(-b,0,+b\), where \(b\) is the authenticated shared
-edge bound, plus every shift within \([-b,b]\) that makes a retained power
-record's start or end coincide with one of the four phase starts. The resulting
-block differences form the onset set \(O_j\). Repeat for the four phase ends,
-using the analogous record-edge coincidences and holding starts fixed, to form
-the offset set \(P_j\). Both sets include the zero-shift value \(z_j\).
+before combining the two movements into one width. For a block \(j\), start
+with its admitted point difference \(\delta_j\). Reintegrate the four retained
+power traces after moving all four phase starts by the same shift while holding
+their ends fixed. The shift candidates are \(-b,0,+b\), where \(b\) is the
+window's authenticated operative timing bound from Section 2, plus every shift
+within \([-b,b]\) that makes a retained power record's start or end coincide
+with one of the four phase starts. The resulting block differences form the
+onset set \(O_j\). Repeat for the four phase ends, using the analogous
+record-edge coincidences and holding starts fixed, to form the offset set
+\(P_j\). Both sets include the zero-shift value \(z_j\).
 
 Define the shared lower and upper excursions
 
@@ -297,9 +363,29 @@ q_j=\max(|d_j^-|,|d_j^+|)+|z_j-\delta_j|.
 
 Thus \(q_j\) is the farther common start-plus-end movement, plus any difference
 between recomputing energy at zero shift and the admitted block value. The
-implementation pads the extrema outward by 64 half-units of binary64—the usual
-64-bit floating-point number format—rounding at the largest input magnitude so
-the printed enclosure cannot round inward.
+implementation prevents a printed interval from rounding inward. In
+**binary64**, the usual 64-bit floating-point format, `ulp(1.0)` is the gap
+between 1 and the next larger representable number. The **member-envelope
+integral sum** is
+\(\sum_{m\in\{A_1,B_1,B_2,A_2\}}|c_m|\int_{\mathrm{start}_m-b}^{\mathrm{end}_m+b}P_m(t)\,dt\),
+where \(c_m=(-1/2,+1/2,+1/2,-1/2)\) and \(P_m(t)\) is member \(m\)'s
+interval-average-power trace, held at each record's reported average across
+that record's time interval. This nonnegative joule sum supplies a scale
+large enough to cover all four member integrals before their signed contrast
+is formed. It sets
+\(M=\max(1,|\delta_j|,|z_j|,\max_{o\in O_j}|o|,\max_{p\in P_j}|p|,\text{member-envelope integral sum})\), takes
+\(p=64\,[\operatorname{ulp}(1.0)/2]M\), subtracts \(p\) from the lower
+extreme and adds \(p\) to the upper extreme, and then moves each resulting
+endpoint four representable binary64 values outward. The factor 64 pays for
+the finite set of floating-point operations before the enclosure is printed.
+For the first two-block fixture below, (M=103.06152807459057) J gives
+
+\[
+p=64(2^{-53})(103.06152807459057)=7.322962010973595\times10^{-13}\ \mathrm{J},
+\]
+
+before the four outward binary64 steps. The amount is small, but its direction
+is fixed: the printed enclosure cannot become narrower through rounding.
 
 Next set the shared calibration-pulse timing movement to zero and, for each of
 the four block members, recompute phase energy from the same power trace while
@@ -350,39 +436,41 @@ shared signs and all four local-sign pairs yields
 \(R_{cm}=3.6330628732\), which passes 2. The fixture demonstrates the
 arithmetic only.
 
-### Outcome sentence forms
-
-Select exactly one after authenticating every required ratio. Do not soften,
-combine, or mechanically retensor these sentences.
-
-**A — all required ratios pass:**
-
-> Every required independent-edge ratio \(R\) was at least 2 and every required comparative shared-error ratio \(R_{cm}\) was at least 2, so allowed boundary movement at least doubled every component's point-only bound on the named M3 Max hardware, MLX inference software, and *powermetrics* power-recording configuration. This result supports the headline that boundary placement dominates point-only variation only if the post-campaign inserted-gap check supports applying the pulse-derived timing bound to inference.
-
-**B — any required ratio fails or refuses:**
-
-> At least one required independent-edge ratio \(R\) or comparative shared-error ratio \(R_{cm}\) was below 2 or could not be evaluated under its registered refusal rule; we therefore withdraw the boundary-doubling sentence and report each failed or excluded component without claiming that boundary placement dominated point-only variation.
-
 ### Adding publication safeguards after the ratio
 
 The ratio is calculated before the safeguards used to publish the final
-resolution bound, called the **cell floor** in the artifacts. For
-\(n\ge5\) independent units, first apply the fixed small-sample multiplier
+**resolution bound**, the largest false phase-energy difference this cell
+admits. The final resolution bound is called the **cell floor** in the
+artifacts. For \(n\ge5\) independent units, first apply the fixed
+small-sample multiplier
 
 \[
 g(n)=\max\!\left(1,\sqrt{9/(n-1)}\right).
 \]
 
-For example, five units give \(g(5)=1.5\), while ten give \(g(10)=1\).
-Fewer than five units remain diagnostic because the registered multiplier
-does not authorize a published component there.
+The 9 is \(10-1\): the multiplier compares the residual degrees of freedom
+at the 10-unit design point with the \(n-1\) residual degrees of freedom
+actually observed. It is an operational widening rule, not a population-
+coverage or confidence guarantee. For example, five units give \(g(5)=1.5\),
+while ten give \(g(10)=1\). Below five units the calculation deliberately
+returns no multiplier and no publishable component; its unguarded value is
+diagnostic only.
 
-Next add that component's whole-window allowance \(A_k\) once. This allowance
-is the larger of the measured reference-trajectory excursion and the issued
-repeatability bound for the same family. It covers curved or other non-linear
-change after A/B/B/A order cancels only a steady linear trend. It is a joule
-quantity and is distinct from the timing allowance already embedded in each
-energy interval. The published components and cell floor are
+Next add that component's whole-window allowance \(A_k\) once. For a named
+energy family \(k\), take the means of its opening, midpoint when present, and
+closing reference runs. The **reference-trajectory excursion** is the largest
+of those means minus the smallest. The **issued repeatability bound** is the
+positive endpoint bound for that family from an earlier retained calculation,
+not a number re-estimated from this window. Its artifact field is
+`replicated_endpoint_bound_j` when the reference protocol has a midpoint and
+`single_member_endpoint_bound_j` otherwise. The forcing problem is a rise and
+fall: A/B/B/A order cancels a steady straight-line change but not a path that
+turns between references. Then \(A_k\) is the larger of that independent bound
+and the observed excursion. Thus reference means 10.0, 10.6, and 10.2 J have
+an excursion of \(10.6-10.0=0.6\) J; with an issued 0.4-J repeatability bound,
+\(A_k=\max(0.6,0.4)=0.6\) J. It is a joule quantity and is distinct from the
+timing allowance already embedded in each energy interval. The published
+components and cell floor are
 
 \[
 F_{\mathrm{abs}}=g(n)U_{\mathrm{abs,corner}}+A_{\mathrm{abs}},\qquad
@@ -405,24 +493,36 @@ but correctly refuses \(R\); it supplies no boundary-doubling result.
 
 Two directional comparisons—token generation and prompt processing—share one
 two-sided Holm step-down correction, which keeps the chance of any false
-direction claim across the pair at 0.05. Order the two raw
-probabilities \(p_{(1)}\le p_{(2)}\). Compare the first with 0.025; only if it
-passes, compare the second with 0.05. For example, 0.012 passes 0.025 and 0.041
-then passes 0.05. If one contrast is missing, its slot remains: a sole value
-0.041 is compared with 0.025 and fails, while the missing contrast cannot pass.
+direction claim across the pair at 0.05. For each comparison, form the ten
+A/B/B/A block differences \(B-A\), divide their mean by its total standard
+error (repeat scatter combined with metrology scatter), and compare that
+statistic with a Student-\(t\) distribution with nine degrees of freedom. The
+null hypothesis is zero mean difference; “two-sided” counts equally extreme
+positive and negative statistics. The resulting tail area is that comparison's
+**raw probability** \(p\). Order the two raw probabilities
+\(p_{(1)}\le p_{(2)}\). Compare the first with 0.025; only if it passes,
+compare the second with 0.05. For example, 0.012 passes 0.025 and 0.041 then
+passes 0.05. If one contrast is missing, its slot remains: a sole value 0.041
+is compared with 0.025 and fails, while the missing contrast cannot pass.
 
 A directional result then faces two different checks. The magnitude check
 requires the absolute point estimate to exceed \(F_{\mathrm{cell}}\); failure
-means not resolvable, not zero. The direction check requires both complete
-uncertainty intervals to lie wholly on the direction fixed before collection
-and the Holm-adjusted test to pass. In the synthetic example, a 10.0 J point
-estimate exceeds the 3.0484 J floor. Its measurement-uncertainty interval is
-[9.5, 10.5] J;
-adding a 0.25 J deterministic allowance on both sides gives [9.25, 10.75] J.
-Both intervals remain positive and the adjusted test passes, so the example
-supports the positive direction. The 0.25 J allowance is not a separate
-planning-only amount added to the floor, and neither decision gate compares
-against such a planning sum.
+means **not resolvable**—the estimate does not clear the cell floor—not zero.
+The direction check requires two named complete uncertainty intervals: the
+measurement interval, formed from the total standard error, and the decision
+interval, formed by extending both ends of that measurement interval by the
+sum of the recorded deterministic bounds. A deterministic bound is a
+non-random maximum displacement carried in the authenticated block record.
+For each named kind, use its recorded contrast bound when present, otherwise
+add its A-side and B-side bounds; average that kind across the ten blocks, then
+sum those kind averages. Both intervals must lie wholly on the direction fixed
+before collection and the Holm-adjusted test must pass. In the synthetic
+example, a 10.0-J point estimate exceeds the 3.0484-J floor. Its measurement
+interval is [9.5, 10.5] J. If the authenticated deterministic-bound list for
+that example contains 0.10 J and 0.15 J, its sum is 0.25 J and the decision
+interval is [\(9.5-0.25\), \(10.5+0.25\)] = [9.25, 10.75] J. Both intervals
+remain positive and the adjusted test passes, so the example supports the
+positive direction.
 
 The results table's **signed clearance or shortfall** is the absolute point
 estimate minus the cell floor. A positive value is the amount by which the
@@ -430,6 +530,36 @@ magnitude check clears; zero or a negative value is the shortfall and cannot
 pass. The synthetic example prints \(10.0-3.0484=6.9516\) J. This difference
 summarizes the magnitude check; it does not replace either uncertainty
 interval used by the direction check.
+
+### Outcome sentence forms
+
+Select exactly one only after the authenticated close-out artifact has checked
+all eight independent-edge ratios and all four comparative shared-error ratios.
+Do not soften, combine, or mechanically retensor these sentences.
+
+**A — every required ratio passes:**
+
+> Every required independent-edge ratio \(R\) was at least 2 and every required comparative shared-error ratio \(R_{cm}\) was at least 2, so allowed boundary movement at least doubled every component's point-only bound on the named M3 Max hardware, MLX, Apple's on-device inference framework, and *powermetrics* power-recording configuration. This result supports the headline that boundary placement dominates point-only variation only if the post-campaign **inserted-gap check**—a test that inserts an approximately 500-ms no-work gap and compares its independently known edges with the power record—supports applying the pulse-derived timing bound to inference.
+
+**B — an authenticated, evaluable ratio is below 2:**
+
+> Every required ratio was authenticated and evaluable, but at least one independent-edge ratio \(R\) or comparative shared-error ratio \(R_{cm}\) was below 2. We therefore withdraw the boundary-doubling sentence and report each failed component without claiming that boundary placement dominated point-only variation.
+
+**Refusal — a required ratio is missing, unauthenticated, or has a zero denominator:**
+
+> A required ratio was missing, unauthenticated, or had a zero denominator and therefore could not be evaluated under the fixed pre-collection rule. This selects neither outcome A nor outcome B, stops all branch-dependent filling, and reports the recorded refusal reason without a boundary-doubling claim.
+
+**Figure 3 is required here.** It must show three separate paths from the
+same authenticated evidence: an exclusion path that stops before either gate;
+a magnitude path that compares the absolute estimate with
+\(F_{\mathrm{cell}}\); and a direction path that takes the measurement interval,
+decision interval, Student-\(t\) raw probability, and Holm result to a fixed
+positive or negative direction. It must also show the four A/B/B/A members,
+one shared sign spanning their blocks, their independent local signs, and the
+corner endpoint choices that feed the two ratios. The figure must label every
+input, every stop, the two intervals, the two thresholds 0.025 and 0.05, and
+the three outcomes above; it must show no campaign number until a fillable
+artifact exists.
 
 <!-- CAMPAIGN FILL LEDGER:
 1. Report all eight independent-edge ratios:
@@ -451,8 +581,9 @@ interval used by the direction check.
    [FILL:R_cm_8B_prefill_p[PREFILL_LENGTH]_abs]
    [FILL:R_cm_8B_decode_abs].
 4. Apply Holm's two-comparison correction for token generation and
-   [FILL:V5-G2A-001]-token prompt processing. A missing contrast retains its
-   place in m=2 and cannot reject.
+   [FILL:V5-G2A-001] — “The selected prefill length is omitted: the hash-bound
+   G2-a selection record has not issued (registry row V5-G2A-001).” prompt
+   processing. A missing contrast retains its place in m=2 and cannot reject.
 5. Build Figure 3 from three distinct paths: evidence exclusion before either
    gate; magnitude against the final cell floor; direction from the complete
    intervals and adjusted test. -->
@@ -484,7 +615,10 @@ The refusal log is part of the result. It preserves contaminated members, calibr
 
 The repository is tamper-evident for the operator's own benefit—a way to catch mistakes—not tamper-proof against another program or person. It assumes a single trusted operator, so its gates defend against error and post-hoc choice rather than an adversary; they provide internal consistency, not third-party provenance.
 
-The repository artifact guide holds the maintainer-facing path conventions, freeze receipts, generated-state checks, and reissue workflow; Appendix A retains the scientific route from raw bytes to the reported verdict.
+The repository artifact guide holds the maintainer-facing path conventions,
+**freeze receipts**—records that fix the plan bytes and the time those bytes
+were frozen—generated-state checks, and reissue workflow; Appendix A retains
+the scientific route from raw bytes to the reported verdict.
 
 ## 6. Demonstration results
 
@@ -500,22 +634,31 @@ future tense in the frozen draft. -->
 4. Print the fixed Qwen3 pair's magnitude gate, direction gate, and result.
 5. Keep the pairwise result separate from scaling language. -->
 
+The selected prompt length remains held. **G2-a** is the fixed-before-
+collection shakedown that tests the allowed prompt lengths before any energy
+claim. A **hash-bound** selection record carries the SHA-256 digest of the
+G2-a record that selected that length, so a later length cannot silently replace
+it. A **prompt pin** is the retained record of the selected prompt text and
+token IDs together with its tokenizer and generation rules.
+
 | Phase | Model | Cell floor | \(R\), absolute | \(R\), comparative | \(R_{cm}\), absolute | \(R_{cm}\), comparative | Registry status |
 |---|---|---:|---:|---:|---|---:|---|
-| prompt processing, [FILL:V5-G2A-001] tokens | Qwen3-1.7B | [FILL:DS-11] | [FILL:R_1p7B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_1p7B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_cm_1p7B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:DS-09] [FILL:DS-10] [FILL:DS-12] |
-| prompt processing, [FILL:V5-G2A-001] tokens | Qwen3-8B | [FILL:DS-15] | [FILL:R_8B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_8B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:R_cm_8B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_cm_8B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:DS-13] [FILL:DS-14] [FILL:DS-16] |
-| token generation | Qwen3-1.7B | [FILL:DS-19] | [FILL:R_1p7B_decode_abs] | [FILL:R_1p7B_decode_cmp] | [FILL:R_cm_1p7B_decode_abs] | [FILL:R_cm_1p7B_decode_cmp] | [FILL:DS-17] [FILL:DS-18] [FILL:DS-20] |
-| token generation | Qwen3-8B | [FILL:DS-23] | [FILL:R_8B_decode_abs] | [FILL:R_8B_decode_cmp] | [FILL:R_cm_8B_decode_abs] | [FILL:R_cm_8B_decode_cmp] | [FILL:DS-21] [FILL:DS-22] [FILL:DS-24] |
+| prompt processing; [FILL:V5-G2A-001] — “The selected prefill length is omitted: the hash-bound G2-a selection record has not issued (registry row V5-G2A-001).” | Qwen3-1.7B | [FILL:DS-11] | [FILL:R_1p7B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_1p7B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_cm_1p7B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:DS-09] — “The Qwen3-1.7B prefill-p[PREFILL_LENGTH] gross phase-energy estimate and interval are omitted: the D-123 reported-mean supplier is not built (registry row DS-09).” [FILL:DS-10] — “The Qwen3-1.7B prefill-p[PREFILL_LENGTH] per-token value is omitted: no authenticated D-123 numerator and denominator fields are registered (registry row DS-10).” [FILL:DS-12] — “The Qwen3-1.7B prefill-p[PREFILL_LENGTH] bundle count is omitted: the D-123 admitted independent-bundle basis is undefined (registry row DS-12).” |
+| prompt processing; [FILL:V5-G2A-001] — “The selected prefill length is omitted: the hash-bound G2-a selection record has not issued (registry row V5-G2A-001).” | Qwen3-8B | [FILL:DS-15] | [FILL:R_8B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_8B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:R_cm_8B_prefill_p[PREFILL_LENGTH]_abs] | [FILL:R_cm_8B_prefill_p[PREFILL_LENGTH]_cmp] | [FILL:DS-13] — “The Qwen3-8B prefill-p[PREFILL_LENGTH] gross phase-energy estimate and interval are omitted: the D-123 reported-mean supplier is not built (registry row DS-13).” [FILL:DS-14] — “The Qwen3-8B prefill-p[PREFILL_LENGTH] per-token value is omitted: no authenticated D-123 numerator and denominator fields are registered (registry row DS-14).” [FILL:DS-16] — “The Qwen3-8B prefill-p[PREFILL_LENGTH] bundle count is omitted: the D-123 admitted independent-bundle basis is undefined (registry row DS-16).” |
+| token generation | Qwen3-1.7B | [FILL:DS-19] | [FILL:R_1p7B_decode_abs] | [FILL:R_1p7B_decode_cmp] | [FILL:R_cm_1p7B_decode_abs] | [FILL:R_cm_1p7B_decode_cmp] | [FILL:DS-17] — “The Qwen3-1.7B `real_prompts_v1` decode gross phase-energy estimate and interval are omitted: the D-123 reported-mean supplier is not built (registry row DS-17).” [FILL:DS-18] — “The Qwen3-1.7B `real_prompts_v1` decode per-token value is omitted: no authenticated D-123 numerator and denominator fields are registered (registry row DS-18).” [FILL:DS-20] — “The Qwen3-1.7B `real_prompts_v1` decode bundle count is omitted: the D-123 admitted independent-bundle basis is undefined (registry row DS-20).” |
+| token generation | Qwen3-8B | [FILL:DS-23] | [FILL:R_8B_decode_abs] | [FILL:R_8B_decode_cmp] | [FILL:R_cm_8B_decode_abs] | [FILL:R_cm_8B_decode_cmp] | [FILL:DS-21] — “The Qwen3-8B `real_prompts_v1` decode gross phase-energy estimate and interval are omitted: the D-123 reported-mean supplier is not built (registry row DS-21).” [FILL:DS-22] — “The Qwen3-8B `real_prompts_v1` decode per-token value is omitted: no authenticated D-123 numerator and denominator fields are registered (registry row DS-22).” [FILL:DS-24] — “The Qwen3-8B `real_prompts_v1` decode bundle count is omitted: the D-123 admitted independent-bundle basis is undefined (registry row DS-24).” |
 
 | Contrast | Point estimate | Complete interval | Cell floor | Signed clearance or shortfall | Magnitude outcome | Direction outcome | Verdict |
 |---|---:|---:|---:|---:|---|---|---|
-| token generation, Qwen3-8B − Qwen3-1.7B | [FILL:DS-25] | [FILL:DS-26] | [FILL:DS-27] | [FILL:DS-28] | [FILL:DS-30] | [FILL:DS-31] | [FILL:DS-32] |
-| prompt processing, Qwen3-8B − Qwen3-1.7B | [FILL:PG-01] | [FILL:PG-02] | [FILL:DS-33] | [FILL:PG-04] | [FILL:PG-06] | [FILL:PG-07] | [FILL:PG-08] |
+| token generation, Qwen3-8B − Qwen3-1.7B | [FILL:DS-25] | [FILL:DS-26] | [FILL:DS-27] | [FILL:DS-28] — “The decode sizing sum and signed clearance are omitted: the claim-side bound and one-cell/two-quantity rendering are unresolved (registry row DS-28).” | [FILL:DS-30] — “The decode floor-gate outcome is omitted: no exact conservative rendering token is registered (registry row DS-30).” | [FILL:DS-31] — “The decode direction-gate outcome is omitted: no exact conservative rendering token is registered (registry row DS-31).” | [FILL:DS-32] — “The decode verdict is omitted: no professor-facing conservative rendering token is registered (registry row DS-32).” |
+| prompt processing, Qwen3-8B − Qwen3-1.7B | [FILL:PG-01] — “The selected `_v5` prefill contrast estimate is omitted: `[PREFILL_LENGTH]` is unresolved until G2-a and no authenticated estimate token is registered (registry row PG-01).” | [FILL:PG-02] — “The selected `_v5` prefill interval is omitted: `[PREFILL_LENGTH]` is unresolved until G2-a and no authenticated lower or upper endpoint tokens are registered (registry row PG-02).” | [FILL:DS-33] — “The selected `_v5` prefill claim floor is omitted: `[PREFILL_LENGTH]` is unresolved until G2-a and no professor-facing prefill token is registered (registry row DS-33).” | [FILL:PG-04] — “The selected `_v5` prefill sizing sum and signed clearance are omitted: the claim-bound token family and rendering contract are not registered (registry row PG-04).” | [FILL:PG-06] — “The selected `_v5` prefill floor-gate outcome is omitted: no conservative rendering token is registered (registry row PG-06).” | [FILL:PG-07] — “The selected `_v5` prefill direction-gate outcome is omitted: no conservative rendering token is registered (registry row PG-07).” | [FILL:PG-08] — “The selected `_v5` prefill verdict is omitted: no authenticated professor-facing verdict token is registered (registry row PG-08).” |
 
-<!-- DS-29 and PG-05 name a “claim-side bound” but have no registered supplier
-or calculation. Do not make that undefined label a reader-facing column. Keep
-both rows stopped until a future contract builds the quantity from physical
-inputs or deletes it. -->
+<!-- “The decode claim-side bound is omitted: no producing
+artifact field is registered, and `deterministic_bounds.total` is not a
+substitute (registry row DS-29).” “The selected `_v5` prefill
+claim-side bound is omitted: no named producing field or rendering token is
+registered (registry row PG-05).” Do not make either undefined quantity a
+reader-facing column. -->
 
 ### Printed negative result: short prompt processing has too few overlapping records
 
@@ -523,12 +666,20 @@ inputs or deletes it. -->
 1. A sampling-record support is its start-to-end time interval. Clip each
    support to the prompt-processing interval and count supports with positive
    overlap. Fewer than three refuses the phase.
+   **Diagram required:** draw the record supports and the prefill interval on
+   one time axis, then mark the two-overlap and three-overlap counts so the
+   refusal threshold is visible.
 2. State [FILL:DG-067] of [FILL:DG-068] had two overlaps and
    [FILL:DG-069] had three. This is the fixed negative answer, not evidence of
    zero prompt-processing energy and not a model comparison.
-3. Work the retained bundle: duration [FILL:DG-070], record-width statistic
-   [FILL:DG-071], overlap count [FILL:DG-072], threshold [FILL:DG-073], and
-   start-spacing statistic [FILL:DG-075]. State that records tile without a
+3. An interquartile range (**IQR**) is the difference between the upper and
+   lower edges of the middle half of sorted values. Work the retained bundle:
+   duration [FILL:DG-070], record-width statistic
+   [FILL:DG-071] — “The sampling-record width is omitted: its median-with-IQR
+   statistic is ratified but not issued (registry row DG-071).”, overlap count
+   [FILL:DG-072], threshold [FILL:DG-073], and start-spacing statistic
+   [FILL:DG-075] — “The record spacing is omitted: its median-with-IQR statistic
+   is ratified but not issued (registry row DG-075).” State that records tile without a
    meaningful pause; width and start spacing describe the same record-period
    distribution apart from endpoint convention. Never resurrect the false
    pause mechanism.
@@ -541,11 +692,18 @@ Condition A is [FILL:V5-ID-001]; condition B is [FILL:V5-ID-002]. Build the
 A/B/B/A order and sign before the result. The token-generation arm uses
 [FILL:V5-WL-001], shared tokenizer [FILL:V5-WL-002], shared conversation
 template and reasoning-off pin [FILL:V5-WL-003], and greedy forced-512 output
-[FILL:V5-WL-004]. The prompt-processing arm uses [FILL:V5-G2A-001] tokens and
-the post-selection prompt pin [FILL:V5-WL-005]. State ten blocks and Holm m=2.
+[FILL:V5-WL-004]. The prompt-processing arm uses [FILL:V5-G2A-001] — “The
+selected prefill length is omitted: the hash-bound G2-a selection record has
+not issued (registry row V5-G2A-001).” and the post-selection prompt pin
+[FILL:V5-WL-005] — “The selected prefill prompt pin is omitted: its
+G2-a-bound `joulewise.prefill_prompt_pin.v2` record has not issued (registry
+row V5-WL-005).” State ten blocks and Holm m=2.
 Call the fixed pair a demonstration of the decision rule, never scaling. -->
 
-### Why [FILL:V5-G2A-001] prompt tokens were selected
+### Why the selected prompt length is not yet stated
+
+[FILL:V5-G2A-001] — “The selected prefill length is omitted: the hash-bound
+G2-a selection record has not issued (registry row V5-G2A-001).”
 
 The forcing problem is alignment: a prompt-processing phase close to the
 three-record minimum can gain or lose an overlapping record when its boundary
@@ -559,13 +717,17 @@ A length passed only when every small-model probe contained at least five power
 records whose time interval overlapped prompt processing. Five is a chosen
 two-record safety margin above the three overlaps needed to calculate a phase.
 For example, counts 5, 6, 7, 5, and 8 pass, while 5, 6, 4, 7, and 8 do not. The
-shortest passing length became [FILL:V5-G2A-001]. Qwen3-8B probes were recorded
-but did not select it.
+shortest passing length became [FILL:V5-G2A-001] — “The selected prefill length
+is omitted: the hash-bound G2-a selection record has not issued (registry row
+V5-G2A-001).” Qwen3-8B probes were recorded to discover whether the larger
+model made the phase even easier or harder to resolve, but the fixed selection
+rule used only the small-model probes.
 
 If no length passed, collection still used 4096; that fallback alone was not a
 refusal. A final count below 3 printed `not_resolvable_sample_count`. A count
-of 3 or 4 remained calculable but printed “below the pre-registered count floor
-of 5” beside the calculated result. This keeps a reducer failure distinct from
+of 3 or 4 remained calculable but printed “below the fixed-before-collection
+count floor of 5” beside the calculated result. This keeps a **reducer**
+failure—the program that turns a retained run bundle into phase energies—from
 the stricter design floor and leaves the two-comparison Holm family unchanged.
 
 ## 7. Discussion and limitations
@@ -630,8 +792,10 @@ Split and disaggregated inference remain a demanding application rather than thi
 ## 9. Evidence and code availability
 
 <!-- BUILD AFTER RELEASE:
-1. [FILL:DS-34] supplies the repository revision, evidence archive, and
-   fingerprint-manifest locators. No nearby path may substitute.
+1. [FILL:DS-34] — “Repository and archive locators are omitted: the release
+   checklist has not issued the registered locator set (registry row DS-34).”
+   supplies the repository revision, evidence archive, and fingerprint-manifest
+   locators only after it is fillable. No nearby path may substitute.
 2. Explain independent re-reduction: rebuild every admitted member and allowed
    timing width from primary bytes and the fixed manifest, compare the complete
    set with the floor artifact, and refuse before analysis on any mismatch.
@@ -931,57 +1095,71 @@ A refused contrast does not show equality. It says the named instrument and evid
 
 ### A.6 Release locators
 
-<!-- BUILD AFTER RELEASE. Fill [FILL:DS-34] with the repository revision,
-evidence-archive locator, and fingerprint-manifest locator. Until that row is
-fillable, state that the evidence-dependent commands cannot support independent
-re-reduction. Release does not remove the pulse-to-inference transfer
-assumption. -->
+<!-- BUILD AFTER RELEASE. [FILL:DS-34] — “Repository and archive locators are
+omitted: the release checklist has not issued the registered locator set
+(registry row DS-34).” Only after that row is fillable may it supply the
+repository revision, evidence-archive locator, and fingerprint-manifest
+locator. Until then, state that the evidence-dependent commands cannot support
+independent re-reduction. Release does not remove the pulse-to-inference
+transfer assumption. -->
 
 ## First-use audit ledger
 
-The first-use test is mechanical: for each term below, the first reader-facing
-use in this skeleton either builds it from physical inputs, glosses it in plain
-words, or occurs only inside a build note that requires the definition first.
+The first-use test was rerun over the final successor text. For each term below,
+the first reader-facing use either builds it from physical inputs, glosses it in
+plain words, or occurs only inside a build note that orders the definition
+first. The audit excludes literal field names and reason names inside quoted
+omission sentences: they identify a registry row and do not assert a mechanism.
 
 | Term checked | First reader-facing home | Definition or disposition |
 |---|---|---|
 | large-language model / LLM | Title | Full phrase precedes the abbreviation. |
-| prompt processing / prefill | Introduction build order, then Section 2 | Prompt work through the first output token; shorthand follows the phrase. |
-| token generation / decode | Introduction build order, then Section 2 | Later output-token emission; shorthand follows the phrase. |
-| sampling record / support | Section 2; Appendix A.3.1 | One average-power record and its start-to-end time interval. |
-| phase edge / boundary | Section 2 | The recorded time separating the two phases. |
-| SHA-256 | Section 2 | Fingerprint that identifies exact file bytes. |
+| prompt processing / prefill | Section 2 | Prompt work through the first output token; shorthand follows the phrase. |
+| token generation / decode | Section 2 | Later output-token emission; shorthand follows the phrase. |
+| sampling record | Section 2 | One average-power record covers one stated start-to-end interval. |
+| phase boundary | Section 2 | Runtime-recorded time separating prompt processing and token generation. |
+| `powermetrics` | Section 2 | macOS built-in sampler emitting CPU, GPU, and neural-engine interval averages. |
+| SHA-256 fingerprint | Section 2 | Digest identifying exact file bytes. |
 | pulse plateau | Section 2 | Flat high-power portion of a commanded pulse. |
 | monotonic clock | Section 2 | Counter that advances but is never corrected to civil time. |
-| cell | Section 4 ratio passage | Runs sharing phase, workload, model, hardware, software, and power definition. |
-| absolute component | Section 4 ratio passage | Same-model spread among repeated energies. |
-| comparative component | Section 4 ratio passage | Spread of A/B/B/A block differences. |
-| A/B/B/A block | Section 2 Figure 2 replacement | Four energies in A, B, B, A order with the signed formula shown. |
-| point-only unguarded bound | Section 4 ratio passage | Complete component formula at recorded points, before the small-sample multiplier and window allowance. |
-| sample standard deviation | Section 4 ratio passage | Square root of squared deviations divided by \(n-1\), with both formulas printed. |
-| Student-\(t\) prediction amount | Section 4 ratio passage | The 97.5% value and its small-sample purpose precede its first formula use. |
-| corner | Section 4 ratio passage | One joint lower-or-upper endpoint choice for every admitted interval. |
-| independent-edge ratio \(R\) | Section 4 ratio passage | Complete corner-re-evaluated unguarded bound divided by the matching point-only bound. |
-| twofold safety factor | Section 4 ratio passage | Chosen threshold 2; edge movement must add one full point-only bound. |
-| zero-denominator refusal | Section 4 ratio passage | A zero point bound prints a reason rather than infinity. |
-| shared error / local error | Section 4 ratio passage | Common movement of all four block edges versus remaining member-specific movement. |
-| shared-error ratio \(R_{cm}\) | Section 4 ratio passage | Complete shared/local replay bound divided by the comparative point bound. |
-| not_applicable absolute \(R_{cm}\) | Section 4 ratio passage | Uniform shared shift cancels after subtracting the cell mean. |
-| cell floor | Section 4 safeguard passage | Maximum of the guarded absolute and comparative bounds. |
-| signed clearance or shortfall | Section 4 gate passage | Absolute point estimate minus the cell floor, with a 10.0 − 3.0484 J example. |
-| Holm correction | Section 4 gate passage | Two raw probabilities are ordered and tested at 0.025 then 0.05, retaining both slots. |
+| \(B_{\mathrm{fiducial}}\), \(b\), and minimum allowance | Section 2 bracket | One-capture pulse-plus-anchor bound, distinct window operative bound, and 9.724-ms lower allowance; formula and 25/29-ms example are printed together. |
+| stage / block member | Figure 2 text | Back-to-back declared run group / one of the four individual runs in an A/B/B/A block. |
+| energy family / whole-window allowance | Figure 2 text | One energy definition and the once-added maximum of named reference excursion and repeatability bound. |
+| record clipping | Section 4 opening | Keep the record time inside a phase and multiply by its average power; the 30-W, 100-ms example is worked. |
+| cell | Section 4 | Runs sharing phase, workload, model, hardware, software, and power definition. |
+| absolute / comparative component | Section 4 | Same-model repeated-run spread / A/B/B/A block-difference spread. |
+| admitted energy / independent unit | Section 4 | Energy passing Section 5 entry checks / one run for absolute or one block for comparative. |
+| point-only unguarded bound | Section 4 | Complete component formula at recorded points before multiplier and allowance. |
+| sample standard deviation / Student-\(t\) prediction amount | Section 4 | Printed \(n-1\) formula and 97.5% small-sample prediction term. |
+| corner | Section 4 | One joint lower-or-upper endpoint choice for every admitted interval. |
+| independent-edge ratio \(R\) / dominates | Section 4 | Complete corner bound divided by matching point bound; “dominates” means \(R\ge2\). |
+| authenticated / unauthenticated | Section 4 | SHA-256 fingerprints and named input agreement are present / a required fingerprint, match, or check is absent. |
+| registered rounding | Section 4 pilot arithmetic | Rounding fixed before collection in plan bytes identified by a SHA-256 fingerprint. |
+| shared / local edge movement and \(R_{cm}\) | Section 4 replay | One common shift for all four block members versus remaining member-specific movement; replay quotient and two-block fixture are printed. |
+| member-envelope integral sum / binary64 padding | Section 4 replay | Coefficient-weighted four-trace integral / 64-bit float format, `ulp(1.0)`, scale \(M\), pad formula, 103.0615-J worked value, and four outward steps. |
+| `not_applicable` absolute \(R_{cm}\) | Section 4 replay | Uniform shared shift cancels when the absolute formula subtracts its cell mean. |
+| resolution bound / cell floor | Section 4 safeguards | Largest false difference the cell permits / maximum of its guarded components. |
+| small-sample multiplier \(g(n)\) | Section 4 safeguards | \(\max(1,\sqrt{9/(n-1)})\), derived from 10-unit versus observed residual degrees of freedom; unavailable below five. |
+| reference-trajectory excursion / issued repeatability bound / \(A_k\) | Section 4 safeguards | Largest-minus-smallest opening/midpoint/closing reference means / retained `replicated_endpoint_bound_j` or `single_member_endpoint_bound_j` / their maximum, with a 10.0/10.6/10.2-J example. |
+| raw probability / Holm correction | Section 4 gates | Two-sided Student-\(t\) tail probability from ten block differences; ordered 0.025 then 0.05 procedure. |
+| measurement interval / decision interval / deterministic bound | Section 4 gates | Total-standard-error interval / that interval extended by authenticated non-random maximum displacements, whose per-kind calculation and 0.25-J example are printed. |
+| not resolvable | Section 4 gates | Estimate does not clear the cell floor; it is not zero. |
+| signed clearance or shortfall | Section 4 gates | Absolute estimate minus cell floor, with a 10.0 − 3.0484-J example. |
+| outcome A, outcome B, and refusal | Section 4 close-out | All ratios pass / every ratio evaluable with one below 2 / missing, unauthenticated, or zero-denominator ratio selects neither and stops filling. |
+| inserted-gap check | Section 4 close-out | Approximately 500-ms no-work gap with independently known edges compared against the power record. |
 | fail-closed | Section 5 | Missing or inconsistent evidence stops and records why. |
-| resolvability | Section 6 negative build | At least three record supports must overlap the phase. |
-| G2-a | Section 6 selection passage | Name of the pre-collection prompt-length shakedown. |
+| freeze receipt | Section 5 | Record fixing plan bytes and the time those bytes were frozen. |
+| G2-a / hash-bound / prompt pin | Section 6 results lead | Fixed prompt-length shakedown / SHA-256-bound selection record / retained prompt text, token IDs, tokenizer, and generation rules. |
+| record support / IQR / resolvability | Section 6 negative build | Record start-to-end interval / middle-half spread of sorted values / at least three supports must overlap the phase. |
+| reducer | Section 6 selection passage | Program turning a retained run bundle into phase energies. |
 | Running Average Power Limit / RAPL | Related work | Processor-exposed energy counter; full phrase precedes the abbreviation. |
 | NVIDIA Management Library / NVML | Related work | Software power counter; full phrase precedes the abbreviation. |
-| binary64 | Section 4 shared/local replay | The usual 64-bit floating-point number format. |
-| fiducial | Appendix A.3.2 | A commanded reference edge timed independently of the instrument. |
-| set membership | Appendix A.3.3 | The complete set of clock mappings consistent with every constraint. |
+| fiducial | Appendix A.3.2 | Commanded reference edge timed independently of the instrument. |
+| set membership | Appendix A.3.3 | Complete set of clock mappings consistent with every constraint. |
 | accepted region | Appendix A.3.5 | All pulse-edge pairs whose loss remains within the fixed limit. |
 | observed sample maximum | Appendix A.3.6 | Largest of the 118 observed edge excursions; no population-coverage label. |
 
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure.
+a failure. Terms the final first-use audit could not build: none.

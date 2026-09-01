@@ -17,17 +17,23 @@ The three dispositions are literal:
 
 In this map, a registry row identifier can be a conventional placement row
 such as `DS-25`, an identity row such as `V5-ID-001`, or an exact-token key such
-as `R_1p7B_decode_abs`. The successor renders all of them as
-`[FILL:<registry-row-id>]` slots until an authenticated supplier issues.
+as `R_1p7B_decode_abs`. The successor renders a value slot as
+`[FILL:<registry-row-id>]` only while its named supplier is still pending. A
+`STOP_FILL` row instead carries that row's exact omission sentence immediately
+beside the marker; no generic “do not fill” note substitutes for it.
 
 ## Preamble and title — frozen lines 1–8 — REWRITE
 
 Build one protocol-first title before any outcome is known, then disclose that
 the optional subtitle *attribution-limited* is allowed only if every required
-independent-edge ratio \(R\) is at least 2 and every required comparative
-shared-error ratio \(R_{cm}\) is at least 2. Do not preserve the two-title
-device, `_v4`, or a null-outcome title. Consume no campaign result row; title
-identity comes from `V5-ID-001`, `V5-ID-002`, and the D-165 branch rule.
+authenticated, evaluable independent-edge ratio \(R\) and every required
+authenticated, evaluable comparative shared-error ratio \(R_{cm}\) is at least
+2. A missing,
+unauthenticated, or zero-denominator required ratio selects neither outcome A
+nor B, stops branch-dependent filling, and forbids the subtitle. Do not
+preserve the two-title device, `_v4`, or a null-outcome title. Consume no
+campaign result row; title identity comes from `V5-ID-001`, `V5-ID-002`, and
+the D-165 branch rule.
 
 ## Abstract — frozen lines 9–12 — REWRITE
 
@@ -37,9 +43,11 @@ pulse calibration, the point-only and boundary-moved component bounds, the
 twofold ratios \(R\) and \(R_{cm}\), the selected outcome branch, the fixed
 Qwen3 demonstration as an application of the rule rather than a scaling
 study, the retained 37-of-50 short-prefill refusal, and the one-machine scope.
+A missing, unauthenticated, or zero-denominator required ratio selects neither
+outcome branch and stops filling rather than becoming an outcome-B shortfall.
 Consume the eight independent-edge ratio keys, the four comparative
 `R_cm_*_cmp` keys, `DS-25`–`DS-33`, `PG-01`, `PG-02`, `PG-04`–`PG-08`, and
-`DG-067`–`DG-069`; use no row whose registry status is `STOP_FILL`.
+`DG-067`–`DG-069`; render every `STOP_FILL` placement with its exact omission.
 
 ## 1. Introduction — frozen lines 13–32 — REWRITE
 
@@ -165,11 +173,12 @@ an older diagnostic label and state that it does not select the paper's result.
 
 ## 4. The resolution bound and how it is composed — frozen lines 109–114 — REWRITE
 
-Begin with one physical example that shows why point repeatability alone is
-insufficient, then name the two components: the absolute component measures
-spread inside one model arm, and the comparative component measures
-A/B/B/A block differences between arms. Define every symbol before its first
-formula and state why the cell uses the larger component rather than their
+Begin with one physical record-clipping example in joules that shows why point
+repeatability alone is insufficient, then name the two components: the absolute
+component measures spread inside one model arm, and the comparative component
+measures A/B/B/A block differences between arms. Define every symbol before its
+first formula, define a resolution bound as the largest false difference the
+cell permits, and state why the cell uses the larger component rather than their
 sum. Introduce no campaign number here. This range consumes no fill row.
 
 ## A reproducible construction — frozen lines 115–190 — REWRITE
@@ -181,23 +190,30 @@ absolute point-only formula; (4) the comparative A/B/B/A point-only formula;
 ratio \(R\), its chosen twofold threshold, exact-equality passage, and
 zero-denominator refusal; (7) the comparative shared/local replay and ratio
 \(R_{cm}\), including why absolute \(R_{cm}\) is `not_applicable`; (8) the
-small-sample multiplier and one-per-component whole-window allowance, both
-applied after the ratio; and (9) the cell maximum. Give a real-number worked
-example for every mechanism, including the pilot ratios and the retained replay
-fixture. Consume `DG-044`–`DG-052` and every `R_*` and `R_cm_*` exact-token
-key. The old line-185 any-exceedance falsifier and line-198 `fixed-p256` are
-not survivors.
+small-sample multiplier, built from the 10-unit reference and \(n-1\) residual
+degrees of freedom, and one-per-component whole-window allowance, built as the
+maximum of named reference-run excursion and issued repeatability bound; and
+(9) the cell maximum. Only after those safeguards and the two claim gates may
+the text give A, evaluable-shortfall B, or the separate refusal disposition.
+Give a real-number worked example for every mechanism, including the pilot
+ratios and the retained replay fixture. Consume `DG-044`–`DG-052` and every
+`R_*` and `R_cm_*` exact-token key. The old line-185 any-exceedance falsifier
+and line-198 `fixed-p256` are not survivors.
 
 ## Two gates for a claim — frozen lines 191–211 — REWRITE
 
 After the resolution calculation is complete, build Holm's fixed family of two
 directional comparisons using token generation and the G2-a-selected prompt
-length; retain the missing comparison's stricter first slot rather than
-shrinking the family. Then separate evidence exclusion, the magnitude gate
-against the final cell floor, and the direction gate from the complete
-uncertainty intervals and adjusted test. Work each gate with numbers and state
-that failure to clear the floor means unresolved, not zero. Consume
-`V5-G2A-001`, `DS-25`–`DS-33`, and `PG-01`, `PG-02`, `PG-04`–`PG-08`.
+length; state the ten block differences, Student-\(t\) statistic, two-sided
+zero-mean null, and tail probability before Holm uses either probability.
+Retain the missing comparison's stricter first slot rather than shrinking the
+family. Then separate evidence exclusion, the magnitude gate against the final
+cell floor, and the direction gate from the named measurement and decision
+intervals and adjusted test. Work each gate with numbers and state that failure
+to clear the floor means unresolved, not zero. Require Figure 3 here: its visual
+elements are the evidence-exclusion path, magnitude path, direction path, both
+intervals, both Holm thresholds, each stop, and all three close-out outcomes.
+Consume `V5-G2A-001`, `DS-25`–`DS-33`, and `PG-01`, `PG-02`, `PG-04`–`PG-08`.
 The line-210 zero-point fixture label is not a ratio result and must not survive
 as one.
 
@@ -230,11 +246,15 @@ Consume the ratio keys, `DS-09`–`DS-33`, `PG-01`, `PG-02`,
 ## Results — frozen lines 241–244 — REWRITE
 
 After data, write the null or exclusion row first. Then report the ratio table
-component by component, select exactly one canonical branch sentence, and only
-then report the model-direction gates. A missing required ratio is an exclusion,
-not a pass. Consume all eight `R_*` keys, all four comparative `R_cm_*_cmp`
-keys, the four absolute `R_cm_*_abs` not-applicable keys, and `DS-25`–`DS-33`
-plus `PG-01`, `PG-02`, `PG-04`–`PG-08`.
+component by component. Select outcome B only when every required ratio is
+authenticated and evaluable and at least one is below 2. A missing,
+unauthenticated, or zero-denominator required ratio selects neither branch,
+stops filling, and prints its refusal reason; it is not an exclusion that may be
+folded into B. Only then report the model-direction gates. Consume all eight
+`R_*` keys, all four comparative `R_cm_*_cmp` keys, the four absolute
+`R_cm_*_abs` not-applicable keys, and `DS-25`–`DS-33` plus `PG-01`, `PG-02`,
+`PG-04`–`PG-08`, rendering every `STOP_FILL` placement with its exact omission
+sentence.
 
 ## Printed negative result: short prompt processing is not resolvable — frozen lines 245–257 — REWRITE
 
@@ -246,9 +266,11 @@ the superseded Qwen2.5 pair as the successor demonstration. In the worked
 bundle, state that the retained records tile without a meaningful pause;
 record width and start-to-start spacing describe the same record-period
 distribution apart from endpoint convention, so duration divided by a nominal
-period cannot replace the overlap count. Consume `DG-067`–`DG-077`; leave
-`DG-071` and `DG-075` unfilled until their path- and SHA-pinned statistic
-artifact issues.
+period cannot replace the overlap count. Require a diagram showing the record
+supports, the prefill interval, and the marked two- and three-overlap counts.
+Consume `DG-067`–`DG-077`; render `DG-071` and `DG-075` with their exact
+registered omission sentences until their path- and SHA-pinned statistic
+artifacts issue.
 
 ## Demonstration fixed before collection — frozen lines 258–265 — REWRITE
 
@@ -263,28 +285,31 @@ the result itself is later stated.
 
 ## Why 256 prompt tokens were selected — frozen lines 266–291 — REWRITE
 
-Retitle this subsection `Why [FILL:V5-G2A-001] prompt tokens were selected`.
+Retitle this subsection so it says the selected prompt length is not yet stated
+and carries the exact `V5-G2A-001` omission sentence beside that marker.
 Build the G2-a rule before the selected rung: test 512, 1024, 2048, and 4096
 in that order with at least five Qwen3-1.7B probes per rung; a rung passes only
 when every small-model probe overlaps at least five records; five is a chosen
 two-record safety margin above the reducer minimum of three. Give the worked
-passing counts 5/6/7/5/8 and failing counts 5/6/4/7/8. The shortest passing
-rung is selected; if none passes, collect at 4096 and distinguish a reducer
-refusal below three from a calculable count of three or four that misses the
-pre-registered five-record design floor. Then build fresh Tables 2 and 3 from
-the registry rather than preserving the old 256-token projection. Consume
-`V5-G2A-001`, `V5-WL-005`, `DS-09`–`DS-33`, `PG-01`, `PG-02`, and
-`PG-04`–`PG-08`; never consume retired sizing rows `DG-078`–`DG-097` as
-successor results.
+passing counts 5/6/7/5/8 and failing counts 5/6/4/7/8. Explain that Qwen3-8B is
+probed to reveal whether the larger model changes resolvability but does not
+select the rung. The shortest passing rung is selected; if none passes, collect
+at 4096 and distinguish a reducer refusal below three from a calculable count
+of three or four that misses the fixed-before-collection five-record design
+floor. Then build fresh Tables 2 and 3 from the registry rather than preserving
+the old 256-token projection. Consume `V5-G2A-001`, `V5-WL-005`, `DS-09`–
+`DS-33`, `PG-01`, `PG-02`, and `PG-04`–`PG-08`, rendering G2-a and prompt-pin
+holds with their exact registered omissions; never consume retired sizing rows
+`DG-078`–`DG-097` as successor results.
 
 ## 7. Discussion and limitations — frozen lines 292–295 — REWRITE
 
 Write this after the campaign and transfer fiducial. Start with the selected
-ratio branch, then say exactly what the fixed Qwen3 demonstration does and
-does not show, and finally state whether the post-campaign gap fiducial supports
-or weakens transfer of the pulse-derived edge bound. Consume the ratio keys
-and the future transfer-fiducial result only after it issues; consume no
-superseded `_v4` row.
+ratio branch, or state the separate no-branch refusal that stops filling; then
+say exactly what the fixed Qwen3 demonstration does and does not show, and
+finally state whether the post-campaign gap fiducial supports or weakens transfer
+of the pulse-derived edge bound. Consume the ratio keys and the future
+transfer-fiducial result only after it issues; consume no superseded `_v4` row.
 
 ## What the finding changes — frozen lines 296–305 — REWRITE
 
@@ -356,12 +381,13 @@ placeholder may be replaced from prose or a nearby path.
 
 ## 10. Conclusion — frozen lines 354–359 — REWRITE
 
-Write this last. In order, give the selected exact ratio branch sentence, the
-fixed Qwen3 demonstration decision without scaling language, the retained
-37-of-50 negative, the transfer-fiducial condition on the headline, and the
-one-machine/counter boundary. Consume the ratio keys, `DS-25`–`DS-33`,
-`PG-01`, `PG-02`, `PG-04`–`PG-08`, and `DG-067`–`DG-069` only where
-authenticated and fillable.
+Write this last. In order, give the selected exact ratio branch sentence or the
+separate no-branch refusal, the fixed Qwen3 demonstration decision without
+scaling language, the retained 37-of-50 negative, the transfer-fiducial
+condition on the headline, and the one-machine/counter boundary. Consume the
+ratio keys, `DS-25`–`DS-33`, `PG-01`, `PG-02`, `PG-04`–`PG-08`, and
+`DG-067`–`DG-069` only where authenticated and fillable; use exact omission
+sentences for `STOP_FILL` rows.
 
 ## 11. References — frozen lines 360–393 — REWRITE
 
