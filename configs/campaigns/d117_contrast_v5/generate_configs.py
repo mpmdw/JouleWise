@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     CommonModeEstimatorRefusal,
+    MAX_EXACT_ADMISSIBLE_CORNER_N,
     canonical_domain_sha256,
     comparative_false_effect_floor,
     registered_common_mode_operative_bound,
@@ -686,7 +687,7 @@ def replay_common_mode_dominance(
 ) -> dict[str, Any]:
     """Compute R_cm from retained pre-mint inputs under the registered fence."""
 
-    if not blocks or len(blocks) > 20:
+    if not blocks or len(blocks) > MAX_EXACT_ADMISSIBLE_CORNER_N:
         raise ValueError("common_mode_replay_block_count_invalid")
     if isinstance(shared_edge_bound_s, bool) or not isinstance(
         shared_edge_bound_s, (int, float)

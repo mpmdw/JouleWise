@@ -238,15 +238,16 @@ one marker site and two semantic slots.
 
 ## Batch 4 — diagnostics, release locator, and NEEDS-VALUE notes
 
-DG-071 and DG-075 now have proposed statistics, not issued values. Their old
-pause mechanism is contradicted by retained bytes: records tile with no
-meaningful gap, and the former 111.8–112.5 ms band is the bottom of the width
-distribution rather than its range.
+DG-071 and DG-075 have ratified statistics but not issued values; see the
+2026-08-31 [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md).
+Their old pause mechanism is contradicted by retained bytes: records tile with
+no meaningful gap, and the former 111.8–112.5 ms band is the bottom of the
+width distribution rather than its range.
 
 | Placement row | Draft site | Supplier status and exact omission |
 |---|---|---|
-| DG-071 | line 256, first diagnostic `[PENDING]` | Proposed median with IQR of `interval_end_s - interval_start_s` over the hash-pinned cited R03P. Until ratified and issued: “The sampling-record width is omitted: its median-with-IQR statistic is proposed but not ratified or issued (registry row DG-071).” |
-| DG-075 | line 256, second diagnostic `[PENDING]` | Proposed median with IQR of consecutive unique `timestamp_s` differences over the same hash-pinned R03P; the records tile, so this is the same record-period distribution apart from endpoint convention and merged intervals. Until ratified and issued: “The record spacing is omitted: its median-with-IQR statistic is proposed but not ratified or issued (registry row DG-075).” |
+| DG-071 | line 256, first diagnostic `[PENDING]` | Ratified median with interquartile range (IQR: the middle value and the spread of its middle half) of `interval_end_s - interval_start_s` over the hash-pinned cited R03P; see the [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md). Until issued: “The sampling-record width is omitted: its median-with-IQR statistic is ratified but not issued (registry row DG-071).” |
+| DG-075 | line 256, second diagnostic `[PENDING]` | Ratified median with IQR of consecutive unique `timestamp_s` differences over the same hash-pinned R03P; see the [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md). The records tile, so this is the same record-period distribution apart from endpoint convention and merged intervals. Until issued: “The record spacing is omitted: its median-with-IQR statistic is ratified but not issued (registry row DG-075).” |
 | DS-34 | line 348, release hold | Until the release checklist issues repository, archive, and digest locators: “Repository and archive locators are omitted: the release checklist has not issued the registered locator set (registry row DS-34).” |
 
 Replace the two explanatory `[[NEEDS-VALUE:...]]` notes only in the working copy:
@@ -363,9 +364,11 @@ STOP_FILL {"label": "SUPPLIER_UNKNOWN", "reason": "the registry freezes this tok
 4. **Claim-side bound:** `[B_decode_claim_J]` and the corresponding prefill
    claim-side bound have no supplier. `deterministic_bounds.total` remains
    forbidden as a substitute.
-5. **Diagnostic ratification:** DG-071 and DG-075 propose median with IQR over
-   the cited retained bundle. A lead ruling and an issued path/SHA-pinned
-   artifact are required before either marker can be filled.
+5. **Diagnostic issuance:** DG-071 and DG-075 have ratified median-with-IQR
+   statistics over the cited retained bundle; see the
+   [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md).
+   Each value and its path/SHA-pinned artifact must still be issued before its
+   marker can be filled.
 6. **Prefill professor-facing tokens:** the generator names the selected
    contrast, but Table 3 estimate, interval, floor, gate, bound, and verdict
    renderings remain unbuilt. D-166's reducer-refusal and pre-registration-
