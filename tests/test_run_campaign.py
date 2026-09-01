@@ -1232,21 +1232,23 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                 telemetry_backend = config.hardware_target.telemetry_backend.value
                 writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=3.0))
 
-                def event(timestamp_s, event_type, phase):
+                def event(timestamp_s, event_type, phase, metadata=None):
                     writer.append_event(
                         RuntimeEvent(
                             timestamp_s=timestamp_s,
                             event_type=event_type,
                             phase=phase,
                             message=f"{{event_type}} {{phase}}",
-                            metadata={{}},
+                            metadata=metadata or {{}},
                         )
                     )
 
                 if status == "succeeded":
                     event(0.0, "stage_started", "measured_run")
                     event(0.0, "sampling_started", "measured_run")
-                    event(0.0, "phase_start", "prefill")
+                    event(0.0, "phase_start", "tokenize")
+                    event(0.05, "phase_end", "tokenize", {{"prompt_tokens": 3}})
+                    event(0.05, "phase_start", "prefill", {{"prompt_tokens": 3}})
                     event(0.5, "phase_end", "prefill")
                     event(0.5, "phase_start", "decode")
                     event(0.6, "token", "decode")
@@ -1277,7 +1279,7 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                                 "telemetry_backend": telemetry_backend,
                                 "idle_window_suspect": False,
                             }},
-                            "workload_observed": {{"token_count": 34, "output_token_count": 2}},
+                            "workload_observed": {{"token_count": 5, "output_token_count": 2}},
                             "workload_provenance": {{
                                 "prompt": prompt_provenance([1, 2, 3], text="test"),
                                 "generator": {{"name": "fake_cli", "version": "test"}},
@@ -5953,6 +5955,133 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["run_id"] for row in rows], ["one-fail"])
             self.assertEqual([row["status"] for row in rows], ["failed"])
+
+    def test_prompt_realization_mismatch_stops_before_second_child(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            first = write_config(
+                config_dir, "01-realization-mismatch.json", "realization-mismatch"
+            )
+            first_value = json.loads(first.read_text(encoding="utf-8"))
+            first_value["workload_profile"]["prompt_tokens"] = None
+            first_value["workload_profile"]["prompt_text"] = "test"
+            first_value["workload_profile"]["output_tokens"] = 2
+            first_value["workload_profile"]["prompt_token_expectation"] = {
+                "schema_version": "joulewise.prompt_token_expectation.v1",
+                "token_hash_domain": "joulewise.prompt_token_ids.v1",
+                "token_count": 3,
+                "token_ids_sha256": "0" * 64,
+            }
+            first.write_text(
+                json.dumps(first_value) + "\n", encoding="utf-8"
+            )
+            write_config(config_dir, "02-never.json", "never-dispatched")
+            fake_cli = make_fake_cli(tmp_path)
+            waivers = tmp_path / "waivers.json"
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "run_id": "realization-mismatch",
+                            "reason": "explicit matching fixture waiver",
+                            "approver": "test",
+                            "timestamp": "2026-09-01T00:00:00Z",
+                            "scope": "any",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                max_failures=1,
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertEqual(
+                (runs_dir / "order.log").read_text(encoding="utf-8").splitlines(),
+                ["realization-mismatch"],
+            )
+            self.assertTrue((runs_dir / "realization-mismatch").is_dir())
+            self.assertFalse((runs_dir / "never-dispatched").exists())
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(len(rows[0]["members"]), 1)
+            member = rows[0]["members"][0]
+            self.assertEqual(member["collection_classification"], "failed")
+            self.assertEqual(member["waiver"]["scope"], "any")
+            self.assertFalse(member["strict_valid"])
+            self.assertTrue(
+                any(
+                    problem.startswith("prompt_realization_mismatch:")
+                    for problem in member["validation_problems"]
+                ),
+                member,
+            )
+
+    def test_prompt_realization_reader_codes_are_unwaivable_including_any(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "prompt-realization"
+            bundle.mkdir()
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded"}) + "\n", encoding="utf-8"
+            )
+            (bundle / "metadata.json").write_text("{}\n", encoding="utf-8")
+            before = {
+                path.name: path.read_bytes()
+                for path in bundle.iterdir()
+                if path.is_file()
+            }
+            info = run_campaign_module.load_config_info(BASE_CONFIG)
+            waiver = run_campaign_module.Waiver(
+                target_kind="bundle_id",
+                target=bundle.name,
+                reason="explicit matching fixture waiver",
+                approver="test",
+                timestamp="2026-09-01T00:00:00Z",
+                scope="any",
+            )
+            waiver_map = {("bundle_id", bundle.name): waiver}
+            for code in sorted(
+                run_campaign_module.PROMPT_REALIZATION_PROBLEM_CODES
+            ):
+                with self.subTest(code=code), patch.object(
+                    run_campaign_module,
+                    "validate_bundle",
+                    return_value=[f"{code}: fixture"],
+                ), patch.object(
+                    run_campaign_module,
+                    "_bundle_config_binding_problem",
+                    return_value=None,
+                ):
+                    evaluation = run_campaign_module.evaluate_member(
+                        bundle, info=info, waivers=waiver_map
+                    )
+                self.assertEqual(
+                    evaluation.collection_integrity_flags, (code,)
+                )
+                self.assertFalse(evaluation.strict_valid)
+                self.assertFalse(evaluation.usable)
+                self.assertFalse(evaluation.waived)
+                self.assertTrue(evaluation.failed)
+            self.assertEqual(
+                before,
+                {
+                    path.name: path.read_bytes()
+                    for path in bundle.iterdir()
+                    if path.is_file()
+                },
+            )
 
     def test_resume_after_partial_failure_sequence_skips_partial_on_second_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

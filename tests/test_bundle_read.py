@@ -411,6 +411,290 @@ class ProblemCollectionTests(ReaderTestCase):
                 )
 
 
+class PromptRealizationExpectationTests(ReaderTestCase):
+    EXPECTED_HASH = prompt_token_ids_sha256([1, 2, 3])
+
+    def make_prompt_bundle(
+        self,
+        run_id: str,
+        *,
+        expectation: bool = True,
+        expected_count: int = 3,
+        expected_hash: str | None = None,
+        expected_domain: str = "joulewise.prompt_token_ids.v1",
+        realized_count: int = 3,
+        realized_hash: str | None = None,
+        realized_domain: str = "joulewise.prompt_token_ids.v1",
+        realized_text_hash: str | None = None,
+        provenance_present: bool = True,
+        tokenize_count: int | None = 3,
+        prefill_count: int | None = 3,
+        observed_prompt_count: int = 3,
+    ) -> RunBundleWriter:
+        data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        data["run_id"] = run_id
+        data["workload_profile"]["prompt_tokens"] = None
+        data["workload_profile"]["prompt_text"] = "test"
+        data["workload_profile"]["output_tokens"] = 2
+        if expectation:
+            data["workload_profile"]["prompt_token_expectation"] = {
+                "schema_version": "joulewise.prompt_token_expectation.v1",
+                "token_hash_domain": expected_domain,
+                "token_count": expected_count,
+                "token_ids_sha256": expected_hash or self.EXPECTED_HASH,
+            }
+        writer = RunBundleWriter.create(
+            self.runs_root,
+            BenchmarkConfig.from_mapping(data),
+            self.clock,
+        )
+        self.add_event(writer, "phase_start", "tokenize", 0.0)
+        self.add_event(
+            writer,
+            "phase_end",
+            "tokenize",
+            0.1,
+            metadata=(
+                {"prompt_tokens": tokenize_count}
+                if tokenize_count is not None
+                else {}
+            ),
+        )
+        self.add_event(
+            writer,
+            "phase_start",
+            "prefill",
+            0.1,
+            metadata=(
+                {"prompt_tokens": prefill_count}
+                if prefill_count is not None
+                else {}
+            ),
+        )
+        self.add_event(writer, "phase_end", "prefill", 0.5)
+        prompt = (
+            {
+                "token_hash_domain": realized_domain,
+                "token_ids_sha256": realized_hash or self.EXPECTED_HASH,
+                "realized_token_count": realized_count,
+                "text_sha256": realized_text_hash or sha256_hex("test"),
+            }
+            if provenance_present
+            else None
+        )
+        writer.write_metadata(
+            {
+                "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
+                "workload_observed": {
+                    "token_count": observed_prompt_count + 2,
+                    "output_token_count": 2,
+                },
+                "workload_provenance": {"prompt": prompt},
+            }
+        )
+        writer.write_power_trace(
+            [PowerSample(timestamp_s=0.0, power_w=1.0, source="mock", rail="mock")]
+        )
+        writer.write_summary(
+            SummaryMetrics(
+                status=RunStatus.SUCCEEDED,
+                energy_request_j=1.0,
+                gross_energy_j=1.0,
+            )
+        )
+        writer.finalize()
+        return writer
+
+    @staticmethod
+    def prompt_problems(writer: RunBundleWriter) -> list[str]:
+        return [
+            problem
+            for problem in BundleReader(writer.path).problems()
+            if problem.startswith("prompt_realization_")
+        ]
+
+    def test_coherent_count_mutation_is_one_mismatch(self) -> None:
+        writer = self.make_prompt_bundle(
+            "prompt-count-mismatch",
+            realized_count=4,
+            tokenize_count=4,
+            prefill_count=4,
+            observed_prompt_count=4,
+        )
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_mismatch", problems[0])
+        self.assertIn("token_count", problems[0])
+        self.assertNotIn("token_ids_sha256", problems[0])
+
+    def test_equal_counts_different_hash_names_hash_mismatch(self) -> None:
+        writer = self.make_prompt_bundle(
+            "prompt-hash-mismatch", realized_hash="b" * 64
+        )
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_mismatch", problems[0])
+        self.assertIn("token_ids_sha256", problems[0])
+        self.assertNotIn("token_count", problems[0])
+
+    def test_count_and_hash_mutation_is_one_problem_naming_both(self) -> None:
+        writer = self.make_prompt_bundle(
+            "prompt-count-hash-mismatch",
+            realized_count=4,
+            realized_hash="b" * 64,
+            tokenize_count=4,
+            prefill_count=4,
+            observed_prompt_count=4,
+        )
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("token_count", problems[0])
+        self.assertIn("token_ids_sha256", problems[0])
+
+    def test_domain_mutation_is_mismatch(self) -> None:
+        writer = self.make_prompt_bundle(
+            "prompt-domain-mismatch", realized_domain="other.domain.v1"
+        )
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_mismatch", problems[0])
+        self.assertIn("token_hash_domain", problems[0])
+
+    def test_one_count_surface_mutation_is_evidence_inconsistent(self) -> None:
+        writer = self.make_prompt_bundle(
+            "prompt-count-inconsistent", tokenize_count=4
+        )
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_evidence_inconsistent", problems[0])
+        self.assertIn("count surfaces disagree", problems[0])
+
+    def test_changed_prompt_text_without_updated_hash_is_inconsistent(self) -> None:
+        writer = self.make_prompt_bundle("prompt-text-inconsistent")
+        config_path = writer.path / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["workload_profile"]["prompt_text"] = "changed prompt"
+        config_path.write_text(json.dumps(config) + "\n", encoding="utf-8")
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_evidence_inconsistent", problems[0])
+        self.assertIn("text_sha256", problems[0])
+
+    def test_missing_provenance_and_marker_are_never_a_pass(self) -> None:
+        cases = (
+            ("provenance-null", {"provenance_present": False}),
+            ("tokenize-count-missing", {"tokenize_count": None}),
+            ("prefill-count-missing", {"prefill_count": None}),
+        )
+        for label, changes in cases:
+            with self.subTest(label=label):
+                writer = self.make_prompt_bundle(label, **changes)
+                problems = self.prompt_problems(writer)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("prompt_realization_evidence_missing", problems[0])
+
+    def test_legacy_config_without_expectation_gets_zero_new_problems(self) -> None:
+        writer = self.make_prompt_bundle("legacy-prompt", expectation=False)
+
+        self.assertEqual(self.prompt_problems(writer), [])
+
+    def test_real_validate_bundle_preserves_exact_named_refusal(self) -> None:
+        writer = self.make_prompt_bundle(
+            "validate-prompt-mismatch", realized_hash="d" * 64
+        )
+        before = {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in writer.path.iterdir()
+            if path.is_file()
+        }
+
+        problems = validate_bundle(writer.path)
+
+        self.assertTrue(
+            any(
+                problem.startswith("prompt_realization_mismatch:")
+                for problem in problems
+            ),
+            problems,
+        )
+        self.assertEqual(
+            before,
+            {
+                path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in writer.path.iterdir()
+                if path.is_file()
+            },
+        )
+
+    def test_mismatch_reaches_floor_and_analysis_admission_as_neither_branch(self) -> None:
+        from joulewise.analysis_engine.inputs import _read_bundle
+        from joulewise.floor_extraction import _evaluate_member
+
+        writer = self.make_prompt_bundle(
+            "consumer-prompt-mismatch", realized_hash="e" * 64
+        )
+        named_problems: list[str] = []
+
+        def strict_validator(path: Path, strict: bool) -> list[str]:
+            problems = validate_bundle(path, strict=strict)
+            named_problems.extend(
+                problem
+                for problem in problems
+                if problem.startswith("prompt_realization_")
+            )
+            return problems
+
+        floor_member = _evaluate_member(
+            slot="prefill-r1",
+            bundle_id=writer.path.name,
+            block_id=None,
+            position=None,
+            runs_root=writer.path.parent,
+            metric="gross_energy_j",
+            window_class="request",
+            cooldowns={},
+            hash_bundles=False,
+            strict_validator=strict_validator,
+        )
+        raw_config = json.loads((writer.path / "config.json").read_text())
+        analysis_evidence = _read_bundle(
+            {},
+            writer.path,
+            writer.path.parent,
+            raw_config,
+            strict_validator,
+        )
+
+        self.assertTrue(
+            any(
+                problem.startswith("prompt_realization_mismatch:")
+                for problem in named_problems
+            ),
+            named_problems,
+        )
+        self.assertIn("bundle_strict_invalid", floor_member.reasons)
+        self.assertFalse(analysis_evidence.included)
+        self.assertTrue(
+            any(
+                problem.startswith("prompt_realization_mismatch:")
+                for problem in analysis_evidence.strict_problems
+            ),
+            analysis_evidence.strict_problems,
+        )
+
+
 class MeasuredWindowTests(ReaderTestCase):
     def test_markers_preferred_over_stage_boundaries(self) -> None:
         writer = self.make_bundle("markers")

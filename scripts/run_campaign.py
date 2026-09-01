@@ -61,6 +61,7 @@ from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
     BundleReadError,
+    PROMPT_REALIZATION_PROBLEM_CODES,
 )
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
 from joulewise.analysis_manifest_v3 import (  # noqa: E402
@@ -219,6 +220,9 @@ CLAIM_READINESS_NOTE = (
 ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS = frozenset({"recovered", "first_run_exempt"})
 DEFAULT_CAMPAIGN_POLICY = (
     ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+)
+UNWAIVABLE_COLLECTION_INTEGRITY_FLAGS = frozenset(
+    {ANCHOR_FALLBACK_MEMBER_REFUSAL, *PROMPT_REALIZATION_PROBLEM_CODES}
 )
 KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
@@ -445,7 +449,9 @@ class MemberEvaluation:
         # This flag is an acquisition failure, not an analysis judgment.  The
         # only recovery is a new, anchor-bounded measurement; a campaign
         # waiver must never turn the clipped point into usable evidence.
-        if ANCHOR_FALLBACK_MEMBER_REFUSAL in self.collection_integrity_flags:
+        if UNWAIVABLE_COLLECTION_INTEGRITY_FLAGS.intersection(
+            self.collection_integrity_flags
+        ):
             return False
         if self.waiver is None:
             return False
@@ -2770,6 +2776,14 @@ def suite_order_evidence(bundle_dir: Path) -> tuple[str | None, int | None, str 
     return policy, row, seed
 
 
+def _prompt_realization_collection_flags(problems: Sequence[str]) -> set[str]:
+    return {
+        problem.split(":", 1)[0]
+        for problem in problems
+        if problem.split(":", 1)[0] in PROMPT_REALIZATION_PROBLEM_CODES
+    }
+
+
 def evaluate_member(
     bundle_dir: Path,
     *,
@@ -2826,6 +2840,7 @@ def evaluate_member(
         else None
     )
     collection_flags = set(prompt_hash_check.collection_integrity_flags())
+    collection_flags.update(_prompt_realization_collection_flags(problems))
     if (
         info.role in FLOOR_MEMBER_ROLES
         and anchor_fallback_member_unusable(summary, metadata, bundle_dir)
@@ -5307,7 +5322,7 @@ def _whole_window_member(
         problems = validate_bundle(bundle_path, strict=True)
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
-    collection_flags: set[str] = set()
+    collection_flags = _prompt_realization_collection_flags(problems)
     telemetry_identity = custody_telemetry_identity(
         bundle_path,
         summary=summary,
