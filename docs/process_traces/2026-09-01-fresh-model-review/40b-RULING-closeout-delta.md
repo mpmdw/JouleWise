@@ -28,7 +28,11 @@ Opus 5 (contract lens) — a family that has not yet touched this branch.
 
 ## Bench verification of the refuted head
 
-(filled by the magistrate after the suite run)
+Magistrate, 2026-09-01, `wt-closeout` @ `88e96f60`, clean tree:
+`python3 -m unittest tests.test_d165_dominance_closeout` → `Ran 18 tests in 9.798s / OK`;
+registration hash (canonical JSON of `dominance_criterion_registration()`) =
+`1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b` (unchanged). The suite being
+green is consistent with the delta seat's REFUTE: F1 is a missing check, not a failing one.
 
 ## Cold-gate verdict
 
