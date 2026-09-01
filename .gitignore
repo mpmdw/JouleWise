@@ -38,3 +38,8 @@ CLAUDE.local.md
 
 # Local decisive-replay custody store — never tracked (T19.3 erratum E-5)
 .decisive-replay/
+
+# codex-run-v3 sidecars (transcripts/status) must never be tracked; reports (.md) are
+docs/process_traces/**/*.codex-observer.jsonl
+docs/process_traces/**/*.status
+docs/process_traces/**/*.log
