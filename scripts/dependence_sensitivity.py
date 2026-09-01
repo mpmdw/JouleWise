@@ -205,6 +205,7 @@ def _model_result(
         raise ValueError("total standard error must be positive")
     statistic = mean_j / se_total
     raw_p = two_sided_student_t_p_value(statistic, degrees)
+    tail_x = degrees / (degrees + statistic**2)
     metrology_direction = _strict_direction(metrology_aware_interval)
     decision_direction = _strict_direction(decision_interval)
     return {
@@ -224,6 +225,11 @@ def _model_result(
         "decision_interval_j": decision_interval,
         "t_statistic": statistic,
         "raw_two_sided_p": raw_p,
+        "raw_two_sided_p_replay": {
+            "formula": "p = I_x(ν/2, 1/2)",
+            "x_formula": "x = ν/(ν + t²)",
+            "x": tail_x,
+        },
         "floor_gate": {
             "rule": "abs(mean_j) > registered_floor_j",
             "registered_floor_j": floor_j,

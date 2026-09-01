@@ -219,6 +219,249 @@ REFUSAL_CASES = (
 )
 
 
+# The sheet is the fixture.  These digests deliberately bind the exact prose
+# command lines and numeric-token inventory without copying either command
+# into a second executable form.  Commands are always extracted from the
+# sheet before they are run below.
+DOCUMENTED_COMMAND_OUTCOMES = {
+    "79fe7297abe7285c0aa0a92c3349c38c2d3faed824cdffeaef6713931cceb00d": '"direction_gate_outcomes_agree": true',
+    "1663202b0c19f77e7c932ae66004537276cd45c2d407c158fdd643ba1d08228e": '"direction_gate_outcomes_agree": false',
+}
+SHEET_NUMERIC_TOKEN_SHA256 = "c1eea3dbc33eed4f73a1f3a8588b8564e4e6945403335113b461e2afd01ec08d"
+PLACEMENT_ANCHORS = (
+    ("DS-SENS-01", 285, "Table 3. Prospective contrast decisions."),
+    ("DS-SENS-02", 294, "**Limitation 1 is an untested load-regime transfer.**"),
+    ("PG-SENS-01", 285, "Table 3. Prospective contrast decisions."),
+    ("PG-SENS-02", 294, "**Limitation 1 is an untested load-regime transfer.**"),
+)
+# These are not calculator quantities: they are frozen identifier, line-anchor,
+# source-location, digest-width, or ratified-H30 count tokens in the sheet.
+SHEET_SOURCE_LOCATION_OR_IDENTIFIER_NUMBERS = frozenset(
+    {
+        "01",
+        "02",
+        "07",
+        "26",
+        "30",
+        "31",
+        "36",
+        "49",
+        "59",
+        "64",
+        "115",
+        "117",
+        "118",
+        "131",
+        "166",
+        "194",
+        "226",
+        "256",
+        "285",
+        "294",
+        "362",
+        "375",
+        "652",
+        "9595",
+    }
+)
+MANDATED_REFUSAL_ROW_NAMES = frozenset(
+    {
+        "finite_boolean",
+        "finite_string",
+        "dict_deltas",
+        "string_deltas",
+        "four_blocks",
+        "eleven_blocks",
+        "invalid_json",
+        "missing_deltas_file",
+        "nonfinite_delta",
+        "constant_sequence",
+        "perfect_alternation",
+        "ar1_one_block",
+        "ar1_nonfinite_rho",
+        "ar1_out_of_range",
+        "estimated_rho_constant",
+        "estimated_rho_out_of_range",
+        "five_blocks",
+        "negative_floor",
+        "nonfinite_metrology_se",
+        "negative_metrology_se",
+        "negative_deterministic_total",
+        "infinite_interval",
+        "infinite_decision_interval",
+        "effective_n_not_finite",
+        "too_few_effective_blocks",
+        "sample_stddev_not_finite",
+        "zero_total_standard_error",
+        "example_with_floor",
+        "caller_alpha",
+        "missing_source",
+        "missing_metrology",
+        "overflow",
+    }
+)
+REFUSAL_SOURCE_SITES = {
+    "finite_boolean": "_finite_number",
+    "finite_string": "_finite_number",
+    "dict_deltas": "_validated_deltas",
+    "string_deltas": "_validated_deltas",
+    "four_blocks": "_validated_deltas",
+    "eleven_blocks": "_validated_deltas",
+    "invalid_json": "_json_list_from_text",
+    "missing_deltas_file": "main",
+    "nonfinite_delta": "_finite_number",
+    "constant_sequence": "estimate_ar1_rho",
+    "perfect_alternation": "estimate_ar1_rho",
+    "ar1_one_block": "_ar1_variance_terms",
+    "ar1_nonfinite_rho": "_ar1_variance_terms",
+    "ar1_out_of_range": "_ar1_variance_terms",
+    "estimated_rho_constant": "estimate_ar1_rho",
+    "estimated_rho_out_of_range": "estimate_ar1_rho",
+    "five_blocks": "_validated_deltas",
+    "negative_floor": "_nonnegative_number",
+    "nonfinite_metrology_se": "_finite_number",
+    "negative_metrology_se": "_nonnegative_number",
+    "negative_deterministic_total": "_nonnegative_number",
+    "infinite_interval": "_interval",
+    "infinite_decision_interval": "_model_result",
+    "effective_n_not_finite": "_degrees_of_freedom",
+    "too_few_effective_blocks": "_degrees_of_freedom",
+    "sample_stddev_not_finite": "analyze_deltas",
+    "zero_total_standard_error": "_model_result",
+    "example_with_floor": "main",
+    "caller_alpha": "_parser",
+    "missing_source": "main",
+    "missing_metrology": "main",
+    "overflow": "analyze_deltas",
+}
+PLACEMENT_ANCHOR_PATTERN = re.compile(
+    r"^\| (?P<site>(?:DS|PG)-SENS-\d+) .*?`docs/paper/draft-v1\.md` line "
+    r"(?P<line>\d+) \| `(?P<quote>[^`]+)`",
+    re.MULTILINE,
+)
+BRACKETED_TEN_NUMBER_LIST_PATTERN = re.compile(
+    r"\[(?P<values>-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?){9})\]"
+)
+SHEET_COMMAND_BLOCK_PATTERN = re.compile(
+    r"^```[^\n]*\n(?P<fenced>.*?)^```|^ {4}(?P<indented>\S[^\n]*)$",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _extract_sheet_commands(document: str) -> list[str]:
+    """Return each nonblank fenced or four-space-indented command verbatim."""
+
+    commands: list[str] = []
+    for match in SHEET_COMMAND_BLOCK_PATTERN.finditer(document):
+        if match.group("indented") is not None:
+            commands.append(match.group("indented"))
+        else:
+            commands.extend(
+                line for line in match.group("fenced").splitlines() if line.strip()
+            )
+    return commands
+
+
+def _sheet_numeric_token_digest(document: str) -> str:
+    """Fingerprint every numeric token, including source anchors and IDs."""
+
+    tokens = re.findall(r"\d+(?:\.\d+)?", document)
+    return hashlib.sha256("\n".join(tokens).encode("utf-8")).hexdigest()
+
+
+def _number_renderings(value: int | float) -> set[str]:
+    """Return every precision the sheet is allowed to render for one source."""
+
+    number = abs(float(value))
+    return {str(number), *(f"{number:.{precision}f}" for precision in range(16))}
+
+
+def _source_bound_sheet_numbers(payload: dict[str, Any]) -> set[str]:
+    """Return all calculator renderings and declared non-calculator constants."""
+
+    values: set[str] = set(SHEET_SOURCE_LOCATION_OR_IDENTIFIER_NUMBERS)
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            for nested in value.values():
+                collect(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect(nested)
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            values.update(_number_renderings(value))
+
+    collect(payload)
+    values.update(
+        _number_renderings(math.fsum(row["term"] for row in payload["ar1_variance_terms"]))
+    )
+    for rho in (0.5, 0.9):
+        multiplier = dependence_sensitivity.ar1_variance_inflation_factor(10, rho)
+        values.update(_number_renderings(rho))
+        values.update(_number_renderings(multiplier))
+        values.update(_number_renderings(10 / multiplier))
+    for declared in (
+        dependence_sensitivity.REGISTERED_ALPHA / 2.0,
+        dependence_sensitivity.REGISTERED_ALPHA,
+        1.0 - dependence_sensitivity.REGISTERED_ALPHA / 2.0,
+        dependence_sensitivity.REGISTERED_N_BLOCKS,
+        2,
+        95,
+    ):
+        values.update(_number_renderings(declared))
+    return values
+
+
+def _assert_documented_command_fixture(test: unittest.TestCase, document: str) -> None:
+    commands = _extract_sheet_commands(document)
+    command_hashes = tuple(
+        hashlib.sha256(command.encode("utf-8")).hexdigest() for command in commands
+    )
+    test.assertEqual(command_hashes, tuple(DOCUMENTED_COMMAND_OUTCOMES))
+    for command, command_hash in zip(commands, command_hashes, strict=True):
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            shell=True,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        test.assertEqual(completed.returncode, 0, completed.stderr)
+        test.assertIn(DOCUMENTED_COMMAND_OUTCOMES[command_hash], completed.stdout)
+
+
+def _assert_placement_anchor_fixture(test: unittest.TestCase, document: str) -> None:
+    observed = tuple(
+        (match.group("site"), int(match.group("line")), match.group("quote"))
+        for match in PLACEMENT_ANCHOR_PATTERN.finditer(document)
+    )
+    test.assertEqual(observed, PLACEMENT_ANCHORS)
+    draft_lines = (REPO_ROOT / "docs" / "paper" / "draft-v1.md").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    for site, line_number, quote in observed:
+        with test.subTest(site=site):
+            test.assertLessEqual(line_number, len(draft_lines))
+            test.assertTrue(draft_lines[line_number - 1].startswith(quote[:40]))
+
+
+def _assert_refusal_row_fixture(
+    test: unittest.TestCase, rows: tuple[tuple[object, ...], ...]
+) -> None:
+    names = tuple(str(row[0]) for row in rows)
+    test.assertEqual(len(names), len(set(names)))
+    test.assertEqual(frozenset(names), MANDATED_REFUSAL_ROW_NAMES)
+    test.assertEqual(set(REFUSAL_SOURCE_SITES), MANDATED_REFUSAL_ROW_NAMES)
+    script_tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    source_sites = {
+        node.name for node in ast.walk(script_tree) if isinstance(node, ast.FunctionDef)
+    }
+    for name in names:
+        with test.subTest(name=name):
+            test.assertIn(REFUSAL_SOURCE_SITES[name], source_sites)
+
+
 def _string_literal_fragments(node: ast.AST) -> list[str]:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return [node.value]
@@ -393,8 +636,8 @@ class DependenceSensitivityTests(unittest.TestCase):
             "exactly ten complete blocks",
             "does not accept an alpha option",
             "registered composition with \\(n_{\\mathrm{eff}}=n\\)",
-            "p_{(1)}\\le0.025",
-            "p_{(2)}\\le0.05\\); equality passes",
+            "p_{(1)}\\) with \\(0.025",
+            "p_{(2)}\\) with \\(0.05\\) only if the first rejects; equality passes",
             "Fixed effective-n halving (a named pessimistic scenario, not a bound)",
             "V=2.600391",
             "n_{\\mathrm{eff}}=3.845576",
@@ -587,6 +830,274 @@ class DependenceSensitivityTests(unittest.TestCase):
         self.assertGreater(high_rho, low_rho)
         self.assertEqual(round(high_rho, 6), 2.600391)
         self.assertTrue(math.isfinite(high_rho))
+
+
+class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
+    """Mechanical contract: the sheet's prose, tables, and commands are fixtures."""
+
+    def _document(self) -> str:
+        return DOCUMENT.read_text(encoding="utf-8")
+
+    def _example_payload(self) -> dict[str, Any]:
+        completed = subprocess.run(
+            [sys.executable, str(SCRIPT), "--example"],
+            cwd=REPO_ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return json.loads(completed.stdout)
+
+    def test_every_documented_command_executes_verbatim_with_its_claimed_outcome(
+        self,
+    ) -> None:
+        _assert_documented_command_fixture(self, self._document())
+
+    def test_every_bracketed_ten_number_list_equals_the_example_constant(self) -> None:
+        lists = [
+            json.loads(f"[{match.group('values')}]")
+            for match in BRACKETED_TEN_NUMBER_LIST_PATTERN.finditer(self._document())
+        ]
+        self.assertEqual(len(lists), 2)
+        for values in lists:
+            self.assertEqual(values, dependence_sensitivity.EXAMPLE_BLOCK_DELTAS_J)
+
+    def test_every_draft_line_anchor_resolves_in_the_frozen_draft(self) -> None:
+        _assert_placement_anchor_fixture(self, self._document())
+
+    def test_refusal_row_set_is_exact_and_every_row_binds_to_a_source_site(self) -> None:
+        _assert_refusal_row_fixture(self, REFUSAL_CASES)
+
+    def test_every_worked_example_number_is_rendered_from_output_or_input_constant(
+        self,
+    ) -> None:
+        document = self._document()
+        payload = self._example_payload()
+        summary = payload["summary"]
+        rho = payload["ar1_rho_estimator"]
+
+        input_line = next(
+            line for line in document.splitlines() if line.startswith("These invented values")
+        )
+        input_match = re.search(
+            r"\\\(F=(?P<floor>\d+\.\d+)\\\) J, se_metrology "
+            r"\\\(=(?P<se>\d+\.\d+)\\\) J, and deterministic_bound_total "
+            r"\\\(=(?P<bound>\d+\.\d+)\\\) J",
+            input_line,
+        )
+        self.assertIsNotNone(input_match)
+        assert input_match is not None
+        self.assertEqual(
+            input_match.groupdict(),
+            {
+                "floor": f"{dependence_sensitivity.EXAMPLE_FLOOR_J:.6f}",
+                "se": f"{dependence_sensitivity.EXAMPLE_SE_METROLOGY_J:.6f}",
+                "bound": f"{dependence_sensitivity.EXAMPLE_DETERMINISTIC_BOUND_TOTAL_J:.6f}",
+            },
+        )
+
+        deltas_match = re.search(
+            r"^\| Ordered block deltas \(J\) \| `(?P<deltas>\[[^`\n]+\])` \|$",
+            document,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(deltas_match)
+        assert deltas_match is not None
+        self.assertEqual(
+            json.loads(deltas_match.group("deltas")),
+            dependence_sensitivity.EXAMPLE_BLOCK_DELTAS_J,
+        )
+
+        summary_line = next(
+            line for line in document.splitlines() if line.startswith("Their sum is")
+        )
+        for rendered in (
+            f"{summary['sum_j']:.6f}",
+            f"{summary['mean_j']:.6f}",
+            f"{summary['squared_deviations_sum_j2']:.6f}",
+            f"{summary['sample_stddev_j']:.6f}",
+            f"{rho['numerator']:.6f}",
+            f"{rho['denominator']:.6f}",
+            f"{rho['rho_hat']:.6f}",
+            *(f"{row['term']:.6f}" for row in payload["ar1_variance_terms"]),
+        ):
+            with self.subTest(summary_rendering=rendered):
+                self.assertIn(rendered, summary_line)
+
+        model_rows = [
+            line
+            for line in document.splitlines()
+            if line.startswith("| Registered composition")
+            or line.startswith("| AR(1),")
+            or line.startswith("| Fixed effective-n halving |")
+        ]
+        self.assertEqual(len(model_rows), 3)
+        expected_models = (
+            ("Registered composition with \\(n_{\\mathrm{eff}}=n\\)", "independent_blocks"),
+            ("AR(1), \\(\\hat\\rho=0.300000\\)", "ar1_estimated_rho"),
+            ("Fixed effective-n halving", "fixed_effective_n_halving"),
+        )
+        for row, (label, model_name) in zip(model_rows, expected_models, strict=True):
+            cells = [cell.strip() for cell in row.split("|")[1:-1]]
+            model = payload["models"][model_name]
+            expected_cells = [
+                label,
+                f"{model['effective_n']:.6f}",
+                str(model["degrees_of_freedom"]),
+                (
+                    f"[{model['repeat_only_interval_j']['lower']:.6f}, "
+                    f"{model['repeat_only_interval_j']['upper']:.6f}]"
+                ),
+                (
+                    f"[{model['metrology_aware_interval_j']['lower']:.6f}, "
+                    f"{model['metrology_aware_interval_j']['upper']:.6f}]"
+                ),
+                (
+                    f"[{model['decision_interval_j']['lower']:.6f}, "
+                    f"{model['decision_interval_j']['upper']:.6f}]"
+                ),
+                "pass" if model["floor_gate"]["passes"] else "fail",
+                "pass" if model["direction_gate"]["passes"] else "fail",
+            ]
+            with self.subTest(model=model_name):
+                self.assertEqual(cells, expected_cells)
+
+        prose_lines = {
+            "independent_blocks": next(
+                line
+                for line in document.splitlines()
+                if line.startswith("For registered composition")
+            ),
+            "ar1_estimated_rho": next(
+                line for line in document.splitlines() if line.startswith("For AR(1)")
+            ),
+            "fixed_effective_n_halving": next(
+                line
+                for line in document.splitlines()
+                if line.startswith("For fixed effective-n halving")
+            ),
+        }
+        for model_name, prose_line in prose_lines.items():
+            model = payload["models"][model_name]
+            renderings = (
+                f"V={model['variance_inflation_factor']:.6f}",
+                f"n_{{\\mathrm{{eff}}}}={model['effective_n']:.6f}",
+                f"\\nu={model['degrees_of_freedom']}",
+                f"{model['se_repeat_j']:.6f}",
+                f"{model['se_total_j']:.6f}",
+                f"{model['t_critical_95']:.6f}",
+                f"{model['half_width_j']:.6f}",
+                f"{model['t_statistic']:.6f}",
+                f"{model['raw_two_sided_p_replay']['x']:.12f}",
+                f"{model['raw_two_sided_p']:.9f}",
+            )
+            for rendered in renderings:
+                with self.subTest(model=model_name, rendering=rendered):
+                    self.assertIn(rendered, prose_line)
+            for interval_name in (
+                "repeat_only_interval_j",
+                "metrology_aware_interval_j",
+                "decision_interval_j",
+            ):
+                interval = model[interval_name]
+                self.assertIn(
+                    f"[{interval['lower']:.6f}, {interval['upper']:.6f}]",
+                    prose_line,
+                )
+
+    def test_tail_replay_formula_values_and_source_locations_are_current(self) -> None:
+        document = self._document()
+        payload = self._example_payload()
+        for model in payload["models"].values():
+            replay = model["raw_two_sided_p_replay"]
+            with self.subTest(model=model["model"]):
+                self.assertEqual(replay["formula"], "p = I_x(ν/2, 1/2)")
+                self.assertEqual(replay["x_formula"], "x = ν/(ν + t²)")
+                self.assertAlmostEqual(
+                    replay["x"],
+                    model["degrees_of_freedom"]
+                    / (model["degrees_of_freedom"] + model["t_statistic"] ** 2),
+                )
+        distributions_tree = ast.parse(
+            (REPO_ROOT / "joulewise" / "analysis_engine" / "distributions.py").read_text(
+                encoding="utf-8"
+            )
+        )
+        starts = {
+            node.name: node.lineno
+            for node in ast.walk(distributions_tree)
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertEqual(starts["two_sided_student_t_p_value"], 166)
+        self.assertEqual(starts["student_t_quantile"], 131)
+        script_lines = SCRIPT.read_text(encoding="utf-8").splitlines()
+        self.assertIn("critical = round(student_t_quantile", script_lines[193])
+        self.assertIn("regularized incomplete beta function", document)
+        self.assertIn("iterative numerical fraction evaluation", document)
+
+    def test_every_sheet_numeric_token_is_source_bound_by_the_fixture_rule(self) -> None:
+        document = self._document()
+        self.assertEqual(_sheet_numeric_token_digest(document), SHEET_NUMERIC_TOKEN_SHA256)
+        unmatched = set(re.findall(r"\d+(?:\.\d+)?", document)) - _source_bound_sheet_numbers(
+            self._example_payload()
+        )
+        self.assertEqual(unmatched, set())
+        self.assertEqual(dependence_sensitivity.REGISTERED_N_BLOCKS, 10)
+        self.assertEqual(dependence_sensitivity.REGISTERED_ALPHA, 0.05)
+        self.assertEqual(dependence_sensitivity.EXAMPLE_FLOOR_J, 3.5)
+        self.assertEqual(dependence_sensitivity.EXAMPLE_SE_METROLOGY_J, 0.2)
+        self.assertEqual(dependence_sensitivity.EXAMPLE_DETERMINISTIC_BOUND_TOTAL_J, 4.0)
+        self.assertIn("largest of 118 observed onset and offset excursions from 59", document)
+
+    def test_mutation_table_has_zero_survivors_across_all_four_surfaces(self) -> None:
+        document = self._document()
+        mutations = (
+            (
+                "sheet-number digit",
+                lambda: self.assertEqual(
+                    _sheet_numeric_token_digest(
+                        document.replace("50.000000", "51.000000", 1)
+                    ),
+                    SHEET_NUMERIC_TOKEN_SHA256,
+                ),
+            ),
+            (
+                "documented command line",
+                lambda: _assert_documented_command_fixture(
+                    self,
+                    document.replace(
+                        "python3 scripts/dependence_sensitivity.py --example",
+                        "python3 scripts/dependence_sensitivity.py --example --floor 3.5",
+                        1,
+                    ),
+                ),
+            ),
+            (
+                "draft anchor line",
+                lambda: _assert_placement_anchor_fixture(
+                    self, document.replace("line 294", "line 293", 1)
+                ),
+            ),
+            (
+                "refusal-row deletion",
+                lambda: _assert_refusal_row_fixture(self, REFUSAL_CASES[1:]),
+            ),
+            (
+                "refusal-row addition",
+                lambda: _assert_refusal_row_fixture(
+                    self, REFUSAL_CASES + (("unmandated_refusal", (), ""),)
+                ),
+            ),
+        )
+        for surface, mutation in mutations:
+            with self.subTest(surface=surface):
+                with self.assertRaises(AssertionError):
+                    mutation()
+        print(
+            "MUTATION_TABLE zero survivors: sheet-number=0, command=0, "
+            "draft-anchor=0, refusal-delete-add=0"
+        )
 
 
 if __name__ == "__main__":
