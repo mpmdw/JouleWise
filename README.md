@@ -40,13 +40,21 @@ worked example's 30 ms calibration bound into its four physical parts
 placement limit + ~1 ms clock term) — the paper's first plotted
 measured data.
 
-**Now:** finishing the regenerated campaign plan (the new pass/fail
-rule wired in, the new model pair pinned, real prompts instead of a
-synthetic one), then its clone rehearsal.
+**Now (updated 2026-08-31):** the regenerated campaign plan is
+code-complete and merged after a full adversarial review cycle: the new
+model pair is pinned down to the tokenizer bytes the machine actually
+loads, the new pass/fail ratio is registered into the plan, and a
+fresh-eyes review board settled how the prompt-length rung is chosen
+(four candidate lengths, a hard count floor, and an honest refusal if
+none qualifies — with the selection done by a checked program, not a
+judgment call on the night). The paper-side fill contract is being
+re-issued against the new plan.
 
-**Next:** the campaign transaction night (earliest ≈ 2026-09-01/02),
-about a week of collection, then the paper's results fill from its
-output.
+**Next:** one instrumented evening at the machine measures the four
+candidate prompt lengths; a desk day then pins the choice, generates
+the final plan, and re-proves it end-to-end in a throwaway clone; the
+transaction night follows (≈ 2026-09-02/03), then about a week of
+collection and the paper's results fill.
 
 ## Current State
 

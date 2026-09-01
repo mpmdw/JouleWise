@@ -10,6 +10,31 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T28b (2026-08-30/31) — THE STALLED QUEUE IS FULLY LANDED; the `_v5` desk
+block is code-complete.** MERGED: #241 (the `_v5` production-pack prep — Qwen3
+pair pinned with runtime identity enforcement, D-165 dominance_criterion +
+R_cm replay, prefill-arm validator; gauntlet: contract refuter + 4 fix rounds
++ 4 delta audits + a root-cause repair of the controller/loader identity seam
+with the AP-2 blind-spot lesson codified in `adjacency-policy.md`), #229 (G2
+checker + the G2-a/desk/G2-b split runsheet with a GENERATED Phase D region,
+the ratified ledger-pin boundary, exact-set membership, and the executable
+`select_g2a_prefill_length.py` selector), #246 (the `_v6` scored leg —
+condition_family.v2 per the NEEDS-RULING-01 ruling, GSM8K import chain
+hardened fail-closed, deprecated producer deleted;
+V6-TOKEN-PIN-BINDING-01 registered as the `_v6` pre-collection blocker),
+#240/#242/#244/#245 (all four reviewer-panel desk analyses), #243 (RQ map
+`_v5` re-base), #236 (round-7 prep + lexicon/lint), #209 (W-10). **COLD GATE
+2026-08-30 AMENDED D-166** (trace `2026-08-30-prefill-margin-coldgate/`):
+"margin ≥5" = count ≥ 5; ladder 512/1024/2048/4096; split refusal branch;
+G2-a sweep (≥5 small-model members/rung) is the selection's precondition.
+D-165 R-5 completed (absolute R_cm not_applicable). Estate 11 ran and HALTED
+correctly on delta drift (anchor #14 rename ruled correct; estate 12 derives
+symbol-pinned anchors at cut). OPEN: #239 (held). IN FLIGHT: the `_v5`
+fill-registry regeneration and the estate-12 delta template (Sol streams).
+NEXT MACHINE STEP: G2-a evening (brackets + four-rung prefill probes) — see
+the T28 Ed items in the session summary; transaction ≈ 09-02/03 if G2-a runs
+tonight.**
+
 **T28 (2026-08-29/30) — RESUMED from the T27 usage-limit stall; queue drained,
 `_v5` prep relaunched.** Main was RED (D-164/165/166 index rows landed without
 bodies — cured, `1e763b15`). Merged: #232 (kernel wave 2), #233 (model-panel
