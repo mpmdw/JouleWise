@@ -1,0 +1,416 @@
+{
+  "anchors": [
+    {
+      "anchor_id": "audit.arm.01",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "EvidenceLifecycleError"
+    },
+    {
+      "anchor_id": "audit.arm.02",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "validate_registry"
+    },
+    {
+      "anchor_id": "audit.arm.03",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_load_histsem_pinset"
+    },
+    {
+      "anchor_id": "audit.arm.04",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "verify_all_receipt_histsem"
+    },
+    {
+      "anchor_id": "audit.arm.05",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_gate_receipt_histsem"
+    },
+    {
+      "anchor_id": "audit.arm.06",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_r1_changed_paths"
+    },
+    {
+      "anchor_id": "audit.arm.07",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_r1_manifest_dependencies"
+    },
+    {
+      "anchor_id": "audit.arm.08",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_require_confirmed_conditional_path"
+    },
+    {
+      "anchor_id": "audit.arm.09",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "validate_r1_evidence_lifecycle"
+    },
+    {
+      "anchor_id": "audit.arm.10",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_admit_bound_analysis_manifest"
+    },
+    {
+      "anchor_id": "audit.arm.11",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_issued_d079"
+    },
+    {
+      "anchor_id": "audit.arm.12",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_evidence_directories"
+    },
+    {
+      "anchor_id": "audit.arm.13",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_authenticate_generic_evidence_item"
+    },
+    {
+      "anchor_id": "audit.arm.14",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_discover_evidence"
+    },
+    {
+      "anchor_id": "audit.arm.15",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_authenticate_freeze_predecessor"
+    },
+    {
+      "anchor_id": "audit.arm.16",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_derive_freeze_predecessor"
+    },
+    {
+      "anchor_id": "audit.arm.17",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_load_freeze_reference"
+    },
+    {
+      "anchor_id": "audit.arm.18",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "generate_freeze_receipt"
+    },
+    {
+      "anchor_id": "audit.arm.19",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "generate_arm_receipt"
+    },
+    {
+      "anchor_id": "audit.arm.20",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_candidate_manifest_tool_digest"
+    },
+    {
+      "anchor_id": "audit.arm.21",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_family_tool_reference"
+    },
+    {
+      "anchor_id": "audit.arm.22",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "build_family_publication_marker"
+    },
+    {
+      "anchor_id": "audit.cli.author.main",
+      "file": "scripts/author_arm_readiness_evidence.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "main"
+    },
+    {
+      "anchor_id": "audit.cli.author.parser",
+      "file": "scripts/author_arm_readiness_evidence.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_parser"
+    },
+    {
+      "anchor_id": "audit.cli.histsem.main",
+      "file": "scripts/verify_receipt_histsem.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "main"
+    },
+    {
+      "anchor_id": "audit.cli.histsem.parser",
+      "file": "scripts/verify_receipt_histsem.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_parser"
+    },
+    {
+      "anchor_id": "audit.cli.identity.main",
+      "file": "scripts/project_identity_pins.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "main"
+    },
+    {
+      "anchor_id": "audit.cli.identity.parser",
+      "file": "scripts/project_identity_pins.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "parse_args"
+    },
+    {
+      "anchor_id": "audit.cli.readiness.main",
+      "file": "scripts/generate_arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "main"
+    },
+    {
+      "anchor_id": "audit.cli.readiness.parser",
+      "file": "scripts/generate_arm_readiness.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_parser"
+    },
+    {
+      "anchor_id": "audit.evidence.applicability",
+      "file": "joulewise/arm_readiness_evidence.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_required_generic_rows"
+    },
+    {
+      "anchor_id": "audit.evidence.author",
+      "file": "joulewise/arm_readiness_evidence.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "author_arm_readiness_evidence"
+    },
+    {
+      "anchor_id": "audit.floor_generator.cli",
+      "file": "configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "main"
+    },
+    {
+      "anchor_id": "audit.floor_generator.echo",
+      "file": "configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_generate"
+    },
+    {
+      "anchor_id": "audit.floor_generator.parser",
+      "file": "configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "parse_args"
+    },
+    {
+      "anchor_id": "audit.identity",
+      "file": "joulewise/identity_pins.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "freeze_projection"
+    },
+    {
+      "anchor_id": "audit.pinset.cli_refusal",
+      "file": "tests/test_receipt_histsem.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "ReceiptHistoricalSemanticsTests.test_verifier_cli_refusal_is_canonical_and_exit_two"
+    },
+    {
+      "anchor_id": "audit.pinset.no_unreviewed_lane",
+      "file": "tests/test_receipt_histsem.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "ReceiptHistoricalSemanticsTests.test_pinset_is_byte_pinned_and_has_no_unreviewed_update_lane"
+    },
+    {
+      "anchor_id": "audit.pinset.path",
+      "file": "tests/test_receipt_histsem.py",
+      "kind": "content",
+      "symbol_or_content_pin": "PINSET = ROOT / \"configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json\""
+    },
+    {
+      "anchor_id": "audit.pinset.sha256",
+      "file": "tests/test_receipt_histsem.py",
+      "kind": "content",
+      "symbol_or_content_pin": "PINSET_SHA256 = \"3e513c535e3095bab44b53c029961aeb54baf1875df2bddd663e679482b38543\""
+    },
+    {
+      "anchor_id": "audit.pyproject.core",
+      "file": "pyproject.toml",
+      "kind": "content_range",
+      "symbol_or_content_pin": [
+        "[build-system]",
+        "dependencies = []"
+      ]
+    },
+    {
+      "anchor_id": "legacy.01",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "EvidenceLifecycleError"
+    },
+    {
+      "anchor_id": "legacy.02",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "content",
+      "symbol_or_content_pin": "            - set(lifecycle[\"irrelevant_path_allowlist\"])"
+    },
+    {
+      "anchor_id": "legacy.03",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "_gate_receipt_histsem"
+    },
+    {
+      "anchor_id": "legacy.04",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "_r1_changed_paths"
+    },
+    {
+      "anchor_id": "legacy.05",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "content",
+      "symbol_or_content_pin": "    allowlist = set(governed[\"irrelevant_path_allowlist\"])"
+    },
+    {
+      "anchor_id": "legacy.06",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "_authenticate_generic_evidence_item"
+    },
+    {
+      "anchor_id": "legacy.07",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "_load_freeze_reference"
+    },
+    {
+      "anchor_id": "legacy.08",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "generate_freeze_receipt"
+    },
+    {
+      "anchor_id": "legacy.09",
+      "file": "joulewise/arm_readiness.py",
+      "kind": "content",
+      "symbol_or_content_pin": "    generation = _pack_generation(root.name)"
+    },
+    {
+      "anchor_id": "legacy.10",
+      "file": "joulewise/identity_pins.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "freeze_projection"
+    },
+    {
+      "anchor_id": "legacy.11",
+      "file": "scripts/generate_arm_readiness.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "_parser"
+    },
+    {
+      "anchor_id": "legacy.12",
+      "file": "scripts/project_identity_pins.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "parse_args"
+    },
+    {
+      "anchor_id": "legacy.13",
+      "file": "scripts/verify_receipt_histsem.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "_parser"
+    },
+    {
+      "anchor_id": "legacy.14",
+      "file": "tests/test_receipt_histsem.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "ReceiptHistoricalSemanticsTests.test_pinset_is_byte_pinned_and_has_no_unreviewed_update_lane"
+    },
+    {
+      "anchor_id": "legacy.15",
+      "file": "tests/test_receipt_histsem.py",
+      "kind": "symbol",
+      "symbol_or_content_pin": "ReceiptHistoricalSemanticsTests.test_verifier_cli_refusal_is_canonical_and_exit_two"
+    },
+    {
+      "anchor_id": "v5.dominance.estimator_site",
+      "file": "configs/campaigns/d117_contrast_v5/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "contrast_floor_estimator_registration"
+    },
+    {
+      "anchor_id": "v5.dominance.manifest_site",
+      "file": "configs/campaigns/d117_contrast_v5/generate_configs.py",
+      "kind": "content",
+      "symbol_or_content_pin": "            \"floor_estimator_registration\": contrast_floor_estimator_registration(),"
+    },
+    {
+      "anchor_id": "v5.dominance.registration",
+      "file": "configs/campaigns/d117_contrast_v5/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "dominance_criterion_registration"
+    },
+    {
+      "anchor_id": "v5.g2a.selection",
+      "file": "scripts/select_g2a_prefill_length.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "select"
+    },
+    {
+      "anchor_id": "v5.mlx.identity_check",
+      "file": "joulewise/adapters/mlx_runtime.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_model_identity_pin_refusal"
+    },
+    {
+      "anchor_id": "v5.mlx.prepare_gate",
+      "file": "joulewise/adapters/mlx_runtime.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "MlxRuntimeAdapter.prepare"
+    },
+    {
+      "anchor_id": "v5.pinset_refresh.apply",
+      "file": "scripts/refresh_receipt_histsem_pinset.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "refresh"
+    },
+    {
+      "anchor_id": "v5.pinset_refresh.derive",
+      "file": "scripts/refresh_receipt_histsem_pinset.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_derive_row"
+    },
+    {
+      "anchor_id": "v5.pinset_refresh.main",
+      "file": "scripts/refresh_receipt_histsem_pinset.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "main"
+    },
+    {
+      "anchor_id": "v5.pinset_refresh.parser",
+      "file": "scripts/refresh_receipt_histsem_pinset.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_parser"
+    },
+    {
+      "anchor_id": "v5.prefill.prompt_pin_refusal",
+      "file": "configs/campaigns/d117_contrast_v5/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "_load_prefill_prompt_pin"
+    },
+    {
+      "anchor_id": "v5.prefill.unresolved_refusal",
+      "file": "configs/campaigns/d117_contrast_v5/generate_configs.py",
+      "kind": "symbol_range",
+      "symbol_or_content_pin": "configure_model_pair"
+    }
+  ],
+  "schema_version": "joulewise.estate_anchor_spec.v1"
+}
