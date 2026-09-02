@@ -78,7 +78,8 @@ Every substantial session runs one conductor procedure:
    merge: a pre-merge oversight pass by 2–3 fresh reviewers with
    distinct angles (deep regression hunt; claim-to-evidence trace;
    merge-order simulation across sibling PRs), lead triage, fixes, CI
-   green. **Final-head rule:** any commit that lands after the last
+   green. The gate ledger has a tracked form (template + `gate-ledger` job,
+   D-170); fill all twelve rows before self-merge. **Final-head rule:** any commit that lands after the last
    review round gets one more fresh review before merge — no commit
    merges unreviewed, however small (its first application caught a
    crash path in a "trivial" post-review fix).
