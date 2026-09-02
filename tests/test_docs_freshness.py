@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import tempfile
 import unittest
@@ -146,7 +147,14 @@ def _has_executed_evidence(text: str, root: Path = ROOT) -> bool:
     citation_paths = re.findall(
         r"([A-Za-z0-9_./-]+\.(?:py|sh|json|toml|ya?ml)):\d+", body
     )
-    citation = any((root / path).is_file() for path in citation_paths)
+    # A citation names a file at repository HEAD: repo-relative only, so an
+    # absolute path or a `..` component cannot point outside `root`.
+    citation = any(
+        not path.startswith("/")
+        and ".." not in path.split("/")
+        and (root / path).is_file()
+        for path in citation_paths
+    )
     fenced_blocks = re.findall(
         r"^```[^\n]*\n(.*?)^```\s*$", body, flags=re.MULTILINE | re.DOTALL
     )
@@ -743,6 +751,24 @@ class DocsFreshnessTests(unittest.TestCase):
                 ROOT,
             )
         )
+        with tempfile.TemporaryDirectory(prefix="docs_freshness_outside.") as outside:
+            outside_file = Path(outside) / "outside.py"
+            outside_file.write_text("# outside\n", encoding="utf-8")
+            # Sol 230 F1: an absolute path or a `..` escape is not a file at HEAD.
+            self.assertFalse(
+                _has_executed_evidence(
+                    f"## Executed evidence\n\nSee {outside_file}:1.\n",
+                    ROOT,
+                )
+            )
+            relative_escape = Path(os.path.relpath(outside_file, ROOT)).as_posix()
+            self.assertTrue(relative_escape.startswith("../"))
+            self.assertFalse(
+                _has_executed_evidence(
+                    f"## Executed evidence\n\nSee {relative_escape}:1.\n",
+                    ROOT,
+                )
+            )
 
     def test_dated_ruling_selector_scans_all_depths_and_excludes_needs_ruling(self) -> None:
         with tempfile.TemporaryDirectory(prefix="docs_freshness_rulings.") as root_name:

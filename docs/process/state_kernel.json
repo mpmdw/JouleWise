@@ -4474,7 +4474,7 @@
           "tests.test_docs_freshness green with the status-vocabulary test, the open-pointer check, and the Executed-evidence shape test present; M7, M8, the $ echo exit fence, the .md:48-only citation, both-depth positive controls, and the NEEDS-RULING- exclusion are mutation-killed",
           "gate-ledger CI job advisory-green on its own PR; pull_request_template.md tracked",
           "arm_readiness boundary regressions (600 s +/- 1 ns at issuance and at arm) green; tests.test_arm_readiness_evidence_t0 and tests.test_t0_rehearsal green",
-          "each of the four D-170 dependencies on this row moved to satisfied with an evidence pointer at the regression that fails when the ruled value is absent"
+          "the single D-170 dependency on this row (the ruled B2 object, covering all four T26 mechanisms) moved to satisfied with an evidence pointer at the regression that fails when the ruled value is absent"
         ],
         "pointer": {
           "json_pointer": "/tasks/T26-RULING-INSTALL-01/acceptance",
