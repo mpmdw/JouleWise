@@ -689,7 +689,15 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertIn("for length in 512 1024 2048 4096", runsheet)
         self.assertIn("Qwen3", runsheet)
         self.assertIn("in_window_sample_count", runsheet)
-        self.assertIn("overlap_margin_above_three", runsheet)
+        # The per-row margin-above-three column left the runsheet with the
+        # inline jq; the ratified reading (count >= 5) is now the summarizer's
+        # constant, bound here so the runsheet and its producer cannot drift.
+        summarizer = (
+            Path(__file__).resolve().parents[1]
+            / "scripts/summarize_g2a_prefill_probe.py"
+        ).read_text()
+        self.assertIn("MIN_OVERLAPPING_POWER_INTERVAL_COUNT = 5", summarizer)
+        self.assertNotIn("overlap_margin_above_three", runsheet)
         # Ratified selection (cold gate 2026-08-30): small-model count >= 5
         # gates; the discarded margin-≥-5 reading (count >= 8) must be gone.
         self.assertIn("all_small_count_ge_5", runsheet)
