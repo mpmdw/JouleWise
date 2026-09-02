@@ -714,9 +714,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    payload = build_payload(
-        args.repository_root.resolve(), args.corpus_root.resolve()
-    )
+    try:
+        payload = build_payload(
+            args.repository_root.resolve(), args.corpus_root.resolve()
+        )
+    except PopulationUnavailable as exc:
+        print(f"population unavailable: {exc}", file=sys.stderr)
+        return 3
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"

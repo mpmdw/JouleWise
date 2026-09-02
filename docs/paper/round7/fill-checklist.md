@@ -22,7 +22,10 @@ draft in place.
 - **Replay fence:** `scripts/check_paper_replay_fence.py`; require the exact
   successful tail `COMPARED 43` / `MISMATCHES 0` before and after every batch.
 - **Round-7 artifact fence:** `scripts/check_paper_round7_artifacts.py`; its
-  `R7F COMPARED n / MISMATCHES 0` census is separate from RF's 43 comparisons.
+  exact successful full-replay tail is `R7F COMPARED 184 / MISMATCHES 0`,
+  separate from RF's 43 comparisons. The literals-only tail
+  `R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0` is not sufficient before a
+  fill batch.
 - **STOP_FILL:** no insertion when a required artifact, field, identity pin,
   replay, branch predicate, or registered rendering is absent or malformed.
 - **`[PREFILL_LENGTH]`:** the G2-a selection record's
