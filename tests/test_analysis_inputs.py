@@ -765,6 +765,121 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
 
             self.assertIsNone(floor_request_for_evidence(*case))
 
+    def test_self_consistent_forged_pack_requires_launch_tree_digest_binding(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-pack-forgery-") as temporary:
+            root = Path(temporary)
+            fixture, pack = self._generated_frozen_gate_pack(root)
+            transport_case = self._generated_transport_case(pack)
+            lineage = transport_case[4][0].launch_lineage
+            assert isinstance(lineage, Mapping)
+            honest_sha = lineage["pack_sha256"]
+
+            raw_config = transport_case[4][0].raw_config
+            assert isinstance(raw_config, dict)
+            raw_config["run_metadata"]["tags"].append("identity-drift")
+
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            projection = tree["arm_attachments"]["identity_pin_projection"]
+            receipt_path = pack / projection["projection_receipt"]["path"]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in receipt["identity_units"]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            inventory_row = unit["config_inventory"][0]
+            config_raw = (
+                json.dumps(raw_config, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            (pack / inventory_row["path"]).write_bytes(config_raw)
+            inventory_row["sha256"] = hashlib.sha256(config_raw).hexdigest()
+            identities = {
+                scientific_config_identity_sha256(
+                    json.loads(
+                        (pack / row["path"]).read_text(encoding="utf-8")
+                    )
+                )
+                for row in unit["config_inventory"]
+            }
+            new_set_sha = identity_pins.identity_unit_config_set_sha256(identities)
+            unit["model_runtime_config"]["config_set_sha256"] = new_set_sha
+            projection_unit = next(
+                item
+                for item in projection["identity_units"]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            projection_unit["model_runtime_config"][
+                "config_set_sha256"
+            ] = new_set_sha
+            for projection_row in projection_unit["config_inventory"]:
+                if projection_row["path"] == inventory_row["path"]:
+                    projection_row["sha256"] = inventory_row["sha256"]
+
+            receipt_raw = identity_pins._render_json(receipt)
+            receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
+            receipt_path.write_bytes(receipt_raw)
+            receipt_path.with_suffix(".sha256").write_bytes(
+                arm_readiness.gnu_sidecar(receipt_sha, receipt_path.name)
+            )
+            projection["projection_receipt"]["sha256"] = receipt_sha
+
+            freeze_reference = tree["arm_attachments"]["arm_readiness"][
+                "freeze_receipt"
+            ]
+            freeze_path = pack / freeze_reference["path"]
+            freeze_receipt = json.loads(freeze_path.read_text(encoding="utf-8"))
+            for item in freeze_receipt["evidence"]:
+                if item["evidence_id"] == "u11-freeze-projection":
+                    item["sha256"] = receipt_sha
+            freeze_raw = arm_readiness.render_json(freeze_receipt)
+            freeze_sha = hashlib.sha256(freeze_raw).hexdigest()
+            freeze_path.write_bytes(freeze_raw)
+            freeze_path.with_name(f"{freeze_path.name}.sha256").write_bytes(
+                arm_readiness.gnu_sidecar(freeze_sha, freeze_path.name)
+            )
+            freeze_reference["sha256"] = freeze_sha
+            fixture.write_identity_tree(pack, tree)
+            fixture.commit_fixture(root, "forge: A/decode declares drifted identity")
+            forged_sha = committed_pack_tree_sha256(pack)
+            self.assertNotEqual(forged_sha, honest_sha)
+
+            exact_case = self._generated_exact_case(pack)
+            for row in exact_case[4]:
+                assert isinstance(row.launch_lineage, dict)
+                row.launch_lineage["pack_sha256"] = honest_sha
+            self.assertEqual(
+                exact_case[4][0].raw_config["run_metadata"]["tags"].count(
+                    "identity-drift"
+                ),
+                1,
+            )
+            drifted_identity = scientific_config_identity_sha256(
+                exact_case[4][0].raw_config
+            )
+            exact_case[1].cell_scientific_identity_sha256[
+                "exact-cell"
+            ] = drifted_identity
+
+            resolution = self._production_floor_resolution(exact_case)
+
+            self.assertEqual(resolution.status, "refused")
+            self.assertEqual(
+                resolution.reason_codes,
+                ("consumer_identity_set_unauthenticated",),
+            )
+            self.assertIsNone(floor_request_for_evidence(*transport_case))
+
+            for row in exact_case[4]:
+                assert isinstance(row.launch_lineage, dict)
+                row.launch_lineage["pack_sha256"] = forged_sha
+            declared = _frozen_consumer_identity_set(exact_case[4], exact_case[3])
+            self.assertIn(drifted_identity, declared)
+            control = self._production_floor_resolution(exact_case)
+            self.assertEqual(control.status, "exact")
+            self.assertEqual(control.reason_codes, ())
+
     def test_generated_pack_gate_refuses_plan_receipt_config_set_mismatch(self) -> None:
         with tempfile.TemporaryDirectory(prefix="analysis-v5-config-set-") as temporary:
             root = Path(temporary)
@@ -912,6 +1027,46 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
                 evidence,
             )
         self.assertIsNone(refused)
+
+    def test_generated_multi_identity_transport_uses_real_frozen_gate_and_skips_exact_cell(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-real-gate-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+            case = self._generated_transport_case(pack)
+            artifact, _binding, contrast, condition_id, evidence = case
+
+            resolution = self._production_floor_resolution(case)
+            self.assertNotIn(
+                "consumer_identity_set_unauthenticated",
+                resolution.reason_codes,
+            )
+            declared = _frozen_consumer_identity_set(evidence, condition_id)
+            evidence_identities = {
+                scientific_config_identity_sha256(row.raw_config)
+                for row in evidence
+            }
+            self.assertTrue(evidence_identities.issubset(declared))
+            self.assertEqual(len(evidence_identities), 2)
+
+            request = floor_request_for_evidence(*case)
+
+            self.assertIsNotNone(request)
+            self.assertEqual(request.condition_family_sha256, "c" * 64)
+
+            artifact["cells"].append(
+                {
+                    "cell_id": "exact-cell",
+                    "key": {
+                        "backend": "powermetrics",
+                        **contrast["floor_selector"],
+                        "condition_family_id": condition_id,
+                        "condition_family_sha256": "d" * 64,
+                    },
+                }
+            )
+            self.assertIsNone(floor_request_for_evidence(*case))
 
 
 if __name__ == "__main__":

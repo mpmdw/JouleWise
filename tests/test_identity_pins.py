@@ -405,7 +405,7 @@ class SharedDerivationTests(unittest.TestCase):
         self.assertIn("suite_manifest_sha256", workload)
 
     def test_declared_manifest_identity_cardinality_refuses_synthetic_mismatch(self) -> None:
-        """M6 dies on the pure declared-count versus observed-identity seam."""
+        """Lines 1681/1695 plus manifest retention at 218 dominate line 1701."""
 
         self.assertIsNone(
             identity_pins._distinct_manifest_identity_refusal_reason(
@@ -417,6 +417,49 @@ class SharedDerivationTests(unittest.TestCase):
                 2, {"a" * 64}
             ),
             "readiness_identity_environment_dirty",
+        )
+
+    def test_distinct_manifest_bindings_produce_distinct_scientific_identities(
+        self,
+    ) -> None:
+        first_raw = synthetic_config(Path("/synthetic/model"), "manifest-member")
+        first_raw["workload_profile"].pop("prompt_tokens")
+        first_raw["workload_profile"].update(
+            suite_manifest_ref="manifests/first.json",
+            suite_manifest_sha256="a" * 64,
+        )
+        second_raw = copy.deepcopy(first_raw)
+        second_raw["workload_profile"].update(
+            suite_manifest_ref="manifests/second.json",
+            suite_manifest_sha256="b" * 64,
+        )
+        first = BenchmarkConfig.from_mapping(first_raw).to_dict()
+        second = BenchmarkConfig.from_mapping(second_raw).to_dict()
+
+        first_identity = identity_pins.scientific_config_identity(first)
+        second_identity = identity_pins.scientific_config_identity(second)
+
+        self.assertIsNotNone(first_identity)
+        self.assertIsNotNone(second_identity)
+        self.assertEqual(
+            first_identity["workload_profile"]["suite_manifest_sha256"],
+            "a" * 64,
+        )
+        self.assertEqual(
+            second_identity["workload_profile"]["suite_manifest_sha256"],
+            "b" * 64,
+        )
+        self.assertEqual(
+            first_identity["workload_profile"]["suite_manifest_ref"],
+            "manifests/first.json",
+        )
+        self.assertEqual(
+            second_identity["workload_profile"]["suite_manifest_ref"],
+            "manifests/second.json",
+        )
+        self.assertNotEqual(
+            scientific_config_identity_sha256(first),
+            scientific_config_identity_sha256(second),
         )
 
     def test_single_identity_set_digest_matches_committed_v3_receipt(self) -> None:
