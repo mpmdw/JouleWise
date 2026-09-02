@@ -40,7 +40,7 @@ the real custody by the refusal check is not PASS.
 ## Amendment 2026-09-01 (ruling 97)
 
 This amendment preserves the prior record while correcting the night commands
-under ruling 97. Old lines 67--74 struck the aggregate-floor precondition:
+under ruling 97. Old lines 69--74 struck the aggregate-floor precondition:
 the floor is minted inside the transaction, so no floor bytes can exist before
 G2-b. Old lines 117--121's remaining ruling is resolved because the refusal
 command is executable with its absent custody path. Old line 149's tree entry,
