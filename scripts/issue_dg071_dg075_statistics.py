@@ -65,8 +65,9 @@ producer: the ``git_commit`` they record is the last commit that changed this
 script (``git log -1 --format=%H -- scripts/issue_dg071_dg075_statistics.py``),
 not the checkout's HEAD, so re-running the producer from any checkout in which
 the script is unchanged since that commit reproduces both files byte for byte.
-The script's SHA-256 is recorded beside it, so an uncommitted edit to the
-producer shows as a mismatch between the two.
+The script's SHA-256 is recorded beside it and must equal the SHA-256 of the
+script as committed there (``git show <producer commit>:<script path>``); an
+uncommitted edit to the producer shows as the two hashes differing.
 """
 
 from __future__ import annotations
@@ -122,8 +123,10 @@ PROVENANCE_DISCLOSURE = (
     "exactly the commit a reader checks out; recording the script's last "
     "commit means re-running the producer from any checkout in which the "
     "script is unchanged since that commit reproduces both files byte for "
-    "byte. The producer SHA-256 is recorded beside it: an uncommitted edit to "
-    "the producer shows as a mismatch between the two."
+    "byte. The producer SHA-256 is recorded beside it and must equal the "
+    "SHA-256 of the script as committed there (`git show <producer commit>:"
+    f"{SCRIPT_REPOSITORY_PATH}`); an uncommitted edit to the producer shows "
+    "as the two hashes differing."
 )
 MS_RENDER_QUANTUM = Decimal("0.0001")
 TILING_TOLERANCE_S = Decimal("0.000001")

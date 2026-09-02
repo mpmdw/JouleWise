@@ -397,8 +397,10 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                     "script's last commit means re-running the producer from any "
                     "checkout in which the script is unchanged since that commit "
                     "reproduces both files byte for byte. The producer SHA-256 is "
-                    "recorded beside it: an uncommitted edit to the producer shows "
-                    "as a mismatch between the two."
+                    "recorded beside it and must equal the SHA-256 of the script as "
+                    "committed there (`git show <producer commit>:"
+                    "scripts/issue_dg071_dg075_statistics.py`); an uncommitted edit "
+                    "to the producer shows as the two hashes differing."
                 ),
             },
             "producer": {
@@ -692,9 +694,23 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             script.parent.mkdir(parents=True)
             script.write_bytes(script_raw)
             git(checkout, "init", "--quiet", date="2000-01-01T00:00:00+00:00")
-            # The script commit is identical in both repositories (same tree,
-            # message and pinned dates); the later empty commit differs by date
-            # so the two HEADs are different commits.
+            # History in each repository: root (empty) -> producer -> a commit
+            # touching an unrelated file -> a later empty commit. The first
+            # three are identical in both repositories (same trees, messages
+            # and pinned dates); the last differs by date so the two HEADs are
+            # different commits. The producer commit is therefore neither the
+            # root, nor HEAD, nor HEAD's parent, nor the last commit of the
+            # history: only a path-scoped lookup finds it (a HEAD, HEAD^ or
+            # unscoped `git log -1` implementation records the wrong commit).
+            git(
+                checkout,
+                "commit",
+                "--quiet",
+                "--allow-empty",
+                "-m",
+                "root",
+                date="2000-01-01T00:00:00+00:00",
+            )
             git(
                 checkout,
                 "add",
@@ -712,6 +728,16 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             script_commits.append(
                 git(checkout, "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00")
             )
+            (checkout / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
+            git(checkout, "add", "unrelated.txt", date="2000-01-01T00:00:00+00:00")
+            git(
+                checkout,
+                "commit",
+                "--quiet",
+                "-m",
+                "unrelated",
+                date="2000-01-01T00:00:00+00:00",
+            )
             git(
                 checkout,
                 "commit",
@@ -722,7 +748,11 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                 date=f"2000-01-0{index + 2}T00:00:00+00:00",
             )
             head = git(checkout, "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00")
+            head_parent = git(
+                checkout, "rev-parse", "HEAD^", date="2000-01-01T00:00:00+00:00"
+            )
             self.assertNotEqual(head, script_commits[-1])
+            self.assertNotEqual(head_parent, script_commits[-1])
             out = checkout / "issued.json"
             exit_code, stderr, _ = self._run_main(
                 out,
@@ -735,6 +765,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             payload = json.loads(outputs[-1])
             self.assertEqual(payload["producer"]["git_commit"], script_commits[-1])
             self.assertNotEqual(payload["producer"]["git_commit"], head)
+            self.assertNotEqual(payload["producer"]["git_commit"], head_parent)
 
         self.assertEqual(script_commits[0], script_commits[1])
         self.assertEqual(outputs[0], outputs[1])
