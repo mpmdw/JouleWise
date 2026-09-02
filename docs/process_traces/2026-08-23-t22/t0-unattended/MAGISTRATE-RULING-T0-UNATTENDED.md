@@ -82,8 +82,6 @@ consumption-time SNTP recency tighter than 6 h is a de-facto horizon
 change and requires an Ed ruling — it must not travel as "predicate
 recency."
 
-**Horizon — AMENDED by cold gate 2026-08-28 (T26 item 3):** the 5 s issuance bound and the 35 s corollary are STRUCK; the retained relation is `0 ≤ (valid_until_monotonic_ns − 21_600_000_000_000) − r1_batch_finished_monotonic_ns ≤ 600_000_000_000` on the ordinary monotonic clock, a liveness bound, not a metrology bound — see `docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md` item 3 and D-170.
-
 **Enforcement postcondition (Sol):** double active
 `systemsetup -setusingnetworktime off` with exit 0 AND exact-stdout-line
 match — ADOPTED, GATED on Ed bench-verifying the exact

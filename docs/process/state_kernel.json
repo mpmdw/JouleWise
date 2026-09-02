@@ -1843,7 +1843,17 @@
         "label": "S9-04 (the gamma four-unit roster is a hand-written literal that nothing checks); ruled roster is D-131 clause 2a",
         "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed (hard-start decision gate and producer-regression evidence rule); the 2026-09-02 cold-gate ruling section B4 applies this dependency to the existing S9-04 row",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -1867,8 +1877,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 109,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD.",
+      "status": "blocked",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
     "GIT-FIXTURE-MAINTENANCE-SWEEP-01": {
@@ -2013,6 +2023,15 @@
         },
         {
           "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed (hard-start decision gate and producer-regression evidence rule); the 2026-09-02 cold-gate ruling section B4 applies this dependency to the existing S9-12 row",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        },
+        {
+          "evidence": null,
           "kind": "task",
           "required": "the L10-A record exists and is ratified",
           "scope": "start",
@@ -2054,7 +2073,7 @@
       "priority": "p1_phase_gate",
       "rank": 113,
       "status": "blocked",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-12 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
     "LINE-AUDIT-GUARD-01": {
@@ -3983,6 +4002,52 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
+    "R7F-DX-PROSE-SCAN-01": {
+      "acceptance": {
+        "evidence": [
+          "scripts/check_paper_round7_artifacts.py scans the DX prose region of docs/paper/draft-v2-skeleton.md (from the mandatory standing sentence to the next '^#' heading) and reports 'MISMATCH prose DX-nnn' for any DX rendered literal in that region not immediately preceded by its own [FILL:DX-nnn] marker; no global scan outside the region",
+          "Regressions in tests/test_paper_round7_artifacts.py: 'refused 49 of 59 pulses' unmarked inside the region -> rc 2; the same literal outside the region -> pass; the literal with its marker -> pass",
+          "fill-checklist.md's deferral sentence naming this row is replaced by the closure statement in the same PR; no acceptance row anywhere records R7F as covering prose placement before this row closes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/R7F-DX-PROSE-SCAN-01/acceptance",
+          "label": "R7F-DX-PROSE-SCAN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "R7F refuses a DX rendered literal placed as bare prose inside the DX prose region without its own marker; the three ruled regressions bite."
+      },
+      "authority": {
+        "label": "2026-09-02 dx/t26-a cold gate ruling §A2 (prose scan deferred to this row; scope = DX prose region only)",
+        "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 frozen renderer",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The frozen 109-key renderer is not edited by this row"
+        },
+        {
+          "authority": {
+            "label": "Ruling §A2 scope clause (no global scan; '15' hits 12 unrelated skeleton lines)",
+            "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+          },
+          "rule": "The scan is bounded to the DX prose region; a global skeleton scan is out of scope and its false positives are not a reason to widen the region"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the R7F coverage gap for bare-prose DX placement: a rendered DX literal inside the DX prose region without its marker must be a MISMATCH, so a fill batch cannot smuggle a number past the marker census.",
+      "id": "R7F-DX-PROSE-SCAN-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 120,
+      "status": "queued",
+      "status_note": "Registered at the bench 2026-09-02 per the dx/t26-a cold gate §A2; fill stage — schedule before the first DX fill batch.",
+      "stop_card": null
+    },
     "RECORDER-SINGLE-OPERATOR-PREAMBLE-01": {
       "acceptance": {
         "evidence": [
@@ -4147,6 +4212,210 @@
       "rank": 71,
       "status": "blocked",
       "status_note": "The frozen renderer cannot represent the live 126-key registry. This successor waits for G2-a because that selection record fixes the prefill length embedded in the registry keys.",
+      "stop_card": null
+    },
+    "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
+      "acceptance": {
+        "evidence": [
+          "test_freeze_readiness_refuses_every_registered_prospective_manifest_finding exists and fails when any registered prospective-manifest finding is not refused before mint",
+          "The W-10 freeze/readiness production path calls validate_prospective_analysis_manifest_v3 on the manifest it is about to pin and refuses every returned registered reason"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S9-01B-REFUSAL-PRODUCER-CHECK-01/acceptance",
+          "label": "S9-01B-REFUSAL-PRODUCER-CHECK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "W-10 retains D-157 R-2 as a producer-side admission check covering the complete registered prospective-manifest refusal set."
+      },
+      "authority": {
+        "label": "Cold-gate ruling on the dx and t26-a packets (2026-09-02) §B4 + ruled-not-installed sweep S9",
+        "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The prospective validator is consumer-only, leaving sixteen registered refusal reasons without a producer-side check (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/FINDINGS-TABLE.md:64-67; docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G8-sol-report.md:112-126). D-157 R-2 already rules the cure; this row is the producer-side check inside W-10, not a descoping. Close by CODE inside W-10: run validate_prospective_analysis_manifest_v3 in the freeze/readiness path and refuse the mint on any registered finding.",
+      "id": "S9-01B-REFUSAL-PRODUCER-CHECK-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 121,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 01b of the ruled-not-installed sweep). The complete D-157 R-2 admission check must remain inside W-10 rather than narrowing to the m=1 case.",
+      "stop_card": null
+    },
+    "S9-02-W10-SCOPE-P256-M1-01": {
+      "acceptance": {
+        "evidence": [
+          "test_gamma_holm_m2_requires_dedicated_p256_floors_and_cross_arm_strata exists and fails when the dedicated p256 floor cells, Holm m=2 family, or cross-arm strata are absent",
+          "Regenerated gamma consumer_family_declaration.json names d117-qwen25-1p5b-prefill-p256-floor-v3 and d117-qwen25-7b-prefill-p256-floor-v3",
+          "The gamma builder and validator accept the ruled Holm alpha=0.05 m=2 family and refuse the former m=1 shape"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S9-02-W10-SCOPE-P256-M1-01/acceptance",
+          "label": "S9-02-W10-SCOPE-P256-M1-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "W-10 covers the dedicated p256 floor dependency, every m=1 producer/validator site, and the cross-arm strata required by D-139 A2."
+      },
+      "authority": {
+        "label": "Cold-gate ruling on the dx and t26-a packets (2026-09-02) §B4 + ruled-not-installed sweep S9",
+        "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "D-139 A2's dedicated p256 floor dependency remains EMPTY in the separately hashed consumer declaration (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G5.md:256-266). The gamma builder and validator still encode m=1 and the analysis edge refuses missing cross-arm strata (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G5.md:228-254). Close by CODE inside W-10 across the dedicated-floor declaration, every m=1 site, and the cross-arm block strata; no new ruling is needed.",
+      "id": "S9-02-W10-SCOPE-P256-M1-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 122,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 02 of the ruled-not-installed sweep). This is a scope correction within D-157 R-1 so W-10 does not repair only the families block.",
+      "stop_card": null
+    },
+    "S9-03-GAMMA-PREFILL-PROMPT-OWNER-01": {
+      "acceptance": {
+        "evidence": [
+          "Ed's dated ruling names the authoritative gamma p256 prompt text, ownership, and ratification state",
+          "test_gamma_prefill_prompt_is_ratified_and_tokenizes_to_256 exists and fails when the ruled prompt bytes, ratification state, tokenizer pin, or 256-token count is absent",
+          "Regenerated gamma, alpha, and beta pack checks agree on the same byte-pinned ratified prompt artifact"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S9-03-GAMMA-PREFILL-PROMPT-OWNER-01/acceptance",
+          "label": "S9-03-GAMMA-PREFILL-PROMPT-OWNER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed resolves prompt ownership and ratification, and CODE makes all three pack families enforce the same byte-pinned 256-token stimulus."
+      },
+      "authority": {
+        "label": "Cold-gate ruling on the dx and t26-a packets (2026-09-02) §B4 + ruled-not-installed sweep S9",
+        "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "The gamma-owned prompt remains PROPOSED-PENDING-LEAD-RATIFICATION with TODO text and no tokenizer check (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G2.md:38-47). The alpha and beta floor packs consume the same artifact as Q1-RATIFIED and byte-pin it (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G2.md:46). Close with ED ownership and ratification of the frozen prompt, then CODE that enforces the ruling and the 256-token count consistently.",
+      "id": "S9-03-GAMMA-PREFILL-PROMPT-OWNER-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 123,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 03 of the ruled-not-installed sweep). The prompt cannot remain a candidate in its owning pack while its consumers call the same bytes ratified.",
+      "stop_card": null
+    },
+    "S9-05-CAL-SCREEN-FLOOR-RULING-01": {
+      "acceptance": {
+        "evidence": [
+          "Ed's ruling recorded as a dated addendum on D-125 or a new D entry",
+          "test_successor_calibration_screen_obeys_ed_ruled_floor_semantics exists and fails when the live resolver violates Ed's retained or superseding rule",
+          "The D-117 and D-125 text and the generation-indexed calibration resolver agree on whether 0.009724 may sit below 0.010818"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S9-05-CAL-SCREEN-FLOOR-RULING-01/acceptance",
+          "label": "S9-05-CAL-SCREEN-FLOOR-RULING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed rules the metrology-floor conflict, after which CODE and decision text enforce one consistent successor-screen rule."
+      },
+      "authority": {
+        "label": "Cold-gate ruling on the dx and t26-a packets (2026-09-02) §B4 + ruled-not-installed sweep S9",
+        "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "D-125 rules lineage-monotone screens inheriting 0.010818 as a lower bound, but no envelope or monotonicity comparison is installed (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G2.md:451-457). The live generation resolves to 0.009724, below 0.010818 (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G2.md:458-462), and D-117 still carries the superseded literal (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G2.md:464-470). Close with ED's metrology ruling first, then CODE and decision text implementing the selected rule.",
+      "id": "S9-05-CAL-SCREEN-FLOOR-RULING-01",
+      "lane": "ed_external",
+      "priority": "p2_next_slice",
+      "rank": 71,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 05 of the ruled-not-installed sweep). The magistrate does not decide whether the live 0.009724 metrology value supersedes or violates D-125's 0.010818 floor.",
+      "stop_card": null
+    },
+    "S9-06-WINDOW-T0-GO-RECEIPT-GATE-01": {
+      "acceptance": {
+        "evidence": [
+          "test_launch_window_refuses_without_valid_d149_go_receipt exists and fails when launch accepts an absent, incomplete, stale, or condition-failing GO receipt",
+          "The window runbook names the exact D-149 GO-receipt production, custody, validation, and launch-binding line",
+          "A launch-path regression proves execve is unreachable until all five T-0 conditions pass and the receipt is custodied"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S9-06-WINDOW-T0-GO-RECEIPT-GATE-01/acceptance",
+          "label": "S9-06-WINDOW-T0-GO-RECEIPT-GATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "CODE or an explicit runbook acceptance makes a valid custodied D-149 T-0 GO receipt a fail-closed launch prerequisite."
+      },
+      "authority": {
+        "label": "Cold-gate ruling on the dx and t26-a packets (2026-09-02) §B4 + ruled-not-installed sweep S9",
+        "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "D-149 requires T-0 GO to be mechanically evaluated and written into custody, yet no launch-path code knows about it (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G6.md:411-417). launch_window.py validates the arm receipt and execves without a GO-receipt argument or refusal, and no filled receipt exists yet (docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/raw/enum-G6.md:417,494). Close by CODE, or an explicit RUNBOOK acceptance, that gates every spent window on a valid custodied GO receipt.",
+      "id": "S9-06-WINDOW-T0-GO-RECEIPT-GATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 124,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {

@@ -3,7 +3,7 @@
 Lane: install of T26 cold-gate verdicts items 1 and 4 plus the D-170 entry, and
 the Q1/Q2 process-rule install.
 Branch `feat/2026-09-02-t26-install`; PR #273.
-Files 01–11 in this directory are the seat briefs and the sealed reports, in
+Files 01–16 in this directory are the seat briefs and the sealed reports, in
 gauntlet order.
 
 ## Gauntlet record
@@ -20,6 +20,10 @@ gauntlet order.
 | Bench | magistrate (bench) | commit `f84be217` (below) | — | — |
 | Pre-merge fresh pass | terra high (231) | 11, 12 | "@ f84be217" | `VERDICT: SHOULD-FIX 1` (F3: B1 existence check is worktree-based, not HEAD-based) |
 | Magistrate disposition on terra 231 | magistrate | 13 | f84be217 | F3 ACCEPTED AS LIMITATION, not fixed — reasons in the file (CI clean checkout ≡ HEAD; D-161; rule-11 second-fix trigger not justified by materiality) |
+| Opus counter-review (gate item 6) | Opus 5 (Agent tool, read-only) | 14, 14b | 10845c14 | `SHOULD-FIX 5`, `NIT 10` + one observation; disposition in 14b (SF1–SF5, NIT1–5, NIT9 accepted; NIT6/7/8/10 recorded; observation carried to the next cold-gate packet) |
+| S9 rows draft (SF1 kernel half) | sol high (236), detached worktree | 15 (brief, report, draft JSON) | 10845c14 | envelope `"status": "clean"`, `"completion": "complete"`; seven rows drafted — two of them (S9-04, S9-12) turned out to pre-exist; see the dated addendum on the cold-gate ruling |
+| Fix round 2 (Opus findings) | terra xhigh (235) | 16 (brief, report) | "@ 10845c14" | envelope `"status": "clean"`, `"completion": "complete"`; wrapper `run_status=SCOPE_VIOLATION rc=77 scope_action=failed_preserved` caused ONLY by the magistrate's untracked files 14/14b in the worktree (`unowned_dirty`); the seat's edits are all inside its six-file scope and were used as landed |
+| Bench | magistrate (bench) | commit below | — | kernel: five S9 rows registered, D-170 dep applied in place to GAMMA-UNIT-ROSTER-GUARD-01 / L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01, R7F-DX-PROSE-SCAN-01 registered (126 tasks); comment chain in `tests/test_gen_state.py` reconstructed from kernel commit counts; M6c regex + "no start dependency" mutant made multi-row; dated addendum on the cold-gate ruling (B4 site correction, PD-1 evidence) |
 
 ## Bench commits (from `git show --stat`)
 

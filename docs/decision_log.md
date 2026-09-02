@@ -11,7 +11,7 @@ be re-derived by a future agent gets an entry here.
 - When you make a new decision of this kind during a run, add an entry, link it
   from the run report, and reference its ID (`D-NNN`) in the code review or doc
   that applies it.
-- Statuses are a closed set: `accepted` (binding design choice), `adopted`
+- Statuses are a closed set: `accepted` (binding design choice, binding until revisited), `adopted`
   (binding ruling incorporated into the project), `ratified` (binding choice
   approved by its named authority), `open` (criteria defined, evidence
   pending), `proposed` (recorded and awaiting its named authority's approval),
@@ -28,7 +28,11 @@ be re-derived by a future agent gets an entry here.
   decision ID as its target. That dependency moves to `satisfied` only with an
   evidence pointer to the regression that FAILS when the ruled value is absent
   at the producer. The status then moves to `accepted` or `adopted`, and the
-  entry body names the installing pull request or commit.
+  entry body names the installing pull request or commit. For a satisfied
+  `kind: decision` dependency, use the regression-evidence form
+  `tests/<file>.py::<TestClass>::<test_method>`: its `path` must match
+  `tests/[A-Za-z0-9_/]+\.py`, and its label must name a defined
+  `test_[a-z0-9_]+` method (`scripts/gen_state.py:185-218`).
 - Every entry must include Options Considered and Considerations. A decision
   without recorded alternatives is not auditable.
 - Revisit triggers are part of the contract: when a trigger fires, the decision
@@ -10526,7 +10530,9 @@ falls on whoever ASSEMBLES the packet or DRAFTS the addendum, never on the
 adjudicating seat; a seat that finds neither input returns the question UNRULED
 and the ruling is recorded `open (installs via …)` per item 1. Binds addenda
 and placement notes exactly as it binds the original ruling.”
-(`COLD-GATE-RULING.md:270-282`).
+(`COLD-GATE-RULING.md:269-279`; the enforcement paragraph at
+`COLD-GATE-RULING.md:281-290` is superseded by the dated addendum at
+`COLD-GATE-RULING.md:317-331`).
 
 **Where recorded and discharged.** Item 1's log-status form and Mission M0
 line, item 3's dated T-0 Horizon line, item 4's D-160 pointer and prospective
@@ -10562,6 +10568,16 @@ decision dependency on D-170 is carried by the transaction task the liveness
 clause gates, `V5-TRANSACTION-01`, while the installing row names the complete
 three-branch acceptance. The status transition requires producer-side
 regression evidence from the sibling implementations, so documentation alone
-cannot close this decision.
+cannot close this decision. Per the 2026-09-02 cold-gate ruling §B4
+(`docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md:245-247`),
+the seven S9 sweep rows carry the same hard-start pending dependency on
+D-170, so limb 3 of the status rule is satisfiable by more than one task:
+five register new on 2026-09-02 (S9-01B-REFUSAL-PRODUCER-CHECK-01,
+S9-02-W10-SCOPE-P256-M1-01, S9-03-GAMMA-PREFILL-PROMPT-OWNER-01,
+S9-05-CAL-SCREEN-FLOOR-RULING-01, S9-06-WINDOW-T0-GO-RECEIPT-GATE-01) and
+two already existed from the 2026-08-27 wave and gain the dependency in
+place (GAMMA-UNIT-ROSTER-GUARD-01 for S9-04,
+L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 for S9-12; dated addendum on the
+ruling).
 
 **Cold gate 2026-09-02 (process rules Q1/Q2, custodied at docs/process_traces/2026-09-02-process-rules/):** Q1 requires delegated implementation briefs authorized by implementation-clause rulings to carry an `ACCEPTANCE` clause map and final reports to return its production-site, biting-assertion, and counterfactual rows; its home is `docs/contracts/bridge_protocol.md` §1. Q2 makes unexhibited cross-artifact equality or identity premises inadmissible as MUSTs, requiring a named-revision artifact pair, full JSON pointer, and both observed values; its home is D-160 R-5 as amended (`docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).

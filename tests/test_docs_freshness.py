@@ -455,14 +455,22 @@ class DocsFreshnessTests(unittest.TestCase):
             return
         header = table_lines[0]
         divider = table_lines[1]
+        header_cells = [
+            cell.strip().lower() for cell in header.strip().strip("|").split("|")
+        ]
+        required_columns = {
+            name: header_cells.index(name)
+            for name in required_cells
+            if name in header_cells
+        }
         self.assertTrue(
-            required_cells.issubset(
-                {cell.strip().lower() for cell in header.strip().strip("|").split("|")}
-            )
+            len(required_columns) == len(required_cells)
             and re.fullmatch(r"\|(?:\s*:?-{3,}:?\s*\|)+", divider) is not None,
             f"{relative_path}: Clause map table header must name production site, "
             "biting assertion, and counterfactual",
         )
+        if len(required_columns) != len(required_cells):
+            return
         body_rows = table_lines[2:]
         self.assertTrue(
             body_rows,
@@ -470,15 +478,18 @@ class DocsFreshnessTests(unittest.TestCase):
         )
         for row in body_rows:
             cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
-            if cells and cells[0].startswith("NOT PINNED:"):
-                continue
             self.assertEqual(
-                len(cells), 3,
-                f"{relative_path}: Clause map body row must have three cells: {row!r}",
+                len(cells),
+                len(header_cells),
+                f"{relative_path}: Clause map body row cell count must match the header: "
+                f"{row!r}",
             )
+            if cells[required_columns["production site"]].startswith("NOT PINNED:"):
+                continue
             self.assertTrue(
-                all(cells),
-                f"{relative_path}: Clause map body row has an empty cell: {row!r}",
+                all(cells[index] for index in required_columns.values()),
+                f"{relative_path}: Clause map body row has an empty cell in a required column: "
+                f"{row!r}",
             )
 
     def test_decision_index_matches_decision_bodies(self) -> None:
@@ -529,7 +540,10 @@ class DocsFreshnessTests(unittest.TestCase):
 
         with self.subTest(mutation="M6c"):
             adopted = _replace_decision_status(base_index, "D-170", "adopted")
-            with self.assertRaisesRegex(AssertionError, r"D-170.*adopted.*(?:T26-RULING-INSTALL-01|V5-TRANSACTION-01)"):
+            # Several rows carry the pending D-170 dependency (installer,
+            # V5-TRANSACTION-01, the S9 rows per ruling B4); the message
+            # names whichever the walk meets first.
+            with self.assertRaisesRegex(AssertionError, r"D-170.*adopted.*pending decision dependency on task"):
                 self._assert_terminal_decisions(base_tasks, adopted)
 
         with self.subTest(mutation="D-171 adopted without dependency"):
@@ -601,10 +615,20 @@ class DocsFreshnessTests(unittest.TestCase):
                 "strength": "hard",
                 "target": "D-170",
             }]
-            tasks["V5-TRANSACTION-01"]["dependencies"] = [
-                dependency for dependency in tasks["V5-TRANSACTION-01"]["dependencies"]
-                if dependency.get("target") != "D-170"
-            ]
+            # Limb 3 is satisfiable by more than one task (ruling B4: the S9
+            # rows carry the start dependency too), so the mutant strips the
+            # start dependency from EVERY other row, not just V5-TRANSACTION-01.
+            stripped = 0
+            for task_id, task in tasks.items():
+                if task_id == "T26-RULING-INSTALL-01":
+                    continue
+                before = len(task["dependencies"])
+                task["dependencies"] = [
+                    dependency for dependency in task["dependencies"]
+                    if dependency.get("target") != "D-170"
+                ]
+                stripped += before - len(task["dependencies"])
+            self.assertGreaterEqual(stripped, 2)
             with self.assertRaisesRegex(AssertionError, r"D-170.*limb 3"):
                 self._assert_open_decisions(tasks, base_index)
 
@@ -621,19 +645,18 @@ class DocsFreshnessTests(unittest.TestCase):
             self._assert_index_rows_complete(malformed)
 
     def test_dated_magistrate_rulings_carry_executed_evidence(self) -> None:
-        # The filename is the trigger. Today the union is exactly the two
+        # The filename is the trigger. The census includes the two known
         # 2026-09-02 magistrate rulings (coldgate-dx-t26a, process-rules).
         selected = _dated_magistrate_rulings()
         self.assertTrue(selected)
-        self.assertEqual(
-            [
-                path.relative_to(ROOT).as_posix()
-                for path in selected
-            ],
-            [
-                "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md",
-                "docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md",
-            ],
+        selected_relative = [path.relative_to(ROOT).as_posix() for path in selected]
+        self.assertIn(
+            "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md",
+            selected_relative,
+        )
+        self.assertIn(
+            "docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md",
+            selected_relative,
         )
         for path in selected:
             relative_path = path.relative_to(ROOT)
@@ -663,8 +686,24 @@ class DocsFreshnessTests(unittest.TestCase):
             header + "| NOT PINNED: reason | | |\n| site | assertion | input |\n",
             "literal-complete-and-not-pinned",
         )
+        four_column_header = (
+            "## Clause map\n"
+            "| Ruling quote | production site | biting assertion | counterfactual |\n"
+            "| --- | --- | --- | --- |\n"
+        )
+        self._assert_clause_map(
+            four_column_header
+            + "| quoted clause | NOT PINNED: doc-only | | |\n"
+            + "| quoted clause | site | assertion | input |\n",
+            "literal-four-column-and-not-pinned",
+        )
         with self.assertRaisesRegex(AssertionError, r"empty cell"):
             self._assert_clause_map(header + "| a | b | |\n", "literal-empty-counterfactual")
+        with self.assertRaisesRegex(AssertionError, r"cell count"):
+            self._assert_clause_map(
+                four_column_header + "| quote | site | assertion |\n",
+                "literal-mismatched-cell-count",
+            )
         with self.assertRaisesRegex(AssertionError, r"body row"):
             self._assert_clause_map(header, "literal-header-only")
 

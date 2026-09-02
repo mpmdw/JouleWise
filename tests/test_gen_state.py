@@ -92,6 +92,13 @@ EXPECTED_IDS = {
     "T26-RULING-INSTALL-01",
     # 2026-09-02 T26 fix round 1 (dx/t26-a cold gate B3): D-110 reconcile row.
     "D110-MINT-DEP-RECONCILE-01",
+    # 2026-09-02 dx/t26-a cold gate: ruling A2 (prose scan row) + B4 (S9 rows)
+    "R7F-DX-PROSE-SCAN-01",
+    "S9-01B-REFUSAL-PRODUCER-CHECK-01",
+    "S9-02-W10-SCOPE-P256-M1-01",
+    "S9-03-GAMMA-PREFILL-PROMPT-OWNER-01",
+    "S9-05-CAL-SCREEN-FLOOR-RULING-01",
+    "S9-06-WINDOW-T0-GO-RECEIPT-GATE-01",
     "ED-BRANCH-PROTECTION-E1-01",
     "ED-D118-NA-TIER-E2-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
@@ -600,13 +607,21 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # (2026-09-01) splits L10-A-G2B-CONTRACT-PREFIX-01 out of the L10
         # row: 114 + 1 = 115. The D-169 stage-1 ruling (2026-09-01) splits
         # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118; #258
-        # registers its two realized-prefill rows: 118 + 2 = 120; the
+        # registers its two realized-prefill rows: 118 + 2 = 120; IDS-CHECK
+        # retired at the #258 merge (4a41d791): 120 - 1 = 119; the
         # NIGHT-GATE-01, NIGHT-DRIVER-01, D165-CLOSEOUT-CORE-01 retired at their
         # 2026-09-02 merges (PRs 264, 265, 261): 119 - 3 = 116;
         # D165-SIDECAR-EMIT-01 retired at its 2026-09-02 merge (PR 267):
-        # 116 - 1 = 115; 2026-09-02 T26 install wave: 116 + 3 = 119.
+        # 116 - 1 = 115; PROJECTION-02 retired (#269) while
+        # LAUNCH-REALIZATION-RECHECK-01 and DECODE-IDENTITY-SET-01 registered
+        # (6075389a): 115 - 1 + 2 = 116; 2026-09-02 T26 install wave registers
+        # T26-RULING-INSTALL-01, ED-BRANCH-PROTECTION-E1-01,
+        # ED-D118-NA-TIER-E2-01, and D110-MINT-DEP-RECONCILE-01: 116 + 4 = 120;
+        # the dx/t26-a cold gate (2026-09-02, sections A2 and B4) registers
+        # R7F-DX-PROSE-SCAN-01 and the five S9 rows not already in the kernel
+        # (01b, 02, 03, 05, 06): 120 + 6 = 126.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 120)
+        self.assertEqual(len(self.tasks), 126)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
