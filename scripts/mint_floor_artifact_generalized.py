@@ -2923,6 +2923,7 @@ def _build_v2_artifacts(
     origin_main_contains_head: bool | None = False,
     head_pin_commit_contained_in_origin_main: bool | None = False,
     recomputation_sink: dict[str, V2CellRecomputation] | None = None,
+    d165_replay_out: Path | None = None,
 ) -> tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]:
     """Build the combined artifact and its two deterministic components.
 
@@ -2990,6 +2991,11 @@ def _build_v2_artifacts(
             )
             if recomputation_sink is not None:
                 recomputation_sink[cell_pins["cell_id"]] = recomputations[role]
+                if (
+                    recomputations[role].estimator_path == "common_mode"
+                    and d165_replay_out is None
+                ):
+                    raise MintError(D165_REPLAY_OUTPUT_REQUIRED)
 
         # Step 11 begins only after the complete producer projection matches.
         for cell_index, cell_pins in enumerate(producer["cells"]):
@@ -4075,6 +4081,7 @@ def _mint_multi_cell_floor_artifact_active(
             head_pin_commit_contained
         ),
         recomputation_sink=gate_recomputations,
+        d165_replay_out=d165_replay_out,
     )
     bind_recomputations: dict[str, Any] = {}
     common_mode_cells = 0
@@ -4162,8 +4169,6 @@ def _mint_multi_cell_floor_artifact_active(
             estimator_path = getattr(bind_recomputation, "estimator_path", None)
             if estimator_path == "common_mode":
                 common_mode_cells += 1
-                if d165_replay_out is None:
-                    raise MintError(D165_REPLAY_OUTPUT_REQUIRED)
             elif estimator_path == "default":
                 pass
             else:

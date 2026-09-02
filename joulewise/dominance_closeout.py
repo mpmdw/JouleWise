@@ -121,17 +121,6 @@ _COMMON_MODE_RESULT_KEYS = {
     "comparison",
     "passes",
 }
-_COMMON_MODE_REFUSED_RESULT_KEYS = {
-    "status",
-    "rule_id",
-    "point_unguarded_floor_j",
-    "common_mode_corner_widened_unguarded_floor_j",
-    "ratio",
-    "threshold",
-    "comparison",
-    "passes",
-    "refusal_reason",
-}
 _CLOSEOUT_TOP_KEYS = {
     "schema_version",
     "sources",
@@ -549,16 +538,11 @@ def build_d165_replay_sidecar(
                     block_members,
                 )
                 bracket_copy = json.loads(json.dumps(bracket, allow_nan=False))
-                try:
-                    result = replay_common_mode_dominance(
-                        [_raw_replay_block(block) for block in replay_blocks],
-                        calibration_bracket=bracket_copy,
-                        shared_edge_bound_s=bound,
-                    )
-                except ValueError as exc:
-                    if str(exc) != DOMINANCE_ZERO_DENOMINATOR_REASON:
-                        raise
-                    result = _build_common_mode_refused_result(str(exc))
+                result = replay_common_mode_dominance(
+                    [_raw_replay_block(block) for block in replay_blocks],
+                    calibration_bracket=bracket_copy,
+                    shared_edge_bound_s=bound,
+                )
             except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError(CLOSEOUT_INPUT_MALFORMED) from exc
             comparative["common_mode_replay"] = {
@@ -788,20 +772,6 @@ def _build_independent_record(
     }
 
 
-def _build_common_mode_refused_result(reason: str) -> dict[str, Any]:
-    return {
-        "status": "refused",
-        "rule_id": COMMON_MODE_REPLAY_RULE_ID,
-        "point_unguarded_floor_j": None,
-        "common_mode_corner_widened_unguarded_floor_j": None,
-        "ratio": None,
-        "threshold": DOMINANCE_THRESHOLD,
-        "comparison": DOMINANCE_COMPARISON,
-        "passes": None,
-        "refusal_reason": reason,
-    }
-
-
 def _point_unguarded_floor_from_component(
     component: Mapping[str, Any], *, parent_key: str
 ) -> float:
@@ -855,30 +825,6 @@ def _validate_common_mode_result(
     where: str,
     errors: list[str],
 ) -> None:
-    if isinstance(value, Mapping) and set(value) == _COMMON_MODE_REFUSED_RESULT_KEYS:
-        if value["status"] != "refused":
-            errors.append(f"{where}.status: must be 'refused'")
-        if value["rule_id"] != COMMON_MODE_REPLAY_RULE_ID:
-            errors.append(f"{where}.rule_id: unexpected replay rule")
-        if any(
-            value[key] is not None
-            for key in (
-                "point_unguarded_floor_j",
-                "common_mode_corner_widened_unguarded_floor_j",
-                "ratio",
-                "passes",
-            )
-        ):
-            errors.append(f"{where}: refused result fields must be null")
-        if value["threshold"] != DOMINANCE_THRESHOLD:
-            errors.append(f"{where}.threshold: unexpected dominance threshold")
-        if value["comparison"] != DOMINANCE_COMPARISON:
-            errors.append(f"{where}.comparison: unexpected comparison")
-        if not isinstance(value["refusal_reason"], str) or not value[
-            "refusal_reason"
-        ]:
-            errors.append(f"{where}.refusal_reason: must name the refusal")
-        return
     if not _check_keys(value, _COMMON_MODE_RESULT_KEYS, where, errors):
         return
     assert isinstance(value, Mapping)
@@ -1103,12 +1049,9 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
                     shared_edge_bound_s=inputs["shared_edge_bound_s"],
                 )
             except (TypeError, ValueError) as exc:
-                if str(exc) == DOMINANCE_ZERO_DENOMINATOR_REASON:
-                    expected_result = _build_common_mode_refused_result(str(exc))
-                else:
-                    errors.append(
-                        f"{inputs_where}: unauthenticated or invalid replay ({exc})"
-                    )
+                errors.append(
+                    f"{inputs_where}: unauthenticated or invalid replay ({exc})"
+                )
         _validate_common_mode_result(
             replay["result"],
             expected_result,

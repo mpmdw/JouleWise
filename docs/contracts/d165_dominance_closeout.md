@@ -141,8 +141,8 @@ cell has exactly `independent` and `estimator`, with `estimator` equal to
 `default`. A common-mode cell has exactly `independent`, `estimator`, and
 `common_mode_replay`, with `estimator` equal to `common_mode`. A default cell
 must not carry `common_mode_replay`, and a common-mode cell must carry it. The
-Stage-2 emitter writes the established schema version
-`joulewise.d165_dominance_replay.v1`.
+schema version remains `joulewise.d165_dominance_replay.v1` because no
+production sidecar was emitted before this exact shape was fixed.
 
 For a common-mode cell, `comparative.common_mode_replay` has exactly `inputs`
 and `result`.
@@ -187,12 +187,6 @@ residual widths and gets an independent sign in each block.
 | `comparison` | string | none | Exact value `greater_than_or_equal`. |
 | `passes` | Boolean | none | True exactly when `ratio >= 2.0`. |
 
-When the replayed point floor is exactly zero, the result instead uses the
-closed refusal shape with `status: "refused"`, null numeric result fields,
-`threshold`, `comparison`, and a nonempty `refusal_reason` (currently
-`dominance_ratio_zero_denominator`). This preserves the authenticated replay
-inputs while keeping the close-out fail-closed for a zero denominator.
-
 `validate_d165_replay_sidecar` rejects missing or extra keys, duplicate cell
 or block identities, non-finite numbers, a block count above the named cap,
 incorrect derived splits, a bracket digest mismatch, an unauthenticated bound,
@@ -208,7 +202,7 @@ four records are keyed by authenticated `cell_id` and compared byte-for-byte
 with the gate records before any output write. A mismatch refuses
 `d165_replay_recomputation_divergence`; a common-mode cell without the replay
 output flag refuses `d165_replay_output_required_for_common_mode` at its first
-binding. The gate recomputation runs once per cell and the binding
+selection. The gate recomputation runs once per cell and the binding
 recomputation runs once per cell; sidecar assembly is after the four-cell
 binding pass, so it cannot duplicate emission from either estimator call.
 
@@ -271,15 +265,18 @@ predicate `_dominance_floor_identity_enabled` governs the optional role: a
 prospective manifest with `dominance_criterion` in every contrast must declare
 exactly five rows, including `dominance_replay_sidecar`; criterion-present
 without that row refuses as
-`analysis_prospective_dominance_replay_attachment_missing`. A legacy
-prospective remains exactly four rows and finalizes byte-identically with the
-same `manifest_id`.
+`analysis_prospective_dominance_replay_attachment_missing`. Legacy D-134-form
+four-row packs (no `dominance_criterion`) still validate and finalize
+byte-identically; pre-D-134 packs (`as_generated_pre_d134_freeze`) are outside
+the promise and are retired by D-167.
 
 Finalization requires the sidecar path under that same predicate and seals its
 path, file hash, schema, and sidecar identity. Omitting it refuses as
 `analysis_finalization_attachment_missing`; supplying it to a legacy
 prospective refuses as `analysis_finalization_attachment_invalid`. An invalid
-sidecar schema or identity uses that same invalid-attachment refusal. When
+sidecar schema or identity uses that same invalid-attachment refusal. A
+finalized manifest without the role is nevertheless fail-closed at its
+consumer: the close-out refuses it as `manifest_lacks_replay_sidecar`. When
 present, `dominance_replay_sidecar` has exactly these fields:
 
 | Field | Type | Meaning |

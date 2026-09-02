@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import copy
 import ast
+import copy
 import functools
 import hashlib
 import io
@@ -15,7 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import CodeType, SimpleNamespace
 from unittest import mock
 
 from configs.campaigns.d117_contrast_v5 import generate_configs as generator
@@ -361,20 +361,15 @@ def floor_artifact() -> dict:
 
 
 
-def _folded_string_constant(node: ast.AST) -> str | None:
-    """Return the string a constant or ``+``-chain of string constants spells."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        left = _folded_string_constant(node.left)
-        right = _folded_string_constant(node.right)
-        if left is not None and right is not None:
-            return left + right
-    if isinstance(node, ast.JoinedStr) and all(
-        isinstance(part, ast.Constant) for part in node.values
-    ):
-        return "".join(str(part.value) for part in node.values)
-    return None
+def _compiled_string_constants(code: CodeType):
+    """Yield string constants recursively from one compiled module."""
+
+    for constant in code.co_consts:
+        if isinstance(constant, str):
+            yield constant
+        elif isinstance(constant, CodeType):
+            yield from _compiled_string_constants(constant)
+
 
 class D165DominanceCloseoutTests(unittest.TestCase):
     maxDiff = None
@@ -644,32 +639,50 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self.assertEqual(set(default_comparative), {"independent", "estimator"})
         self.assertEqual(default_comparative["estimator"], "default")
         self.assertNotIn("common_mode_replay", default_comparative)
-        self.assertEqual(core.validate_d165_replay_sidecar(built), [])
+        malformed_floor = copy.deepcopy(floor)
+        del malformed_floor["artifact_id"]
+        with self.assertRaisesRegex(ValueError, r"^closeout_input_malformed$"):
+            core.build_d165_replay_sidecar(
+                malformed_floor,
+                builder_recomputations(
+                    floor,
+                    source_sidecar,
+                    default_cell_ids=frozenset({default_id}),
+                ),
+            )
 
     def test_stage2_sidecar_ownership_ast_census(self) -> None:
-        production = {
+        reference_sites = {
             ROOT / "joulewise" / "dominance_closeout.py": "owner",
             ROOT / "joulewise" / "floor_mint_estimator.py": "adapter-consumer",
             ROOT / "scripts" / "mint_floor_artifact_generalized.py": "mint-consumer",
             ROOT / "joulewise" / "analysis_manifest_v3.py": "manifest-consumer",
         }
+        owner = ROOT / "joulewise" / "dominance_closeout.py"
+        production = sorted(
+            set((ROOT / "joulewise").rglob("*.py"))
+            | set((ROOT / "scripts").rglob("*.py"))
+        )
         schema_literal = "joulewise.d165_dominance_replay.v1"
-        owner_paths: list[Path] = []
         record_literal_paths: list[Path] = []
+        owner_code = compile(owner.read_text(encoding="utf-8"), str(owner), "exec")
+        self.assertIn(schema_literal, set(_compiled_string_constants(owner_code)))
+        for path in production:
+            if path == owner:
+                continue
+            code = compile(path.read_text(encoding="utf-8"), str(path), "exec")
+            self.assertNotIn(
+                schema_literal,
+                set(_compiled_string_constants(code)),
+                str(path.relative_to(ROOT)),
+            )
+
         reference_paths: dict[str, set[Path]] = {
             "d165_replay_blocks_from_mint_inputs": set(),
             "build_d165_replay_sidecar": set(),
         }
         for path in production:
             tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
-            # A literal assembled from string pieces (``"a" + "b"``) is the
-            # same second owner as a whole literal; fold constant
-            # concatenations before matching.
-            if any(
-                _folded_string_constant(node) == schema_literal
-                for node in ast.walk(tree)
-            ):
-                owner_paths.append(path)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Dict):
                     keys = {
@@ -677,15 +690,26 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                         for key in node.keys
                         if isinstance(key, ast.Constant) and isinstance(key.value, str)
                     }
-                    if {"block_id", "delta_j"} <= keys:
+                    if {
+                        "block_id",
+                        "members",
+                        "delta_j",
+                        "onset_sweep_j",
+                        "offset_sweep_j",
+                        "zero_point_contrast_j",
+                        "bundle_residual_half_widths_j",
+                        "member_window_bounds_s",
+                        "member_envelope_integral_sum_j",
+                    } <= keys:
                         record_literal_paths.append(path)
+                if path not in reference_sites:
+                    continue
                 if isinstance(node, ast.Name) and node.id in reference_paths:
                     reference_paths[node.id].add(path)
                 if isinstance(node, ast.Attribute) and node.attr in reference_paths:
                     reference_paths[node.attr].add(path)
-        self.assertEqual(owner_paths, [ROOT / "joulewise" / "dominance_closeout.py"])
         self.assertEqual(
-            record_literal_paths, [ROOT / "joulewise" / "dominance_closeout.py"]
+            record_literal_paths, [owner]
         )
         for name, paths in reference_paths.items():
             self.assertTrue(paths <= {

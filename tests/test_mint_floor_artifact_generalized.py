@@ -6714,6 +6714,16 @@ class V2PinsetAndMintTests(unittest.TestCase):
             shared_binder = (
                 generalized.mint_estimator.bind_v2_floor_artifact_evidence
             )
+            original_replay_floor = (
+                generalized.dominance_closeout.comparative_false_effect_floor
+            )
+
+            def nonzero_replay_floor(*args, **kwargs):
+                result = original_replay_floor(*args, **kwargs)
+                if result.unguarded_floor_j == 0.0:
+                    return SimpleNamespace(unguarded_floor_j=1.0)
+                return result
+
             with (
                 _mixed_common_mode_seams(inputs),
                 mock.patch.object(
@@ -6751,6 +6761,11 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     "build_d165_replay_sidecar",
                     wraps=generalized.dominance_closeout.build_d165_replay_sidecar,
                 ) as builder_site,
+                mock.patch.object(
+                    generalized.dominance_closeout,
+                    "comparative_false_effect_floor",
+                    side_effect=nonzero_replay_floor,
+                ),
             ):
                 artifact = generalized.mint_multi_cell_floor_artifact(
                     pinset_path=path,
@@ -6784,7 +6799,8 @@ class V2PinsetAndMintTests(unittest.TestCase):
                         project_tree_state="clean",
                         strict_validator=lambda _path, _strict: [],
                     )
-                self.assertEqual(events, ["bind"])
+                self.assertEqual(bind_site.call_count, 0)
+                self.assertEqual(events, [])
                 self.assertFalse((root / "absent-floor.json").exists())
                 self.assertFalse((root / "absent-single-count.txt").exists())
                 pinned_binds.extend(first_pinned_binds)
@@ -6835,14 +6851,116 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     list(comparative.widths_j),
                 )
 
-    def test_phase0_base_floor_bytes_are_pinned(self) -> None:
-        """Pin bytes whose digest binds nine provenance SHA-256 scalars.
+    def test_zero_denominator_replay_refuses_without_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(root)
+            manifest_path = root / "manifest.json"
+            head_path = root / "ledger.head.json"
+            head_path.write_text("{}\n", encoding="utf-8")
+            manifest = {"calibration_ledger_head_pin": str(head_path)}
+            floor_path = root / "floor.json"
+            statement_path = root / "single-count.txt"
+            sidecar_path = root / "d165-replay.json"
+            evidence_roots = {
+                producer["evidence_root_id"]: inputs[
+                    producer["plan"]["plan_id"]
+                ].evidence_root
+                for producer in load_json(path)["producer_plans"]
+            }
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            recomputations = {}
+            with _mixed_common_mode_seams(inputs):
+                for producer in loaded.value["producer_plans"]:
+                    producer_input = inputs[producer["plan"]["plan_id"]]
+                    generalized._v2_gate_producer_inventory(
+                        producer, producer_input
+                    )
+                    for cell_pins in producer["cells"]:
+                        role = cell_pins["role"]
+                        recomputations[cell_pins["cell_id"]] = (
+                            generalized._v2_gate_postcollection(
+                                producer=producer,
+                                cell_pins=cell_pins,
+                                cell_inputs=producer_input.cells[role],
+                                producer_inputs=producer_input,
+                                ledger_snapshot=snapshot,
+                            )
+                        )
 
-        The scalars are ``cells[0..3].provenance.{absolute,comparative}``'s
-        ``extraction_report.sha256`` values plus ``provenance.calibration_plan.sha256``.
-        Their inputs record the evidence root as an absolute string, so the
-        fixed ``/tmp`` literal is load-bearing; this test must not be changed
-        to use a random ``TMPDIR``.
+            def bind_from_gate(*, artifact, **_kwargs):
+                cell_id = artifact["cells"][0]["cell_id"]
+                return {}, copy.deepcopy(recomputations[cell_id])
+
+            with (
+                _mixed_common_mode_seams(inputs),
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_load_v2_input_manifest",
+                    return_value=manifest,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_authenticate_v2_inputs",
+                    return_value=(inputs, evidence_roots, snapshot),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized.mint_estimator,
+                    "bind_v2_floor_artifact_evidence",
+                    side_effect=bind_from_gate,
+                ),
+                mock.patch.object(
+                    generalized.dominance_closeout,
+                    "comparative_false_effect_floor",
+                    return_value=SimpleNamespace(unguarded_floor_j=0.0),
+                ) as zero_floor_recomputation,
+            ):
+                with self.assertRaisesRegex(
+                    generalized.MintError,
+                    rf"^{generalized.dominance_closeout.CLOSEOUT_INPUT_MALFORMED}$",
+                ):
+                    generalized.mint_multi_cell_floor_artifact(
+                        pinset_path=path,
+                        pinset_sha256=digest,
+                        input_manifest_path=manifest_path,
+                        floor_path=floor_path,
+                        statement_path=statement_path,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                        strict_validator=lambda _path, _strict: [],
+                        d165_replay_out=sidecar_path,
+                    )
+            self.assertGreater(zero_floor_recomputation.call_count, 0)
+            self.assertFalse(floor_path.exists())
+            self.assertFalse(statement_path.exists())
+            self.assertFalse(sidecar_path.exists())
+
+    def test_phase0_base_floor_bytes_are_pinned(self) -> None:
+        """Pin the digest over the whole ``floor.json`` file.
+
+        Its nine path-sensitive provenance SHA-256 inputs are
+        ``cells[0].provenance.absolute.extraction_report.sha256``,
+        ``cells[0].provenance.comparative.extraction_report.sha256``,
+        ``cells[1].provenance.absolute.extraction_report.sha256``,
+        ``cells[1].provenance.comparative.extraction_report.sha256``,
+        ``cells[2].provenance.absolute.extraction_report.sha256``,
+        ``cells[2].provenance.comparative.extraction_report.sha256``,
+        ``cells[3].provenance.absolute.extraction_report.sha256``,
+        ``cells[3].provenance.comparative.extraction_report.sha256``, and
+        ``provenance.calibration_plan.sha256``. Their inputs record the
+        evidence root as an absolute string, so the fixed ``/tmp`` literal is
+        load-bearing; this test must not be changed to use a random ``TMPDIR``.
         """
 
         class StableTemporaryDirectory:
@@ -7830,6 +7948,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
 
             floor_path = root / "crosswired-floor.json"
             statement_path = root / "crosswired-single-count.txt"
+            replay_path = root / "crosswired-replay.json"
             with (
                 _mixed_common_mode_seams(inputs),
                 mock.patch.object(
@@ -7875,11 +7994,13 @@ class V2PinsetAndMintTests(unittest.TestCase):
                         project_commit="0" * 40,
                         project_tree_state="clean",
                         strict_validator=lambda _path, _strict: [],
+                        d165_replay_out=replay_path,
                     )
             self.assertEqual(final_site.call_count, 1)
             self.assertEqual(write_calls, 0)
             self.assertFalse(floor_path.exists())
             self.assertFalse(statement_path.exists())
+            self.assertFalse(replay_path.exists())
 
     def test_all_three_site_refusals_leave_outputs_absent(self) -> None:
         """Postcollection, frozen construction, and binding precede writing."""

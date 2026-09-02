@@ -15,6 +15,7 @@ from unittest import mock
 
 from joulewise import detection_floor, dominance_closeout, floor_mint_estimator
 from joulewise.analysis_manifest_v3 import (
+    DOMINANCE_REPLAY_SIDECAR_ROLE,
     analysis_semantics_sha256_v1,
     prospective_finalization_required_attachments,
     validate_prospective_analysis_manifest_v3,
@@ -693,7 +694,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
             self.assertEqual(
                 manifest["finalization_contract"]["required_attachments"],
                 prospective_finalization_required_attachments(
-                    optional_roles=("dominance_replay_sidecar",)
+                    optional_roles=(DOMINANCE_REPLAY_SIDECAR_ROLE,)
                 ),
             )
             self.assertEqual(
