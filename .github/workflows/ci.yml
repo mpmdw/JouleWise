@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+# One live run per ref: a newer push to the same branch (or PR) cancels the
+# superseded queued/in-progress run, so bookkeeping commits do not pile up
+# behind each other in the hosted-runner queue (32 runs were queued on
+# 2026-09-01 with ~2 h latency each).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

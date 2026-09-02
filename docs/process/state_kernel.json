@@ -1179,6 +1179,176 @@
       "status_note": "Minted 2026-08-20 from the D-144 pre-merge seat pass (both seats GO; nits recorded in the ruling, not queued).",
       "stop_card": null
     },
+    "D165-CLOSEOUT-CORE-01": {
+      "acceptance": {
+        "evidence": [
+          "The close-out, the artifact that decides whether the paper may use the dominance sentence, contains exactly eight ordinary ratio records and four shared-error ratio records; an unknown, missing, or extra cell or component name is refused",
+          "The replay sidecar, a separate hash-bound file emitted alongside the detection-floor artifact, is tied to the finalized manifest by its SHA-256 file digest, its block names, and every per-block input used in the replay",
+          "The builder refuses to replace an existing output file",
+          "Regression tests, tests that preserve a previously observed failure as an example, refuse both relabelled cell names and a self-consistent forged sidecar in tests/test_d165_dominance_closeout.py",
+          "The _v5 pack generator imports the three decision rules from joulewise/dominance_closeout.py, while the generated registration bytes stay exactly unchanged"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-CLOSEOUT-CORE-01/acceptance",
+          "label": "D165-CLOSEOUT-CORE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "One module owns the dominance calculations and the close-out builder refuses any wrong cell list, broken source trail, zero denominator, or existing output file."
+      },
+      "authority": {
+        "label": "D-168 clauses 3-5 and the D-165 close-out fix-round ruling",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-161 evidence-lineage rule carried into D-168",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence lineage, the recorded chain from each input block to the issued result, fails closed; hashes detect changed bytes but do not defend against an operator who supplies a wholly forged yet internally consistent input set"
+        },
+        {
+          "authority": {
+            "label": "D-168 clause 2 neither-branch rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Neither branch may be selected from an untruthful or incomplete input: the sentence and subtitle permissions remain false and filling stops"
+        },
+        {
+          "authority": {
+            "label": "D-165 pre-registration rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration, fixing the decision rule before campaign results exist: every component in every cell must have R at least 2; R equal to 2.0 passes, there must be at least two repeated observations for each component in each cell, and a zero denominator is refused"
+        }
+      ],
+      "flags": [],
+      "goal": "Finish the one-home dominance module and close-out builder so one checked source trail produces the exact twelve required decisions without allowing forged names, forged replay inputs, or overwrite of prior evidence.",
+      "id": "D165-CLOSEOUT-CORE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 69,
+      "status": "active",
+      "status_note": "The implementation is on branch feat/d165-dominance-closeout-core (PR #254). Two independent reviews found relabelled-cell and forged-sidecar failures; the ruled repair (rulings 70c/70g/70h) is stage 1 on the stacked branch feat/d165-closeout-stage1-identity, PR #261 (supersedes #254): floor_cell_id + eleven-field floor_stack_identity, sealed-floor block census, content-derived manifest-id authentication, exact default/common-mode shapes. 2026-09-01: Opus contract refuter returned one blocker (stage-2 clause-7 sidecar requirement pre-empted via an unruled gate) plus six should-fix; magistrate ruled the fixes (sidecar optional in stage 1, ARM_KEYS census, real pre-change byte pin, refusal-name routing, contract replication-bar items) and Sol fix round 1 is in flight; terra execution refuter re-runs on the fixed head. Stage 2 (clauses 7-11, 13, 14) starts only after stage-1 refuters pass.",
+      "stop_card": null
+    },
+    "D165-E2E-REPLAY-01": {
+      "acceptance": {
+        "evidence": [
+          "Committed fixtures, fixed example input files kept with the tests, reproduce a finalized manifest through sidecar emission, close-out building, and paper-row rendering",
+          "A second run from the same fixtures reproduces every emitted byte exactly",
+          "The rendered dominance sentence is filled only after the final V5-NIGHTLY-G3-01 campaign check has closed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-E2E-REPLAY-01/acceptance",
+          "label": "D165-E2E-REPLAY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Fixed example inputs replay the complete source-to-paper path twice with identical bytes, and the live sentence fill remains after campaign close."
+      },
+      "authority": {
+        "label": "D-168 clauses 4-5 fixture-backed end-to-end order",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the mint emits the sanctioned separate replay file without changing the detection-floor artifact",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D165-SIDECAR-EMIT-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the successor renderer can turn the 126 registered fill keys and the close-out decision into paper rows",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "RENDERER-V5-SUCCESSOR-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 clause 4 fixture replay boundary",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Fixture proof is a repeatable code-path check, not live campaign evidence and not permission to fill the paper before the campaign closes"
+        }
+      ],
+      "flags": [],
+      "goal": "Prove with fixed example inputs that a finalized manifest produces the separate replay file, the close-out decision, and the rendered paper rows with exactly repeatable bytes.",
+      "id": "D165-E2E-REPLAY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 72,
+      "status": "blocked",
+      "status_note": "This is the post-campaign consumer of the close-out for the dominance-sentence fill. It starts only after both the sidecar emitter and successor renderer exist; fixture proof does not move the live fill before the final G3 check.",
+      "stop_card": null
+    },
+    "D165-SIDECAR-EMIT-01": {
+      "acceptance": {
+        "evidence": [
+          "The mint, the authenticated step that issues the detection-floor result, emits joulewise.d165_dominance_replay.v1 only through the sanctioned adapter in joulewise/dominance_closeout.py",
+          "The sidecar, a separate hash-bound file emitted alongside the floor result, carries the shared-edge bound, every replay block and input, each split shared and local width, and both the ordinary and shared-error ratio decisions",
+          "The existing joulewise.detection_floor_artifact.v2 bytes remain exactly unchanged",
+          "Finalization, the step that seals the campaign manifest, remains outcome-blind and does not read dominance results at joulewise/analysis_manifest_v3.py:3624"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-SIDECAR-EMIT-01/acceptance",
+          "label": "D165-SIDECAR-EMIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The authenticated mint emits one separately bound replay file through the shared adapter while leaving both the floor artifact and outcome-blind finalization unchanged."
+      },
+      "authority": {
+        "label": "D-168 clauses 1 and 4 sidecar ownership",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared dominance rules and strict close-out checks finish their ruled repair round",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D165-CLOSEOUT-CORE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 outcome-blind finalization boundary",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Finalization seals identities and hashes but never reads a ratio, pass flag, or paper branch"
+        },
+        {
+          "authority": {
+            "label": "D-168 unchanged floor-artifact ruling",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The existing detection-floor artifact keeps its present meaning and bytes; replay detail is emitted only in the separate file"
+        }
+      ],
+      "flags": [],
+      "goal": "Add the one sanctioned mint adapter that emits the separately hash-bound replay file while preserving the existing floor artifact byte for byte and keeping manifest finalization blind to results.",
+      "id": "D165-SIDECAR-EMIT-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 70,
+      "status": "blocked",
+      "status_note": "This emission step waits for the active close-out core repair so the mint has only one implementation of each decision rule.",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [
@@ -1734,27 +1904,120 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
       "stop_card": null
     },
+    "L10-A-G2B-CONTRACT-PREFIX-01": {
+      "acceptance": {
+        "evidence": [
+          "Step 1 strict validation and step 2 reduction ran on the G2-b shakedown block at the transaction head, outputs only under the L10 custody root",
+          "Step 5 finalization on a scratch custody copy refused with exactly the singleton reason analysis_finalization_member_cover_mismatch (any other reason, or a successful finalization, is FAIL)",
+          "The record carries proof_scope L10_A_G2B_CONTRACT_PREFIX, the head, and the G2-b root tree hash before and after (equal), and the magistrate ratified it before Ed's GO"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/L10-A-G2B-CONTRACT-PREFIX-01/acceptance",
+          "label": "L10-A-G2B-CONTRACT-PREFIX-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The pre-window prefix of the claim edge (validate, reduce, refusing finalizer) ran on the real G2-b block at the transaction head and left the G2-b root byte-unchanged."
+      },
+      "authority": {
+        "label": "Ruling 89 R-1 (L10 ladder; L10-A gates V5-TRANSACTION-01)",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the G2-b shakedown root exists with its verdict and bracket binding",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-G2B-SHAKEDOWN-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "Ruling 89 R-1/R-2/R-4",
+            "path": "docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md"
+          },
+          "rule": "L10-A reads the G2-b shakedown root only through strict validation, reduction, and a refusing finalizer on a scratch copy; the root stays byte-unchanged (tree hash recorded before and after) and the G2-b immutability fence is not amended; every L10 step is a bench desk command (no sudo, no [QUIET-MAC])"
+        },
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 ruling R-1",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Same head, production pack: a synthetic or smoke-scoped replay does not discharge this row (D-160 R-1 forbids a synthetic clean leg standing in for the real edge)"
+        },
+        {
+          "authority": {
+            "label": "S9-12 cure column (RUNBOOK + W-LIST)",
+            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+          },
+          "rule": "Schedule and record only (RUNBOOK + W-LIST): this row does not change the claim edge; defects the rehearsal finds are routed to their owning rows"
+        }
+      ],
+      "flags": [],
+      "goal": "Execute L10-A at the bench before the first claim-bearing _v5 arm: step 1 strict validation and step 2 reduction of the G2-b shakedown block (outputs only under the L10 custody root), and step 5 finalization on a scratch custody copy that must refuse with exactly the singleton reason analysis_finalization_member_cover_mismatch; record the G2-b tree hash before and after (byte-unchanged) and a ratified record with proof_scope L10_A_G2B_CONTRACT_PREFIX.",
+      "id": "L10-A-G2B-CONTRACT-PREFIX-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 119,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-01 from ruling 89 R-1 (docs/process/v5-l10-rehearsal-phase.md carries the runsheet). Split out of L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 so the transaction can gate on a row that closes BEFORE the window; the parent row keeps the full ladder (L10-B before the real mint, L10-C before publication) and cannot close before the transaction. Ruling 97 R-6c/R-6h: the floor is ABSENT by ruling (floors/ empty, asserted before and after step 5); the singleton proves prospective validation, verdict schema/status/basis, and present-member hashes only — the finalizer's bracket and ledger legs (analysis_manifest_v3.py:3380-3487) run after member cover and are first exercised on real bytes in L10-C (E1 provenance validates the same objects outside the finalizer).",
+      "stop_card": null
+    },
     "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01": {
       "acceptance": {
         "evidence": [
-          "The real-transaction runbook (or its post-mint successor) carries a named phase that re-runs the full claim edge at the transaction head on the production pack before any window is spent, with its evidence custodied",
-          "The pre-window worklist carries the entry and the _v4 night is sequenced behind it",
-          "The executed rehearsal record exists, custodied, before the first spent window"
+          "L10-A (pre-window, bench lane): step 1 strict validation and step 2 reduction of the G2-b shakedown block, outputs only under the L10 custody root, plus step 5 finalization on a scratch custody copy refusing with exactly the singleton reason analysis_finalization_member_cover_mismatch; record carries proof_scope L10_A_G2B_CONTRACT_PREFIX and the G2-b tree hash before and after (byte-unchanged)",
+          "L10-B (after the ALPHA/BETA floor arms, before the real mint): steps 3-4 on a scratch copy of the real floor-producer corpus; record carries proof_scope L10_B_FLOOR_PRODUCER",
+          "L10-C (after the last consuming arm, before any claim is published): steps 5-7 in positive form on a scratch copy of the campaign corpus; record carries proof_scope L10_C_FULL_EDGE",
+          "The row closes only when all three records exist, custodied; L10-A alone does not close it (ruling 89 R-1)"
         ],
         "pointer": {
           "json_pointer": "/tasks/L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01/acceptance",
           "label": "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The same-head full-claim-edge sacrificial replay is a scheduled, recorded pre-window step, not an unscheduled ruling."
+        "summary": "The same-head full-claim-edge sacrificial replay is a three-part ladder (L10-A pre-window on the G2-b block, L10-B before the real mint, L10-C before publication), each part recorded and custodied; ruling 89 re-sequenced D-160's obligation without reducing it."
       },
       "authority": {
         "label": "S9-12 (the L10 sacrificial rehearsal ruled to precede any spent window has no schedule); the ruling is the WO-CONSUMPTION-EDGE contract adoption, item 4",
         "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "L10-C needs a scratch copy of the completed campaign corpus",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-TRANSACTION-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the L10-A record exists and is ratified",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "L10-A-G2B-CONTRACT-PREFIX-01"
+        }
+      ],
       "fallback": null,
       "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "Ruling 89 R-1/R-2/R-4",
+            "path": "docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md"
+          },
+          "rule": "L10-A reads the G2-b shakedown root only through strict validation, reduction, and a refusing finalizer on a scratch copy; the root stays byte-unchanged (tree hash recorded before and after) and the G2-b immutability fence is not amended; every L10 step is a bench desk command (no sudo, no [QUIET-MAC])"
+        },
         {
           "authority": {
             "anchor": "rulings",
@@ -1777,7 +2040,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 113,
-      "status": "queued",
+      "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED.",
       "stop_card": null
     },
@@ -3580,7 +3843,7 @@
       "id": "PREWINDOW-REGEX-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 71,
+      "rank": 74,
       "status": "queued",
       "status_note": "Owning-seat (L9) assent to be solicited at the next council touch (S-7 residual).",
       "stop_card": null
@@ -3744,6 +4007,56 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-11 of the ruled-not-installed sweep (status C, cure CODE; does not gate the mint but writes the mint's estimator pin).",
       "stop_card": null
     },
+    "RENDERER-V5-SUCCESSOR-01": {
+      "acceptance": {
+        "evidence": [
+          "The renderer, the script that turns issued result files into paper-table text, reads the close-out artifact and the other governed fill sources",
+          "The successor renders all 126 registered fill keys, including keys whose names contain the selected prefill length, into docs/paper/results-fill-registry.md rows",
+          "The close-out branch alone decides whether the dominance sentence and subtitle are filled or withheld",
+          "The frozen 109-key renderer remains unedited"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RENDERER-V5-SUCCESSOR-01/acceptance",
+          "label": "RENDERER-V5-SUCCESSOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A new renderer covers the 126-key _v5 fill registry and uses the issued close-out decision without changing the frozen 109-key renderer."
+      },
+      "authority": {
+        "label": "D-168 clauses 4-5 and the ratio close-out scout renderer finding",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the G2-a selection record fixes the prefill length represented in the 126-key fill registry",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-G2A-PREFILL-PROBE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 frozen-renderer ruling",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The existing 109-key renderer is frozen and is never edited; the 126-key registry is handled by a successor"
+        }
+      ],
+      "flags": [],
+      "goal": "Build the successor script that combines the issued close-out with the governed fill sources and renders every row in the 126-key _v5 results-fill registry.",
+      "id": "RENDERER-V5-SUCCESSOR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 71,
+      "status": "blocked",
+      "status_note": "The frozen renderer cannot represent the live 126-key registry. This successor waits for G2-a because that selection record fixes the prefill length embedded in the registry keys.",
+      "stop_card": null
+    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -3886,7 +4199,7 @@
       "priority": "p1_phase_gate",
       "rank": 101,
       "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware. 2026-09-01 status: divergence exhibited (trace 78) and the reader alignment landed on PR #260 (feat/2026-09-01-supersession-exhibit); terra delta re-audit found the regressions were helper-only, cured by fix round r7 (commit bc1489c3: production-seam tests driving _whole_window_campaign_membership, _validate_row_uncached, load_analysis_inputs -> analyze_claims -> validate_claim_verdicts; mutations m1/m2/m3/m5 killed at the seams); luna delta re-audit of r7 in flight; retained corpus rebaselined at 40 campaign logs, all clean.",
       "stop_card": null
     },
     "T0-CLOCK-ROW-RENAME-01": {
@@ -4553,6 +4866,16 @@
         {
           "evidence": null,
           "kind": "task",
+          "note": "Advisory cross-link only: D165-E2E-REPLAY-01 is the row that later consumes the close-out with the successor renderer to fill the dominance sentence after V5-NIGHTLY-G3-01 closes the campaign; this does not block desk-day work.",
+          "required": "the shared dominance decision rule used by the _v5 pack remains coordinated with the later paper-fill path",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "D165-CLOSEOUT-CORE-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
           "required": "G2-a finishes with immutable bracket, probe-summary, and selector-input evidence",
           "scope": "start",
           "state": "pending",
@@ -4720,7 +5043,7 @@
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family.",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d and ordering regression R-6e landed together in PR #262 (2026-09-01, branch feat/2026-09-01-ruling-97-runsheet; terra 99 + magistrate bench), merge pending green CI.",
       "stop_card": null
     },
     "V5-NIGHTLY-G3-01": {
@@ -4742,6 +5065,16 @@
         "path": "docs/decision_log.md"
       },
       "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "note": "Advisory cross-link only: D165-E2E-REPLAY-01 consumes the close-out with RENDERER-V5-SUCCESSOR-01 for the dominance-sentence fill after this row closes the campaign; the consumer is not a prerequisite for G3.",
+          "required": "the post-campaign paper-fill consumer remains explicitly linked to the final nightly check",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "D165-E2E-REPLAY-01"
+        },
         {
           "evidence": null,
           "kind": "task",
@@ -4798,6 +5131,15 @@
         "path": "docs/decision_log.md"
       },
       "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the L10-A record (proof_scope L10_A_G2B_CONTRACT_PREFIX) exists and is ratified before the first claim-bearing arm (ruling 89 R-1)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "L10-A-G2B-CONTRACT-PREFIX-01"
+        },
         {
           "evidence": null,
           "kind": "task",
@@ -5013,7 +5355,7 @@
       "id": "V6-TOKEN-PIN-BINDING-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 69,
+      "rank": 73,
       "status": "queued",
       "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
       "stop_card": null
