@@ -37,6 +37,95 @@ and the scratch-copy refusal check observes exactly
 missing predecessor, unexpected refusal, CONTRACT mutation, or write beneath
 the real custody by the refusal check is not PASS.
 
+## Amendment 2026-09-01 (ruling 97)
+
+This amendment preserves the prior record while correcting the night commands
+under ruling 97. Old lines 69--74 struck the aggregate-floor precondition:
+the floor is minted inside the transaction, so no floor bytes can exist before
+G2-b. Old lines 117--121's remaining ruling is resolved because the refusal
+command is executable with its absent custody path. Old line 149's tree entry,
+old line 212's `export AGGREGATE_FLOOR_ARTIFACT='NEEDS-RULING'`, and old lines
+550, 591, and 593's floor-file check/copy/compare are removed so custody keeps
+an empty floors directory. Old lines 178--180 used the errata
+`qwen3_1p7b`, `qwen3_8b`, and `qwen3_1p7b_vs_8b`; the generator's hyphenated
+ids are canonical. Old F2 text is amended with pre/post emptiness assertions,
+a STOP for an attachment-missing observation, and ruling 97's member-cover
+proof scope: bracket and ledger/head authentication are outside the finalizer
+at that gate and are instead exercised by E1 on the night.
+
+### Struck text (verbatim, from the pre-amendment record)
+
+Old lines 69--74:
+
+```text
+   `configs/campaigns/d117_{contrast,floor}_*_v5` directories and no real v5
+   aggregate-floor artifact under
+   `/Users/edr/JouleWise-measurement-20260813`. Do not substitute `_v3`, `_v4`, `_v9`,
+   the historical `df-ph-decode-floor-mint1.json`, or guessed bytes. The live
+   gate reopens only at a reviewed head containing all three real `_v5` packs,
+   their real freeze/mint supply, and the exact aggregate floor path.
+```
+
+Old lines 119--121:
+
+```text
+1. **Exact `_v5` floor artifact.** Name the real mint’s aggregate-floor path.
+   Until supplied, finalizer/refusal commands below are templates with exact
+   parser flags but are not executable.
+```
+
+Old line 149:
+
+```text
+│   ├── floors/                       # exact real-mint floor copy
+```
+
+Old lines 178--180:
+
+```text
+export PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_contrast_qwen3_1p7b_vs_8b_v5"
+export FLOOR_15_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3_1p7b_v5"
+export FLOOR_7_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3_8b_v5"
+```
+
+Old lines 211--212:
+
+```text
+# Lead supplies this from the real v5 mint transcript; never guess it.
+export AGGREGATE_FLOOR_ARTIFACT='NEEDS-RULING'
+```
+
+Old line 540:
+
+```text
+path, unresolved floor path, or B10 refusal.
+```
+
+Old line 550:
+
+```text
+test -f "$AGGREGATE_FLOOR_ARTIFACT"
+```
+
+Old lines 576--577:
+
+```text
+floor, completed ledger, and adjacent head pin. Expected refusal: any recursive
+diff or `cmp` mismatch. The prospective validator resolves every binding
+```
+
+Old line 591:
+
+```text
+/bin/cp -p "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
+```
+
+Old line 593:
+
+```text
+/usr/bin/cmp -s "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
+```
+
 ## G2-b-only blockers — these do not gate G2-a
 
 1. **OWN-B1 — RESOLVED by G2 ruling R-1.** The current `run_campaign.py` parser cannot select one A/B/B/A
@@ -66,12 +155,14 @@ the real custody by the refusal check is not PASS.
 
 2. **B-SUPPLY — G2-b only: the named measurement checkout must contain the real `_v5`
    supply.** The 2026-08-28 desk census found no successor
-   `configs/campaigns/d117_{contrast,floor}_*_v5` directories and no real v5
-   aggregate-floor artifact under
-   `/Users/edr/JouleWise-measurement-20260813`. Do not substitute `_v3`, `_v4`, `_v9`,
-   the historical `df-ph-decode-floor-mint1.json`, or guessed bytes. The live
-   gate reopens only at a reviewed head containing all three real `_v5` packs,
-   their real freeze/mint supply, and the exact aggregate floor path.
+   `configs/campaigns/d117_{contrast,floor}_*_v5` directories. Do not substitute
+   `_v3`, `_v4`, `_v9`, the historical `df-ph-decode-floor-mint1.json`, or guessed
+   bytes. The live gate reopens only at a reviewed head containing all three real
+   `_v5` packs and their real freeze/mint supply. No aggregate floor is staged for
+   G2-b (ruling 97 R-6a): it is minted inside the transaction from the ALPHA/BETA
+   arms and cannot exist yet; the finalizer's member-cover gate
+   (`joulewise/analysis_manifest_v3.py:3373`) refuses before the floor is first
+   opened (`:3575`).
 
 3. **B3 — RESOLVED by G2 ruling R-5.** `preflight.sh` takes the checkout as its
    one required argument. The documented and only accepted value for this G2
@@ -116,9 +207,9 @@ models, the existing harness, its own diagnostic runs root, and calibration.
 
 ## Remaining ruling
 
-1. **Exact `_v5` floor artifact.** Name the real mint’s aggregate-floor path.
-   Until supplied, finalizer/refusal commands below are templates with exact
-   parser flags but are not executable.
+1. **RESOLVED by ruling 97.** The finalizer/refusal commands are executable
+   with the absent custody floor path; the member-cover gate refuses before it
+   can be opened.
 
 ## Timeline
 
@@ -146,7 +237,7 @@ used consistently as the lexical root; real paths remain the safest advice.
 ├── custody/
 │   ├── prospective/                  # exact pack copies
 │   ├── calibration/                  # exact completed ledger copy
-│   ├── floors/                       # exact real-mint floor copy
+│   ├── floors/                       # empty by ruling 97; no floor bytes are staged for G2-b
 │   └── runs/                         # RUNS_ROOT: non-claim, never campaign reuse
 │       ├── bracket-binding.json      # built before verdict
 │       ├── campaign_log.jsonl        # authoritative verdict row lives here
@@ -175,9 +266,9 @@ export QUARANTINE_ROOT="$SHAKEDOWN_ROOT/quarantine"
 export TRANSCRIPT_ROOT="$SHAKEDOWN_ROOT/transcript"
 export WINDOW_PLAN_ROOT="$SHAKEDOWN_ROOT/window-plan"
 export REHEARSAL_PLAN_ROOT="$SHAKEDOWN_ROOT/rehearsal-window-plan"
-export PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_contrast_qwen3_1p7b_vs_8b_v5"
-export FLOOR_15_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3_1p7b_v5"
-export FLOOR_7_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3_8b_v5"
+export PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+export FLOOR_15_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3-1p7b_v5"
+export FLOOR_7_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3-8b_v5"
 export POLICY="$MEASUREMENT_CHECKOUT/configs/campaign_policies/quiet_mac_p2_production.json"
 export CALIBRATION_LEDGER="$MEASUREMENT_CHECKOUT/runs/calibration_observation_ledger.jsonl"
 export LEDGER_HEAD_PIN="$MEASUREMENT_CHECKOUT/configs/calibration/calibration_ledger_head.json"
@@ -208,8 +299,6 @@ export REHEARSAL_POST_ATTEMPT_ID=d117-g2-arm-abort-post-throwaway-20260829
 export POWER_POLICY=ac_high_power
 export SETTLE_S=600
 export PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
-# Lead supplies this from the real v5 mint transcript; never guess it.
-export AGGREGATE_FLOOR_ARTIFACT='NEEDS-RULING'
 ```
 
 The two arms consume distinct ids. The rehearsal arm is the earlier,
@@ -608,7 +697,7 @@ equality.
 
 CWD: `$MEASUREMENT_CHECKOUT`. Timing: <2 min. Expected artifact: transcript
 only. Expected refusal: any absent pack/file, non-main head, dirty governed
-path, unresolved floor path, or B10 refusal.
+path, or B10 refusal.
 
 ```sh
 cd "$MEASUREMENT_CHECKOUT"
@@ -618,7 +707,6 @@ test -f "$PACK_ROOT/plan_tree.json"
 test -f "$PACK_ROOT/calibration_plan.json"
 test -f "$FLOOR_15_PACK_ROOT/plan_tree.json"
 test -f "$FLOOR_7_PACK_ROOT/plan_tree.json"
-test -f "$AGGREGATE_FLOOR_ARTIFACT"
 test -f "$CALIBRATION_LEDGER"
 test -f "$LEDGER_HEAD_PIN"
 test -f "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json"
@@ -644,8 +732,8 @@ cherry-pick only the PASS text:
 
 CWD: `$MEASUREMENT_CHECKOUT`. Timing: <2 min before launch, then <1 min after
 the post bracket. Expected artifacts: a byte-identical complete pack subtree,
-floor, completed ledger, and adjacent head pin. Expected refusal: any recursive
-diff or `cmp` mismatch. The prospective validator resolves every binding
+an empty floors directory, completed ledger, and adjacent head pin. Expected
+refusal: any recursive diff or `cmp` mismatch. The prospective validator resolves every binding
 relative to the manifest directory: calibration plan
 (`analysis_manifest_v3.py:1945-1952`), root order manifest (`:1964-1971`), four
 stage order manifests (`:1982-2008`), four condition-family definitions
@@ -659,9 +747,7 @@ staging defect, not a night result.
   "$CUSTODY_ROOT/floors" "$RUNS_ROOT" "$BOUND_RUNS_ROOT" "$ANALYSIS_ROOT" "$CLAIMS_ROOT" \
   "$SCRATCH_ROOT" "$TRANSCRIPT_ROOT" "$WINDOW_PLAN_ROOT" "$REHEARSAL_PLAN_ROOT"
 /bin/cp -Rp "$PACK_ROOT/." "$CUSTODY_ROOT/prospective/"
-/bin/cp -p "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
 /usr/bin/diff -r "$PACK_ROOT" "$CUSTODY_ROOT/prospective"
-/usr/bin/cmp -s "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
 ```
 
 After D1 completes both bracket slots, complete the same staging unit before E1:
@@ -1204,6 +1290,19 @@ before calling the finalizer, because finalization writes the finalized
 manifest append-only into its custody output
 (`joulewise/analysis_manifest_v3.py:3738-3816`).
 
+The PASS line carries no information about the floor; this pre-assertion is
+the transcript's proof that no floor bytes were staged.
+
+```sh
+if test -d "$CUSTODY_ROOT/floors" \
+   && test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" \
+   && test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"; then
+  echo "FLOORS-EMPTY OK"
+else
+  echo "STOP: floors/ missing or non-empty: $(/bin/ls -lA "$CUSTODY_ROOT/floors" 2>&1)"; false
+fi
+```
+
 ```sh
 "$PY" scripts/check_window_provenance.py --expect-finalize-refusal \
   --scratch-dir "$SCRATCH_ROOT" \
@@ -1218,6 +1317,19 @@ manifest append-only into its custody output
   --output-dir "$CUSTODY_ROOT"
 ```
 
+The PASS line carries no information about the floor; this post-assertion is
+the transcript's proof that no floor bytes were staged.
+
+```sh
+if test -d "$CUSTODY_ROOT/floors" \
+   && test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" \
+   && test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"; then
+  echo "FLOORS-EMPTY OK"
+else
+  echo "STOP: floors/ missing or non-empty: $(/bin/ls -lA "$CUSTODY_ROOT/floors" 2>&1)"; false
+fi
+```
+
 The default expected set is reachable **only** from A2's complete staged pack
 subtree and completed adjacent ledger/head pair. If the stage directories or
 any other manifest-relative binding are absent, the observed singleton is
@@ -1230,6 +1342,16 @@ one-block basis does not cover all 80 frozen members and refuses
 (`joulewise/analysis_manifest_v3.py:2970-2980`). It never reaches
 `insufficient_complete_blocks` / `fixed_n_plan_incomplete`, which belong to the
 claim engine (`joulewise/analysis_engine/__init__.py:690-700`).
+
+An observed singleton of `analysis_finalization_attachment_missing` is a STOP
+and a ruling, never "stage a floor and rerun". The member-cover singleton
+proves prospective-manifest validation, verdict schema/status/basis, and the
+present members' config/metadata/summary hashes and identity paths; it does not
+prove bracket-byte or ledger-head authentication. The finalizer's bracket and
+ledger legs (`joulewise/analysis_manifest_v3.py:3380-3487`) run after member
+cover and are validated on the night by the reusable G3 provenance block
+(`check_window_provenance.py --bracket-binding … --calibration-ledger …
+--head-pin …`, executed at F1), outside the finalizer.
 
 `analyze-claims` is copy-safe with respect to the source trees: it reads the
 manifest/runs/floor inputs and writes only `--output`
