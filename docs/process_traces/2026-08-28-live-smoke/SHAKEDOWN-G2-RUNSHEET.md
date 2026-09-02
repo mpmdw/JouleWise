@@ -53,6 +53,79 @@ a STOP for an attachment-missing observation, and ruling 97's member-cover
 proof scope: bracket and ledger/head authentication are outside the finalizer
 at that gate and are instead exercised by E1 on the night.
 
+### Struck text (verbatim, from the pre-amendment record)
+
+Old lines 69--74:
+
+```text
+   `configs/campaigns/d117_{contrast,floor}_*_v5` directories and no real v5
+   aggregate-floor artifact under
+   `/Users/edr/JouleWise-measurement-20260813`. Do not substitute `_v3`, `_v4`, `_v9`,
+   the historical `df-ph-decode-floor-mint1.json`, or guessed bytes. The live
+   gate reopens only at a reviewed head containing all three real `_v5` packs,
+   their real freeze/mint supply, and the exact aggregate floor path.
+```
+
+Old lines 119--121:
+
+```text
+1. **Exact `_v5` floor artifact.** Name the real mint’s aggregate-floor path.
+   Until supplied, finalizer/refusal commands below are templates with exact
+   parser flags but are not executable.
+```
+
+Old line 149:
+
+```text
+│   ├── floors/                       # exact real-mint floor copy
+```
+
+Old lines 178--180:
+
+```text
+export PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_contrast_qwen3_1p7b_vs_8b_v5"
+export FLOOR_15_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3_1p7b_v5"
+export FLOOR_7_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3_8b_v5"
+```
+
+Old lines 211--212:
+
+```text
+# Lead supplies this from the real v5 mint transcript; never guess it.
+export AGGREGATE_FLOOR_ARTIFACT='NEEDS-RULING'
+```
+
+Old line 540:
+
+```text
+path, unresolved floor path, or B10 refusal.
+```
+
+Old line 550:
+
+```text
+test -f "$AGGREGATE_FLOOR_ARTIFACT"
+```
+
+Old lines 576--577:
+
+```text
+floor, completed ledger, and adjacent head pin. Expected refusal: any recursive
+diff or `cmp` mismatch. The prospective validator resolves every binding
+```
+
+Old line 591:
+
+```text
+/bin/cp -p "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
+```
+
+Old line 593:
+
+```text
+/usr/bin/cmp -s "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
+```
+
 ## G2-b-only blockers — these do not gate G2-a
 
 1. **OWN-B1 — RESOLVED by G2 ruling R-1.** The current `run_campaign.py` parser cannot select one A/B/B/A
@@ -1150,9 +1223,13 @@ The PASS line carries no information about the floor; this pre-assertion is
 the transcript's proof that no floor bytes were staged.
 
 ```sh
-test -d "$CUSTODY_ROOT/floors"
-test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
-test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"
+if test -d "$CUSTODY_ROOT/floors" \
+   && test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" \
+   && test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"; then
+  echo "FLOORS-EMPTY OK"
+else
+  echo "STOP: floors/ missing or non-empty: $(/bin/ls -lA "$CUSTODY_ROOT/floors" 2>&1)"; false
+fi
 ```
 
 ```sh
@@ -1173,9 +1250,13 @@ The PASS line carries no information about the floor; this post-assertion is
 the transcript's proof that no floor bytes were staged.
 
 ```sh
-test -d "$CUSTODY_ROOT/floors"
-test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
-test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"
+if test -d "$CUSTODY_ROOT/floors" \
+   && test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" \
+   && test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"; then
+  echo "FLOORS-EMPTY OK"
+else
+  echo "STOP: floors/ missing or non-empty: $(/bin/ls -lA "$CUSTODY_ROOT/floors" 2>&1)"; false
+fi
 ```
 
 The default expected set is reachable **only** from A2's complete staged pack
