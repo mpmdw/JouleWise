@@ -13,6 +13,10 @@ the comparative estimator cancel a slow linear drift.
 
 A **replay sidecar** (shortened to **sidecar**) is the separate JSON file that
 holds the physical A/B/B/A operands needed to replay the common-mode result.
+The **mint** (in full, the **stage-2 mint**) is the program, owed by the second
+delivery stage (`D165-SIDECAR-EMIT-01`), that writes the sidecar from the floor
+extractor's own block inputs at the moment the common-mode result is computed;
+it is the only producer of a sidecar, and stage 1 defines its interface below.
 The **close-out builder** is the function that reads the exact bytes of the
 finalized manifest, floor artifact, and sidecar and produces the one decision
 record defined below. **Lineage** is the chain of custody between those physical
@@ -87,7 +91,7 @@ tolerance of exactly `1e-12` seconds. The exact-corner cap is exactly 16 blocks:
 the implementation reads `MAX_EXACT_ADMISSIBLE_CORNER_N`, whose registered
 value is 16, and rejects 17 or more.
 
-For an ordinary point floor, the already-defined close-out builder calls
+For an ordinary point floor, the close-out builder calls
 `joulewise.detection_floor._point_floor_diagnostic` on the floor artifact's
 unconditional parents. It does not copy that function's maximum calculation.
 The absolute parent is `max_abs_residual_j`; the comparative parent is
@@ -325,7 +329,7 @@ above.
 
 Every `independent_ratios[]` record is the sidecar independent-ratio record
 plus `cell_id` and `component`. `component` is `absolute` or `comparative`.
-The already-defined census must contain each of the four cell identities exactly twice, once
+The census must contain each of the four cell identities exactly twice, once
 per component. The close-out builder reads the operands again from the floor
 artifact rather than trusting the sidecar copy.
 
@@ -354,7 +358,7 @@ Branch B requires all twelve values to be complete and at least one value to
 be below 2.0. Both prose licenses are false. A completed mix of passing and
 failing cells therefore selects B, not a stop.
 
-The already-defined neither branch is selected when a result cannot be
+The neither branch is selected when a result cannot be
 truthfully completed. The
 builder sets both `all_*_pass` fields and `branch` to null, both licenses to
 false, and `refusal_reason` to the first deterministic reason. Stop conditions

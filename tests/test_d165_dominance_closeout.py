@@ -7,6 +7,7 @@ import functools
 import hashlib
 import inspect
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ from joulewise.floor_extraction import (
     _CommonModeBlockInputs,
     _common_mode_block_half_width,
 )
+from scripts import build_d165_dominance_closeout as cli_module
 from scripts.build_d165_dominance_closeout import (
     build_d165_dominance_closeout,
 )
@@ -1145,6 +1147,31 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             hashlib.sha256(PINNED_DOMINANCE_CRITERION_BYTES).hexdigest(),
             "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b",
         )
+
+    def test_contract_runnable_command_names_exactly_the_parser_flags(self) -> None:
+        # Extract the flags from the contract's fenced command rather than
+        # re-typing them, so a parser rename without a contract edit fails here.
+        contract = (ROOT / "docs/contracts/d165_dominance_closeout.md").read_text(
+            encoding="utf-8"
+        )
+        commands = [
+            line
+            for line in contract.splitlines()
+            if line.startswith("python3 scripts/build_d165_dominance_closeout.py")
+        ]
+        self.assertEqual(len(commands), 1, commands)
+        documented = re.findall(r"--[a-z-]+", commands[0])
+        parser = cli_module._parser()
+        parsed = [
+            action.option_strings[0]
+            for action in parser._actions
+            if action.option_strings and action.option_strings[0] != "-h"
+        ]
+        self.assertEqual(documented, parsed)
+        required = {a.option_strings[0] for a in parser._actions if a.required}
+        for flag in documented:
+            bracketed = f"[{flag}" in commands[0]
+            self.assertEqual(bracketed, flag not in required, flag)
 
     def test_cli_writes_the_same_valid_closeout_as_the_python_builder(self) -> None:
         expected, manifest, floor, sidecar = self.build()
