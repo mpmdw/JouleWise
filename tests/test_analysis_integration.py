@@ -71,6 +71,7 @@ from joulewise.whole_window import (
     CustodyTelemetryIdentity,
     IDLE_ADMISSION_CORE_SCHEMA,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     WHOLE_WINDOW_SCHEMA,
     build_row_provenance,
@@ -524,6 +525,22 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
             Path("floor.json"),
             strict_validator=lambda path, strict=True: [],
         )
+
+
+def _v3_supersession_finding_artifact() -> dict:
+    artifact = _v3_fixture_artifact(diverged=True)
+    audit = artifact["supersession_audit"][0]
+    audit["validated_count"] = audit["raw_count"]
+    audit["findings"] = [
+        {
+            "reason_code": (
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+            ),
+            "bundle_ids": ["bundle-a", "bundle-z"],
+        }
+    ]
+    artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+    return artifact
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
@@ -1348,6 +1365,115 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertIn(
             "whole_window_verdict_conflict",
             refused_contrast["claim_evaluation"]["reason_codes"],
+        )
+
+    def test_supersession_audit_valid_finding_validates_after_persistence(self):
+        artifact = _v3_supersession_finding_artifact()
+        persisted = json.loads(render_claim_verdicts(artifact))
+        self.assertEqual(validate_claim_verdicts(persisted), [])
+
+    def test_supersession_audit_finding_unknown_key_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["detail"] = "extra"
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any("unrecognized key(s): detail" in error for error in errors),
+            errors,
+        )
+
+    def test_supersession_audit_finding_unknown_reason_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0][
+            "reason_code"
+        ] = "unruled_reason"
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any("findings[0].reason_code: invalid" in error for error in errors),
+            errors,
+        )
+
+    def test_supersession_audit_finding_empty_bundle_ids_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["bundle_ids"] = []
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "bundle_ids: must be a nonempty array of nonempty strings"
+                in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_finding_duplicate_bundle_ids_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["bundle_ids"] = [
+            "bundle-a",
+            "bundle-a",
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "bundle_ids: must be sorted and duplicate-free" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_finding_unsorted_bundle_ids_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["bundle_ids"] = [
+            "bundle-z",
+            "bundle-a",
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "bundle_ids: must be sorted and duplicate-free" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_clean_row_with_findings_refuses(self):
+        artifact = _v3_fixture_artifact()
+        artifact["supersession_audit"][0]["findings"] = [
+            {
+                "reason_code": (
+                    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                ),
+                "bundle_ids": ["bundle-a"],
+            }
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "findings: only a refused row may carry findings" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_equal_authenticated_refusal_without_findings_refuses(
+        self,
+    ):
+        artifact = _v3_fixture_artifact(diverged=True)
+        audit = artifact["supersession_audit"][0]
+        audit["validated_count"] = audit["raw_count"]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "authenticated equal counts cannot be refused" in error
+                for error in errors
+            ),
+            errors,
         )
 
     def test_v3_requires_scan_row_for_every_declared_floor_root(self):
@@ -6015,6 +6141,7 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         from joulewise.analysis_engine import inputs as inputs_module
 
         entry = {
+            "record_type": "campaign_occurrence_supersession",
             "bundle_id": "dup-bundle",
             "selected_occurrence": {
                 "source_manifest": {"path": "campaign_manifests/campaign-b.json"},
@@ -6124,6 +6251,60 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertEqual(audit["validated_count"], 1)
         self.assertEqual(audit["status"], "refused")
         self.assertNotIn("path", audit["authenticated_basis"])
+
+    def test_d093_two_row_scan_persists_as_valid_claim_artifact(self):
+        from joulewise.analysis_engine.inputs import supersession_visibility_scan
+
+        root = self._duplicated_root()
+        self._manifest(root, "campaign-z-a.json", "session-z-a", "z-bundle")
+        self._manifest(root, "campaign-z-b.json", "session-z-b", "z-bundle")
+
+        z_entry = self._install_real_supersession(
+            root,
+            "z-bundle",
+            selected_manifest="campaign-z-b.json",
+            superseded_manifests=["campaign-z-a.json"],
+        )
+        with (root / "campaign_log.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(z_entry, sort_keys=True) + "\n")
+
+        a_entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest="campaign-b.json",
+            superseded_manifests=["campaign-a.json"],
+        )
+        with (root / "campaign_log.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(a_entry, sort_keys=True) + "\n")
+
+        audit = supersession_visibility_scan(
+            root,
+            scope="analysis_corpus",
+            evidence_root_id=None,
+            authenticated_basis={
+                "kind": "whole_window_evaluation_basis_sha256",
+                "sha256": "a" * 64,
+            },
+        )
+        self.assertEqual(audit["raw_count"], 4)
+        self.assertEqual(audit["validated_count"], 4)
+        self.assertEqual(
+            audit["findings"],
+            [
+                {
+                    "reason_code": (
+                        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                    ),
+                    "bundle_ids": ["dup-bundle", "z-bundle"],
+                }
+            ],
+        )
+
+        artifact = _v3_fixture_artifact(diverged=True)
+        artifact["supersession_audit"][0] = audit
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        persisted = json.loads(render_claim_verdicts(artifact))
+        self.assertEqual(validate_claim_verdicts(persisted), [])
 
     def test_invalid_json_supersession_reader_input_refuses_join_globally(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence
