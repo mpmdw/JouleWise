@@ -566,12 +566,35 @@ class ProjectionLifecycleTests(unittest.TestCase):
         receipt_path = self.pack / reference["path"]
         receipt_raw = receipt_path.read_bytes()
         self.assertEqual(sha256_bytes(receipt_raw), reference["sha256"])
+        sidecar_path = receipt_path.with_suffix(".sha256")
+        expected_sidecar = (
+            f"{reference['sha256']}  {receipt_path.name}\n".encode("ascii")
+        )
+        self.assertEqual(sidecar_path.read_bytes(), expected_sidecar)
         receipt = read_json(receipt_path)
         validate_projection_receipt(receipt)
         self.assertEqual(receipt["schema_version"], IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA)
         self.assertEqual(receipt["receipt_kind"], "freeze_projection")
         self.assertEqual(receipt["status"], "PASS")
         self.assertFalse((receipt_path.parent / "projection-0002.json").exists())
+
+        first_hex = "0" if reference["sha256"][0] != "0" else "1"
+        mutated_digest = first_hex + reference["sha256"][1:]
+        sidecar_path.write_bytes(
+            f"{mutated_digest}  {receipt_path.name}\n".encode("ascii")
+        )
+        pack_with_mutated_sidecar = pack_bytes(self.pack)
+        with self.assertRaises(IdentityPinProjectionError) as refusal:
+            verify_frozen_projection(
+                self.pack,
+                self.root / "custody",
+                "bracket-mutated-freeze-sidecar",
+            )
+        self.assertEqual(
+            refusal.exception.reason_code,
+            "readiness_identity_pinset_frozen_mismatch",
+        )
+        self.assertEqual(pack_bytes(self.pack), pack_with_mutated_sidecar)
 
     def test_verify_is_pack_read_only_and_writes_custody_receipt(self) -> None:
         freeze_projection(self.pack)
