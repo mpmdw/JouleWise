@@ -234,36 +234,45 @@ I_i=[\delta_i^-,\delta_i^+]
 \right].
 \]
 The mean interval over the five null-test blocks is
-\(I_{\rm mean}=[\sum_i\delta_i^-/5,\sum_i\delta_i^+/5]\). No issued
-null-ladder member endpoints are available, so this endpoint-combination
-example is symbolic rather than measured. The forcing problem is that a point
-value can hide an allowed nonzero difference, while a mean can hide two blocks
-moving in opposite directions. The containment test therefore requires every
-\(I_i\) to contain zero, then requires both \(I_{\rm mean}\) and the largest
-absolute allowed block difference to fit the comparator.
+\(I_{\rm mean}=[\sum_i\delta_i^-/5,\sum_i\delta_i^+/5]\). Let
+\(C=[-m,+m]\) be the earlier comparator, where \(m\) is its positive joule
+endpoint, and define the largest absolute allowed block difference as
+\[
+M=\max_i\max(|\delta_i^-|,|\delta_i^+|).
+\]
+No issued null-ladder member endpoints are available, so this construction is
+symbolic rather than measured. The forcing problem is that a point value can
+hide an allowed nonzero difference, while a mean can hide blocks moving in
+opposite directions. The containment test therefore requires every \(I_i\) to
+contain zero, then requires \(I_{\rm mean}\subseteq C\) and \(M\le m\).
 
-Here is a numeric illustration, not measured evidence: all five measured block
-intervals are \([-2\ \mathrm{J},+2\ \mathrm{J}]\), and the comparator band is
-\([-3\ \mathrm{J},+3\ \mathrm{J}]\). Their mean interval remains
-\([-2\ \mathrm{J},+2\ \mathrm{J}]\), so every displayed containment passes.
+Here is a numeric illustration, not measured evidence: its comparator is
+\([-3\ \mathrm{J},+3\ \mathrm{J}]\), and its five block intervals, all in
+joules, are \([-2,+2]\), \([-1,+1]\), \([-0.5,+0.5]\),
+\([-1.5,+1.5]\), and \([-1,+1]\). For this numeric illustration, the
+lower endpoints sum to \(-6\) J and the upper endpoints to \(+6\) J, so
+\(I_{\rm mean}=[-1.2\ \mathrm{J},+1.2\ \mathrm{J}]\) and \(M=2\) J.
+Every displayed check passes. If, still only as an illustration, the fifth
+interval were \([+0.5\ \mathrm{J},+2.5\ \mathrm{J}]\), it would remain
+inside the comparator but exclude zero, so that block would fail the first
+containment check even though its mean interval would be inside the comparator.
 
 ```text
 comparator C       [-3 J==========================+3 J]
-first block I      |    [-2 J----------------+2 J]    |
-second block I     |    [-2 J----------------+2 J]    |
-third block I      |    [-2 J----------------+2 J]    |
-fourth block I     |    [-2 J----------------+2 J]    |
-fifth block I      |    [-2 J----------------+2 J]    |
-mean interval Ibar |    [-2 J----------------+2 J]    |
+first block I_1    |    [-2 J----------------+2 J]    |
+second block I_2   |      [-1 J------------+1 J]      |
+third block I_3    |       [-0.5 J--------+0.5 J]      |
+fourth block I_4   |     [-1.5 J----------+1.5 J]     |
+fifth block I_5    |      [-1 J------------+1 J]      |
+mean interval Ibar |     [-1.2 J----------+1.2 J]     |
 ```
 
-Diagram legend: `C` is the earlier comparator band; each `I` is one measured
-block's allowed-difference interval; `Ibar` is their mean interval; `=` spans
-the comparator; `-` spans a measured or mean interval; square brackets are
-included endpoints; and the inset block spans show containment. Five measured
-blocks leave every unmeasured block and the population distribution unknown,
-so a pass establishes only measured-block containment, never population
-coverage.
+Diagram legend: `C` is the earlier comparator band; `I_1` through `I_5` are
+measured blocks' allowed-difference intervals; `Ibar` is their mean interval;
+`=` spans the comparator; `-` spans a block or mean interval; and square
+brackets are included endpoints. Five measured blocks leave every unmeasured
+block and the population distribution unknown, so a pass establishes only
+measured-block containment, never population coverage.
 
 For phase accounting, the residual
 \(D=E_{\rm prefill}+E_{\rm decode}-E_{\rm request}\) is the signed energy left
@@ -310,12 +319,14 @@ numerical cutoff the slope must exceed—needs two endpoint vectors, not all
 \(2^{40}\) combinations. <!-- C1.2/C1.3: fixed forty-bundle design and zero threshold; reviewer D3 -->
 
 An illustrative three-term excerpt, not measured data, uses weights
-\((-2,0,+2)\) and allowed energy intervals \([0,2]\), \([2,16]\), and
-\([16,24]\) J. The minimum chooses \(2\) for the negative-weight term, either
-endpoint for the zero-weight term, and \(16\) for the positive-weight term,
-giving the selected expression \(-2(2)+2(16)\). The maximum reverses those
-choices and gives \(-2(0)+2(24)\). The forty-member calculation applies that
-same sign rule to every real weight.
+\((-2,0,+2)\ \mathrm{token}^{-1}\) and allowed energy intervals
+\([0,2]\), \([2,16]\), and \([16,24]\) J. The minimum chooses \(2\)
+for the negative-weight term, either endpoint for the zero-weight term, and
+\(16\) for the positive-weight term. For this numeric illustration, the
+minimum is \(-2(2)+2(16)=28\) J per output token and the maximum, after
+reversing those endpoint choices, is \(-2(0)+2(24)=48\) J per output
+token. The forty-member calculation applies that same sign rule to every real
+weight.
 
 ```text
 allowed endpoint pair [L_i, U_i]
