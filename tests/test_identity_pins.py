@@ -1483,12 +1483,25 @@ class PromptRealizationProjectionTests(unittest.TestCase):
                 result = verify_frozen_projection(
                     pack, root / "custody", "bracket-digit-string"
                 )
+                # The arm mapper (arm_readiness._run_identity_arm_reverification)
+                # must surface the same code, not a generic dirty/unreadable
+                # substitute (luna delta re-audit F2).
+                from joulewise import arm_readiness
+
+                item, pseudo_receipt, reasons = (
+                    arm_readiness._run_identity_arm_reverification(
+                        pack, root / "custody", "bracket-digit-string-arm"
+                    )
+                )
 
             self.assertEqual(result["status"], "REFUSE")
             self.assertEqual(
                 result["reason_codes"],
                 ["readiness_identity_artifact_unreadable"],
             )
+            self.assertEqual(reasons, ["readiness_identity_artifact_unreadable"])
+            self.assertIsNotNone(item)
+            self.assertEqual(pseudo_receipt["status"], "REFUSE")
             self.assertEqual(pack_bytes(pack), before)
 
     def test_runtime_probe_prepares_and_cleans_up_once_for_two_configs(self) -> None:
@@ -1603,6 +1616,19 @@ class PromptRealizationProjectionTests(unittest.TestCase):
         self.assertEqual(hashed_rows, expected_rows)
         self.assertEqual(
             projection_input_sha256, canonical_json_sha256(captured_inputs[0])
+        )
+
+        # The frozen receipt carries that same digest (luna delta re-audit F1:
+        # the derivation-only check above passes even when the receipt's
+        # pack.projection_input_sha256 field is dropped).
+        self.assertEqual(freeze_projection(self.pack)["status"], "PASS")
+        tree = read_json(self.pack / "plan_tree.json")
+        reference = tree["arm_attachments"]["identity_pin_projection"][
+            "projection_receipt"
+        ]
+        receipt = read_json(self.pack / reference["path"])
+        self.assertEqual(
+            receipt["pack"]["projection_input_sha256"], projection_input_sha256
         )
 
 
