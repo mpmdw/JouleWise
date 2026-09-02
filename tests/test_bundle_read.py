@@ -542,20 +542,22 @@ class PromptRealizationExpectationTests(ReaderTestCase):
         self.assertNotIn("token_count", problems[0])
 
     def test_hash_comparison_binds_every_character_not_a_prefix(self) -> None:
-        # Mutation guard: a prefix-only comparison would accept two hashes
-        # that share their first 56 characters and differ only in the tail;
-        # a case-folded comparison would accept an upper-case realized hash.
-        # Neither may pass: the tail difference is a mismatch, and the
-        # upper-case form is ill-formed evidence (the lowercase validator
-        # refuses it before any comparison).
+        # Mutation guard: a prefix-only, suffix-only, or character-multiset
+        # comparison would each accept one of these realized hashes, and a
+        # case-folded comparison would accept the upper-case one. None may
+        # pass: the tail, head, and permutation differences are mismatches,
+        # and the upper-case form is ill-formed evidence (the lowercase
+        # validator refuses it before any comparison).
         cases = (
-            ("a" * 56 + "b" * 8, "prompt_realization_mismatch"),
-            ("A" * 64, "prompt_realization_evidence_missing"),
+            ("a" * 64, "a" * 56 + "b" * 8, "prompt_realization_mismatch"),
+            ("a" * 64, "b" + "a" * 63, "prompt_realization_mismatch"),
+            ("a" * 32 + "b" * 32, "b" * 32 + "a" * 32, "prompt_realization_mismatch"),
+            ("a" * 64, "A" * 64, "prompt_realization_evidence_missing"),
         )
-        for index, (realized_hash, expected_code) in enumerate(cases):
+        for index, (expected_hash, realized_hash, expected_code) in enumerate(cases):
             writer = self.make_prompt_bundle(
                 f"prompt-hash-tail-mismatch-{index}",
-                expected_hash="a" * 64,
+                expected_hash=expected_hash,
                 realized_hash=realized_hash,
             )
 
