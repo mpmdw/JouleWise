@@ -169,6 +169,13 @@ def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
             continue
 
         target = match.group(1)
+        if ":" in target or "#" in target:
+            # The template forbids `:N` line suffixes and `#anchor` fragments as
+            # syntax; refuse them before the existence check so a committed
+            # file literally named `evidence.txt:12` cannot satisfy the row
+            # (Sol 233 SF1). `_valid_path` stays a verbatim `_check_pointer`.
+            defects.append(f"gate-ledger: item {key}: :N line suffix or #anchor is not a path: {target}")
+            continue
         if key == 12 and SHA_RE.fullmatch(target):
             if not _is_commit(target, repo_root):
                 defects.append(f"gate-ledger: item {key}: commit sha does not resolve: {target}")

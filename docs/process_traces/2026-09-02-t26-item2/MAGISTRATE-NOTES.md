@@ -9,7 +9,7 @@ reports, in gauntlet order.
 
 | Stage | Seat | File | Outcome |
 | --- | --- | --- | --- |
-| Landing | terra xhigh (195) | 01, 02 | template + checker + tests + advisory workflow |
+| Landing | terra xhigh (195) | 01, 02 | report `status: blocked`, `completion: partial` — NEEDS_SCOPE on `.github/workflows/gate-ledger.yml` (a second workflow file, so `ci.yml`'s untyped `pull_request` trigger does not re-run the matrix on every body edit); template + checker + tests landed by the seat; the workflow was written AT THE BENCH from the report's `minimal_change` spec and committed with the seat's work in `b36d6c2d` (Sol 233 SF3 corrected this row, which had read as if the seat delivered all four) |
 | Refute, contract lens | luna xhigh (199) | 03, 04 | findings (merge-ref ≠ head, `_check_pointer` parity, labels-as-doctrine) |
 | Refute, execution lens | sol xhigh (200) | 05, 06 | findings (naive pipe split, traversal coverage, malformed RUN, item-12 non-sha, input-error traceback) |
 | Fix round 1 | Sol xhigh (205) | 07, 08 | nine dictated closures applied; commit `1529b09a` |
@@ -19,7 +19,28 @@ reports, in gauntlet order.
 | Cold gate | Fable cold seat (222), Sol (221), Opus 207b counter-review | 13, 13b, 13c, 14, 15, 16 | L1 ADOPT (Opus's GFM reading; "NEW" overturned), L2 option (c) splitter + arity refusal, L3 same class / structural cure |
 | Fix round 3 | terra xhigh (223) | commit `5ed6f1e9` | L2/L3 verbatim + Opus S1–S5, N1–N9; M1–M5 KILLED |
 | Bench fix | magistrate | commit `55bf9f73` | F-9 regression bites (luna 227 SF1): numbered key after the indented heading; mutant `line.startswith("## ")` FAILS the test |
+| Bench fix | magistrate | commit `c01c39bb` | `tests/test_check_gate_ledger.py` `setUpClass`: `os.environ["TMPDIR"]` → `os.environ.get("TMPDIR")` — CI `pr-fast (2)` failed with `KeyError: 'TMPDIR'` (runner exports none); found independently by luna 232's sibling census on the dx lane (`docs/process_traces/2026-09-02-dx-registry/18-luna-232-fresh-pass.md` F1); verified OK with and without TMPDIR |
+| Pre-merge fresh pass | sol high (233) | 17b, 18 | over `55bf9f73` + `d14a818d`: `VERDICT: SHOULD-FIX 3` — SF1 `:N`/`#anchor` policy not enforced when such a file exists; SF2 two `_valid_path` parity probes non-biting (absolute-path and URL guards); SF3 landing row overstated file 02 (corrected above). F-9 repair CONFIRMED to bite (numbered probe FAILS under the `startswith("## ")` mutant, bold probe passes); all shas/seat numbers/verdicts in this table verified against the files |
+| Bench fix | magistrate | commit (below) | SF1: syntactic refusal of `:` / `#` in the RUN target BEFORE the existence check (`_valid_path` stays a verbatim `_check_pointer` copy, parity intact); regression creates real files named `evidence.txt:12` and `evidence.txt#anchor`. SF2: the absolute and URL fixtures now EXIST at their join-under-root spellings, so the syntax guards are the sole refusers on both sides of the parity. Mutants executed at the bench: drop the `:`/`#` refusal → `FAILED (failures=2)`; drop the `/` guard → `FAILED (failures=2)`; drop the `://` guard → `FAILED (failures=1)`; restored, `git diff --check` clean; module OK with and without TMPDIR |
 | Delta re-audit 3 | luna xhigh (227) | 17 | `_split_table_row` models nothing beyond the pipe rule; B1 (D-170 absent on this branch) is a sibling-branch artefact — D-170 lands on `feat/2026-09-02-t26-install`, which merges first; SF1 fixed at the bench |
+
+## Same-signature judgment on the test-quality class (magistrate, 2026-09-02)
+
+"Regression that does not bite" has now appeared in two consecutive audit
+rounds on this lane: luna 227 SF1 (one probe; cured `55bf9f73`) and Sol 233
+SF2 (two probes; cured at the bench above). Rule 11 says the next spend is a
+consult, not a third fix round. Disposition: the structural question — WHICH
+probes in the module are inert, and WHY — is answered in Sol 233's
+exhaustive table (22 rejection/ignore tests, each paired with the permissive
+mutant that would let its row through; exactly two do not bite, both for the
+same cause: the fixture never existed, so `os.path.isfile` refused it
+before the guard under test could). That table is the consult's deliverable;
+a separate consult seat would reproduce it. The SF2 cure therefore acts on
+the class (make the fixture exist so only the guard refuses), not on one
+probe, and the delta re-audit of this bench commit (a different model)
+verifies the class claim, not just the two edits. No production splitter
+code changed. If a THIRD round surfaces another inert probe, that is a cold
+gate, not a bench fix.
 
 ## I1 same-signature classification (magistrate, confirmed by luna 215) — SUPERSEDED
 

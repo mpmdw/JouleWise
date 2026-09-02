@@ -102,16 +102,28 @@ class CheckGateLedgerTests(unittest.TestCase):
                              "gate-ledger: item 1: neither a commit nor a path: missing.txt")
 
     def test_line_suffix_is_refused_as_a_path(self) -> None:
-        self.assert_rejected(
-            self.body().replace("RUN evidence.txt", "RUN evidence.txt:12", 1),
-            "gate-ledger: item 1: neither a commit nor a path: evidence.txt:12",
-        )
+        # Sol 233 SF1: the refusal is syntactic. Committed files literally named
+        # `evidence.txt:12` / `evidence.txt#anchor` exist here, so an
+        # existence-only check would let both rows through as 12/12 RUN.
+        for suffixed in ("evidence.txt:12", "evidence.txt#anchor"):
+            (self.repo / suffixed).write_text("suffixed\n", encoding="utf-8")
+            with self.subTest(target=suffixed):
+                self.assert_rejected(
+                    self.body().replace("RUN evidence.txt", f"RUN {suffixed}", 1),
+                    f"gate-ledger: item 1: :N line suffix or #anchor is not a path: {suffixed}",
+                )
 
     def test_escaping_path_is_refused(self) -> None:
         outside = Path(self.temporary.name) / "outside-evidence.txt"
         outside.write_text("outside\n", encoding="utf-8")
         tilde_target = self.repo / "~existing-evidence.txt"
         tilde_target.write_text("tilde\n", encoding="utf-8")
+        # Sol 233 SF2: the absolute target also exists at its join-under-root
+        # spelling, so only the `/` guard refuses it (os.path.join keeps the
+        # leading-slash split as a path under the root).
+        joined_absolute = self.repo.joinpath(*str(outside).split("/"))
+        joined_absolute.parent.mkdir(parents=True, exist_ok=True)
+        joined_absolute.write_text("joined\n", encoding="utf-8")
         targets = ("../outside-evidence.txt", "~existing-evidence.txt", str(outside))
         for target in targets:
             with self.subTest(target=target):
@@ -285,6 +297,13 @@ class CheckGateLedgerTests(unittest.TestCase):
         nested = self.repo / "dir" / "nested.txt"
         nested.parent.mkdir()
         nested.write_text("nested\n", encoding="utf-8")
+        # Sol 233 SF2: the absolute and URL pointers exist at their
+        # join-under-root spellings, so their refusals come from the syntax
+        # guards alone, on both sides of the parity.
+        for shaped in ("/absolute/evidence.txt", "https://example.invalid/evidence.txt"):
+            joined = self.repo.joinpath(*shaped.split("/"))
+            joined.parent.mkdir(parents=True, exist_ok=True)
+            joined.write_text("joined\n", encoding="utf-8")
         pointers = (
             "evidence.txt",
             "dir/nested.txt",
