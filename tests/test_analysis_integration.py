@@ -329,86 +329,101 @@ def install_passing_analysis_whole_window(
 
 def install_two_row_supersession_counterfactual(
     runs_root: Path,
-    bundle_id: str,
-) -> dict:
-    """Append two writer-shaped, byte-identical valid supersession rows."""
+    bundle_ids: list[str],
+) -> list[dict]:
+    """Append two identical writer-shaped rows for each named bundle.
+
+    Each row has the same 11 keys as the production recorder emits, but its
+    values are synthetic.  The source manifests intentionally omit
+    ``campaign_policy`` because this helper installs the legacy/hand-edited
+    consumer counterfactual after finalization rather than exercising the
+    guarded recorder.  That omission does not weaken the reader case: every
+    installed row passes the production supersession validator before the
+    exact out-of-band duplicate bytes are appended.
+    """
 
     root = Path(runs_root).resolve()
-    canonical = root / bundle_id
-    if not canonical.is_dir():
-        raise AssertionError("counterfactual bundle must be canonical")
     campaign_dir = root / "campaign_manifests"
     campaign_dir.mkdir(parents=True, exist_ok=True)
-    occurrences = []
-    for suffix in ("a", "b"):
-        manifest_path = campaign_dir / f"supersession-counterfactual-{suffix}.json"
-        manifest = {
-            "schema_version": "joulewise.campaign_provenance.v1",
-            "analysis_manifest_id": None,
-            "session_id": f"supersession-counterfactual-{suffix}",
-            "members": [
-                {
-                    "config": f"{bundle_id}.json",
-                    "execution": "invoked",
-                    "run_id": bundle_id,
-                    "bundle_ids": [bundle_id],
-                }
-            ],
-        }
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        occurrences.append(
-            {
-                "bundle_id": bundle_id,
-                "source_manifest": {
-                    "path": manifest_path.relative_to(root).as_posix(),
-                    "sha256": hashlib.sha256(
-                        manifest_path.read_bytes()
-                    ).hexdigest(),
-                },
-                "member_index": 0,
-                "bundle_index": 0,
-            }
-        )
-
-    quarantine = root.parent / f"supersession-quarantine-{bundle_id}"
-    quarantine.mkdir()
-    custody = {}
-    for name, field in (
-        ("config.json", "config_sha256"),
-        ("metadata.json", "metadata_sha256"),
-        ("summary_metrics.json", "summary_sha256"),
-    ):
-        raw = (canonical / name).read_bytes()
-        (quarantine / name).write_bytes(raw)
-        custody[field] = hashlib.sha256(raw).hexdigest()
     policy_path = (
         ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
     )
-    row = {
-        "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
-        "record_type": "campaign_occurrence_supersession",
-        "timestamp": "2026-09-01T12:00:00Z",
-        "runs_root": str(root),
-        "campaign_policy_sha256": hashlib.sha256(
-            policy_path.read_bytes()
-        ).hexdigest(),
-        "bundle_id": bundle_id,
-        "selected_occurrence": occurrences[1],
-        "superseded_occurrences": [occurrences[0]],
-        "quarantine": {"path": str(quarantine.resolve()), **custody},
-        "reason": "counterfactual duplicate supersession disposition",
-    }
-    row["entry_sha256"] = supersession_entry_sha256(row)
-    if not validate_occurrence_supersession_entry(row, root):
-        raise AssertionError("counterfactual supersession row must validate")
-    encoded = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
-    with (root / "campaign_log.jsonl").open("ab") as handle:
-        handle.write(encoded)
-        handle.write(encoded)
-    return row
+    policy_sha256 = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    rows = []
+    for bundle_ordinal, bundle_id in enumerate(bundle_ids):
+        canonical = root / bundle_id
+        if not canonical.is_dir():
+            raise AssertionError("counterfactual bundle must be canonical")
+        occurrences = []
+        for suffix in ("a", "b"):
+            manifest_path = campaign_dir / (
+                f"supersession-counterfactual-{bundle_ordinal}-{suffix}.json"
+            )
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "analysis_manifest_id": None,
+                "session_id": (
+                    f"supersession-counterfactual-{bundle_ordinal}-{suffix}"
+                ),
+                "members": [
+                    {
+                        "config": f"{bundle_id}.json",
+                        "execution": "invoked",
+                        "run_id": bundle_id,
+                        "bundle_ids": [bundle_id],
+                    }
+                ],
+            }
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            occurrences.append(
+                {
+                    "bundle_id": bundle_id,
+                    "source_manifest": {
+                        "path": manifest_path.relative_to(root).as_posix(),
+                        "sha256": hashlib.sha256(
+                            manifest_path.read_bytes()
+                        ).hexdigest(),
+                    },
+                    "member_index": 0,
+                    "bundle_index": 0,
+                }
+            )
+
+        quarantine = root.parent / f"supersession-quarantine-{bundle_id}"
+        quarantine.mkdir()
+        custody = {}
+        for name, field in (
+            ("config.json", "config_sha256"),
+            ("metadata.json", "metadata_sha256"),
+            ("summary_metrics.json", "summary_sha256"),
+        ):
+            raw = (canonical / name).read_bytes()
+            (quarantine / name).write_bytes(raw)
+            custody[field] = hashlib.sha256(raw).hexdigest()
+        row = {
+            "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+            "record_type": "campaign_occurrence_supersession",
+            "timestamp": f"2026-09-01T12:00:0{bundle_ordinal}Z",
+            "runs_root": str(root),
+            "campaign_policy_sha256": policy_sha256,
+            "bundle_id": bundle_id,
+            "selected_occurrence": occurrences[1],
+            "superseded_occurrences": [occurrences[0]],
+            "quarantine": {"path": str(quarantine.resolve()), **custody},
+            "reason": "counterfactual duplicate supersession disposition",
+        }
+        row["entry_sha256"] = supersession_entry_sha256(row)
+        if not validate_occurrence_supersession_entry(row, root):
+            raise AssertionError("counterfactual supersession row must validate")
+        encoded = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+        with (root / "campaign_log.jsonl").open("ab") as handle:
+            handle.write(encoded)
+            handle.write(encoded)
+        rows.append(row)
+    return rows
 
 
 def _real_mlx_identity_inputs(arm_id: str) -> tuple[dict, dict]:
@@ -668,10 +683,14 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 fixture["prospective"]["manifest_id"]
                 + FINALIZED_BASENAME_SUFFIX
             )
-            bundle_id = finalized["entries"][0]["run_id"]
+            bundle_ids = [
+                finalized["entries"][-1]["run_id"],
+                finalized["entries"][0]["run_id"],
+            ]
+            self.assertNotEqual(bundle_ids, sorted(bundle_ids))
             install_two_row_supersession_counterfactual(
                 fixture["runs_root"],
-                bundle_id,
+                bundle_ids,
             )
 
             loaded = load_analysis_inputs(
@@ -685,8 +704,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 for row in loaded.supersession_audit
                 if row["scope"] == "analysis_corpus"
             )
-            self.assertEqual(analysis_audit["raw_count"], 2)
-            self.assertEqual(analysis_audit["validated_count"], 2)
+            self.assertEqual(analysis_audit["raw_count"], 4)
+            self.assertEqual(analysis_audit["validated_count"], 4)
             self.assertEqual(analysis_audit["status"], "refused")
             self.assertEqual(
                 analysis_audit["findings"],
@@ -695,7 +714,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                         "reason_code": (
                             REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
                         ),
-                        "bundle_ids": [bundle_id],
+                        "bundle_ids": sorted(bundle_ids),
                     }
                 ],
             )
@@ -713,6 +732,17 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 if row["scope"] == "analysis_corpus"
             )
             self.assertEqual(persisted_audit, dict(analysis_audit))
+            self.assertEqual(
+                persisted_audit["findings"],
+                [
+                    {
+                        "reason_code": (
+                            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                        ),
+                        "bundle_ids": sorted(bundle_ids),
+                    }
+                ],
+            )
             self.assertEqual(
                 validate_claim_verdicts(
                     persisted,

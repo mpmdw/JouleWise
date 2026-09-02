@@ -68,7 +68,12 @@ def build_supersession_fixture(
     occurrence_count: int = 3,
     row_names: Sequence[str] = ("S1", "S2"),
 ) -> SupersessionFixture:
-    """Write a hand-assembled log that the guarded recorder now refuses."""
+    """Write hand-assembled rows that the guarded recorder now refuses.
+
+    Each supersession is writer-shaped: it has the same 11 keys as the
+    production recorder's row, while timestamps, policy digest, and other
+    values are synthetic for this preserved counterfactual.
+    """
 
     if occurrence_count not in {2, 3}:
         raise ValueError("the exhibition fixture supports two or three occurrences")
@@ -398,6 +403,8 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
         """Call _whole_window_campaign_membership.
 
         The counterfactual input is two valid rows for the same bundle.
+        This production seam kills removal of _resolve_ordinary_occurrence's
+        recognizable-duplicate guard; that guard runs before the matcher.
         """
 
         self.assert_production_membership_refused(self.fixture())
@@ -564,6 +571,16 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
         )
 
     def test_mutation_m1_matching_never_restores_latest_wins(self) -> None:
+        """Lock matcher defense-in-depth behind _resolve_ordinary_occurrence.
+
+        Production cannot pass two recognizable same-bundle rows through the
+        resolver's earlier guard.  The production seam
+        test_production_run_campaign_membership_refuses_two_rows covers
+        removal of that _resolve_ordinary_occurrence guard; this helper-level
+        test separately prevents _matching_supersession from becoming a
+        latest-wins fallback if its call contract changes later.
+        """
+
         fixture = self.fixture()
         self.assertIsNone(
             run_campaign_module._matching_supersession(
