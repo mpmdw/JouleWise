@@ -1,0 +1,67 @@
+# T26 item 2 (gate ledger) — magistrate notes for the PR gate
+
+Branch `feat/2026-09-02-t26-gateledger`; ruling: T26 cold gate item 2
+(`docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md`,
+D-170). Files 01–12 in this directory are the seat briefs and the sealed
+reports, in gauntlet order.
+
+## Gauntlet record
+
+| Stage | Seat | File | Outcome |
+| --- | --- | --- | --- |
+| Landing | terra xhigh (195) | 01, 02 | template + checker + tests + advisory workflow |
+| Refute, contract lens | luna xhigh (199) | 03, 04 | findings (merge-ref ≠ head, `_check_pointer` parity, labels-as-doctrine) |
+| Refute, execution lens | sol xhigh (200) | 05, 06 | findings (naive pipe split, traversal coverage, malformed RUN, item-12 non-sha, input-error traceback) |
+| Fix round 1 | Sol xhigh (205) | 07, 08 | nine dictated closures applied; commit `1529b09a` |
+| Delta re-audit 1 | terra xhigh (208) | 09, 10 | all nine closures CONFIRMED; seven round-1 classes KILLED; one should-fix **I1** |
+| Fix round 2 (bench) | magistrate | commit `2983cdd4` | `_split_table_row` guard: a backslash-escaped backtick outside a code span is a literal, never a span opener; test `test_escaped_backtick_outside_code_span_does_not_open_a_span` |
+| Delta re-audit 2 | luna xhigh (215) | 11, 12 | CLEAN; classification **NEW** (agrees with the magistrate's); seven adversarial edge cases traced against GFM cell boundaries, all correct |
+
+## I1 same-signature classification (magistrate, confirmed by luna 215)
+
+Round 1's defect class was "representation-blind pipe split" (a naive
+`line.split("|")`). The round-1 cure REPLACED it with a stateful GFM scanner;
+I1 (`gate \` literal tick` swallowed the evidence cell) is an edge case of
+that NEW scanner's escape handling, not a survivor of the naive split.
+Signature: NEW. No STANDING ESCALATION TRIGGER (two rounds, same signature)
+fired; round 2 was a bench fix under the bench-vs-session threshold (a
+7-line guard + one specified test), with the counterfactual executed
+against the pre-fix script: new test `FAILED (failures=1)` → with the
+guard `Ran 21 tests OK` (`tests.test_check_gate_ledger tests.test_docs_freshness`).
+
+## Apex code-reading gate (item 7) — design-level questions answered
+
+1. **Is the checker's acceptance set the ruled one?** Yes: items 1–11
+   `RUN <repo-relative path>` (rules copied from `scripts/gen_state.py`
+   `_check_pointer`: no leading `/` or `~`, no `..` segment, no `://`, must be a
+   regular file at the PR head) or `RUN <commit sha>` (`git cat-file -e
+   <sha>^{commit}` in the checkout); item 12 sha-only and a prefix of the
+   PR head; `NOT-RUN`, empty, missing, duplicate keys and malformed cells
+   refused with one stable message each; input errors (missing body/root)
+   exit 1 without a traceback.
+2. **Does the workflow test the right object?** It checks out
+   `github.event.pull_request.head.sha` with `fetch-depth: 0` (earlier
+   branch commits named as evidence resolve; the merge ref is not the head)
+   and passes the body through the environment, never interpolated into the
+   shell line. Fires on `opened, synchronize, edited, ready_for_review` —
+   `edited` is required because the ledger is filled by body edits after the
+   review rounds. It is ADVISORY (own workflow, not a required check; the
+   promotion is Ed's branch-protection change, kernel row
+   ED-BRANCH-PROTECTION-E1-01); D-072's self-merge condition binds
+   independently.
+3. **Threat model.** Targets the MISTAKE class (a forgotten row). A
+   deliberately pasted `RUN README.md` block is out of the threat model
+   (D-161: the operator is not the adversary); the ledger's value is that
+   the twelve keys must each be answered with a resolving pointer under a
+   reviewer's eyes.
+4. **Prune (item 8).** Nothing to prune: 171 lines of stdlib checker, 191 of
+   defect-shaped tests, a 28-line template, a 60-line workflow whose header
+   comment is the ONE explanation of why it is a separate file, and one
+   pointer line in `docs/orchestration.md` (labels are keys; the doctrine
+   text stays in D-118/D-121/D-170).
+
+## Full-suite replay (item 9)
+
+Run at the bench on this branch at `2983cdd4` (worktree `JouleWise-wt-t26-c`,
+no seat active, fresh output file). Tail recorded in `suite-tail.txt` in
+this directory.
