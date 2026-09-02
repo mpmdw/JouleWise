@@ -1,0 +1,198 @@
+```json
+{
+  "schema": "claude-codex-report/v1",
+  "genre": "implementation",
+  "status": "clean",
+  "completion": "complete",
+  "summary": "Implemented DG-071/DG-075 systematic coverage, prose glosses, and pruning.",
+  "workspace": {
+    "base_requested": "/Users/edr/code/JouleWise-wt-paper-d",
+    "base_mode": "exact",
+    "head_start": "447a0f2b1e9dd2c894d0853a97b3a9e7d22ca4c2",
+    "head_end": "447a0f2b1e9dd2c894d0853a97b3a9e7d22ca4c2",
+    "upstream_end": "8ab397b554057ffb094b24e72e181480cd38a1db",
+    "branch": "feat/2026-09-02-paper-d"
+  },
+  "pathspec": [
+    "scripts/issue_dg071_dg075_statistics.py",
+    "tests/test_issue_dg071_dg075_statistics.py"
+  ],
+  "unowned_dirty": [],
+  "verdict": {
+    "counts": {
+      "focused_tests": 25,
+      "differential_bundles": 12,
+      "mutants": 6,
+      "mutants_killed": 6,
+      "replay_runs": 2
+    },
+    "C1": "done",
+    "C2": "done",
+    "C3": "done",
+    "C4": "done",
+    "C5": "done",
+    "C6": "done",
+    "C7": "done",
+    "implementation": "implemented",
+    "acceptance": "ready"
+  },
+  "verification": [
+    {
+      "id": "V1",
+      "kind": "test",
+      "cmd": "TMPDIR=$(mktemp -d <scratchpad>/tmp251.last-focused2.XXXXXX) PYTHONDONTWRITEBYTECODE=1 /Users/edr/code/JouleWise/.venv/bin/python -m unittest tests.test_issue_dg071_dg075_statistics && git diff --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "Ran 25 tests in 0.288s",
+          "OK"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "Ran 25 tests .*\\nOK"
+      }
+    },
+    {
+      "id": "V2",
+      "kind": "other",
+      "cmd": "(cd <mutant-copy> && TMPDIR=<mutant-tmp> PYTHONDONTWRITEBYTECODE=1 /Users/edr/code/JouleWise/.venv/bin/python -m unittest tests.test_issue_dg071_dg075_statistics)",
+      "cwd": "<scratchpad>/tmp251.final-matrix3.4tnfNk",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "base exit=0",
+          "halfup exit=1",
+          "starts exit=1",
+          "iqr exit=1",
+          "gap-count exit=1",
+          "no-abs exit=1",
+          "ge-tolerance exit=1"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "base exit=0.*halfup exit=1.*ge-tolerance exit=1"
+      }
+    },
+    {
+      "id": "V3",
+      "kind": "replay",
+      "cmd": "/Users/edr/code/JouleWise/.venv/bin/python scripts/issue_dg071_dg075_statistics.py --repository-root /Users/edr/code/JouleWise-wt-paper-d --out <scratchpad>/tmp251.final-replay.C7GOD5/run1/issued.json && /Users/edr/code/JouleWise/.venv/bin/python scripts/issue_dg071_dg075_statistics.py --repository-root /Users/edr/code/JouleWise-wt-paper-d --out <scratchpad>/tmp251.final-replay.C7GOD5/run2/issued.json",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": [
+          "DG-071 406 116.9720 120.9186 122.9227 5.9508",
+          "DG-075 405 117.0321 120.9224 122.9270 5.8949"
+        ]
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "DG-071 406 .*\\nDG-075 405 .*"
+      }
+    }
+  ],
+  "flags": []
+}
+```
+
+## Change
+
+Updated [producer](</Users/edr/code/JouleWise-wt-paper-d/scripts/issue_dg071_dg075_statistics.py:398>) and [tests](</Users/edr/code/JouleWise-wt-paper-d/tests/test_issue_dg071_dg075_statistics.py:227>).
+
+C1–C3: golden full-payload test, Markdown/stdout projection, and 12-bundle seeded independent differential.
+
+C4–C5: dictated prose glosses, dynamic tiling values, and removal of write-only fields.
+
+## Verification notes
+
+C6 mutation results:
+
+| Mutant | Result | Failing tests |
+|---|---:|---|
+| HALF_EVEN → HALF_UP | killed | golden, differential, tie rendering |
+| Drop `len(starts) != 1` | killed | rail-set mismatch |
+| Rendered-quartile IQR | killed | golden, differential |
+| `gap > tolerance` nonzero count | killed | golden, differential |
+| Drop `abs` in gap | killed | golden, differential |
+| `>=` tolerance refusal | killed | golden, differential, precision |
+
+C7 replay SHA-256 pairs:
+
+```text
+JSON: 820fd9f6cc8ff16799790c45d3b02a798689e9a1824c0870243e11a2f9f8598c
+MD:   0d0af50c0558cbb928d9557f4614d2fd078d49f6263f1beaf0274c82bf935fe4
+
+JSON: 820fd9f6cc8ff16799790c45d3b02a798689e9a1824c0870243e11a2f9f8598c
+MD:   0d0af50c0558cbb928d9557f4614d2fd078d49f6263f1beaf0274c82bf935fe4
+```
+
+Tables:
+
+```text
+| DG-071 | 406 | 116.9720 | 120.9186 | 122.9227 | 5.9508 |
+| DG-075 | 405 | 117.0321 | 120.9224 | 122.9270 | 5.8949 |
+```
+
+```text
+| DG-071 | 0.116971950 | 0.12091860 | 0.122922700 | 0.005950750 |
+| DG-075 | 0.1170321 | 0.1209224 | 0.122927 | 0.0058949 |
+```
+
+Full re-issued Markdown:
+
+```markdown
+# DG-071 / DG-075 issued statistics
+
+- Input: `runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv`
+- Input SHA-256: `6945160964bc8667f4bfcc1ba7b500f81045fce8301ef7aadce45a188d3e06e9`
+- Sampler records: 406
+- Rail rows: 1218
+- Rails: ane_power, cpu_power, gpu_power
+- Largest tiling gap (s; defined under Method): 0.0000004
+- Boundaries with a nonzero tiling gap (see Method): 100
+- Producer: `scripts/issue_dg071_dg075_statistics.py`
+- Producer SHA-256: `c745bcf50a80181f254ae704c8c1921e62545fe719b279876c20e016630b5386`
+- Git commit: `447a0f2b1e9dd2c894d0853a97b3a9e7d22ca4c2`
+
+## Method
+
+A sampler record is one contiguous group of CSV rows — consecutive rows in file order — that share one `timestamp_s` literal. A literal is the character string exactly as written in the file, before any numeric conversion; two literals are equal only when their characters are identical. Every group must contain exactly one row for each of `ane_power`, `cpu_power` and `gpu_power`, and the three rows' `interval_start_s` and `interval_end_s` literals must be identical; a timestamp literal that reappears after another group has begun is refused. DG-071 uses one interval width, `interval_end_s − interval_start_s`, per sampler record.
+
+The timestamp and endpoint literals are parsed directly as exact decimals. Widths, spacings, quantiles and IQR never pass through binary floating point.
+
+For the n values sorted ascending, the quantile at probability p uses the exact 0-based position h = (n−1)·p and exact linear interpolation between the two neighbouring order statistics — the sorted values at positions ⌊h⌋ and ⌊h⌋+1 (Hyndman–Fan type 7; numpy `linear` and R type 7 are cross-references). The median is the p = 0.5 quantile, which is the mean of the two middle values for even n. IQR is Q3 − Q1, computed exactly before rendering.
+
+The exact seconds in the second table are the values of record: the authoritative numbers, which nothing downstream re-derives. The millisecond columns are renderings of them — value × 1000, rounded to four decimal places with round-half-even, meaning a value exactly halfway between two four-decimal neighbours goes to the one whose last digit is even — and are never re-used as inputs. Because rounding is applied after subtraction, a rendered IQR can differ from the difference of the rendered quartiles by one unit in the last place.
+
+A float64 replication (numpy `linear`, R type 7) is guaranteed to agree only to three decimals because a float64 at 1.78e9 s has spacing 2.4e-7 s, coarser than the file's 1e-7 s literals; the digits characterise the retained bytes, not the sampler's physical timing resolution. Worked example: median 120.9186 ms exact vs 120.9185 ms float64.
+
+Tiling. The records tile when each record's interval ends exactly at its own timestamp (`interval_end_s` literal identical to `timestamp_s` literal) and begins where the previous record ended (`interval_start_s` of record k within 0.000001 s of `timestamp_s` of record k−1); the producer refuses otherwise. The tiling gap at a boundary is |interval_start_s(k) − timestamp_s(k−1)| in exact decimal seconds; the header reports the largest gap and the number of boundaries whose gap is not zero. In this bundle 100 of 405 boundaries have a nonzero gap, the largest 0.0000004 s: the writer formatted the interval endpoints and the timestamp from two separately rounded binary floats, so the seventh decimal can differ. This is the endpoint convention referred to next.
+
+DG-075 is the DG-071 distribution minus the first record: its consecutive timestamp differences equal the widths of records 2–n up to the endpoint convention above, i.e. to within the largest tiling gap.
+
+| Registry row | Sample count | Q1 (ms) | Median (ms) | Q3 (ms) | IQR (ms) |
+|---|---:|---:|---:|---:|---:|
+| DG-071 | 406 | 116.9720 | 120.9186 | 122.9227 | 5.9508 |
+| DG-075 | 405 | 117.0321 | 120.9224 | 122.9270 | 5.8949 |
+
+| Registry row | Q1 (s) | Median (s) | Q3 (s) | IQR (s) |
+|---|---:|---:|---:|---:|
+| DG-071 | 0.116971950 | 0.12091860 | 0.122922700 | 0.005950750 |
+| DG-075 | 0.1170321 | 0.1209224 | 0.122927 | 0.0058949 |
+```
+
+`git diff --stat`:
+
+```text
+scripts/issue_dg071_dg075_statistics.py    | 255 ++++++++++++++---------
+tests/test_issue_dg071_dg075_statistics.py | 311 ++++++++++++++++++++++++++++-
+2 files changed, 472 insertions(+), 94 deletions(-)
+```
+
+The canonical discovery suite was intentionally not run per the explicit brief. No docs or generated artifacts were modified; the magistrate should reissue and commit at the bench.
