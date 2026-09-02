@@ -121,3 +121,19 @@ guard `Ran 21 tests OK` (`tests.test_check_gate_ledger tests.test_docs_freshness
 Run at the bench on this branch at `2983cdd4` (worktree `JouleWise-wt-t26-c`,
 no seat active, fresh output file). Tail recorded in `suite-tail.txt` in
 this directory.
+
+## Terminal review (gate item 12) — 2026-09-02, magistrate, full session context
+
+Merge candidate: the head carrying this note; commits after the luna 234
+delta-4 CLEAN verdict are `2c2006b7` (item-9 replay custody, text only) and
+this note. Reviewed at the bench: `.github/workflows/gate-ledger.yml`
+(typed `pull_request` trigger incl. `edited`; the PR body reaches the
+checker through an `env:` variable written with `printf '%s'`, never through
+inline `${{ }}` interpolation in `run:`, so a hostile body cannot inject
+shell; concurrency group per PR), `scripts/check_gate_ledger.py` (syntactic
+refusal before existence; `RUN <sha>` resolved with `git cat-file -e`; item
+12 must be the head sha), `tests/test_check_gate_ledger.py` (25 refusal
+probes, mutants bite per luna 234), the PR template, one line in
+`docs/orchestration.md`. Additive against main (1 deletion). Item 9: the
+integration tree 858f553e ran the canonical suite: Ran 4820, OK
+(skipped=125), file 23. Verdict: MERGE, second in the wave, after t26-a.
