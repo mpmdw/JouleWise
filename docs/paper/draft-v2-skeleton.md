@@ -843,10 +843,10 @@ input on the wall side of its power supply—could test whether the counter's
 whole-request totals track physical energy over controlled loads. Without that
 comparison, a gain error, meaning a mismatch between reported and physical
 energy, could move the absolute and comparative joule values upward or downward
-by an unquantified amount. The external-meter protocol proposed below would
-close this limit at whole-request scale, but would not by itself validate a
-phase split. We report joules rather than counter-internal units because watts
-integrated over seconds give an interpretable energy quantity, while the
+by an unquantified amount. Such a comparison would address this limit at
+whole-request scale, but would not by itself validate a phase split. We report
+joules rather than counter-internal units because watts integrated over seconds
+give an interpretable energy quantity, while the
 unmeasured gain means that quantity is validated only on the counter's reported
 scale. <!-- Reviewer D7; ranked item 16. -->
 
@@ -939,8 +939,11 @@ fingerprints alone.
 
 <!-- Source: docs/paper/round7/survival-map.md; reviewer items C1 and M1; ranked item 16 / TRANSFER-FIDUCIAL-01. -->
 
-The inserted-gap study is a protocol this paper proposes and has not run. This
-paper has not pre-registered it. Hold model identity, prompt, tokenizer, and
+The inserted-gap study is a registered diagnostic protocol that this paper has
+not run. Its gap, run count, estimator, and residual comparison are fixed before
+collection. It is a proposed design, not yet a runnable protocol: its sleep
+actuation, command-stamp method, and fitted-edge selection remain to be fixed.
+Hold model identity, prompt, tokenizer, and
 generation rules fixed at the values registered for the campaign. In each of
 about ten otherwise identical real-workload runs, insert an approximately
 500-ms commanded sleep during which the inference workload submits no GPU work.
@@ -958,17 +961,18 @@ when decode resumes. For each edge
 \(r_e=t_{\mathrm{fit},e}-t_{\mathrm{command},e}\), where
 \(t_{\mathrm{fit},e}\) is the detector's fitted edge time and
 \(t_{\mathrm{command},e}\) is that edge's independently stamped command time.
-Report every signed \(r_e\). The proposed protocol passes only when
-\(\max_e|r_e|\le B_{\mathrm{fiducial}}\), where
+Report every signed \(r_e\) and record its comparison with
+\(B_{\mathrm{fiducial}}\), where
 \(B_{\mathrm{fiducial}}=0.030067931757111657\) s is the retained diagnostic
 capture's pulse-derived bound. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA /
-REPLAY_FENCED. --> Any exceedance reports transfer failure for this machine and
-workload and leaves the phase claim conditional; it does not enlarge the bound
-after the residuals are seen. A reader can recompute both residuals from the
-retained command stamps and power trace.
+REPLAY_FENCED. --> The registered row does not prescribe an acceptance
+threshold for that comparison, so this paper does not label a result a pass or
+transfer failure. A reader can recompute both residuals from the retained
+command stamps and power trace.
 
-The external-meter study is a protocol this paper proposes and has not run. This
-paper has not pre-registered it either. Place the meter on the wall side of the
+The external-meter study is a proposed design, not yet a runnable protocol: its
+workload levels, meter synchronization, and allowable range for \(g\) remain to
+be fixed. This paper has not pre-registered it. Place the meter on the wall side of the
 machine's power supply. At each workload level already registered for the
 campaign, integrate the meter's power over the same request start and end stamps
 that the counter uses, obtaining \(E_{\mathrm{meter}}\), and retain the counter's
