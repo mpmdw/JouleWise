@@ -93,8 +93,87 @@ gloss, K1 replayable census, K2 provenance; custody 17/17b)
 
 The commit that lands the Sol 241 fresh-pass cures (files 18/18b, this
 ledger, the process-rules README anchors, the process-rules ruling addendum)
-is the branch head named in the PR #273 gate ledger; it cannot name its own
-hash here.
+could not name its own hash when it was written; it landed as `b2b26c86`,
+and the luna 242 custody landed as `ad22ec83` (both recorded below in the
+commit that carries the terminal review, which likewise cannot name itself).
+
+`b2b26c86` — "T26 items 1+4 fresh pass (Sol 241) cures at the bench" (F1
+durable anchors, F2 ledger, F3 packet-basename addendum; custody 18/18b)
+
+```
+ .../MAGISTRATE-RULING-process-rules.md             |   8 +
+ .../2026-09-02-process-rules/README.md             |   4 +-
+ .../18-fresh-pass-brief.md                         |  42 ++++
+ .../18-sol-241-fresh-pass.md                       | 212 +++++++++++++++++++++
+ .../18b-magistrate-disposition-sol-241.md          |  38 ++++
+ .../2026-09-02-t26-items-1-4/MAGISTRATE-NOTES.md   |  53 +++++-
+ 6 files changed, 353 insertions(+), 4 deletions(-)
+```
+
+`ad22ec83` — custody only: file 19 (luna 242 delta re-audit 3, CLEAN) + the
+notes row.
+
+```
+ .../2026-09-02-t26-items-1-4/19-delta-3-brief.md   |  32 +++++
+ .../19-luna-242-delta-3.md                         | 138 +++++++++++++++++++++
+ .../2026-09-02-t26-items-1-4/MAGISTRATE-NOTES.md   |   3 +-
+ 3 files changed, 172 insertions(+), 1 deletion(-)
+```
+
+## Magistrate terminal review (gate item 12) — merge candidate `ad22ec83`
+
+Read at the bench on 2026-09-02, after luna 242 returned CLEAN over
+`b2b26c86` and `ad22ec83` added only custody. The review covers the whole
+branch-vs-main diff outside `docs/process_traces/`:
+
+```
+$ git -C /Users/edr/code/JouleWise-wt-t26-a diff --stat main...ad22ec83 -- . ':!docs/process_traces'
+ TASK_QUEUE.md                     |  32 +-
+ docs/agent_playbook.md            |   4 +
+ docs/contracts/bridge_protocol.md |  30 ++
+ docs/decision_log.md              | 145 +++++++-
+ docs/process/state_kernel.json    | 466 +++++++++++++++++++++++++-
+ scripts/gen_state.py              |  30 ++
+ tests/test_docs_freshness.py      | 689 +++++++++++++++++++++++++++++++++++++-
+ tests/test_gen_state.py           |  76 ++++-
+ 8 files changed, 1452 insertions(+), 20 deletions(-)
+```
+
+What was read and the judgment on each:
+
+- `scripts/gen_state.py` — the only production-code change: a satisfied
+  `kind: decision` dependency must carry `evidence.path` matching
+  `tests/[A-Za-z0-9_/]+\.py` and an `evidence.label` naming a `test_*`
+  method defined in that file. Fail-closed, bounded to the new dependency
+  kind, no effect on any existing row (the `--check` and the 126-task
+  regeneration are byte-stable). Sound.
+- `docs/decision_log.md` — status set closed and glossed; the `open
+  (installs via <TASK-ID>)` form defined before first use; D-170 records the
+  four AMEND verdicts by pointer and quotation (no reinterpretation), names
+  the three installing branches, and stays OPEN until all three land. The
+  D-150a/D-150b index rows are reordered to match body order only. Sound.
+- `docs/contracts/bridge_protocol.md` §1 clause map + §10 ONE-home row;
+  `docs/agent_playbook.md` M0 line — pointers only, each names its home.
+  Sound.
+- `TASK_QUEUE.md` — regenerated surface: the D-170 hard-start dependency now
+  appears on `V5-TRANSACTION-01`, the two pre-existing S9 rows and the five
+  new S9 rows; `T26-RULING-INSTALL-01` reads `PARTIAL; READY; GATES close:
+  D-170`; `R7F-DX-PROSE-SCAN-01` and the two Ed items E1/E2 registered.
+  Matches the kernel (`gen_state.py --check` exit 0 is item 7 on the
+  ledger). Sound.
+- `docs/process/state_kernel.json`, `tests/test_docs_freshness.py`,
+  `tests/test_gen_state.py` — reviewed at each bench commit as they were
+  written (`d8451daa`, `f84be217`, `c05cf181`, `162049bd`) and re-audited
+  by Sol 230, terra 231, Opus (14), luna 238, Sol 241, luna 242; not re-read
+  line by line here. The prospective S1/S2 shape tests and the census
+  `assertIn` form (terra 235 SF2) are the ones that bit on integration and
+  were confirmed passing on the integration tree (item 9).
+
+Verdict: MERGE at `ad22ec83`. No finding. Open follow-ups carried by the
+kernel, not by this branch: `R7F-DX-PROSE-SCAN-01` (registered here),
+`D110-MINT-DEP-RECONCILE-01` (Ed call, NIT8), and the post-merge kernel
+batch that moves D-170 to `adopted` once the liveness and gate-ledger
+branches land.
 
 ## Commits on this branch
 
