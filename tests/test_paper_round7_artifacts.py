@@ -14,6 +14,7 @@ the missing path.
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -33,6 +34,7 @@ REGISTRY_PATH = Path(
 )
 SKELETON_PATH = ROOT / "docs" / "paper" / "draft-v2-skeleton.md"
 CORPUS_ROOT = Path("/Users/edr/code/JouleWise")
+SCRATCH_PARENT = Path(os.environ.get("TMPDIR", tempfile.gettempdir()))
 
 FENCE_SPEC = importlib.util.spec_from_file_location("check_paper_round7_artifacts", FENCE_PATH)
 assert FENCE_SPEC is not None and FENCE_SPEC.loader is not None
@@ -57,6 +59,59 @@ CORPUS_PRESENT = all(
         CORPUS_ROOT / "runs" / "instrument_validation",
     )
 )
+
+
+def _copy_checker_inputs(root: Path) -> None:
+    paths = [
+        FENCE.REGISTRY_RELATIVE_PATH,
+        FENCE.SKELETON_RELATIVE_PATH,
+        FENCE.EXPECTED_R7F_PATH,
+        *FENCE.EXPECTED_SOURCE_PATHS.values(),
+    ]
+    for relative_path in paths:
+        target = root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative_path, target)
+
+
+def _update_scratch_aq_pin(root: Path) -> None:
+    aq_path = root / FENCE.EXPECTED_SOURCE_PATHS["AQ"]
+    registry_path = root / FENCE.REGISTRY_RELATIVE_PATH
+    registry_text = registry_path.read_text(encoding="utf-8")
+    old_pin = FENCE.parse_registry_text(registry_text).sources["AQ"]
+    new_sha256 = hashlib.sha256(aq_path.read_bytes()).hexdigest()
+    new_size = aq_path.stat().st_size
+    registry_text = registry_text.replace(old_pin.sha256, new_sha256)
+    old_source = (
+        f"- AQ = {old_pin.path}, sha256 {new_sha256} "
+        f"({old_pin.size:,} B)"
+    )
+    new_source = f"- AQ = {old_pin.path}, sha256 {new_sha256} ({new_size:,} B)"
+    if old_source not in registry_text:
+        raise AssertionError("scratch AQ source pin was not found")
+    registry_path.write_text(
+        registry_text.replace(old_source, new_source, 1), encoding="utf-8"
+    )
+
+
+def _run_scratch_checker(root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(FENCE_PATH),
+            "--repository-root",
+            str(root),
+            "--registry",
+            str(root / FENCE.REGISTRY_RELATIVE_PATH),
+            "--skeleton",
+            str(root / FENCE.SKELETON_RELATIVE_PATH),
+            "--literals-only",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 class RegistryAndDigestTests(unittest.TestCase):
@@ -164,6 +219,99 @@ class RefusalTests(unittest.TestCase):
             artifacts, json_checks = FENCE.load_json_artifacts(root, self.spec)
             self.assertNotIn("XD", artifacts)
             self.assertTrue(any(not row.match and row.label == "JSON XD" for row in json_checks))
+
+    def test_fractional_population_size_reissue_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-fractional-population-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            aq_path = root / FENCE.EXPECTED_SOURCE_PATHS["AQ"]
+            aq_text = aq_path.read_text(encoding="utf-8")
+            mutated = aq_text.replace(
+                '"population_size": 15,', '"population_size": 15.9,', 1
+            )
+            self.assertNotEqual(mutated, aq_text)
+            aq_path.write_text(mutated, encoding="utf-8")
+            _update_scratch_aq_pin(root)
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("row DX-020", output)
+        self.assertIn("AQ#summary.population_size", output)
+
+    def test_extra_v3_refusal_bucket_reissue_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-extra-refusal-bucket-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            aq_path = root / FENCE.EXPECTED_SOURCE_PATHS["AQ"]
+            payload = json.loads(aq_path.read_text(encoding="utf-8"))
+            payload["summary"]["v3_refusals_by_token"]["other_refusal"] = [
+                "not-an-anchor-unresolved-row"
+            ]
+            aq_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            _update_scratch_aq_pin(root)
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("row DX-021", output)
+        self.assertIn("AQ#summary.v3_refusals_by_token", output)
+
+    def test_dx003_without_svg_in_full_replay_command_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-f4-command-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            registry_path = root / FENCE.REGISTRY_RELATIVE_PATH
+            registry_text = registry_path.read_text(encoding="utf-8")
+            mutated = registry_text.replace(
+                " --svg docs/paper/figures/fig4_edge_excursions.svg", "", 1
+            )
+            self.assertNotEqual(mutated, registry_text)
+            registry_path.write_text(mutated, encoding="utf-8")
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("DX-003", output)
+        self.assertIn("full F4 replay command including --svg", output)
+
+    def test_dx027_unsigned_percent_renderer_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-unsigned-median-percent-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            registry_path = root / FENCE.REGISTRY_RELATIVE_PATH
+            registry_text = registry_path.read_text(encoding="utf-8")
+            current = next(
+                line for line in registry_text.splitlines() if line.startswith("| DX-027 ")
+            )
+            mutated = current.replace("| +0.61 % |", "| 0.61 % |").replace(
+                "render an explicit sign and two decimals followed by ` %`; "
+                "`R7F_RENDER=signed_2_percent`",
+                "round once to two decimals and append ` %`; "
+                "`R7F_RENDER=fixed_2_percent`",
+            )
+            self.assertNotEqual(mutated, current)
+            registry_path.write_text(
+                registry_text.replace(current, mutated, 1), encoding="utf-8"
+            )
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("DX-027", output)
+        self.assertIn("R7F_RENDER=signed_2_percent", output)
 
 
 class InvocationTests(unittest.TestCase):

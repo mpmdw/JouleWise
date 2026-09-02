@@ -77,6 +77,12 @@ XD_CAMPAIGN = "retained 20260722 capture / 59-pulse calibration"
 AQ_CAMPAIGN = "15 retained instrument_validation captures, v2 era"
 Y_VALUE_TOLERANCE_MS = 0.0008
 X_INDEX_TOLERANCE = 0.00035
+F4_REPLAY_COMMAND = (
+    "python3 scripts/paper_excursion_decomposition.py --corpus-root "
+    "/Users/edr/code/JouleWise --out "
+    "docs/paper/round7/excursion-decomposition.json --svg "
+    "docs/paper/figures/fig4_edge_excursions.svg"
+)
 
 SOURCE_RE = re.compile(
     r"^- (?P<code>XD|XS|F4|AQ|AS) = (?P<path>[^,]+), sha256 "
@@ -219,11 +225,17 @@ def parse_registry_text(text: str) -> RegistrySpec:
         row_id = site_match.group(1)
         if row_id in rows:
             raise RegistryError(f"duplicate DX row {row_id}")
+        if row_id == "DX-003" and f"full replay is `{F4_REPLAY_COMMAND}`." not in supplier:
+            raise RegistryError(
+                "DX-003 must carry the exact full F4 replay command including --svg"
+            )
         render_matches = RENDER_RE.findall(supplier)
         if len(render_matches) != 1:
             raise RegistryError(
                 f"{row_id} must carry exactly one R7F_RENDER directive, found {render_matches}"
             )
+        if row_id == "DX-027" and render_matches != ["signed_2_percent"]:
+            raise RegistryError("DX-027 must use R7F_RENDER=signed_2_percent")
         field_refs = tuple(
             FieldRef(match.group("source"), match.group("path"))
             for match in FIELD_RE.finditer(supplier)
@@ -370,6 +382,19 @@ def _signed(value: Any, places: int) -> str:
     return f"{sign}{abs(decimal):.{places}f}"
 
 
+def _exact_int(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"not an exact integer: {value!r}")
+    return value
+
+
+def _exact_int_field(value: Any, field: str) -> int:
+    try:
+        return _exact_int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field}: {exc}") from exc
+
+
 def _row_values(row: DXRow, artifacts: dict[str, Any]) -> list[Any]:
     return [resolve_field(artifacts[ref.source], ref.path) for ref in row.field_refs]
 
@@ -386,7 +411,9 @@ def render_row(row: DXRow, spec: RegistrySpec, artifacts: dict[str, Any]) -> str
     if rule == "signed_1_ms" and len(values) == 1:
         return f"{_signed(values[0], 1)} ms"
     if rule in {"positive_count_of_count", "negative_count_of_count"} and len(values) == 2:
-        return f"{int(values[0])} of {int(values[1])}"
+        first = _exact_int_field(values[0], row.field_refs[0].label)
+        count = _exact_int_field(values[1], row.field_refs[1].label)
+        return f"{first} of {count}"
     if rule == "fixed_1_ms" and len(values) == 1:
         return f"{_fixed(values[0], 1)} ms"
     if rule == "ratio_percent_1" and len(values) == 2:
@@ -395,33 +422,55 @@ def render_row(row: DXRow, spec: RegistrySpec, artifacts: dict[str, Any]) -> str
     if rule == "difference_1_ms" and len(values) == 2:
         return f"{_decimal(values[0]) - _decimal(values[1]):.1f} ms"
     if rule == "integer" and len(values) == 1:
-        return str(int(values[0]))
+        return str(_exact_int_field(values[0], row.field_refs[0].label))
     if rule == "derived_refused_counts" and len(values) == 3:
-        derived, refused, refusal_ids = values
-        if not isinstance(refusal_ids, list) or len(refusal_ids) != int(refused):
+        derived, refused, _ = values
+        summary = artifacts["AQ"].get("summary")
+        buckets = summary.get("v3_refusals_by_token") if isinstance(summary, dict) else None
+        if not isinstance(buckets, dict) or set(buckets) != {"anchor_unresolved"}:
+            raise ValueError(
+                "AQ#summary.v3_refusals_by_token is not exclusively anchor_unresolved"
+            )
+        derived_i = _exact_int_field(derived, "AQ#summary.v3_derived_count")
+        refused_i = _exact_int_field(refused, "AQ#summary.v3_refused_count")
+        population = summary.get("population_size")
+        population_i = _exact_int_field(population, "AQ#summary.population_size")
+        if derived_i + refused_i != population_i:
+            raise ValueError(
+                "AQ#summary v3_derived_count + v3_refused_count does not equal population_size"
+            )
+        refusal_ids = buckets["anchor_unresolved"]
+        if not isinstance(refusal_ids, list) or len(refusal_ids) != refused_i:
             raise ValueError("anchor_unresolved list does not match v3_refused_count")
-        return f"{int(derived)} derived / {int(refused)} refused (all anchor_unresolved)"
+        return f"{derived_i} derived / {refused_i} refused (all anchor_unresolved)"
     if rule == "flip_count_refused_by_v3" and len(values) == 2:
         count, flips = values
-        if not isinstance(flips, list) or len(flips) != int(count):
+        count_i = _exact_int_field(count, "AQ#summary.admissibility_flip_count")
+        if not isinstance(flips, list) or len(flips) != count_i:
             raise ValueError("admissibility_flips does not match admissibility_flip_count")
         if any(
             not isinstance(flip, dict) or flip.get("flip_direction") != "refused_by_v3"
             for flip in flips
         ):
             raise ValueError("not every admissibility flip is refused_by_v3")
-        return f"{int(count)} (both refused_by_v3)"
+        return f"{count_i} (both refused_by_v3)"
     if rule == "control_count" and len(values) == 3:
         reproduced, population, failures = values
+        reproduced_i = _exact_int_field(
+            reproduced, "AQ#summary.control_v2_reproduces_stored_count"
+        )
+        population_i = _exact_int_field(population, "AQ#summary.population_size")
         if not isinstance(failures, list) or len(failures) != 1:
             raise ValueError("control reproduction failure list is not singular")
-        return f"{int(reproduced)} of {int(population)}; failure {failures[0]}"
+        return f"{reproduced_i} of {population_i}; failure {failures[0]}"
     if rule == "signed_6_ms" and len(values) == 1:
         return f"{_signed(values[0], 6)} ms"
     if rule == "fixed_6_ms" and len(values) == 1:
         return f"{_fixed(values[0], 6)} ms"
     if rule == "fixed_2_percent" and len(values) == 1:
         return f"{_fixed(values[0], 2)} %"
+    if rule == "signed_2_percent" and len(values) == 1:
+        return f"{_signed(values[0], 2)} %"
     raise ValueError(f"unsupported or ill-shaped renderer {rule} with {len(values)} values")
 
 
