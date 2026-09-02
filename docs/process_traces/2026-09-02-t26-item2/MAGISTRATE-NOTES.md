@@ -23,6 +23,7 @@ reports, in gauntlet order.
 | Pre-merge fresh pass | sol high (233) | 17b, 18 | over `55bf9f73` + `d14a818d`: `VERDICT: SHOULD-FIX 3` — SF1 `:N`/`#anchor` policy not enforced when such a file exists; SF2 two `_valid_path` parity probes non-biting (absolute-path and URL guards); SF3 landing row overstated file 02 (corrected above). F-9 repair CONFIRMED to bite (numbered probe FAILS under the `startswith("## ")` mutant, bold probe passes); all shas/seat numbers/verdicts in this table verified against the files |
 | Bench fix | magistrate | commit `8207364c` | SF1: syntactic refusal of `:` / `#` in the RUN target BEFORE the existence check (`_valid_path` stays a verbatim `_check_pointer` copy, parity intact); regression creates real files named `evidence.txt:12` and `evidence.txt#anchor`. SF2: the absolute and URL fixtures now EXIST at their join-under-root spellings, so the syntax guards are the sole refusers on both sides of the parity. Mutants executed at the bench: drop the `:`/`#` refusal → `FAILED (failures=2)`; drop the `/` guard → `FAILED (failures=2)`; drop the `://` guard → `FAILED (failures=1)`; restored, `git diff --check` clean; module OK with and without TMPDIR |
 | Delta re-audit 4 | luna high (234) | 18b, 19 | over `8207364c`: envelope `"label": "CLEAN"`, `"same_signature": "no"` (no literal `VERDICT:` line; `completion: partial` only because the sandbox could not reach api.github.com for the PR-body step). All 25 refusal tests re-checked against their permissive mutants: every probe bites, "no inert refusal probe remains; therefore no Rule-11 trigger". Three bench mutants reproduced (module `FAILED` 2/2/1). PR-body check executed AT THE BENCH instead (below) |
+| Opus counter-review, near-final head (item 6) | opus (agent, model opus) | 20 | over `5f04e147`: `VERDICT: SHOULD-FIX 3`, NIT 2. SF1 item 6 cited the cold-gate-head review (13b) — repointed at file 20. SF2 the same-signature section claimed a cross-model verification before it existed — now cites luna 234. SF3 PROCESS PROPOSAL (not installed — rule 11 makes any proposed process rule a cold-gate matter): fix-round briefs dictate, for every rejection test, the permissive mutant it must kill AND the counterfactual input that reaches the guard; the report pastes the mutant run. Queued for the next process cold gate / Ed batch. NIT1 table boundary anchored on the first pipe line, not the delimiter row (diverges from GitHub two ways, both fail-closed) — DEFERRED, as the cold ruling §L2 deferred this class; re-grade to SHOULD-FIX if the job is promoted to a required check (E1). NIT2 `reopened` missing from the trigger sentence — fixed |
 | Delta re-audit 3 | luna xhigh (227) | 17 | `_split_table_row` models nothing beyond the pipe rule; B1 (D-170 absent on this branch) is a sibling-branch artefact — D-170 lands on `feat/2026-09-02-t26-install`, which merges first; SF1 fixed at the bench |
 
 ## PR-body ledger check at the bench (luna 234's blocked step)
@@ -54,7 +55,10 @@ before the guard under test could). That table is the consult's deliverable;
 a separate consult seat would reproduce it. The SF2 cure therefore acts on
 the class (make the fixture exist so only the guard refuses), not on one
 probe, and the delta re-audit of this bench commit (a different model)
-verifies the class claim, not just the two edits. No production splitter
+verifies the class claim, not just the two edits — discharged by luna 234
+(file 19): all 25 refusal probes re-checked, every one bites. (Opus
+counter-review SF2, file 20: at 5f04e147 this sentence was written ahead
+of the record; it is now cited.) No production splitter
 code changed. If a THIRD round surfaces another inert probe, that is a cold
 gate, not a bench fix.
 
@@ -95,7 +99,7 @@ guard `Ran 21 tests OK` (`tests.test_check_gate_ledger tests.test_docs_freshness
    `github.event.pull_request.head.sha` with `fetch-depth: 0` (earlier
    branch commits named as evidence resolve; the merge ref is not the head)
    and passes the body through the environment, never interpolated into the
-   shell line. Fires on `opened, synchronize, edited, ready_for_review` —
+   shell line. Fires on `opened, synchronize, reopened, edited, ready_for_review` —
    `edited` is required because the ledger is filled by body edits after the
    review rounds. It is ADVISORY (own workflow, not a required check; the
    promotion is Ed's branch-protection change, kernel row
