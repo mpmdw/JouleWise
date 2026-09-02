@@ -8,8 +8,8 @@
 - Largest tiling gap (s; defined under Method): 0.0000004
 - Boundaries with a nonzero tiling gap (see Method): 100
 - Producer: `scripts/issue_dg071_dg075_statistics.py`
-- Producer SHA-256: `404e6a5614619dbb03916016b0284addfff3ce2458a5ea31ce60be834a16b859`
-- Producer commit (last commit that changed the producer; defined under Method): `701471732488b56952beb47393e08c68285a5ea2`
+- Producer SHA-256: `d657d75fc4bfa36dbfc12249b791a73541ae6e043eb861e4050c297e537f46d9`
+- Producer commit (last commit that changed the producer; defined under Method): `6b6deb2f8f9bbe88b604b18d544856d6ae4e0013`
 
 ## Method
 
@@ -27,7 +27,7 @@ Tiling. The records tile when each record's interval ends exactly at its own tim
 
 DG-075 is the DG-071 distribution minus the first record: its consecutive timestamp differences equal the widths of records 2–n up to the endpoint convention above, i.e. to within the largest tiling gap.
 
-Provenance. The producer commit is the last commit in the repository's history that changed the producer script (`git log -1 --format=%H -- scripts/issue_dg071_dg075_statistics.py`), not the commit the issuer happened to have checked out. A committed artifact cannot name the commit that contains it, so recording the checkout would make byte-exact replay impossible at exactly the commit a reader checks out; recording the script's last commit means re-running the producer from any checkout in which the script is unchanged since that commit reproduces both files byte for byte. The producer SHA-256 is recorded beside it: an uncommitted edit to the producer shows as a mismatch between the two.
+Provenance. The producer commit is the last commit in the repository's history that changed the producer script (`git log -1 --format=%H -- scripts/issue_dg071_dg075_statistics.py`), not the commit the issuer happened to have checked out. A committed artifact cannot name the commit that contains it, so recording the checkout would make byte-exact replay impossible at exactly the commit a reader checks out; recording the script's last commit means re-running the producer from any checkout in which the script is unchanged since that commit reproduces both files byte for byte. The producer SHA-256 is recorded beside it and must equal the SHA-256 of the script as committed there (`git show <producer commit>:scripts/issue_dg071_dg075_statistics.py`); an uncommitted edit to the producer shows as the two hashes differing.
 
 | Registry row | Sample count | Q1 (ms) | Median (ms) | Q3 (ms) | IQR (ms) |
 |---|---:|---:|---:|---:|---:|
