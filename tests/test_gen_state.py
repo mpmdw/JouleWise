@@ -85,6 +85,13 @@ EXPECTED_IDS = {
     # replace the retired projection-02 row.
     "V5-LAUNCH-REALIZATION-RECHECK-01",
     "V5-DECODE-IDENTITY-SET-01",
+    # 2026-09-02 bench sweep: the T26 cold-gate verdicts (items 1-4,
+    # docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md)
+    # were found uninstalled; one installing row plus the two Ed items the
+    # ruling routed (E1 branch protection, E2 the D-118 N/A tier).
+    "T26-RULING-INSTALL-01",
+    "ED-BRANCH-PROTECTION-E1-01",
+    "ED-D118-NA-TIER-E2-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
@@ -549,9 +556,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # NIGHT-GATE-01, NIGHT-DRIVER-01, D165-CLOSEOUT-CORE-01 retired at their
         # 2026-09-02 merges (PRs 264, 265, 261): 119 - 3 = 116;
         # D165-SIDECAR-EMIT-01 retired at its 2026-09-02 merge (PR 267):
-        # 116 - 1 = 115.
+        # 116 - 1 = 115; 2026-09-02 T26 install wave: 116 + 3 = 119.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 116)
+        self.assertEqual(len(self.tasks), 119)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

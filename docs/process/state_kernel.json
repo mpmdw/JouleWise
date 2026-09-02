@@ -1474,6 +1474,90 @@
       "status": "shelved",
       "stop_card": null
     },
+    "ED-BRANCH-PROTECTION-E1-01": {
+      "acceptance": {
+        "evidence": [
+          "`gh api repos/mpmdw/JouleWise/branches/main/protection` returns the protection object naming `test`, both exclusive jobs, and `gate-ledger` as required status checks"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ED-BRANCH-PROTECTION-E1-01/acceptance",
+          "label": "ED-BRANCH-PROTECTION-E1-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed enables branch protection on main so the gate-ledger job (and CI) can bind; until then the job is advisory and D-072 self-merge is conditioned on it green by doctrine only."
+      },
+      "authority": {
+        "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
+        "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "The advisory gate-ledger job exists and is green on its own PR before Ed is asked to make it required",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "T26-RULING-INSTALL-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
+            "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
+          },
+          "rule": "`enforce_admins` is Ed's choice; D-150a/D-155 NR-2 forbid pushes inside the freeze span, so a red required check is least recoverable exactly there - Ed decides with that in view"
+        }
+      ],
+      "flags": [],
+      "goal": "T26 cold gate item 2 routed item E1: enable branch protection on `main` with `test`, both exclusive jobs, and `gate-ledger` as required status checks (today `gh api .../branches/main/protection` returns 404 Branch not protected, so no red check blocks anything).",
+      "id": "ED-BRANCH-PROTECTION-E1-01",
+      "lane": "ed_external",
+      "priority": "p2_next_slice",
+      "rank": 8,
+      "status": "blocked",
+      "status_note": "Lane: ed (GitHub admin action on Ed's account). Registered 2026-09-02 with T26-RULING-INSTALL-01. Batch with the next Ed machine session; nothing else waits on it except the job becoming binding.",
+      "stop_card": null
+    },
+    "ED-D118-NA-TIER-E2-01": {
+      "acceptance": {
+        "evidence": [
+          "A decision-log amendment to D-118 recording Ed's ruling on an `N/A <reason>` tier and on a docs-only exemption, or Ed's recorded decline"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ED-D118-NA-TIER-E2-01/acceptance",
+          "label": "ED-D118-NA-TIER-E2-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed rules whether the twelve-item gate ledger gains an N/A tier and a docs-only exemption; until then docs-only PRs fill all twelve rows or land as direct commits as today."
+      },
+      "authority": {
+        "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
+        "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
+            "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
+          },
+          "rule": "A cold gate may rule the MECHANISM for an Ed-ratified rule but may not add an N/A tier or a docs-only exemption to D-118's twelve items; only Ed amends Ed's directive"
+        }
+      ],
+      "flags": [],
+      "goal": "T26 cold gate item 2 routed item E2: Ed decides whether D-118 gains an `N/A <reason>` tier and a docs-only exemption (direct docs commits to main under doctrine rule 7 are otherwise formally in tension with D-118's NOTHING approaches merge).",
+      "id": "ED-D118-NA-TIER-E2-01",
+      "lane": "ed_external",
+      "priority": "p3_tooling",
+      "rank": 10,
+      "status": "queued",
+      "status_note": "Lane: ed (directive amendment). Registered 2026-09-02 with T26-RULING-INSTALL-01. Decision-only; a one-line email answer suffices, the magistrate records it.",
+      "stop_card": null
+    },
     "ED-HANDS-BATCH-01": {
       "acceptance": {
         "evidence": [
@@ -4345,6 +4429,54 @@
       "status_note": "PARTIAL on branch impl/t0-unattended-01 (PR pending). Landed: the ruled REASON_CODE_COVERAGE enumerated delta (first deliverable, gauntlet-complete: audit -> fix -> delta re-audit -> fix -> delta re-audit -> one lead bench fix); the D-127.1 scope-closure amendment drafted as a proposed decision-log delta for the magistrate to land (the lieutenant does not edit docs/decision_log.md); the clock-reference collector; and the machine-authored T-0 clock evidence itself -- R0 pre-pin plus R1 live-at-authoring across a fixed three-operator roster with quorum>=2 and an agreement-interval intersection inside the governed 0.5 s ceiling, a separately-gated 5 ms CLOCK_MONOTONIC_RAW anchor falsifier never summed into that bound, the anchor endpoints published for an arm-side step re-check, an untouched 6 h horizon, a ceremony with no prompt and no stdin read, and a strengthened exact-Off postcondition. No new reason code in either vocabulary; the live coverage gate stays 55/45/10. Acceptance item 1 MET; item 3 MET for the amendment draft, with its four Ed-hands sub-items surfaced and not assumed. REMAINS: (a) acceptance item 2, the supervised rehearsal window -- the ten-gate evaluator is committed and green in fixture mode but its first audit REFUTED it with seven blockers (six gates accept self-declared evidence; no producer writes the records the live gates need), the fix round was killed mid-flight by a window reset and reverted, and the live sitting is Ed's hands; (b) TWO magistrate questions, both recorded in full in the delta document -- which production entry point consumes a rehearsal receipt for gate G7 and which refusal code it emits (HEAD has no consumer of a D-149 GO receipt at all), and how to reconcile the ruled R1-before-censuses ordering with the ruled 5 s R1-completion-to-validity-origin bound, which HEAD's derivation order cannot satisfy and which is ill-typed today because validity origin and the R1 endpoints are read from different clocks. That upper bound is deliberately NOT implemented and no inert substitute was added; the six-hour lower relation is enforced and non-tautological. 2026-09-01: branch impl/t0-unattended-01 is content-identical to main (its first deliverable is merged); the remaining rehearsal-evaluator blockers are folded into the D-169 unattended lane and will be scheduled by that lane's staged ruling rather than as a separate PR.",
       "stop_card": null
     },
+    "T26-RULING-INSTALL-01": {
+      "acceptance": {
+        "evidence": [
+          "D-170 indexed `open (installs via T26-RULING-INSTALL-01)` carrying the four T26 verdicts by pointer, then moved to `adopted` naming the installing PR",
+          "tests.test_docs_freshness green with the status-vocabulary test, the `open`-pointer check, and the Executed-evidence shape test present and mutation-killed",
+          "gate-ledger CI job advisory-green on its own PR; pull_request_template.md tracked",
+          "arm_readiness boundary regressions (600 s +/- 1 ns at issuance and at arm) green; tests.test_arm_readiness_evidence_t0 and tests.test_t0_rehearsal green",
+          "each of the four D-170 dependencies on this row moved to satisfied with an evidence pointer at the regression that fails when the ruled value is absent"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T26-RULING-INSTALL-01/acceptance",
+          "label": "T26-RULING-INSTALL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "All four T26 cold-gate verdicts installed as code, tests, tracked templates, and decision-log text, with the ruling's own `open (installs via ...)` form applied to the entry that carries them."
+      },
+      "authority": {
+        "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
+        "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
+            "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
+          },
+          "rule": "Item 3's 600 s bound is a LIVENESS bound on the consumer's ordinary monotonic clock, labelled so in code; it is not a metrology bound, moves no other constant, adds no reason code, and never touches CLOCK_MONOTONIC_RAW anchor physics"
+        },
+        {
+          "authority": {
+            "label": "cold-gate charter section 5 (magistrate overrule only by written dissent to Ed)",
+            "path": "docs/process/coldgate_charter.md"
+          },
+          "rule": "The four verdicts are installed AS RULED; any deviation from the ruled text is a magistrate dissent recorded separately and shown to Ed, never a silent reinterpretation by the installing seat"
+        }
+      ],
+      "flags": [],
+      "goal": "Install the four AMENDED verdicts of the 2026-08-27 T26 cold gate (ruled PR #231, custodied PR #238) that were found UNINSTALLED on 2026-09-02: item 1 ruling-status semantics (`open (installs via <TASK-ID>)` + kind:decision hard-start dependency + status-vocabulary test + M0 line), item 2 the gate ledger (PR template + advisory `gate-ledger` CI job + D-118 amendment + Ed rows E1/E2), item 3 the T-0 600 s liveness bound (arm_readiness `_predicate_passes` conjunct, both sites, boundary regressions), item 4 the executed-evidence duty (D-160 R-5 amendment + prospective `## Executed evidence` shape test).",
+      "id": "T26-RULING-INSTALL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 17,
+      "status": "partial",
+      "status_note": "Registered 2026-09-02 by the magistrate after a bench sweep found that NONE of the four T26 verdict mechanisms had reached the repo six days after the ruling merged: no `installs via` form in the decision-log How-To, no status-vocabulary or Executed-evidence test in tests/test_docs_freshness.py, no pull_request_template.md or gate-ledger job, and arm_readiness.py still carrying the pre-ruling `<=5 s ... open magistrate item` comment with no 600 s conjunct. The ruling about decided-not-equal-done was itself decided and not done; it is installed under its own item-1 form (D-170 `open (installs via T26-RULING-INSTALL-01)`). In flight 2026-09-02 as three seats on feat/2026-09-02-t26-install (items 1+4, docs/tests), feat/2026-09-02-t26-liveness (item 3, code, full C-028 gauntlet: hardware-adjacent), feat/2026-09-02-t26-gateledger (item 2, CI/template); integration tree before the merge wave. The operation-loop skill section 5 pointer (item 2) lives outside the repo and is a magistrate bench edit. Kernel form per item 1: the `kind: decision` hard-start dependency on D-170 sits on the task the clause GATES (V5-TRANSACTION-01 for item 3), not on this installing row; its satisfied evidence pointer names the regression that fails when the ruled value is absent.",
+      "stop_card": null
+    },
     "T3-CHAR-PAIR-01": {
       "acceptance": {
         "evidence": [
@@ -5204,6 +5336,15 @@
         "path": "docs/decision_log.md"
       },
       "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "Item 3 of the T26 cold gate is installed: the 600 s liveness conjunct evaluates at both the T-0 issuance and the arm site with boundary regressions, so no _v5 transaction consumes a T-0 receipt authored under the struck 5 s/35 s text or under no upper bound at all",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        },
         {
           "evidence": null,
           "kind": "task",
