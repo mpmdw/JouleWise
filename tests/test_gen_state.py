@@ -173,6 +173,7 @@ EXPECTED_IDS = {
     "T0-CLOCK-ROW-RENAME-01",
     "T0-UNATTENDED-01",
     "T0-LIVENESS-BOUND-EMPIRICAL-01",
+    "T0-PROBE-CENSUS-RESOURCE-01",
     "UNATTENDED-LAUNCH-01",
     # 2026-09-01 D-169 stage-1 split (MAGISTRATE-RULING-UNATTENDED-STAGE1,
     # cold gate coldgate-e10): night gate, night driver, launchd rehearsal
@@ -622,9 +623,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # R7F-DX-PROSE-SCAN-01 and the five S9 rows not already in the kernel
         # (01b, 02, 03, 05, 06): 120 + 6 = 126; the T26 item-3 lane
         # (2026-09-02, PHYS-1 limitation) registers
-        # T0-LIVENESS-BOUND-EMPIRICAL-01: 126 + 1 = 127.
+        # T0-LIVENESS-BOUND-EMPIRICAL-01: 126 + 1 = 127; the census-guard
+        # cold gate (2026-09-02, files 22-25) registers
+        # T0-PROBE-CENSUS-RESOURCE-01: 127 + 1 = 128.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 127)
+        self.assertEqual(len(self.tasks), 128)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

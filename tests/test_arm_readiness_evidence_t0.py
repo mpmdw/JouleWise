@@ -855,63 +855,90 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
         """The ruled 600 s = (post-R1 ``_fresh_probe`` sites) × 45 s + 105 s.
 
-        Cold gate T26 item 3 states the constant's provenance as eleven
-        governed post-R1 probe sites times ``_PROBE_TIMEOUT_SECONDS`` plus
-        105 s of ungoverned work. This test counts the sites by AST so the
-        derivation is enforced, not asserted: a twelfth post-R1 site (or a
-        removed one) fails here instead of silently changing the governed
-        envelope. The one site inside ``_fresh_clock_reference_batch`` IS
-        R1 and is excluded. The equality with ``_MIN_IDLE_NS`` that the
-        ruling noted is a coincidence of two unrelated quantities (anchor
-        span floor, idle capture floor) and is deliberately not pinned.
+        What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
+        item 3, which states the constant as eleven governed post-R1 probe
+        sites times ``_PROBE_TIMEOUT_SECONDS`` plus 105 s of ungoverned
+        work. Each factor is read from the code (the sites by an AST
+        census of direct ``_fresh_probe`` calls, the timeout from the
+        module constant), so an edit to either factor fails here while
+        the constant stays 600 s. The one site inside
+        ``_fresh_clock_reference_batch`` IS R1 and is excluded.
+
+        What this test does NOT protect: the runtime R1→stamp envelope.
+        A static census counts sites, not seconds — a loop around a site,
+        a deriver registered for a second row, a direct ``_execute_probe``
+        caller such as ``_boot_probe`` moved above the ``validity_origin``
+        stamp, a retry inside ``_fresh_probe``, or a wait in another
+        module all change the envelope while this test stays green. The
+        ruling's 2026-09-02 correction already records the fixed subtotal
+        as 715 s (495 s probes + 220 s git ceilings) against the ruled
+        600 s; the runtime interval is unmeasured and is carried by kernel
+        row ``T0-LIVENESS-BOUND-EMPIRICAL-01`` (the census-the-resource
+        hardening is ``T0-PROBE-CENSUS-RESOURCE-01``).
+
+        Completeness of the census: direct calls must be the ONLY way the
+        module reaches ``_fresh_probe``. Rather than enumerating reference
+        forms (two rounds showed the enumeration is never complete — Sol
+        256 F1, terra 257 F1; cold gate files 22–25), every string-valued
+        field of every AST node is censused: the identifier may appear
+        only as the single ``FunctionDef.name`` and as the ``Name.id`` of a
+        counted direct call. Aliases, stored callbacks, attribute lookups,
+        string constants (including escaped or implicitly concatenated
+        spellings and NFKC-normalised homoglyphs, which the parser folds),
+        import shadows, ``as``-bindings, class/async redefinitions,
+        parameter, keyword, ``except … as`` and ``match`` captures all
+        fail. Comments and docstrings are not AST fields and may name the
+        helper freely. Deliberately constructed names
+        (``"_fresh_" + "probe"``, ``importlib`` lookups, star-import
+        rebinding) are invisible to any static check and are not guarded
+        (D-161: deliberate-only, no mistake reaches them). Sites are
+        counted as DISTINCT call nodes, attributed to the innermost
+        enclosing function, so a call inside a nested closure is counted
+        once. The equality with ``_MIN_IDLE_NS`` that the ruling noted is
+        a coincidence of two unrelated quantities (anchor span floor, idle
+        capture floor) and is deliberately not pinned.
         """
 
         import ast
+        from collections import Counter
 
         tree = ast.parse(Path(t0.__file__).read_text(encoding="utf-8"))
-        sites_by_function: dict[str, int] = {}
-        direct_call_names: set[int] = set()
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            calls = [
-                call
-                for call in ast.walk(node)
-                if isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Name)
-                and call.func.id == "_fresh_probe"
-            ]
-            direct_call_names.update(id(call.func) for call in calls)
-            if calls:
-                sites_by_function[node.name] = len(calls)
-        # The census counts direct calls, so it is only complete if direct
-        # calls are the ONLY way the module reaches ``_fresh_probe``. Any
-        # other reference — an alias (``probe = _fresh_probe``), a stored
-        # callback, an attribute lookup, or the name as a string for
-        # ``globals()[...]`` — would add a governed probe the census cannot
-        # see (Sol 256 F1), so every such reference fails here.
-        indirect = [
-            (type(node).__name__, getattr(node, "lineno", None))
+        definitions = [
+            node
             for node in ast.walk(tree)
-            if (
-                isinstance(node, ast.Name)
-                and node.id == "_fresh_probe"
-                and id(node) not in direct_call_names
-            )
-            or (isinstance(node, ast.Attribute) and node.attr == "_fresh_probe")
-            or (isinstance(node, ast.Constant) and node.value == "_fresh_probe")
+            if isinstance(node, ast.FunctionDef) and node.name == "_fresh_probe"
         ]
-        self.assertEqual(indirect, [], "indirect _fresh_probe references")
-        self.assertEqual(
-            sum(
-                1
-                for node in ast.walk(tree)
-                if isinstance(node, ast.FunctionDef) and node.name == "_fresh_probe"
-            ),
-            1,
+        self.assertEqual(len(definitions), 1)
+        direct_call_names = [
+            call.func
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "_fresh_probe"
+        ]
+        permitted = {id(name) for name in direct_call_names} | {id(definitions[0])}
+        stray = [
+            (type(node).__name__, field, getattr(node, "lineno", None))
+            for node in ast.walk(tree)
+            if id(node) not in permitted
+            for field, value in ast.iter_fields(node)
+            for item in (value if isinstance(value, list) else [value])
+            if item == "_fresh_probe"
+        ]
+        self.assertEqual(stray, [], "non-call mentions of _fresh_probe")
+        # ast.walk is breadth-first, so a nested function's assignment
+        # overwrites its enclosing function's: the innermost def wins.
+        innermost: dict[int, str] = {}
+        for function in ast.walk(tree):
+            if isinstance(function, ast.FunctionDef):
+                for child in ast.walk(function):
+                    innermost[id(child)] = function.name
+        sites_by_function = Counter(
+            innermost.get(id(name), "<module>") for name in direct_call_names
         )
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
-        post_r1_sites = sum(sites_by_function.values())
+        post_r1_sites = len(direct_call_names) - 1
+        self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
         self.assertEqual(post_r1_sites, 11, sites_by_function)
         self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
         self.assertEqual(

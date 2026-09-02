@@ -4659,6 +4659,51 @@
       "status_note": "Proposed 2026-09-02 from the T26 PHYS-1 registered limitation. No retained receipt carries a validity_origin stamp; the origin is recovered from valid_until minus the kind's horizon (Sol 256 F2 correction, 2026-09-02) — the route needs no producer or schema change.",
       "stop_card": null
     },
+    "T0-PROBE-CENSUS-RESOURCE-01": {
+      "acceptance": {
+        "evidence": [
+          "Mutation table in the landing report: four counterfactual mutants applied to in-memory copies of joulewise/arm_readiness_evidence_t0.py, each KILLED; unmutated source SURVIVES; the module run tails."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T0-PROBE-CENSUS-RESOURCE-01/acceptance",
+          "label": "T0-PROBE-CENSUS-RESOURCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each of (1)-(4) is pinned by an executed assertion with a mutation probe showing the counterfactual (a second _execute_probe caller, _boot_probe moved above the stamp, a deriver registered twice, a loop around a post-R1 site) fails the test while the unmutated module passes."
+      },
+      "authority": {
+        "label": "Census-guard cold gate synthesis (2026-09-02), files 22-25",
+        "path": "docs/process_traces/2026-09-02-t26-item-3/25-magistrate-synthesis-census-guard-gate.md"
+      },
+      "dependencies": [],
+      "fallback": {
+        "action": "Record the un-pinned form in the census test docstring and leave the runtime question to T0-LIVENESS-BOUND-EMPIRICAL-01; never widen the static census into a runtime claim. Superseded entirely once T0-LIVENESS-BOUND-EMPIRICAL-01 closes on retained receipts carrying both stamps (a measured margin makes every static envelope pin redundant); do not build (5) if (1)-(4) already cost more than one bench session.",
+        "condition": "An assertion in (1)-(4) cannot be expressed without re-implementing the author's control flow in the test (tests the test), or a legitimate refactor needs a form it forbids.",
+        "pointer": {
+          "anchor": "residual-q3-and-the-altitude-of-the-defect",
+          "label": "Census-guard cold gate synthesis, Q3 residual",
+          "path": "docs/process_traces/2026-09-02-t26-item-3/25-magistrate-synthesis-census-guard-gate.md"
+        }
+      },
+      "fences": [
+        {
+          "authority": {
+            "label": "Census-guard cold gate synthesis (2026-09-02), Q3",
+            "path": "docs/process_traces/2026-09-02-t26-item-3/25-magistrate-synthesis-census-guard-gate.md"
+          },
+          "rule": "A static census pins provenance arithmetic only; it never becomes a runtime-envelope claim, and the 600 s number moves only by cold gate."
+        }
+      ],
+      "flags": [],
+      "goal": "Census the resource, not the wrapper: extend tests/test_arm_readiness_evidence_t0.py::test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census (or a sibling test) so the static provenance pin also asserts (1) _execute_probe has exactly two direct call sites, inside _fresh_probe and _boot_probe; (2) both _boot_probe calls in the author sit outside the R1-to-validity_origin window (one before the R1 batch, one after the stamp); (3) _DERIVERS is injective (no deriver registered for a second row); (4) no post-R1 _fresh_probe site has a For/While/comprehension ancestor outside _fresh_clock_reference_batch; optionally (5) _fresh_probe carries no decorator and calls _execute_probe exactly once. These are the MISTAKE-class envelope changes the census cannot see (cold gate files 22-25, Opus Q2 iv-v, Fable M14/M34).",
+      "id": "T0-PROBE-CENSUS-RESOURCE-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 125,
+      "status": "queued",
+      "status_note": "Registered 2026-09-02 by the census-guard cold gate synthesis (files 22-25). Not in-PR by ruling: additive census logic inside a merge gate is how a fix round introduces the next defect (Opus Q4).",
+      "stop_card": null
+    },
     "T0-REHEARSAL-PRODUCERS-01": {
       "acceptance": {
         "evidence": [
