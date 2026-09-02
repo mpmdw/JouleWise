@@ -22,7 +22,23 @@ reports, in gauntlet order.
 | Bench fix | magistrate | commit `c01c39bb` | `tests/test_check_gate_ledger.py` `setUpClass`: `os.environ["TMPDIR"]` → `os.environ.get("TMPDIR")` — CI `pr-fast (2)` failed with `KeyError: 'TMPDIR'` (runner exports none); found independently by luna 232's sibling census on the dx lane (`docs/process_traces/2026-09-02-dx-registry/18-luna-232-fresh-pass.md` F1); verified OK with and without TMPDIR |
 | Pre-merge fresh pass | sol high (233) | 17b, 18 | over `55bf9f73` + `d14a818d`: `VERDICT: SHOULD-FIX 3` — SF1 `:N`/`#anchor` policy not enforced when such a file exists; SF2 two `_valid_path` parity probes non-biting (absolute-path and URL guards); SF3 landing row overstated file 02 (corrected above). F-9 repair CONFIRMED to bite (numbered probe FAILS under the `startswith("## ")` mutant, bold probe passes); all shas/seat numbers/verdicts in this table verified against the files |
 | Bench fix | magistrate | commit `8207364c` | SF1: syntactic refusal of `:` / `#` in the RUN target BEFORE the existence check (`_valid_path` stays a verbatim `_check_pointer` copy, parity intact); regression creates real files named `evidence.txt:12` and `evidence.txt#anchor`. SF2: the absolute and URL fixtures now EXIST at their join-under-root spellings, so the syntax guards are the sole refusers on both sides of the parity. Mutants executed at the bench: drop the `:`/`#` refusal → `FAILED (failures=2)`; drop the `/` guard → `FAILED (failures=2)`; drop the `://` guard → `FAILED (failures=1)`; restored, `git diff --check` clean; module OK with and without TMPDIR |
+| Delta re-audit 4 | luna high (234) | 18b, 19 | over `8207364c`: envelope `"label": "CLEAN"`, `"same_signature": "no"` (no literal `VERDICT:` line; `completion: partial` only because the sandbox could not reach api.github.com for the PR-body step). All 25 refusal tests re-checked against their permissive mutants: every probe bites, "no inert refusal probe remains; therefore no Rule-11 trigger". Three bench mutants reproduced (module `FAILED` 2/2/1). PR-body check executed AT THE BENCH instead (below) |
 | Delta re-audit 3 | luna xhigh (227) | 17 | `_split_table_row` models nothing beyond the pipe rule; B1 (D-170 absent on this branch) is a sibling-branch artefact — D-170 lands on `feat/2026-09-02-t26-install`, which merges first; SF1 fixed at the bench |
+
+## PR-body ledger check at the bench (luna 234's blocked step)
+
+```text
+$ gh pr view 275 --json body -q .body > $TMPDIR/body275.md
+$ python3 scripts/check_gate_ledger.py --body-file $TMPDIR/body275.md --head-sha $(git rev-parse HEAD) --repo-root .
+gate-ledger: item 9: NOT-RUN
+gate-ledger: item 10: NOT-RUN
+gate-ledger: item 11: NOT-RUN
+gate-ledger: item 12: NOT-RUN
+PR_BODY_CHECK_EXIT=1
+```
+
+Run at head `8207364c` (trace commits excluded) on 2026-09-02; the four
+NOT-RUN rows are the merge-time rows, filled at merge. No other defect line.
 
 ## Same-signature judgment on the test-quality class (magistrate, 2026-09-02)
 
