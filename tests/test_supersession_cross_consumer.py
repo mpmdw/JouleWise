@@ -19,11 +19,17 @@ from joulewise.analysis_engine.inputs import (
 )
 from joulewise.campaign_provenance import campaign_provenance_attestation
 from joulewise.whole_window import (
+    IDLE_ADMISSION_CORE_SCHEMA,
     OCCURRENCE_SUPERSESSION_SCHEMA,
     REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+    WHOLE_WINDOW_SCHEMA,
     _basis_source_manifests,
     _supersession_is_logged,
+    _validate_row_uncached,
+    build_evaluation_basis,
+    build_row_provenance,
     recognizable_occurrence_supersession_counts,
+    source_manifest_descriptors,
     supersession_entry_sha256,
     supersession_entry_validation_results,
     validate_occurrence_supersession_entry,
@@ -91,18 +97,27 @@ def build_supersession_fixture(
     manifests: list[dict[str, Any]] = []
     occurrences: list[dict[str, Any]] = []
     attestations: list[dict[str, Any]] = []
+    for reference_id in ("neg8-reference-start", "neg8-reference-end"):
+        reference = root / reference_id
+        reference.mkdir()
+        (reference / "summary_metrics.json").write_bytes(
+            _json_bytes({"status": "succeeded"})
+        )
     for index in range(1, occurrence_count + 1):
         manifest = {
             "schema_version": "joulewise.campaign_provenance.v2",
             "analysis_manifest_id": None,
             "session_id": f"session-{index}",
             "first_physical_run_id": BUNDLE_ID,
+            "campaign_policy": {"sha256": POLICY_SHA256},
             "members": [
                 {
                     "config": f"{BUNDLE_ID}.json",
                     "execution": "invoked",
                     "run_id": BUNDLE_ID,
                     "bundle_ids": [BUNDLE_ID],
+                    "role": "campaign_member",
+                    "sentinel_position": None,
                     "preceding_campaign_cooldown": {
                         "result": "first_run_exempt",
                         "session_id": f"session-{index}",
@@ -111,6 +126,24 @@ def build_supersession_fixture(
                 }
             ],
         }
+        if index in {1, occurrence_count}:
+            position = "start" if index == 1 else "end"
+            reference_id = f"neg8-reference-{position}"
+            manifest["members"].append(
+                {
+                    "config": f"{reference_id}.json",
+                    "execution": "invoked",
+                    "run_id": reference_id,
+                    "bundle_ids": [reference_id],
+                    "role": f"neg8_daily_reference_{position}",
+                    "sentinel_position": position,
+                    "preceding_campaign_cooldown": {
+                        "result": "first_run_exempt",
+                        "session_id": f"session-{index}",
+                        "following_run_id": reference_id,
+                    },
+                }
+            )
         manifest_path = manifest_dir / f"{index:02d}.json"
         raw = _json_bytes(manifest)
         manifest_path.write_bytes(raw)
@@ -144,6 +177,7 @@ def build_supersession_fixture(
         entry: dict[str, Any] = {
             "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
             "record_type": "campaign_occurrence_supersession",
+            "timestamp": f"2026-09-01T12:01:0{selected_index}Z",
             "runs_root": str(root.resolve()),
             "bundle_id": BUNDLE_ID,
             "campaign_policy_sha256": POLICY_SHA256,
@@ -302,6 +336,150 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
             ],
         )
         self.assertEqual(fixture.log_path.read_bytes(), before)
+
+    def production_membership(
+        self,
+        fixture: SupersessionFixture,
+    ) -> run_campaign_module.WholeWindowMembershipResolution:
+        descriptors = [
+            {
+                "path": occurrence["source_manifest"]["path"],
+                "sha256": occurrence["source_manifest"]["sha256"],
+                "size": (
+                    fixture.root / occurrence["source_manifest"]["path"]
+                ).stat().st_size,
+            }
+            for occurrence in fixture.occurrences
+        ]
+        binding_path = fixture.root / "whole_window_membership.json"
+        binding_path.write_bytes(
+            _json_bytes(
+                {
+                    "schema_version": run_campaign_module.MEMBERSHIP_BINDING_SCHEMA,
+                    "campaign_policy_sha256": POLICY_SHA256,
+                    "source_campaign_manifests": descriptors,
+                    "membership_id": run_campaign_module.whole_window_membership_id(
+                        descriptors
+                    ),
+                }
+            )
+        )
+        return run_campaign_module._whole_window_campaign_membership(
+            fixture.root,
+            POLICY_SHA256,
+            membership_binding_path=binding_path,
+        )
+
+    def assert_production_membership_refused(
+        self,
+        fixture: SupersessionFixture,
+    ) -> None:
+        result = self.production_membership(fixture)
+
+        self.assertIn(
+            "whole_window_campaign_membership_ambiguous",
+            result.conditions,
+        )
+        self.assertIn(
+            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            result.conditions,
+        )
+        resolutions = [
+            row for row in result.occurrence_resolutions if row.bundle_id == BUNDLE_ID
+        ]
+        self.assertEqual(len(resolutions), 1)
+        self.assertEqual(resolutions[0].status, "ambiguous")
+        self.assertIn(
+            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            resolutions[0].refusal_reasons,
+        )
+
+    def test_production_run_campaign_membership_refuses_two_rows(self) -> None:
+        """Call _whole_window_campaign_membership.
+
+        The counterfactual input is two valid rows for the same bundle.
+        """
+
+        self.assert_production_membership_refused(self.fixture())
+
+    def test_production_run_campaign_membership_counts_invalid_second_row(self) -> None:
+        """Call _whole_window_campaign_membership.
+
+        The counterfactual input is a valid-plus-invalid same-bundle pair.
+        """
+
+        self.assert_production_membership_refused(
+            self.fixture(
+                occurrence_count=2,
+                row_names=("S1", "S1_INVALID"),
+            )
+        )
+
+    def test_production_whole_window_row_validator_refuses_two_rows(self) -> None:
+        """Call _validate_row_uncached->_basis_source_manifests.
+
+        The counterfactual input is two logged rows for the same bundle.
+        """
+
+        fixture = self.fixture()
+        occurrence = {"bundle_id": BUNDLE_ID, "bundle_path": BUNDLE_ID}
+        for name, field in (
+            ("config.json", "config_sha256"),
+            ("metadata.json", "metadata_sha256"),
+            ("summary_metrics.json", "summary_sha256"),
+        ):
+            occurrence[field] = hashlib.sha256(
+                (fixture.root / BUNDLE_ID / name).read_bytes()
+            ).hexdigest()
+        basis = build_evaluation_basis(
+            policy_sha256=POLICY_SHA256,
+            member_occurrences=[occurrence],
+            calibration_bracket=None,
+        )
+        descriptors = source_manifest_descriptors(
+            fixture.root,
+            [
+                fixture.root / value["source_manifest"]["path"]
+                for value in fixture.occurrences
+            ],
+        )
+        row = {
+            "schema_version": WHOLE_WINDOW_SCHEMA,
+            "record_type": "idle_admission_whole_window_verdict",
+            "status": "passed",
+            "campaign_policy": {"sha256": POLICY_SHA256},
+            "bundle_ids": [BUNDLE_ID],
+            "evaluation_scope": {
+                "runs_root": str(fixture.root.resolve()),
+                "started_at": "2026-09-01T12:00:00Z",
+                "completed_at": "2026-09-01T12:01:00Z",
+            },
+            "evaluation_basis": basis,
+            "occurrence_supersessions": [fixture.supersessions["S2"]],
+            "idle_admission_core": {
+                "schema_version": IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": POLICY_SHA256,
+                "members": [],
+                "conditions": [],
+            },
+        }
+        row["row_provenance"] = build_row_provenance(
+            policy_sha256=POLICY_SHA256,
+            bundle_ids=[BUNDLE_ID],
+            source_manifests=descriptors,
+        )
+
+        valid, reasons = _validate_row_uncached(
+            row,
+            fixture.root,
+            {BUNDLE_ID},
+        )
+
+        self.assertFalse(valid)
+        self.assertIn(
+            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            reasons,
+        )
 
     def test_truth_table_row_1_single_valid_selects_all_consumers(self) -> None:
         fixture = self.fixture(occurrence_count=2, row_names=("S1",))

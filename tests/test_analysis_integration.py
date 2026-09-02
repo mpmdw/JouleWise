@@ -71,11 +71,14 @@ from joulewise.whole_window import (
     CustodyTelemetryIdentity,
     IDLE_ADMISSION_CORE_SCHEMA,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    OCCURRENCE_SUPERSESSION_SCHEMA,
     REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     WHOLE_WINDOW_SCHEMA,
     build_row_provenance,
     source_manifest_descriptors,
+    supersession_entry_sha256,
+    validate_occurrence_supersession_entry,
     whole_window_refusal_reasons,
 )
 from joulewise.cli import main, validate_bundle
@@ -324,6 +327,90 @@ def install_passing_analysis_whole_window(
     )
 
 
+def install_two_row_supersession_counterfactual(
+    runs_root: Path,
+    bundle_id: str,
+) -> dict:
+    """Append two writer-shaped, byte-identical valid supersession rows."""
+
+    root = Path(runs_root).resolve()
+    canonical = root / bundle_id
+    if not canonical.is_dir():
+        raise AssertionError("counterfactual bundle must be canonical")
+    campaign_dir = root / "campaign_manifests"
+    campaign_dir.mkdir(parents=True, exist_ok=True)
+    occurrences = []
+    for suffix in ("a", "b"):
+        manifest_path = campaign_dir / f"supersession-counterfactual-{suffix}.json"
+        manifest = {
+            "schema_version": "joulewise.campaign_provenance.v1",
+            "analysis_manifest_id": None,
+            "session_id": f"supersession-counterfactual-{suffix}",
+            "members": [
+                {
+                    "config": f"{bundle_id}.json",
+                    "execution": "invoked",
+                    "run_id": bundle_id,
+                    "bundle_ids": [bundle_id],
+                }
+            ],
+        }
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        occurrences.append(
+            {
+                "bundle_id": bundle_id,
+                "source_manifest": {
+                    "path": manifest_path.relative_to(root).as_posix(),
+                    "sha256": hashlib.sha256(
+                        manifest_path.read_bytes()
+                    ).hexdigest(),
+                },
+                "member_index": 0,
+                "bundle_index": 0,
+            }
+        )
+
+    quarantine = root.parent / f"supersession-quarantine-{bundle_id}"
+    quarantine.mkdir()
+    custody = {}
+    for name, field in (
+        ("config.json", "config_sha256"),
+        ("metadata.json", "metadata_sha256"),
+        ("summary_metrics.json", "summary_sha256"),
+    ):
+        raw = (canonical / name).read_bytes()
+        (quarantine / name).write_bytes(raw)
+        custody[field] = hashlib.sha256(raw).hexdigest()
+    policy_path = (
+        ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+    )
+    row = {
+        "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+        "record_type": "campaign_occurrence_supersession",
+        "timestamp": "2026-09-01T12:00:00Z",
+        "runs_root": str(root),
+        "campaign_policy_sha256": hashlib.sha256(
+            policy_path.read_bytes()
+        ).hexdigest(),
+        "bundle_id": bundle_id,
+        "selected_occurrence": occurrences[1],
+        "superseded_occurrences": [occurrences[0]],
+        "quarantine": {"path": str(quarantine.resolve()), **custody},
+        "reason": "counterfactual duplicate supersession disposition",
+    }
+    row["entry_sha256"] = supersession_entry_sha256(row)
+    if not validate_occurrence_supersession_entry(row, root):
+        raise AssertionError("counterfactual supersession row must validate")
+    encoded = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    with (root / "campaign_log.jsonl").open("ab") as handle:
+        handle.write(encoded)
+        handle.write(encoded)
+    return row
+
+
 def _real_mlx_identity_inputs(arm_id: str) -> tuple[dict, dict]:
     """Adapt a real MLX metadata boundary to either frozen v3 arm."""
 
@@ -557,6 +644,105 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         session_patch.start()
         self.addCleanup(session_patch.stop)
+
+    def test_production_two_row_audit_persists_and_stripped_finding_refuses(self):
+        """Call load_analysis_inputs->analyze_claims->validate_claim_verdicts.
+
+        The counterfactual input strips findings from the produced audit row.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            finalized = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            bundle_id = finalized["entries"][0]["run_id"]
+            install_two_row_supersession_counterfactual(
+                fixture["runs_root"],
+                bundle_id,
+            )
+
+            loaded = load_analysis_inputs(
+                finalized_path,
+                fixture["runs_root"],
+                fixture["floor_path"],
+                strict_validator=lambda path, strict=True: [],
+            )
+            analysis_audit = next(
+                row
+                for row in loaded.supersession_audit
+                if row["scope"] == "analysis_corpus"
+            )
+            self.assertEqual(analysis_audit["raw_count"], 2)
+            self.assertEqual(analysis_audit["validated_count"], 2)
+            self.assertEqual(analysis_audit["status"], "refused")
+            self.assertEqual(
+                analysis_audit["findings"],
+                [
+                    {
+                        "reason_code": (
+                            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                        ),
+                        "bundle_ids": [bundle_id],
+                    }
+                ],
+            )
+
+            artifact = analyze_claims(
+                finalized_path,
+                fixture["runs_root"],
+                fixture["floor_path"],
+                strict_validator=lambda path, strict=True: [],
+            )
+            persisted = json.loads(render_claim_verdicts(artifact))
+            persisted_audit = next(
+                row
+                for row in persisted["supersession_audit"]
+                if row["scope"] == "analysis_corpus"
+            )
+            self.assertEqual(persisted_audit, dict(analysis_audit))
+            self.assertEqual(
+                validate_claim_verdicts(
+                    persisted,
+                    frozen_manifest=finalized,
+                ),
+                [],
+            )
+
+            stripped = copy.deepcopy(persisted)
+            stripped_audit = next(
+                row
+                for row in stripped["supersession_audit"]
+                if row["scope"] == "analysis_corpus"
+            )
+            del stripped_audit["findings"]
+            stripped["claim_verdicts_id"] = calculate_claim_verdicts_id(
+                stripped
+            )
+            stripped_persisted = json.loads(render_claim_verdicts(stripped))
+            errors = validate_claim_verdicts(
+                stripped_persisted,
+                frozen_manifest=finalized,
+            )
+            self.assertTrue(
+                any(
+                    "authenticated equal counts cannot be refused" in error
+                    for error in errors
+                ),
+                errors,
+            )
 
     def test_finalized_gamma_runs_real_engine_then_isolates_math_layers(self):
         """Real synthetic end-to-end pass followed by isolated math seams."""
