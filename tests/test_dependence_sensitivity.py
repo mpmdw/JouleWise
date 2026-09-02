@@ -1314,6 +1314,25 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
             "pass" if nonregistered_pass else "fail",
         )
 
+    def test_agreement_word_is_derived_from_the_command_payload_not_a_literal(self) -> None:
+        # Counterfactual: today's documented example agrees, so a hard-coded
+        # "agree" renders byte-identically. Feed the resolver a command whose
+        # payload disagrees and one that agrees; the word must follow the
+        # payload in both directions.
+        for agreement, expected_word in ((False, "disagree"), (True, "agree")):
+            payload = {"comparison": {"direction_gate_outcomes_agree": agreement}}
+            command = shlex.join(
+                [sys.executable, "-c", f"import json; print(json.dumps({payload!r}))"]
+            )
+            returned_payload, fragment, word = dependence_sensitivity._execute_sheet_command(
+                command
+            )
+            self.assertEqual(returned_payload, payload)
+            self.assertEqual(
+                fragment, f'"direction_gate_outcomes_agree": {str(agreement).lower()}'
+            )
+            self.assertEqual(word, expected_word)
+
     def test_template_digit_and_code_citation_lint_has_a_closed_shape_allowlist(self) -> None:
         template = TEMPLATE.read_text(encoding="utf-8")
         math_spans = [
