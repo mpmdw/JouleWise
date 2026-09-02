@@ -5035,8 +5035,8 @@
         "summary": "The authenticated per-config prefill expectation is checked against coherent realized prompt evidence at every bundle consumer and is non-waivable."
       },
       "authority": {
-        "label": "Ruling 44c realized-prefill check placement (branch-local source seat 44b)",
-        "path": "docs/process_traces/2026-09-01-fresh-model-review/44b-opus-consult-realized-prefill.md"
+        "label": "Ruling 44c realized-prefill check placement",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
       },
       "dependencies": [],
       "fallback": null,
@@ -5066,8 +5066,8 @@
         "summary": "Freeze and arm identity projection catch prompt-realization drift before the first measured bundle."
       },
       "authority": {
-        "label": "Ruling 44c deferred identity-projection catcher (branch-local source seat 44b)",
-        "path": "docs/process_traces/2026-09-01-fresh-model-review/44b-opus-consult-realized-prefill.md"
+        "label": "Ruling 44c deferred identity-projection catcher",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
       },
       "dependencies": [
         {
