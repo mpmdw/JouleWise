@@ -53,7 +53,7 @@ REFRESH_SCRIPT = ROOT / "scripts/refresh_receipt_histsem_pinset.py"
 # (arm_readiness.py:3196-3199; docs/contracts/receipt_histsem_verifier.md:53-57).
 # Every assertion about it below is therefore PRESENCE-CONDITIONAL: vacuous
 # before the mint, active after it.
-SUCCESSOR_PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+SUCCESSOR_PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json"
 # D-151 condition-3 ruled shape literals.  These are CONSISTENCY CHECKS ONLY and
 # are explicitly NOT byte authenticators: condition 2 forbids this file from
 # authenticating the successor, whose only byte authenticator is the hS literal
@@ -63,9 +63,9 @@ SUCCESSOR_PACK_COUNT = 3
 SUCCESSOR_RECEIPT_COUNT = 33
 SUCCESSOR_PACK_IDS = frozenset(
     {
-        "d117_contrast_qwen25_1p5b_vs_7b_v4",
-        "d117_floor_qwen25_1p5b_v4",
-        "d117_floor_qwen25_7b_v4",
+        "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+        "d117_floor_qwen3-1p7b_v5",
+        "d117_floor_qwen3-8b_v5",
     }
 )
 
@@ -133,7 +133,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH,
             (
                 Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"),
-                Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"),
+                Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json"),
             ),
         )
         with tempfile.TemporaryDirectory() as temporary:
@@ -155,7 +155,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             directory = repository / "configs/arm_readiness"
             directory.mkdir(parents=True)
             (directory / "legacy_receipt_histsem_pinset_v1.json").write_bytes(PINSET.read_bytes())
-            successor_path = directory / "legacy_receipt_histsem_pinset_v4_v1.json"
+            successor_path = directory / "legacy_receipt_histsem_pinset_v5_v1.json"
             successor = json.loads(PINSET.read_bytes())
             row = copy.deepcopy(successor["packs"][0])
             row["pack_id"] = "d117_synthetic_v4"
@@ -2027,7 +2027,7 @@ def load_v4_builder():
 class PreAuthoringProjectionCustodyTests(unittest.TestCase):
     """The pre-authoring test must admit U11 projection custody.
 
-    The ruled `_v4` transaction order (runsheet §3.2) commits each pack's
+    The ruled `_v5` transaction order (runsheet §3.2) commits each pack's
     identity-pin projection receipt BEFORE any evidence is authored, because
     the v2 issuance gate refuses to freeze a dirty tree.  The generic receipts
     authored at §3.4 therefore record a `derivation_commit` -- the historical

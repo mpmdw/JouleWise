@@ -16,7 +16,7 @@ The governed pinset is a closed, ordered, code-enumerated chain of versioned
 artifacts:
 
 1. `configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`
-2. `configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json`
+2. `configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json`
 
 A pack is a histsem pack exactly when its immutable repository identity — the
 pair `(pack_id, pack_path)` — is a member of the committed union. Receipt counts,
@@ -307,11 +307,11 @@ ruled pre-install coordinate in
 elsewhere is a location refusal, not evidence of pack corruption, and this
 verifier does not add a `pack_root` equality check.
 
-## `_v4` transaction sequencing
+## `_v5` transaction sequencing
 
-This verifier and its refusal vocabulary land before the `_v4` re-freeze.
+This verifier and its refusal vocabulary land before the `_v5` re-freeze.
 After all three `freeze-0004` artifacts exist, and before Ed's exact-byte step
-6, the `_v4` pinset rows are minted and checked against the transaction's
+6, the `_v5` pinset rows are minted and checked against the transaction's
 confirmation table. The successor pinset path is the pack-and-ordinal-exact 112th entry
 in the whole-repository changed-set allowlist. Retrofitting the rows after the
 transaction would recreate the missing-expected-value defect; a later family

@@ -73,8 +73,15 @@ FAMILY_PUBLICATION_VERIFICATION_SCHEMA = (
     "joulewise.d117_family_publication_verification.v1"
 )
 STEP6_CONFIRMATION_TABLE_SCHEMA = "joulewise.d117_step6_confirmation_table.v1"
-FAMILY_PUBLICATION_MARKER_NAME = "d117_family_publication_v4.json"
-STEP6_CONFIRMATION_TABLE_NAME = "d117_step6_confirmation_table_v4.json"
+FAMILY_PUBLICATION_MARKER_NAME = "d117_family_publication_v5.json"
+STEP6_CONFIRMATION_TABLE_NAME = "d117_step6_confirmation_table_v5.json"
+_RULED_V5_PREDECESSOR_PACK_IDS = {
+    "d117_floor_qwen3-1p7b_v5": "d117_floor_qwen25_1p5b_v3",
+    "d117_floor_qwen3-8b_v5": "d117_floor_qwen25_7b_v3",
+    "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": (
+        "d117_contrast_qwen25_1p5b_vs_7b_v3"
+    ),
+}
 S0_CANDIDATE_MANIFEST_NAME = "s0-candidate-manifest.json"
 LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_launch_consumption.v1"
@@ -300,10 +307,17 @@ _PROFILE_BY_PACK = {
     "d117_contrast_qwen25_1p5b_vs_7b_v1": "GAMMA",
 }
 _SUCCESSOR_PROFILE_PATTERNS = {
-    "ALPHA": re.compile(r"^d117_floor_qwen25_1p5b_v(?:[2-9]|[1-9][0-9]+)$"),
-    "BETA": re.compile(r"^d117_floor_qwen25_7b_v(?:[2-9]|[1-9][0-9]+)$"),
+    "ALPHA": re.compile(
+        r"^(?:d117_floor_qwen25_1p5b_v(?:[2-9]|[1-9][0-9]+)"
+        r"|d117_floor_qwen3-1p7b_v(?:[5-9]|[1-9][0-9]+))$"
+    ),
+    "BETA": re.compile(
+        r"^(?:d117_floor_qwen25_7b_v(?:[2-9]|[1-9][0-9]+)"
+        r"|d117_floor_qwen3-8b_v(?:[5-9]|[1-9][0-9]+))$"
+    ),
     "GAMMA": re.compile(
-        r"^d117_contrast_qwen25_1p5b_vs_7b_v(?:[2-9]|[1-9][0-9]+)$"
+        r"^(?:d117_contrast_qwen25_1p5b_vs_7b_v(?:[2-9]|[1-9][0-9]+)"
+        r"|d117_contrast_qwen3-1p7b_vs_qwen3-8b_v(?:[5-9]|[1-9][0-9]+))$"
     ),
 }
 
@@ -2862,7 +2876,7 @@ def committed_pack_tree_sha256(pack_root: Path | str) -> str:
 
 RECEIPT_HISTSEM_PINSET_RELATIVE_PATH = (
     Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"),
-    Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"),
+    Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json"),
 )
 RECEIPT_HISTSEM_PINSET_SCHEMA = "joulewise.receipt_histsem_pinset.v1"
 R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS = frozenset(
@@ -2976,7 +2990,7 @@ pre-authoring test does, and the two must not share an answer:
   this coordinate was committed?".  Only authoring answers that.
 
 ``identity_pin_projection.receipts`` holds U11 identity-pin projection
-receipts, which the ruled ``_v4`` transaction order (D-153 / packet-5, the
+receipts, which the ruled ``_v5`` transaction order (D-153 / packet-5, the
 runsheet §3.2 interleave) commits per pack BEFORE any evidence is authored --
 forced by the v2 issuance gate, which refuses to freeze a dirty tree.  Its
 presence at the historical coordinate is therefore CORRECT and carries no
@@ -7410,7 +7424,7 @@ def generate_freeze_receipt(
     resulting ``predecessor`` binding is derived here from committed bytes; the
     caller supplies paths only.
 
-    During the intended `_v4` ordering the successor histsem pinset does not
+    During the intended `_v5` ordering the successor histsem pinset does not
     exist at freeze time, so there is no digest-conditional changed path to
     subtract and an absent confirmation digest is harmless.  Once that pinset
     exists, the same replay path requires both the table and its out-of-band
@@ -7459,6 +7473,14 @@ def generate_freeze_receipt(
             raise _successor_chain_refusal(
                 f"predecessor pack root is unreadable: {exc}"
             ) from exc
+        expected_predecessor = _RULED_V5_PREDECESSOR_PACK_IDS.get(root.name)
+        if (
+            expected_predecessor is not None
+            and predecessor_root.name != expected_predecessor
+        ):
+            raise _successor_chain_refusal(
+                "the ruled _v5 family requires its authenticated _v3 predecessor"
+            )
     if (
         predecessor_root is not None
         and _pack_generation(predecessor_root.name) >= family_first_generation
@@ -10715,7 +10737,7 @@ def _family_first_generation(registry: Mapping[str, Any]) -> int:
 
     ``registry`` is the whole row registry (the object ``load_registry``
     returns).  The threshold is the pack generation at which family publication
-    first engages -- 4 for the ``_v4`` family.  It lives in
+    first engages -- 5 for the ``_v5`` family.  It lives in
     ``freeze_evidence_lifecycle.successor_policy.family_publication_first_generation``
     precisely so that advancing to ``_v5`` is a REVIEWED REGISTRY EDIT rather
     than a code change, which is what the marker ruling adopted in place of the
@@ -10774,7 +10796,7 @@ def validate_family_publication_marker(
     if (
         marker["schema_version"] != FAMILY_PUBLICATION_MARKER_SCHEMA
         or marker["marker_kind"] != "FAMILY_PUBLICATION"
-        or marker["family_id"] != "d117-v4"
+        or marker["family_id"] != "d117-v5"
         or marker["family_generation"] != first_generation
         or isinstance(marker["family_generation"], bool)
         or marker["publication_state"] != "PUBLISHED"
@@ -10851,9 +10873,9 @@ def validate_family_publication_marker(
     if not isinstance(members, list) or len(members) != 3:
         raise FamilyPublicationError("roster_incomplete", "marker must carry three members")
     expected = (
-        ("ALPHA", "d117_floor_qwen25_1p5b_v4"),
-        ("BETA", "d117_floor_qwen25_7b_v4"),
-        ("GAMMA", "d117_contrast_qwen25_1p5b_vs_7b_v4"),
+        ("ALPHA", "d117_floor_qwen3-1p7b_v5"),
+        ("BETA", "d117_floor_qwen3-8b_v5"),
+        ("GAMMA", "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"),
     )
     for index, (raw_member, (profile, pack_id)) in enumerate(zip(members, expected, strict=True)):
         member = _family_exact(raw_member, _FAMILY_MEMBER_KEYS, f"family marker.members[{index}]")
@@ -10984,7 +11006,7 @@ def validate_family_publication_marker(
         "family marker.authoring_context",
     )
     if (
-        context["transaction_id"] != f"d117-v4@{head}"
+        context["transaction_id"] != f"d117-v5@{head}"
         or context["construction_phase"] != "POST_FREEZE_FAMILY_BOUNDARY"
         or context["custody_class"] != "TRANSACTION_EXTERNAL"
     ):
@@ -11012,7 +11034,7 @@ def validate_step6_confirmation_table(value: object) -> Mapping[str, Any]:
     if (
         table["schema_version"] != STEP6_CONFIRMATION_TABLE_SCHEMA
         or table["table_kind"] != "D117_STEP6_CONFIRMATION"
-        or table["family_id"] != "d117-v4"
+        or table["family_id"] != "d117-v5"
     ):
         raise FamilyPublicationError("confirmation_mismatch", "confirmation constants differ")
     if not isinstance(table["transaction_id"], str) or not table["transaction_id"]:
@@ -11078,12 +11100,12 @@ def validate_step6_confirmation_table(value: object) -> Mapping[str, Any]:
     for name in ("pack_count", "receipt_count", "fact_count"):
         if not isinstance(successor[name], int) or isinstance(successor[name], bool) or successor[name] < 0:
             raise FamilyPublicationError("confirmation_mismatch", f"confirmation {name} is invalid")
-    # The contract fixes both counts for the _v4 family (contract doc
+    # The contract fixes both counts for the _v5 family (contract doc
     # "successor_pinset section"); only fact_count is recomputed and free.
     if successor["pack_count"] != 3 or successor["receipt_count"] != 33:
         raise FamilyPublicationError(
             "confirmation_mismatch",
-            "confirmation successor counts differ from the _v4 contract (3 packs, 33 receipts)",
+            "confirmation successor counts differ from the _v5 contract (3 packs, 33 receipts)",
         )
     confirmation = _family_exact(
         table["confirmation"],
@@ -11412,7 +11434,7 @@ def build_family_publication_marker(
     marker = {
         "schema_version": FAMILY_PUBLICATION_MARKER_SCHEMA,
         "marker_kind": "FAMILY_PUBLICATION",
-        "family_id": "d117-v4",
+        "family_id": "d117-v5",
         "family_generation": first_generation,
         "publication_state": "PUBLISHED",
         "publication_git": dict(reviewed),
@@ -11440,7 +11462,7 @@ def build_family_publication_marker(
         },
         "conditional_paths_deferred": deferral.disclosure(),
         "authoring_context": {
-            "transaction_id": f"d117-v4@{head}",
+            "transaction_id": f"d117-v5@{head}",
             "source_commit_time_utc": commit_time.isoformat().replace("+00:00", "Z"),
             "construction_phase": "POST_FREEZE_FAMILY_BOUNDARY",
             "custody_class": "TRANSACTION_EXTERNAL",

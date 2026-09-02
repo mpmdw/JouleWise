@@ -4,6 +4,7 @@ import ast
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import subprocess
 import sys
@@ -87,8 +88,8 @@ def marker() -> dict[str, object]:
     return {
         "schema_version": readiness.FAMILY_PUBLICATION_MARKER_SCHEMA,
         "marker_kind": "FAMILY_PUBLICATION",
-        "family_id": "d117-v4",
-        "family_generation": 4,
+        "family_id": "d117-v5",
+        "family_generation": 5,
         "publication_state": "PUBLISHED",
         "publication_git": {
             "head_commit": OID,
@@ -113,9 +114,9 @@ def marker() -> dict[str, object]:
             },
         },
         "members": [
-            member("ALPHA", "d117_floor_qwen25_1p5b_v4"),
-            member("BETA", "d117_floor_qwen25_7b_v4"),
-            member("GAMMA", "d117_contrast_qwen25_1p5b_vs_7b_v4"),
+            member("ALPHA", "d117_floor_qwen3-1p7b_v5"),
+            member("BETA", "d117_floor_qwen3-8b_v5"),
+            member("GAMMA", "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"),
         ],
         "terminal_review": {
             "evidence_kind": "TERMINAL_REVIEW",
@@ -133,7 +134,7 @@ def marker() -> dict[str, object]:
             ),
         },
         "authoring_context": {
-            "transaction_id": f"d117-v4@{OID}",
+            "transaction_id": f"d117-v5@{OID}",
             "source_commit_time_utc": "2026-08-22T00:00:00Z",
             "construction_phase": "POST_FREEZE_FAMILY_BOUNDARY",
             "custody_class": "TRANSACTION_EXTERNAL",
@@ -150,8 +151,8 @@ def confirmation(marker_sha: str | None = None) -> dict[str, object]:
     return {
         "schema_version": readiness.STEP6_CONFIRMATION_TABLE_SCHEMA,
         "table_kind": "D117_STEP6_CONFIRMATION",
-        "transaction_id": "d117-v4-publication",
-        "family_id": "d117-v4",
+        "transaction_id": "d117-v5-publication",
+        "family_id": "d117-v5",
         "git": {"head_commit": OID, "head_tree_oid": TREE},
         "registry": {
             "path": "configs/arm_readiness/d117_row_registry_v2.json",
@@ -176,7 +177,7 @@ def confirmation(marker_sha: str | None = None) -> dict[str, object]:
             ],
         },
         "successor_pinset": {
-            "path": "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json",
+            "path": "configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json",
             "schema_version": readiness.RECEIPT_HISTSEM_PINSET_SCHEMA,
             "sha256": digest("successor_pinset"),
             "pack_count": 3,
@@ -186,7 +187,7 @@ def confirmation(marker_sha: str | None = None) -> dict[str, object]:
         "confirmation": {
             "authority": "ED",
             "decision": "YES",
-            "statement": "I confirm these exact D-117 v4 step-6 bytes.",
+            "statement": "I confirm these exact D-117 v5 step-6 bytes.",
         },
     }
 
@@ -194,7 +195,7 @@ def confirmation(marker_sha: str | None = None) -> dict[str, object]:
 class FamilyMarkerSchemaTests(unittest.TestCase):
     def test_golden_marker_and_confirmation_are_exact_canonical_schemas(self) -> None:
         value = marker()
-        self.assertEqual(readiness.validate_family_publication_marker(value, first_generation=4), value)
+        self.assertEqual(readiness.validate_family_publication_marker(value, first_generation=5), value)
         self.assertEqual(readiness.parse_json_bytes(readiness.render_json(value), require_canonical=True), value)
         table = confirmation()
         self.assertEqual(readiness.validate_step6_confirmation_table(table), table)
@@ -218,7 +219,7 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
         for value, expected in cases:
             with self.subTest(expected=expected):
                 with self.assertRaises(readiness.FamilyPublicationError) as caught:
-                    readiness.validate_family_publication_marker(value, first_generation=4)
+                    readiness.validate_family_publication_marker(value, first_generation=5)
                 self.assertEqual(caught.exception.check_id, expected)
 
     def test_confirmation_is_one_two_section_authenticator_without_cycle_fields(self) -> None:
@@ -245,6 +246,9 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
 
         unknown = confirmation(); unknown["family_publication"]["extra"] = True
         wrong = confirmation(); wrong["successor_pinset"]["path"] = "configs/arm_readiness/not-enumerated.json"
+        old_family = confirmation(); old_family["family_id"] = "d117-v4"
+        old_marker = confirmation(); old_marker["family_publication"]["marker"]["path"] = "d117_family_publication_v4.json"
+        old_pinset = confirmation(); old_pinset["successor_pinset"]["path"] = "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
         no = confirmation(); no["confirmation"]["decision"] = "NO"
         absent_section = confirmation(); absent_section.pop("successor_pinset")
         wrong_packs = confirmation(); wrong_packs["successor_pinset"]["pack_count"] = 2
@@ -252,6 +256,9 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
         cases = (
             (unknown, "marker_schema_mismatch", "unknown key in a section"),
             (wrong, "confirmation_mismatch", "successor path off the chain"),
+            (old_family, "confirmation_mismatch", "old family identity"),
+            (old_marker, "confirmation_mismatch", "old marker path"),
+            (old_pinset, "confirmation_mismatch", "old successor pinset path"),
             (no, "confirmation_mismatch", "decision is not the literal YES"),
             (absent_section, "marker_schema_mismatch", "successor section absent"),
             (wrong_packs, "confirmation_mismatch", "pack_count off contract"),
@@ -460,7 +467,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             with self.assertRaises(readiness.FamilyPublicationError) as caught:
                 readiness._family_member(
                     ROOT,
-                    ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v4",
+                    ROOT / "configs/campaigns/d117_floor_qwen3-1p7b_v5",
                     registry,
                     {},
                 )
@@ -474,7 +481,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         ):
             with self.assertRaises(readiness.FamilyPublicationError) as caught:
                 readiness._gate_family_publication(
-                    Path("d117_floor_qwen25_1p5b_v4"),
+                    Path("d117_floor_qwen3-1p7b_v5"),
                     marker_path=None,
                     confirmation_path=None,
                 )
@@ -493,18 +500,18 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         self.assertFalse(hasattr(readiness, "FAMILY_PUBLICATION_FIRST_GENERATION"))
         registry = json.loads((ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes())
         policy = registry["freeze_evidence_lifecycle"]["successor_policy"]
-        self.assertEqual(policy["family_publication_first_generation"], 4)
-        self.assertEqual(readiness._family_first_generation(registry), 4)
+        self.assertEqual(policy["family_publication_first_generation"], 5)
+        self.assertEqual(readiness._family_first_generation(registry), 5)
 
         # The validator follows the registry, not a constant: the same marker
-        # bytes are accepted at 4 and refused at 5.
+        # bytes are accepted at 5 and refused at 4.
         value = marker()
         self.assertEqual(
-            readiness.validate_family_publication_marker(value, first_generation=4),
+            readiness.validate_family_publication_marker(value, first_generation=5),
             value,
         )
         with self.assertRaises(readiness.FamilyPublicationError) as caught:
-            readiness.validate_family_publication_marker(value, first_generation=5)
+            readiness.validate_family_publication_marker(value, first_generation=4)
         self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
 
         # A registry that carries no reviewed threshold cannot engage at all.
@@ -529,7 +536,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         predecessor-only (the bootstrap cure) and threshold-driven.
 
         The pack being minted is never gated on its own unbuilt publication, so
-        a generation-4 pack with no marker must still mint; a generation-4
+        a generation-5 pack with no marker must still reach the chain gate; a generation-5
         PREDECESSOR without a marker must refuse.
         """
 
@@ -546,8 +553,8 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             root = Path(temporary)
             for name in (
                 "d117_floor_qwen25_1p5b_v3",
-                "d117_floor_qwen25_1p5b_v4",
-                "d117_floor_qwen25_1p5b_v5",
+                "d117_floor_qwen3-1p7b_v5",
+                "d117_floor_qwen25_1p5b_v6",
             ):
                 (root / name).mkdir()
             with (
@@ -582,25 +589,25 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
                 # bootstrap case. Execution stops at the patched _plan_tree.
                 with self.assertRaises(readiness.ArmReadinessError):
                     readiness.generate_freeze_receipt(
-                        root / "d117_floor_qwen25_1p5b_v4",
+                        root / "d117_floor_qwen3-1p7b_v5",
                         measurement_checkout=ROOT,
                     )
                 self.assertEqual(calls, [])
 
                 refusal = readiness.generate_freeze_receipt(
-                    root / "d117_floor_qwen25_1p5b_v5",
+                    root / "d117_floor_qwen25_1p5b_v6",
                     measurement_checkout=ROOT,
-                    predecessor_pack_root=root / "d117_floor_qwen25_1p5b_v4",
+                    predecessor_pack_root=root / "d117_floor_qwen3-1p7b_v5",
                 )
                 self.assertEqual(
                     refusal["reason_codes"], ["readiness_r1_family_publication"]
                 )
                 self.assertEqual(
-                    calls, [(root / "d117_floor_qwen25_1p5b_v4").resolve()]
+                    calls, [(root / "d117_floor_qwen3-1p7b_v5").resolve()]
                 )
 
         self.assertEqual(
-            readiness._family_first_generation(registry), 4,
+            readiness._family_first_generation(registry), 5,
             "the threshold the gate compares against is the registry's",
         )
 
@@ -620,7 +627,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
            scheduler.
 
         NOT proven here: the full end-to-end arm receipt carrying that code,
-        which needs the three `_v4` packs (unbuilt until S-0).  Recorded as an
+        which needs the three `_v5` packs (unbuilt until desk day).  Recorded as an
         open item in the S-1 manifest rather than papered over.
         """
 
@@ -653,7 +660,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         ):
             with self.assertRaises(readiness.FamilyPublicationError) as caught:
                 readiness._gate_family_publication(
-                    Path("d117_floor_qwen25_1p5b_v4"),
+                    Path("d117_floor_qwen3-1p7b_v5"),
                     marker_path=None,
                     confirmation_path=None,
                 )
@@ -671,7 +678,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         completed = subprocess.run(
             (
                 "python3", "scripts/verify_family_marker.py", "--repository", ".",
-                "--marker", "/definitely/absent/d117_family_publication_v4.json",
+                "--marker", "/definitely/absent/d117_family_publication_v5.json",
             ),
             cwd=ROOT,
             check=False,
@@ -681,8 +688,49 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         self.assertNotIn(b"Traceback", completed.stderr)
         result = json.loads(completed.stdout)
         self.assertEqual(result["lane"], "candidate")
+        self.assertEqual(result["family_id"], "d117-v5")
         self.assertFalse(result["gate_admissible"])
         self.assertEqual(result["checks"], [{"check_id": "marker_absent", "status": "REFUSE"}])
+
+    def test_candidate_cli_refusal_branches_report_v5(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "verify_family_marker_refusal_test",
+            ROOT / "scripts/verify_family_marker.py",
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        cases = (
+            readiness.FamilyPublicationError("marker_absent", "absent marker"),
+            readiness.ArmReadinessError(
+                "readiness_row_registry_mismatch", "invalid registry"
+            ),
+        )
+        for error in cases:
+            with self.subTest(error=type(error).__name__):
+                buffer = io.BytesIO()
+                stdout = mock.Mock(buffer=buffer)
+                with (
+                    mock.patch.object(
+                        module.readiness,
+                        "verify_family_publication_marker",
+                        side_effect=error,
+                    ),
+                    mock.patch.object(module.sys, "stdout", stdout),
+                ):
+                    code = module.main(
+                        [
+                            "--repository",
+                            ".",
+                            "--marker",
+                            "/definitely/absent/marker.json",
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                self.assertEqual(
+                    json.loads(buffer.getvalue())["family_id"], "d117-v5"
+                )
 
     def test_tool_hash_lane_is_phase_selected_and_neither_mode_is_bypassable(self) -> None:
         """Split S-5, behaviourally.
@@ -858,8 +906,8 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
     a real marker file with a real GNU sidecar in custody OUTSIDE that
     repository -- then walks a tamper ladder through the verifier's own code.
 
-    What it does NOT cover, honestly: the three `_v4` packs do not exist until
-    S-0 mints them, so the member-replay leg (``pack_digest_mismatch``,
+    What it does NOT cover, honestly: the three `_v5` packs do not exist until
+    desk day mints them, so the member-replay leg (``pack_digest_mismatch``,
     ``freeze_binding_mismatch``, ``evidence_set_mismatch``) is reached but its
     PASS direction cannot be observed here.  That first observation belongs to
     S-0 and must be transcribed there.
@@ -906,7 +954,7 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
         value = marker()
         value["publication_git"] = dict(live)
         value["terminal_review"]["head_tree_oid"] = live["head_tree_oid"]
-        value["authoring_context"]["transaction_id"] = f"d117-v4@{live['head_commit']}"
+        value["authoring_context"]["transaction_id"] = f"d117-v5@{live['head_commit']}"
         value["lifecycle_registry"]["sha256"] = readiness.sha256_bytes(registry_raw)
         return value
 
@@ -1128,7 +1176,7 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
             marker_path = self.write_marker(custody, value)
 
             # The honest marker gets all the way to member replay, which is the
-            # first check that needs the unbuilt _v4 packs.
+            # first check that needs the unbuilt _v5 packs.
             self.assertEqual(
                 self.refusal(repository, marker_path), "plan_binding_mismatch"
             )
@@ -1202,7 +1250,7 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
                     "python3", str(ROOT / "scripts/build_family_marker.py"),
                     "--repository", str(repository),
                     "--head", "0" * 40,
-                    "--pack-root", "configs/campaigns/d117_floor_qwen25_1p5b_v4",
+                    "--pack-root", "configs/campaigns/d117_floor_qwen3-1p7b_v5",
                     "--output", str(in_tree),
                 ),
                 check=False, capture_output=True,
@@ -1222,7 +1270,7 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
                     "python3", str(ROOT / "scripts/build_family_marker.py"),
                     "--repository", str(repository),
                     "--head", "0" * 40,
-                    "--pack-root", "configs/campaigns/d117_floor_qwen25_1p5b_v4",
+                    "--pack-root", "configs/campaigns/d117_floor_qwen3-1p7b_v5",
                     "--output", str(external),
                 ),
                 check=False, capture_output=True,
@@ -1360,7 +1408,7 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
         derivation = git("rev-parse", "HEAD")
         source, receipt = content_source_and_receipt(repository, derivation)
         registry = lifecycle_registry(allowlist=(self.SUCCESSOR,))
-        registry["successor_policy"]["family_publication_first_generation"] = 4
+        registry["successor_policy"]["family_publication_first_generation"] = 5
         successor = repository / self.SUCCESSOR
         successor.parent.mkdir(parents=True, exist_ok=True)
         successor.write_bytes(b'{"packs": []}\n')
@@ -1456,7 +1504,7 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
 
         The call still ends in a refusal, but a LATER one: ``plan_binding_``
         ``mismatch`` is the next check after the freeze replay, and it needs the
-        real ``_v4`` pack files that only S-0 mints.  What matters is that the
+        real ``_v5`` pack files that only desk day mints.  What matters is that the
         changed-set refusal is gone and the ledger names the deferred path.
         """
 
@@ -1569,14 +1617,14 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
 
         value = marker()
         self.assertEqual(
-            readiness.validate_family_publication_marker(value, first_generation=4),
+            readiness.validate_family_publication_marker(value, first_generation=5),
             value,
         )
 
         empty = marker()
         empty["conditional_paths_deferred"]["deferred_paths"] = []
         self.assertEqual(
-            readiness.validate_family_publication_marker(empty, first_generation=4),
+            readiness.validate_family_publication_marker(empty, first_generation=5),
             empty,
         )
 
@@ -1610,7 +1658,7 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
             with self.subTest(case=label):
                 with self.assertRaises(readiness.FamilyPublicationError) as caught:
                     readiness.validate_family_publication_marker(
-                        candidate, first_generation=4
+                        candidate, first_generation=5
                     )
                 self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
 
@@ -1645,7 +1693,7 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
                 candidate["conditional_paths_deferred"]["deferred_paths"] = value
                 with self.assertRaises(readiness.FamilyPublicationError) as caught:
                     readiness.validate_family_publication_marker(
-                        candidate, first_generation=4
+                        candidate, first_generation=5
                     )
                 self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
 

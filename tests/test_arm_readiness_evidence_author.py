@@ -313,13 +313,23 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
     )
 
     beta_identity = _identity_unit("B", "beta-model")
-    sibling_trees = {
-        f"d117_floor_qwen25_7b{generation_suffix}": [beta_identity],
-        f"d117_contrast_qwen25_1p5b_vs_7b{generation_suffix}": [
-            alpha_identity,
-            beta_identity,
-        ],
-    }
+    sibling_trees = (
+        {
+            "d117_floor_qwen3-8b_v5": [beta_identity],
+            "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": [
+                alpha_identity,
+                beta_identity,
+            ],
+        }
+        if pack_name == "d117_floor_qwen3-1p7b_v5"
+        else {
+            f"d117_floor_qwen25_7b{generation_suffix}": [beta_identity],
+            f"d117_contrast_qwen25_1p5b_vs_7b{generation_suffix}": [
+                alpha_identity,
+                beta_identity,
+            ],
+        }
+    )
     for pack_name, units in sibling_trees.items():
         sibling = repository / "configs/campaigns" / pack_name
         sibling.mkdir(parents=True, exist_ok=True)
@@ -1239,15 +1249,15 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             evidence._PACKS_BY_PROFILE,
             {
                 # The ruled successor family (MAGISTRATE-RULING.md:124-131).
-                "ALPHA": "d117_floor_qwen25_1p5b_v4",
-                "BETA": "d117_floor_qwen25_7b_v4",
-                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
+                "ALPHA": "d117_floor_qwen3-1p7b_v5",
+                "BETA": "d117_floor_qwen3-8b_v5",
+                "GAMMA": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
             },
         )
         family.start()
         self.addCleanup(family.stop)
         temporary, repository, pack, _custody, _arm_path = make_author_fixture(
-            "d117_floor_qwen25_1p5b_v4"
+            "d117_floor_qwen3-1p7b_v5"
         )
         self.addCleanup(temporary.cleanup)
         author_output = io.BytesIO()

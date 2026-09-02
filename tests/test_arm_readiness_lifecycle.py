@@ -49,11 +49,11 @@ from tests.test_arm_readiness_schemas import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-# The ruled R1 registry installs the _v4 family as the successor identities
+# The ruled R1 registry installs the _v5 family as the successor identities
 # (MAGISTRATE-RULING.md:124-131).  These fixtures build their packs
 # synthetically, so they carry the ruled ID to exercise the registry's admit
-# path; minting the real _v4 pack BYTES is S-0's transaction, not this ID.
-PACK_NAME = "d117_floor_qwen25_1p5b_v4"
+# path; minting the real _v5 pack BYTES is the desk-day transaction, not this ID.
+PACK_NAME = "d117_floor_qwen3-1p7b_v5"
 # The generation-1 ALPHA identity.  It is a historical record, NOT a superseded
 # entry that leaves the code: ``_PROFILE_BY_PACK`` keeps it forever (see the
 # ``_plan_profile`` docstring and PostSupersessionLayeringTests below).
@@ -62,6 +62,18 @@ _PACK_STEMS_BY_PROFILE = {
     "ALPHA": "d117_floor_qwen25_1p5b",
     "BETA": "d117_floor_qwen25_7b",
     "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b",
+}
+RULED_SUCCESSOR_PACKS = {
+    "ALPHA": "d117_floor_qwen3-1p7b_v5",
+    "BETA": "d117_floor_qwen3-8b_v5",
+    "GAMMA": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+}
+RULED_PREDECESSOR_BY_PACK = {
+    "d117_floor_qwen3-1p7b_v5": "d117_floor_qwen25_1p5b_v3",
+    "d117_floor_qwen3-8b_v5": "d117_floor_qwen25_7b_v3",
+    "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5": (
+        "d117_contrast_qwen25_1p5b_vs_7b_v3"
+    ),
 }
 LAUNCH_WINDOW_SPEC = importlib.util.spec_from_file_location(
     "arm_readiness_lifecycle_launch_window",
@@ -86,6 +98,8 @@ def git_text(repo: Path, *args: str) -> str:
 def predecessor_pack_name(pack_name: str) -> str:
     """Return the previous-generation pack ID for a ``_v<N>`` successor."""
 
+    if pack_name in RULED_PREDECESSOR_BY_PACK:
+        return RULED_PREDECESSOR_BY_PACK[pack_name]
     match = re.search(r"_v([0-9]+)$", pack_name)
     if match is None or int(match.group(1)) < 2:
         raise ValueError(f"{pack_name!r} is not a successor pack ID")
@@ -95,6 +109,8 @@ def predecessor_pack_name(pack_name: str) -> str:
 def fixture_pack_family(pack_name: str) -> dict[str, str]:
     """Return the three pack IDs at the fixture pack's own generation."""
 
+    if pack_name in RULED_PREDECESSOR_BY_PACK:
+        return dict(RULED_SUCCESSOR_PACKS)
     generation = readiness._pack_generation(pack_name)
     return {
         profile: f"{stem}_v{generation}"
@@ -110,7 +126,13 @@ def fixture_row_registry(pack_name: str) -> bytes:
     installed = lifecycle["successor_policy"]["successor_pack_ids"]
     fixture_family = fixture_pack_family(pack_name)
     generation = readiness._pack_generation(pack_name)
-    fixture_freeze_ordinal = 2 if generation > 1 else 1
+    fixture_freeze_ordinal = (
+        4
+        if pack_name in RULED_PREDECESSOR_BY_PACK
+        else 2
+        if generation > 1
+        else 1
+    )
     replacements = {
         f"configs/campaigns/{installed[profile]}/": (
             f"configs/campaigns/{fixture_family[profile]}/"
@@ -144,7 +166,7 @@ def fixture_row_registry(pack_name: str) -> bytes:
         lifecycle["successor_policy"][
             "family_publication_first_generation"
         ] = generation
-    # Pre-``_v4`` fixtures deliberately leave the ruled family threshold in
+    # Pre-``_v5`` fixtures deliberately leave the ruled family threshold in
     # place and fall BELOW it: the threshold is family policy, not a per-pack
     # knob, and R1 now requires the key to be present (exact-keys validation of
     # ``successor_policy``).  Popping it would author an invalid registry.
@@ -168,7 +190,7 @@ def write_predecessor_pack(
     plan_path_spelling: str | None = None,
     identity_status: str = "PASS",
 ) -> Path:
-    """Author a committed historical pack whose freeze-0001 is hand-recorded.
+    """Author a committed historical pack whose freeze receipt is hand-recorded.
 
     Deliberately map-free: no live ``_PROFILE_BY_PACK`` entry, no current R2
     resolver derivation, and ``plan_path_spelling`` may carry the superseded
@@ -207,10 +229,12 @@ def write_predecessor_pack(
     registry_sha = hashlib.sha256(installed_registry_raw).hexdigest()
     # The recorded reference must name the registry this fixture installed.
     registry_id = json.loads(installed_registry_raw)["registry_id"]
+    freeze_ordinal = 3 if pack_name in RULED_PREDECESSOR_BY_PACK.values() else 1
+    freeze_receipt_id = f"freeze-{freeze_ordinal:04d}"
     receipt = {
         "schema_version": readiness.FREEZE_RECEIPT_SCHEMA,
         "receipt_kind": "freeze",
-        "receipt_id": "freeze-0001",
+        "receipt_id": freeze_receipt_id,
         "status": status,
         "arm_disposition": "NOT_APPLICABLE",
         "issued_at_utc": "2026-08-13T00:00:00Z",
@@ -261,9 +285,10 @@ def write_predecessor_pack(
     receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
     namespace = pack / "arm_readiness.freeze.receipts"
     namespace.mkdir()
-    (namespace / "freeze-0001.json").write_bytes(receipt_raw)
-    (namespace / "freeze-0001.json.sha256").write_bytes(
-        gnu_sidecar(receipt_sha, "freeze-0001.json")
+    freeze_receipt_name = f"{freeze_receipt_id}.json"
+    (namespace / freeze_receipt_name).write_bytes(receipt_raw)
+    (namespace / f"{freeze_receipt_name}.sha256").write_bytes(
+        gnu_sidecar(receipt_sha, freeze_receipt_name)
     )
 
     tree = {
@@ -294,7 +319,7 @@ def write_predecessor_pack(
                     "plan_profile": profile,
                 },
                 "freeze_receipt": {
-                    "path": "arm_readiness.freeze.receipts/freeze-0001.json",
+                    "path": f"arm_readiness.freeze.receipts/{freeze_receipt_name}",
                     "sha256": receipt_sha,
                 },
                 "arm_receipt_namespace": "arm_readiness.receipts/arm-<4+ digits>.json",
@@ -1052,18 +1077,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             getattr(readiness, "consume_launch_capability")
 
 
-SUCCESSOR_PACKS = {
-    "ALPHA": "d117_floor_qwen25_1p5b_v4",
-    "BETA": "d117_floor_qwen25_7b_v4",
-    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
-}
+SUCCESSOR_PACKS = dict(RULED_SUCCESSOR_PACKS)
 SUCCESSOR_PROFILE_BY_PACK = {
     pack_name: profile for profile, pack_name in SUCCESSOR_PACKS.items()
 }
 
 
 class FreezeSuccessorChainTests(unittest.TestCase):
-    """D-139: chain-monotonic freeze-0002 with an authenticated predecessor.
+    """D-139: chain-monotonic freeze-0004 with an authenticated predecessor.
 
     The successor packs are pinned into the live profile map for the duration
     of each test so these regressions hold both before and after the D-138
@@ -1599,7 +1620,7 @@ with mock.patch.object(
         raised = copy.deepcopy(registry)
         raised["freeze_evidence_lifecycle"]["successor_policy"][
             "family_publication_first_generation"
-        ] = 5
+        ] = 6
         current = readiness._pack_identity(pack, tree)
         _repo, _prefix, pack_relative = readiness._repository_and_pack_relative(
             pack
@@ -1613,7 +1634,7 @@ with mock.patch.object(
         )
         # A location mismatch falls back to ABSOLUTE semantics: even a recorded
         # root carrying the correct repository-relative suffix refuses with the
-        # legacy detail, because generation 4 < threshold 5.
+        # legacy detail, because generation 5 < threshold 6.
         relocated = copy.deepcopy(current)
         relocated["pack_root"] = f"/historical/clone/{pack_relative}"
         self.assertEqual(
@@ -1658,32 +1679,32 @@ with mock.patch.object(
                 )
 
     # R-1 / R-7 -------------------------------------------------------------
-    def test_pass_predecessor_mints_a_singleton_freeze_0002(self) -> None:
+    def test_pass_predecessor_mints_a_singleton_freeze_0004(self) -> None:
         repo, pack, predecessor = self.successor_fixture()
         result = self.mint(pack, predecessor)
         self.assertTrue(result["mutated"])
         namespace = self.freeze_namespace(pack)
         self.assertEqual(
             sorted(path.name for path in namespace.iterdir()),
-            ["freeze-0002.json", "freeze-0002.json.sha256"],
+            ["freeze-0004.json", "freeze-0004.json.sha256"],
         )
         receipt = self.read_receipt(result["receipt_path"])
         self.assertEqual(receipt["schema_version"], readiness.FREEZE_RECEIPT_V2_SCHEMA)
-        self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        self.assertEqual(receipt["receipt_id"], "freeze-0004")
         self.assertNotIn("supersedes", receipt)
         self.assertEqual(
-            receipt["predecessor"]["freeze_receipt"]["receipt_id"], "freeze-0001"
+            receipt["predecessor"]["freeze_receipt"]["receipt_id"], "freeze-0003"
         )
-        # R-7: a singleton freeze-0002 under a new root needs no local 0001.
+        # R-7: a singleton freeze-0004 under a new root needs no local 0001-0003.
         scanned = scan_receipt_namespace(namespace, "freeze")
-        self.assertEqual([item["number"] for item in scanned], [2])
+        self.assertEqual([item["number"] for item in scanned], [4])
         pinned = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))[
             "arm_attachments"
         ]["arm_readiness"]["freeze_receipt"]
         self.assertEqual(
             pinned,
             {
-                "path": "arm_readiness.freeze.receipts/freeze-0002.json",
+                "path": "arm_readiness.freeze.receipts/freeze-0004.json",
                 "sha256": result["receipt_sha256"],
             },
         )
@@ -1698,7 +1719,7 @@ with mock.patch.object(
         result = self.mint(pack, predecessor)
         recorded = self.read_receipt(result["receipt_path"])["predecessor"]
 
-        receipt_path = predecessor / "arm_readiness.freeze.receipts/freeze-0001.json"
+        receipt_path = predecessor / "arm_readiness.freeze.receipts/freeze-0003.json"
         receipt_raw = receipt_path.read_bytes()
         receipt = json.loads(receipt_raw.decode("utf-8"))
         projection_relative = "identity_pin_projection.receipts/projection-0001.json"
@@ -1712,8 +1733,8 @@ with mock.patch.object(
             "plan_id": receipt["pack_identity"]["plan_id"],
             "plan_sha256": hashlib.sha256(plan_raw).hexdigest(),
             "freeze_receipt": {
-                "receipt_id": "freeze-0001",
-                "path": "arm_readiness.freeze.receipts/freeze-0001.json",
+                "receipt_id": "freeze-0003",
+                "path": "arm_readiness.freeze.receipts/freeze-0003.json",
                 "sha256": hashlib.sha256(receipt_raw).hexdigest(),
             },
             "identity_receipt": {
@@ -1742,10 +1763,10 @@ with mock.patch.object(
         cases = {
             "missing directory": lambda: shutil.rmtree(predecessor),
             "missing receipt": lambda: (
-                predecessor / "arm_readiness.freeze.receipts/freeze-0001.json"
+                predecessor / "arm_readiness.freeze.receipts/freeze-0003.json"
             ).unlink(),
             "missing sidecar": lambda: (
-                predecessor / "arm_readiness.freeze.receipts/freeze-0001.json.sha256"
+                predecessor / "arm_readiness.freeze.receipts/freeze-0003.json.sha256"
             ).unlink(),
             "missing identity receipt": lambda: (
                 predecessor / "identity_pin_projection.receipts/projection-0001.json"
@@ -1795,10 +1816,28 @@ with mock.patch.object(
         )
         self.assert_no_successor_bytes(pack, tree_before)
 
+    def test_canonical_v5_refuses_a_fabricated_v4_predecessor(self) -> None:
+        repo, pack, ruled_predecessor = self.successor_fixture()
+        tree_before = (pack / "plan_tree.json").read_bytes()
+        fabricated = write_predecessor_pack(
+            repo, "d117_floor_qwen3-1p7b_v4", "ALPHA"
+        )
+        git(repo, "add", ".")
+        git(repo, "commit", "-qm", "fabricated v4 predecessor")
+
+        with self.assertRaises(ArmReadinessError) as caught:
+            self.mint(pack, fabricated)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_successor_chain_invalid"
+        )
+        self.assertIn("requires its authenticated _v3 predecessor", str(caught.exception))
+        self.assert_no_successor_bytes(pack, tree_before)
+        self.assertEqual(ruled_predecessor.name, "d117_floor_qwen25_1p5b_v3")
+
     def test_uncommitted_predecessor_receipt_refuses(self) -> None:
         repo, pack, predecessor = self.successor_fixture()
         tree_before = (pack / "plan_tree.json").read_bytes()
-        extra = predecessor / "arm_readiness.freeze.receipts/freeze-0003.json"
+        extra = predecessor / "arm_readiness.freeze.receipts/freeze-0002.json"
         extra.write_bytes(b"{}\n")
         with self.assertRaises(ArmReadinessError) as caught:
             self.mint(pack, predecessor)
@@ -1848,8 +1887,8 @@ with mock.patch.object(
     def test_tampered_predecessor_bytes_refuse_at_mint(self) -> None:
         targets = (
             "calibration_plan.json",
-            "arm_readiness.freeze.receipts/freeze-0001.json",
-            "arm_readiness.freeze.receipts/freeze-0001.json.sha256",
+            "arm_readiness.freeze.receipts/freeze-0003.json",
+            "arm_readiness.freeze.receipts/freeze-0003.json.sha256",
             "identity_pin_projection.receipts/projection-0001.json",
             "identity_pin_projection.receipts/projection-0001.sha256",
             "plan_tree.json",
@@ -1896,7 +1935,7 @@ with mock.patch.object(
         readiness._authenticate_freeze_predecessor(
             pack,
             recorded,
-            successor_receipt_id="freeze-0002",
+            successor_receipt_id="freeze-0004",
             successor_profile="ALPHA",
         )
         mutations = {
@@ -1938,7 +1977,7 @@ with mock.patch.object(
                     readiness._authenticate_freeze_predecessor(
                         pack,
                         mutated,
-                        successor_receipt_id="freeze-0002",
+                        successor_receipt_id="freeze-0004",
                         successor_profile="ALPHA",
                     )
                 self.assertEqual(
@@ -1947,15 +1986,15 @@ with mock.patch.object(
 
     # R-6 -------------------------------------------------------------------
     @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic _v4 fixture omits the family-publication "
+        "STRUCTURAL-BLOCKED: synthetic _v5 fixture omits the family-publication "
         "marker required before self-predecessor validation"
     )
     def test_self_wrong_role_and_ordinal_violations_refuse(self) -> None:
         """Blocked by the synthetic repository's absent family marker.
 
         The self-reference leg mints with the pack as its OWN predecessor.  The
-        ruled registry sets ``family_publication_first_generation`` to 4, so a
-        ``_v4`` predecessor engages the family-publication gate FIRST: the mint
+        ruled registry sets ``family_publication_first_generation`` to 5, so a
+        ``_v5`` predecessor engages the family-publication gate FIRST: the mint
         returns a REFUSE record carrying ``readiness_r1_family_publication``
         ("marker_absent: registry-installed family has no marker") instead of
         raising ``readiness_successor_chain_invalid``.  The self-reference
@@ -1988,7 +2027,7 @@ with mock.patch.object(
 
         result = self.mint(pack, predecessor)
         recorded = self.read_receipt(result["receipt_path"])["predecessor"]
-        for successor_receipt_id in ("freeze-0001", "freeze-0003"):
+        for successor_receipt_id in ("freeze-0001", "freeze-0005"):
             with self.subTest(successor=successor_receipt_id):
                 with self.assertRaises(ArmReadinessError) as caught:
                     readiness._authenticate_freeze_predecessor(
@@ -2008,13 +2047,13 @@ with mock.patch.object(
         result = self.mint(pack, predecessor)
         namespace = self.freeze_namespace(pack)
         receipt = self.read_receipt(result["receipt_path"])
-        receipt["receipt_id"] = "freeze-0003"
+        receipt["receipt_id"] = "freeze-0005"
         raw = render_json(receipt)
-        (namespace / "freeze-0002.json").unlink()
-        (namespace / "freeze-0002.json.sha256").unlink()
-        (namespace / "freeze-0003.json").write_bytes(raw)
-        (namespace / "freeze-0003.json.sha256").write_bytes(
-            gnu_sidecar(hashlib.sha256(raw).hexdigest(), "freeze-0003.json")
+        (namespace / "freeze-0004.json").unlink()
+        (namespace / "freeze-0004.json.sha256").unlink()
+        (namespace / "freeze-0005.json").write_bytes(raw)
+        (namespace / "freeze-0005.json.sha256").write_bytes(
+            gnu_sidecar(hashlib.sha256(raw).hexdigest(), "freeze-0005.json")
         )
         with self.assertRaises(ArmReadinessError):
             scan_receipt_namespace(namespace, "freeze")
@@ -2095,7 +2134,7 @@ with mock.patch.object(
         """Replay returns the recorded conclusion; it does not re-adjudicate it.
 
         A schema-valid REFUSE identity projection lawfully mints a REFUSE
-        freeze-0002.  Replaying that receipt authenticates every byte it binds
+        freeze-0004.  Replaying that receipt authenticates every byte it binds
         and must then return the REFUSE it recorded.  Before this was fixed the
         loader compared the recorded refusals against a freshly derived list in
         ROW-DEFINITION order while every mint writes them in canonical
@@ -2230,18 +2269,18 @@ with mock.patch.object(
                 self.assertEqual(verified["receipt_sha256"], digest)
 
     # R-10 ------------------------------------------------------------------
-    def test_v2_presence_never_supersedes_a_v1_receipt(self) -> None:
+    def test_v4_presence_never_supersedes_a_v3_receipt(self) -> None:
         repo, pack, predecessor = self.successor_fixture()
         self.mint(pack, predecessor)
         historical = (
-            predecessor / "arm_readiness.freeze.receipts/freeze-0001.json"
+            predecessor / "arm_readiness.freeze.receipts/freeze-0003.json"
         )
         verified = verify_receipt(predecessor, historical)
         self.assertEqual(verified["status"], "PASS")
         scanned = scan_receipt_namespace(
             predecessor / "arm_readiness.freeze.receipts", "freeze"
         )
-        self.assertEqual([item["number"] for item in scanned], [1])
+        self.assertEqual([item["number"] for item in scanned], [3])
         self.assertIsNone(scanned[0]["receipt"]["supersedes"])
 
         # v1 and v2 may share one namespace without supersession semantics.
@@ -2270,14 +2309,14 @@ with mock.patch.object(
         )
         self.assertEqual(
             attachment["freeze_receipt"]["path"],
-            "arm_readiness.freeze.receipts/freeze-0001.json",
+            "arm_readiness.freeze.receipts/freeze-0003.json",
         )
-        receipt = self.read_receipt(namespace / "freeze-0001.json")
-        receipt["receipt_id"] = "freeze-0002"
+        receipt = self.read_receipt(namespace / "freeze-0003.json")
+        receipt["receipt_id"] = "freeze-0004"
         raw = render_json(receipt)
-        (namespace / "freeze-0002.json").write_bytes(raw)
-        (namespace / "freeze-0002.json.sha256").write_bytes(
-            gnu_sidecar(hashlib.sha256(raw).hexdigest(), "freeze-0002.json")
+        (namespace / "freeze-0004.json").write_bytes(raw)
+        (namespace / "freeze-0004.json.sha256").write_bytes(
+            gnu_sidecar(hashlib.sha256(raw).hexdigest(), "freeze-0004.json")
         )
         git(repo, "add", ".")
         git(repo, "commit", "-qm", "second committed freeze receipt")
@@ -2329,7 +2368,7 @@ with mock.patch.object(
         self.assertTrue(bypassed.called)
         self.assertTrue(result["mutated"])
         self.assertTrue(
-            (pack / "arm_readiness.freeze.receipts/freeze-0002.json").exists()
+            (pack / "arm_readiness.freeze.receipts/freeze-0004.json").exists()
         )
 
     # R-14 ------------------------------------------------------------------
@@ -2339,7 +2378,7 @@ with mock.patch.object(
                 repo, pack, predecessor = self.successor_fixture(profile)
                 result = self.mint(pack, predecessor)
                 receipt = self.read_receipt(result["receipt_path"])
-                self.assertEqual(receipt["receipt_id"], "freeze-0002")
+                self.assertEqual(receipt["receipt_id"], "freeze-0004")
                 self.assertEqual(
                     receipt["schema_version"], readiness.FREEZE_RECEIPT_V2_SCHEMA
                 )
@@ -2350,7 +2389,7 @@ with mock.patch.object(
                 )
                 self.assertEqual(
                     receipt["predecessor"]["freeze_receipt"]["receipt_id"],
-                    "freeze-0001",
+                    "freeze-0003",
                 )
 
     # Lead hazard note ------------------------------------------------------
@@ -2385,7 +2424,7 @@ with mock.patch.object(
             # Reconstructed refusal.  The original premise was a generation-1
             # predecessor: _v1 matches no successor SHAPE, so the registry-free
             # _plan_profile refused it outright.  The ruled registry installs
-            # the _v4 family, whose predecessor is _v3 -- a conforming shape,
+            # the _v5 family, whose predecessor is _v3 -- a conforming shape,
             # which the shape-only route admits.  The PROPERTY is unchanged and
             # is proven on the PRODUCTION admission path instead: _plan_profile
             # consults the registry, and the registry does not install _v3.
@@ -2396,7 +2435,7 @@ with mock.patch.object(
                 readiness._plan_profile(predecessor, registry)
             result = self.mint(pack, predecessor)
             receipt = self.read_receipt(result["receipt_path"])
-            self.assertEqual(receipt["receipt_id"], "freeze-0002")
+            self.assertEqual(receipt["receipt_id"], "freeze-0004")
             self.assertEqual(receipt["predecessor"]["pack_id"], predecessor_name)
             verify_receipt(pack, Path(result["receipt_path"]))
 
@@ -2560,7 +2599,7 @@ with mock.patch.object(
         )
         self.assertTrue(result["mutated"])
         self.assertTrue(
-            (pack / "arm_readiness.freeze.receipts/freeze-0002.json").exists()
+            (pack / "arm_readiness.freeze.receipts/freeze-0004.json").exists()
         )
 
     def test_first_generation_packs_reject_a_predecessor_input(self) -> None:
@@ -2770,7 +2809,7 @@ class PostSupersessionLayeringTests(unittest.TestCase):
     dry-run, and arm at R2 frozen-plan resolution
     (``readiness_pack_unreadable``); GAMMA v1 refuses all three earlier at the
     registry-binding check (``readiness_row_registry_mismatch``), because the
-    live registry installs only ``_v4``; all three refuse evidence authoring
+    live registry installs only ``_v5``; all three refuse evidence authoring
     (``evidence_author_existing_stale``).  Those
     end-to-end paths are exercised by the R2 and freeze-authentication
     regressions in their own ONE homes; the units here pin the map design
@@ -2787,7 +2826,7 @@ class PostSupersessionLayeringTests(unittest.TestCase):
     def historical_fixture(self, profile: str = "ALPHA") -> tuple[Path, Path, Path]:
         # The generation-1 identity the map keeps forever -- taken from the map
         # itself, NOT as "one before the current successor", which now moves
-        # with the ruled _v4 installation.
+        # with the ruled _v5 installation.
         pack_name = next(
             name
             for name, mapped in readiness._PROFILE_BY_PACK.items()
@@ -2892,16 +2931,16 @@ class PostSupersessionLayeringTests(unittest.TestCase):
         STRUCTURAL-BLOCKED: the assertion below -- that the successor's
         predecessor is an entry of ``_PROFILE_BY_PACK`` -- holds
         only for the ``_v2``/``_v1`` pairing.  The ruled registry installs the
-        ``_v4`` family, whose predecessor is ``_v3``, and ``_v3`` is neither a
+        ``_v5`` family, whose predecessor is ``_v3``, and ``_v3`` is neither a
         historical map entry nor an installed successor.  The `_v3` pack bytes
         already exist; S-0 cannot add this static code-map entry.
 
         RULED 2026-08-23 (magistrate): neither retired nor reconstructed now.
         The property this test names -- that a historical predecessor still
         anchors the chain across generations -- is real, but reconstructing it
-        needs REAL ``_v4``->``_v3`` receipt chains, which exist only after S-0
+        needs REAL ``_v5``->``_v3`` receipt chains, which exist only after desk day
         mints them.  The reconstruction design (replace static map-membership
-        with an authenticated runtime ``_v4``->``_v3`` predecessor proof,
+        with an authenticated runtime ``_v5``->``_v3`` predecessor proof,
         supplying a valid synthetic family-publication marker) is assigned to
         work order FIXTURE-MODERNIZATION-01 as its post-mint item.  This honest
         structural skip stands until then; do not restate the false
@@ -2921,7 +2960,7 @@ class PostSupersessionLayeringTests(unittest.TestCase):
         receipt = json.loads(
             Path(result["receipt_path"]).read_text(encoding="utf-8")
         )
-        self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        self.assertEqual(receipt["receipt_id"], "freeze-0004")
         self.assertEqual(receipt["predecessor"]["pack_id"], predecessor.name)
 
 

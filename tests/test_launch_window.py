@@ -449,9 +449,9 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
         family = {
-            "ALPHA": "d117_floor_qwen25_1p5b_v4",
-            "BETA": "d117_floor_qwen25_7b_v4",
-            "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
+            "ALPHA": "d117_floor_qwen3-1p7b_v5",
+            "BETA": "d117_floor_qwen3-8b_v5",
+            "GAMMA": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
         }
         live_fixture_now = time.monotonic_ns()
         # Give the synthetic command-capture timeline a complete positive
