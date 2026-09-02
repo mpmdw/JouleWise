@@ -1,6 +1,6 @@
 """Cross-consumer supersession behavior on preserved counterfactual log bytes.
 
-# PRE-CURE EXHIBITION — SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01 phase 1
+# PHASE-2 CURE — SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01
 """
 
 from __future__ import annotations
@@ -20,8 +20,12 @@ from joulewise.analysis_engine.inputs import (
 from joulewise.campaign_provenance import campaign_provenance_attestation
 from joulewise.whole_window import (
     OCCURRENCE_SUPERSESSION_SCHEMA,
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     _basis_source_manifests,
+    _supersession_is_logged,
+    recognizable_occurrence_supersession_counts,
     supersession_entry_sha256,
+    supersession_entry_validation_results,
     validate_occurrence_supersession_entry,
 )
 from scripts import run_campaign as run_campaign_module
@@ -192,11 +196,12 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
 
     def membership_binding(
         self, fixture: SupersessionFixture, supplied_name: str
-    ) -> list[dict[str, Any]] | None:
+    ) -> tuple[list[dict[str, Any]] | None, tuple[str, ...]]:
         selected_occurrence = fixture.supersessions[supplied_name][
             "selected_occurrence"
         ]
-        return _basis_source_manifests(
+        refusal_reasons: set[str] = set()
+        selected = _basis_source_manifests(
             basis={"member_occurrences": [selected_occurrence]},
             verified_sources=[
                 (occurrence["source_manifest"], manifest)
@@ -211,55 +216,12 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
                 ],
             },
             runs_root=fixture.root,
+            refusal_reasons=refusal_reasons,
         )
+        return selected, tuple(sorted(refusal_reasons))
 
-    def test_legacy_log_selects_in_whole_window_while_cooldown_join_refuses(
-        self,
-    ) -> None:
-        fixture = self.fixture()
-        before = fixture.log_path.read_bytes()
-        s1 = fixture.supersessions["S1"]
-        s2 = fixture.supersessions["S2"]
-        self.assertTrue(validate_occurrence_supersession_entry(s1, fixture.root))
-        self.assertTrue(validate_occurrence_supersession_entry(s2, fixture.root))
-
-        valid_entries = run_campaign_module._valid_supersession_entries(
-            fixture.root
-        )
-        self.assertEqual(valid_entries, [s1, s2])
-        selected = run_campaign_module._matching_supersession(
-            valid_entries,
-            BUNDLE_ID,
-            fixture.occurrences,
-            POLICY_SHA256,
-        )
-        self.assertEqual(selected, s2)
-        self.assertEqual(selected["selected_occurrence"], fixture.occurrences[2])
-
-        cooldown = campaign_cooldown_evidence(fixture.root)[BUNDLE_ID]
-        self.assertEqual(cooldown["result"], "unknown")
-        self.assertFalse(cooldown["verified"])
-        self.assertIsNone(cooldown["manifest"])
-        self.assertEqual(fixture.log_path.read_bytes(), before)
-
-    def test_membership_binding_disposition_on_the_same_fixture(self) -> None:
-        fixture = self.fixture()
-        before = fixture.log_path.read_bytes()
-
-        selected_manifests = self.membership_binding(fixture, "S2")
-
-        self.assertIsNotNone(selected_manifests)
-        assert selected_manifests is not None
-        self.assertEqual(len(selected_manifests), 1)
-        self.assertEqual(selected_manifests[0]["session_id"], "session-3")
-        self.assertEqual(fixture.log_path.read_bytes(), before)
-
-    def test_d093_totals_audit_reports_clean_for_two_valid_same_bundle_rows(
-        self,
-    ) -> None:
-        fixture = self.fixture()
-
-        audit = supersession_visibility_scan(
+    def audit(self, fixture: SupersessionFixture) -> dict[str, Any]:
+        return supersession_visibility_scan(
             fixture.root,
             scope="analysis_corpus",
             evidence_root_id=None,
@@ -269,12 +231,81 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(audit["raw_count"], 2)
-        self.assertEqual(audit["validated_count"], 2)
-        self.assertEqual(audit["status"], "clean")
+    def assert_multiple_row_refusal(
+        self,
+        fixture: SupersessionFixture,
+        supplied_name: str,
+    ) -> None:
+        before = fixture.log_path.read_bytes()
+        read = supersession_entry_validation_results(fixture.root)
+        self.assertIsNotNone(read)
+        assert read is not None
 
-    def test_single_valid_row_all_three_consumers_agree(self) -> None:
+        cooldown = campaign_cooldown_evidence(fixture.root)[BUNDLE_ID]
+        self.assertEqual(
+            cooldown,
+            {
+                "result": "unknown",
+                "verified": False,
+                "session_id": None,
+                "manifest": None,
+                "raw_artifact": None,
+            },
+        )
+
+        valid_entries = run_campaign_module._valid_supersession_entries(
+            fixture.root
+        )
+        self.assertEqual(valid_entries, [])
+        self.assertIsNone(
+            run_campaign_module._matching_supersession(
+                valid_entries,
+                BUNDLE_ID,
+                fixture.occurrences,
+                POLICY_SHA256,
+            )
+        )
+        resolution = run_campaign_module._resolve_ordinary_occurrence(
+            fixture.root,
+            BUNDLE_ID,
+            fixture.occurrences,
+            POLICY_SHA256,
+            read,
+        )
+        self.assertEqual(resolution.status, "ambiguous")
+        self.assertIn(
+            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            resolution.refusal_reasons,
+        )
+
+        selected_manifests, binding_reasons = self.membership_binding(
+            fixture, supplied_name
+        )
+        self.assertIsNone(selected_manifests)
+        self.assertIn(
+            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            binding_reasons,
+        )
+
+        audit = self.audit(fixture)
+        self.assertEqual(audit["raw_count"], 2)
+        self.assertEqual(audit["status"], "refused")
+        self.assertEqual(
+            audit["findings"],
+            [
+                {
+                    "reason_code": (
+                        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                    ),
+                    "bundle_ids": [BUNDLE_ID],
+                }
+            ],
+        )
+        self.assertEqual(fixture.log_path.read_bytes(), before)
+
+    def test_truth_table_row_1_single_valid_selects_all_consumers(self) -> None:
         fixture = self.fixture(occurrence_count=2, row_names=("S1",))
+        before = fixture.log_path.read_bytes()
         s1 = fixture.supersessions["S1"]
         self.assertTrue(validate_occurrence_supersession_entry(s1, fixture.root))
 
@@ -296,59 +327,142 @@ class SupersessionCrossConsumerExhibitionTests(unittest.TestCase):
             s1,
         )
 
-        selected_manifests = self.membership_binding(fixture, "S1")
+        read = supersession_entry_validation_results(fixture.root)
+        self.assertIsNotNone(read)
+        assert read is not None
+        resolution = run_campaign_module._resolve_ordinary_occurrence(
+            fixture.root,
+            BUNDLE_ID,
+            fixture.occurrences,
+            POLICY_SHA256,
+            read,
+        )
+        self.assertEqual(resolution.status, "selected")
+        self.assertEqual(resolution.selected_occurrence, fixture.occurrences[1])
+        self.assertEqual(resolution.refusal_reasons, ())
+
+        selected_manifests, binding_reasons = self.membership_binding(
+            fixture, "S1"
+        )
         self.assertIsNotNone(selected_manifests)
         assert selected_manifests is not None
         self.assertEqual(selected_manifests[0]["session_id"], "session-2")
+        self.assertEqual(binding_reasons, ())
+        audit = self.audit(fixture)
+        self.assertEqual(audit["raw_count"], 1)
+        self.assertEqual(audit["validated_count"], 1)
+        self.assertEqual(audit["status"], "clean")
+        self.assertNotIn("findings", audit)
+        self.assertEqual(fixture.log_path.read_bytes(), before)
 
-    def test_truth_table_additional_multiple_row_shapes(self) -> None:
-        cases = (
-            # name, occurrence count, log rows, governing row, C2 match, C3 session
-            ("chained_reverse_order", 3, ("S2", "S1"), "S2", "S2", "session-3"),
-            (
-                "valid_nonchain",
-                3,
-                ("S1", "S2_NONCHAIN"),
-                "S2_NONCHAIN",
-                None,
-                None,
-            ),
-            ("valid_plus_invalid", 2, ("S1", "S1_INVALID"), "S1", "S1", "session-2"),
-            ("duplicate_identical", 2, ("S1", "S1"), "S1", None, "session-2"),
+    def test_truth_table_row_2_two_valid_chained_refuses_all_consumers(self) -> None:
+        self.assert_multiple_row_refusal(self.fixture(), "S2")
+
+    def test_truth_table_row_3_valid_nonchain_refuses_all_consumers(self) -> None:
+        self.assert_multiple_row_refusal(
+            self.fixture(row_names=("S1", "S2_NONCHAIN")),
+            "S2_NONCHAIN",
         )
-        for name, occurrence_count, row_names, supplied, c2_match, c3_session in cases:
-            with self.subTest(shape=name):
-                fixture = self.fixture(
-                    occurrence_count=occurrence_count,
-                    row_names=row_names,
-                )
-                cooldown = campaign_cooldown_evidence(fixture.root)[BUNDLE_ID]
-                self.assertFalse(cooldown["verified"])
-                self.assertEqual(cooldown["result"], "unknown")
 
-                valid_entries = run_campaign_module._valid_supersession_entries(
-                    fixture.root
-                )
-                selected = run_campaign_module._matching_supersession(
-                    valid_entries,
-                    BUNDLE_ID,
-                    fixture.occurrences,
-                    POLICY_SHA256,
-                )
-                self.assertEqual(
-                    selected,
-                    fixture.supersessions[c2_match]
-                    if c2_match is not None
-                    else None,
-                )
+    def test_truth_table_row_4_valid_plus_invalid_refuses_all_consumers(self) -> None:
+        self.assert_multiple_row_refusal(
+            self.fixture(
+                occurrence_count=2,
+                row_names=("S1", "S1_INVALID"),
+            ),
+            "S1",
+        )
 
-                selected_manifests = self.membership_binding(fixture, supplied)
-                if c3_session is None:
-                    self.assertIsNone(selected_manifests)
-                else:
-                    self.assertIsNotNone(selected_manifests)
-                    assert selected_manifests is not None
-                    self.assertEqual(selected_manifests[0]["session_id"], c3_session)
+    def test_truth_table_row_5_identical_duplicates_refuse_all_consumers(self) -> None:
+        self.assert_multiple_row_refusal(
+            self.fixture(occurrence_count=2, row_names=("S1", "S1")),
+            "S1",
+        )
+
+    def test_truth_table_row_6_reverse_order_refuses_all_consumers(self) -> None:
+        self.assert_multiple_row_refusal(
+            self.fixture(row_names=("S2", "S1")),
+            "S2",
+        )
+
+    def test_mutation_m1_matching_never_restores_latest_wins(self) -> None:
+        fixture = self.fixture()
+        self.assertIsNone(
+            run_campaign_module._matching_supersession(
+                [fixture.supersessions["S1"], fixture.supersessions["S2"]],
+                BUNDLE_ID,
+                fixture.occurrences,
+                POLICY_SHA256,
+            )
+        )
+
+    def test_mutation_m2_binding_never_uses_existence_only_membership(self) -> None:
+        fixture = self.fixture(occurrence_count=2, row_names=("S1", "S1"))
+        refusal_reasons: set[str] = set()
+        self.assertFalse(
+            _supersession_is_logged(
+                fixture.supersessions["S1"],
+                fixture.root,
+                refusal_reasons,
+            )
+        )
+        self.assertEqual(
+            refusal_reasons,
+            {REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS},
+        )
+
+    def test_mutation_m3_d093_never_drops_multiple_row_finding(self) -> None:
+        fixture = self.fixture()
+        self.assertEqual(
+            self.audit(fixture)["findings"][0]["reason_code"],
+            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+        )
+
+    def test_mutation_m4_all_consumers_share_reason_constant(self) -> None:
+        fixture = self.fixture()
+        read = supersession_entry_validation_results(fixture.root)
+        self.assertIsNotNone(read)
+        assert read is not None
+        resolution = run_campaign_module._resolve_ordinary_occurrence(
+            fixture.root,
+            BUNDLE_ID,
+            fixture.occurrences,
+            POLICY_SHA256,
+            read,
+        )
+        _selected, binding_reasons = self.membership_binding(fixture, "S2")
+        reported = self.audit(fixture)["findings"][0]["reason_code"]
+        self.assertEqual(
+            {
+                *resolution.refusal_reasons,
+                *binding_reasons,
+                reported,
+            },
+            {REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS},
+        )
+
+    def test_mutation_m5_recognizable_count_includes_invalid_rows(self) -> None:
+        fixture = self.fixture(
+            occurrence_count=2,
+            row_names=("S1", "S1_INVALID"),
+        )
+        self.assertEqual(
+            recognizable_occurrence_supersession_counts(
+                [
+                    fixture.supersessions["S1"],
+                    fixture.supersessions["S1_INVALID"],
+                ]
+            ),
+            {BUNDLE_ID: 2},
+        )
+
+    def test_mutation_m6_recognizable_count_preserves_identical_rows(self) -> None:
+        fixture = self.fixture(occurrence_count=2, row_names=("S1", "S1"))
+        entry = fixture.supersessions["S1"]
+        self.assertEqual(
+            recognizable_occurrence_supersession_counts([entry, entry]),
+            {BUNDLE_ID: 2},
+        )
 
 
 if __name__ == "__main__":
