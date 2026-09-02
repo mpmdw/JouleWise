@@ -1191,6 +1191,46 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("courier.sent", completed.stderr)
         self.assertFalse(launch_log.exists())
 
+    def test_installer_refuses_a_dangling_symlink_night_record(self) -> None:
+        # Sol 135 F1: zsh `[[ -e ]]` is false for a dangling symlink, so the
+        # stale-night guard must also test `-L`.
+        root = self.root / "stale-symlink"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        environment, _courier = self._installer_environment(root)
+        custody_night = root / "custody" / "night"
+        custody_night.mkdir(parents=True)
+        (custody_night / "result.json").symlink_to(root / "missing-target.json")
+        launch_log = root / "launch.log"
+        launcher = root / "launchctl-stub"
+        launcher.write_text(
+            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        environment["LAUNCH_LOG"] = str(launch_log)
+        completed = subprocess.run(
+            [
+                "/bin/zsh",
+                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
+                "--plan",
+                str(plan),
+                "--hour",
+                "1",
+                "--minute",
+                "2",
+                "--launchctl-bin",
+                str(launcher),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 3)
+        self.assertIn("result.json", completed.stderr)
+        self.assertFalse(launch_log.exists())
+
     def test_installer_uninstalls_with_stale_courier_sent(self) -> None:
         root = self.root / "stale-uninstall"
         root.mkdir()

@@ -122,7 +122,8 @@ fi
 
 existing_night_records=()
 for record in receipt.json result.json refusal.json chain.started chain.exited courier.json courier.sent; do
-  [[ -e "$custody_root/night/$record" ]] && existing_night_records+=("$record")
+  # -L too: a dangling symlink is still a record name the run path would trip on.
+  [[ -e "$custody_root/night/$record" || -L "$custody_root/night/$record" ]] && existing_night_records+=("$record")
 done
 if (( ${#existing_night_records[@]} )); then
   print "refusing install: existing night records: ${existing_night_records[*]}" >&2
