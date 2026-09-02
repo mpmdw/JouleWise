@@ -1,0 +1,8 @@
+            repository_root,
+        )
+        if anchor.returncode != 0:
+            if anchor.returncode == 3:
+                raise ArtifactsUnavailable(
+                    _producer_unavailable_message(anchor, corpus_root)
+                )
+            comparisons.append(_producer_failure("AS", anchor))

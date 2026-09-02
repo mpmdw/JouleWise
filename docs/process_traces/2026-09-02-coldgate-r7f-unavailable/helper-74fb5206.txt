@@ -1,0 +1,6 @@
+def _producer_unavailable_message(
+    completed: subprocess.CompletedProcess[str], fallback: Path
+) -> str:
+    output = (completed.stdout + completed.stderr).strip().splitlines()
+    return " | ".join(output) if output else str(fallback)
+
