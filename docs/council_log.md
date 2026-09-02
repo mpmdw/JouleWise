@@ -3893,3 +3893,36 @@ Spend shape: ~14 Sol sessions (2 xhigh implement, 4 high fix, 6 xhigh
 audit/refute, 1 xhigh root-cause, 1 high adopt), 5 Opus/Fable seats, across
 ~36 h wall including one machine-sleep loss. No layer had zero unique
 catches; nothing is dropped from the gauntlet.
+
+## T29 (2026-09-01) — cold gates catch the MAGISTRATE twice in one block
+
+Two rulings written at the bench by the magistrate were refuted by the
+mandatory cold gate + cross-model pair, both on the magistrate's own premises
+(traces under `docs/process_traces/2026-09-01-fresh-model-review/`):
+
+- **Ruling 70c premise (iv)** cited `scripts/floor_mint_pinsets/schema_v2.json:333`
+  as the floor ARTIFACT's shape; it is the PINSET schema. The sealed floor
+  already carries `cells[].comparative.blocks[]` with `block_id`, positioned
+  `members[]` and `delta_j` (`scripts/mint_floor_artifact.py:1450-1469`). The
+  blind Fable seat (70d risk 1) had proposed exactly that binding and the
+  magistrate overrode it on the misread — a union-of-sets census that would
+  have admitted an A1/B1 swap flipping the sign of `delta_j`. Caught by the
+  cold Fable seat (70e) from the artifact angle and by the Opus refuter (70f)
+  from the provenance angle; ruling amended as 70g. The Opus refuter also
+  found the clause-4 shared-selector design unimplementable (bundle-derived
+  inputs absent at close-out) — no consult seat had seen it.
+- **Dependence r6 brief cure** ("assert the rendered word equals the word
+  implied by the example payload") was satisfiable by comparing today's
+  agreeing document to today's agreeing payload — incapable by construction
+  of killing the W2a literal. Sol implemented the sentence faithfully; terra's
+  independent audit (74) found the survivor; the magistrate's bench r7 killed
+  the literal but pushed it one frame up (cold gate #4, 74a: a literal at the
+  `sheet_slots` threading site and a stdout-sniffed word both survived).
+  Amendment landed as r7b.
+
+Rule-5 ledger: the cold-gate layer has now caught the magistrate's own design
+errors on three consecutive triggers (73a realized-prefill `.lower()` claim,
+70e/70f, 74a). Lesson for briefs: a mutation-kill cure must name the
+COUNTERFACTUAL input and the PRODUCTION call site, never a property of
+today's artifact — a cure the magistrate cannot show killing the mutation on
+paper is not a cure.

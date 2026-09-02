@@ -1,0 +1,31 @@
+# 70e — COLD FABLE adjudication of ruling 70c
+
+Fresh Fable instance, no loop context, read-only over `feat/d165-dominance-closeout-core` @ `140ec4cc`, ruling on the mechanically assembled packet (70, 70b, 70d, 71, 70c). Paired with the Opus contract-lens refuter (70f). Verbatim:
+
+---
+
+**C. VERDICT: RATIFY WITH AMENDMENTS** (four, below). The §A defect is real and the stage-2 shape is sound, but the ruling's bench finding (iv) is factually wrong in a way that makes clause 3 weaker than the evidence already sealed in the floor, and clause 4 is unimplementable as written because the finalizer's selector consumes bundle-derived inputs the close-out never has.
+
+**A1 — CONFIRM (defect real), DISSENT on premise (iv).**
+(i) Namespaces differ: floor spec `d117-df-cmp-abba-ph-decode-qwen25-7b-b01` (`configs/floor_mint/d117_qwen25_7b_v3_extraction_spec.json:414`) vs contrast `d117-decode-contrast-b01` (`analysis_manifest_v3.json:137`; `generate_configs.py:1191-1197`). CONFIRM.
+(ii) `_manifest_block_membership_error` looks sidecar cells up by manifest `cell_a_id/cell_b_id` and requires set-equality with `contrasts[].block_ids` (`dominance_closeout.py:1280-1285`), while `_sidecar_floor_alignment_errors` requires sidecar cell ids == floor cell ids (`:1120`). Both hold only if floor ids == manifest arm ids; production floor ids are pinset ids (`ArtifactPins.cell_id`, `mint_floor_artifact_generalized.py:1927`), a third namespace; the synthetic fixture finalizes with `synthetic-floor-i-j` (`tests/test_analysis_finalizer.py:479`). CONFIRM — the defect is worse than stated: cell keying is unsatisfiable before block ids are even compared.
+(iii) Arm cell ids are minted `cell-{arm}-{label}` (`analysis_manifest_v3.py:3120`); floor cells bound by selector (`:3312-3331`). CONFIRM.
+(iv) DISSENT. `scripts/floor_mint_pinsets/schema_v2.json` is the PINSET schema, not the floor artifact. The sealed floor's `cells[].comparative` carries `blocks[]` with `block_id`, positioned `members[{position,bundle_id,bundle_sha256,config_sha256,metric_value_j}]` and `delta_j` (`scripts/mint_floor_artifact.py:1450-1469`; keyset `_CMP_KEYS` `detection_floor.py:1877-1889`; validated `:3696-3712`). The floor DOES record block ids; the ruling's cure discards evidence it already has.
+
+**A2 — CONFIRM with amendment 1.** Clause 3 + §B sealing + clause 10 census are fail-closed on identity. Way a physically wrong sidecar passes: any block whose numeric inputs (sweeps, half-widths, window bounds, envelope sum) are self-consistent but wrong — the close-out replays the criterion from `inputs` and never re-derives inputs from bundles; the set-only census also admits an A1/B1 role swap within a block (set equality is position-blind; `delta_j` would change sign). Under D-161 that is producer correctness (clause 9 divergence + clause 14 byte-identity), acceptable — but amendment 1 closes the role-swap/delta subset for free.
+
+**A3 — DISSENT (hidden coupling).** The selector's `expected_backend`/`expected_stack_sha` come from bundle files via `_floor_consumer_contexts` (`analysis_manifest_v3.py:3185-3233`, `build_stack_identity`+`stack_identity_sha256`); the finalized manifest records `realized_stack_identity` from a different builder (`analysis_engine/inputs.py:2474`), and the close-out has no bundles. `resolve_arm_floor_cells(manifest, floor)` cannot reproduce the finalizer's predicate. No `_prospective_semantics`/`_finalized_semantics` or `calculate_manifest_id` consequence (`:383` hashes data, not code; arms are not projected at `:1599-1690`), but `len(direct)==1` is enforced only for `exact_stack_only` (`:3332`) — `governed_transport` arms have no unique cell.
+
+**B1 — CONFIRM.** None of the four committed manifests carries a `finalization_contract` (v1–v3 are draft-shaped; splitwise is a frozen `.v3` without one) — nothing to re-freeze; v5 holds only `generate_configs.py`. `dominance_criterion_registration()` sha = `1c0a4a11` on `140ec4cc` (ran the command). Note: the v5 generator's `prospective_finalization_required_attachments()` (`:121-140`) is a LOCAL literal despite the `:2322-2326` comment claiming it uses the accessor.
+
+**B2 — CONFIRM.** Registration marks `comparative_common_mode` `"mandatory"` (`generate_configs.py:535-539`); a default-path cell makes the criterion unevaluable → null/neither branch is the honest state, not a weakening.
+
+**B3 — DISSENT (unacknowledged).** Clause 12 changes the exact-key set `_COMPARATIVE_KEYS = {"independent","common_mode_replay"}` (`dominance_closeout.py:68`) and the contract table; §B treats it as stage-2 design without saying the stage-1 schema moves. Clause 2 is acknowledged; clause 12 is not.
+
+**Amendments for the implementation brief**
+1. Clause 3: bind each sidecar block to the sealed floor's `comparative.blocks[]` by `block_id`, exact positioned `members` (A1,B1,B2,A2 → bundle_id), and `delta_j` (`_close`); block count == `n_blocks`. Keep the name `floor_member_census_mismatch`. Drop the union-of-sets formulation.
+2. Clause 4: the finalizer RECORDS the resolved floor `cell_id` per arm (new arm field, `ARM_KEYS` `:230` updated; frozen semantics unaffected); the close-out reads it and re-checks the selector's floor-side predicate (key/transport/stack sha/claim_usable) against the sealed floor. Governed-transport or non-unique resolution → named refusal `floor_cell_unresolved`, distinct from `cell_not_common_mode`.
+3. Clause 12: spell both admitted `comparative` shapes as exact key sets; `independent` mandatory in both; state that `.v1` stays because no production sidecar was ever emitted, and mark the contract table rows `:110-151` as amended.
+4. Clause 7: the v5 generator's local attachments list must import the accessor or gain an equality test; the validator's `dominance_criterion` check is presence-only (no value interpretation) to keep the finalizer outcome-blind. Contract states the A2 limitation (inputs trusted from the sole producer; not re-derived).
+
+Seats read after forming the view: 70d risk 1 proposed `comparative.blocks[].block_id` — it was right and the ruling overrode it on a misread of the pinset schema; 70b R1's "admitted vs prospective" framing was wrong (mint never reads the manifest) and the ruling correctly rejected it. No seat saw the bundle-derived selector inputs (A3).
