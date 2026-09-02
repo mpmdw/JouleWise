@@ -3,7 +3,7 @@
 Lane: install of T26 cold-gate verdicts items 1 and 4 plus the D-170 entry, and
 the Q1/Q2 process-rule install.
 Branch `feat/2026-09-02-t26-install`; PR #273.
-Files 01–18b in this directory are the seat briefs and the sealed reports, in
+Files 01–19 in this directory are the seat briefs and the sealed reports, in
 gauntlet order.
 
 ## Gauntlet record
@@ -26,6 +26,7 @@ gauntlet order.
 | Bench | magistrate (bench) | commit `c05cf181` (below; the luna 238 cures + custody 17/17b land as `162049bd`) | — | kernel: five S9 rows registered, D-170 dep applied in place to GAMMA-UNIT-ROSTER-GUARD-01 / L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01, R7F-DX-PROSE-SCAN-01 registered (126 tasks); comment chain in `tests/test_gen_state.py` reconstructed from kernel commit counts; M6c regex + "no start dependency" mutant made multi-row; dated addendum on the cold-gate ruling (B4 site correction, PD-1 evidence) |
 | Delta re-audit 2 | luna xhigh (238) | 17 (brief, report), 17b | "@ c05cf181" | `VERDICT: SHOULD-FIX 2` + 1 nit (date gloss names the wrong date source; addendum evidence block not replayable; stale WAVE-ROWS provenance) — all three cured at the bench per 17b; execution lens clean (luna's own mutants), kernel lens clean |
 | Final-head fresh pass | sol high (241), detached worktree | 18 (brief, report), 18b | "@ 162049bd" | `SHOULD-FIX 2` + 1 nit (stale `file:line` anchors in the process-rules README; incomplete bench-commit ledger in this file; wrong packet basename in the process-rules ruling) — all three replicated and cured at the bench per 18b (durable anchors, ledger completed, dated addendum) |
+| Delta re-audit 3 (§5 pass over the Sol 241 cure commit) | luna high (242), detached worktree | 19 (brief, report) | "@ b2b26c86" | `VERDICT: CLEAN` (envelope `semantic_status=clean`, `completion=complete`, wrapper `run_status=OK rc=0`): all three cures replicated, ledger/stat blocks match, addendum replays, `test_docs_freshness` + `test_gen_state` + `gen_state.py --check` pass. The commit landing file 19 is custody-only. |
 
 ## Bench commits (from `git show --stat`)
 
