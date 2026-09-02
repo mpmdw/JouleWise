@@ -271,7 +271,10 @@ class CheckGateLedgerTests(unittest.TestCase):
         )
 
     def test_indented_summary_terminates_the_ledger_section(self) -> None:
-        body = self.body() + "\n  ## Summary\n| **1** | ignored after summary | RUN evidence.txt |\n"
+        # A numbered key after the indented heading: if the heading were
+        # matched raw (unstripped) the section would continue and this row
+        # would be refused as "outside the ledger table" (luna 227 SF1).
+        body = self.body() + "\n  ## Summary\n| 4 | ignored after summary | RUN evidence.txt |\n"
         result = self.run_checker(body)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
