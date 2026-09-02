@@ -101,6 +101,8 @@ def install_synthetic_prospective_fixture(
     transport_mode: str = "exact_stack_only",
     runtime_backend: str = "mlx",
     telemetry_backend: str = "powermetrics",
+    floor_cells_by_slot: dict[tuple[str, str], dict] | None = None,
+    dominance_criterion: dict | None = None,
 ) -> tuple[Path, Path, dict]:
     """Install a resolved, shape-true gamma declaration in temporary custody.
 
@@ -153,6 +155,40 @@ def install_synthetic_prospective_fixture(
         draft["root_order_manifest"]["sha256"] = hashlib.sha256(
             root_order_raw
         ).hexdigest()
+    if floor_cells_by_slot is not None:
+        for condition in draft["condition_families"]:
+            slot = (condition["measurement_arm"], condition["arm"])
+            floor_cell = floor_cells_by_slot[slot]
+            definition = copy.deepcopy(
+                floor_cell["key"]["condition_family_definition"]
+            )
+            raw = (json.dumps(definition, indent=2, sort_keys=True) + "\n").encode()
+            (campaign / condition["path"]).write_bytes(raw)
+            condition.update(
+                {
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                    "condition_family_id": floor_cell["key"][
+                        "condition_family_id"
+                    ],
+                    "canonical_domain_sha256": floor_cell["key"][
+                        "condition_family_sha256"
+                    ],
+                }
+            )
+        for source in draft["contrasts"]:
+            measurement_arm = source["measurement_arm"]
+            source["condition_a_id"] = floor_cells_by_slot[
+                (measurement_arm, "A")
+            ]["key"]["condition_family_id"]
+            source["condition_b_id"] = floor_cells_by_slot[
+                (measurement_arm, "B")
+            ]["key"]["condition_family_id"]
+    if dominance_criterion is not None:
+        for source in draft["contrasts"]:
+            source["floor_estimator_registration"] = {
+                **copy.deepcopy(source["floor_estimator_registration"]),
+                "dominance_criterion": copy.deepcopy(dominance_criterion),
+            }
     families = []
     contrasts = []
     for index, source in enumerate(draft["contrasts"]):
@@ -229,7 +265,11 @@ def install_synthetic_prospective_fixture(
                         "transport_groups": [
                             {
                                 "transport_group_id": (
-                                    "synthetic-floor-group-"
+                                    floor_cells_by_slot[
+                                        (source["measurement_arm"], arm)
+                                    ]["transport_group_id"]
+                                    if floor_cells_by_slot is not None
+                                    else "synthetic-floor-group-"
                                     f"{source['measurement_arm']}-{arm.lower()}"
                                 ),
                                 "condition_family_id": condition_id,

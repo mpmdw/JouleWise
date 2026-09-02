@@ -55,7 +55,7 @@ the physical files do not support:
 |---|---|---|
 | Ordinary R | A widened floor alone does not say whether attribution uncertainty dominates repeatability. | A 2.0 J corner-widened floor divided by a 1.0 J point floor gives R = 2.0 and passes; 1.5 J / 1.0 J gives R = 1.5 and selects B when every record is complete. |
 | Shared/local split and replay | Giving every block an independent timing sign can claim combinations that one shared clock edge cannot physically take. | Measured block `b01` has `delta_j = 0.21462565134537215`, `shared_width_j = 0.2617693341828027`, and `local_width_j = 0.048579253149402035`. With the authenticated `shared_edge_bound_s = 0.03678263869781979`, the two-block replay gives point 2.430576610260499 J, corner 8.830437643102993 J, and R_cm = 3.6330628731577335. |
-| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar bytes hash to `33e4f4140f28e4d2e564d47996bfaae03855322f591edce913123da3149ddc2e`; changing one operand changes that digest and yields `replay_sidecar_digest_mismatch`. |
+| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar bytes hash to `69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735`; changing one operand changes that digest and yields `replay_sidecar_digest_mismatch`. |
 | Exact census | Twelve plausible records can still omit a physical cell and duplicate another. | Cells `cell-decode-a`, `cell-decode-b`, `cell-prefill_p256-a`, and `cell-prefill_p256-b` must yield exactly eight ordinary slots (4 × 2 components) and four R_cm slots (4 × 1 comparative component). |
 | Byte-only source custody | A parsed object and an authenticated byte string supplied through two channels can describe different artifacts. | A close-out built from sidecar bytes X must validate against X. If block 0's energy operands are multiplied by 0.9 and its split/result are recomputed into bytes Y, validation still refuses because X's stored file digest does not equal Y's digest, even though Y is internally consistent. |
 | Manifest-sealed floor | A close-out canonical digest can authenticate a newly rendered floor Y while the finalized manifest separately seals floor X; both digests can be individually valid but authenticate different artifacts. | The worked manifest seals floor X as `5be2fdc561e93b40810d6707f531e1d8668f2a675586a2d6ddbeccbc4dbe8a8c`. Changing one corner from 2.0 J to 2.1 J produces floor Y at `39221b0503af3479db2bad595c2e7201a522b0e5e1dc4b426562e7b538854099`; the builder records `floor_artifact_source_hash_mismatch` and selects neither branch. |
@@ -247,24 +247,28 @@ The finalized manifest's `evidence` object must contain
 Producer→finalizer sidecar custody is unproven until
 `D165-SIDECAR-EMIT-01` lands; the paper cannot cite a close-out before then.
 
-When the prospective manifest declares the dominance sidecar attachment, each
-finalized `arms[]` record also carries `floor_cell_id`. For an
+When every prospective contrast's floor-estimator registration carries the
+`dominance_criterion` key, each finalized `arms[]` record also carries the
+presence-coupled pair `floor_cell_id` and `floor_stack_identity`.
+`floor_stack_identity` is the eleven-field governed identity returned by
+`build_stack_identity` for that arm's authenticated bundle members. For an
 `exact_stack_only` arm whose finalizer selector resolves exactly one eligible
 sealed floor cell, the value is that floor cell's `cell_id`; otherwise it is
-null. Legacy prospective manifests do not gain the field and finalize to the
-same bytes and `manifest_id` as before. The presence of the
-`dominance_criterion` key in every prospective contrast registration controls
-this behavior; the finalizer does not read that key's value.
+null. Legacy prospective manifests gain neither field and finalize to the same
+bytes and `manifest_id` as before. The finalizer does not read the
+`dominance_criterion` value.
 
 The close-out maps each contrast arm through `arms[].floor_cell_id`; null is
 the named stop `floor_cell_unresolved`. It then rechecks that the named sealed
 floor cell has the arm's `condition_family_id` and
 `condition_family_sha256`, has `eligibility.claim_usable` exactly true, and
 has `source_regime.stack_identity_sha256` equal to the SHA-256 derived from
-the arm's `realized_stack_identity` by the finalizer's stack-identity
-calculation. A resolved cell whose `comparative.estimator` is not
-`common_mode`, or whose sidecar cell has no replay, stops with
-`cell_not_common_mode`.
+the arm's `floor_stack_identity` by `stack_identity_sha256`. This recomputed
+value is the finalizer's bundle-derived `expected_stack_sha`; it must equal the
+sealed floor cell's value. The seven-field `realized_stack_identity` remains
+unchanged and is not accepted in its place. A resolved sidecar cell whose
+`comparative.estimator` is not `common_mode`, or which has no replay, stops
+with `cell_not_common_mode`.
 
 For every sidecar cell, the close-out binds each sidecar block by `block_id` to
 the sealed floor cell's `comparative.blocks[]`. Both sides must contain exactly
@@ -425,7 +429,8 @@ are:
   extraction-spec block-id census, positioned member map, or `delta_j` differs
   from its sealed floor comparative block census.
 - `floor_cell_unresolved`: a contrast arm has a null or unusable finalized
-  `floor_cell_id`.
+  `floor_cell_id`, lacks its presence-coupled eleven-field
+  `floor_stack_identity`, or fails the sealed floor-side selector recheck.
 - `cell_not_common_mode`: a resolved floor cell or its sidecar cell lacks the
   required common-mode replay shape.
 - `finalized_manifest_id_mismatch`: `manifest_id` is not the value recomputed

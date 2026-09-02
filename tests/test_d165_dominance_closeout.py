@@ -13,11 +13,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from configs.campaigns.d117_contrast_v5 import generate_configs as generator
 from joulewise.analysis_manifest_v3 import (
+    calculate_manifest_id,
     finalize_prospective_analysis_manifest_v3,
 )
+from joulewise import detection_floor as detection_floor_module
 from joulewise import dominance_closeout as core
 from joulewise.detection_floor import (
     _common_mode_block_half_width as detection_floor_block_half_width,
@@ -27,6 +30,7 @@ from joulewise.floor_extraction import (
     _common_mode_block_half_width,
 )
 from scripts import build_d165_dominance_closeout as cli_module
+from scripts import mint_floor_artifact_generalized as generalized_mint
 from scripts.build_d165_dominance_closeout import (
     build_d165_dominance_closeout,
 )
@@ -35,18 +39,15 @@ from tests.test_d117_contrast_v5_pack import (
     PINNED_DOMINANCE_CRITERION_BYTES,
     frozen_json_bytes,
 )
+from tests.test_mint_floor_artifact_generalized import (
+    _mixed_common_mode_seams,
+    freeze_mixed_estimator_v2_pinset,
+)
+from joulewise.identity_pins import build_stack_identity, stack_identity_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_BLOCK_FIXTURE = ROOT / "tests/fixtures/fcm_r4_real_blocks/measured_pair.json"
-CELL_IDS = (
-    "cell-decode-a",
-    "cell-decode-b",
-    "cell-prefill_p256-a",
-    "cell-prefill_p256-b",
-)
-
-
 def authenticated_bracket(operative_bound_s: float) -> dict:
     allowance_s = 0.010818
     return {
@@ -65,52 +66,6 @@ def authenticated_bracket(operative_bound_s: float) -> dict:
     }
 
 
-def floor_artifact() -> dict:
-    return {
-        "schema_version": core.FLOOR_ARTIFACT_SCHEMA_VERSION,
-        "artifact_id": "d165-test-floor",
-        "cells": [
-            {
-                "cell_id": cell_id,
-                "absolute": {
-                    "max_abs_residual_j": 1.0,
-                    "prediction_component_j": 0.5,
-                    "corner_widened_unguarded_floor_j": 2.0,
-                },
-                "comparative": {
-                    "max_abs_delta_j": 1.0,
-                    "prediction_component_j": 0.75,
-                    "corner_widened_unguarded_floor_j": 2.5,
-                },
-            }
-            for cell_id in CELL_IDS
-        ],
-    }
-
-
-@functools.cache
-def _production_finalized_manifest() -> dict:
-    """Run the production finalizer once and retain its real wire shape."""
-
-    with tempfile.TemporaryDirectory() as temporary:
-        fixture = install_synthetic_finalization_fixture(Path(temporary))
-        return finalize_prospective_analysis_manifest_v3(
-            fixture["prospective_path"],
-            plan_tree_path=fixture["plan_tree_path"],
-            custody_root=fixture["root"],
-            runs_root=fixture["runs_root"],
-            whole_window_verdict_path=fixture["verdict_path"],
-            bracket_binding_path=fixture["bracket_path"],
-            calibration_ledger_path=fixture["ledger_path"],
-            aggregate_floor_artifact_path=fixture["floor_path"],
-            output_dir=fixture["root"],
-        )
-
-
-def finalized_manifest() -> dict:
-    return copy.deepcopy(_production_finalized_manifest())
-
-
 def _file_json_bytes(value: object) -> bytes:
     return (
         json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2, sort_keys=True)
@@ -126,22 +81,25 @@ def mutate_then_encode(source_bytes: bytes, mutator) -> bytes:
     return _file_json_bytes(value)
 
 
-def _attach_replay_sidecar(
+def _reseal_test_sources(
     manifest: dict, floor: dict, sidecar: dict
 ) -> tuple[bytes, bytes, bytes]:
+    """Reseal explicitly mutated test sources derived from a real finalization."""
+
     floor_bytes = _file_json_bytes(floor)
     sidecar_bytes = _file_json_bytes(sidecar)
     evidence = manifest["evidence"]
     evidence["aggregate_floor_artifact"]["sha256"] = hashlib.sha256(
         floor_bytes
     ).hexdigest()
-    # injected pending D165-SIDECAR-EMIT-01
-    evidence["dominance_replay_sidecar"] = {
-        "path": "dominance_replay_sidecar.json",
-        "sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
-        "schema_version": sidecar["schema_version"],
-        "sidecar_id": sidecar["sidecar_id"],
-    }
+    evidence["dominance_replay_sidecar"]["sha256"] = hashlib.sha256(
+        sidecar_bytes
+    ).hexdigest()
+    evidence["dominance_replay_sidecar"]["schema_version"] = sidecar[
+        "schema_version"
+    ]
+    evidence["dominance_replay_sidecar"]["sidecar_id"] = sidecar["sidecar_id"]
+    manifest["manifest_id"] = calculate_manifest_id(manifest)
     return _file_json_bytes(manifest), floor_bytes, sidecar_bytes
 
 
@@ -159,17 +117,24 @@ def independent_from_component(component: dict, parent_key: str) -> dict:
 
 def fixture_replay_inputs(
     block_ids: list[str] | None = None,
+    block_deltas_j: list[float] | None = None,
+    block_members: list[dict[str, str]] | None = None,
+    residual_width_scale: float = 1.0,
 ) -> tuple[list[dict], dict, float, dict]:
     fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
     bound = float(fixture["operative_bound_s"])
     bracket = authenticated_bracket(bound)
     source_block_ids = []
-    block_deltas_j = []
-    block_inputs = []
+    source_block_deltas_j = []
+    source_block_members = []
+    source_block_inputs = []
     for source in fixture["blocks"]:
         source_block_ids.append(source["block_id"])
-        block_deltas_j.append(source["delta_j"])
-        block_inputs.append(
+        source_block_deltas_j.append(source["delta_j"])
+        source_block_members.append(
+            {row["position"]: row["bundle_id"] for row in source["members"]}
+        )
+        source_block_inputs.append(
             _CommonModeBlockInputs(
                 onset_values_j=tuple(source["onset_sweep_j"]),
                 offset_values_j=tuple(source["offset_sweep_j"]),
@@ -187,20 +152,37 @@ def fixture_replay_inputs(
         )
     if block_ids is None:
         selected_ids = source_block_ids
-        selected_deltas = block_deltas_j
-        selected_inputs = block_inputs
+        selected_deltas = source_block_deltas_j
+        selected_members = source_block_members
     else:
         selected_ids = block_ids
-        selected_deltas = [
-            block_deltas_j[index % len(block_deltas_j)]
+        selected_deltas = block_deltas_j or [
+            source_block_deltas_j[index % len(source_block_deltas_j)]
             for index in range(len(selected_ids))
         ]
-        selected_inputs = [
-            block_inputs[index % len(block_inputs)]
+        selected_members = block_members or [
+            source_block_members[index % len(source_block_members)]
             for index in range(len(selected_ids))
         ]
+    selected_inputs = []
+    for index, delta_j in enumerate(selected_deltas):
+        source = source_block_inputs[index % len(source_block_inputs)]
+        shift = delta_j - source.zero_point_contrast_j
+        selected_inputs.append(
+            _CommonModeBlockInputs(
+                onset_values_j=tuple(value + shift for value in source.onset_values_j),
+                offset_values_j=tuple(value + shift for value in source.offset_values_j),
+                zero_point_contrast_j=delta_j,
+                bundle_residual_half_widths_j=tuple(
+                    value * residual_width_scale
+                    for value in source.bundle_residual_half_widths_j
+                ),
+                member_window_bounds_s=source.member_window_bounds_s,
+                member_envelope_integral_sum_j=source.member_envelope_integral_sum_j,
+            )
+        )
     blocks = core.d165_replay_blocks_from_mint_inputs(
-        selected_ids, selected_deltas, selected_inputs
+        selected_ids, selected_deltas, selected_inputs, selected_members
     )
     raw_blocks = [core._raw_replay_block(block) for block in blocks]
     result = core.replay_common_mode_dominance(
@@ -211,17 +193,49 @@ def fixture_replay_inputs(
     return blocks, bracket, bound, result
 
 
-def replay_sidecar(floor: dict, manifest: dict | None = None) -> dict:
-    manifest = finalized_manifest() if manifest is None else manifest
-    block_ids_by_cell: dict[str, list[str]] = {}
-    for contrast in manifest["contrasts"]:
-        for cell_key in ("cell_a_id", "cell_b_id"):
-            block_ids_by_cell[contrast[cell_key]] = contrast["block_ids"]
+def replay_sidecar(
+    floor: dict,
+    *,
+    default_cell_ids: frozenset[str] = frozenset(),
+    residual_width_scale: float = 20.0,
+) -> dict:
     cells = []
     for floor_cell in floor["cells"]:
-        blocks, bracket, bound, result = fixture_replay_inputs(
-            block_ids_by_cell[floor_cell["cell_id"]]
-        )
+        comparative = {
+            "independent": independent_from_component(
+                floor_cell["comparative"], "max_abs_delta_j"
+            ),
+            "estimator": "default",
+        }
+        if floor_cell["cell_id"] not in default_cell_ids:
+            floor_blocks = floor_cell["comparative"]["blocks"]
+            block_ids = [block["block_id"] for block in floor_blocks]
+            block_deltas = [block["delta_j"] for block in floor_blocks]
+            block_members = [
+                {row["position"]: row["bundle_id"] for row in block["members"]}
+                for block in floor_blocks
+            ]
+            blocks, bracket, bound, result = fixture_replay_inputs(
+                block_ids,
+                block_deltas,
+                block_members,
+                residual_width_scale,
+            )
+            comparative = {
+                "independent": comparative["independent"],
+                "estimator": "common_mode",
+                "common_mode_replay": {
+                    "inputs": {
+                        "calibration_bracket": copy.deepcopy(bracket),
+                        "calibration_bracket_sha256": (
+                            core.canonical_json_sha256(bracket)
+                        ),
+                        "shared_edge_bound_s": bound,
+                        "blocks": copy.deepcopy(blocks),
+                    },
+                    "result": copy.deepcopy(result),
+                },
+            }
         cells.append(
             {
                 "cell_id": floor_cell["cell_id"],
@@ -234,22 +248,7 @@ def replay_sidecar(floor: dict, manifest: dict | None = None) -> dict:
                         "reason": core.ABSOLUTE_COMMON_MODE_REASON,
                     },
                 },
-                "comparative": {
-                    "independent": independent_from_component(
-                        floor_cell["comparative"], "max_abs_delta_j"
-                    ),
-                    "common_mode_replay": {
-                        "inputs": {
-                            "calibration_bracket": copy.deepcopy(bracket),
-                            "calibration_bracket_sha256": (
-                                core.canonical_json_sha256(bracket)
-                            ),
-                            "shared_edge_bound_s": bound,
-                            "blocks": copy.deepcopy(blocks),
-                        },
-                        "result": copy.deepcopy(result),
-                    },
-                },
+                "comparative": comparative,
             }
         )
     return {
@@ -257,6 +256,52 @@ def replay_sidecar(floor: dict, manifest: dict | None = None) -> dict:
         "sidecar_id": "d165-test-replay",
         "cells": cells,
     }
+
+
+def _recompute_sidecar_cell_result(sidecar: dict, cell_index: int = 0) -> None:
+    replay = sidecar["cells"][cell_index]["comparative"]["common_mode_replay"]
+    inputs = replay["inputs"]
+    replay["result"] = core.replay_common_mode_dominance(
+        [core._raw_replay_block(block) for block in inputs["blocks"]],
+        calibration_bracket=inputs["calibration_bracket"],
+        shared_edge_bound_s=inputs["shared_edge_bound_s"],
+    )
+
+
+@functools.cache
+def _production_sources() -> tuple[dict, dict, dict]:
+    """Finalize a dominance-enabled fixture with a real sealed sidecar."""
+
+    with tempfile.TemporaryDirectory() as temporary:
+        fixture = install_synthetic_finalization_fixture(
+            Path(temporary),
+            dominance_criterion=generator.dominance_criterion_registration(),
+        )
+        floor = json.loads(fixture["floor_path"].read_bytes())
+        sidecar = replay_sidecar(floor)
+        sidecar_path = fixture["root"] / "dominance_replay_sidecar.json"
+        sidecar_path.write_bytes(_file_json_bytes(sidecar))
+        manifest = finalize_prospective_analysis_manifest_v3(
+            fixture["prospective_path"],
+            plan_tree_path=fixture["plan_tree_path"],
+            custody_root=fixture["root"],
+            runs_root=fixture["runs_root"],
+            whole_window_verdict_path=fixture["verdict_path"],
+            bracket_binding_path=fixture["bracket_path"],
+            calibration_ledger_path=fixture["ledger_path"],
+            aggregate_floor_artifact_path=fixture["floor_path"],
+            output_dir=fixture["root"],
+            dominance_replay_sidecar_path=sidecar_path,
+        )
+        return manifest, floor, sidecar
+
+
+def finalized_manifest() -> dict:
+    return copy.deepcopy(_production_sources()[0])
+
+
+def floor_artifact() -> dict:
+    return copy.deepcopy(_production_sources()[1])
 
 
 class D165DominanceCloseoutTests(unittest.TestCase):
@@ -278,8 +323,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
     def build(self, floor: dict | None = None) -> tuple[dict, dict, dict, dict]:
         floor = floor_artifact() if floor is None else floor
         manifest = finalized_manifest()
-        sidecar = replay_sidecar(floor, manifest)
-        manifest_bytes, floor_bytes, sidecar_bytes = _attach_replay_sidecar(
+        sidecar = replay_sidecar(floor)
+        manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
             manifest, floor, sidecar
         )
         closeout = build_d165_dominance_closeout(
@@ -329,7 +374,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
     def test_terra_relabel_all_cells_to_forged_ids_refuses_neither_branch(self) -> None:
         closeout, manifest, floor, sidecar = self.build()
         forged_ids = ("forged-a", "forged-b", "forged-c", "forged-d")
-        mapping = dict(zip(CELL_IDS, forged_ids, strict=True))
+        cell_ids = tuple(cell["cell_id"] for cell in floor["cells"])
+        mapping = dict(zip(cell_ids, forged_ids, strict=True))
         for record in closeout["independent_ratios"]:
             record["cell_id"] = mapping[record["cell_id"]]
         for record in closeout["comparative_common_mode_ratios"]:
@@ -353,6 +399,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
     def test_luna_replace_first_cell_id_with_forged_cell_refuses(self) -> None:
         closeout, manifest, floor, sidecar = self.build()
+        cell_ids = tuple(cell["cell_id"] for cell in floor["cells"])
         closeout["independent_ratios"][0]["cell_id"] = "forged-cell"
         reason = (
             "closeout.independent_ratios.cell_id: unknown 'forged-cell' "
@@ -369,7 +416,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self.assertIn(reason, errors)
         self.assertIn(
             "closeout.independent_ratios.cell_id: missing "
-            f"{CELL_IDS[0]!r} for component 'absolute'",
+            f"{cell_ids[0]!r} for component 'absolute'",
             errors,
         )
         self.assertIsNone(closeout["branch"])
@@ -377,11 +424,16 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self.assertFalse(closeout["subtitle_licensed"])
 
     def test_ratio_equal_to_two_passes(self) -> None:
-        closeout, manifest, floor, sidecar = self.build()
+        floor = floor_artifact()
+        component = floor["cells"][0]["absolute"]
+        point = core._point_unguarded_floor_from_component(
+            component, parent_key="max_abs_residual_j"
+        )
+        component["corner_widened_unguarded_floor_j"] = 2.0 * point
+        closeout, manifest, floor, sidecar = self.build(floor)
         record = closeout["independent_ratios"][0]
         self.assertEqual(record["ratio"], 2.0)
         self.assertTrue(record["passes"])
-        self.assertEqual(closeout["branch"], "A")
         self.assert_valid_closeout(closeout, manifest, floor, sidecar)
 
     def test_zero_denominator_refuses_with_named_reason(self) -> None:
@@ -405,7 +457,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         manifest = finalized_manifest()
         sidecar = replay_sidecar(floor)
         missing_id = sidecar["cells"].pop()["cell_id"]
-        manifest_bytes, floor_bytes, sidecar_bytes = _attach_replay_sidecar(
+        manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
             manifest, floor, sidecar
         )
         closeout = build_d165_dominance_closeout(
@@ -576,11 +628,11 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 )
                 self.assertTrue(forbidden.isdisjoint(parameters))
 
-    def test_build_catches_unhashable_source_membership_as_named_neither(self) -> None:
+    def test_manifest_id_tamper_refuses_before_closeout_licensing(self) -> None:
         _, manifest, floor, sidecar = self.build()
         malformed_manifest_bytes = mutate_then_encode(
             _file_json_bytes(manifest),
-            lambda value: value["contrasts"][0]["block_ids"].__setitem__(0, []),
+            lambda value: value["arms"][0].update({"model_tag": "tampered"}),
         )
         floor_bytes = _file_json_bytes(floor)
         sidecar_bytes = _file_json_bytes(sidecar)
@@ -588,7 +640,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             malformed_manifest_bytes, floor_bytes, sidecar_bytes
         )
         self.assertEqual(
-            closeout["refusal_reason"], core.CLOSEOUT_INPUT_MALFORMED_SOURCE
+            closeout["refusal_reason"], "finalized_manifest_id_mismatch"
         )
         self.assertIsNone(closeout["branch"])
         self.assertFalse(closeout["dominance_sentence_licensed"])
@@ -637,17 +689,14 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self,
     ) -> None:
         _, manifest, floor, sidecar = self.build()
-        manifest_bytes = _file_json_bytes(manifest)
         floor_bytes = _file_json_bytes(floor)
         sidecar_bytes = _file_json_bytes(sidecar)
         for missing_key in ("path", "sha256", "schema_version", "sidecar_id"):
             with self.subTest(missing_key=missing_key):
-                partial_manifest_bytes = mutate_then_encode(
-                    manifest_bytes,
-                    lambda value, key=missing_key: value["evidence"][
-                        "dominance_replay_sidecar"
-                    ].pop(key),
-                )
+                partial = copy.deepcopy(manifest)
+                partial["evidence"]["dominance_replay_sidecar"].pop(missing_key)
+                partial["manifest_id"] = calculate_manifest_id(partial)
+                partial_manifest_bytes = _file_json_bytes(partial)
                 closeout = build_d165_dominance_closeout(
                     partial_manifest_bytes, floor_bytes, sidecar_bytes
                 )
@@ -658,12 +707,11 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
     def test_sidecar_attachment_schema_mismatch_has_identity_reason(self) -> None:
         _, manifest, floor, sidecar = self.build()
-        manifest_bytes = mutate_then_encode(
-            _file_json_bytes(manifest),
-            lambda value: value["evidence"]["dominance_replay_sidecar"].update(
-                {"schema_version": "forged-schema"}
-            ),
-        )
+        manifest["evidence"]["dominance_replay_sidecar"][
+            "schema_version"
+        ] = "forged-schema"
+        manifest["manifest_id"] = calculate_manifest_id(manifest)
+        manifest_bytes = _file_json_bytes(manifest)
         closeout = build_d165_dominance_closeout(
             manifest_bytes, _file_json_bytes(floor), _file_json_bytes(sidecar)
         )
@@ -701,6 +749,17 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             )
         )
 
+    def test_default_estimator_cannot_carry_common_mode_replay(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        sidecar["cells"][0]["comparative"]["estimator"] = "default"
+        self.assertEqual(
+            core.validate_d165_replay_sidecar(sidecar),
+            [
+                "sidecar.cells[0].comparative.estimator: must be 'common_mode' "
+                "when common_mode_replay is present"
+            ],
+        )
+
     def test_replay_sidecar_guard_matrix_trips_one_named_guard_per_case(self) -> None:
         base = replay_sidecar(floor_artifact())
         cases: list[tuple[str, dict, str]] = []
@@ -727,11 +786,12 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         duplicate_cell["cells"][1]["cell_id"] = duplicate_cell["cells"][0][
             "cell_id"
         ]
+        duplicate_cell_id = duplicate_cell["cells"][0]["cell_id"]
         cases.append(
             (
                 "cell census",
                 duplicate_cell,
-                "sidecar.cells[1].cell_id: duplicate 'cell-decode-a'",
+                f"sidecar.cells[1].cell_id: duplicate {duplicate_cell_id!r}",
             )
         )
         absolute_common = copy.deepcopy(base)
@@ -794,12 +854,13 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             "common_mode_replay"
         ]["inputs"]["blocks"]
         blocks[1]["block_id"] = blocks[0]["block_id"]
+        duplicate_block_id = blocks[0]["block_id"]
         cases.append(
             (
                 "block census",
                 duplicate_block,
                 "sidecar.cells[0].comparative.common_mode_replay.inputs."
-                "blocks[1].block_id: duplicate 'd117-decode-contrast-b01'",
+                f"blocks[1].block_id: duplicate {duplicate_block_id!r}",
             )
         )
         split = copy.deepcopy(base)
@@ -898,7 +959,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         cases.append(("source result arithmetic", common_result, common_reason))
 
         license_record = copy.deepcopy(closeout)
-        license_record["dominance_sentence_licensed"] = False
+        license_record["dominance_sentence_licensed"] = not closeout[
+            "dominance_sentence_licensed"
+        ]
         license_reason = (
             "closeout.dominance_sentence_licensed: does not match branch rule"
         )
@@ -919,7 +982,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
     def test_builder_guard_matrix_refuses_named_invalid_sources(self) -> None:
         manifest = finalized_manifest()
         floor = floor_artifact()
-        sidecar = replay_sidecar(floor, manifest)
+        sidecar = replay_sidecar(floor)
         cases = []
 
         short_floor = copy.deepcopy(floor)
@@ -974,7 +1037,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 manifest_for_case = copy.deepcopy(manifest_value)
                 sidecar_for_case = copy.deepcopy(sidecar_value)
                 manifest_bytes, floor_bytes, sidecar_bytes = (
-                    _attach_replay_sidecar(
+                    _reseal_test_sources(
                         manifest_for_case, floor_value, sidecar_for_case
                     )
                 )
@@ -991,12 +1054,12 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
         attached_manifest = copy.deepcopy(manifest)
         attached_manifest_bytes, floor_bytes, sidecar_bytes = (
-            _attach_replay_sidecar(attached_manifest, floor, sidecar)
+            _reseal_test_sources(attached_manifest, floor, sidecar)
         )
-        absent_manifest_bytes = mutate_then_encode(
-            attached_manifest_bytes,
-            lambda value: value["evidence"].pop("dominance_replay_sidecar"),
-        )
+        absent_manifest = json.loads(attached_manifest_bytes)
+        absent_manifest["evidence"].pop("dominance_replay_sidecar")
+        absent_manifest["manifest_id"] = calculate_manifest_id(absent_manifest)
+        absent_manifest_bytes = _file_json_bytes(absent_manifest)
         attachment_cases.append(
             (
                 "manifest attachment",
@@ -1009,7 +1072,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
         digest_manifest = copy.deepcopy(manifest)
         digest_manifest_bytes, digest_floor_bytes, original_sidecar_bytes = (
-            _attach_replay_sidecar(digest_manifest, floor, sidecar)
+            _reseal_test_sources(digest_manifest, floor, sidecar)
         )
         forged_sidecar = copy.deepcopy(sidecar)
         forged_sidecar["cells"][0]["absolute"]["independent"].update(
@@ -1031,47 +1094,17 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             _file_json_bytes(forged_sidecar), original_sidecar_bytes
         )
 
-        campaign_manifest = copy.deepcopy(manifest)
-        campaign_sidecar = copy.deepcopy(sidecar)
-        contrasts = campaign_manifest["contrasts"]
-        for target, other in (
-            (contrasts[0], contrasts[1]),
-            (contrasts[1], contrasts[0]),
-        ):
-            for cell_id in (target["cell_a_id"], target["cell_b_id"]):
-                cell = next(
-                    row
-                    for row in campaign_sidecar["cells"]
-                    if row["cell_id"] == cell_id
-                )
-                blocks = cell["comparative"]["common_mode_replay"]["inputs"][
-                    "blocks"
-                ]
-                for block, block_id in zip(
-                    blocks, other["block_ids"], strict=True
-                ):
-                    block["block_id"] = block_id
-        campaign_manifest_bytes, campaign_floor_bytes, campaign_sidecar_bytes = (
-            _attach_replay_sidecar(campaign_manifest, floor, campaign_sidecar)
-        )
-        attachment_cases.append(
-            (
-                "manifest block membership",
-                campaign_manifest_bytes,
-                campaign_floor_bytes,
-                campaign_sidecar_bytes,
-                "manifest_block_membership_mismatch",
-            )
-        )
-
         identity_manifest = copy.deepcopy(manifest)
         identity_manifest_bytes, identity_floor_bytes, identity_sidecar_bytes = (
-            _attach_replay_sidecar(identity_manifest, floor, sidecar)
+            _reseal_test_sources(identity_manifest, floor, sidecar)
         )
         identity_manifest_bytes = mutate_then_encode(
             identity_manifest_bytes,
-            lambda value: value["evidence"]["dominance_replay_sidecar"].update(
-                {"sidecar_id": "other-sidecar"}
+            lambda value: (
+                value["evidence"]["dominance_replay_sidecar"].update(
+                    {"sidecar_id": "other-sidecar"}
+                ),
+                value.update({"manifest_id": calculate_manifest_id(value)}),
             ),
         )
         attachment_cases.append(
@@ -1111,18 +1144,282 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                     [],
                 )
 
+    def test_floor_member_census_refuses_each_position_delta_and_count_mutation(
+        self,
+    ) -> None:
+        manifest = finalized_manifest()
+        floor = floor_artifact()
+        sidecar = replay_sidecar(floor)
+
+        def wrong_member(mutated_floor: dict, mutated_sidecar: dict) -> None:
+            block = mutated_sidecar["cells"][0]["comparative"][
+                "common_mode_replay"
+            ]["inputs"]["blocks"][0]
+            block["members"]["A1"] = "wrong-bundle"
+
+        def swap_positions(mutated_floor: dict, mutated_sidecar: dict) -> None:
+            members = mutated_sidecar["cells"][0]["comparative"][
+                "common_mode_replay"
+            ]["inputs"]["blocks"][0]["members"]
+            members["A1"], members["B1"] = members["B1"], members["A1"]
+
+        def delta_mismatch(mutated_floor: dict, mutated_sidecar: dict) -> None:
+            replay = mutated_sidecar["cells"][0]["comparative"][
+                "common_mode_replay"
+            ]
+            block = replay["inputs"]["blocks"][0]
+            shift = 1e-6
+            block["delta_j"] += shift
+            block["zero_point_contrast_j"] += shift
+            block["onset_sweep_j"] = [
+                value + shift for value in block["onset_sweep_j"]
+            ]
+            block["offset_sweep_j"] = [
+                value + shift for value in block["offset_sweep_j"]
+            ]
+            block["derived_split"] = core.split_common_mode_block_width(
+                delta_j=block["delta_j"],
+                onset_sweep_j=block["onset_sweep_j"],
+                offset_sweep_j=block["offset_sweep_j"],
+                zero_point_contrast_j=block["zero_point_contrast_j"],
+                bundle_residual_half_widths_j=block[
+                    "bundle_residual_half_widths_j"
+                ],
+                member_envelope_integral_sum_j=block[
+                    "member_envelope_integral_sum_j"
+                ],
+            )
+            _recompute_sidecar_cell_result(mutated_sidecar)
+
+        def missing_block(mutated_floor: dict, mutated_sidecar: dict) -> None:
+            mutated_sidecar["cells"][0]["comparative"]["common_mode_replay"][
+                "inputs"
+            ]["blocks"].pop()
+            _recompute_sidecar_cell_result(mutated_sidecar)
+
+        def extra_block(mutated_floor: dict, mutated_sidecar: dict) -> None:
+            blocks = mutated_sidecar["cells"][0]["comparative"][
+                "common_mode_replay"
+            ]["inputs"]["blocks"]
+            extra = copy.deepcopy(blocks[-1])
+            extra["block_id"] = "extra-extraction-block"
+            extra["members"] = {
+                position: f"extra-{position}" for position in core._ABBA_POSITIONS
+            }
+            blocks.append(extra)
+            _recompute_sidecar_cell_result(mutated_sidecar)
+
+        def duplicate_floor_id(mutated_floor: dict, mutated_sidecar: dict) -> None:
+            blocks = mutated_floor["cells"][0]["comparative"]["blocks"]
+            blocks[1]["block_id"] = blocks[0]["block_id"]
+
+        cases = (
+            ("wrong positioned member", wrong_member),
+            ("A1/B1 swap", swap_positions),
+            ("delta_j beyond _close", delta_mismatch),
+            ("missing block", missing_block),
+            ("extra block", extra_block),
+            ("duplicated floor block id", duplicate_floor_id),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                mutated_floor = copy.deepcopy(floor)
+                mutated_sidecar = copy.deepcopy(sidecar)
+                mutate(mutated_floor, mutated_sidecar)
+                manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
+                    copy.deepcopy(manifest), mutated_floor, mutated_sidecar
+                )
+                closeout = build_d165_dominance_closeout(
+                    manifest_bytes, floor_bytes, sidecar_bytes
+                )
+                self.assertEqual(
+                    closeout["refusal_reason"], "floor_member_census_mismatch"
+                )
+                self.assertIsNone(closeout["branch"])
+
+    def test_floor_cell_unresolved_does_not_fall_back_to_another_floor_cell(
+        self,
+    ) -> None:
+        _, manifest, floor, sidecar = self.build()
+        manifest["arms"][0]["floor_cell_id"] = None
+        manifest["manifest_id"] = calculate_manifest_id(manifest)
+        closeout = build_d165_dominance_closeout(
+            _file_json_bytes(manifest),
+            _file_json_bytes(floor),
+            _file_json_bytes(sidecar),
+        )
+        self.assertEqual(closeout["refusal_reason"], "floor_cell_unresolved")
+        self.assertIsNone(closeout["branch"])
+
+    def test_resolved_default_cell_refuses_cell_not_common_mode(self) -> None:
+        _, manifest, floor, sidecar = self.build()
+        target_id = manifest["arms"][0]["floor_cell_id"]
+        target = next(
+            cell for cell in sidecar["cells"] if cell["cell_id"] == target_id
+        )
+        target["comparative"] = {
+            "independent": target["comparative"]["independent"],
+            "estimator": "default",
+        }
+        manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
+            manifest, floor, sidecar
+        )
+        closeout = build_d165_dominance_closeout(
+            manifest_bytes, floor_bytes, sidecar_bytes
+        )
+        self.assertEqual(closeout["refusal_reason"], "cell_not_common_mode")
+        self.assertIsNone(closeout["branch"])
+
+    def test_floor_stack_identity_recomputes_to_finalizer_expected_stack_sha(
+        self,
+    ) -> None:
+        _, manifest, floor, sidecar = self.build()
+        floor_by_id = {cell["cell_id"]: cell for cell in floor["cells"]}
+        for arm in manifest["arms"]:
+            expected_stack_sha = stack_identity_sha256(
+                arm["floor_stack_identity"]
+            )
+            self.assertEqual(
+                expected_stack_sha,
+                floor_by_id[arm["floor_cell_id"]]["source_regime"][
+                    "stack_identity_sha256"
+                ],
+            )
+
+        mutated = copy.deepcopy(manifest)
+        mutated["arms"][0]["floor_stack_identity"]["kernel_library"] = (
+            "mutated-kernel"
+        )
+        mutated["manifest_id"] = calculate_manifest_id(mutated)
+        closeout = build_d165_dominance_closeout(
+            _file_json_bytes(mutated),
+            _file_json_bytes(floor),
+            _file_json_bytes(sidecar),
+        )
+        self.assertEqual(closeout["refusal_reason"], "floor_cell_unresolved")
+
+    def test_seven_field_realized_identity_cannot_substitute_for_floor_stack(
+        self,
+    ) -> None:
+        _, manifest, floor, sidecar = self.build()
+        manifest["arms"][0]["floor_stack_identity"] = copy.deepcopy(
+            manifest["arms"][0]["realized_stack_identity"]
+        )
+        manifest["manifest_id"] = calculate_manifest_id(manifest)
+        closeout = build_d165_dominance_closeout(
+            _file_json_bytes(manifest),
+            _file_json_bytes(floor),
+            _file_json_bytes(sidecar),
+        )
+        self.assertEqual(closeout["refusal_reason"], "floor_cell_unresolved")
+
+    def test_minted_mixed_floor_finalizes_and_refuses_default_contrast_cell(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            seed = install_synthetic_finalization_fixture(
+                root / "seed", shared_governed_stack=True
+            )
+            seed_bundle = next(
+                path
+                for path in seed["runs_root"].iterdir()
+                if (path / "config.json").is_file()
+            )
+            governed_stack = build_stack_identity(
+                json.loads((seed_bundle / "config.json").read_bytes()),
+                json.loads((seed_bundle / "metadata.json").read_bytes()),
+            )
+            self.assertIsNotNone(governed_stack)
+
+            mint_root = root / "mint"
+            mint_root.mkdir()
+            pinset_path, pinset_sha, inputs, snapshot = (
+                freeze_mixed_estimator_v2_pinset(
+                    mint_root,
+                    source_stack_identity=dict(governed_stack),
+                )
+            )
+            with _mixed_common_mode_seams(inputs):
+                floor = generalized_mint.mint_multi_cell_authenticated_artifact(
+                    pinset_path=pinset_path,
+                    pinset_sha256=pinset_sha,
+                    producer_inputs=inputs,
+                    calibration_ledger_snapshot=snapshot,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                )
+            floor_by_id = {cell["cell_id"]: cell for cell in floor["cells"]}
+            cells_by_slot = {
+                ("decode", "A"): floor_by_id["cell-0-decode"],
+                ("decode", "B"): floor_by_id["cell-1-decode"],
+                ("prefill_p256", "A"): floor_by_id["cell-0-prefill"],
+                ("prefill_p256", "B"): floor_by_id["cell-1-prefill"],
+            }
+            fixture = install_synthetic_finalization_fixture(
+                root / "final",
+                shared_governed_stack=True,
+                floor_cells_by_slot=cells_by_slot,
+                dominance_criterion=generator.dominance_criterion_registration(),
+            )
+            fixture["floor_path"].write_bytes(_file_json_bytes(floor))
+            default_ids = frozenset(floor_by_id)
+            sidecar = replay_sidecar(floor, default_cell_ids=default_ids)
+            sidecar_path = fixture["root"] / "dominance_replay_sidecar.json"
+            sidecar_path.write_bytes(_file_json_bytes(sidecar))
+            pinset_projection, pinset_error = (
+                detection_floor_module._read_floor_mint_pinset(
+                    pinset_path, expected_sha256=pinset_sha
+                )
+            )
+            self.assertIsNone(pinset_error)
+            with mock.patch.object(
+                detection_floor_module,
+                "_repository_floor_mint_pinsets",
+                return_value=([pinset_projection], None),
+            ):
+                manifest = finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                    dominance_replay_sidecar_path=sidecar_path,
+                )
+            closeout = build_d165_dominance_closeout(
+                _file_json_bytes(manifest),
+                _file_json_bytes(floor),
+                _file_json_bytes(sidecar),
+            )
+        self.assertEqual(
+            {arm["floor_cell_id"] for arm in manifest["arms"]}, set(floor_by_id)
+        )
+        self.assertEqual(closeout["refusal_reason"], "cell_not_common_mode")
+        self.assertIsNone(closeout["branch"])
+
     def test_branch_a_and_branch_b_fixtures(self) -> None:
-        branch_a, manifest_a, floor_a, sidecar_a = self.build()
+        floor_a = floor_artifact()
+        for cell in floor_a["cells"]:
+            for component_name, parent_key in (
+                ("absolute", "max_abs_residual_j"),
+                ("comparative", "max_abs_delta_j"),
+            ):
+                component = cell[component_name]
+                point = core._point_unguarded_floor_from_component(
+                    component, parent_key=parent_key
+                )
+                component["corner_widened_unguarded_floor_j"] = 2.0 * point
+        branch_a, manifest_a, floor_a, sidecar_a = self.build(floor_a)
         self.assertEqual(branch_a["branch"], "A")
         self.assertTrue(branch_a["dominance_sentence_licensed"])
         self.assertTrue(branch_a["subtitle_licensed"])
         self.assert_valid_closeout(branch_a, manifest_a, floor_a, sidecar_a)
 
-        floor_b = floor_artifact()
-        floor_b["cells"][0]["absolute"][
-            "corner_widened_unguarded_floor_j"
-        ] = 1.5
-        branch_b, manifest_b, floor_b, sidecar_b = self.build(floor_b)
+        branch_b, manifest_b, floor_b, sidecar_b = self.build()
         self.assertEqual(branch_b["branch"], "B")
         self.assertFalse(branch_b["all_independent_pass"])
         self.assertFalse(branch_b["dominance_sentence_licensed"])
@@ -1288,12 +1585,30 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 [block["block_id"] for block in blocks],
                 [block["delta_j"] for block in blocks[:-1]],
                 [object() for _ in blocks],
+                [block["members"] for block in blocks],
             )
         with self.assertRaisesRegex(
             ValueError, core.CLOSEOUT_INPUT_MALFORMED_ADAPTER
         ):
             core.d165_replay_blocks_from_mint_inputs(
-                [[]], [blocks[0]["delta_j"]], [object()]
+                [[]],
+                [blocks[0]["delta_j"]],
+                [object()],
+                [blocks[0]["members"]],
+            )
+
+    def test_mint_adapter_copies_exact_positioned_members_only(self) -> None:
+        blocks, _, _, _ = fixture_replay_inputs()
+        self.assertEqual(set(blocks[0]["members"]), set(core._ABBA_POSITIONS))
+        self.assertNotIn("members", core._raw_replay_block(blocks[0]))
+        invalid_members = copy.deepcopy(blocks[0]["members"])
+        invalid_members.pop("A1")
+        with self.assertRaisesRegex(ValueError, "d165_mint_adapter_input_invalid"):
+            core.d165_replay_blocks_from_mint_inputs(
+                [blocks[0]["block_id"]],
+                [blocks[0]["delta_j"]],
+                [object()],
+                [invalid_members],
             )
 
 

@@ -212,6 +212,9 @@ def install_synthetic_finalization_fixture(
     transport_mode: str = "exact_stack_only",
     runtime_backend: str = "mlx",
     telemetry_backend: str = "powermetrics",
+    shared_governed_stack: bool = False,
+    floor_cells_by_slot: dict[tuple[str, str], dict] | None = None,
+    dominance_criterion: dict | None = None,
 ) -> dict:
     root = Path(root)
     prospective_path, plan_tree_path, prospective = (
@@ -221,6 +224,8 @@ def install_synthetic_finalization_fixture(
             transport_mode=transport_mode,
             runtime_backend=runtime_backend,
             telemetry_backend=telemetry_backend,
+            floor_cells_by_slot=floor_cells_by_slot,
+            dominance_criterion=dominance_criterion,
         )
     )
     runs_root = root / "runs"
@@ -243,9 +248,21 @@ def install_synthetic_finalization_fixture(
             config = json.loads(config_raw)
             (bundle / "config.json").write_bytes(config_raw)
             model_token = (
-                "a" if member["arm"] == "A" else "b"
+                "c"
+                if shared_governed_stack
+                else "a" if member["arm"] == "A" else "b"
             )
             metadata = _metadata_for_config(config, model_token)
+            if shared_governed_stack:
+                metadata["workload_provenance"]["tokenizer"].update(
+                    {
+                        "identifier": "synthetic-shared-tokenizer",
+                        "revision": "shared",
+                    }
+                )
+                metadata["workload_provenance"]["output_policy"][
+                    "requested_tokens"
+                ] = 512
             if runtime_backend != "mlx" or telemetry_backend != "powermetrics":
                 metadata["adapters"]["runtime"]["name"] = runtime_backend
                 metadata["adapters"]["telemetry"]["name"] = telemetry_backend
@@ -536,6 +553,33 @@ def install_synthetic_finalization_fixture(
 
 
 class AnalysisFinalizerTests(unittest.TestCase):
+    def test_legacy_finalization_is_byte_unchanged_without_floor_identity_fields(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            manifest = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+        legacy_projection = copy.deepcopy(manifest)
+        for arm in legacy_projection["arms"]:
+            arm.pop("floor_cell_id", None)
+            arm.pop("floor_stack_identity", None)
+        self.assertEqual(
+            manifest["manifest_id"], calculate_manifest_id(legacy_projection)
+        )
+        for arm in manifest["arms"]:
+            self.assertNotIn("floor_cell_id", arm)
+            self.assertNotIn("floor_stack_identity", arm)
+
     def test_cli_maps_fuzz_shaped_prospective_value_to_closed_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

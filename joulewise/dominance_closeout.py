@@ -16,13 +16,16 @@ from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 from typing import Any
 
+from joulewise.analysis_manifest_v3 import calculate_manifest_id
 from joulewise.detection_floor import (
     MAX_EXACT_ADMISSIBLE_CORNER_N,
     CommonModeEstimatorRefusal,
+    _close,
     _point_floor_diagnostic,
     comparative_false_effect_floor,
     registered_common_mode_operative_bound,
 )
+from joulewise.identity_pins import stack_identity_sha256
 
 
 REPLAY_SCHEMA_VERSION = "joulewise.d165_dominance_replay.v1"
@@ -65,7 +68,16 @@ _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _SIDECAR_TOP_KEYS = {"schema_version", "sidecar_id", "cells"}
 _SIDECAR_CELL_KEYS = {"cell_id", "absolute", "comparative"}
 _ABSOLUTE_KEYS = {"independent", "common_mode"}
-_COMPARATIVE_KEYS = {"independent", "common_mode_replay"}
+_COMPARATIVE_DEFAULT_KEYS = {"independent", "estimator"}
+_COMPARATIVE_COMMON_MODE_KEYS = {
+    "independent",
+    "estimator",
+    "common_mode_replay",
+}
+_COMPARATIVE_KEYS = (
+    _COMPARATIVE_DEFAULT_KEYS,
+    _COMPARATIVE_COMMON_MODE_KEYS,
+)
 _INDEPENDENT_KEYS = {
     "status",
     "ratio_id",
@@ -87,6 +99,7 @@ _COMMON_MODE_INPUT_KEYS = {
 }
 _COMMON_MODE_BLOCK_KEYS = {
     "block_id",
+    "members",
     "delta_j",
     "onset_sweep_j",
     "offset_sweep_j",
@@ -96,6 +109,7 @@ _COMMON_MODE_BLOCK_KEYS = {
     "member_envelope_integral_sum_j",
     "derived_split",
 }
+_ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
 _DERIVED_SPLIT_KEYS = {"shared_width_j", "local_width_j"}
 _COMMON_MODE_RESULT_KEYS = {
     "rule_id",
@@ -336,12 +350,14 @@ def d165_replay_blocks_from_mint_inputs(
     block_ids: Sequence[str],
     block_deltas_j: Sequence[float],
     block_inputs: Sequence[Any],
+    block_members: Sequence[Mapping[str, str]],
 ) -> list[dict[str, Any]]:
-    """Adapt the three extraction-owned mint values into replay blocks.
+    """Adapt the four extraction-owned mint values into replay blocks.
 
     ``block_inputs`` contains ``floor_extraction._CommonModeBlockInputs``
     instances.  The loose annotation avoids an import cycle while the exact
-    attribute census below keeps this boundary closed.
+    attribute census below keeps this boundary closed. ``block_members`` is
+    the positioned A/B/B/A map from the authenticated extraction spec.
     """
 
     reason = "d165_mint_adapter_input_invalid"
@@ -350,17 +366,30 @@ def d165_replay_blocks_from_mint_inputs(
             isinstance(block_ids, (str, bytes))
             or isinstance(block_deltas_j, (str, bytes))
             or isinstance(block_inputs, (str, bytes))
+            or isinstance(block_members, (str, bytes))
             or not isinstance(block_ids, Sequence)
             or not isinstance(block_deltas_j, Sequence)
             or not isinstance(block_inputs, Sequence)
+            or not isinstance(block_members, Sequence)
             or not block_ids
             or len(block_ids) != len(block_deltas_j)
             or len(block_ids) != len(block_inputs)
+            or len(block_ids) != len(block_members)
             or len(block_ids) > MAX_EXACT_ADMISSIBLE_CORNER_N
             or len(set(block_ids)) != len(block_ids)
             or any(
                 not isinstance(block_id, str) or not block_id
                 for block_id in block_ids
+            )
+            or any(
+                not isinstance(members, Mapping)
+                or set(members) != set(_ABBA_POSITIONS)
+                or any(
+                    not isinstance(members[position], str)
+                    or not members[position]
+                    for position in _ABBA_POSITIONS
+                )
+                for members in block_members
             )
         )
     except TypeError as exc:
@@ -369,13 +398,16 @@ def d165_replay_blocks_from_mint_inputs(
         raise ValueError(reason)
 
     records: list[dict[str, Any]] = []
-    for block_id, raw_delta, item in zip(
-        block_ids, block_deltas_j, block_inputs, strict=True
+    for block_id, raw_delta, item, members in zip(
+        block_ids, block_deltas_j, block_inputs, block_members, strict=True
     ):
         try:
             delta = _finite_number(raw_delta, reason)
             record = {
                 "block_id": block_id,
+                "members": {
+                    position: members[position] for position in _ABBA_POSITIONS
+                },
                 "delta_j": delta,
                 "onset_sweep_j": list(item.onset_values_j),
                 "offset_sweep_j": list(item.offset_values_j),
@@ -720,15 +752,35 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
                 )
 
         comparative = cell["comparative"]
-        if not _check_keys(
-            comparative, _COMPARATIVE_KEYS, f"{cell_where}.comparative", errors
-        ):
+        comparative_where = f"{cell_where}.comparative"
+        if not isinstance(comparative, Mapping):
+            errors.append(f"{comparative_where}: must be an object")
+            continue
+        comparative_keys = set(comparative)
+        if not any(comparative_keys == keys for keys in _COMPARATIVE_KEYS):
+            errors.append(
+                f"{comparative_where}: must have exactly "
+                "['estimator', 'independent'] or ['common_mode_replay', "
+                "'estimator', 'independent']"
+            )
             continue
         _validate_independent_record(
             comparative["independent"],
-            f"{cell_where}.comparative.independent",
+            f"{comparative_where}.independent",
             errors,
         )
+        if comparative_keys == _COMPARATIVE_DEFAULT_KEYS:
+            if comparative["estimator"] != "default":
+                errors.append(
+                    f"{comparative_where}.estimator: must be 'default' "
+                    "when common_mode_replay is absent"
+                )
+            continue
+        if comparative["estimator"] != "common_mode":
+            errors.append(
+                f"{comparative_where}.estimator: must be 'common_mode' "
+                "when common_mode_replay is present"
+            )
         replay = comparative["common_mode_replay"]
         if not _check_keys(
             replay,
@@ -798,6 +850,20 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
                     errors.append(f"{block_where}.block_id: duplicate {block_id!r}")
                 else:
                     seen_blocks.add(block_id)
+                members = block["members"]
+                if (
+                    not isinstance(members, Mapping)
+                    or set(members) != set(_ABBA_POSITIONS)
+                    or any(
+                        not isinstance(members.get(position), str)
+                        or not members.get(position)
+                        for position in _ABBA_POSITIONS
+                    )
+                ):
+                    errors.append(
+                        f"{block_where}.members: must map exactly A1, B1, B2, "
+                        "and A2 to nonempty bundle ids"
+                    )
                 derived = block["derived_split"]
                 if not _check_keys(
                     derived,
@@ -1226,64 +1292,167 @@ def _manifest_floor_artifact_digest_error(
     return None
 
 
-def _sidecar_block_id_set(cell: Mapping[str, Any]) -> set[str] | None:
-    try:
-        blocks = cell["comparative"]["common_mode_replay"]["inputs"]["blocks"]
-    except (KeyError, TypeError):
-        return None
-    if not isinstance(blocks, list):
-        return None
-    block_ids = {
-        block.get("block_id")
-        for block in blocks
-        if isinstance(block, Mapping) and isinstance(block.get("block_id"), str)
-    }
-    if len(block_ids) != len(blocks):
-        return None
-    return block_ids
-
-
-def _manifest_block_membership_error(
-    finalized_manifest: object,
+def _floor_member_census_error(
+    floor_artifact: object,
     replay_sidecar: object,
 ) -> str | None:
-    """Compare each sidecar cell with its finalized contrast's block census."""
+    """Bind common-mode sidecar blocks to the sealed floor block census."""
 
-    if not isinstance(finalized_manifest, Mapping) or not isinstance(
-        replay_sidecar, Mapping
-    ):
-        return "manifest_block_membership_mismatch"
-    blocks = finalized_manifest.get("blocks")
+    floor_cells, floor_errors = _floor_cell_map(floor_artifact)
+    if floor_errors:
+        return "floor_member_census_mismatch"
+    sidecar_cells = _sidecar_cell_map(replay_sidecar)
+    for cell_id, sidecar_cell in sidecar_cells.items():
+        comparative = sidecar_cell.get("comparative")
+        if not isinstance(comparative, Mapping):
+            return "floor_member_census_mismatch"
+        if comparative.get("estimator") == "default":
+            continue
+        try:
+            sidecar_blocks = comparative["common_mode_replay"]["inputs"]["blocks"]
+            floor_comparative = floor_cells[cell_id]["comparative"]
+            floor_blocks = floor_comparative["blocks"]
+            n_blocks = floor_comparative["n_blocks"]
+        except (KeyError, TypeError):
+            return "floor_member_census_mismatch"
+        if (
+            not isinstance(sidecar_blocks, list)
+            or not isinstance(floor_blocks, list)
+            or not isinstance(n_blocks, int)
+            or isinstance(n_blocks, bool)
+            or len(sidecar_blocks) != n_blocks
+            or len(floor_blocks) != n_blocks
+        ):
+            return "floor_member_census_mismatch"
+
+        def by_id(rows: Sequence[object]) -> dict[str, Mapping[str, Any]] | None:
+            result: dict[str, Mapping[str, Any]] = {}
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    return None
+                block_id = row.get("block_id")
+                if (
+                    not isinstance(block_id, str)
+                    or not block_id
+                    or block_id in result
+                ):
+                    return None
+                result[block_id] = row
+            return result
+
+        sidecar_by_id = by_id(sidecar_blocks)
+        floor_by_id = by_id(floor_blocks)
+        if (
+            sidecar_by_id is None
+            or floor_by_id is None
+            or set(sidecar_by_id) != set(floor_by_id)
+        ):
+            return "floor_member_census_mismatch"
+        for block_id, sidecar_block in sidecar_by_id.items():
+            floor_block = floor_by_id[block_id]
+            floor_members = floor_block.get("members")
+            if not isinstance(floor_members, list):
+                return "floor_member_census_mismatch"
+            positioned: dict[str, str] = {}
+            for member in floor_members:
+                if not isinstance(member, Mapping):
+                    return "floor_member_census_mismatch"
+                position = member.get("position")
+                bundle_id = member.get("bundle_id")
+                if (
+                    position not in _ABBA_POSITIONS
+                    or position in positioned
+                    or not isinstance(bundle_id, str)
+                    or not bundle_id
+                ):
+                    return "floor_member_census_mismatch"
+                positioned[str(position)] = bundle_id
+            sidecar_members = sidecar_block.get("members")
+            if (
+                set(positioned) != set(_ABBA_POSITIONS)
+                or not isinstance(sidecar_members, Mapping)
+                or dict(sidecar_members) != positioned
+                or not _close(sidecar_block.get("delta_j"), floor_block.get("delta_j"))
+            ):
+                return "floor_member_census_mismatch"
+    return None
+
+
+def _contrast_floor_binding_error(
+    finalized_manifest: object,
+    floor_artifact: object,
+    replay_sidecar: object,
+) -> str | None:
+    """Recheck every finalized contrast arm against its resolved floor cell."""
+
+    if not isinstance(finalized_manifest, Mapping):
+        return "floor_cell_unresolved"
+    arms = finalized_manifest.get("arms")
     contrasts = finalized_manifest.get("contrasts")
-    if not isinstance(blocks, list) or not isinstance(contrasts, list):
-        return "manifest_block_membership_mismatch"
-    finalized_block_ids = {
-        block.get("block_id")
-        for block in blocks
-        if isinstance(block, Mapping) and isinstance(block.get("block_id"), str)
-    }
-    if len(finalized_block_ids) != len(blocks):
-        return "manifest_block_membership_mismatch"
+    if not isinstance(arms, list) or not isinstance(contrasts, list):
+        return "floor_cell_unresolved"
+    arm_by_id: dict[str, Mapping[str, Any]] = {}
+    for arm in arms:
+        if not isinstance(arm, Mapping):
+            return "floor_cell_unresolved"
+        arm_id = arm.get("arm_id")
+        if not isinstance(arm_id, str) or not arm_id or arm_id in arm_by_id:
+            return "floor_cell_unresolved"
+        arm_by_id[arm_id] = arm
+    floor_cells, floor_errors = _floor_cell_map(floor_artifact)
+    if floor_errors:
+        return "floor_cell_unresolved"
     sidecar_cells = _sidecar_cell_map(replay_sidecar)
     for contrast in contrasts:
-        if not isinstance(contrast, Mapping) or not isinstance(
-            contrast.get("block_ids"), list
-        ):
-            return "manifest_block_membership_mismatch"
-        expected = set(contrast["block_ids"])
-        if (
-            len(expected) != len(contrast["block_ids"])
-            or not all(isinstance(block_id, str) and block_id for block_id in expected)
-            or not expected <= finalized_block_ids
-        ):
-            return "manifest_block_membership_mismatch"
-        for cell_key in ("cell_a_id", "cell_b_id"):
-            cell_id = contrast.get(cell_key)
-            if not isinstance(cell_id, str) or not cell_id:
-                return "manifest_block_membership_mismatch"
-            sidecar_cell = sidecar_cells.get(cell_id)
-            if sidecar_cell is None or _sidecar_block_id_set(sidecar_cell) != expected:
-                return "manifest_block_membership_mismatch"
+        if not isinstance(contrast, Mapping):
+            return "floor_cell_unresolved"
+        measurement_arm = contrast.get("measurement_arm")
+        if not isinstance(measurement_arm, str) or not measurement_arm:
+            return "floor_cell_unresolved"
+        for arm_label in ("A", "B"):
+            arm = arm_by_id.get(f"{measurement_arm}:{arm_label}")
+            if arm is None:
+                return "floor_cell_unresolved"
+            floor_cell_id = arm.get("floor_cell_id")
+            if not isinstance(floor_cell_id, str) or not floor_cell_id:
+                return "floor_cell_unresolved"
+            floor_cell = floor_cells.get(floor_cell_id)
+            if floor_cell is None:
+                return "floor_cell_unresolved"
+            key = floor_cell.get("key")
+            eligibility = floor_cell.get("eligibility")
+            source_regime = floor_cell.get("source_regime")
+            try:
+                expected_stack_sha = stack_identity_sha256(
+                    arm["floor_stack_identity"]
+                )
+            except (KeyError, TypeError, ValueError):
+                return "floor_cell_unresolved"
+            if (
+                not isinstance(key, Mapping)
+                or key.get("condition_family_id")
+                != arm.get("condition_family_id")
+                or key.get("condition_family_sha256")
+                != arm.get("condition_family_sha256")
+                or not isinstance(eligibility, Mapping)
+                or eligibility.get("claim_usable") is not True
+                or not isinstance(source_regime, Mapping)
+                or source_regime.get("stack_identity_sha256")
+                != expected_stack_sha
+            ):
+                return "floor_cell_unresolved"
+            sidecar_cell = sidecar_cells.get(floor_cell_id)
+            comparative = (
+                sidecar_cell.get("comparative")
+                if isinstance(sidecar_cell, Mapping)
+                else None
+            )
+            if (
+                not isinstance(comparative, Mapping)
+                or comparative.get("estimator") != "common_mode"
+                or not isinstance(comparative.get("common_mode_replay"), Mapping)
+            ):
+                return "cell_not_common_mode"
     return None
 
 
@@ -1310,6 +1479,13 @@ def _source_precondition_errors(
             finalized_manifest.get("manifest_id"), str
         ) or not finalized_manifest.get("manifest_id"):
             errors.append("finalized_manifest: manifest_id is invalid")
+        else:
+            try:
+                expected_manifest_id = calculate_manifest_id(finalized_manifest)
+            except (TypeError, ValueError):
+                expected_manifest_id = None
+            if finalized_manifest.get("manifest_id") != expected_manifest_id:
+                errors.append("finalized_manifest_id_mismatch")
     if (
         not isinstance(floor_artifact, Mapping)
         or floor_artifact.get("schema_version") != FLOOR_ARTIFACT_SCHEMA_VERSION
@@ -1340,11 +1516,17 @@ def _source_precondition_errors(
     )
     errors.extend(alignment_errors)
     if not errors:
-        membership_error = _manifest_block_membership_error(
-            finalized_manifest, replay_sidecar
+        binding_error = _contrast_floor_binding_error(
+            finalized_manifest, floor_artifact, replay_sidecar
         )
-        if membership_error is not None:
-            errors.append(membership_error)
+        if binding_error is not None:
+            errors.append(binding_error)
+    if not errors:
+        census_error = _floor_member_census_error(
+            floor_artifact, replay_sidecar
+        )
+        if census_error is not None:
+            errors.append(census_error)
     return errors
 
 
