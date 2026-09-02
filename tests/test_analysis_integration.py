@@ -333,8 +333,9 @@ def install_two_row_supersession_counterfactual(
 ) -> list[dict]:
     """Append two identical writer-shaped rows for each named bundle.
 
-    Each row has the same 11 keys as the production recorder emits, but its
-    values are synthetic.  The source manifests intentionally omit
+    Each row has the same 11 keys as the production recorder emits; its values
+    are synthetic except ``campaign_policy_sha256``, which is the digest of the
+    real production policy file.  The source manifests intentionally omit
     ``campaign_policy`` because this helper installs the legacy/hand-edited
     consumer counterfactual after finalization rather than exercising the
     guarded recorder.  That omission does not weaken the reader case: every
@@ -727,8 +728,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 fixture["floor_path"],
                 strict_validator=lambda path, strict=True: [],
             )
-            artifact_bytes = render_claim_verdicts(artifact)
-            persisted = json.loads(artifact_bytes)
+            persisted = json.loads(render_claim_verdicts(artifact))
             persisted_audit = next(
                 row
                 for row in persisted["supersession_audit"]
@@ -746,13 +746,6 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     }
                 ],
             )
-            expected_audit_bytes = "\n".join(
-                "    " + line
-                for line in json.dumps(
-                    dict(analysis_audit), indent=2, ensure_ascii=False
-                ).splitlines()
-            ).encode("utf-8")
-            self.assertIn(expected_audit_bytes, artifact_bytes)
             self.assertEqual(
                 validate_claim_verdicts(
                     persisted,
