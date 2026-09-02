@@ -41,6 +41,12 @@ from joulewise.arm_readiness import (
 ROOT = Path(__file__).resolve().parents[1]
 ZERO_SHA = "0" * 64
 TEST_BOOT_SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+# T-0 liveness bound (cold gate T26 item 3): the sample clock probe finishes
+# R1 at 2_000_000_000 ns, so the sample EVIDENCE horizon of R1 + 6 h + 1 s sits
+# inside the ruled 600 s window (`_MIN_IDLE_NS`); the previous 10**30 horizon
+# was rejected by the liveness predicate. The sample ARM keeps 10**30 because
+# arm consumption is checked against the live monotonic clock.
+SAMPLE_VALID_UNTIL_NS = 2_000_000_000 + 21_600_000_000_000 + 1_000_000_000
 
 
 def probe_clock_value() -> dict[str, Any]:
@@ -280,7 +286,7 @@ def sample_evidence() -> dict[str, Any]:
         "status": "PASS",
         "issued_at_utc": "2026-08-11T00:00:00Z",
         "boot_session_id": TEST_BOOT_SESSION_ID,
-        "valid_until_monotonic_ns": 10**30,
+        "valid_until_monotonic_ns": SAMPLE_VALID_UNTIL_NS,
         "pack_sha256": ZERO_SHA,
         "head_commit": "a" * 40,
         "facts": [
