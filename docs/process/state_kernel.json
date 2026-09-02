@@ -1966,7 +1966,7 @@
       "priority": "p1_phase_gate",
       "rank": 119,
       "status": "blocked",
-      "status_note": "Registered 2026-09-01 from ruling 89 R-1 (docs/process/v5-l10-rehearsal-phase.md carries the runsheet). Split out of L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 so the transaction can gate on a row that closes BEFORE the window; the parent row keeps the full ladder (L10-B before the real mint, L10-C before publication) and cannot close before the transaction.",
+      "status_note": "Registered 2026-09-01 from ruling 89 R-1 (docs/process/v5-l10-rehearsal-phase.md carries the runsheet). Split out of L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 so the transaction can gate on a row that closes BEFORE the window; the parent row keeps the full ladder (L10-B before the real mint, L10-C before publication) and cannot close before the transaction. Ruling 97 R-6c/R-6h: the floor is ABSENT by ruling (floors/ empty, asserted before and after step 5); the singleton proves prospective validation, verdict schema/status/basis, and present-member hashes only — the finalizer's bracket and ledger legs (analysis_manifest_v3.py:3380-3487) run after member cover and are first exercised on real bytes in L10-C (E1 provenance validates the same objects outside the finalizer).",
       "stop_card": null
     },
     "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01": {
@@ -5043,7 +5043,7 @@
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. NEEDS-RULING (ruling 89 R-6, 2026-09-01): The G2-b runsheet's B-SUPPLY demands a real v5 aggregate-floor artifact before G2-b, but the _v5 floor-producer corpus is collected by the transaction's ALPHA/BETA arms (registry roster); one of the two is wrong. Also: the runsheet spells the floor pack ids with underscores (d117_floor_qwen3_1p7b_v5) while the generator emits hyphenated model tokens (d117_floor_qwen3-1p7b_v5). Rule before the desk day.",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d owed to the runbook stream; ordering regression R-6e owed.",
       "stop_card": null
     },
     "V5-NIGHTLY-G3-01": {
