@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joulewise.night</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>@@REPO@@/scripts/run_night.py</string>
+    <string>@@MODE@@</string>
+    <string>--plan</string>
+    <string>@@PLAN@@</string>
+    <string>--courier-bin</string>
+    <string>@@COURIER_BIN@@</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>@@REPO@@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@@PATH@@</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>@@HOUR@@</integer>
+    <key>Minute</key>
+    <integer>@@MINUTE@@</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>@@CUSTODY_ROOT@@/night/@@LOG_STEM@@.out</string>
+  <key>StandardErrorPath</key>
+  <string>@@CUSTODY_ROOT@@/night/@@LOG_STEM@@.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

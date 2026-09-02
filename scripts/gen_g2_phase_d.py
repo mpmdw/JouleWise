@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -68,6 +70,90 @@ G2A_INPUT_CHECK = (
     '  --head-pin "$LEDGER_HEAD_PIN" \\\n'
     '  --campaign-policy "$POLICY"\n'
 )
+
+
+def _section_bounds(source: str, heading: str) -> tuple[int, int]:
+    """Return the character bounds for one level-two runsheet section."""
+
+    start = source.index(heading)
+    following = re.search(r"^## ", source[start + len(heading) :], re.MULTILINE)
+    end = len(source) if following is None else start + len(heading) + following.start()
+    return start, end
+
+
+def _line_number(source: str, offset: int) -> int:
+    return source.count("\n", 0, offset) + 1
+
+
+def inventory_g2a_shell_blocks(runsheet: str) -> list[tuple[int, int, str]]:
+    """Inventory shell fences in the fixed-variable and G2-a sections.
+
+    The inclusive line numbers deliberately cover the markdown fence lines:
+    they are the stable source anchors recorded in an emitted chain.
+    """
+
+    sections = (
+        _section_bounds(runsheet, "## Tree and fixed variables"),
+        _section_bounds(runsheet, "## G2-a — first machine evening"),
+    )
+    blocks: list[tuple[int, int, str]] = []
+    pattern = re.compile(r"^```(?:sh|zsh)\n(?P<body>.*?)^```$", re.MULTILINE | re.DOTALL)
+    for start, end in sections:
+        section = runsheet[start:end]
+        for match in pattern.finditer(section):
+            absolute_start = start + match.start()
+            absolute_end = start + match.end()
+            blocks.append(
+                (
+                    _line_number(runsheet, absolute_start),
+                    _line_number(runsheet, absolute_end),
+                    match.group("body"),
+                )
+            )
+    return blocks
+
+
+def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
+    """Render the reviewed G2-a night chain without the desk-only producer."""
+
+    if re.fullmatch(r"[0-9]{8}", night_date) is None:
+        raise ValueError("--night-date must be YYYYMMDD")
+    blocks = inventory_g2a_shell_blocks(runsheet)
+    expected_ranges = [(252, 302), (326, 349), (372, 383), (387, 562), (573, 585)]
+    observed_ranges = [(start, end) for start, end, _body in blocks]
+    if observed_ranges != expected_ranges:
+        raise ValueError(
+            "runsheet shell-fence inventory drifted: "
+            f"observed={observed_ranges!r} expected={expected_ranges!r}"
+        )
+
+    fixed, g2a_exports, _desk_producer, bracket, summarizer = blocks
+    adjusted_exports = g2a_exports[2].replace("20260830", night_date)
+    required_inputs = (
+        "# The desk producer runs while agents are present; require its outputs here.\n"
+        'test -f "$G2A_INPUT_INVENTORY"\n'
+        'test -f "$G2A_FROZEN_PLAN"\n'
+        'test -f "$G2A_PROMPT_LADDER"\n'
+    )
+    pieces = ["#!/bin/zsh\n", "set -euo pipefail\n"]
+    for start, end, body in (fixed, (g2a_exports[0], g2a_exports[1], adjusted_exports)):
+        pieces.extend((f"\n# runsheet L{start}-{end}\n", body))
+    pieces.extend(("\n# arm-time input assertions\n", required_inputs))
+    for start, end, body in (bracket, summarizer):
+        pieces.extend((f"\n# runsheet L{start}-{end}\n", body))
+    return "".join(pieces)
+
+
+def emit_g2a_night_chain(output_path: Path, night_date: str) -> None:
+    """Write an executable chain and its GNU-format SHA-256 sidecar."""
+
+    chain = render_g2a_night_chain(RUNSHEET_PATH.read_text(encoding="utf-8"), night_date)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(chain, encoding="utf-8")
+    output_path.chmod(0o755)
+    digest = hashlib.sha256(chain.encode("utf-8")).hexdigest()
+    sidecar = output_path.with_name(f"{output_path.name}.sha256")
+    sidecar.write_text(f"{digest}  {output_path.name}\n", encoding="utf-8")
 
 
 def _replace_once(source: str, old: str, new: str, *, label: str) -> str:
@@ -292,11 +378,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check", action="store_true", help="refuse instead of updating on drift"
     )
+    parser.add_argument(
+        "--emit-chain", type=Path, metavar="OUT", help="write the G2-a night chain"
+    )
+    parser.add_argument(
+        "--night-date", metavar="YYYYMMDD", help="date substituted into G2-a exports"
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.emit_chain is not None:
+        if args.night_date is None:
+            raise SystemExit("--emit-chain requires --night-date YYYYMMDD")
+        emit_g2a_night_chain(args.emit_chain, args.night_date)
+        print(f"emitted {args.emit_chain}")
+        return 0
+    if args.night_date is not None:
+        raise SystemExit("--night-date is only valid with --emit-chain")
     runbook = RUNBOOK_PATH.read_text(encoding="utf-8")
     runsheet = RUNSHEET_PATH.read_text(encoding="utf-8")
     g2a_generated = render_g2a_generated_region(runbook)

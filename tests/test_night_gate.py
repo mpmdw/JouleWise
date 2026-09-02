@@ -790,7 +790,11 @@ class NightGateTests(unittest.TestCase):
                 "night_aborted_agent_present",
                 "night_chain_already_started",
                 "night_chain_alive",
+                "night_chain_launch_failed",
+                "night_courier_running",
+                "night_courier_unavailable",
                 "night_plan_overruns_deadman",
+                "night_record_exists",
             },
         )
         self.assertFalse(night_gate.NIGHT_DRIVER_REASON_CODES & night_gate.NIGHT_GATE_REASON_CODES)
@@ -798,6 +802,13 @@ class NightGateTests(unittest.TestCase):
         body = source.split("NIGHT_DRIVER_REASON_CODES = frozenset(", 1)[1].split("\n)\n", 1)[1]
         for code in night_gate.NIGHT_DRIVER_REASON_CODES:
             self.assertNotIn(f'"{code}"', body, code)
+
+    def test_every_reason_registry_member_has_the_night_prefix(self) -> None:
+        for registry in (
+            night_gate.NIGHT_GATE_REASON_CODES,
+            night_gate.NIGHT_DRIVER_REASON_CODES,
+        ):
+            self.assertTrue(all(code.startswith("night_") for code in registry))
 
 
 if __name__ == "__main__":
