@@ -63,10 +63,12 @@ from joulewise.identity_pins import (
 from joulewise.whole_window import (
     CONSUMPTION_PROVENANCE_PRECHECK_KEY,
     NEG8_WHOLE_WINDOW_ALLOWANCE_TERM,
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     AuthenticatedConsumptionSession,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
+    recognizable_occurrence_supersession_counts,
     supersession_entry_validation_results,
     supersession_selected_occurrence_identity,
     whole_window_drift_allowances,
@@ -1360,7 +1362,13 @@ def supersession_visibility_scan(
     entries, validations = result
     raw_count = len(entries)
     validated_count = sum(validations)
-    return {
+    recognizable_counts = recognizable_occurrence_supersession_counts(entries)
+    multiple_bundle_ids = sorted(
+        bundle_id
+        for bundle_id, count in recognizable_counts.items()
+        if count > 1
+    )
+    audit = {
         "scope": scope,
         "evidence_root_id": evidence_root_id,
         "authenticated_basis": copy.deepcopy(dict(authenticated_basis)),
@@ -1368,10 +1376,24 @@ def supersession_visibility_scan(
         "validated_count": validated_count,
         "status": (
             "clean"
-            if raw_count == validated_count and basis_authenticated
+            if (
+                raw_count == validated_count
+                and basis_authenticated
+                and not multiple_bundle_ids
+            )
             else "refused"
         ),
     }
+    if multiple_bundle_ids:
+        audit["findings"] = [
+            {
+                "reason_code": (
+                    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                ),
+                "bundle_ids": multiple_bundle_ids,
+            }
+        ]
+    return audit
 
 
 def _campaign_order_binding_problems(
@@ -2132,6 +2154,9 @@ def _campaign_cooldown_evidence(
     if supersession_read is None:
         return {}
     raw_supersessions, supersession_validations = supersession_read
+    supersession_counts = recognizable_occurrence_supersession_counts(
+        raw_supersessions
+    )
     log_rows = load_campaign_log_rows(log_path or runs_root / "campaign_log.jsonl")
     if log_rows is None:
         return {}
@@ -2352,7 +2377,11 @@ def _campaign_cooldown_evidence(
             resolved[bundle_id] = rows[0][1]
             continue
         selected = None
-        if len(bundle_supersessions) == 1 and bundle_supersessions[0][1]:
+        if (
+            supersession_counts.get(bundle_id, 0) == 1
+            and len(bundle_supersessions) == 1
+            and bundle_supersessions[0][1]
+        ):
             selected = supersession_selected_occurrence_identity(
                 [bundle_supersessions[0][0]], bundle_id, declared
             )

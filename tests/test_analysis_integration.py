@@ -71,10 +71,14 @@ from joulewise.whole_window import (
     CustodyTelemetryIdentity,
     IDLE_ADMISSION_CORE_SCHEMA,
     MINTED_CONSUMPTION_SEMANTICS_ID,
+    OCCURRENCE_SUPERSESSION_SCHEMA,
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     WHOLE_WINDOW_SCHEMA,
     build_row_provenance,
     source_manifest_descriptors,
+    supersession_entry_sha256,
+    validate_occurrence_supersession_entry,
     whole_window_refusal_reasons,
 )
 from joulewise.cli import main, validate_bundle
@@ -323,6 +327,106 @@ def install_passing_analysis_whole_window(
     )
 
 
+def install_two_row_supersession_counterfactual(
+    runs_root: Path,
+    bundle_ids: list[str],
+) -> list[dict]:
+    """Append two identical writer-shaped rows for each named bundle.
+
+    Each row has the same 11 keys as the production recorder emits; its values
+    are synthetic except ``campaign_policy_sha256``, which is the digest of the
+    real production policy file.  The source manifests intentionally omit
+    ``campaign_policy`` because this helper installs the legacy/hand-edited
+    consumer counterfactual after finalization rather than exercising the
+    guarded recorder.  That omission does not weaken the reader case: every
+    installed row passes the production supersession validator before the
+    exact out-of-band duplicate bytes are appended.
+    """
+
+    root = Path(runs_root).resolve()
+    campaign_dir = root / "campaign_manifests"
+    campaign_dir.mkdir(parents=True, exist_ok=True)
+    policy_path = (
+        ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+    )
+    policy_sha256 = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    rows = []
+    for bundle_ordinal, bundle_id in enumerate(bundle_ids):
+        canonical = root / bundle_id
+        if not canonical.is_dir():
+            raise AssertionError("counterfactual bundle must be canonical")
+        occurrences = []
+        for suffix in ("a", "b"):
+            manifest_path = campaign_dir / (
+                f"supersession-counterfactual-{bundle_ordinal}-{suffix}.json"
+            )
+            manifest = {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "analysis_manifest_id": None,
+                "session_id": (
+                    f"supersession-counterfactual-{bundle_ordinal}-{suffix}"
+                ),
+                "members": [
+                    {
+                        "config": f"{bundle_id}.json",
+                        "execution": "invoked",
+                        "run_id": bundle_id,
+                        "bundle_ids": [bundle_id],
+                    }
+                ],
+            }
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            occurrences.append(
+                {
+                    "bundle_id": bundle_id,
+                    "source_manifest": {
+                        "path": manifest_path.relative_to(root).as_posix(),
+                        "sha256": hashlib.sha256(
+                            manifest_path.read_bytes()
+                        ).hexdigest(),
+                    },
+                    "member_index": 0,
+                    "bundle_index": 0,
+                }
+            )
+
+        quarantine = root.parent / f"supersession-quarantine-{bundle_id}"
+        quarantine.mkdir()
+        custody = {}
+        for name, field in (
+            ("config.json", "config_sha256"),
+            ("metadata.json", "metadata_sha256"),
+            ("summary_metrics.json", "summary_sha256"),
+        ):
+            raw = (canonical / name).read_bytes()
+            (quarantine / name).write_bytes(raw)
+            custody[field] = hashlib.sha256(raw).hexdigest()
+        row = {
+            "schema_version": OCCURRENCE_SUPERSESSION_SCHEMA,
+            "record_type": "campaign_occurrence_supersession",
+            "timestamp": f"2026-09-01T12:00:0{bundle_ordinal}Z",
+            "runs_root": str(root),
+            "campaign_policy_sha256": policy_sha256,
+            "bundle_id": bundle_id,
+            "selected_occurrence": occurrences[1],
+            "superseded_occurrences": [occurrences[0]],
+            "quarantine": {"path": str(quarantine.resolve()), **custody},
+            "reason": "counterfactual duplicate supersession disposition",
+        }
+        row["entry_sha256"] = supersession_entry_sha256(row)
+        if not validate_occurrence_supersession_entry(row, root):
+            raise AssertionError("counterfactual supersession row must validate")
+        encoded = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+        with (root / "campaign_log.jsonl").open("ab") as handle:
+            handle.write(encoded)
+            handle.write(encoded)
+        rows.append(row)
+    return rows
+
+
 def _real_mlx_identity_inputs(arm_id: str) -> tuple[dict, dict]:
     """Adapt a real MLX metadata boundary to either frozen v3 arm."""
 
@@ -526,6 +630,22 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
         )
 
 
+def _v3_supersession_finding_artifact() -> dict:
+    artifact = _v3_fixture_artifact(diverged=True)
+    audit = artifact["supersession_audit"][0]
+    audit["validated_count"] = audit["raw_count"]
+    audit["findings"] = [
+        {
+            "reason_code": (
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+            ),
+            "bundle_ids": ["bundle-a", "bundle-z"],
+        }
+    ]
+    artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+    return artifact
+
+
 class AnalysisIntegrationTests(unittest.TestCase):
     def setUp(self):
         source_patch = mock.patch(
@@ -540,6 +660,122 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         session_patch.start()
         self.addCleanup(session_patch.stop)
+
+    def test_production_two_row_audit_persists_and_stripped_finding_refuses(self):
+        """Insert two bundle ids in reverse lexical order, then call production.
+
+        ``load_analysis_inputs`` must call ``supersession_visibility_scan`` and
+        emit the ids sorted; the artifact must persist that exact finding.  The
+        counterfactual input then strips findings from the produced audit row.
+        """
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            finalized = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            bundle_ids = [
+                finalized["entries"][-1]["run_id"],
+                finalized["entries"][0]["run_id"],
+            ]
+            self.assertNotEqual(bundle_ids, sorted(bundle_ids))
+            install_two_row_supersession_counterfactual(
+                fixture["runs_root"],
+                bundle_ids,
+            )
+
+            loaded = load_analysis_inputs(
+                finalized_path,
+                fixture["runs_root"],
+                fixture["floor_path"],
+                strict_validator=lambda path, strict=True: [],
+            )
+            analysis_audit = next(
+                row
+                for row in loaded.supersession_audit
+                if row["scope"] == "analysis_corpus"
+            )
+            self.assertEqual(analysis_audit["raw_count"], 4)
+            self.assertEqual(analysis_audit["validated_count"], 4)
+            self.assertEqual(analysis_audit["status"], "refused")
+            self.assertEqual(
+                analysis_audit["findings"],
+                [
+                    {
+                        "reason_code": (
+                            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                        ),
+                        "bundle_ids": sorted(bundle_ids),
+                    }
+                ],
+            )
+
+            artifact = analyze_claims(
+                finalized_path,
+                fixture["runs_root"],
+                fixture["floor_path"],
+                strict_validator=lambda path, strict=True: [],
+            )
+            persisted = json.loads(render_claim_verdicts(artifact))
+            persisted_audit = next(
+                row
+                for row in persisted["supersession_audit"]
+                if row["scope"] == "analysis_corpus"
+            )
+            self.assertEqual(persisted_audit, dict(analysis_audit))
+            self.assertEqual(
+                persisted_audit["findings"],
+                [
+                    {
+                        "reason_code": (
+                            REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                        ),
+                        "bundle_ids": sorted(bundle_ids),
+                    }
+                ],
+            )
+            self.assertEqual(
+                validate_claim_verdicts(
+                    persisted,
+                    frozen_manifest=finalized,
+                ),
+                [],
+            )
+
+            stripped = copy.deepcopy(persisted)
+            stripped_audit = next(
+                row
+                for row in stripped["supersession_audit"]
+                if row["scope"] == "analysis_corpus"
+            )
+            del stripped_audit["findings"]
+            stripped["claim_verdicts_id"] = calculate_claim_verdicts_id(
+                stripped
+            )
+            stripped_persisted = json.loads(render_claim_verdicts(stripped))
+            errors = validate_claim_verdicts(
+                stripped_persisted,
+                frozen_manifest=finalized,
+            )
+            self.assertTrue(
+                any(
+                    "authenticated equal counts cannot be refused" in error
+                    for error in errors
+                ),
+                errors,
+            )
 
     def test_finalized_gamma_runs_real_engine_then_isolates_math_layers(self):
         """Real synthetic end-to-end pass followed by isolated math seams."""
@@ -1348,6 +1584,115 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertIn(
             "whole_window_verdict_conflict",
             refused_contrast["claim_evaluation"]["reason_codes"],
+        )
+
+    def test_supersession_audit_valid_finding_validates_after_persistence(self):
+        artifact = _v3_supersession_finding_artifact()
+        persisted = json.loads(render_claim_verdicts(artifact))
+        self.assertEqual(validate_claim_verdicts(persisted), [])
+
+    def test_supersession_audit_finding_unknown_key_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["detail"] = "extra"
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any("unrecognized key(s): detail" in error for error in errors),
+            errors,
+        )
+
+    def test_supersession_audit_finding_unknown_reason_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0][
+            "reason_code"
+        ] = "unruled_reason"
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any("findings[0].reason_code: invalid" in error for error in errors),
+            errors,
+        )
+
+    def test_supersession_audit_finding_empty_bundle_ids_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["bundle_ids"] = []
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "bundle_ids: must be a nonempty array of nonempty strings"
+                in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_finding_duplicate_bundle_ids_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["bundle_ids"] = [
+            "bundle-a",
+            "bundle-a",
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "bundle_ids: must be sorted and duplicate-free" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_finding_unsorted_bundle_ids_refuses(self):
+        artifact = _v3_supersession_finding_artifact()
+        artifact["supersession_audit"][0]["findings"][0]["bundle_ids"] = [
+            "bundle-z",
+            "bundle-a",
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "bundle_ids: must be sorted and duplicate-free" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_clean_row_with_findings_refuses(self):
+        artifact = _v3_fixture_artifact()
+        artifact["supersession_audit"][0]["findings"] = [
+            {
+                "reason_code": (
+                    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                ),
+                "bundle_ids": ["bundle-a"],
+            }
+        ]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "findings: only a refused row may carry findings" in error
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_supersession_audit_equal_authenticated_refusal_without_findings_refuses(
+        self,
+    ):
+        artifact = _v3_fixture_artifact(diverged=True)
+        audit = artifact["supersession_audit"][0]
+        audit["validated_count"] = audit["raw_count"]
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        errors = validate_claim_verdicts(artifact)
+        self.assertTrue(
+            any(
+                "authenticated equal counts cannot be refused" in error
+                for error in errors
+            ),
+            errors,
         )
 
     def test_v3_requires_scan_row_for_every_declared_floor_root(self):
@@ -6015,6 +6360,7 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         from joulewise.analysis_engine import inputs as inputs_module
 
         entry = {
+            "record_type": "campaign_occurrence_supersession",
             "bundle_id": "dup-bundle",
             "selected_occurrence": {
                 "source_manifest": {"path": "campaign_manifests/campaign-b.json"},
@@ -6124,6 +6470,60 @@ class SupersessionAwareCooldownJoinTests(unittest.TestCase):
         self.assertEqual(audit["validated_count"], 1)
         self.assertEqual(audit["status"], "refused")
         self.assertNotIn("path", audit["authenticated_basis"])
+
+    def test_d093_two_row_scan_persists_as_valid_claim_artifact(self):
+        from joulewise.analysis_engine.inputs import supersession_visibility_scan
+
+        root = self._duplicated_root()
+        self._manifest(root, "campaign-z-a.json", "session-z-a", "z-bundle")
+        self._manifest(root, "campaign-z-b.json", "session-z-b", "z-bundle")
+
+        z_entry = self._install_real_supersession(
+            root,
+            "z-bundle",
+            selected_manifest="campaign-z-b.json",
+            superseded_manifests=["campaign-z-a.json"],
+        )
+        with (root / "campaign_log.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(z_entry, sort_keys=True) + "\n")
+
+        a_entry = self._install_real_supersession(
+            root,
+            "dup-bundle",
+            selected_manifest="campaign-b.json",
+            superseded_manifests=["campaign-a.json"],
+        )
+        with (root / "campaign_log.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(a_entry, sort_keys=True) + "\n")
+
+        audit = supersession_visibility_scan(
+            root,
+            scope="analysis_corpus",
+            evidence_root_id=None,
+            authenticated_basis={
+                "kind": "whole_window_evaluation_basis_sha256",
+                "sha256": "a" * 64,
+            },
+        )
+        self.assertEqual(audit["raw_count"], 4)
+        self.assertEqual(audit["validated_count"], 4)
+        self.assertEqual(
+            audit["findings"],
+            [
+                {
+                    "reason_code": (
+                        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+                    ),
+                    "bundle_ids": ["dup-bundle", "z-bundle"],
+                }
+            ],
+        )
+
+        artifact = _v3_fixture_artifact(diverged=True)
+        artifact["supersession_audit"][0] = audit
+        artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
+        persisted = json.loads(render_claim_verdicts(artifact))
+        self.assertEqual(validate_claim_verdicts(persisted), [])
 
     def test_invalid_json_supersession_reader_input_refuses_join_globally(self):
         from joulewise.analysis_engine.inputs import _campaign_cooldown_evidence

@@ -93,10 +93,12 @@ REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED = (
 REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE = (
     "campaign_occurrence_supersession_log_unreadable"
 )
+REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS = "campaign_occurrence_supersession_multiple_rows"
 SUPERSESSION_RECORDER_REASON_CODES = frozenset(
     {
         REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED,
         REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE,
+        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     }
 )
 CURRENT_MINT_REDUCER_VERSIONS = frozenset({"0.5.2", "0.6.2"})
@@ -2770,6 +2772,29 @@ def _is_recognizable_occurrence_supersession(value: Mapping[str, Any]) -> bool:
     )
 
 
+def recognizable_occurrence_supersession_counts(
+    log_rows: Sequence[Any],
+) -> dict[str, int]:
+    """Count every recognizable supersession row by recorded bundle id.
+
+    Recognition deliberately precedes custody validation: an invalid row is
+    still a competing recorded disposition.  Iterating the input directly
+    also means byte-identical decoded rows count independently.
+    """
+
+    counts: dict[str, int] = {}
+    for row in log_rows:
+        if not isinstance(row, Mapping):
+            continue
+        if not _is_recognizable_occurrence_supersession(row):
+            continue
+        bundle_id = row.get("bundle_id")
+        if not isinstance(bundle_id, str) or not bundle_id:
+            continue
+        counts[bundle_id] = counts.get(bundle_id, 0) + 1
+    return counts
+
+
 def _recorded_string(value: Any) -> str:
     if not isinstance(value, str):
         value = "<missing-or-non-string>"
@@ -2788,6 +2813,7 @@ def require_occurrence_supersession_recordable(
     recognizable = [
         row for row in log_rows if _is_recognizable_occurrence_supersession(row)
     ]
+    recognizable_counts = recognizable_occurrence_supersession_counts(log_rows)
     unidentifiable = next(
         (
             row
@@ -2824,7 +2850,7 @@ def require_occurrence_supersession_recordable(
             )
         first = matching[0]
         recorded_bundle_id = bundle_id
-        same_bundle_count = len(matching)
+        same_bundle_count = recognizable_counts[bundle_id]
     message = (
         "supersession recording refused: first recognizable existing row "
         f"bundle_id={_recorded_string(recorded_bundle_id)}; "
@@ -4700,7 +4726,13 @@ def _whole_window_row_launch_refusal_reasons(
     return ()
 
 
-def _supersession_is_logged(entry: Mapping[str, Any], runs_root: Path) -> bool:
+def _supersession_is_logged(
+    entry: Mapping[str, Any],
+    runs_root: Path,
+    refusal_reasons: set[str] | None = None,
+) -> bool:
+    """Return exact-log membership, refusing same-bundle multiplicity."""
+
     try:
         lines = read_authentication_text(
             Path(runs_root) / "campaign_log.jsonl",
@@ -4710,14 +4742,23 @@ def _supersession_is_logged(entry: Mapping[str, Any], runs_root: Path) -> bool:
         ).splitlines()
     except (OSError, UnicodeDecodeError):
         return False
+    rows: list[Mapping[str, Any]] = []
     for line in lines:
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if isinstance(value, Mapping) and dict(value) == dict(entry):
-            return True
-    return False
+        if isinstance(value, Mapping):
+            rows.append(value)
+    bundle_id = entry.get("bundle_id")
+    counts = recognizable_occurrence_supersession_counts(rows)
+    if isinstance(bundle_id, str) and counts.get(bundle_id, 0) > 1:
+        if refusal_reasons is not None:
+            refusal_reasons.add(
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS
+            )
+        return False
+    return any(dict(value) == dict(entry) for value in rows)
 
 
 def _basis_source_manifests(
@@ -4726,6 +4767,7 @@ def _basis_source_manifests(
     verified_sources: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
     row: Mapping[str, Any],
     runs_root: Path,
+    refusal_reasons: set[str] | None = None,
 ) -> list[Mapping[str, Any]] | None:
     """Project authenticated source history onto the basis-selected occurrences."""
 
@@ -4797,16 +4839,24 @@ def _basis_source_manifests(
         if len(occurrences) == 1:
             selected_manifests.append(occurrences[0][1])
             continue
-        matches = [
+        logged = [
             entry
             for entry in supplied
             if entry.get("bundle_id") == bundle_id
-            and entry.get("campaign_policy_sha256") == policy_sha256
+            and _supersession_is_logged(
+                entry,
+                runs_root,
+                refusal_reasons,
+            )
+        ]
+        matches = [
+            entry
+            for entry in logged
+            if entry.get("campaign_policy_sha256") == policy_sha256
             and entry.get("selected_occurrence") == occurrences[-1][0]
             and entry.get("superseded_occurrences")
             == [value[0] for value in occurrences[:-1]]
             and validate_occurrence_supersession_entry(entry, runs_root)
-            and _supersession_is_logged(entry, runs_root)
         ]
         if len(matches) != 1:
             return None
@@ -5173,6 +5223,7 @@ def _validate_row_uncached(
             verified_sources=verified_sources,
             row=row,
             runs_root=runs_root,
+            refusal_reasons=reasons,
         )
         if projected is None:
             reasons.add("whole_window_verdict_provenance_invalid")
@@ -5897,6 +5948,7 @@ __all__ = [
     "OCCURRENCE_SUPERSESSION_SCHEMA",
     "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED",
     "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE",
+    "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS",
     "SUPERSESSION_RECORDER_REASON_CODES",
     "SupersessionRecorderError",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
@@ -5917,6 +5969,7 @@ __all__ = [
     "neg8_claim_family_for_metric",
     "neg8_freshness_bindings_from_metadata",
     "ordinary_present_bundle_paths",
+    "recognizable_occurrence_supersession_counts",
     "require_occurrence_supersession_recordable",
     "source_manifest_descriptors",
     "supersession_entry_sha256",
