@@ -568,19 +568,43 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
         _append_log(custody_root, f"durable record failed: {error}")
 
 
-def _resolve_courier_bin(requested: Path | None) -> tuple[Path | None, str | None]:
+def _resolve_courier_bin(
+    requested: Path | None,
+) -> tuple[Path | None, str | None, dict[str, str] | None]:
+    substitution: dict[str, str] | None = None
     if requested is not None:
         candidate = requested
         if not candidate.is_absolute():
-            return None, "--courier-bin must be an absolute path"
+            return None, "--courier-bin must be an absolute path", None
+        if not candidate.exists():
+            found = shutil.which("claude")
+            if found is None:
+                return (
+                    None,
+                    f"courier binary is missing and claude was not found on PATH: {candidate}",
+                    None,
+                )
+            candidate = Path(found)
+            substitution = {"requested": str(requested), "used": str(candidate)}
     else:
         found = shutil.which("claude")
         if found is None:
-            return None, "claude was not found on PATH"
+            return None, "claude was not found on PATH", None
         candidate = Path(found)
     if not candidate.is_file() or not os.access(candidate, os.X_OK):
-        return None, f"courier binary is missing or not executable: {candidate}"
-    return candidate, None
+        return None, f"courier binary is missing or not executable: {candidate}", None
+    return candidate, None, substitution
+
+
+def _record_courier_substitution(
+    custody_root: Path, substitution: Mapping[str, str] | None
+) -> None:
+    if substitution is not None:
+        _append_log(
+            custody_root,
+            "courier binary substituted "
+            f"requested={substitution['requested']} used={substitution['used']}",
+        )
 
 
 def _courier_argv(
@@ -697,6 +721,7 @@ def run_courier(
     courier_bin: Path,
     *,
     deadman_epoch_s: float | None = None,
+    courier_bin_substitution: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run one launch plus three retries while holding the courier lock."""
 
@@ -754,6 +779,10 @@ def run_courier(
                 "sent": was_sent,
                 "error": last_error,
             }
+            if courier_bin_substitution is not None:
+                attempt_record["courier_bin_substitution"] = dict(
+                    courier_bin_substitution
+                )
             with attempts_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(attempt_record, sort_keys=True) + "\n")
             _append_log(
@@ -914,6 +943,7 @@ def _finish_reporting(
     courier_error: str | None = None,
     deadman_epoch_s: float | None = None,
     allow_courier: bool = True,
+    courier_bin_substitution: Mapping[str, str] | None = None,
 ) -> int:
     _durable_record(custody_root, night_dir, plan)
     if allow_courier and courier_bin is not None:
@@ -922,6 +952,7 @@ def _finish_reporting(
             plan,
             courier_bin,
             deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_bin_substitution,
         )
     else:
         outcome = {
@@ -985,7 +1016,8 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
         started_epoch_s,
         started_monotonic_ns,
     )
-    resolved, resolution_error = _resolve_courier_bin(courier_bin)
+    resolved, resolution_error, substitution = _resolve_courier_bin(courier_bin)
+    _record_courier_substitution(custody_root, substitution)
     return _finish_reporting(
         custody_root,
         night_dir,
@@ -993,6 +1025,7 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
         EXIT_REFUSED,
         resolved,
         courier_error=resolution_error,
+        courier_bin_substitution=substitution,
     )
 
 
@@ -1019,7 +1052,10 @@ def run_night(
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
-    resolved_courier, courier_error = _resolve_courier_bin(courier_bin)
+    resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
+        courier_bin
+    )
+    _record_courier_substitution(custody_root, courier_substitution)
     if resolved_courier is None:
         _write_standard_refusal_result(
             custody_root,
@@ -1037,6 +1073,7 @@ def run_night(
             EXIT_REFUSED,
             None,
             courier_error=courier_error,
+            courier_bin_substitution=courier_substitution,
         )
 
     deadman_epoch_s = _next_deadman_epoch(plan.t0_epoch_s)
@@ -1063,6 +1100,7 @@ def run_night(
             EXIT_REFUSED,
             resolved_courier,
             deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_substitution,
         )
 
     probes = make_probes()
@@ -1087,6 +1125,7 @@ def run_night(
             EXIT_REFUSED,
             resolved_courier,
             deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_substitution,
         )
 
     rehearsal_effective = rehearsal or plan.receipt_class == "REHEARSAL_STUB"
@@ -1113,6 +1152,7 @@ def run_night(
             EXIT_REFUSED,
             resolved_courier,
             deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_substitution,
         )
 
     if rehearsal_effective:
@@ -1150,6 +1190,7 @@ def run_night(
                 EXIT_REFUSED,
                 resolved_courier,
                 deadman_epoch_s=deadman_epoch_s,
+                courier_bin_substitution=courier_substitution,
             )
         command = ["/bin/zsh", str(chain_path)]
         _append_log(custody_root, "night chain digest verified")
@@ -1172,6 +1213,7 @@ def run_night(
             EXIT_REFUSED,
             resolved_courier,
             deadman_epoch_s=deadman_epoch_s,
+            courier_bin_substitution=courier_substitution,
         )
 
     chain_exit_code, abort, census_count, census_hits, termination_proven = (
@@ -1232,6 +1274,7 @@ def run_night(
             resolved_courier,
             courier_error="chain termination was not proven",
             allow_courier=False,
+            courier_bin_substitution=courier_substitution,
         )
     return _finish_reporting(
         custody_root,
@@ -1240,6 +1283,7 @@ def run_night(
         base_exit_code,
         resolved_courier,
         deadman_epoch_s=deadman_epoch_s,
+        courier_bin_substitution=courier_substitution,
     )
 
 
@@ -1276,7 +1320,10 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
         )
         return EXIT_GO
 
-    resolved_courier, courier_error = _resolve_courier_bin(courier_bin)
+    resolved_courier, courier_error, courier_substitution = _resolve_courier_bin(
+        courier_bin
+    )
+    _record_courier_substitution(custody_root, courier_substitution)
     if _courier_lock_is_live(night_dir):
         _write_driver_refusal(
             night_dir / "refusal.json",
@@ -1347,7 +1394,12 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
             "last_error": courier_error,
         }
     else:
-        outcome = run_courier(custody_root, plan, resolved_courier)
+        outcome = run_courier(
+            custody_root,
+            plan,
+            resolved_courier,
+            courier_bin_substitution=courier_substitution,
+        )
     if not (night_dir / "courier.json").exists():
         _write_courier_outcome(night_dir, outcome)
     _durable_record(custody_root, night_dir, plan)

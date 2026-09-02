@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
+from typing import Sequence
 from unittest import mock
 
 from joulewise import identity_pins
@@ -29,18 +30,24 @@ from joulewise.identity_pins import (
     verify_frozen_projection,
 )
 from joulewise.provenance import model_artifact_identity
-from joulewise.schemas import BenchmarkConfig
+from joulewise.schemas import (
+    PROMPT_TOKEN_EXPECTATION_SCHEMA,
+    PROMPT_TOKEN_HASH_DOMAIN,
+    BenchmarkConfig,
+)
 from scripts import mint_floor_artifact_generalized as generalized
 from scripts import project_identity_pins
 
 
 MINT_GIT_ANCHOR = identity_pins._mint_git_anchor
+RUNTIME_PROBE_METADATA = identity_pins._runtime_probe_metadata
 GIT_MAINTENANCE_CONTROLS = (
     ("maintenance.auto", "false"),
     ("gc.auto", "0"),
     ("maintenance.autoDetach", "false"),
     ("gc.autoDetach", "false"),
 )
+REGISTERED_PROMPT_TOKEN_IDS_SHA256 = "d" * 64
 
 
 def render_json(value: object) -> bytes:
@@ -92,8 +99,10 @@ def commit_paths(repository: Path, paths: list[Path], message: str) -> str:
     return git(repository, "rev-parse", "HEAD").stdout.strip()
 
 
-def synthetic_config(model_root: Path, run_id: str) -> dict:
-    return {
+def synthetic_config(
+    model_root: Path, run_id: str, *, prompt_expectation: bool = False
+) -> dict:
+    config = {
         "schema_version": "0.1",
         "run_id": run_id,
         "model": {
@@ -129,6 +138,21 @@ def synthetic_config(model_root: Path, run_id: str) -> dict:
             ],
         },
     }
+    if prompt_expectation:
+        config["workload_profile"] = {
+            "name": "synthetic_prefill",
+            "prompt_text": "registered projection prompt",
+            "output_tokens": 4,
+            "prompt_token_expectation": {
+                "schema_version": PROMPT_TOKEN_EXPECTATION_SCHEMA,
+                "token_hash_domain": PROMPT_TOKEN_HASH_DOMAIN,
+                "token_count": 4,
+                "token_ids_sha256": REGISTERED_PROMPT_TOKEN_IDS_SHA256,
+            },
+            "repetitions": 1,
+            "warmup_runs": 1,
+        }
+    return config
 
 
 def declared_identity(config: dict) -> dict:
@@ -145,9 +169,12 @@ def declared_identity(config: dict) -> dict:
     }
 
 
-def probe_metadata(config: BenchmarkConfig) -> dict:
+def probe_metadata(
+    config: BenchmarkConfig,
+    realization_configs: Sequence[tuple[str, BenchmarkConfig]] = (),
+) -> dict:
     artifact = model_artifact_identity(config.model.source)
-    return {
+    metadata = {
         "platform": "synthetic-macos-identity-test",
         "machine": "arm64",
         "device": {
@@ -198,6 +225,22 @@ def probe_metadata(config: BenchmarkConfig) -> dict:
             },
         },
     }
+    if realization_configs:
+        metadata["prompt_realizations"] = [
+            {
+                "config_path": path,
+                "token_count": candidate.workload_profile.prompt_token_expectation.token_count,
+                "token_ids_sha256": (
+                    candidate.workload_profile.prompt_token_expectation.token_ids_sha256
+                ),
+                "token_hash_domain": (
+                    candidate.workload_profile.prompt_token_expectation.token_hash_domain
+                ),
+            }
+            for path, candidate in realization_configs
+            if candidate.workload_profile.prompt_token_expectation is not None
+        ]
+    return metadata
 
 
 def make_pack(
@@ -205,6 +248,7 @@ def make_pack(
     *,
     supersedes: list[object] | None = None,
     pack_name: str = "synthetic-pack",
+    prompt_expectation: bool = False,
 ) -> tuple[Path, Path]:
     pack = root / pack_name
     model = pack / "model"
@@ -212,8 +256,8 @@ def make_pack(
     weight = model / "weights.safetensors"
     weight.write_bytes(b"synthetic-weight-bytes")
     configs = [
-        synthetic_config(model, "synthetic-r1"),
-        synthetic_config(model, "synthetic-r2"),
+        synthetic_config(model, "synthetic-r1", prompt_expectation=prompt_expectation),
+        synthetic_config(model, "synthetic-r2", prompt_expectation=prompt_expectation),
     ]
     inventory = []
     for index, config in enumerate(configs, start=1):
@@ -522,12 +566,35 @@ class ProjectionLifecycleTests(unittest.TestCase):
         receipt_path = self.pack / reference["path"]
         receipt_raw = receipt_path.read_bytes()
         self.assertEqual(sha256_bytes(receipt_raw), reference["sha256"])
+        sidecar_path = receipt_path.with_suffix(".sha256")
+        expected_sidecar = (
+            f"{reference['sha256']}  {receipt_path.name}\n".encode("ascii")
+        )
+        self.assertEqual(sidecar_path.read_bytes(), expected_sidecar)
         receipt = read_json(receipt_path)
         validate_projection_receipt(receipt)
         self.assertEqual(receipt["schema_version"], IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA)
         self.assertEqual(receipt["receipt_kind"], "freeze_projection")
         self.assertEqual(receipt["status"], "PASS")
         self.assertFalse((receipt_path.parent / "projection-0002.json").exists())
+
+        first_hex = "0" if reference["sha256"][0] != "0" else "1"
+        mutated_digest = first_hex + reference["sha256"][1:]
+        sidecar_path.write_bytes(
+            f"{mutated_digest}  {receipt_path.name}\n".encode("ascii")
+        )
+        pack_with_mutated_sidecar = pack_bytes(self.pack)
+        with self.assertRaises(IdentityPinProjectionError) as refusal:
+            verify_frozen_projection(
+                self.pack,
+                self.root / "custody",
+                "bracket-mutated-freeze-sidecar",
+            )
+        self.assertEqual(
+            refusal.exception.reason_code,
+            "readiness_identity_pinset_frozen_mismatch",
+        )
+        self.assertEqual(pack_bytes(self.pack), pack_with_mutated_sidecar)
 
     def test_verify_is_pack_read_only_and_writes_custody_receipt(self) -> None:
         freeze_projection(self.pack)
@@ -1098,6 +1165,495 @@ class ProjectionLifecycleTests(unittest.TestCase):
         self.assertEqual(readiness_identity_pin_projection["status"], "REFUSE")
         self.assertTrue(
             set(result["reason_codes"]).issubset(IDENTITY_PIN_PROJECTION_REASON_CODES)
+        )
+
+
+class PromptRealizationProjectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        init_git(self.root)
+        self.pack, _ = make_pack(self.root, prompt_expectation=True)
+        commit_pack(self.root, self.pack, "registered prompt projection pack")
+        self.git_anchor = mock.patch(
+            "joulewise.identity_pins._mint_git_anchor",
+            side_effect=lambda: (
+                self.root.resolve(),
+                git(self.root, "rev-parse", "HEAD").stdout.strip(),
+            ),
+        )
+        self.git_anchor.start()
+        self.probe = mock.patch(
+            "joulewise.identity_pins._runtime_probe_metadata",
+            side_effect=probe_metadata,
+        )
+        self.probe_mock = self.probe.start()
+
+    def tearDown(self) -> None:
+        self.probe.stop()
+        self.git_anchor.stop()
+        self.temporary.cleanup()
+
+    def test_legacy_projection_probe_and_checks_keep_exact_key_sets(self) -> None:
+        legacy_pack, _ = make_pack(
+            self.root / "legacy", pack_name="legacy-projection-pack"
+        )
+        tree = read_json(legacy_pack / "plan_tree.json")
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        captured_inputs: list[list[dict]] = []
+        canonical_json_sha256 = identity_pins.canonical_json_sha256
+
+        def capture_projection_input(value: object) -> str:
+            if (
+                isinstance(value, list)
+                and value
+                and isinstance(value[0], dict)
+                and "probe_metadata" in value[0]
+            ):
+                captured_inputs.append(copy.deepcopy(value))
+            return canonical_json_sha256(value)
+
+        with mock.patch(
+            "joulewise.identity_pins.canonical_json_sha256",
+            side_effect=capture_projection_input,
+        ):
+            _, _, checks = identity_pins._derive_projection_units(
+                legacy_pack, projection
+            )
+
+        self.assertEqual(len(captured_inputs), 1)
+        metadata = captured_inputs[0][0]["probe_metadata"]
+        self.assertEqual(
+            set(metadata),
+            {
+                "platform",
+                "machine",
+                "device",
+                "quantization",
+                "adapters",
+                "workload_provenance",
+            },
+        )
+        self.assertEqual(len(checks), 1)
+        self.assertEqual(
+            set(checks[0]), {"check_id", "status", "expected", "observed"}
+        )
+        self.assertNotIn("prompt_realizations", metadata)
+
+    def test_freeze_checks_every_registered_config(self) -> None:
+        def member_two_drift(
+            config: BenchmarkConfig,
+            realization_configs: Sequence[tuple[str, BenchmarkConfig]],
+        ) -> dict:
+            metadata = probe_metadata(config, realization_configs)
+            for row in metadata["prompt_realizations"]:
+                if row["config_path"] == "configs/member-2.json":
+                    row["token_count"] += 1
+            return metadata
+
+        self.probe_mock.side_effect = member_two_drift
+        before = pack_bytes(self.pack)
+
+        with self.assertRaises(IdentityPinProjectionError) as raised:
+            freeze_projection(self.pack)
+
+        self.assertEqual(
+            raised.exception.reason_code, "readiness_identity_environment_dirty"
+        )
+        self.assertIn("configs/member-2.json", str(raised.exception))
+        self.assertNotIn("configs/member-1.json", str(raised.exception))
+        self.assertEqual(pack_bytes(self.pack), before)
+
+    def test_freeze_mismatch_names_all_differing_fields(self) -> None:
+        def all_fields_drift(
+            config: BenchmarkConfig,
+            realization_configs: Sequence[tuple[str, BenchmarkConfig]],
+        ) -> dict:
+            metadata = probe_metadata(config, realization_configs)
+            row = metadata["prompt_realizations"][0]
+            row["token_count"] += 1
+            row["token_ids_sha256"] = "e" * 64
+            row["token_hash_domain"] = "joulewise.prompt_token_ids.mutant"
+            return metadata
+
+        self.probe_mock.side_effect = all_fields_drift
+
+        with self.assertRaises(IdentityPinProjectionError) as raised:
+            freeze_projection(self.pack)
+
+        self.assertEqual(
+            raised.exception.reason_code, "readiness_identity_environment_dirty"
+        )
+        self.assertEqual(
+            raised.exception.observed["differing_fields"],
+            ["token_count", "token_ids_sha256", "token_hash_domain"],
+        )
+        for field in ("token_count", "token_ids_sha256", "token_hash_domain"):
+            self.assertIn(field, str(raised.exception))
+        self.assertIn("configs/member-1.json", str(raised.exception))
+
+    def test_arm_reverification_refuses_each_prompt_realization_drift(self) -> None:
+        for field in ("token_count", "token_ids_sha256", "token_hash_domain"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                init_git(root)
+                pack, _ = make_pack(root, prompt_expectation=True)
+                commit_pack(root, pack, "registered prompt projection pack")
+
+                def git_anchor() -> tuple[Path, str]:
+                    return root.resolve(), git(root, "rev-parse", "HEAD").stdout.strip()
+
+                with (
+                    mock.patch(
+                        "joulewise.identity_pins._mint_git_anchor",
+                        side_effect=git_anchor,
+                    ),
+                    mock.patch(
+                        "joulewise.identity_pins._runtime_probe_metadata",
+                        side_effect=probe_metadata,
+                    ),
+                ):
+                    freeze_projection(pack)
+                commit_pack(root, pack, "freeze registered prompt projection")
+                before = pack_bytes(pack)
+
+                def one_field_drift(
+                    config: BenchmarkConfig,
+                    realization_configs: Sequence[tuple[str, BenchmarkConfig]],
+                ) -> dict:
+                    metadata = probe_metadata(config, realization_configs)
+                    row = metadata["prompt_realizations"][0]
+                    if field == "token_count":
+                        row[field] += 1
+                    elif field == "token_ids_sha256":
+                        row[field] = "e" * 64
+                    else:
+                        row[field] = "joulewise.prompt_token_ids.mutant"
+                    return metadata
+
+                with (
+                    mock.patch(
+                        "joulewise.identity_pins._mint_git_anchor",
+                        side_effect=git_anchor,
+                    ),
+                    mock.patch(
+                        "joulewise.identity_pins._runtime_probe_metadata",
+                        side_effect=one_field_drift,
+                    ),
+                ):
+                    result = verify_frozen_projection(
+                        pack, root / "custody", f"bracket-{field}"
+                    )
+
+                self.assertEqual(result["status"], "REFUSE")
+                self.assertEqual(
+                    result["reason_codes"],
+                    ["readiness_identity_environment_dirty"],
+                )
+                self.assertEqual(result["observed"]["differing_fields"], [field])
+                self.assertEqual(pack_bytes(pack), before)
+
+    def test_projection_refuses_unavailable_registered_realization(self) -> None:
+        def missing_realization(
+            config: BenchmarkConfig,
+            realization_configs: Sequence[tuple[str, BenchmarkConfig]],
+        ) -> dict:
+            metadata = probe_metadata(config, realization_configs)
+            del metadata["prompt_realizations"]
+            return metadata
+
+        self.probe_mock.side_effect = missing_realization
+        before = pack_bytes(self.pack)
+
+        with self.assertRaises(IdentityPinProjectionError) as raised:
+            freeze_projection(self.pack)
+
+        self.assertEqual(
+            raised.exception.reason_code, "readiness_identity_artifact_unreadable"
+        )
+        self.assertIn("configs/member-1.json", str(raised.exception))
+        self.assertEqual(pack_bytes(self.pack), before)
+
+        class RuntimeWithoutProjection:
+            name = "mlx"
+
+            def prepare(self, config: BenchmarkConfig) -> mock.Mock:
+                return mock.Mock(ok=True, metadata={}, message=None)
+
+            def cleanup(self, config: BenchmarkConfig) -> mock.Mock:
+                return mock.Mock(ok=True, message=None)
+
+        config_path = "configs/member-1.json"
+        typed = BenchmarkConfig.from_mapping(read_json(self.pack / config_path))
+        with (
+            mock.patch(
+                "joulewise.adapters.resolve_runtime",
+                return_value=(RuntimeWithoutProjection(), None),
+            ),
+            mock.patch(
+                "joulewise.adapters.resolve_telemetry",
+                return_value=(mock.Mock(), None),
+            ),
+            self.assertRaises(IdentityPinProjectionError) as no_hook,
+        ):
+            RUNTIME_PROBE_METADATA(typed, [(config_path, typed)])
+        self.assertEqual(
+            no_hook.exception.reason_code, "readiness_identity_artifact_unreadable"
+        )
+        self.assertIn(config_path, str(no_hook.exception))
+
+    def test_projection_check_ids_carry_shared_mint_projection(self) -> None:
+        freeze_projection(self.pack)
+        self.probe_mock.assert_called_once()
+        realization_configs = self.probe_mock.call_args.args[1]
+        self.assertEqual(
+            [path for path, _ in realization_configs],
+            ["configs/member-1.json", "configs/member-2.json"],
+        )
+        tree = read_json(self.pack / "plan_tree.json")
+        reference = tree["arm_attachments"]["identity_pin_projection"][
+            "projection_receipt"
+        ]
+        receipt = read_json(self.pack / reference["path"])
+        prompt_checks = [
+            check
+            for check in receipt["checks"]
+            if check["check_id"].endswith(":prompt_realization")
+        ]
+
+        self.assertEqual(len(prompt_checks), 2)
+        self.assertEqual(
+            [check["check_id"].split(":")[1] for check in prompt_checks],
+            ["configs/member-1.json", "configs/member-2.json"],
+        )
+        # Ruling 141a P-5: "one PASS check" per realized config (Opus 159 M-159).
+        self.assertEqual([check["status"] for check in prompt_checks], ["PASS", "PASS"])
+        self.assertTrue(
+            all(
+                "shared_mint_projection" in check["check_id"]
+                for check in receipt["checks"]
+            )
+        )
+        self.assertTrue(
+            all(check["expected"] == check["observed"] for check in receipt["checks"])
+        )
+        self.assertTrue(
+            all(
+                set(check) == {"check_id", "status", "expected", "observed"}
+                for check in receipt["checks"]
+            )
+        )
+
+    def test_digit_string_token_count_refused_at_freeze_and_arm_reverification(
+        self,
+    ) -> None:
+        def digit_string_token_count(
+            config: BenchmarkConfig,
+            realization_configs: Sequence[tuple[str, BenchmarkConfig]],
+        ) -> dict:
+            metadata = probe_metadata(config, realization_configs)
+            metadata["prompt_realizations"][0]["token_count"] = "4"
+            return metadata
+
+        with self.subTest(path="freeze"):
+            self.probe_mock.side_effect = digit_string_token_count
+            before = pack_bytes(self.pack)
+
+            with self.assertRaises(IdentityPinProjectionError) as raised:
+                freeze_projection(self.pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_artifact_unreadable",
+            )
+            self.assertIn("configs/member-1.json", str(raised.exception))
+            self.assertEqual(pack_bytes(self.pack), before)
+
+        with (
+            self.subTest(path="arm_reverification"),
+            tempfile.TemporaryDirectory() as temporary,
+        ):
+            root = Path(temporary)
+            init_git(root)
+            pack, _ = make_pack(root, prompt_expectation=True)
+            commit_pack(root, pack, "registered prompt projection pack")
+
+            def git_anchor() -> tuple[Path, str]:
+                return root.resolve(), git(root, "rev-parse", "HEAD").stdout.strip()
+
+            with (
+                mock.patch(
+                    "joulewise.identity_pins._mint_git_anchor",
+                    side_effect=git_anchor,
+                ),
+                mock.patch(
+                    "joulewise.identity_pins._runtime_probe_metadata",
+                    side_effect=probe_metadata,
+                ),
+            ):
+                freeze_projection(pack)
+            commit_pack(root, pack, "freeze registered prompt projection")
+            before = pack_bytes(pack)
+
+            with (
+                mock.patch(
+                    "joulewise.identity_pins._mint_git_anchor",
+                    side_effect=git_anchor,
+                ),
+                mock.patch(
+                    "joulewise.identity_pins._runtime_probe_metadata",
+                    side_effect=digit_string_token_count,
+                ),
+            ):
+                result = verify_frozen_projection(
+                    pack, root / "custody", "bracket-digit-string"
+                )
+                # The arm mapper (arm_readiness._run_identity_arm_reverification)
+                # must surface the same code, not a generic dirty/unreadable
+                # substitute (luna delta re-audit F2).
+                from joulewise import arm_readiness
+
+                item, pseudo_receipt, reasons = (
+                    arm_readiness._run_identity_arm_reverification(
+                        pack, root / "custody", "bracket-digit-string-arm"
+                    )
+                )
+
+            self.assertEqual(result["status"], "REFUSE")
+            self.assertEqual(
+                result["reason_codes"],
+                ["readiness_identity_artifact_unreadable"],
+            )
+            self.assertEqual(reasons, ["readiness_identity_artifact_unreadable"])
+            self.assertIsNotNone(item)
+            self.assertEqual(pseudo_receipt["status"], "REFUSE")
+            self.assertEqual(pack_bytes(pack), before)
+
+    def test_runtime_probe_prepares_and_cleans_up_once_for_two_configs(self) -> None:
+        config_paths = ["configs/member-1.json", "configs/member-2.json"]
+        configs = [
+            BenchmarkConfig.from_mapping(read_json(self.pack / path))
+            for path in config_paths
+        ]
+        prepare_calls: list[BenchmarkConfig] = []
+        cleanup_calls: list[BenchmarkConfig] = []
+        projection_calls: list[BenchmarkConfig] = []
+
+        class RecordingRuntime:
+            name = "mlx"
+
+            def prepare(self, config: BenchmarkConfig) -> mock.Mock:
+                prepare_calls.append(config)
+                return mock.Mock(ok=True, metadata={}, message=None)
+
+            def identity_projection_metadata(self, config: BenchmarkConfig) -> dict:
+                projection_calls.append(config)
+                expectation = config.workload_profile.prompt_token_expectation
+                assert expectation is not None
+                return {
+                    "prompt_realization": {
+                        "token_count": expectation.token_count,
+                        "token_ids_sha256": expectation.token_ids_sha256,
+                        "token_hash_domain": expectation.token_hash_domain,
+                    }
+                }
+
+            def cleanup(self, config: BenchmarkConfig) -> mock.Mock:
+                cleanup_calls.append(config)
+                return mock.Mock(ok=True, message=None)
+
+        telemetry = mock.Mock()
+        telemetry.name = "powermetrics"
+        telemetry.device_metadata.return_value = {"device": "synthetic_mac"}
+        runtime = RecordingRuntime()
+
+        with (
+            mock.patch(
+                "joulewise.adapters.resolve_runtime",
+                return_value=(runtime, None),
+            ),
+            mock.patch(
+                "joulewise.adapters.resolve_telemetry",
+                return_value=(telemetry, None),
+            ),
+        ):
+            metadata = RUNTIME_PROBE_METADATA(
+                configs[0], list(zip(config_paths, configs))
+            )
+
+        self.assertEqual(len(prepare_calls), 1)
+        self.assertIs(prepare_calls[0], configs[0])
+        self.assertEqual(len(cleanup_calls), 1)
+        self.assertIs(cleanup_calls[0], configs[0])
+        self.assertEqual(projection_calls, configs)
+        self.assertEqual(
+            [row["config_path"] for row in metadata["prompt_realizations"]],
+            config_paths,
+        )
+
+    def test_projection_input_sha256_binds_realization_rows(self) -> None:
+        """P-5: the realization rows are hashed into projection_input_sha256.
+
+        Counterfactual: binding the rows beside the hashed input instead of
+        inside ``probe_metadata`` (identity_pins._derive_projection_units,
+        the ``projection_input_units`` append) keeps every check and every
+        row-level validation green while a frozen receipt's
+        ``projection_input_sha256`` no longer covers what was realized.
+        """
+        tree = read_json(self.pack / "plan_tree.json")
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        captured_inputs: list[list[dict]] = []
+        canonical_json_sha256 = identity_pins.canonical_json_sha256
+
+        def capture_projection_input(value: object) -> str:
+            if (
+                isinstance(value, list)
+                and value
+                and isinstance(value[0], dict)
+                and "probe_metadata" in value[0]
+            ):
+                captured_inputs.append(copy.deepcopy(value))
+            return canonical_json_sha256(value)
+
+        with mock.patch(
+            "joulewise.identity_pins.canonical_json_sha256",
+            side_effect=capture_projection_input,
+        ):
+            _, projection_input_sha256, _ = identity_pins._derive_projection_units(
+                self.pack, projection
+            )
+
+        self.assertEqual(len(captured_inputs), 1)
+        hashed_rows = captured_inputs[0][0]["probe_metadata"]["prompt_realizations"]
+        expected_rows = []
+        for path in ("configs/member-1.json", "configs/member-2.json"):
+            expectation = BenchmarkConfig.from_mapping(
+                read_json(self.pack / path)
+            ).workload_profile.prompt_token_expectation
+            expected_rows.append(
+                {
+                    "config_path": path,
+                    "token_count": expectation.token_count,
+                    "token_ids_sha256": expectation.token_ids_sha256,
+                    "token_hash_domain": expectation.token_hash_domain,
+                }
+            )
+        self.assertEqual(hashed_rows, expected_rows)
+        self.assertEqual(
+            projection_input_sha256, canonical_json_sha256(captured_inputs[0])
+        )
+
+        # The frozen receipt carries that same digest (luna delta re-audit F1:
+        # the derivation-only check above passes even when the receipt's
+        # pack.projection_input_sha256 field is dropped).
+        self.assertEqual(freeze_projection(self.pack)["status"], "PASS")
+        tree = read_json(self.pack / "plan_tree.json")
+        reference = tree["arm_attachments"]["identity_pin_projection"][
+            "projection_receipt"
+        ]
+        receipt = read_json(self.pack / reference["path"])
+        self.assertEqual(
+            receipt["pack"]["projection_input_sha256"], projection_input_sha256
         )
 
 

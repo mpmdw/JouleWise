@@ -40,19 +40,22 @@ pass/fail rule now requires the timing-aware uncertainty floor to be at
 least TWICE the naive floor, per component, pre-registered before any data
 exists.
 
-**Now (updated 2026-09-02):** two code lanes are landing in parallel.
-(1) The dominance close-out's second stage: the floor-minting script will
-emit, once per campaign, a small "replay" file that lets anyone re-derive
-the paper's dominance verdict from the published floor artifact; a byte
-pin taken before the change proves the floor artifact itself is
-unaltered by it. (2) A pre-flight check for the prompt-length campaign:
-at freeze and again at arm time, the harness re-tokenizes every registered
-prompt with the same encoder the collection run will use and refuses if
-the token count or token hash differs from what the plan registered — so
-a tokenizer drift can never silently change what was measured.
+**Now (updated 2026-09-02):** the unattended-night rehearsals are running.
+The first stub night fired on its own from the macOS scheduler at 02:56
+this morning: results were pushed to a branch readable from a phone and
+the morning summary email arrived — the whole path worked with nobody at
+the keyboard. A second rehearsal is armed for tomorrow night to prove the
+"installed the morning before" case, whose 07:00 watchdog must notice the
+night hasn't happened yet and stand down quietly. Between the two nights,
+five small hardening fixes from the reviews landed (among them: the
+scheduler's PATH entry pointed at a directory that couldn't find the
+mail-courier program by name, and a courier binary deleted by a
+same-night self-update now falls back to the installed one and records
+the substitution). Earlier today the two parallel code lanes also landed:
+the dominance-verdict "replay" file and the freeze/arm-time re-tokenize
+check that stops tokenizer drift from silently changing what is measured.
 
-**Next:** rehearse one stub night end to end (results pushed, email
-delivered), rehearse the "installed the morning before" stand-down, then
+**Next:** harvest tomorrow's stand-down rehearsal, then
 email Ed the plan for the first real instrumented night — which launches
 without his hand unless he replies no. That night measures the four
 candidate prompt lengths; a desk day then pins the choice, generates the

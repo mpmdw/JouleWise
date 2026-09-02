@@ -30,7 +30,13 @@ from joulewise.provenance import (
     sha256_hex,
     suite_prompt_rollup,
 )
-from joulewise.schemas import BenchmarkConfig, FailureReason, SchemaError
+from joulewise.schemas import (
+    PROMPT_TOKEN_EXPECTATION_SCHEMA,
+    PROMPT_TOKEN_HASH_DOMAIN,
+    BenchmarkConfig,
+    FailureReason,
+    SchemaError,
+)
 from joulewise.suite import (
     ITEM_END,
     ITEM_START,
@@ -441,7 +447,9 @@ class MlxRuntimeTests(unittest.TestCase):
             )
             self.assertIn("mlx_model_chat_template_pin_unavailable", result.message)
 
-    def test_identity_projection_metadata_uses_loaded_tokenizer_and_sampler_probe(self) -> None:
+    def test_identity_projection_metadata_omits_realization_without_expectation(
+        self,
+    ) -> None:
         adapter, fake_mlx = self.prepared_adapter(["A"])
         adapter._model_artifact_identity = {
             "status": "ok",
@@ -454,6 +462,9 @@ class MlxRuntimeTests(unittest.TestCase):
 
         projection = adapter.identity_projection_metadata(config)
 
+        self.assertEqual(
+            set(projection), {"model", "tokenizer", "sampler", "output_policy"}
+        )
         self.assertEqual(projection["tokenizer"]["backend"], "mlx")
         self.assertEqual(projection["tokenizer"]["class"], "FakeTokenizer")
         self.assertEqual(projection["sampler"]["pinned"], True)
@@ -464,6 +475,54 @@ class MlxRuntimeTests(unittest.TestCase):
                 "name": "fixed_budget_exact",
                 "requested_tokens": 7,
                 "stop_condition": "requested_tokens_emitted",
+            },
+        )
+
+    def test_identity_projection_metadata_realizes_registered_prompt_with_collection_encoder(
+        self,
+    ) -> None:
+        class RecordingTokenizer(FakeTokenizer):
+            def __init__(self) -> None:
+                super().__init__()
+                self.encode_calls: list[tuple[str, bool]] = []
+
+            def encode(self, text: str, *, add_special_tokens: bool = True) -> list[int]:
+                self.encode_calls.append((text, add_special_tokens))
+                return super().encode(text, add_special_tokens=add_special_tokens)
+
+        adapter, _ = self.prepared_adapter(["A"])
+        tokenizer = RecordingTokenizer()
+        adapter._tokenizer = tokenizer
+        adapter._model_artifact_identity = {
+            "status": "ok",
+            "kind": "single_file",
+            "algorithm": "sha256",
+            "sha256": "a" * 64,
+            "path": "/models/synthetic.safetensors",
+        }
+        prompt_text = "registered projection prompt"
+        token_ids = [1, 10, 11, 12]
+        config = make_config(
+            workload_profile={
+                "prompt_text": prompt_text,
+                "prompt_token_expectation": {
+                    "schema_version": PROMPT_TOKEN_EXPECTATION_SCHEMA,
+                    "token_hash_domain": PROMPT_TOKEN_HASH_DOMAIN,
+                    "token_count": len(token_ids),
+                    "token_ids_sha256": prompt_token_ids_sha256(token_ids),
+                },
+            }
+        )
+
+        projection = adapter.identity_projection_metadata(config)
+
+        self.assertEqual(tokenizer.encode_calls, [(prompt_text, True)])
+        self.assertEqual(
+            projection["prompt_realization"],
+            {
+                "token_count": len(token_ids),
+                "token_ids_sha256": prompt_token_ids_sha256(token_ids),
+                "token_hash_domain": PROMPT_TOKEN_HASH_DOMAIN,
             },
         )
 
