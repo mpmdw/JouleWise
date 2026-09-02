@@ -252,6 +252,50 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("monotonic_ns", exited)
         self.assertTrue(self.popen_kwargs[0]["start_new_session"])
 
+    def test_chain_spawn_failure_records_refusal_and_finishes_reporting(self) -> None:
+        self.driver._durable_record = self.real_durable_record
+        run_argv = []
+
+        def run_command(argv, **kwargs):
+            run_argv.append(list(argv))
+            if argv[:4] == ["git", "clone", "--depth", "1"]:
+                Path(argv[-1]).mkdir(parents=True)
+            return types.SimpleNamespace(stdout="example-origin\n", returncode=0)
+
+        try:
+            with mock.patch.object(
+                self.driver.subprocess,
+                "Popen",
+                side_effect=FileNotFoundError("chain executable missing"),
+            ), mock.patch.object(
+                self.driver.subprocess, "run", side_effect=run_command
+            ):
+                exit_code = self.driver.run_night(self.plan_path)
+        except FileNotFoundError as error:
+            self.fail(f"chain launch failure escaped instead of becoming a refusal: {error}")
+
+        night = self.custody / "night"
+        refusal = json.loads((night / "refusal.json").read_text())
+        started = json.loads((night / "chain.started").read_text())
+        exited = json.loads((night / "chain.exited").read_text())
+        pushes = [argv for argv in run_argv if "push" in argv]
+        self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
+        self.assertNotEqual(exit_code, 0)
+        self.assertEqual(
+            refusal["refusal"]["reason"], self.driver._CODES["chain_launch_failed"]
+        )
+        self.assertEqual(self.driver.validate_refusal(refusal), [])
+        self.assertIsNone(started["pid"])
+        self.assertIsNone(started["pgid"])
+        self.assertEqual(
+            started["launch_error"],
+            "FileNotFoundError: chain executable missing",
+        )
+        self.assertIsNone(exited["exit_code"])
+        self.assertIs(exited["launch_failed"], True)
+        self.driver.run_courier.assert_called_once()
+        self.assertEqual(len(pushes), 2)
+
     def test_chain_claim_prevents_a_second_spawn_after_a_failed_chain(self) -> None:
         calls, spawn = self._popen_recorder(return_code=17)
         with mock.patch.object(self.driver.subprocess, "Popen", spawn):
@@ -315,19 +359,41 @@ class NightDriverTests(unittest.TestCase):
         self.assertEqual(self.driver.dead_man(self.plan_path), 0)
         self.driver.run_courier.assert_not_called()
 
-    def test_dead_man_refuses_while_the_chain_is_alive_without_spawning(self) -> None:
+    def test_dead_man_couriers_after_an_empty_start_marker_without_killpg(self) -> None:
         night = self.custody / "night"
         night.mkdir()
-        (night / "chain.started").write_text("claimed\n", encoding="utf-8")
-        calls, spawn = self._popen_recorder()
-        with mock.patch.object(self.driver.subprocess, "Popen", spawn):
-            self.assertEqual(self.driver.dead_man(self.plan_path), 3)
-        refusal = json.loads((night / "refusal.json").read_text())
-        self.assertEqual(
-            refusal["refusal"]["reason"], self.driver._CODES["chain_alive"]
+        (night / "chain.started").write_text("", encoding="utf-8")
+        with mock.patch.object(self.driver.os, "killpg") as kill_group:
+            exit_code = self.driver.dead_man(self.plan_path)
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        exited = json.loads((night / "chain.exited").read_text())
+        self.assertIs(exited["launch_failed"], True)
+        self.assertEqual(exited["reaped_by"], "dead-man")
+        kill_group.assert_not_called()
+        self.driver.run_courier.assert_called_once()
+
+    def test_dead_man_couriers_after_a_null_pgid_marker_without_killpg(self) -> None:
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "chain.started").write_text(
+            json.dumps(
+                {
+                    "pid": None,
+                    "pgid": None,
+                    "epoch_s": time.time(),
+                    "launch_error": "FileNotFoundError: missing",
+                }
+            ),
+            encoding="utf-8",
         )
-        self.assertEqual(calls, [])
-        self.driver.run_courier.assert_not_called()
+        with mock.patch.object(self.driver.os, "killpg") as kill_group:
+            exit_code = self.driver.dead_man(self.plan_path)
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        exited = json.loads((night / "chain.exited").read_text())
+        self.assertIs(exited["launch_failed"], True)
+        self.assertEqual(exited["reaped_by"], "dead-man")
+        kill_group.assert_not_called()
+        self.driver.run_courier.assert_called_once()
 
     def test_overrun_refuses_before_the_gate_or_chain(self) -> None:
         t0_epoch_s = datetime(2026, 9, 2, 6, 50).timestamp()
@@ -356,6 +422,40 @@ class NightDriverTests(unittest.TestCase):
         self.assertNotIn("courier_backoff", detail)
         self.assertEqual(gate_calls, [])
         self.assertEqual(calls, [])
+
+    def test_deadman_boundary_refuses_equality_and_allows_one_second_before(self) -> None:
+        deadman_epoch_s = self.driver._next_deadman_epoch(self.t0_epoch_s)
+        equal_window_s = int(
+            deadman_epoch_s - self.t0_epoch_s - self.driver.COURIER_DEADLINE_S
+        )
+        self.assertEqual(
+            self.t0_epoch_s + equal_window_s + self.driver.COURIER_DEADLINE_S,
+            deadman_epoch_s,
+        )
+        self._write_plan(window_max_s=equal_window_s)
+        self.source.now_epoch_s = self.t0_epoch_s + 1
+        calls, spawn = self._popen_recorder()
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn):
+            equal_exit = self.driver.run_night(self.plan_path)
+        self.assertEqual(equal_exit, self.driver.EXIT_REFUSED)
+        equal_refusal = json.loads(
+            (self.custody / "night" / "refusal.json").read_text()
+        )
+        self.assertEqual(
+            equal_refusal["refusal"]["reason"],
+            self.driver._CODES["plan_overruns_deadman"],
+        )
+        self.assertEqual(calls, [])
+
+        earlier_custody = self.root / "earlier-custody"
+        earlier_plan = json.loads(self.plan_path.read_text())
+        earlier_plan["window_max_s"] = equal_window_s - 1
+        earlier_plan["custody_root"] = str(earlier_custody)
+        self.plan_path.write_text(json.dumps(earlier_plan), encoding="utf-8")
+        with mock.patch.object(self.driver.subprocess, "Popen", spawn):
+            earlier_exit = self.driver.run_night(self.plan_path)
+        self.assertEqual(earlier_exit, self.driver.EXIT_GO)
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
 
     def test_courier_backoffs_do_not_enter_the_overrun_predicate(self) -> None:
         t0_epoch_s = datetime(2026, 9, 2, 6, 45).timestamp()
@@ -760,6 +860,34 @@ class NightDriverTests(unittest.TestCase):
         self.assertFalse(outcome["sent"])
         self.assertEqual(calls, [])
         self.assertFalse((self.custody / "night" / "courier.lock").exists())
+
+    def test_courier_wait_caps_sleep_at_the_dead_man_epoch(self) -> None:
+        heartbeat = self.root / "absent-heartbeat"
+        sent = self.root / "absent-sent"
+        stop_epoch_s = 10_000.0
+        wall_clock = [stop_epoch_s - 0.3]
+        monotonic_clock = [50.0]
+        sleeps = []
+
+        def advance(delay: float) -> None:
+            sleeps.append(delay)
+            wall_clock[0] += delay
+            monotonic_clock[0] += delay
+
+        with mock.patch.object(
+            self.driver.time, "time", side_effect=lambda: wall_clock[0]
+        ), mock.patch.object(
+            self.driver.time, "monotonic", side_effect=lambda: monotonic_clock[0]
+        ), mock.patch.object(self.driver.time, "sleep", side_effect=advance):
+            heartbeat_seen, was_sent = self.driver._wait_for_courier(
+                heartbeat,
+                sent,
+                stop_epoch_s=stop_epoch_s,
+            )
+        self.assertFalse(heartbeat_seen)
+        self.assertFalse(was_sent)
+        self.assertTrue(sleeps)
+        self.assertLessEqual(max(sleeps), 0.3)
 
     def test_night_date_uses_the_same_local_civil_day_as_dead_man(self) -> None:
         self._write_plan(t0_epoch_s=datetime(2026, 9, 2, 20, 0).timestamp())

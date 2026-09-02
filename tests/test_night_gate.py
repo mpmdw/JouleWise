@@ -790,6 +790,7 @@ class NightGateTests(unittest.TestCase):
                 "night_aborted_agent_present",
                 "night_chain_already_started",
                 "night_chain_alive",
+                "night_chain_launch_failed",
                 "night_courier_running",
                 "night_courier_unavailable",
                 "night_plan_overruns_deadman",

@@ -299,7 +299,11 @@ def _append_census(path: Path, probe: ProbeResult, refusal: Any) -> None:
 
 
 def _record_chain_exit(
-    night_dir: Path, exit_code: int | None, *, reaped_by: str | None = None
+    night_dir: Path,
+    exit_code: int | None,
+    *,
+    reaped_by: str | None = None,
+    launch_failed: bool = False,
 ) -> None:
     record: dict[str, Any] = {
         "exit_code": exit_code,
@@ -308,6 +312,8 @@ def _record_chain_exit(
     }
     if reaped_by is not None:
         record["reaped_by"] = reaped_by
+    if launch_failed:
+        record["launch_failed"] = True
     _write_json(night_dir / "chain.exited", record)
 
 
@@ -364,6 +370,25 @@ def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any]) -> in
     return pgid
 
 
+def _complete_chain_launch_failure(descriptor: int, error: OSError) -> str:
+    launch_error = f"{type(error).__name__}: {error}"
+    try:
+        _write_all(
+            descriptor,
+            _json_bytes(
+                {
+                    "pid": None,
+                    "pgid": None,
+                    "epoch_s": time.time(),
+                    "launch_error": launch_error,
+                }
+            ),
+        )
+    finally:
+        os.close(descriptor)
+    return launch_error
+
+
 def _run_chain_once(
     chain_path: Path,
     plan: NightPlan,
@@ -382,13 +407,28 @@ def _run_chain_once(
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         environment = os.environ.copy()
         environment["NIGHT_PLAN_ID"] = plan.plan_id
-        process = subprocess.Popen(
-            command if command is not None else ["/bin/zsh", str(chain_path)],
-            stdout=stdout,
-            stderr=stderr,
-            env=environment,
-            start_new_session=True,
-        )
+        try:
+            process = subprocess.Popen(
+                command if command is not None else ["/bin/zsh", str(chain_path)],
+                stdout=stdout,
+                stderr=stderr,
+                env=environment,
+                start_new_session=True,
+            )
+        except OSError as error:
+            launch_error = _complete_chain_launch_failure(claim_descriptor, error)
+            _record_chain_exit(night_dir, None, launch_failed=True)
+            return (
+                None,
+                _refusal_mapping(
+                    _CODES["chain_launch_failed"],
+                    "night chain process could not be launched",
+                    {"launch_error": launch_error},
+                ),
+                0,
+                [],
+                True,
+            )
         pgid = _complete_chain_start(claim_descriptor, process)
         census_count = 0
         census_hits: list[dict[str, Any]] = []
@@ -573,14 +613,29 @@ def _wait_for_courier(
 ) -> tuple[bool, bool]:
     deadline = time.monotonic() + COURIER_DEADLINE_S
     heartbeat_seen = heartbeat.is_file()
-    while time.monotonic() < deadline and (
-        stop_epoch_s is None or time.time() < stop_epoch_s
-    ):
+    while True:
+        monotonic_now = time.monotonic()
+        epoch_now = time.time() if stop_epoch_s is not None else None
+        if monotonic_now >= deadline or (
+            stop_epoch_s is not None
+            and epoch_now is not None
+            and epoch_now >= stop_epoch_s
+        ):
+            break
         heartbeat_seen = heartbeat_seen or heartbeat.is_file()
         if sent.is_file():
             _fsync_path(sent)
             return heartbeat_seen, True
-        time.sleep(1)
+        deadline_remaining = deadline - time.monotonic()
+        stop_remaining = (
+            float("inf")
+            if stop_epoch_s is None
+            else stop_epoch_s - time.time()
+        )
+        sleep_s = max(0.0, min(1.0, deadline_remaining, stop_remaining))
+        if sleep_s <= 0:
+            break
+        time.sleep(sleep_s)
     heartbeat_seen = heartbeat_seen or heartbeat.is_file()
     if sent.is_file():
         _fsync_path(sent)
@@ -1128,16 +1183,20 @@ def run_night(
     )
 
     if abort is not None:
+        abort_reason = str(abort["reason"])
         _write_driver_refusal(
             night_dir / "refusal.json",
             plan,
-            str(abort["reason"]),
+            abort_reason,
             str(abort["detail"]),
             abort["evidence"],
         )
-        verdict = "REFUSED" if not termination_proven else "ABORTED"
-        base_exit_code = EXIT_REFUSED if not termination_proven else EXIT_ABORTED
-        aborted_reason = str(abort["reason"])
+        refused = (
+            abort_reason == _CODES["chain_launch_failed"] or not termination_proven
+        )
+        verdict = "REFUSED" if refused else "ABORTED"
+        base_exit_code = EXIT_REFUSED if refused else EXIT_ABORTED
+        aborted_reason = abort_reason
     elif rehearsal_effective:
         verdict = "REHEARSAL_ONLY"
         base_exit_code = EXIT_REFUSED
@@ -1221,27 +1280,38 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     exited = night_dir / "chain.exited"
     if started.exists() and not exited.exists():
         pgid = _read_started_pgid(started)
-        group_alive = True
-        if pgid is not None:
+        if pgid is None:
+            _record_chain_exit(
+                night_dir,
+                None,
+                reaped_by="dead-man",
+                launch_failed=True,
+            )
+            _append_log(
+                custody_root,
+                "dead-man found no live process-group identity in chain.started",
+            )
+        else:
+            group_alive = True
             try:
                 os.killpg(pgid, 0)
             except ProcessLookupError:
                 group_alive = False
             except PermissionError:
                 group_alive = True
-        if group_alive:
-            _write_driver_refusal(
-                night_dir / "refusal.json",
-                plan,
-                _CODES["chain_alive"],
-                "chain process group is still alive or cannot be disproven",
-                {"pgid": pgid},
-            )
-            _append_log(custody_root, "dead-man refused while chain was alive")
-            _durable_record(custody_root, night_dir, plan)
-            return EXIT_REFUSED
-        _record_chain_exit(night_dir, None, reaped_by="dead-man")
-        _append_log(custody_root, "dead-man proved the chain process group was gone")
+            if group_alive:
+                _write_driver_refusal(
+                    night_dir / "refusal.json",
+                    plan,
+                    _CODES["chain_alive"],
+                    "chain process group is still alive or cannot be disproven",
+                    {"pgid": pgid},
+                )
+                _append_log(custody_root, "dead-man refused while chain was alive")
+                _durable_record(custody_root, night_dir, plan)
+                return EXIT_REFUSED
+            _record_chain_exit(night_dir, None, reaped_by="dead-man")
+            _append_log(custody_root, "dead-man proved the chain process group was gone")
 
     probes = make_probes()
     probe, census_refusal = agent_census(probes)
