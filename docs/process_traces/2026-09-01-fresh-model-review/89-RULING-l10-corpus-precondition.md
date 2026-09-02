@@ -101,3 +101,16 @@ only carve-out; declined per R-2 (a literal reading suffices once the roots
 are separated and steps 3/4/6 leave the G2-b root). Sol held that closing the
 full-edge row on G2-b alone would be a reversal needing a cold gate; agreed —
 R-1 does not close the row on L10-A, so no cold gate is triggered.
+
+## Erratum (2026-09-01, from the trace-90 delta re-audit)
+
+R-1's citation `joulewise/analysis_manifest_v3.py:2590,2598` for
+`analysis_finalization_member_cover_mismatch` is WRONG: those lines belong to
+`analysis_prospective_member_cover_mismatch` (a different reason code,
+raised while validating the prospective manifest). The finalization reason
+is raised at `analysis_manifest_v3.py:2986,3008,3027,3034,3048,3093` (verified
+at `6a6e340d`). The ruled PASS criterion — the singleton reason
+`analysis_finalization_member_cover_mismatch` — is unchanged; only the
+citation is corrected. The inherited citation came from the Opus consult
+seat (`88-opus-l10-corpus-lens.md`) and was not opened before ruling; the
+next ruling that cites a code line opens it first.
