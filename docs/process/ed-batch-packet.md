@@ -57,6 +57,17 @@ quiet-state baseline** (gates the census WO — can ride ANY earlier tap);
 a9/a10 desk replay; ED-QUAL-L4-1 decisive replay. ONE home: RUN_STATE
 §Ed-owed + `docs/phase_2/window_runbook.md`.
 
+**L10 `_v5` PRE-WINDOW — exactly the Ed-hands portions.** After every FIRST
+CHECK in `docs/process/v5-l10-rehearsal-phase.md` passes: (1) open the clean
+production checkout and confirm its HEAD and authenticated `_v5` pack are the
+fixed transaction head; (2) provide the outside-repository transaction custody
+and read-only, production-pack-bound replay corpus paths; (3) run the seven
+ED-FIRST steps — Strict validation, Reduction, Floor extraction, Mint,
+Finalization, Claim gate, and Results fills — in that checkout; and (4) hash the
+artifacts and complete the proposed `l10-sacrificial-rehearsal-record.json`. No L10
+step uses `sudo` or starts a `[QUIET-MAC]` collection. The first claim-bearing
+`_v5` window waits for a PASS record.
+
 ## What happens after this sitting
 
 A1+A2 unblock gamma's production freeze; A3 unblocks the Phase-2 atomic
