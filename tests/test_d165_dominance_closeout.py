@@ -360,6 +360,22 @@ def floor_artifact() -> dict:
     return copy.deepcopy(_production_sources()[1])
 
 
+
+def _folded_string_constant(node: ast.AST) -> str | None:
+    """Return the string a constant or ``+``-chain of string constants spells."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _folded_string_constant(node.left)
+        right = _folded_string_constant(node.right)
+        if left is not None and right is not None:
+            return left + right
+    if isinstance(node, ast.JoinedStr) and all(
+        isinstance(part, ast.Constant) for part in node.values
+    ):
+        return "".join(str(part.value) for part in node.values)
+    return None
+
 class D165DominanceCloseoutTests(unittest.TestCase):
     maxDiff = None
 
@@ -646,8 +662,11 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         }
         for path in production:
             tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            # A literal assembled from string pieces (``"a" + "b"``) is the
+            # same second owner as a whole literal; fold constant
+            # concatenations before matching.
             if any(
-                isinstance(node, ast.Constant) and node.value == schema_literal
+                _folded_string_constant(node) == schema_literal
                 for node in ast.walk(tree)
             ):
                 owner_paths.append(path)

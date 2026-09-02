@@ -1145,7 +1145,22 @@ _FINALIZED_EVIDENCE_KEYS = {
     "aggregate_floor_artifact",
 }
 _DOMINANCE_REPLAY_SIDECAR_ROLE = "dominance_replay_sidecar"
-_DOMINANCE_REPLAY_SIDECAR_SCHEMA = "joulewise.d165_" + "dominance_replay.v1"
+# Public name for callers that request the optional D-165 attachment row.
+DOMINANCE_REPLAY_SIDECAR_ROLE = _DOMINANCE_REPLAY_SIDECAR_ROLE
+
+
+def _dominance_replay_sidecar_schema() -> str:
+    """Return the replay-sidecar schema version from its sole owner.
+
+    ``joulewise.dominance_closeout`` owns the literal (D-165 clause 10, the
+    stage-2 ownership census); it imports this module at load time, so the
+    owner is read lazily here rather than duplicated.
+    """
+    from joulewise.dominance_closeout import REPLAY_SCHEMA_VERSION
+
+    return REPLAY_SCHEMA_VERSION
+
+
 _FINALIZED_DOMINANCE_REPLAY_KEYS = {
     "path",
     "sha256",
@@ -1217,9 +1232,12 @@ _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS = {
     "aggregate_floor_artifact": _FLOOR_SCHEMA,
 }
 
-_OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS = {
-    _DOMINANCE_REPLAY_SIDECAR_ROLE: _DOMINANCE_REPLAY_SIDECAR_SCHEMA,
-}
+
+
+def _optional_attachment_schema_versions() -> dict[str, str]:
+    return {
+        _DOMINANCE_REPLAY_SIDECAR_ROLE: _dominance_replay_sidecar_schema(),
+    }
 
 def prospective_finalization_required_attachments(
     *, optional_roles: Sequence[str] = (),
@@ -1248,15 +1266,16 @@ def prospective_finalization_required_attachments(
         raise AnalysisManifestV3Error(
             "unknown or duplicate optional finalization attachment role"
         ) from exc
+    optional_schemas = _optional_attachment_schema_versions()
     if len(optional_role_set) != len(optional_roles) or any(
-        role not in _OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS for role in optional_roles
+        role not in optional_schemas for role in optional_roles
     ):
         raise AnalysisManifestV3Error(
             "unknown or duplicate optional finalization attachment role"
         )
     schemas = dict(_REQUIRED_ATTACHMENT_SCHEMA_VERSIONS)
     schemas.update(
-        (role, _OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS[role])
+        (role, optional_schemas[role])
         for role in optional_roles
     )
     return [
@@ -2794,10 +2813,9 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
         )
         expected_attachment_roles = set(_REQUIRED_ATTACHMENT_ROLES)
         if dominance_enabled:
-            expected_attachment_schemas.update(
-                _OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS
-            )
-            expected_attachment_roles.update(_OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS)
+            optional_schemas = _optional_attachment_schema_versions()
+            expected_attachment_schemas.update(optional_schemas)
+            expected_attachment_roles.update(optional_schemas)
         observed_attachment_schemas = {
             attachment.get("role"): attachment.get("schema_version")
             for attachment in attachments
@@ -3757,7 +3775,7 @@ def _authenticate_finalization_inputs(
             sidecar_path, "dominance replay sidecar"
         )
         if (
-            sidecar.get("schema_version") != _DOMINANCE_REPLAY_SIDECAR_SCHEMA
+            sidecar.get("schema_version") != _dominance_replay_sidecar_schema()
             or not isinstance(sidecar.get("sidecar_id"), str)
             or not sidecar.get("sidecar_id")
         ):
@@ -4458,6 +4476,7 @@ def write_manifest_atomic(path: Path, value: Mapping[str, Any]) -> None:
 
 
 __all__ = [
+    "DOMINANCE_REPLAY_SIDECAR_ROLE",
     "ARM_FREEZE",
     "AnalysisManifestFinalizationError",
     "AnalysisManifestV3Error",

@@ -54,6 +54,7 @@ from joulewise.arm_readiness import (  # noqa: E402
     plan_arm_readiness_attachment,
 )
 from joulewise.analysis_manifest_v3 import (  # noqa: E402
+    DOMINANCE_REPLAY_SIDECAR_ROLE,
     EXACT_STACK_RULE_ID,
     FINALIZATION_CONTRACT_ID,
     FINALIZED_BASENAME_SUFFIX,
@@ -63,6 +64,7 @@ from joulewise.analysis_manifest_v3 import (  # noqa: E402
     analysis_semantics_projection_v1,
     analysis_semantics_sha256_v1,
     calculate_manifest_id,
+    prospective_finalization_required_attachments,
     validate_prospective_analysis_manifest_v3,
 )
 from joulewise.model_panel import ModelPanelError, load_model_panel  # noqa: E402
@@ -121,29 +123,6 @@ PREFILL_EXHAUSTED_LADDER_BRANCH = {
         "print_reducer_refusal_code": False,
     },
 }
-
-
-def prospective_finalization_required_attachments() -> list[dict[str, str]]:
-    """Return the exact W-10 attachment declaration required by v3."""
-
-    return [
-        {
-            "role": "whole_window_verdict",
-            "schema_version": "joulewise.idle_admission_whole_window_verdict.v1",
-        },
-        {
-            "role": "bracket_binding",
-            "schema_version": "joulewise.calibration_bracket_binding.v1",
-        },
-        {
-            "role": "calibration_ledger",
-            "schema_version": "joulewise.calibration_observation_ledger.v1",
-        },
-        {
-            "role": "aggregate_floor_artifact",
-            "schema_version": DETECTION_FLOOR_ARTIFACT_SCHEMA,
-        },
-    ]
 
 
 DRAFT_STATUS = "unfrozen_draft"
@@ -2446,11 +2425,15 @@ def build_analysis_manifest(
             }
         return common
 
-    # The four roles and their schema versions come from the supported
+    # The attachment roles and their schema versions come from the supported
     # accessor rather than a local copy, so this generator -- which is
     # committed into the frozen successor pack -- cannot drift from the
-    # validator it must satisfy.
-    required_attachments = prospective_finalization_required_attachments()
+    # validator it must satisfy.  This pack registers the dominance
+    # criterion on every contrast, so it declares the D-165 replay-sidecar
+    # role as well (five rows; clause 7e).
+    required_attachments = prospective_finalization_required_attachments(
+        optional_roles=(DOMINANCE_REPLAY_SIDECAR_ROLE,),
+    )
 
     manifest = {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
