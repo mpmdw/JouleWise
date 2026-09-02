@@ -10348,6 +10348,8 @@ Index row carries the operative detail. Trace:
 
 **AMENDED by D-170 (T26 cold gate item 4, 2026-09-02):** evidence-path rulings and addenda require an executed-evidence custody input or code-path proof — see D-170.
 
+**AMENDED (cross-artifact equality, cold gate 2026-09-02):** The same inadmissibility applies to a ruling, addendum, or draft contract clause whose dispositive premise asserts that a named field is equal, or a set identical, across two artifacts, packs, or units (producer vs consumer, floor vs contrast, unit A vs unit B). The custody directory must carry, as a listed packet input, the artifact pair the clause quantifies over (repo-relative paths at a named revision), the field as a full JSON pointer, and both observed values (S3). Where no committed pair exists the clause is recorded `UNVERIFIED against artifacts` and may enter contract text only as a stated assumption, never as a MUST. Duty on the packet assembler or drafter; a seat that finds no exhibit returns the question UNRULED. The S9-shape sweep does not carry this check: it grades installation, not truth. The consult-brief "Executed:" block gains the words "or artifact-pair exhibit". `docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`
+
 
 ## D-161: threat-model prune (Ed, 2026-08-27)
 
@@ -10561,3 +10563,5 @@ clause gates, `V5-TRANSACTION-01`, while the installing row names the complete
 three-branch acceptance. The status transition requires producer-side
 regression evidence from the sibling implementations, so documentation alone
 cannot close this decision.
+
+**Cold gate 2026-09-02 (process rules Q1/Q2, custodied at docs/process_traces/2026-09-02-process-rules/):** Q1 requires delegated implementation briefs authorized by implementation-clause rulings to carry an `ACCEPTANCE` clause map and final reports to return its production-site, biting-assertion, and counterfactual rows; its home is `docs/contracts/bridge_protocol.md` §1. Q2 makes unexhibited cross-artifact equality or identity premises inadmissible as MUSTs, requiring a named-revision artifact pair, full JSON pointer, and both observed values; its home is D-160 R-5 as amended (`docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).

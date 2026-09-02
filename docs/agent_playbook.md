@@ -57,6 +57,7 @@ needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
    A pending `kind: decision` dependency in `state_kernel.json` is an
    uninstalled ruling — the task is not selectable until the dependency is
    satisfied with an evidence pointer (D-170).
+   A brief that installs a ruling carries the clause map as an `ACCEPTANCE` item — `docs/contracts/bridge_protocol.md` §1 Clause map (process-rules ruling 2026-09-02).
 3. Read the selected mission's own read-first list. Read `AGENT_PLAN.md`
    only at phase starts or when the project structure changes. Consult
    `docs/decision_log.md` by targeted decision ID, not as a whole-file

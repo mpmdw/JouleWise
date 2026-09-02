@@ -96,15 +96,19 @@ def _decision_index_rows(text: str | None = None) -> list[tuple[str, str]]:
     )
 
 
-def _dated_magistrate_rulings() -> list[Path]:
+def _dated_process_trace_files(pattern: str, minimum_date: str) -> list[Path]:
     trace_root = ROOT / "docs/process_traces"
-    rulings = []
-    for path in trace_root.glob("*/**/*MAGISTRATE-RULING*.md"):
+    paths = []
+    for path in trace_root.glob(pattern):
         dated_directory = path.relative_to(trace_root).parts[0]
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:-.+)?", dated_directory):
-            if dated_directory[:10] >= "2026-08-29":
-                rulings.append(path)
-    return sorted(rulings)
+            if dated_directory[:10] >= minimum_date:
+                paths.append(path)
+    return sorted(paths)
+
+
+def _dated_magistrate_rulings() -> list[Path]:
+    return _dated_process_trace_files("*/**/*MAGISTRATE-RULING*.md", "2026-08-29")
 
 
 def _has_executed_evidence(text: str) -> bool:
@@ -305,6 +309,44 @@ class DocsFreshnessTests(unittest.TestCase):
                     _has_executed_evidence(text),
                     f"{relative_path}: dispositive ruling lacks a valid ## Executed evidence section",
                 )
+
+    def test_custodied_impl_reports_carry_clause_map(self) -> None:
+        # Today the glob matches 2026-09-02-process-rules no `*-impl.md` files;
+        # any match in today's or an earlier directory is skipped by date.
+        clause_map = re.compile(
+            r"^## Clause map\s*$\n(.*?)(?=^## |\Z)",
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        required_cells = {"production site", "biting assertion", "counterfactual"}
+        for path in _dated_process_trace_files("*/**/*-impl.md", "2026-09-03"):
+            relative_path = path.relative_to(ROOT)
+            text = path.read_text(encoding="utf-8")
+            section = clause_map.search(text)
+            self.assertIsNotNone(
+                section,
+                f"{relative_path}: missing ## Clause map heading",
+            )
+            assert section is not None
+            body = section.group(1)
+            lines = body.splitlines()
+            if any(line.startswith("|") and "NOT PINNED:" in line for line in lines):
+                continue
+            header_index = next((index for index, line in enumerate(lines) if line.startswith("|")), None)
+            header = "" if header_index is None else lines[header_index].lower()
+            divider = "" if header_index is None or header_index + 1 == len(lines) else lines[header_index + 1]
+            self.assertTrue(
+                required_cells.issubset({cell.strip() for cell in header.strip("|").split("|")})
+                and re.fullmatch(r"\|(?:\s*:?-{3,}:?\s*\|)+", divider) is not None,
+                f"{relative_path}: Clause map table header must name production site, biting assertion, and counterfactual, or contain NOT PINNED:",
+            )
+
+    def test_bridge_protocol_clause_map_pins_s1_and_s2(self) -> None:
+        contract = _read("docs/contracts/bridge_protocol.md")
+        self.assertIn("Clause map (ruling installs)", contract)
+        self.assertIn(
+            "the contract-lens refuter enumerates the ruling's clauses independently",
+            contract,
+        )
 
     def test_current_sections_do_not_copy_volatile_literals(self) -> None:
         self.assertEqual([], _volatile_violations(_current_sections()))
