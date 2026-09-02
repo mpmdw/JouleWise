@@ -96,6 +96,7 @@ from joulewise.detection_floor import (
     validate_common_mode_estimator_registration,
     validate_floor_metric_window_class,
 )
+from joulewise.dominance_closeout import split_common_mode_block_width
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
@@ -466,41 +467,16 @@ def _common_mode_block_half_width(
     residuals: Sequence[float],
 ) -> float:
     """Registered excursion composition, private to governed extraction."""
-
-    member_envelope_sum = max(
-        member_envelope_sum,
-        1.0,
-        abs(delta),
-        abs(zero_point),
-        *(abs(value) for value in onset),
-        *(abs(value) for value in offset),
+    split = split_common_mode_block_width(
+        delta_j=delta,
+        onset_sweep_j=onset,
+        offset_sweep_j=offset,
+        zero_point_contrast_j=zero_point,
+        bundle_residual_half_widths_j=residuals,
+        member_envelope_integral_sum_j=member_envelope_sum,
     )
-    extrema_pad = 64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
-    excursion_lower = math.fsum(
-        (min(onset), -zero_point, min(offset), -zero_point)
-    )
-    excursion_upper = math.fsum(
-        (max(onset), -zero_point, max(offset), -zero_point)
-    )
-    lower = _common_mode_outward(
-        math.fsum((excursion_lower, -extrema_pad)),
-        -math.inf,
-    )
-    upper = _common_mode_outward(
-        math.fsum((excursion_upper, extrema_pad)),
-        math.inf,
-    )
-    zero_centred_width = _common_mode_outward(
-        max(abs(lower), abs(upper)),
-        math.inf,
-    )
-    shared_width = _common_mode_outward(
-        math.fsum((zero_centred_width, abs(zero_point - delta))),
-        math.inf,
-    )
-    local_width = math.fsum(residuals) / 2.0
     return _common_mode_outward(
-        math.fsum((shared_width, local_width)),
+        math.fsum((split["shared_width_j"], split["local_width_j"])),
         math.inf,
     )
 

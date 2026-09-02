@@ -46,13 +46,13 @@ from tests.test_arm_readiness_schemas import (
 ROOT = Path(__file__).resolve().parents[1]
 # D-138: the end-to-end fixtures exercise the live pack/profile map, so they
 # name the successor family the R1 registry installs.  Per the ruled repoint
-# (MAGISTRATE-RULING.md:124-131) that is the _v4 family; these packs are built
+# (MAGISTRATE-RULING.md:124-131) that is the _v5 family; these packs are built
 # synthetically by make_go_fixture, so carrying the ruled ID exercises the
 # registry's admit path without minting anything S-0 owns.
 PACKS = {
-    "ALPHA": "d117_floor_qwen25_1p5b_v4",
-    "BETA": "d117_floor_qwen25_7b_v4",
-    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
+    "ALPHA": "d117_floor_qwen3-1p7b_v5",
+    "BETA": "d117_floor_qwen3-8b_v5",
+    "GAMMA": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
 }
 
 

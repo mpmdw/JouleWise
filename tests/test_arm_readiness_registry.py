@@ -30,6 +30,14 @@ PACKS = {
     "BETA": "d117_floor_qwen25_7b_v1",
     "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v1",
 }
+SUCCESSOR_PACK_IDS = (
+    "d117_floor_qwen3-1p7b_v5",
+    "d117_floor_qwen3-8b_v5",
+    "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
+)
+SUCCESSOR_PINSET = (
+    "configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json"
+)
 PAGES = {
     "ALPHA": ROOT / "docs/phase_2/alpha_arm_readiness.md",
     "BETA": ROOT / "docs/phase_2/beta_arm_readiness.md",
@@ -102,6 +110,33 @@ class ArmReadinessRegistryTests(unittest.TestCase):
             {"ALWAYS", "CLOCK_HELPER_ONLY", "SUCCESSOR_ACCEPTANCE_ONLY"},
         )
 
+    def test_v5_allowlist_has_only_the_exact_successor_identities(self) -> None:
+        allowlist = self.registry["freeze_evidence_lifecycle"][
+            "irrelevant_path_allowlist"
+        ]
+        self.assertEqual(len(allowlist), 112)
+        self.assertEqual(len(allowlist), len(set(allowlist)))
+        self.assertEqual(allowlist, sorted(allowlist))
+        self.assertEqual(allowlist.count(SUCCESSOR_PINSET), 1)
+        pack_paths = [path for path in allowlist if path != SUCCESSOR_PINSET]
+        for pack_id in SUCCESSOR_PACK_IDS:
+            self.assertEqual(
+                sum(
+                    path.startswith(f"configs/campaigns/{pack_id}/")
+                    for path in pack_paths
+                ),
+                37,
+            )
+        self.assertTrue(
+            all(
+                any(
+                    path.startswith(f"configs/campaigns/{pack_id}/")
+                    for pack_id in SUCCESSOR_PACK_IDS
+                )
+                for path in pack_paths
+            )
+        )
+
     def test_markdown_row_id_parity_exactly_once_for_each_profile(self) -> None:
         for profile in self.registry["plan_profiles"]:
             profile_id = profile["profile_id"]
@@ -146,7 +181,7 @@ class ArmReadinessRegistryTests(unittest.TestCase):
         # (_v1.._v3) were minted against v1, so their immutable plan_tree bytes
         # still name that ARCHIVAL coordinate.  The loop is a static-bytes pin:
         # it proves the recorded path, ID, and digest remain intact, not that a
-        # frozen pack resolves through the live _v4 registry at runtime.  The
+        # frozen pack resolves through the live _v5 registry at runtime.  The
         # live-coordinate half follows the loop.
         registry_sha = hashlib.sha256(self.raw).hexdigest()
         archival_relative = "configs/arm_readiness/d117_row_registry_v1.json"

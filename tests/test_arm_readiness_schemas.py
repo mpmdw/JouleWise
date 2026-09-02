@@ -429,7 +429,7 @@ def apply_freeze_projection(
     test could only ever agree with it.  The real `freeze_projection` cannot be
     used here because it derives identity units through the mlx runtime adapters
     and mints its git anchor under a clean-tree gate.  Fidelity to the real
-    write set is proven separately, against the live `_v4` packs.
+    write set is proven separately, against the live `_v5` packs.
     """
 
     tree, projection, producer = identity_pins._load_pack_projection(pack_root)
@@ -480,7 +480,7 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         allowlist = lifecycle["irrelevant_path_allowlist"]
         self.assertEqual(len(allowlist), 112)
         self.assertEqual(allowlist, sorted(set(allowlist)))
-        successor = "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+        successor = "configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json"
         # Membership is the ruled 112th entry (D-151 condition 1) and is NOT a
         # licence to subtract: the successor class is digest-conditional
         # (condition 2).  The behavioural proof that membership alone does not

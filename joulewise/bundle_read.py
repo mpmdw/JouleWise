@@ -61,6 +61,7 @@ from joulewise.axi_decode_config import (
 )
 from joulewise.schemas import (
     BenchmarkConfig,
+    PromptTokenExpectation,
     RunStatus,
     SchemaError,
     summary_validation_problems,
@@ -92,6 +93,7 @@ __all__ = [
     "BundleReadError",
     "BundleReader",
     "ItemWindow",
+    "PROMPT_REALIZATION_PROBLEM_CODES",
     "TracePoint",
     "Window",
     "axi_v2_validation_problems",
@@ -121,6 +123,14 @@ AXI_VALIDATOR_REASON_CODES = frozenset(
         "request_roster_invalid",
         "target_tokenizer_artifact_hash_mismatch",
         "target_tokenizer_identity_unavailable",
+    }
+)
+
+PROMPT_REALIZATION_PROBLEM_CODES = frozenset(
+    {
+        "prompt_realization_evidence_missing",
+        "prompt_realization_evidence_inconsistent",
+        "prompt_realization_mismatch",
     }
 )
 
@@ -791,6 +801,15 @@ class BundleReader:
         if "events.jsonl" not in missing:
             problems.extend(_check_events(path / "events.jsonl"))
 
+        problems.extend(
+            _prompt_realization_problems(
+                self,
+                parsed.get("config.json"),
+                metadata,
+                summary,
+            )
+        )
+
         problems.extend(_check_power_trace(path, summary, metadata))
         if _has_suite_contract(path, parsed.get("config.json")):
             problems.extend(
@@ -881,6 +900,181 @@ class BundleReader:
 
 # ---------------------------------------------------------------------------
 # Structural check helpers (validate-bundle policy details)
+
+
+def _positive_nonbool_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _lowercase_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _phase_prompt_counts(
+    events: list[dict[str, Any]], *, event_type: str, phase: str
+) -> list[Any]:
+    counts: list[Any] = []
+    for event in events:
+        if event.get("event_type") != event_type or event.get("phase") != phase:
+            continue
+        metadata = event.get("metadata")
+        counts.append(
+            metadata.get("prompt_tokens") if isinstance(metadata, dict) else None
+        )
+    return counts
+
+
+def _prompt_realization_problems(
+    reader: BundleReader,
+    raw_config: Any,
+    metadata: Any,
+    summary: Any,
+) -> list[str]:
+    """Bind a succeeded single-prompt realization to its config expectation."""
+
+    if not isinstance(raw_config, dict):
+        return []
+    workload = raw_config.get("workload_profile")
+    if not isinstance(workload, dict) or "prompt_token_expectation" not in workload:
+        return []
+    expectation = workload.get("prompt_token_expectation")
+    if not isinstance(expectation, dict):
+        # Config schema validation owns malformed registrations.  This check
+        # owns only realized evidence for a structurally valid expectation.
+        return []
+    # The raw config dict is not validated on this path, so the registered
+    # operand is canonicalized through the same constructor the schema uses;
+    # a registration the constructor refuses is never compared against.
+    try:
+        registered = PromptTokenExpectation.from_mapping(expectation)
+    except SchemaError as error:
+        return [
+            "prompt_realization_evidence_missing: ill-formed registration at "
+            f"config.workload_profile.prompt_token_expectation ({error})"
+        ]
+    if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
+        return []
+
+    missing: list[str] = []
+    prompt_text = workload.get("prompt_text")
+    if not isinstance(prompt_text, str):
+        missing.append("config.workload_profile.prompt_text")
+
+    provenance = metadata.get("workload_provenance") if isinstance(metadata, dict) else None
+    prompt = provenance.get("prompt") if isinstance(provenance, dict) else None
+    if not isinstance(prompt, dict):
+        missing.append("metadata.workload_provenance.prompt")
+        prompt = {}
+
+    token_hash_domain = prompt.get("token_hash_domain")
+    token_ids_sha256 = prompt.get("token_ids_sha256")
+    realized_token_count = prompt.get("realized_token_count")
+    text_sha256 = prompt.get("text_sha256")
+    if not isinstance(token_hash_domain, str) or not token_hash_domain:
+        missing.append("metadata.workload_provenance.prompt.token_hash_domain")
+    if not _lowercase_sha256(token_ids_sha256):
+        missing.append("metadata.workload_provenance.prompt.token_ids_sha256")
+    if not _positive_nonbool_int(realized_token_count):
+        missing.append("metadata.workload_provenance.prompt.realized_token_count")
+    if not _lowercase_sha256(text_sha256):
+        missing.append("metadata.workload_provenance.prompt.text_sha256")
+
+    observed = metadata.get("workload_observed") if isinstance(metadata, dict) else None
+    observed_token_count = observed.get("token_count") if isinstance(observed, dict) else None
+    output_token_count = (
+        observed.get("output_token_count") if isinstance(observed, dict) else None
+    )
+    if not _positive_nonbool_int(observed_token_count):
+        missing.append("metadata.workload_observed.token_count")
+    if (
+        not isinstance(output_token_count, int)
+        or isinstance(output_token_count, bool)
+        or output_token_count < 0
+    ):
+        missing.append("metadata.workload_observed.output_token_count")
+
+    try:
+        events = reader.events()
+    except (BundleReadError, OSError, TypeError, ValueError):
+        events = []
+    tokenize_counts = _phase_prompt_counts(
+        events, event_type="phase_end", phase="tokenize"
+    )
+    prefill_counts = _phase_prompt_counts(
+        events, event_type="phase_start", phase="prefill"
+    )
+    if not tokenize_counts or any(
+        not _positive_nonbool_int(value) for value in tokenize_counts
+    ):
+        missing.append("events.jsonl tokenize end_metadata.prompt_tokens")
+    if not prefill_counts or any(
+        not _positive_nonbool_int(value) for value in prefill_counts
+    ):
+        missing.append("events.jsonl prefill start_metadata.prompt_tokens")
+
+    observed_prompt_count = None
+    if _positive_nonbool_int(observed_token_count) and isinstance(
+        output_token_count, int
+    ) and not isinstance(output_token_count, bool):
+        observed_prompt_count = observed_token_count - output_token_count
+        if not _positive_nonbool_int(observed_prompt_count):
+            missing.append(
+                "metadata.workload_observed.token_count-output_token_count"
+            )
+
+    if missing:
+        return [
+            "prompt_realization_evidence_missing: absent or ill-typed evidence at "
+            + ", ".join(dict.fromkeys(missing))
+        ]
+
+    assert isinstance(realized_token_count, int)
+    assert isinstance(observed_prompt_count, int)
+    count_surfaces = {
+        "workload_provenance.prompt.realized_token_count": realized_token_count,
+        "tokenize.end_metadata.prompt_tokens": tuple(tokenize_counts),
+        "prefill.start_metadata.prompt_tokens": tuple(prefill_counts),
+        "workload_observed.token_count-output_token_count": observed_prompt_count,
+    }
+    realized_counts = {
+        realized_token_count,
+        observed_prompt_count,
+        *tokenize_counts,
+        *prefill_counts,
+    }
+    inconsistencies: list[str] = []
+    if len(realized_counts) != 1:
+        inconsistencies.append(f"count surfaces disagree: {count_surfaces!r}")
+    expected_text_sha256 = sha256_hex(prompt_text.encode("utf-8"))
+    if text_sha256 != expected_text_sha256:
+        inconsistencies.append(
+            "workload_provenance.prompt.text_sha256 does not match config "
+            f"prompt_text (realized={text_sha256!r}, config={expected_text_sha256!r})"
+        )
+    if inconsistencies:
+        return [
+            "prompt_realization_evidence_inconsistent: "
+            + "; ".join(inconsistencies)
+        ]
+
+    differing: list[str] = []
+    if registered.token_count != realized_token_count:
+        differing.append("token_count")
+    if registered.token_ids_sha256 != token_ids_sha256:
+        differing.append("token_ids_sha256")
+    if registered.token_hash_domain != token_hash_domain:
+        differing.append("token_hash_domain")
+    if differing:
+        return [
+            "prompt_realization_mismatch: registered expectation differs from "
+            "coherent realized evidence for "
+            + ", ".join(differing)
+        ]
+    return []
 
 
 def _axi_problem(code: str, detail: str) -> str:

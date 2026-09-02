@@ -82,6 +82,10 @@ EXPECTED_IDS = {
     "D165-E2E-REPLAY-01",
     "V6-TOKEN-PIN-BINDING-01",
     "V6-SCORED-LEG-01",
+    # 2026-09-01 ruling 44c (+49b): the realized-prompt check landed with two
+    # kernel rows — the implementation row and the deferred identity-projection
+    # catcher (the implementation row retired at its 2026-09-01 merge).
+    "V5-PREFILL-REALIZED-PROJECTION-02",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
@@ -543,9 +547,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # four close-out and renderer rows: 110 + 4 = 114. Ruling 89 R-1
         # (2026-09-01) splits L10-A-G2B-CONTRACT-PREFIX-01 out of the L10
         # row: 114 + 1 = 115. The D-169 stage-1 ruling (2026-09-01) splits
-        # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118.
+        # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118; #258
+        # registers its two realized-prefill rows: 118 + 2 = 120; the
+        # IDS-CHECK row retired at its 2026-09-01 merge: 120 - 1 = 119.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 118)
+        self.assertEqual(len(self.tasks), 119)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

@@ -742,6 +742,30 @@
               }
             }
           ]
+        },
+        {
+          "if": {
+            "properties": {
+              "prompt_token_expectation": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "prompt_token_expectation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "prompt_text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "prompt_text"
+            ]
+          }
         }
       ],
       "properties": {
@@ -790,6 +814,39 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "prompt_token_expectation": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "schema_version": {
+                  "const": "joulewise.prompt_token_expectation.v1"
+                },
+                "token_count": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "token_hash_domain": {
+                  "const": "joulewise.prompt_token_ids.v1"
+                },
+                "token_ids_sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "schema_version",
+                "token_hash_domain",
+                "token_count",
+                "token_ids_sha256"
+              ],
+              "type": "object"
+            }
           ]
         },
         "prompt_tokens": {

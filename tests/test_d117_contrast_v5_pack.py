@@ -13,13 +13,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import detection_floor, floor_mint_estimator
+from joulewise import detection_floor, dominance_closeout, floor_mint_estimator
 from joulewise.analysis_manifest_v3 import (
     analysis_semantics_sha256_v1,
     validate_prospective_analysis_manifest_v3,
 )
 from joulewise.aggregate import student_t_critical_95
 from joulewise.provenance import prompt_token_ids_sha256
+from joulewise.schemas import BenchmarkConfig
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -312,6 +313,14 @@ class D117ContrastV5PackTests(unittest.TestCase):
     def generate_pack(self, root: Path) -> Path:
         self.generator.generate(root, self.generator.GenerationIdentity())
         return root / "configs/campaigns" / PACK_ID
+
+    @staticmethod
+    def science_config_paths(pack: Path) -> list[Path]:
+        return sorted(
+            path
+            for path in pack.glob("[0-9][0-9]_*/*.json")
+            if path.name != "order_manifest.json"
+        )
 
     def test_unresolved_prefill_has_no_default_and_refuses_before_panel_load(self) -> None:
         args = self.generator.parse_args(
@@ -716,6 +725,196 @@ class D117ContrastV5PackTests(unittest.TestCase):
             self.assertEqual(second, first)
             self.assertEqual(list(root.glob(".d117-v5-stage-*")), [])
 
+    def test_prefill_configs_close_candidate_family_and_tree_registration(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-realization-") as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+            pack = self.generate_pack(root)
+            candidate = json.loads(
+                (pack / "prefill_prompt_candidate.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            candidate_by_model = {
+                row["model_id"]: row
+                for row in candidate["token_count_basis"]["per_model"]
+            }
+            tree = json.loads(
+                (pack / "plan_tree.json").read_text(encoding="utf-8")
+            )
+            units = {
+                row["identity_unit_id"]: row
+                for row in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+            }
+
+            prefill_count = 0
+            decode_count = 0
+            for config_path in self.science_config_paths(pack):
+                raw = json.loads(config_path.read_text(encoding="utf-8"))
+                workload = raw["workload_profile"]
+                arm = next(
+                    arm
+                    for arm in ("A", "B")
+                    if raw["model"]["name"] == self.generator.MODELS[arm]["name"]
+                )
+                if workload.get("prompt_text") is None:
+                    decode_count += 1
+                    self.assertNotIn("prompt_token_expectation", workload)
+                    continue
+                prefill_count += 1
+                expectation = workload["prompt_token_expectation"]
+                candidate_row = candidate_by_model[self.generator.MODEL_IDS[arm]]
+                family = json.loads(
+                    (
+                        pack
+                        / self.generator.family_relpath(
+                            self.generator.PREFILL_ARM, arm
+                        )
+                    ).read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    expectation["token_ids_sha256"],
+                    candidate_row["token_ids_sha256"],
+                )
+                self.assertEqual(
+                    expectation["token_count"], candidate_row["token_count"]
+                )
+                self.assertEqual(
+                    expectation["token_count"],
+                    family["workload_profile"]["prompt_tokens"],
+                )
+                self.assertEqual(
+                    units[f"{arm}/{self.generator.PREFILL_ARM}"][
+                        "declared_identity"
+                    ]["workload_profile"],
+                    BenchmarkConfig.from_mapping(raw).to_dict()[
+                        "workload_profile"
+                    ],
+                )
+
+        self.assertEqual(prefill_count, 40)
+        self.assertEqual(decode_count, 40)
+
+    def test_distinct_arm_pins_project_to_each_arms_own_configs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-realization-arms-") as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+            self.generator.PREFILL_TOKEN_IDS["B"] = [8] * self.generator.PREFILL_LENGTH
+            self.generator.PREFILL_TOKEN_IDS_SHA256["B"] = prompt_token_ids_sha256(
+                self.generator.PREFILL_TOKEN_IDS["B"]
+            )
+            pack = self.generate_pack(root)
+            observed: dict[str, set[str]] = {"A": set(), "B": set()}
+            for config_path in self.science_config_paths(pack):
+                raw = json.loads(config_path.read_text(encoding="utf-8"))
+                expectation = raw["workload_profile"].get(
+                    "prompt_token_expectation"
+                )
+                if expectation is None:
+                    continue
+                arm = next(
+                    arm
+                    for arm in ("A", "B")
+                    if raw["model"]["name"] == self.generator.MODELS[arm]["name"]
+                )
+                observed[arm].add(expectation["token_ids_sha256"])
+
+        self.assertEqual(
+            observed,
+            {
+                "A": {self.generator.PREFILL_TOKEN_IDS_SHA256["A"]},
+                "B": {self.generator.PREFILL_TOKEN_IDS_SHA256["B"]},
+            },
+        )
+        self.assertNotEqual(observed["A"], observed["B"])
+
+    def test_closed_pack_prompt_registration_refusals_are_defect_shaped(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-realization-refuse-") as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+            pack = self.generate_pack(root)
+            configs = self.science_config_paths(pack)
+            prefill_path = next(
+                path
+                for path in configs
+                if json.loads(path.read_text())["workload_profile"].get(
+                    "prompt_text"
+                )
+                is not None
+            )
+            decode_path = next(
+                path
+                for path in configs
+                if json.loads(path.read_text())["workload_profile"].get(
+                    "prompt_text"
+                )
+                is None
+            )
+            original_prefill = prefill_path.read_text(encoding="utf-8")
+            original_decode = decode_path.read_text(encoding="utf-8")
+            base = json.loads(original_prefill)
+            expectation = base["workload_profile"]["prompt_token_expectation"]
+
+            missing = copy.deepcopy(base)
+            missing["workload_profile"].pop("prompt_token_expectation")
+            prefill_path.write_text(json.dumps(missing), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "prompt_realization_registration_missing"
+            ):
+                self.generator.validate_prompt_realization_registration(pack)
+            prefill_path.write_text(original_prefill, encoding="utf-8")
+
+            invalid_expectations = (
+                {key: value for key, value in expectation.items() if key != "token_count"},
+                {**expectation, "token_hash_domain": "wrong.domain"},
+                {**expectation, "token_count": True},
+                {**expectation, "token_ids_sha256": "A" * 64},
+            )
+            for invalid in invalid_expectations:
+                changed = copy.deepcopy(base)
+                changed["workload_profile"]["prompt_token_expectation"] = invalid
+                prefill_path.write_text(json.dumps(changed), encoding="utf-8")
+                with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                    ValueError, "prompt_realization_registration_invalid"
+                ):
+                    self.generator.validate_prompt_realization_registration(pack)
+                prefill_path.write_text(original_prefill, encoding="utf-8")
+
+            decode = json.loads(original_decode)
+            decode["workload_profile"]["prompt_token_expectation"] = expectation
+            decode_path.write_text(json.dumps(decode), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "prompt_realization_registration_invalid"
+            ):
+                self.generator.validate_prompt_realization_registration(pack)
+            decode_path.write_text(original_decode, encoding="utf-8")
+
+            inconsistent = copy.deepcopy(base)
+            inconsistent["workload_profile"]["prompt_token_expectation"] = {
+                **expectation,
+                "token_count": expectation["token_count"] + 1,
+            }
+            prefill_path.write_text(json.dumps(inconsistent), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "prompt_realization_registration_inconsistent"
+            ):
+                self.generator.validate_prompt_realization_registration(pack)
+            prefill_path.write_text(original_prefill, encoding="utf-8")
+
+            family_path = pack / self.generator.family_relpath(
+                self.generator.PREFILL_ARM, "A"
+            )
+            original_family = family_path.read_text(encoding="utf-8")
+            family = json.loads(original_family)
+            family["workload_profile"]["prompt_tokens"] += 1
+            family_path.write_text(json.dumps(family), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "prompt_realization_registration_inconsistent"
+            ):
+                self.generator.validate_prompt_realization_registration(pack)
+
     def test_member_model_config_refuses_missing_runtime_identity_pin(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-pin-") as temporary:
             self.configure(self.write_prefill_pin(Path(temporary)))
@@ -821,8 +1020,10 @@ class D117ContrastV5PackTests(unittest.TestCase):
         fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
         bracket = authenticated_bracket(fixture["operative_bound_s"])
 
+        # The replay now lives in the one-home module (D-168); the cap must
+        # refuse before that module ever calls the floor estimator.
         with mock.patch.object(
-            self.generator, "comparative_false_effect_floor"
+            dominance_closeout, "comparative_false_effect_floor"
         ) as floor:
             with self.assertRaisesRegex(
                 ValueError, "common_mode_replay_block_count_invalid"

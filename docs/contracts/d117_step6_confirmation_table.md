@@ -41,7 +41,7 @@ finite JSON values, lexicographically sorted object keys, two-space indent,
 and one trailing newline. Its adjacent sidecar is exact GNU SHA-256 form:
 
 ```text
-<64 lowercase hex><two spaces>d117_step6_confirmation_table_v4.json\n
+<64 lowercase hex><two spaces>d117_step6_confirmation_table_v5.json\n
 ```
 
 The table contains no self-digest and no timestamp. Event time belongs in the
@@ -105,29 +105,29 @@ hexadecimal characters.
     "decision": "YES",
     "statement": "Confirmed under the D-150b standing delegation: hM recomputed from the marker bytes on disk and hS from the bytes committed at the mint head; both matched the values this table asserts."
   },
-  "family_id": "d117-v4",
+  "family_id": "d117-v5",
   "family_publication": {
     "marker": {
-      "path": "d117_family_publication_v4.json",
+      "path": "d117_family_publication_v5.json",
       "schema_version": "joulewise.d117_family_publication_marker.v1",
       "sha256": "<hM>"
     },
     "members": [
       {
         "freeze_receipt_sha256": "<sha256>",
-        "pack_id": "d117_floor_qwen25_1p5b_v4",
+        "pack_id": "d117_floor_qwen3-1p7b_v5",
         "pack_sha256": "<sha256>",
         "profile": "ALPHA"
       },
       {
         "freeze_receipt_sha256": "<sha256>",
-        "pack_id": "d117_floor_qwen25_7b_v4",
+        "pack_id": "d117_floor_qwen3-8b_v5",
         "pack_sha256": "<sha256>",
         "profile": "BETA"
       },
       {
         "freeze_receipt_sha256": "<sha256>",
-        "pack_id": "d117_contrast_qwen25_1p5b_vs_7b_v4",
+        "pack_id": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
         "pack_sha256": "<sha256>",
         "profile": "GAMMA"
       }
@@ -147,7 +147,7 @@ hexadecimal characters.
   "successor_pinset": {
     "fact_count": "<nonnegative integer>",
     "pack_count": 3,
-    "path": "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json",
+    "path": "configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json",
     "receipt_count": 33,
     "schema_version": "joulewise.receipt_histsem_pinset.v1",
     "sha256": "<hS>"
@@ -171,7 +171,7 @@ consumer validates the entire table and the `C → M` edge.
 The `successor_pinset` section names the code-enumerated successor path,
 schema, whole-file digest, and recomputed counts. The changed-set/histsem
 consumer validates the entire table and the `C → S` edge. `pack_count` is
-exactly three and `receipt_count` is exactly 33 for the `_v4` family; the
+exactly three and `receipt_count` is exactly 33 for the `_v5` family; the
 fact count is recomputed from the 33 receipts.
 
 ### Where the `C → S` edge is enforced
@@ -304,7 +304,7 @@ confirmed family/pinset records refuses publication.
 The histsem verifier never compares a freeze receipt's
 `pack_identity.pack_root` (its "Archival location rule" in
 [`receipt_histsem_verifier.md`](receipt_histsem_verifier.md)); the
-freeze-replay gate compares it repository-relatively for `_v4`+ generations
+freeze-replay gate compares it repository-relatively for `_v5`+ generations
 and absolutely below the registry's family-publication generation threshold,
 per the 2026-08-25 D-154 ruling.
 

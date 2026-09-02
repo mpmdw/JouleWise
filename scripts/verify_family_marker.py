@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the D-117 v4 family marker in candidate or published custody."""
+"""Verify the D-117 v5 family marker in candidate or published custody."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             "checked_at_utc": readiness._utc_now(),
             "status": "REFUSE",
             "publication_authorized": False,
-            "family_id": "d117-v4",
+            "family_id": "d117-v5",
             "marker": None,
             "confirmation": None,
             "consulted_git": None,
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             "checked_at_utc": readiness._utc_now(),
             "status": "REFUSE",
             "publication_authorized": False,
-            "family_id": "d117-v4",
+            "family_id": "d117-v5",
             "marker": None,
             "confirmation": None,
             "consulted_git": None,

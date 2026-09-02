@@ -2394,7 +2394,7 @@
       "priority": "p1_phase_gate",
       "rank": 85,
       "status": "partial",
-      "status_note": "terra xhigh seat in flight 2026-09-01 on feat/2026-09-01-night-driver (off PR #257's head); the once-only latch and dead-man chain-alive refusal are bound on its fix round.",
+      "status_note": "Sol/terra seats landed 2026-09-01 on feat/2026-09-01-night-driver (head f07c85d5, 88 tests): refuters luna 123 (execution) + Opus 124 (contract); fix rounds 127/131 with delta re-audits terra 130 (FIX-ROUND) and luna 132 (FIX-ROUND, blocker D1: dead-man vs. empty chain.started marker). D1 is the second fix round on the same defect -> mandatory cold gate coldgate-d1 (Sol xhigh + Opus contract lens + cold Fable) in flight; fix round 4 follows its ruling. WO-4 NIGHT_HANDBACK.md template landed on the branch.",
       "stop_card": null
     },
     "NIGHT-GATE-01": {
@@ -5155,7 +5155,7 @@
       "priority": "p1_phase_gate",
       "rank": 2,
       "status": "queued",
-      "status_note": "Installed by D-167 as the first live _v5 step. It replaces the retired Qwen2.5 _v3 Q2 row at the same lane rank but carries no old-window evidence forward.",
+      "status_note": "Installed by D-167 as the first live _v5 step. It replaces the retired Qwen2.5 _v3 Q2 row at the same lane rank but carries no old-window evidence forward. Producers landed 2026-09-01: PR #257 merged (8b86573b) — input generator, window binder, authenticated summarizer, runtime-verified prompt-pin issuer (r1-r4). Identities re-parameterized to the Qwen3 1.7B/8B roster by PR #263 (0a0ca6dd, V5-IDENTITY-REPARAM-01 closed at merge). The night itself waits on the unattended loop (NIGHT-DRIVER-01 gauntlet, fix round 4 under cold gate coldgate-d1).",
       "stop_card": null
     },
     "V5-G2B-SHAKEDOWN-01": {
@@ -5228,7 +5228,7 @@
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d and ordering regression R-6e landed together in PR #262 (2026-09-01, branch feat/2026-09-01-ruling-97-runsheet; terra 99 + magistrate bench), merge pending green CI.",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d and ordering regression R-6e landed together in PR #262 (2026-09-01, branch feat/2026-09-01-ruling-97-runsheet; terra 99 + magistrate bench), merged 2026-09-01 (1c63f9a7).",
       "stop_card": null
     },
     "V5-NIGHTLY-G3-01": {
@@ -5295,6 +5295,50 @@
       "rank": 68,
       "status": "blocked",
       "status_note": "Installed by D-167 and re-homed from the G3 portion of PIPELINE-SMOKE-LIVE-01. A desk script is agent-lane work; the quiet-machine collection it checks remains in V5-TRANSACTION-01.",
+      "stop_card": null
+    },
+    "V5-PREFILL-REALIZED-PROJECTION-02": {
+      "acceptance": {
+        "evidence": [
+          "The freeze projection derives the prompt realization from the registered prompt text on the collection stack",
+          "Arm-time projection re-verification refuses a count, ids-hash, or domain mismatch before collection",
+          "The arm-critical identity_pins.py change passes the required council and delta-review gates"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-PREFILL-REALIZED-PROJECTION-02/acceptance",
+          "label": "V5-PREFILL-REALIZED-PROJECTION-02 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Freeze and arm identity projection catch prompt-realization drift before the first measured bundle."
+      },
+      "authority": {
+        "label": "Ruling 44c deferred identity-projection catcher",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "V5-PREFILL-REALIZED-IDS-CHECK-01 landed 2026-09-01: PR #258 merged (35577a64) — registered operand canonicalized, whole-hash + coherent-bundle mutation guards; realized-prefill check non-waivable at every bundle consumer",
+            "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
+          },
+          "kind": "task",
+          "required": "the shared bundle-reader prompt-realization fence is implemented and reviewed first",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "advisory",
+          "target": "V5-PREFILL-REALIZED-IDS-CHECK-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add the identity-pin projection catcher for registered prefill prompt realization at freeze and arm.",
+      "id": "V5-PREFILL-REALIZED-PROJECTION-02",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 6,
+      "status": "queued",
+      "status_note": "Enters identity_pins.py — council trigger.",
       "stop_card": null
     },
     "V5-TRANSACTION-01": {

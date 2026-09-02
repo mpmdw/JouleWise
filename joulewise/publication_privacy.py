@@ -86,6 +86,7 @@ _CONFIG_KEYS: dict[str, frozenset[str]] = {
             "suite_manifest_ref",
             "suite_manifest_sha256",
             "generator_sidecar_ref",
+            "prompt_token_expectation",
             "repetitions",
             "warmup_runs",
         }
