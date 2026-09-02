@@ -8,9 +8,12 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,9 +87,16 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         self.assertEqual(payload["duplicate_timestamp_count"], 1)
         self.assertEqual(json.loads(out.read_text(encoding="utf-8")), payload)
         self.assertIn(
-            "| DG-071 | 5 | 3000.000000 | 2000.000000 |",
+            "| DG-071 | 5 | 2000.000000 | 3000.000000 | "
+            "4000.000000 | 2000.000000 |",
             out.with_suffix(".md").read_text(encoding="utf-8"),
         )
+        self.assertEqual(
+            payload["input_bundle"]["path"],
+            "runs_window_a10_20260725/"
+            "p2015-df-ph-decode-abs-r03/power_trace.csv",
+        )
+        self.assertFalse(payload["input_bundle"]["path"].startswith("/"))
 
     def test_two_runs_are_byte_identical(self) -> None:
         first = self.root / "first" / "issued.json"
@@ -98,6 +108,66 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             first.with_suffix(".md").read_bytes(),
             second.with_suffix(".md").read_bytes(),
         )
+
+    def test_two_checkout_roots_produce_byte_identical_json(self) -> None:
+        checkouts = [self.root / "checkout-a", self.root / "checkout-b"]
+        fixture_raw = self.bundle.read_bytes()
+        git_environment = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "Fixture Author",
+            "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00+00:00",
+            "GIT_COMMITTER_NAME": "Fixture Committer",
+            "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00+00:00",
+        }
+        outputs = []
+        for checkout in checkouts:
+            fixture = checkout / ISSUER.PINNED_BUNDLE_REPOSITORY_PATH
+            fixture.parent.mkdir(parents=True)
+            fixture.write_bytes(fixture_raw)
+            subprocess.run(
+                ["git", "init", "--quiet"], cwd=checkout, check=True
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "commit.gpgSign=false",
+                    "commit",
+                    "--quiet",
+                    "--allow-empty",
+                    "-m",
+                    "fixture",
+                ],
+                cwd=checkout,
+                env=git_environment,
+                check=True,
+            )
+            out = checkout / "issued.json"
+            with (
+                mock.patch.object(ISSUER, "PINNED_BUNDLE_PATH", fixture),
+                mock.patch.object(
+                    ISSUER,
+                    "PINNED_BUNDLE_SHA256",
+                    hashlib.sha256(fixture_raw).hexdigest(),
+                ),
+                mock.patch("sys.stdout", new=io.StringIO()),
+            ):
+                exit_code = ISSUER.main(
+                    ["--repository-root", str(checkout), "--out", str(out)]
+                )
+            self.assertEqual(exit_code, 0)
+            outputs.append(out.read_bytes())
+
+        self.assertEqual(outputs[0], outputs[1])
+        payload = json.loads(outputs[0])
+        self.assertEqual(
+            payload["input_bundle"]["path"],
+            "runs_window_a10_20260725/"
+            "p2015-df-ph-decode-abs-r03/power_trace.csv",
+        )
+        self.assertFalse(payload["input_bundle"]["path"].startswith("/"))
 
     def test_wrong_sha_is_refused_without_output(self) -> None:
         out = self.root / "wrong-sha.json"
@@ -111,14 +181,21 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
 
     def test_missing_required_field_is_refused_without_output(self) -> None:
         self.bundle.write_text(
-            "timestamp_s,power_w,source,rail,interval_start_s\n"
-            "10,1,fixture,cpu_power,0\n",
+            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+            "10,1,fixture,cpu_power,0,\n",
             encoding="utf-8",
         )
         out = self.root / "missing-field.json"
-        with self.assertRaises(ISSUER.IssuanceRefused) as raised:
-            self._issue(out)
-        self.assertEqual(raised.exception.reason, "record_schema_mismatch")
+        stderr = io.StringIO()
+        with (
+            mock.patch.object(ISSUER, "PINNED_BUNDLE_PATH", self.bundle),
+            mock.patch.object(ISSUER, "PINNED_BUNDLE_SHA256", self._sha256()),
+            redirect_stderr(stderr),
+        ):
+            exit_code = ISSUER.main(["--out", str(out)])
+        self.assertEqual(exit_code, ISSUER.REFUSAL_EXIT_CODE)
+        self.assertIn("REFUSED record_field_missing:", stderr.getvalue())
+        self.assertIn("missing interval_end_s", stderr.getvalue())
         self.assertFalse(out.exists())
 
     def test_non_monotone_timestamps_are_refused_without_output(self) -> None:

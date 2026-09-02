@@ -49,6 +49,10 @@ PINNED_BUNDLE_PATH = Path(
     "/Users/edr/code/JouleWise/runs_window_a10_20260725/"
     "p2015-df-ph-decode-abs-r03/power_trace.csv"
 )
+PINNED_BUNDLE_REPOSITORY_PATH = (
+    "runs_window_a10_20260725/"
+    "p2015-df-ph-decode-abs-r03/power_trace.csv"
+)
 PINNED_BUNDLE_SHA256 = (
     "6945160964bc8667f4bfcc1ba7b500f81045fce8301ef7aadce45a188d3e06e9"
 )
@@ -270,7 +274,9 @@ def build_payload(
         "schema_version": SCHEMA_VERSION,
         "registry_row_ids": list(REGISTRY_ROW_IDS),
         "input_bundle": {
-            "path": str(actual_path),
+            # The absolute paths above are an execution-time refusal pin only.
+            # Custody artifacts use a checkout-independent repository locator.
+            "path": PINNED_BUNDLE_REPOSITORY_PATH,
             "sha256": observed_sha256,
             "record_schema": list(EXPECTED_RECORD_SCHEMA),
         },
@@ -317,11 +323,14 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "Milliseconds are renderings rounded to six decimals. The unrounded ",
         "seconds below are the issued values of record.",
         "",
-        "| Registry row | Sample count | Median (ms) | IQR (ms) |",
-        "|---|---:|---:|---:|",
-        f"| DG-071 | {dg071['sample_count']} | {dg071['median_ms']:.6f} | "
+        "| Registry row | Sample count | Q1 (ms) | Median (ms) | "
+        "Q3 (ms) | IQR (ms) |",
+        "|---|---:|---:|---:|---:|---:|",
+        f"| DG-071 | {dg071['sample_count']} | {dg071['q1_ms']:.6f} | "
+        f"{dg071['median_ms']:.6f} | {dg071['q3_ms']:.6f} | "
         f"{dg071['iqr_ms']:.6f} |",
-        f"| DG-075 | {dg075['sample_count']} | {dg075['median_ms']:.6f} | "
+        f"| DG-075 | {dg075['sample_count']} | {dg075['q1_ms']:.6f} | "
+        f"{dg075['median_ms']:.6f} | {dg075['q3_ms']:.6f} | "
         f"{dg075['iqr_ms']:.6f} |",
         "",
         "| Registry row | Q1 (s) | Median (s) | Q3 (s) | IQR (s) |",
