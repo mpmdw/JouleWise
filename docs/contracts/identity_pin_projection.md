@@ -75,13 +75,40 @@ before their JSON is trusted.
   normalization runs, every other `run_metadata` key is discarded and the
   normalized object is exactly `{"tags": <remaining tags>}`.
 - An **identity unit** is one ordered pack entry whose configurations all
-  declare one model, hardware target, runtime, telemetry backend,
-  quantization (the policy for representing the model's numeric weights), and
-  scientific workload. It is the loop unit in
-  `_derive_projection_units`.
+  declare one model, hardware target, runtime, telemetry backend, and
+  quantization (the policy for representing the model's numeric weights).
+  Its configurations have either one exact scientific workload or one common
+  workload profile plus a declared closed set of suite manifests. It is the
+  loop unit in `_derive_projection_units`.
 - A **declaration** is the eight-field claim copied from the pack for one
   identity unit: hardware target, runtime backend, telemetry backend, model
   name, model source, model revision, quantization, and workload profile.
+- A **common workload profile** is a typed configuration's workload profile
+  after only `suite_manifest_ref` and `suite_manifest_sha256` are removed.
+  Every other typed key and value, including schema-inserted JSON nulls,
+  remains.
+- A **declared manifest member** is an object with exactly
+  `suite_manifest_ref`, `suite_manifest_sha256`, and
+  `declared_member_count`. The reference is one nonempty relative POSIX path;
+  the digest is one lowercase SHA-256; and the count is a positive integer
+  that is not a Boolean. A **declared manifest set** is the nonempty ordered
+  `suite_manifest_set` array of those objects. Its references are unique and
+  its digests are unique. It is stored beside the common workload fields
+  inside `declared_identity.workload_profile`; it is never folded into one
+  synthetic manifest.
+- A **manifest class** is every emitted configuration in one identity unit
+  whose typed workload binds the same `suite_manifest_sha256`. Each member of
+  the class must also use the reference paired with that digest in the
+  declared manifest set. The **emitted census** maps each declared manifest
+  digest to the number of emitted configurations in that class.
+- A **member scientific identity** is the SHA-256 of one normalized scientific
+  configuration. The **distinct member identity set** is the mathematical set
+  of those hashes for one identity unit. Configurations in one manifest class
+  must have exactly one member scientific identity, and the number of distinct
+  member identities must equal the number of declared manifest members.
+- The **unit config-set digest** is the value written as
+  `config_set_sha256`. Section 4 defines its byte preimage for both the
+  one-identity and several-identity cases.
 - A **configuration inventory** is the list of pack-relative configuration
   paths, meaning paths measured from the pack directory, and each file's
   raw-byte SHA-256. The list is **lexically sorted**: path strings are ordered
@@ -279,7 +306,7 @@ top-level fields in the constructed object:
 | `identity_unit_id` | The unit's nonempty string ID. |
 | `producer_plan_reference` | Object with exactly `plan_id` and `path`, both nonempty strings. |
 | `consumer_bindings` | Nonempty array; every object has exactly `arm`, `family`, and `measurement_arm`, all nonempty strings. |
-| `declared_identity` | Object with exactly `hardware_target`, `runtime_backend`, `telemetry_backend`, `model_name`, `model_source`, `model_revision`, `quantization`, and `workload_profile`. It must equal the value re-derived from every typed configuration. |
+| `declared_identity` | Object with exactly `hardware_target`, `runtime_backend`, `telemetry_backend`, `model_name`, `model_source`, `model_revision`, `quantization`, and `workload_profile`. For a legacy one-identity unit it must equal the value re-derived from every typed configuration. For a declared manifest set, every non-workload field must equal every typed configuration, and the declared common workload profile must equal every typed workload after its two per-member manifest fields are removed. |
 | `config_inventory` | Lexically sorted array of objects with exactly `path` and lowercase `sha256`. The digest covers the raw configuration file bytes, so even fields omitted from scientific identity remain byte-bound here. |
 | `model_artifact_identity` | The complete successful single-file or file-set result defined immediately above. |
 | `probe_metadata` | The complete runtime-probe result defined immediately above. |
@@ -317,14 +344,31 @@ bytes, and render the 32-byte result as 64 lowercase hexadecimal characters
 The three shared-mint pins are derived beside this input:
 
 1. `model_artifact_sha256` is the single-file digest or folded file-set digest.
-2. `config_set_sha256` is canonical-JSON SHA-256 of the typed configuration
-   after the exact scientific-workload normalization predicate printed in
-   section 2. That predicate removes only `analysis-replacement-of=`,
-   `analysis-replacement-reason=`, `calibration-plan-sha256=`,
-   `calibration-abba-block-id=`, `calibration-abba-label=`, and
+2. Derive each member scientific identity by applying the exact
+   scientific-workload normalization predicate printed in section 2 and then
+   applying SHA-256 to its canonical JSON. That predicate removes only
+   `analysis-replacement-of=`, `analysis-replacement-reason=`,
+   `calibration-plan-sha256=`, `calibration-abba-block-id=`,
+   `calibration-abba-label=`, and
    `calibration-abba-sequence-index=` prefixes, plus a full-string
    `rep[0-9]+`; when tags are normalized, all other `run_metadata` keys are
-   discarded. Every config in one unit must produce the same value.
+   discarded.
+
+   Let `H` be the lexically sorted distinct member identity set. `H` must be
+   nonempty. If `H` contains one hash, `config_set_sha256` is that hash
+   unchanged. This preserves every existing single-identity receipt byte for
+   byte. If `H` contains two or more hashes, form this UTF-8 byte string with
+   no NUL bytes and no final line feed:
+
+   ```text
+   joulewise.identity_unit_config_set.v1\n<smallest hash>\n<next hash>...
+   ```
+
+   In formula form, the preimage is the literal domain string
+   `joulewise.identity_unit_config_set.v1`, one line-feed byte, and
+   `"\n".join(sorted(H))`. `config_set_sha256` is the lowercase SHA-256 of
+   that complete preimage. Duplicate occurrences do not enter the preimage;
+   their required counts are enforced by the emitted census instead.
 3. `runtime_identity_sha256` is SHA-256 over
    `joulewise.stack_identity.v1`, one NUL byte, and canonical JSON of exactly
    these eleven fields:
@@ -338,6 +382,15 @@ The three shared-mint pins are derived beside this input:
 
    These are `STACK_IDENTITY_FIELDS` in
    `joulewise/identity_pins.py:48-60,313-345`.
+
+The runtime probe may use the first lexically inventoried configuration as its
+representative only after every member has passed the common model, hardware,
+runtime, telemetry, quantization, and workload checks. The representative
+selects no unit-level config value: the unit config-set digest comes only from
+the sorted distinct member identity set. The projection also derives the model
+artifact and runtime identity pins for every member from the probe metadata and
+refuses unless every member produces the same two pins and the same complete
+stack identity.
 
 ## 5. Prompt realization
 
@@ -390,7 +443,49 @@ pack consumes. It validates an `unprojected` or already `frozen` projection,
 derives all units, obtains the **mint Git anchor** (the repository root and
 reviewed commit selected by the floor mint), and records the **derivation code
 identity** (the contract ID, function-name list, and SHA-256 of every source
-file defining those functions). On the first successful freeze it writes:
+file defining those functions).
+
+For each identity unit, freeze performs the following comparison before it
+probes runtime metadata or writes anything:
+
+1. It authenticates every inventoried configuration's raw bytes against that
+   row's digest and parses the configuration through `BenchmarkConfig`.
+2. When `suite_manifest_set` is absent, the legacy rule applies: every complete
+   typed declaration must equal the stored declaration and every configuration
+   must have the same member scientific identity.
+3. When `suite_manifest_set` is present, freeze validates every exact
+   three-field declared member, removes only `suite_manifest_set` from the
+   stored workload to obtain the declared common workload profile, and removes
+   only `suite_manifest_ref` and `suite_manifest_sha256` from each typed
+   emitted workload to obtain its observed common workload profile. Every
+   observed common profile and every non-workload declaration field must equal
+   the declaration.
+4. Each emitted configuration's manifest digest must name one declared member,
+   and its manifest reference must equal the reference paired with that digest.
+   Freeze constructs the emitted census without dropping duplicate
+   occurrences, then requires every declared digest to occur exactly its
+   `declared_member_count`. An extra digest, missing digest, missing occurrence,
+   or extra occurrence refuses.
+5. For each manifest class, the set of member scientific identities must have
+   cardinality one. The distinct member identity set for the unit must have
+   cardinality equal to the declared manifest set. Thus an unfiltered changed
+   tag or note on one repeated member refuses even when its manifest binding
+   and common workload are unchanged.
+6. Only after those comparisons pass does freeze use the representative
+   configuration for the runtime probe. It derives every member's stack pins
+   through the shared mint path with that metadata, requires all member model
+   artifact pins, runtime identity pins, and complete stack identities to be
+   equal, and supplies the unit config-set digest defined in section 4, never a
+   hash selected by set iteration.
+
+The identity projection authenticates the inventoried configuration bytes. It
+does not independently open the suite-manifest files to recompute their
+digests; manifest-file authentication remains with the pack and suite gates.
+Within this contract, an unauthenticated manifest binding means a configuration
+digest or reference not present as the exact declared pair, and that condition
+refuses in step 4.
+
+On the first successful freeze it writes:
 
 - `identity_pin_projection.receipts/projection-NNNN.json`, where `NNNN` is the
   next zero-padded number beginning at `0001`;
@@ -458,6 +553,33 @@ authenticated escape to the readiness layer that maps projection evidence into
 the arm decision. That layer maps the same code into readiness refusal but may
 have no arm receipt to bind (`joulewise/identity_pins.py:2100-2234`;
 `joulewise/arm_readiness.py:5681-5729`).
+
+Arm re-verification calls the same `_derive_projection_units` comparison, so
+the common-profile equality, declared manifest membership, exact census, and
+one-identity-per-manifest rules are re-run against current configuration bytes.
+The frozen receipt remains the expected side of the comparison; the live
+derivation never edits its declaration or census.
+
+### Analysis consumption
+
+For successor packs, every accepted bundle carries an authenticated launch
+lineage that resolves one pack root. The analysis input gate follows that
+already-authenticated root to the plan-pinned U8 readiness freeze receipt,
+authenticates its sidecar, requires its one
+`u11-freeze-projection` evidence binding to equal the plan's frozen projection
+binding, and authenticates the bound frozen identity receipt and sidecar. The
+gate selects the one receipt unit whose `consumer_bindings.family` equals the
+requested condition-family ID. It authenticates that unit's inventoried config
+bytes, re-derives their distinct member identity set, and checks the resulting
+unit config-set digest against the receipt.
+
+The evidence member identities must be nonempty and a subset of that frozen
+set. Any outside identity or unreadable binding returns no floor request. A
+single evidence identity may use the exact-cell route. Two or more evidence
+identities skip the exact-cell route entirely and may bind only through a
+declared condition-family transport group. Legacy evidence without successor
+launch lineage retains the historical single-identity route; it cannot use the
+multi-identity route.
 
 ### What happens after arm
 
@@ -528,6 +650,15 @@ ID is `joulewise.identity_pin_derivation.v1`. `supersedes` is an array whose
 rows have exactly `pack_id`, `pack_sha256`, `projection_receipt_sha256`, and
 `readiness_sha256` (`joulewise/identity_pins.py:97-156,589-740`).
 
+No receipt or runtime-config key is added for manifest rotation. The receipt
+copies the declaration unchanged into its existing `declared_identity` field,
+so a rotating unit stores its common workload keys and `suite_manifest_set`
+inside `declared_identity.workload_profile`. The existing config inventory
+stores every occurrence, including repeated manifest classes. The existing
+`config_set_sha256` stores the section 4 unit config-set digest. A legacy or
+new unit with one distinct member identity therefore stores that identity hash
+unchanged; a unit with several stores the domain-separated set digest.
+
 The derivation callable list names the shared model enumerator, typed-config
 constructor, scientific-config normalizer, stack builder and hasher, three-pin
 derivers, adapter resolvers, powermetrics device probe, private runtime probe,
@@ -543,6 +674,15 @@ part of that executable-identity equality (`joulewise/identity_pins.py:1148-1210
 | `readiness_identity_projection_mint_divergence` | The projection cannot use the same derivation code or obtain the same model/config result as the shared mint path. |
 | `readiness_identity_pinset_frozen_mismatch` | Frozen pack state, pins, receipt bytes, receipt binding, successor state, or idempotent re-derivation disagree. |
 | `readiness_identity_receipt_namespace_anomalous` | The committed projection-receipt directory contains a nonconforming entry or another namespace condition that could hide or collide with a receipt. |
+
+No new refusal code is needed. A well-shaped declaration whose common profile,
+manifest membership, emitted census, per-manifest identity, or distinct
+identity count differs from emitted configurations uses
+`readiness_identity_environment_dirty`. A malformed `suite_manifest_set`,
+member row, relative reference, digest, or count uses
+`readiness_identity_artifact_unreadable`. A derived unit config-set digest or
+representative runtime pin that disagrees with the shared derivation uses
+`readiness_identity_projection_mint_divergence`.
 
 The generic code preserves identity-unit order and requires unique nonempty
 IDs, but does not itself enforce a pack-specific alpha/beta/gamma roster or
@@ -623,6 +763,63 @@ The derived three-pin value is:
 ```json
 {"config_set_sha256":"95367df3b83bf6995b5d054f5d21114744b14614b999071a801b3189c107c019","model_artifact_sha256":"6361d8e661d28948e82e68ed04a7d5becdc39bc6a94176bd805003b90991fdfb","runtime_identity_sha256":"e2dc2bd8a10f4f4029443d824ed21756d5d3146671998b12324d7791685c4e36"}
 ```
+
+### Two-manifest decode extension
+
+The following values are computed example values, not production campaign
+pins. Let the exact example manifest bytes be `example decode manifest one`
+plus one line-feed byte and `example decode manifest two` plus one line-feed
+byte. Their real SHA-256 digests are, respectively:
+
+```text
+ea6cbc2e9870340c7b9ec85d64ec861ce53b7ca6f927bf72eff73add97f36732
+f6130adccb590d06e952c8034fc36e080884980444a1ce441ee1c303cac58c3b
+```
+
+Starting from the canonical scientific identity shown earlier in this section,
+replace only its `workload_profile`. Member 1 uses this exact canonical
+workload object:
+
+```json
+{"dataset_ref":null,"name":"toy-rotating-decode","output_tokens":null,"prompt_text":null,"prompt_tokens":null,"repetitions":1,"suite_manifest_ref":"manifests/decode-1.json","suite_manifest_sha256":"ea6cbc2e9870340c7b9ec85d64ec861ce53b7ca6f927bf72eff73add97f36732","warmup_runs":1}
+```
+
+Member 2 uses:
+
+```json
+{"dataset_ref":null,"name":"toy-rotating-decode","output_tokens":null,"prompt_text":null,"prompt_tokens":null,"repetitions":1,"suite_manifest_ref":"manifests/decode-2.json","suite_manifest_sha256":"f6130adccb590d06e952c8034fc36e080884980444a1ce441ee1c303cac58c3b","warmup_runs":1}
+```
+
+All other canonical scientific-identity fields remain byte-for-byte those in
+the earlier example. SHA-256 over the two complete canonical scientific
+identities gives these member scientific identities:
+
+```text
+3303662e78c6c9ac83a48d7c719a67e005d21c82ad0760ad745cdacc382873f9
+cb04695ea87d9a1eb91da89305a8d999d21285e9434c61f306e75ca1756959a1
+```
+
+The declaration removes the two per-member manifest fields, retains every
+other typed workload field, and appends the ordered declared manifest set:
+
+```json
+{"dataset_ref":null,"name":"toy-rotating-decode","output_tokens":null,"prompt_text":null,"prompt_tokens":null,"repetitions":1,"suite_manifest_set":[{"declared_member_count":1,"suite_manifest_ref":"manifests/decode-1.json","suite_manifest_sha256":"ea6cbc2e9870340c7b9ec85d64ec861ce53b7ca6f927bf72eff73add97f36732"},{"declared_member_count":1,"suite_manifest_ref":"manifests/decode-2.json","suite_manifest_sha256":"f6130adccb590d06e952c8034fc36e080884980444a1ce441ee1c303cac58c3b"}],"warmup_runs":1}
+```
+
+The exact unit config-set preimage is the following three UTF-8 lines with no
+line-feed after the last hash:
+
+```text
+joulewise.identity_unit_config_set.v1
+3303662e78c6c9ac83a48d7c719a67e005d21c82ad0760ad745cdacc382873f9
+cb04695ea87d9a1eb91da89305a8d999d21285e9434c61f306e75ca1756959a1
+```
+
+Its SHA-256, and therefore this example unit's `config_set_sha256`, is
+`7462f88bc7188c4630ab27e554a1be4a59aeae310a5fe16936b320c505caf4c9`.
+Reversing input order produces the same digest because the two member hashes
+are sorted before joining; changing either manifest binding produces a
+different member identity and therefore a different set digest.
 
 The member-2 PASS check and the relevant freeze-receipt fragment are:
 
@@ -718,6 +915,9 @@ bytes. Arrow B is too late to save the night, which is the interval owned by
 | Clause | Pinning test |
 |---|---|
 | Shared-mint three-pin equality | `tests.test_identity_pins.SharedDerivationTests.test_synthetic_pack_triple_equals_generalized_mint_rederivation` |
+| Sorted multi-identity set digest and unchanged single-identity case | `tests.test_identity_pins.SharedDerivationTests.test_identity_unit_set_digest_uses_sorted_distinct_hashes` |
+| Common workload projection removes only the two manifest fields | `tests.test_identity_pins.SharedDerivationTests.test_common_profile_projection_removes_only_member_manifest_binding` |
+| Committed v3 single-identity digest remains byte-identical | `tests.test_identity_pins.SharedDerivationTests.test_single_identity_set_digest_matches_committed_v3_receipt` |
 | Lexical model inventory and file-link behavior | `tests.test_identity_pins.SharedDerivationTests.test_directory_inventory_is_lexical_and_file_symlink_records_target` |
 | Exact receipt, sidecar binding, freeze mutation, and idempotence | `tests.test_identity_pins.ProjectionLifecycleTests.test_freeze_writes_authenticated_exact_key_receipt_and_is_idempotent` |
 | Arm is pack-read-only and custody emission is idempotent | `tests.test_identity_pins.ProjectionLifecycleTests.test_verify_is_pack_read_only_and_writes_custody_receipt` |
@@ -731,6 +931,9 @@ bytes. Arrow B is too late to save the night, which is the interval owned by
 | Digit-string count is unreadable at freeze and arm | `tests.test_identity_pins.PromptRealizationProjectionTests.test_digit_string_token_count_refused_at_freeze_and_arm_reverification` |
 | One prepare, all config projections, one cleanup | `tests.test_identity_pins.PromptRealizationProjectionTests.test_runtime_probe_prepares_and_cleans_up_once_for_two_configs` |
 | Realization rows are inside `projection_input_sha256` and the receipt | `tests.test_identity_pins.PromptRealizationProjectionTests.test_projection_input_sha256_binds_realization_rows` |
+| Generated v5 manifest rotation freezes and arm-verifies | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_freezes_and_verifies` |
+| Unlisted manifest, wrong census, old retyped declaration, and drifted member tag refuse | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_refuses_unlisted_decode_manifest`, `test_generated_v5_pack_refuses_declared_census_off_by_one`, `test_generated_v5_pack_refuses_retyped_decode_declaration`, and `test_generated_v5_pack_refuses_drifted_member_tag` |
+| Analysis reaches the U8-bound frozen set and admits only subset-bound multi-identity transport | `tests.test_analysis_inputs.FrozenConsumerIdentitySetTests.test_u8_freeze_receipt_reaches_committed_v3_member_identity_set` and `test_multi_identity_transport_requires_declared_subset_and_skips_exact_cell` |
 | Operator cannot pass or serialize identity overrides | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_cli_and_public_arm_callables_accept_no_identity_values`, `test_cli_refuses_unknown_identity_override_options`, and `test_unprojected_pack_refuses_serialized_operator_pin_values` |
 | Closed five-code vocabulary | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_projection_reason_vocabulary_is_closed` and `test_projection_reasons_are_registered_in_d078_decision_vocabulary` |
 | Every projection refusal code becomes an arm-readiness row refusal | `tests.test_arm_readiness_integration.ArmReadinessIntegrationTests.test_all_five_u11_refusals_propagate_through_identity_row` |

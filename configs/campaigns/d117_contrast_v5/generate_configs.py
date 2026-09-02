@@ -173,6 +173,7 @@ N_BLOCKS = 10
 MEMBERS_PER_BLOCK = 4
 MEMBERS_PER_ARM = N_BLOCKS * MEMBERS_PER_BLOCK
 TOTAL_SCIENCE_MEMBERS = MEMBERS_PER_ARM * 2
+ABBA_POSITIONS = (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2"))
 
 
 def freeze_aware_status(freeze_reference: object) -> str:
@@ -1468,6 +1469,53 @@ def decode_suite_manifest(arm: str, prompt_index: int) -> dict[str, Any]:
     return manifest
 
 
+def decode_declared_suite_manifest_set(arm: str) -> list[dict[str, Any]]:
+    """Declare the closed manifest census from the registered block rotation."""
+
+    counts = [0] * len(DECODE_PROFILE["prompts"])
+    members_per_block = sum(label == arm for label, _position in ABBA_POSITIONS)
+    for stage in STAGE_SPECS:
+        if stage["measurement_arm"] != "decode":
+            continue
+        for block in range(stage["first_block"], stage["last_block"] + 1):
+            counts[decode_prompt_index(block)] += members_per_block
+    return [
+        {
+            "suite_manifest_ref": (
+                active_generation().pack_rel / decode_suite_relpath(arm, prompt_index)
+            ).as_posix(),
+            "suite_manifest_sha256": suite_manifest_sha256(
+                decode_suite_manifest(arm, prompt_index)
+            ),
+            "declared_member_count": counts[prompt_index],
+        }
+        for prompt_index in range(len(DECODE_PROFILE["prompts"]))
+    ]
+
+
+def declared_identity_workload_profile(
+    measurement_arm: str, arm: str
+) -> dict[str, Any]:
+    if measurement_arm == "decode":
+        return {
+            "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "prompt_tokens": None,
+            "output_tokens": 512,
+            "prompt_text": None,
+            "dataset_ref": None,
+            "suite_manifest_set": decode_declared_suite_manifest_set(arm),
+        }
+    workload = workload_for(measurement_arm, arm)
+    return {
+        **workload,
+        "prompt_tokens": workload.get("prompt_tokens"),
+        "prompt_text": workload.get("prompt_text"),
+        "dataset_ref": None,
+    }
+
+
 def decode_workload_candidate() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_decode_workload_candidate.v1",
@@ -1632,13 +1680,12 @@ def arm_plan(
 def build_runs() -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     all_runs: list[dict[str, Any]] = []
     by_stage: dict[str, list[dict[str, Any]]] = {}
-    positions = (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2"))
     for stage in STAGE_SPECS:
         stage_runs: list[dict[str, Any]] = []
         measurement_arm = stage["measurement_arm"]
         for block in range(stage["first_block"], stage["last_block"] + 1):
             prompt_index = decode_prompt_index(block) if measurement_arm == "decode" else None
-            for sequence_index, (arm, position) in enumerate(positions, start=1):
+            for sequence_index, (arm, position) in enumerate(ABBA_POSITIONS, start=1):
                 member_id = run_id(measurement_arm, block, position.lower())
                 row = {
                     "run_id": member_id,
@@ -2577,16 +2624,9 @@ def build_tree(
                     "model_source": MODELS[arm]["source"],
                     "model_revision": MODELS[arm]["revision"],
                     "quantization": dict(QUANTIZATION),
-                    "workload_profile": {
-                        **workload_for(measurement_arm, arm),
-                        "prompt_tokens": (
-                            workload_for(measurement_arm, arm).get("prompt_tokens")
-                        ),
-                        "prompt_text": (
-                            workload_for(measurement_arm, arm).get("prompt_text")
-                        ),
-                        "dataset_ref": None,
-                    },
+                    "workload_profile": declared_identity_workload_profile(
+                        measurement_arm, arm
+                    ),
                 },
                 "config_inventory": [
                     {
