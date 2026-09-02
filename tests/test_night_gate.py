@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import copy
-import inspect
 import hashlib
+import inspect
 import json
 import unittest
 from unittest import mock
@@ -79,6 +79,7 @@ class FakeProbeSource:
         self.read_calls: list[str] = []
         self.now_calls = 0
         self.monotonic_calls = 0
+        self.monotonic_error: Exception | None = None
         self.checkout_calls = 0
         self.raise_for: dict[tuple[str, ...], Exception] = {}
 
@@ -94,6 +95,8 @@ class FakeProbeSource:
 
     def monotonic(self) -> int:
         self.monotonic_calls += 1
+        if self.monotonic_error is not None:
+            raise self.monotonic_error
         return 99_000 + self.monotonic_calls
 
     def read_text(self, path: str) -> str:
@@ -160,6 +163,32 @@ class NightGateTests(unittest.TestCase):
         ):
             return night_gate.evaluate_night(plan, source.probes())
 
+    def test_production_argv_constants_match_the_t0_author_literals(self) -> None:
+        self.assertEqual(
+            ("/usr/bin/pgrep", "-lf", "codex|claude|t3"),
+            night_gate.AGENT_CENSUS_ARGV,
+        )
+        self.assertEqual(
+            ("/usr/bin/defaults", "-currentHost", "read", "com.apple.screensaver", "idleTime"),
+            night_gate.HID_IDLE_ARGV,
+        )
+        self.assertEqual(("/usr/bin/pmset", "-g", "batt"), night_gate.PMSET_BATT_ARGV)
+        self.assertEqual(("/usr/bin/pmset", "-g"), night_gate.PMSET_GENERAL_ARGV)
+        self.assertEqual(
+            ("/usr/sbin/sysctl", "-n", "vm.loadavg"), night_gate.LOAD_AVG_ARGV
+        )
+        self.assertEqual(("/usr/bin/pmset", "-g", "therm"), night_gate.THERMAL_ARGV)
+        self.assertEqual(
+            ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"),
+            night_gate.BOOT_SESSION_ARGV,
+        )
+
+    def test_d166_registration_digest_is_the_ruled_literal(self) -> None:
+        self.assertEqual(
+            "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b",
+            night_gate.D166_REGISTRATION_SHA256,
+        )
+
     def test_an_exit_one_census_with_only_whitespace_is_clean(self) -> None:
         source = FakeProbeSource()
         source.results[night_gate.AGENT_CENSUS_ARGV] = result(
@@ -189,6 +218,20 @@ class NightGateTests(unittest.TestCase):
         _, refusal = night_gate.agent_census(source.probes())
         self.assertEqual("night_refused_agent_present", refusal.reason)
         self.assertIn("42 t3", refusal.detail)
+
+    def test_census_refusal_detail_is_bounded_to_twenty_lines(self) -> None:
+        source = FakeProbeSource()
+        lines = [f"process {index}" for index in range(586)]
+        source.results[night_gate.AGENT_CENSUS_ARGV] = result(
+            night_gate.AGENT_CENSUS_ARGV,
+            exit_code=0,
+            stdout="\n".join(lines) + "\n",
+        )
+        _, refusal = night_gate.agent_census(source.probes())
+        self.assertEqual(21, len(refusal.detail.splitlines()))
+        self.assertIn("process 19", refusal.detail)
+        self.assertNotIn("process 20", refusal.detail)
+        self.assertTrue(refusal.detail.endswith("… (+566 more)"))
 
     def test_an_error_exit_refuses_and_names_the_pgrep_status(self) -> None:
         source = FakeProbeSource()
@@ -229,6 +272,14 @@ class NightGateTests(unittest.TestCase):
         with self.assertRaises(night_gate.PlanError) as raised:
             night_gate.NightPlan.from_mapping(extra)
         self.assertEqual("night_plan_malformed", raised.exception.reason)
+
+    def test_a_direct_plan_with_missing_registration_is_refused_as_malformed(self) -> None:
+        source = FakeProbeSource()
+        receipt = self.evaluate(make_plan(registration_path=None), source)
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("night_plan_malformed", receipt.refusal.reason)
+        self.assertEqual([], source.run_calls)
+        self.assertEqual([], source.read_calls)
 
     def test_the_class_table_matches_the_ruled_condition_matrix(self) -> None:
         expected = {
@@ -277,7 +328,11 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual("REFUSED", receipt.verdict)
         self.assertEqual("FAIL", receipt.conditions[0].status)
         self.assertEqual("stage 3 not implemented", receipt.conditions[0].measured["detail"])
-        self.assertIsNone(receipt.refusal)
+        self.assertEqual("night_refused_class_unbuilt", receipt.refusal.reason)
+        self.assertEqual(
+            "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
+            receipt.refusal.detail,
+        )
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
         self.assertNotIn("/custody/registration.json", source.read_calls)
 
@@ -295,6 +350,15 @@ class NightGateTests(unittest.TestCase):
         self.assertIn(b'  "authored_monotonic_ns"', encoded)
         self.assertLess(encoded.index(b'"authored_monotonic_ns"'), encoded.index(b'"conditions"'))
         self.assertEqual(encoded, receipt.to_json_bytes())
+
+        non_ascii_source = FakeProbeSource()
+        non_ascii_source.results[night_gate.AGENT_CENSUS_ARGV] = result(
+            night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="42 naïve-agent\n"
+        )
+        non_ascii_receipt = self.evaluate(make_plan(), non_ascii_source)
+        non_ascii = non_ascii_receipt.to_json_bytes()
+        self.assertIn(b"na\\u00efve-agent", non_ascii)
+        self.assertEqual(non_ascii, non_ascii_receipt.to_json_bytes())
 
     def test_window_refusal_performs_no_command_or_file_or_head_probe(self) -> None:
         source = FakeProbeSource(now_epoch_s=2_000.0)
@@ -316,6 +380,38 @@ class NightGateTests(unittest.TestCase):
             boundary,
         )
         self.assertEqual("GO", receipt.verdict)
+
+    def test_a_future_dated_plan_is_malformed(self) -> None:
+        source = FakeProbeSource()
+        receipt = self.evaluate(make_plan(authored_epoch_s=source.now_value + 1.0), source)
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("night_plan_malformed", receipt.refusal.reason)
+        self.assertIn("future", receipt.refusal.detail)
+
+    def test_chain_sidecar_accepts_bare_hex_and_gnu_shasum_forms(self) -> None:
+        digest = hashlib.sha256(CHAIN_TEXT.encode("utf-8")).hexdigest()
+        for sidecar in (digest + "\n", f"{digest}  chain.zsh\n"):
+            with self.subTest(sidecar=sidecar):
+                receipt = self.evaluate(
+                    make_plan(), FakeProbeSource(chain_digest=sidecar)
+                )
+                self.assertEqual("GO", receipt.verdict)
+
+    def test_chain_sidecar_refuses_case_name_and_token_count_defects(self) -> None:
+        digest = hashlib.sha256(CHAIN_TEXT.encode("utf-8")).hexdigest()
+        cases = (
+            (" \n", "token check"),
+            (digest.upper() + "\n", "digest check"),
+            (f"{digest}  wrong.zsh\n", "basename check"),
+            (f"{digest}  a  b\n", "token check"),
+        )
+        for sidecar, detail in cases:
+            with self.subTest(sidecar=sidecar):
+                receipt = self.evaluate(
+                    make_plan(), FakeProbeSource(chain_digest=sidecar)
+                )
+                self.assertEqual("night_chain_digest_mismatch", receipt.refusal.reason)
+                self.assertIn(detail, receipt.refusal.detail)
 
     def test_first_refusal_order_advances_one_ruled_gate_at_a_time(self) -> None:
         def all_later_failures() -> FakeProbeSource:
@@ -353,15 +449,17 @@ class NightGateTests(unittest.TestCase):
                 source.text["/custody/chain.zsh.sha256"] = (
                     hashlib.sha256(CHAIN_TEXT.encode("utf-8")).hexdigest() + "\n"
                 )
-            if index > 4:
+            if index == 4:
+                plan = make_plan("TRANSACTION_PACK")
+            if index > 5:
                 source.results[night_gate.HID_IDLE_ARGV] = result(
                     night_gate.HID_IDLE_ARGV, stdout="0\n"
                 )
-            if index > 5:
+            if index > 6:
                 source.results[night_gate.PMSET_BATT_ARGV] = result(
                     night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'AC Power'\n"
                 )
-            if index > 6:
+            if index > 7:
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
                     night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
                 )
@@ -403,6 +501,43 @@ class NightGateTests(unittest.TestCase):
         self.assertIn("2.0", measured["load_average_raw"])
         self.assertIn("CPU_Speed_Limit", measured["thermal_raw"])
 
+    def test_load_average_requires_the_exact_sysctl_shape(self) -> None:
+        malformed = FakeProbeSource()
+        malformed.results[night_gate.LOAD_AVG_ARGV] = result(
+            night_gate.LOAD_AVG_ARGV, stdout="warning 0.1\n"
+        )
+        receipt = self.evaluate(make_plan(), malformed)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("warning 0.1", receipt.refusal.detail)
+
+        exact = FakeProbeSource()
+        exact.results[night_gate.LOAD_AVG_ARGV] = result(
+            night_gate.LOAD_AVG_ARGV, stdout="{ 0.10 0.20 0.30 }\n"
+        )
+        receipt = self.evaluate(make_plan(), exact)
+        self.assertEqual("GO", receipt.verdict)
+        self.assertEqual(0.10, receipt.conditions[2].measured["load_1m"])
+
+    def test_thermal_limit_prefix_with_trailing_text_is_a_probe_error(self) -> None:
+        malformed = FakeProbeSource()
+        malformed.results[night_gate.THERMAL_ARGV] = result(
+            night_gate.THERMAL_ARGV, stdout="CPU_Speed_Limit = 80 trailing\n"
+        )
+        receipt = self.evaluate(make_plan(), malformed)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("thermal output malformed", receipt.refusal.detail)
+
+        no_limit_line = self.evaluate(make_plan(), FakeProbeSource())
+        self.assertEqual("GO", no_limit_line.verdict)
+
+    def test_list_form_probe_argv_is_accepted(self) -> None:
+        source = FakeProbeSource()
+        source.results[night_gate.AGENT_CENSUS_ARGV] = night_gate.ProbeResult(
+            list(night_gate.AGENT_CENSUS_ARGV), 1, "", "", 10  # type: ignore[arg-type]
+        )
+        receipt = self.evaluate(make_plan(), source)
+        self.assertEqual("GO", receipt.verdict)
+
     def test_each_quiet_predicate_fails_closed_with_its_name_in_detail(self) -> None:
         cases = (
             (
@@ -433,6 +568,8 @@ class NightGateTests(unittest.TestCase):
                 receipt = self.evaluate(make_plan(), source)
                 self.assertEqual("night_refused_not_quiet", receipt.refusal.reason)
                 self.assertIn(name, receipt.refusal.detail)
+                if name == "ac_power":
+                    self.assertEqual("ac_power", receipt.refusal.detail)
 
     def test_hid_idle_requires_the_exact_zero_value(self) -> None:
         for stdout in ("1\n", "{ idleTime = 0; }\n", ""):
@@ -465,6 +602,14 @@ class NightGateTests(unittest.TestCase):
         self.assertNotIn(night_gate.LOAD_AVG_ARGV, source.run_calls)
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
 
+    def test_monotonic_probe_failure_is_reported_as_a_probe_error(self) -> None:
+        source = FakeProbeSource(now_epoch_s=2_000.0)
+        source.monotonic_error = RuntimeError("clock unavailable")
+        receipt = self.evaluate(make_plan(), source)
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("clock unavailable", receipt.refusal.detail)
+
     def test_malformed_probe_fields_and_unencodable_text_fail_closed(self) -> None:
         malformed = FakeProbeSource()
         malformed.results[night_gate.HID_IDLE_ARGV] = night_gate.ProbeResult(
@@ -492,6 +637,32 @@ class NightGateTests(unittest.TestCase):
                 changed["conditions"][1][field] = value
                 defects = night_gate.validate_receipt(changed)
                 self.assertTrue(any("night_receipt_class_invalid" in item for item in defects))
+
+    def test_receipt_rows_are_paired_with_class_rules_by_row_id(self) -> None:
+        receipt = json.loads(self.evaluate(make_plan(), FakeProbeSource()).to_json_bytes())
+        receipt["conditions"] = list(reversed(receipt["conditions"]))
+        self.assertEqual([], night_gate.validate_receipt(receipt))
+
+    def test_verdict_and_refusal_nullability_are_bidirectional(self) -> None:
+        go_receipt = json.loads(
+            self.evaluate(make_plan(), FakeProbeSource()).to_json_bytes()
+        )
+        go_receipt["refusal"] = {
+            "reason": "night_probe_error",
+            "detail": "injected",
+            "evidence": [],
+        }
+        defects = night_gate.validate_receipt(go_receipt)
+        self.assertTrue(any("GO verdict requires null" in item for item in defects))
+
+        refused = json.loads(
+            self.evaluate(make_plan("TRANSACTION_PACK"), FakeProbeSource()).to_json_bytes()
+        )
+        refused["refusal"] = None
+        defects = night_gate.validate_receipt(refused)
+        self.assertTrue(
+            any("REFUSED verdict requires a refusal object" in item for item in defects)
+        )
 
     def test_each_single_field_tamper_is_named_by_the_validator(self) -> None:
         original = json.loads(self.evaluate(make_plan(), FakeProbeSource()).to_json_bytes())
@@ -563,8 +734,8 @@ class NightGateTests(unittest.TestCase):
                 defects = night_gate.validate_receipt(changed)
                 self.assertTrue(any(needle in item for item in defects), defects)
 
-    def test_every_registered_reason_code_has_a_mutation_shaped_test_path(self) -> None:
-        covered = {
+    def test_reason_code_registry_is_exactly_the_ruled_set(self) -> None:
+        expected = {
             "night_refused_agent_present",
             "night_refused_not_quiet",
             "night_refused_hid_idle",
@@ -574,10 +745,30 @@ class NightGateTests(unittest.TestCase):
             "night_plan_stale",
             "night_plan_malformed",
             "night_chain_digest_mismatch",
+            "night_refused_class_unbuilt",
             "night_receipt_class_invalid",
             "night_probe_error",
         }
-        self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, covered)
+        self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, expected)
+        coverage = {
+            "night_refused_agent_present": "test_a_census_that_finds_lines_refuses_and_preserves_them",
+            "night_refused_not_quiet": "test_each_quiet_predicate_fails_closed_with_its_name_in_detail",
+            "night_refused_hid_idle": "test_hid_idle_requires_the_exact_zero_value",
+            "night_refused_boot_clock": "test_boot_clock_uses_a_canonical_uuid_and_never_invokes_sntp",
+            "night_refused_registration": "test_a_wrong_registration_hash_refuses_after_every_machine_gate",
+            "night_window_expired": "test_window_refusal_performs_no_command_or_file_or_head_probe",
+            "night_plan_stale": "test_wrong_checkout_head_is_stale_and_the_36_hour_boundary_is_current",
+            "night_plan_malformed": "test_a_direct_plan_with_missing_registration_is_refused_as_malformed",
+            "night_chain_digest_mismatch": "test_chain_sidecar_refuses_case_name_and_token_count_defects",
+            "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",
+            "night_receipt_class_invalid": "test_c2_pass_or_an_unregistered_basis_is_a_class_invalid_defect",
+            "night_probe_error": "test_any_probe_exception_refuses_before_later_commands_run",
+        }
+        self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, set(coverage))
+        methods = dir(type(self))
+        for code, method_name in coverage.items():
+            with self.subTest(code=code):
+                self.assertIn(method_name, methods)
 
     def test_driver_codes_are_registered_here_but_never_emitted_by_the_gate(self) -> None:
         self.assertEqual(
