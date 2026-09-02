@@ -177,3 +177,49 @@ PY
 
 Delete `.tmp-r7/` after the round-7 operator has retained any required run
 evidence elsewhere.
+
+## Successor-skeleton close (2026-09-02)
+
+The round-7 close was applied to `docs/paper/draft-v2-skeleton.md`, never to the
+byte-frozen round-6 draft. The registered command above is specific to the
+round-6 file and preserves reference-list order; it does not reorder an already
+different successor by first citation. The successor was therefore renumbered
+by hand in one bounded edit, and `scripts/paper_renumber_refs.py` was not run.
+
+The final successor list has 24 cited entries and no orphans. Its first-citation
+order is:
+
+| New | Source | Former key or lineage source | First citation site |
+|---:|---|---|---|
+| 1 | Khan et al. | 5 | §8, counter gain |
+| 2 | Jay et al. | 6 | §8, counter gain |
+| 3 | Hähnel et al. | 29 | §8, counter time |
+| 4 | Burtscher, Zecena, and Zong | RECOMMEND lineage | §8, counter time |
+| 5 | Dauner et al. | 23 | §8, counter time |
+| 6 | Ma et al. | 20 | §8, LLM energy measurement |
+| 7 | Niu et al. | 7 | §8, LLM energy measurement |
+| 8 | Ruf and Detyniecki | 19 | §8, LLM energy measurement |
+| 9 | Chung et al. | 8 | §8, LLM energy measurement |
+| 10 | Saad-Falcon et al. | 22 | §8, LLM energy measurement |
+| 11 | Benazir and Lin | 13 | §8, LLM energy measurement |
+| 12 | Rivoire et al. | 3 | §8, benchmark lineage |
+| 13 | Lange | 15 | §8, benchmark lineage |
+| 14 | Tschand et al. | 1 | §8, benchmark lineage |
+| 15 | Standard Performance Evaluation Corporation | 2 | §8, benchmark lineage |
+| 16 | Georges, Buytaert, and Eeckhout | 30 | §8, metrology lineage |
+| 17 | Mytkowicz et al. | 31 | §8, metrology lineage |
+| 18 | Zhuang, Li, and Fan | 26 | §8, prospective threshold discipline |
+| 19 | Milanese and Vicino | RECOMMEND lineage | §8, bounded systematic uncertainty |
+| 20 | Li et al. | 27 | §8, disaggregated inference |
+| 21 | Basit et al. | 12 | §8, disaggregated inference |
+| 22 | Li et al. | 10 | §8, disaggregated inference |
+| 23 | Guo and Joshi | 28 | §8, disaggregated inference |
+| 24 | Marzullo and Owicki | RECOMMEND lineage | Appendix A.3, clock-anchor feasible set |
+
+The round-7 verification resolved the entries formerly numbered 13, 19, and
+23 and all three added lineage sources against online records. Its HotCarbon
+PDF locators replace the former locator-free entries. The other retained
+entries keep the locators audited in `docs/paper/bibliography-audit-2026-08-27.md`;
+they are not relabeled as online-verified by this close. The SPEC methodology
+remains `n.d.` because the audited locator does not supply a verified year; no
+year was invented.
