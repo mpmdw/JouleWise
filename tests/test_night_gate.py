@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import hashlib
 import json
 import unittest
@@ -577,6 +578,22 @@ class NightGateTests(unittest.TestCase):
             "night_probe_error",
         }
         self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, covered)
+
+    def test_driver_codes_are_registered_here_but_never_emitted_by_the_gate(self) -> None:
+        self.assertEqual(
+            night_gate.NIGHT_DRIVER_REASON_CODES,
+            {
+                "night_aborted_agent_present",
+                "night_chain_already_started",
+                "night_chain_alive",
+                "night_plan_overruns_deadman",
+            },
+        )
+        self.assertFalse(night_gate.NIGHT_DRIVER_REASON_CODES & night_gate.NIGHT_GATE_REASON_CODES)
+        source = inspect.getsource(night_gate)
+        body = source.split("NIGHT_DRIVER_REASON_CODES = frozenset(", 1)[1].split("\n)\n", 1)[1]
+        for code in night_gate.NIGHT_DRIVER_REASON_CODES:
+            self.assertNotIn(f'"{code}"', body, code)
 
 
 if __name__ == "__main__":

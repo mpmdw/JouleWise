@@ -65,6 +65,20 @@ NIGHT_GATE_REASON_CODES = frozenset(
     }
 )
 
+# Codes the DRIVER (scripts/run_night.py) emits after the gate has said GO.
+# They live here so the registry has one home (ruling R-8); the gate itself
+# never emits them.  Cold gate coldgate-e10 (2026-09-01) d.3 and the Opus
+# refuter's once-only finding are their forcing problems.
+NIGHT_DRIVER_REASON_CODES = frozenset(
+    {
+        "night_aborted_agent_present",   # census hit while the chain ran; chain group terminated
+        "night_chain_already_started",   # O_EXCL claim on chain.started failed: never start the chain twice (D-078)
+        "night_chain_alive",             # dead-man refused: the chain has not exited, so no agent may start
+        "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour
+    }
+)
+assert not (NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES)
+
 # First-refusal precedence.  Probe failures use ``night_probe_error`` at the
 # position of the probe that failed rather than forming a separate phase.
 ORDER = (
