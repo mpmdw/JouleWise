@@ -1150,6 +1150,7 @@ The PASS line carries no information about the floor; this pre-assertion is
 the transcript's proof that no floor bytes were staged.
 
 ```sh
+test -d "$CUSTODY_ROOT/floors"
 test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
 test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"
 ```
@@ -1172,6 +1173,7 @@ The PASS line carries no information about the floor; this post-assertion is
 the transcript's proof that no floor bytes were staged.
 
 ```sh
+test -d "$CUSTODY_ROOT/floors"
 test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json"
 test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"
 ```
