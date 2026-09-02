@@ -80,10 +80,11 @@ EXPECTED_IDS = {
     "D165-E2E-REPLAY-01",
     "V6-TOKEN-PIN-BINDING-01",
     "V6-SCORED-LEG-01",
-    # 2026-09-01 ruling 44c (+49b): the realized-prompt check landed with two
-    # kernel rows — the implementation row and the deferred identity-projection
-    # catcher (the implementation row retired at its 2026-09-01 merge).
-    "V5-PREFILL-REALIZED-PROJECTION-02",
+    # 2026-09-02 projection-02 merge (PR #269): its ruling-150a follow-up (the
+    # launch-step realization recheck) and the ruling-171a decode-identity fix
+    # replace the retired projection-02 row.
+    "V5-LAUNCH-REALIZATION-RECHECK-01",
+    "V5-DECODE-IDENTITY-SET-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
@@ -550,7 +551,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # D165-SIDECAR-EMIT-01 retired at its 2026-09-02 merge (PR 267):
         # 116 - 1 = 115.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 115)
+        self.assertEqual(len(self.tasks), 116)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -728,9 +729,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
                 "V5-TRANSACTION-01": (4, "blocked"),
             },
         )
+        # Ruling 171a R-9 (2026-09-02): the three _v5 packs cannot freeze until
+        # decode units carry a declared manifest set.
         self.assertEqual(
             self._hard_start_targets("V5-DESK-DAY-01"),
-            {"V5-G2A-PREFILL-PROBE-01"},
+            {"V5-G2A-PREFILL-PROBE-01", "V5-DECODE-IDENTITY-SET-01"},
         )
         self.assertEqual(
             self._hard_start_targets("V5-G2B-SHAKEDOWN-01"),
@@ -742,9 +745,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         )
         # Ruling 89 R-1 (2026-09-01): the L10-A record gates the first
         # claim-bearing arm alongside Ed's GO.
+        # Ruling 150a R-150-3 (2026-09-02): no _v5 claim night is armed before
+        # the launch-step realization recheck lands.
         self.assertEqual(
             self._hard_start_targets("V5-TRANSACTION-01"),
-            {"V5-TRANSACTION-GO-01", "L10-A-G2B-CONTRACT-PREFIX-01"},
+            {
+                "V5-TRANSACTION-GO-01",
+                "L10-A-G2B-CONTRACT-PREFIX-01",
+                "V5-LAUNCH-REALIZATION-RECHECK-01",
+            },
         )
         queued = [t for t in quiet if t["status"] == "queued"]
         self.assertEqual(
