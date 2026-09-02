@@ -1240,7 +1240,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         )
 
     def test_authored_evidence_makes_synthetic_pack_freeze_pass(self) -> None:
-        # This one exercises the SUCCESSOR world end to end (freeze-0002 with a
+        # This one exercises the SUCCESSOR world end to end (freeze-0004 with a
         # predecessor root), so it needs the successor family route.  Patching
         # _PACKS_BY_PROFILE stands in for the registry-driven successor family
         # route that is not built yet: the code map itself is immutable history
@@ -1351,7 +1351,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             ),
             1,
         )
-        self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        # The ruled _v5 fixture chains to its _v3 predecessor (freeze-0003).
+        self.assertEqual(receipt["receipt_id"], "freeze-0004")
         git(repository, "add", "--", pack_relative)
         git(repository, "commit", "-qm", "freeze synthetic successor")
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
