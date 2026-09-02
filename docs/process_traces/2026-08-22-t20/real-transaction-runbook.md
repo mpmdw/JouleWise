@@ -21,6 +21,8 @@ to `s0-runsheet-r4.md`, which is the *rehearsal* instrument. The rehearsal ran
 end to end with zero failures at estate 10 (`S0-COMPLETION-RECORD.md`); this
 document is what that rehearsal was a rehearsal *of*.
 
+For the `_v5` successor, the named same-head production-pack PRE-WINDOW phase is [`v5-l10-rehearsal-phase.md`](../../process/v5-l10-rehearsal-phase.md).
+
 Two rules govern how to read it.
 
 1. **The runsheet owns the commands; this document owns the sequence, the

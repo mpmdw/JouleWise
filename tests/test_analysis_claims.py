@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.analysis_engine.artifact import (
+    _SUPERSESSION_FINDING_REASON_CODES,
     calculate_claim_verdicts_id,
     finalize_claim_verdicts,
     render_claim_verdicts,
@@ -71,7 +72,10 @@ from joulewise.detection_floor import (
     comparative_false_effect_floor,
 )
 from scripts import mint_floor_artifact as mint
-from joulewise.whole_window import CustodyTelemetryIdentity
+from joulewise.whole_window import (
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+    CustodyTelemetryIdentity,
+)
 from tests.test_detection_floor import (
     make_artifact,
     make_cell,
@@ -2591,6 +2595,14 @@ class MetricWindowHygieneTests(unittest.TestCase):
 
 
 class ClaimArtifactTests(unittest.TestCase):
+    def test_supersession_finding_reason_set_pins_shared_disposition(self):
+        self.assertEqual(
+            _SUPERSESSION_FINDING_REASON_CODES,
+            frozenset(
+                {REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS}
+            ),
+        )
+
     def test_d093_divergence_cannot_be_rehashed_around_estimation_precedence(self):
         artifact = minimal_artifact()
         artifact["supersession_audit"] = [

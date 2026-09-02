@@ -97,10 +97,11 @@ def _current_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
         "PROJECT_STATUS status/architecture": _between(
             project, "## Summary\n", "## Process Note\n"
         ),
-        # The two dated "What one day" anecdotes are excluded; the live process
-        # contract and the trailing owner pointers remain checked.
+        # The 2026-09-01 reconcile (PR #253) dropped the two dated "What one
+        # day" anecdotes; the process contract now runs up to the owner
+        # pointers, which remain checked separately.
         "PROJECT_STATUS process contract": _between(
-            project, "## Process Note\n", "**What one day of this looks like"
+            project, "## Process Note\n", "**Where to look.**"
         ),
         "PROJECT_STATUS owner pointers": _after(project, "**Where to look.**"),
         # WO-022's verbatim spend policy and the dated topology/session examples
@@ -201,14 +202,20 @@ class DocsFreshnessTests(unittest.TestCase):
 
         for section in (readme, project):
             self.assertIn("RUN_STATE.md", section)
-            self.assertIn("state-kernel", section)
+        self.assertIn("state-kernel", readme)
+        # The advisor-facing status document names the kernel file, not the
+        # generated-region shorthand (advisor plain-language standing rule).
+        self.assertIn("docs/process/state_kernel.json", project)
         self.assertIn("docs/site/DRIFT.md", project)
         self.assertIn("docs/site/DRIFT.md", orchestration)
         self.assertIn("Ed deploys", orchestration)
 
         project_status = _current_sections()["PROJECT_STATUS status/architecture"]
-        self.assertIn("Window A's software gates are\nsatisfied", project_status)
-        self.assertIn("execution timing is governed by the live work-selection state", project_status)
+        # Freshness ownership: the status document defers live sequencing to
+        # RUN_STATE.md and promises no dates of its own (Window A literals
+        # retired with the 2026-09-01 reconcile; that campaign is voided).
+        self.assertIn("This document promises sequence, not dates.", project_status)
+        self.assertIn("Live status is in `RUN_STATE.md`.", project_status)
         self.assertIn("RUN_STATE.md", project_status)
 
     def test_site_closeout_is_drift_report_then_ed_deploy(self) -> None:

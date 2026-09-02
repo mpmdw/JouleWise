@@ -61,6 +61,7 @@ from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
     BundleReadError,
+    PROMPT_REALIZATION_PROBLEM_CODES,
 )
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
 from joulewise.analysis_manifest_v3 import (  # noqa: E402
@@ -148,6 +149,7 @@ from joulewise.whole_window import (  # noqa: E402
     MINTED_CONSUMPTION_SEMANTICS_ID,
     OCCURRENCE_SUPERSESSION_SCHEMA,
     PROSPECTIVE_MEMBER_FAILURE_REASON_CODES,
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SupersessionRecorderError,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
@@ -159,6 +161,7 @@ from joulewise.whole_window import (  # noqa: E402
     load_neg8_drift_bound_artifact,
     mint_neg8_drift_bound_artifact,
     ordinary_present_bundle_paths,
+    recognizable_occurrence_supersession_counts,
     require_occurrence_supersession_recordable,
     source_manifest_descriptors,
     supersession_entry_sha256,
@@ -220,6 +223,9 @@ ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS = frozenset({"recovered", "first_run_exempt"}
 DEFAULT_CAMPAIGN_POLICY = (
     ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
 )
+UNWAIVABLE_COLLECTION_INTEGRITY_FLAGS = frozenset(
+    {ANCHOR_FALLBACK_MEMBER_REFUSAL, *PROMPT_REALIZATION_PROBLEM_CODES}
+)
 KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
         "affine_smoke_annotations.v1",
@@ -276,6 +282,7 @@ class OrdinaryOccurrenceResolution:
     selected_path: Path | None = None
     supersession: dict[str, Any] | None = None
     present_paths: tuple[Path, ...] = ()
+    refusal_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -445,7 +452,9 @@ class MemberEvaluation:
         # This flag is an acquisition failure, not an analysis judgment.  The
         # only recovery is a new, anchor-bounded measurement; a campaign
         # waiver must never turn the clipped point into usable evidence.
-        if ANCHOR_FALLBACK_MEMBER_REFUSAL in self.collection_integrity_flags:
+        if UNWAIVABLE_COLLECTION_INTEGRITY_FLAGS.intersection(
+            self.collection_integrity_flags
+        ):
             return False
         if self.waiver is None:
             return False
@@ -2770,6 +2779,14 @@ def suite_order_evidence(bundle_dir: Path) -> tuple[str | None, int | None, str 
     return policy, row, seed
 
 
+def _prompt_realization_collection_flags(problems: Sequence[str]) -> set[str]:
+    return {
+        problem.split(":", 1)[0]
+        for problem in problems
+        if problem.split(":", 1)[0] in PROMPT_REALIZATION_PROBLEM_CODES
+    }
+
+
 def evaluate_member(
     bundle_dir: Path,
     *,
@@ -2826,6 +2843,7 @@ def evaluate_member(
         else None
     )
     collection_flags = set(prompt_hash_check.collection_integrity_flags())
+    collection_flags.update(_prompt_realization_collection_flags(problems))
     if (
         info.role in FLOOR_MEMBER_ROLES
         and anchor_fallback_member_unusable(summary, metadata, bundle_dir)
@@ -5307,7 +5325,7 @@ def _whole_window_member(
         problems = validate_bundle(bundle_path, strict=True)
     except Exception as exc:  # noqa: BLE001 - validator failure is invalid
         problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
-    collection_flags: set[str] = set()
+    collection_flags = _prompt_realization_collection_flags(problems)
     telemetry_identity = custody_telemetry_identity(
         bundle_path,
         summary=summary,
@@ -5357,19 +5375,23 @@ def _valid_supersession_entries(
         lines = log_path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return []
-    entries: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for line in lines:
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if (
-            isinstance(value, dict)
-            and value.get("record_type") == "campaign_occurrence_supersession"
-            and validate_occurrence_supersession_entry(value, runs_dir)
-        ):
-            entries.append(value)
-    return entries
+        if isinstance(value, dict):
+            rows.append(value)
+    counts = recognizable_occurrence_supersession_counts(rows)
+    return [
+        value
+        for value in rows
+        if value.get("record_type") == "campaign_occurrence_supersession"
+        and isinstance(value.get("bundle_id"), str)
+        and counts.get(value.get("bundle_id"), 0) == 1
+        and validate_occurrence_supersession_entry(value, runs_dir)
+    ]
 
 
 def _matching_supersession(
@@ -5378,6 +5400,9 @@ def _matching_supersession(
     occurrences: Sequence[Mapping[str, Any]],
     policy_sha256: str,
 ) -> dict[str, Any] | None:
+    counts = recognizable_occurrence_supersession_counts(entries)
+    if counts.get(bundle_id, 0) > 1:
+        return None
     selected = dict(occurrences[-1])
     superseded = [dict(value) for value in occurrences[:-1]]
     matches = [
@@ -5419,6 +5444,17 @@ def _resolve_ordinary_occurrence(
         for entry, valid in zip(raw_entries, validations, strict=True)
         if entry.get("bundle_id") == bundle_id
     ]
+    if recognizable_occurrence_supersession_counts(raw_entries).get(
+        bundle_id, 0
+    ) > 1:
+        return OrdinaryOccurrenceResolution(
+            bundle_id,
+            "ambiguous",
+            present_paths=present,
+            refusal_reasons=(
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            ),
+        )
     # A malformed recognizable record for the same bundle remains evidence of
     # a competing disposition; it may not be filtered into invisibility.
     if any(not valid for _entry, valid in relevant):
@@ -5889,10 +5925,17 @@ def _whole_window_campaign_membership(
         if len(eligible_candidates) > 1 or len(candidates) > 1 or ambiguous_duplicate
         else "whole_window_campaign_membership_unresolved"
     )
+    refusal_reasons = sorted(
+        {
+            reason
+            for resolution in all_resolutions
+            for reason in resolution.refusal_reasons
+        }
+    )
     return WholeWindowMembershipResolution(
         sources=tuple(WholeWindowMemberSource(path=path) for path in fallback),
         source_manifests=(),
-        conditions=(condition,),
+        conditions=tuple([condition, *refusal_reasons]),
         occurrence_supersessions=tuple(retained_supersessions),
         occurrence_resolutions=tuple(all_resolutions),
         membership_binding=membership_binding,

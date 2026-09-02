@@ -161,3 +161,17 @@ R-6h. **Erratum 2 to ruling 89** (Sol seat F1, verified): ruling 89 `:47-49`
   R-6b's pattern check.
 - New small row `G2B-FLOOR-ORDER-REGRESSION-01` (R-6e) or fold into the
   runbook-stream PR; magistrate's choice at harvest.
+
+## Errata (magistrate, 2026-09-01 evening)
+
+- R-6h names "the E1 provenance run". E1 is the bracket BUILD (runsheet
+  `### E1 — build the binding from the completed staged ledger pair`); the
+  provenance run that validates bracket and ledger-head bytes is the reusable
+  G3 desk check executed at **F1** (`### F1 — run the reusable G3 provenance
+  block`). Read R-6h's "E1 provenance run" as "F1 (reusable G3 provenance
+  block)". Caught by the Opus delta re-audit of PR #259; the L10 doc's "F1"
+  is correct. Scope and substance of R-6h unchanged.
+- R-6c's emptiness assertion (`test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"`)
+  passes when the directory does not exist. The runsheet and the L10 doc
+  now precede it with `test -d "$CUSTODY_ROOT/floors"`; the ruled fact
+  (directory present AND empty) is unchanged.

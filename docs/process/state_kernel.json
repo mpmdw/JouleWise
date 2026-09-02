@@ -1231,7 +1231,7 @@
       "priority": "p1_phase_gate",
       "rank": 69,
       "status": "active",
-      "status_note": "The implementation is on branch feat/d165-dominance-closeout-core. Two independent reviews found relabelled-cell and forged-sidecar failures; the ruled repair round is in progress.",
+      "status_note": "The implementation is on branch feat/d165-dominance-closeout-core (PR #254). Two independent reviews found relabelled-cell and forged-sidecar failures; the ruled repair (rulings 70c/70g/70h) is stage 1 on the stacked branch feat/d165-closeout-stage1-identity, PR #261 (supersedes #254): floor_cell_id + eleven-field floor_stack_identity, sealed-floor block census, content-derived manifest-id authentication, exact default/common-mode shapes. 2026-09-01: Opus contract refuter returned one blocker (stage-2 clause-7 sidecar requirement pre-empted via an unruled gate) plus six should-fix; magistrate ruled the fixes (sidecar optional in stage 1, ARM_KEYS census, real pre-change byte pin, refusal-name routing, contract replication-bar items) and Sol fix round 1 is in flight; terra execution refuter re-runs on the fixed head. Stage 2 (clauses 7-11, 13, 14) starts only after stage-1 refuters pass. 2026-09-01 (later): Sol fix round 1 landed and terra's execution re-audit found one residual (builder raised a raw floor message before the source-precondition checks, masking finalized_manifest_id_mismatch) -- a second round on the same defect, so the mandatory cold gate ran (fresh Fable + Opus contract refuter); its ruling (source checks first, first precedence-ordered reason only, no artifact when the twelve-record census cannot be built, manifest-id recompute before schema/freeze checks, dead branch deleted, census guard restored, CT1-CT9, m10-m13) was implemented by Sol xhigh as fix round 2 and bench-verified (76 tests, registration hash unchanged); a terra delta re-audit of round 2 is in flight. Stage 2 still waits on that verdict.",
       "stop_card": null
     },
     "D165-E2E-REPLAY-01": {
@@ -2330,6 +2330,191 @@
       "rank": 56,
       "status": "queued",
       "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
+      "stop_card": null
+    },
+    "NIGHT-DRIVER-01": {
+      "acceptance": {
+        "evidence": [
+          "Emitted chain bytes equal the runsheet's G2-a and fixed-variables blocks (identity test) and carry a sha256 sidecar",
+          "The chain is a Popen child in its own session, started at most once (O_EXCL claim), terminated as a group on a census hit",
+          "Results are pushed from a fresh shallow clone under the custody root; the development checkout is never checked out",
+          "Courier heartbeat proof with bounded backoff (60, 180, 600 s; three attempts); dead-man refuses while the chain is alive",
+          "Installer contains no sudo and refuses a plan whose repo_head is not HEAD"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-DRIVER-01/acceptance",
+          "label": "NIGHT-DRIVER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A launchd-started driver runs the reviewed G2-a chain exactly once under continuous census, records the night durably on a results branch from a fresh clone, and reports to Ed by a courier agent with liveness proof and a chain-aware dead-man."
+      },
+      "authority": {
+        "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+        "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the driver codes against the gate's fixed interface in parallel; the gate must be merged before the driver's PR closes",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "NIGHT-GATE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 no-retry rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-078 no-retry: the chain starts at most once per plan (O_EXCL chain.started claim, no launchd KeepAlive); a failed night is a refused night, never a rerun"
+        },
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+            "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+          },
+          "rule": "The dead-man courier refuses while the chain has not exited (night_chain_alive), and t0 + window_max_s + COURIER_DEADLINE_S must precede the dead-man hour (night_plan_overruns_deadman) - no agent process may start during capture"
+        },
+        {
+          "authority": {
+            "label": "D-127 zero-agent rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Zero-agent fence unchanged: the agent census (/usr/bin/pgrep -lf 'codex, claude, or t3 (alternation)' exit exactly 1, empty stdout) is the driver's first act and repeats every 30 s during the chain; any hit refuses or aborts the night"
+        }
+      ],
+      "flags": [],
+      "goal": "Land scripts/run_night.py (run / dead-man / rehearse), scripts/gen_g2_phase_d.py --emit-chain (byte-identical to the runsheet blocks, sha256 sidecar), the com.joulewise.night LaunchAgent template + no-sudo installer, the courier prompt, and scripts/measure_claude_cold_start.sh.",
+      "id": "NIGHT-DRIVER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 85,
+      "status": "partial",
+      "status_note": "terra xhigh seat in flight 2026-09-01 on feat/2026-09-01-night-driver (off PR #257's head); the once-only latch and dead-man chain-alive refusal are bound on its fix round.",
+      "stop_card": null
+    },
+    "NIGHT-GATE-01": {
+      "acceptance": {
+        "evidence": [
+          "Module is stdlib-only and pure: no subprocess, clock, environment, or filesystem access outside the injected Probes",
+          "The census predicate is bit-identical to arm_readiness_evidence_t0._expect_absent",
+          "validate_receipt round-trips every class and rejects every single-field tamper",
+          "Refuters with distinct lenses (execution, contract) and a delta re-audit by a different model precede merge"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-GATE-01/acceptance",
+          "label": "NIGHT-GATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A pure, probe-injected gate library decides GO / REFUSED / REHEARSAL_ONLY for a night plan and is the single home of the night reason codes."
+      },
+      "authority": {
+        "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+        "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+            "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+          },
+          "rule": "Receipt classes are honest: REHEARSAL_STUB can never carry verdict GO; TRANSACTION_PACK cannot GO from stage-1 code; DIAGNOSTIC_NO_PACK records C2 as NOT_APPLICABLE with basis no_pack_by_design, never PASS"
+        },
+        {
+          "authority": {
+            "label": "D-127 zero-agent rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Zero-agent fence unchanged: the agent census (/usr/bin/pgrep -lf 'codex, claude, or t3 (alternation)' exit exactly 1, empty stdout) is the driver's first act and repeats every 30 s during the chain; any hit refuses or aborts the night"
+        }
+      ],
+      "flags": [],
+      "goal": "Land joulewise/night_gate.py: the pure unattended-night gate library (receipt schema joulewise.unattended_night_receipt.v2 with the R-4 class table, ordered fail-closed evaluation, production-identical agent census, consumer-side validate_receipt, the night reason-code registry).",
+      "id": "NIGHT-GATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 83,
+      "status": "partial",
+      "status_note": "Sol xhigh seat landed 2026-09-01 on feat/2026-09-01-night-gate (26 tests); NIGHT_DRIVER_REASON_CODES added at the bench after the cold gate; luna execution-lens and Opus contract-lens refuters in flight.",
+      "stop_card": null
+    },
+    "NIGHT-REHEARSAL-01": {
+      "acceptance": {
+        "evidence": [
+          "cold_start.json recorded and COURIER_DEADLINE_S set from its median",
+          "A REHEARSAL_STUB result on a night-results branch produced by a launchd-started driver (not a shell-started one), with verdict REHEARSAL_ONLY",
+          "The courier email for that rehearsal is in Ed's inbox (message id recorded)",
+          "The stage-1 plan email (first armed date; launches without Ed's hand unless he replies NO) is sent before install_night_agent.sh arms a DIAGNOSTIC_NO_PACK plan"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-REHEARSAL-01/acceptance",
+          "label": "NIGHT-REHEARSAL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The unattended path has fired once from launchd with a delivered email, and Ed has been told the first armed date and that NO overrides."
+      },
+      "authority": {
+        "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+        "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "driver merged",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "NIGHT-DRIVER-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "gate merged",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "NIGHT-GATE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+            "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+          },
+          "rule": "Ed's standing NO overrides any armed night; the arming email precedes arming (cold gate coldgate-e10 (b))"
+        },
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+            "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+          },
+          "rule": "Receipt classes are honest: REHEARSAL_STUB can never carry verdict GO; TRANSACTION_PACK cannot GO from stage-1 code; DIAGNOSTIC_NO_PACK records C2 as NOT_APPLICABLE with basis no_pack_by_design, never PASS"
+        },
+        {
+          "authority": {
+            "label": "D-127 zero-agent rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Zero-agent fence unchanged: the agent census (/usr/bin/pgrep -lf 'codex, claude, or t3 (alternation)' exit exactly 1, empty stdout) is the driver's first act and repeats every 30 s during the chain; any hit refuses or aborts the night"
+        }
+      ],
+      "flags": [],
+      "goal": "Prove the stage-1 machinery end to end before the first live night: bench cold-start measurement sets COURIER_DEADLINE_S; at least one REHEARSAL_STUB night fires FROM the installed LaunchAgent, pushes its results branch, and delivers the courier email; the stage-1 plan email naming the first armed date is SENT to Ed before arming.",
+      "id": "NIGHT-REHEARSAL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 88,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-01 by the stage-1 ruling; cold gate d.4 made the launchd-path rehearsal a hard acceptance, not a nicety (launchd's minimal environment - PATH, venv, HF cache, git credentials - is where a first night fails).",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -4199,7 +4384,7 @@
       "priority": "p1_phase_gate",
       "rank": 101,
       "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware. 2026-09-01 status: divergence exhibited (trace 78) and the reader alignment landed on PR #260 (feat/2026-09-01-supersession-exhibit); terra delta re-audit found the regressions were helper-only, cured by fix round r7 (commit bc1489c3: production-seam tests driving _whole_window_campaign_membership, _validate_row_uncached, load_analysis_inputs -> analyze_claims -> validate_claim_verdicts; mutations m1/m2/m3/m5 killed at the seams); luna delta re-audit of r7 in flight; retained corpus rebaselined at 40 campaign logs, all clean.",
       "stop_card": null
     },
     "T0-CLOCK-ROW-RENAME-01": {
@@ -4372,7 +4557,7 @@
       "priority": "p1_phase_gate",
       "rank": 80,
       "status": "partial",
-      "status_note": "PARTIAL on branch impl/t0-unattended-01 (PR pending). Landed: the ruled REASON_CODE_COVERAGE enumerated delta (first deliverable, gauntlet-complete: audit -> fix -> delta re-audit -> fix -> delta re-audit -> one lead bench fix); the D-127.1 scope-closure amendment drafted as a proposed decision-log delta for the magistrate to land (the lieutenant does not edit docs/decision_log.md); the clock-reference collector; and the machine-authored T-0 clock evidence itself -- R0 pre-pin plus R1 live-at-authoring across a fixed three-operator roster with quorum>=2 and an agreement-interval intersection inside the governed 0.5 s ceiling, a separately-gated 5 ms CLOCK_MONOTONIC_RAW anchor falsifier never summed into that bound, the anchor endpoints published for an arm-side step re-check, an untouched 6 h horizon, a ceremony with no prompt and no stdin read, and a strengthened exact-Off postcondition. No new reason code in either vocabulary; the live coverage gate stays 55/45/10. Acceptance item 1 MET; item 3 MET for the amendment draft, with its four Ed-hands sub-items surfaced and not assumed. REMAINS: (a) acceptance item 2, the supervised rehearsal window -- the ten-gate evaluator is committed and green in fixture mode but its first audit REFUTED it with seven blockers (six gates accept self-declared evidence; no producer writes the records the live gates need), the fix round was killed mid-flight by a window reset and reverted, and the live sitting is Ed's hands; (b) TWO magistrate questions, both recorded in full in the delta document -- which production entry point consumes a rehearsal receipt for gate G7 and which refusal code it emits (HEAD has no consumer of a D-149 GO receipt at all), and how to reconcile the ruled R1-before-censuses ordering with the ruled 5 s R1-completion-to-validity-origin bound, which HEAD's derivation order cannot satisfy and which is ill-typed today because validity origin and the R1 endpoints are read from different clocks. That upper bound is deliberately NOT implemented and no inert substitute was added; the six-hour lower relation is enforced and non-tautological.",
+      "status_note": "PARTIAL on branch impl/t0-unattended-01 (PR pending). Landed: the ruled REASON_CODE_COVERAGE enumerated delta (first deliverable, gauntlet-complete: audit -> fix -> delta re-audit -> fix -> delta re-audit -> one lead bench fix); the D-127.1 scope-closure amendment drafted as a proposed decision-log delta for the magistrate to land (the lieutenant does not edit docs/decision_log.md); the clock-reference collector; and the machine-authored T-0 clock evidence itself -- R0 pre-pin plus R1 live-at-authoring across a fixed three-operator roster with quorum>=2 and an agreement-interval intersection inside the governed 0.5 s ceiling, a separately-gated 5 ms CLOCK_MONOTONIC_RAW anchor falsifier never summed into that bound, the anchor endpoints published for an arm-side step re-check, an untouched 6 h horizon, a ceremony with no prompt and no stdin read, and a strengthened exact-Off postcondition. No new reason code in either vocabulary; the live coverage gate stays 55/45/10. Acceptance item 1 MET; item 3 MET for the amendment draft, with its four Ed-hands sub-items surfaced and not assumed. REMAINS: (a) acceptance item 2, the supervised rehearsal window -- the ten-gate evaluator is committed and green in fixture mode but its first audit REFUTED it with seven blockers (six gates accept self-declared evidence; no producer writes the records the live gates need), the fix round was killed mid-flight by a window reset and reverted, and the live sitting is Ed's hands; (b) TWO magistrate questions, both recorded in full in the delta document -- which production entry point consumes a rehearsal receipt for gate G7 and which refusal code it emits (HEAD has no consumer of a D-149 GO receipt at all), and how to reconcile the ruled R1-before-censuses ordering with the ruled 5 s R1-completion-to-validity-origin bound, which HEAD's derivation order cannot satisfy and which is ill-typed today because validity origin and the R1 endpoints are read from different clocks. That upper bound is deliberately NOT implemented and no inert substitute was added; the six-hour lower relation is enforced and non-tautological. 2026-09-01: branch impl/t0-unattended-01 is content-identical to main (its first deliverable is merged); the remaining rehearsal-evaluator blockers are folded into the D-169 unattended lane and will be scheduled by that lane's staged ruling rather than as a separate PR.",
       "stop_card": null
     },
     "T3-CHAR-PAIR-01": {
@@ -4770,7 +4955,7 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "the ruled T-0 evidence change (machine clock attestation, zero prompts) must exist before a launch harness can rehearse an unattended window",
+          "required": "the ruled T-0 evidence change (machine clock attestation, zero prompts) must exist before a launch harness can rehearse an unattended window (pack-bound nights only; no T-0 producer runs in a DIAGNOSTIC_NO_PACK night, so stage 1 - NIGHT-GATE-01, NIGHT-DRIVER-01, NIGHT-REHEARSAL-01 - does not wait on this)",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
@@ -4781,10 +4966,10 @@
       "fences": [
         {
           "authority": {
-            "label": "MAGISTRATE-RULING-T0-UNATTENDED (2026-08-23 two-seat co-design synthesis)",
-            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+            "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+            "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
           },
-          "rule": "Separate row by ruling: T0-UNATTENDED-01 owns evidence semantics only; this row owns process lifecycle. Production windows depend on BOTH. E-10 amendment is Ed-ratified before any automated launch."
+          "rule": "Separate row by ruling: T0-UNATTENDED-01 owns evidence semantics only; this row owns process lifecycle. Production (pack-bound) windows depend on BOTH. The E-10 amendment is Ed-ratified before any automated launch that consumes a frozen pack - i.e. any launch preceded by generate_arm_readiness.py verify --pack-root or invoking scripts/launch_window.py (window_runbook.md:1227-1244) - G2-b included. A DIAGNOSTIC_NO_PACK night (G2-a: no $PACK_ROOT, no arm receipt, no step-6 table) is outside E-10's scope (runbook 'Applies to: claim-bearing', :7; SHAKEDOWN-G2-RUNSHEET :227-229) and launches under the night gate without Ed ratification; Ed's standing NO overrides. The test is pack/launcher consumption, never the word 'diagnostic'. Authority: this fence's ruling + MAGISTRATE-RULING-UNATTENDED-STAGE1 R-10 + cold gate coldgate-e10 (2026-09-01)."
         }
       ],
       "flags": [],
@@ -4794,7 +4979,7 @@
       "priority": "p1_phase_gate",
       "rank": 81,
       "status": "blocked",
-      "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (both seats co-signed the separation). Design round required before implementation. RULED ADDITION 2026-08-26 (magistrate, from T0-UNATTENDED-01's G7 gap and the separately-raised 'window launches with no T-0 GO receipt' finding — they are ONE missing mechanism seen from two ends): this row also owns the PRODUCTION CONSUMER of the D-149 GO receipt. Nothing in scripts/ or joulewise/ consumes a GO receipt at HEAD, so there is no launch precondition to weaken — it was never built. The consumer is scripts/launch_window.py's launch-capability consumption: a window launches ONLY against a valid, non-rehearsal GO receipt, and a receipt whose class is T0_UNATTENDED_SUPERVISED_REHEARSAL is refused BY CLASS. That class refusal is what discharges the T0 ruling's 'production-side mechanical REJECTION of the valid rehearsal receipt' requirement and closes rehearsal gate G7, which T0-UNATTENDED-01 correctly ships as first-class UNRULED rather than faking. The refusal code is this row's to select and must be fully registered before it emits (the T0 delta document's §4.5 gives the exhaustive R1 family/type/role/registry path if a new spelling is chosen; reusing an existing registered spelling avoids that churn). Do NOT implement it inside T0-UNATTENDED-01 — the T0 ruling's scope fence reserves every launch-side mechanism to this row. Evidence pointer: docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md §6.2.",
+      "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (both seats co-signed the separation). Design round required before implementation. RULED ADDITION 2026-08-26 (magistrate, from T0-UNATTENDED-01's G7 gap and the separately-raised 'window launches with no T-0 GO receipt' finding — they are ONE missing mechanism seen from two ends): this row also owns the PRODUCTION CONSUMER of the D-149 GO receipt. Nothing in scripts/ or joulewise/ consumes a GO receipt at HEAD, so there is no launch precondition to weaken — it was never built. The consumer is scripts/launch_window.py's launch-capability consumption: a window launches ONLY against a valid, non-rehearsal GO receipt, and a receipt whose class is T0_UNATTENDED_SUPERVISED_REHEARSAL is refused BY CLASS. That class refusal is what discharges the T0 ruling's 'production-side mechanical REJECTION of the valid rehearsal receipt' requirement and closes rehearsal gate G7, which T0-UNATTENDED-01 correctly ships as first-class UNRULED rather than faking. The refusal code is this row's to select and must be fully registered before it emits (the T0 delta document's §4.5 gives the exhaustive R1 family/type/role/registry path if a new spelling is chosen; reusing an existing registered spelling avoids that churn). Do NOT implement it inside T0-UNATTENDED-01 — the T0 ruling's scope fence reserves every launch-side mechanism to this row. Evidence pointer: docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md §6.2. REPRIORITIZED 2026-09-01 by D-169 (Ed: 'that should be done first. so you can drive the experiments entirely'): this row and the T0-UNATTENDED-01 remainder are now the TOP lane, ahead of the remaining _v5 transaction ladder. A mechanical scout of the launch path (zero-agent predicate, sudoers slices already installed, no launchd artifacts, no GO-receipt producer or consumer, nine gaps G-1..G-9) and a three-seat design consult (Sol xhigh, Opus 5, blind Fable) are in flight; the magistrate synthesizes a staged ruling whose stage 1 is the smallest merge that removes Ed from a G2-a night (D-167: diagnostic windows need no Ed GO). Ed-hands residue is limited to what rulings literally require; the quiet-guard sudo install is NOT on this critical path. RULED 2026-09-01 (MAGISTRATE-RULING-UNATTENDED-STAGE1, cold-gated): stage 1 is a night gate (joulewise/night_gate.py) plus a night driver (scripts/run_night.py) wrapping the reviewed generated G2-a chain, scheduled by a user LaunchAgent (no sudo); it is split into rows NIGHT-GATE-01, NIGHT-DRIVER-01, NIGHT-REHEARSAL-01. This row keeps the pack-bound consumer (stage 3) and the E-10 amendment; G2-b is pack-bound and stays here, not in stage 1.",
       "stop_card": null
     },
     "V4-TRANSACTION-01": {
@@ -5043,7 +5228,7 @@
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d owed to the runbook stream; ordering regression R-6e owed.",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d and ordering regression R-6e landed together in PR #262 (2026-09-01, branch feat/2026-09-01-ruling-97-runsheet; terra 99 + magistrate bench), merge pending green CI.",
       "stop_card": null
     },
     "V5-NIGHTLY-G3-01": {
@@ -5110,6 +5295,79 @@
       "rank": 68,
       "status": "blocked",
       "status_note": "Installed by D-167 and re-homed from the G3 portion of PIPELINE-SMOKE-LIVE-01. A desk script is agent-lane work; the quiet-machine collection it checks remains in V5-TRANSACTION-01.",
+      "stop_card": null
+    },
+    "V5-PREFILL-REALIZED-IDS-CHECK-01": {
+      "acceptance": {
+        "evidence": [
+          "Every generated _v5 prefill config carries the arm-derived closed prompt-token expectation while every decode config omits it",
+          "BundleReader refuses missing, inconsistent, or mismatched succeeded-bundle realization evidence with the ruled named reason",
+          "The first mismatching member stops a max-failures-one campaign before its second child and no waiver, including scope any, restores usability",
+          "Legacy configs remain byte-identical and a retained corpus without the expectation gains zero validation problems"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-PREFILL-REALIZED-IDS-CHECK-01/acceptance",
+          "label": "V5-PREFILL-REALIZED-IDS-CHECK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The authenticated per-config prefill expectation is checked against coherent realized prompt evidence at every bundle consumer and is non-waivable."
+      },
+      "authority": {
+        "label": "Ruling 44c realized-prefill check placement",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "A `_v5` prefill bundle whose realized prompt token count, ids hash, or hash domain differs from the registered expectation in its own `config.json` is refused by `BundleReader.problems()` with a named reason, stops the night on first occurrence, is unwaivable, and is excluded neither-branch at every consumer.",
+      "id": "V5-PREFILL-REALIZED-IDS-CHECK-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "partial",
+      "status_note": "Implemented on branch, pending review.",
+      "stop_card": null
+    },
+    "V5-PREFILL-REALIZED-PROJECTION-02": {
+      "acceptance": {
+        "evidence": [
+          "The freeze projection derives the prompt realization from the registered prompt text on the collection stack",
+          "Arm-time projection re-verification refuses a count, ids-hash, or domain mismatch before collection",
+          "The arm-critical identity_pins.py change passes the required council and delta-review gates"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-PREFILL-REALIZED-PROJECTION-02/acceptance",
+          "label": "V5-PREFILL-REALIZED-PROJECTION-02 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Freeze and arm identity projection catch prompt-realization drift before the first measured bundle."
+      },
+      "authority": {
+        "label": "Ruling 44c deferred identity-projection catcher",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared bundle-reader prompt-realization fence is implemented and reviewed first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "V5-PREFILL-REALIZED-IDS-CHECK-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add the identity-pin projection catcher for registered prefill prompt realization at freeze and arm.",
+      "id": "V5-PREFILL-REALIZED-PROJECTION-02",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 6,
+      "status": "queued",
+      "status_note": "Enters identity_pins.py — council trigger.",
       "stop_card": null
     },
     "V5-TRANSACTION-01": {

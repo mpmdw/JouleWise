@@ -291,6 +291,31 @@ class PublicationPrivacyTests(unittest.TestCase):
         _write_json(bundle / "raw" / "mock_samples.json", [{"source": "private-host-28"}])
         return bundle
 
+    def test_prompt_token_expectation_is_allowlisted_and_retained(self) -> None:
+        source = self.make_secret_bundle("prompt-expectation-private")
+        config_path = source / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        expectation = {
+            "schema_version": "joulewise.prompt_token_expectation.v1",
+            "token_hash_domain": "joulewise.prompt_token_ids.v1",
+            "token_count": 4,
+            "token_ids_sha256": "a" * 64,
+        }
+        config["workload_profile"]["prompt_token_expectation"] = expectation
+        _write_json(config_path, config)
+        destination = self.tmp / "prompt-expectation-public"
+
+        publication_privacy.audit_private_bundle(source)
+        publication_privacy.transform_public_bundle(source, destination)
+
+        public_config = json.loads(
+            (destination / "config.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            public_config["workload_profile"]["prompt_token_expectation"],
+            expectation,
+        )
+
     def test_secret_bearing_bundle_is_transformed_without_mutating_source(self) -> None:
         source = self.make_secret_bundle()
         source_hashes = _file_hashes(source)
