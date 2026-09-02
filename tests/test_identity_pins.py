@@ -1420,6 +1420,59 @@ class PromptRealizationProjectionTests(unittest.TestCase):
         )
 
 
+    def test_projection_input_sha256_binds_realization_rows(self) -> None:
+        """P-5: the realization rows are hashed into projection_input_sha256.
+
+        Counterfactual: binding the rows beside the hashed input instead of
+        inside ``probe_metadata`` (identity_pins._derive_projection_units,
+        the ``projection_input_units`` append) keeps every check and every
+        row-level validation green while a frozen receipt's
+        ``projection_input_sha256`` no longer covers what was realized.
+        """
+        tree = read_json(self.pack / "plan_tree.json")
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        captured_inputs: list[list[dict]] = []
+        canonical_json_sha256 = identity_pins.canonical_json_sha256
+
+        def capture_projection_input(value: object) -> str:
+            if (
+                isinstance(value, list)
+                and value
+                and isinstance(value[0], dict)
+                and "probe_metadata" in value[0]
+            ):
+                captured_inputs.append(copy.deepcopy(value))
+            return canonical_json_sha256(value)
+
+        with mock.patch(
+            "joulewise.identity_pins.canonical_json_sha256",
+            side_effect=capture_projection_input,
+        ):
+            _, projection_input_sha256, _ = identity_pins._derive_projection_units(
+                self.pack, projection
+            )
+
+        self.assertEqual(len(captured_inputs), 1)
+        hashed_rows = captured_inputs[0][0]["probe_metadata"]["prompt_realizations"]
+        expected_rows = []
+        for path in ("configs/member-1.json", "configs/member-2.json"):
+            expectation = BenchmarkConfig.from_mapping(
+                read_json(self.pack / path)
+            ).workload_profile.prompt_token_expectation
+            expected_rows.append(
+                {
+                    "config_path": path,
+                    "token_count": expectation.token_count,
+                    "token_ids_sha256": expectation.token_ids_sha256,
+                    "token_hash_domain": expectation.token_hash_domain,
+                }
+            )
+        self.assertEqual(hashed_rows, expected_rows)
+        self.assertEqual(
+            projection_input_sha256, canonical_json_sha256(captured_inputs[0])
+        )
+
+
 class DerivationOnlyArmPathTests(unittest.TestCase):
     def test_cli_and_public_arm_callables_accept_no_identity_values(self) -> None:
         parser_args = project_identity_pins.parse_args(

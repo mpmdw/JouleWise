@@ -1353,25 +1353,24 @@ def _runtime_probe_metadata(
     except Exception as exc:  # noqa: BLE001 - adapter failures become closed refusals
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable",
-            f"identity projection probe failed"
+            "identity projection probe failed"
             + (f" for config {realization_path}" if realization_path else "")
             + f": {type(exc).__name__}: {exc}",
         ) from exc
     finally:
+        # Cleanup is per unit, not per config: naming the last-visited
+        # realization path here would misdirect the reader.
         try:
             cleanup = runtime.cleanup(config)
         except Exception as exc:  # noqa: BLE001 - cleanup must precede quiet settle
             raise IdentityPinProjectionError(
                 "readiness_identity_artifact_unreadable",
-                f"runtime cleanup failed"
-                + (f" for config {realization_path}" if realization_path else "")
-                + f": {type(exc).__name__}: {exc}",
+                f"runtime cleanup failed: {type(exc).__name__}: {exc}",
             ) from exc
         if not cleanup.ok:
             raise IdentityPinProjectionError(
                 "readiness_identity_artifact_unreadable",
-                (cleanup.message or "runtime cleanup refused after identity projection")
-                + (f" for config {realization_path}" if realization_path else ""),
+                cleanup.message or "runtime cleanup refused after identity projection",
             )
     prepare_identity = {
         name: prepare.metadata[name]
@@ -1397,7 +1396,7 @@ def _runtime_probe_metadata(
         },
         "workload_provenance": workload,
     }
-    # Ruling 44c P-2: legacy configs retain the exact pre-catcher key set.
+    # Ruling 141a P-2: legacy configs retain the exact pre-catcher key set.
     if realization_configs:
         metadata["prompt_realizations"] = prompt_realizations
     return metadata
