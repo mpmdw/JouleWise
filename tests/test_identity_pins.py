@@ -1419,6 +1419,139 @@ class PromptRealizationProjectionTests(unittest.TestCase):
             )
         )
 
+    def test_digit_string_token_count_refused_at_freeze_and_arm_reverification(
+        self,
+    ) -> None:
+        def digit_string_token_count(
+            config: BenchmarkConfig,
+            realization_configs: Sequence[tuple[str, BenchmarkConfig]],
+        ) -> dict:
+            metadata = probe_metadata(config, realization_configs)
+            metadata["prompt_realizations"][0]["token_count"] = "4"
+            return metadata
+
+        with self.subTest(path="freeze"):
+            self.probe_mock.side_effect = digit_string_token_count
+            before = pack_bytes(self.pack)
+
+            with self.assertRaises(IdentityPinProjectionError) as raised:
+                freeze_projection(self.pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_artifact_unreadable",
+            )
+            self.assertIn("configs/member-1.json", str(raised.exception))
+            self.assertEqual(pack_bytes(self.pack), before)
+
+        with (
+            self.subTest(path="arm_reverification"),
+            tempfile.TemporaryDirectory() as temporary,
+        ):
+            root = Path(temporary)
+            init_git(root)
+            pack, _ = make_pack(root, prompt_expectation=True)
+            commit_pack(root, pack, "registered prompt projection pack")
+
+            def git_anchor() -> tuple[Path, str]:
+                return root.resolve(), git(root, "rev-parse", "HEAD").stdout.strip()
+
+            with (
+                mock.patch(
+                    "joulewise.identity_pins._mint_git_anchor",
+                    side_effect=git_anchor,
+                ),
+                mock.patch(
+                    "joulewise.identity_pins._runtime_probe_metadata",
+                    side_effect=probe_metadata,
+                ),
+            ):
+                freeze_projection(pack)
+            commit_pack(root, pack, "freeze registered prompt projection")
+            before = pack_bytes(pack)
+
+            with (
+                mock.patch(
+                    "joulewise.identity_pins._mint_git_anchor",
+                    side_effect=git_anchor,
+                ),
+                mock.patch(
+                    "joulewise.identity_pins._runtime_probe_metadata",
+                    side_effect=digit_string_token_count,
+                ),
+            ):
+                result = verify_frozen_projection(
+                    pack, root / "custody", "bracket-digit-string"
+                )
+
+            self.assertEqual(result["status"], "REFUSE")
+            self.assertEqual(
+                result["reason_codes"],
+                ["readiness_identity_artifact_unreadable"],
+            )
+            self.assertEqual(pack_bytes(pack), before)
+
+    def test_runtime_probe_prepares_and_cleans_up_once_for_two_configs(self) -> None:
+        config_paths = ["configs/member-1.json", "configs/member-2.json"]
+        configs = [
+            BenchmarkConfig.from_mapping(read_json(self.pack / path))
+            for path in config_paths
+        ]
+        prepare_calls: list[BenchmarkConfig] = []
+        cleanup_calls: list[BenchmarkConfig] = []
+        projection_calls: list[BenchmarkConfig] = []
+
+        class RecordingRuntime:
+            name = "mlx"
+
+            def prepare(self, config: BenchmarkConfig) -> mock.Mock:
+                prepare_calls.append(config)
+                return mock.Mock(ok=True, metadata={}, message=None)
+
+            def identity_projection_metadata(self, config: BenchmarkConfig) -> dict:
+                projection_calls.append(config)
+                expectation = config.workload_profile.prompt_token_expectation
+                assert expectation is not None
+                return {
+                    "prompt_realization": {
+                        "token_count": expectation.token_count,
+                        "token_ids_sha256": expectation.token_ids_sha256,
+                        "token_hash_domain": expectation.token_hash_domain,
+                    }
+                }
+
+            def cleanup(self, config: BenchmarkConfig) -> mock.Mock:
+                cleanup_calls.append(config)
+                return mock.Mock(ok=True, message=None)
+
+        telemetry = mock.Mock()
+        telemetry.name = "powermetrics"
+        telemetry.device_metadata.return_value = {"device": "synthetic_mac"}
+        runtime = RecordingRuntime()
+
+        with (
+            mock.patch(
+                "joulewise.adapters.resolve_runtime",
+                return_value=(runtime, None),
+            ),
+            mock.patch(
+                "joulewise.adapters.resolve_telemetry",
+                return_value=(telemetry, None),
+            ),
+        ):
+            metadata = RUNTIME_PROBE_METADATA(
+                configs[0], list(zip(config_paths, configs))
+            )
+
+        self.assertEqual(len(prepare_calls), 1)
+        self.assertIs(prepare_calls[0], configs[0])
+        self.assertEqual(len(cleanup_calls), 1)
+        self.assertIs(cleanup_calls[0], configs[0])
+        self.assertEqual(projection_calls, configs)
+        self.assertEqual(
+            [row["config_path"] for row in metadata["prompt_realizations"]],
+            config_paths,
+        )
 
     def test_projection_input_sha256_binds_realization_rows(self) -> None:
         """P-5: the realization rows are hashed into projection_input_sha256.
