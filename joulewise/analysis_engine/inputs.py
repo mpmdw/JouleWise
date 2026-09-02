@@ -4048,17 +4048,17 @@ def _frozen_consumer_identity_set(
         return frozenset()
 
 
-def floor_request_for_evidence(
+def _floor_request_or_refusal(
     artifact: Mapping[str, Any],
     binding: FloorEvidenceBinding,
     contrast: Mapping[str, Any],
     condition_family_id: str,
     evidence: Sequence[BundleEvidence],
-) -> FloorRequest | None:
-    """Build the production typed request from independently bound evidence."""
+) -> FloorRequest | tuple[str, ...]:
+    """Build a production request or return its identity-specific refusal."""
 
     if not evidence:
-        return None
+        return ()
     backends = {
         hardware.get("telemetry_backend")
         for row in evidence
@@ -4066,29 +4066,29 @@ def floor_request_for_evidence(
         and isinstance((hardware := row.raw_config.get("hardware_target")), Mapping)
     }
     if len(backends) != 1 or not all(isinstance(value, str) and value for value in backends):
-        return None
+        return ()
     backend = next(iter(backends))
     selector = contrast.get("floor_selector")
     if not isinstance(selector, Mapping):
-        return None
+        return ()
     consumer_identities: set[str] = set()
     for row in evidence:
         identity = scientific_config_identity(row.raw_config) if isinstance(row.raw_config, Mapping) else None
         if identity is None:
-            return None
+            return ()
         consumer_identities.add(canonical_json_sha256(identity))
     if not consumer_identities:
-        return None
+        return ()
     declared_consumer_identities = _frozen_consumer_identity_set(
         evidence, condition_family_id
     )
-    if declared_consumer_identities is not None and (
-        not declared_consumer_identities
-        or not consumer_identities.issubset(declared_consumer_identities)
-    ):
-        return None
+    if declared_consumer_identities is not None:
+        if not declared_consumer_identities:
+            return ("consumer_identity_set_unauthenticated",)
+        if not consumer_identities.issubset(declared_consumer_identities):
+            return ("consumer_identity_undeclared",)
     if len(consumer_identities) > 1 and declared_consumer_identities is None:
-        return None
+        return ("consumer_identity_undeclared",)
     consumer_identity = (
         next(iter(consumer_identities))
         if len(consumer_identities) == 1
@@ -4098,10 +4098,10 @@ def floor_request_for_evidence(
     for row in evidence:
         stack = floor_stack_identity(row.raw_config, row.metadata)
         if stack is None:
-            return None
+            return ()
         consumer_stack_hashes.add(canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack))
     if len(consumer_stack_hashes) != 1:
-        return None
+        return ()
     consumer_stack_hash = next(iter(consumer_stack_hashes))
     matches: list[Mapping[str, Any]] = []
     same_condition_seen = False
@@ -4146,7 +4146,7 @@ def floor_request_for_evidence(
                 consumer_stress={},
             )
     if matches or same_condition_seen:
-        return None
+        return ()
 
     transport_matches: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     for group in artifact.get("transport_groups", []):
@@ -4175,7 +4175,7 @@ def floor_request_for_evidence(
             ):
                 transport_matches.append((group, family))
     if len(transport_matches) != 1:
-        return None
+        return ()
     _, family = transport_matches[0]
     return FloorRequest(
         backend=backend,
@@ -4188,6 +4188,25 @@ def floor_request_for_evidence(
             evidence, str(selector["metric"])
         ),
     )
+
+
+def floor_request_for_evidence(
+    artifact: Mapping[str, Any],
+    binding: FloorEvidenceBinding,
+    contrast: Mapping[str, Any],
+    condition_family_id: str,
+    evidence: Sequence[BundleEvidence],
+) -> FloorRequest | None:
+    """Build the public typed request, preserving the historical None seam."""
+
+    result = _floor_request_or_refusal(
+        artifact,
+        binding,
+        contrast,
+        condition_family_id,
+        evidence,
+    )
+    return result if isinstance(result, FloorRequest) else None
 
 
 def resolve_floor(

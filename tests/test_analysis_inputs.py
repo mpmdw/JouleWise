@@ -11,9 +11,11 @@ from unittest import mock
 
 from joulewise import arm_readiness, identity_pins
 from joulewise.arm_readiness import committed_pack_tree_sha256
+from joulewise.analysis_engine import _resolve_contrast_floor
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorEvidenceBinding,
+    LoadedAnalysisInputs,
     _realized_identity_matches_config,
     _typed_config,
     floor_request_for_evidence,
@@ -27,6 +29,7 @@ except ImportError:  # RED staging: production helper lands with the cure.
 from joulewise.identity_pins import scientific_config_identity_sha256
 from joulewise.suite import SuiteManifest, suite_manifest_sha256
 from tests import test_d117_contrast_v5_pack as d117_fixture
+from tests.test_detection_floor import make_cell, make_regime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -498,6 +501,207 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
             global_problems=(),
         )
         return artifact, binding, {"floor_selector": selector}, condition_id, evidence
+
+    def _generated_exact_case(
+        self,
+        pack: Path,
+    ) -> tuple[
+        Mapping[str, Any],
+        FloorEvidenceBinding,
+        Mapping[str, Any],
+        str,
+        list[BundleEvidence],
+    ]:
+        tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        identity_receipt = json.loads(
+            (pack / projection["projection_receipt"]["path"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        unit = next(
+            item
+            for item in identity_receipt["identity_units"]
+            if item["identity_unit_id"] == "A/decode"
+        )
+        config = json.loads(
+            (pack / unit["config_inventory"][0]["path"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        lineage = {
+            "pack_root": str(pack.resolve()),
+            "pack_sha256": committed_pack_tree_sha256(pack),
+        }
+        evidence = [
+            _bundle_evidence(
+                "generated-exact",
+                config,
+                _stack_metadata_for(config),
+                launch_lineage=lineage,
+            )
+        ]
+        stack = floor_stack_identity(config, evidence[0].metadata)
+        assert stack is not None
+        condition_id = unit["consumer_bindings"][0]["family"]
+        selector = {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase",
+        }
+        cell = make_cell(
+            cell_id="exact-cell",
+            regime=make_regime(stack_identity=stack),
+            condition=condition_id,
+            metric=selector["metric"],
+        )
+        cell["key"]["window_class"] = selector["window_class"]
+        artifact = {
+            "artifact_id": "identity-refusal-test-floor",
+            "calibration_scope": "window_a",
+            "cells": [cell],
+            "transport_groups": [],
+        }
+        stack_sha = identity_pins.stack_identity_sha256(stack)
+        binding = FloorEvidenceBinding(
+            bound_cell_ids=frozenset({"exact-cell"}),
+            cell_scientific_identity_sha256={
+                "exact-cell": scientific_config_identity_sha256(config)
+            },
+            cell_stack_identity_sha256={"exact-cell": stack_sha},
+            bound_bundle_sha256s=frozenset(),
+            problems_by_cell={},
+            global_problems=(),
+        )
+        return artifact, binding, {"floor_selector": selector}, condition_id, evidence
+
+    def _production_floor_resolution(
+        self,
+        case: tuple[
+            Mapping[str, Any],
+            FloorEvidenceBinding,
+            Mapping[str, Any],
+            str,
+            list[BundleEvidence],
+        ],
+    ):
+        artifact, binding, contrast, condition_id, evidence = case
+        production_contrast = copy.deepcopy(dict(contrast))
+        production_contrast["floor_selector"]["condition_family_ids"] = [
+            condition_id
+        ]
+        cells = artifact.get("cells", [])
+        condition_sha = (
+            cells[0].get("key", {}).get("condition_family_sha256")
+            if cells
+            else next(
+                family["condition_family_sha256"]
+                for group in artifact.get("transport_groups", [])
+                for family in group.get(
+                    "allowed_consumer_condition_families", []
+                )
+                if family.get("condition_family_id") == condition_id
+            )
+        )
+        inputs = LoadedAnalysisInputs(
+            manifest={
+                "schema_version": "joulewise.analysis_manifest.v3.finalized",
+                "arms": [
+                    {
+                        "condition_family_id": condition_id,
+                        "condition_family_sha256": condition_sha,
+                    }
+                ],
+            },
+            manifest_sha256="a" * 64,
+            floor_artifact=artifact,
+            floor_sha256="b" * 64,
+            registered={},
+            effective={},
+            extra_audits=(),
+            valid_replacements=(),
+            unregistered_matching=(),
+            top_up_entry_ids=frozenset(),
+            floor_binding=binding,
+        )
+        return _resolve_contrast_floor(
+            inputs,
+            production_contrast,
+            {condition_id: evidence},
+            None,
+        )[0]
+
+    def test_production_refuses_unauthenticated_frozen_identity_set_with_named_reason(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-receipt-label-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+            case = self._generated_exact_case(pack)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            receipt_path = pack / tree["arm_attachments"][
+                "identity_pin_projection"
+            ]["projection_receipt"]["path"]
+            raw = bytearray(receipt_path.read_bytes())
+            raw[len(raw) // 2] ^= 1
+            receipt_path.write_bytes(bytes(raw))
+
+            resolution = self._production_floor_resolution(case)
+
+            self.assertEqual(resolution.status, "refused")
+            self.assertEqual(
+                resolution.reason_codes,
+                ("consumer_identity_set_unauthenticated",),
+            )
+            self.assertNotIn("consumer_term_unknown", resolution.reason_codes)
+
+    def test_production_refuses_identity_outside_authenticated_set_with_named_reason(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-member-label-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+            case = self._generated_exact_case(pack)
+            raw_config = case[4][0].raw_config
+            assert isinstance(raw_config, dict)
+            raw_config["run_metadata"]["tags"].append("identity-drift")
+
+            resolution = self._production_floor_resolution(case)
+
+            self.assertEqual(resolution.status, "refused")
+            self.assertEqual(
+                resolution.reason_codes,
+                ("consumer_identity_undeclared",),
+            )
+
+    def test_production_refuses_legacy_multi_identity_without_declaration_with_named_reason(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-legacy-label-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+            case = self._generated_transport_case(pack, include_lineage=False)
+
+            resolution = self._production_floor_resolution(case)
+
+            self.assertEqual(resolution.status, "refused")
+            self.assertEqual(
+                resolution.reason_codes,
+                ("consumer_identity_undeclared",),
+            )
+
+    def test_production_accepts_same_authenticated_fixture_without_receipt_perturbation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-receipt-control-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+
+            resolution = self._production_floor_resolution(
+                self._generated_exact_case(pack)
+            )
+
+            self.assertIn(resolution.status, {"exact", "transported"})
+            self.assertEqual(resolution.reason_codes, ())
 
     def test_u8_freeze_receipt_reaches_committed_v3_member_identity_set(self) -> None:
         pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"

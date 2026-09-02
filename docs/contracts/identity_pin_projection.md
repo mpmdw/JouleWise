@@ -599,6 +599,19 @@ declared condition-family transport group. Legacy evidence without successor
 launch lineage retains the historical single-identity route; it cannot use the
 multi-identity route.
 
+The analysis output distinguishes the two identity failures. If successor
+launch lineage exists but the gate cannot finish the authentication sequence
+above—for example, the lineage rows are incomplete or disagree, the pack digest,
+U8 freeze receipt, U11 receipt, or a sidecar does not authenticate, the
+projection is not frozen, the selected unit is missing or nonunique, inventoried
+config bytes fail their hash, the re-derived set is empty or has the wrong
+digest, or parsing/validation fails—the floor resolution is refused with
+`consumer_identity_set_unauthenticated`. If that sequence authenticates a
+nonempty frozen set, the gate hashes every evidence row's scientific identity
+and refuses with `consumer_identity_undeclared` when any hash is outside the
+set; the same second label covers legacy evidence containing two or more
+scientific identities when no frozen declaration exists.
+
 ### What happens after arm
 
 The ordinary launch step authenticates and replays the arm receipt, pack
@@ -952,6 +965,7 @@ bytes. Arrow B is too late to save the night, which is the interval owned by
 | Generated v5 manifest rotation freezes and arm-verifies | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_freezes_and_verifies` |
 | Unlisted manifest, wrong census, old retyped declaration, and drifted member tag refuse | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_refuses_unlisted_decode_manifest`, `test_generated_v5_pack_refuses_declared_census_off_by_one`, `test_generated_v5_pack_refuses_retyped_decode_declaration`, and `test_generated_v5_pack_refuses_drifted_member_tag` |
 | Analysis reaches the U8-bound frozen set and admits only subset-bound multi-identity transport | `tests.test_analysis_inputs.FrozenConsumerIdentitySetTests.test_u8_freeze_receipt_reaches_committed_v3_member_identity_set` and `test_multi_identity_transport_requires_declared_subset_and_skips_exact_cell` |
+| Analysis labels unauthenticated declarations and undeclared identities on the production path, with an authenticated control | `tests.test_analysis_inputs.FrozenConsumerIdentitySetTests.test_production_refuses_unauthenticated_frozen_identity_set_with_named_reason`, `test_production_refuses_identity_outside_authenticated_set_with_named_reason`, `test_production_refuses_legacy_multi_identity_without_declaration_with_named_reason`, and `test_production_accepts_same_authenticated_fixture_without_receipt_perturbation` |
 | Operator cannot pass or serialize identity overrides | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_cli_and_public_arm_callables_accept_no_identity_values`, `test_cli_refuses_unknown_identity_override_options`, and `test_unprojected_pack_refuses_serialized_operator_pin_values` |
 | Closed five-code vocabulary | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_projection_reason_vocabulary_is_closed` and `test_projection_reasons_are_registered_in_d078_decision_vocabulary` |
 | Every projection refusal code becomes an arm-readiness row refusal | `tests.test_arm_readiness_integration.ArmReadinessIntegrationTests.test_all_five_u11_refusals_propagate_through_identity_row` |
