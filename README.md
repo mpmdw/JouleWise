@@ -40,21 +40,22 @@ worked example's 30 ms calibration bound into its four physical parts
 placement limit + ~1 ms clock term) — the paper's first plotted
 measured data.
 
-**Now (updated 2026-08-31):** the regenerated campaign plan is
-code-complete and merged after a full adversarial review cycle: the new
-model pair is pinned down to the tokenizer bytes the machine actually
-loads, the new pass/fail ratio is registered into the plan, and a
-fresh-eyes review board settled how the prompt-length rung is chosen
-(four candidate lengths, a hard count floor, and an honest refusal if
-none qualifies — with the selection done by a checked program, not a
-judgment call on the night). The paper-side fill contract — the list of
-every number the results section will need, each tied to the plan file
-that produces it — has been re-issued against the new plan and merged
-(2026-09-01), so the desk side of the campaign is complete. With the
-machine steps waiting on Ed, a new lead model is running a cold review
-of the whole repository (code, tests, process, paper) with four
-independent reviewers from three model families; its "what I would
-change" assessment lands under `docs/process_traces/`.
+**Now (updated 2026-09-01):** the fresh-model review is turning its
+findings into landed fixes, each through the full adversarial cycle
+(implementer, two reviewers from different model families, a fix round,
+a re-audit of the fix by a third model, and — whenever a fix has to be
+tried twice — a cold reviewer with no memory of the discussion). Four
+lanes are in flight: the paper's dependence-sensitivity sheet (every
+number bound to code or an executed command; PR #256, review complete);
+a reader-side check that the prompt the machine actually tokenized is
+the one the plan registered (fix landed, final re-audit running); the
+prompt-length probe's pin loader (fix landed, re-audit running); and a
+correction to the dominance close-out, where the cold reviewers showed
+the design compared block identities across two naming schemes that
+can never match in production — the corrected design binds each block
+by its recorded members and delta instead, and is being implemented
+now. The cold reviewers caught the lead's own errors twice this block;
+both are recorded in the council log.
 
 **Next:** one instrumented evening at the machine measures the four
 candidate prompt lengths; a desk day then pins the choice, generates
