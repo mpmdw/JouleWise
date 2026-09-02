@@ -1,23 +1,40 @@
 #!/usr/bin/env python3
 """Issue the ratified DG-071 and DG-075 sampling-record statistics.
 
-The 2026-08-31 magistrate ratification defines the two statistics as follows:
+The governing convention is the ``Addendum 2026-09-02`` at the end of
+``docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md``.
 
-"DG-071 (record interval width): median with IQR of
-`interval_end_s − interval_start_s` over every retained record of the cited
-`p2015-df-ph-decode-abs-r03` bundle, with the exact file path and SHA-256
-recorded by the fill's ratification artifact."
+DG-071 is the median with IQR of ``interval_end_s - interval_start_s``
+over sampler records.  A sampler record is one contiguous group of CSV rows
+with a byte-identical ``timestamp_s`` literal.  Each group must contain one
+row for each of ``ane_power``, ``cpu_power``, and ``gpu_power``, and all three
+rows must carry byte-identical interval endpoint literals.  One width, never
+one width per rail row, enters the sample.
 
-"DG-075 (record spacing): median with IQR of differences between
-consecutive unique `timestamp_s` values over the same bundle."
+DG-075 is the median with IQR of the differences between consecutive sorted
+distinct timestamp literals.  Issuance requires every record's
+``interval_end_s`` literal to equal its ``timestamp_s`` literal and every
+later ``interval_start_s`` value to be within 0.000001 exact decimal seconds
+of the previous record's timestamp.  Thus DG-075 is the DG-071 distribution
+minus the first record, up to the retained writer's endpoint convention.
 
-Ruling R-167-1 fixes the previously open conventions: ``statistics.median``;
-linear-interpolated Q1 and Q3; IQR = Q3 - Q1; unrounded seconds as the issued
-values of record; six-decimal millisecond renderings; distinct timestamps
-sorted ascending before differencing; duplicates collapsed; and every CSV row
-included without filtering.  The command refuses before writing either output
-if the exact retained file path, SHA-256, schema, or record ordering differs
-from its pins.
+``timestamp_s``, ``interval_start_s``, and ``interval_end_s`` are parsed
+directly from their literals with ``Decimal``.  Widths, spacings, quantiles,
+and IQR never pass through binary floating point.  For a sorted sample of n
+values and probability p, the quantile position is exactly h = (n - 1) * p
+(0-based), with exact linear interpolation between its two neighbouring
+order statistics (Hyndman-Fan type 7; numpy ``linear`` and R type 7 are
+cross-references).  The median is the p = 0.5 quantile, hence the mean of the
+two middle values for even n.  IQR is Q(0.75) - Q(0.25), computed before any
+rendering.  Exact seconds are JSON strings.  Milliseconds are JSON strings
+formed by multiplying by 1000 and rounding to four decimal places using
+round-half-even.
+
+A float64 replication (numpy ``linear``, R type 7) is guaranteed to agree
+only to three decimals because a float64 at 1.78e9 s has spacing 2.4e-7 s,
+coarser than the file's 1e-7 s literals; the digits characterise the retained
+bytes, not the sampler's physical timing resolution.  Worked example: median
+120.9186 ms exact vs 120.9185 ms float64.
 
 Usage::
 
@@ -33,12 +50,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import hashlib
 import json
-import math
 import os
 import re
-import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -69,10 +86,12 @@ REQUIRED_STATISTIC_FIELDS = (
     "interval_start_s",
     "interval_end_s",
 )
+EXPECTED_RAILS = frozenset(("cpu_power", "gpu_power", "ane_power"))
 REGISTRY_ROW_IDS = ("DG-071", "DG-075")
-SCHEMA_VERSION = "joulewise.paper.dg071-dg075-statistics.v1"
+SCHEMA_VERSION = "joulewise.paper.dg071-dg075-statistics.v2"
 SCRIPT_REPOSITORY_PATH = "scripts/issue_dg071_dg075_statistics.py"
-MS_DECIMALS = 6
+MS_RENDER_QUANTUM = Decimal("0.0001")
+TILING_TOLERANCE_S = Decimal("0.000001")
 REFUSAL_EXIT_CODE = 2
 
 
@@ -82,6 +101,30 @@ class IssuanceRefused(RuntimeError):
     def __init__(self, reason: str, detail: str) -> None:
         super().__init__(detail)
         self.reason = reason
+
+
+@dataclass(frozen=True)
+class _ParsedRow:
+    row_number: int
+    timestamp_literal: str
+    timestamp_s: Decimal
+    rail: str
+    interval_start_literal: str
+    interval_start_s: Decimal
+    interval_end_literal: str
+    interval_end_s: Decimal
+
+
+@dataclass(frozen=True)
+class SamplerRecord:
+    """One validated three-rail sampler record."""
+
+    timestamp_literal: str
+    timestamp_s: Decimal
+    interval_start_literal: str
+    interval_start_s: Decimal
+    interval_end_literal: str
+    interval_end_s: Decimal
 
 
 def _sha256(raw: bytes) -> str:
@@ -94,49 +137,114 @@ def _absolute_without_symlink_resolution(path: Path) -> Path:
     return Path(os.path.abspath(os.fspath(path.expanduser())))
 
 
-# Copied verbatim from scripts/paper_excursion_decomposition.py:246-259 under
-# Ruling R-167-1; paper producers remain standalone rather than importing it.
-def _quantile(ordered: list[float], fraction: float) -> float:
-    """Linear-interpolated quantile of an already-sorted sample."""
+def _decimal_string(value: Decimal) -> str:
+    """Render an exact Decimal without exponent notation."""
+
+    return format(value, "f")
+
+
+def _quantile(ordered: list[Decimal], fraction: Decimal) -> Decimal:
+    """Hyndman-Fan type-7 quantile of an already-sorted exact sample."""
 
     if not ordered:
         raise ValueError("empty sample")
     if len(ordered) == 1:
         return ordered[0]
-    position = fraction * (len(ordered) - 1)
-    lower_index = math.floor(position)
-    upper_index = math.ceil(position)
-    if lower_index == upper_index:
+    position = Decimal(len(ordered) - 1) * fraction
+    lower_index = int(position)
+    if position == Decimal(lower_index):
         return ordered[lower_index]
-    weight = position - lower_index
-    return ordered[lower_index] * (1.0 - weight) + ordered[upper_index] * weight
+    upper_index = lower_index + 1
+    weight = position - Decimal(lower_index)
+    return ordered[lower_index] + weight * (
+        ordered[upper_index] - ordered[lower_index]
+    )
 
 
-def _describe(values: list[float]) -> dict[str, Any]:
-    """Return the ruled median/IQR statistic in seconds and rendered ms."""
+def _describe(values: list[Decimal]) -> dict[str, Any]:
+    """Return exact seconds of record and four-place millisecond renderings."""
 
     ordered = sorted(values)
-    if not ordered:
-        raise IssuanceRefused("statistic_sample_empty", "no values to summarize")
-    median_s = statistics.median(ordered)
-    q1_s = _quantile(ordered, 0.25)
-    q3_s = _quantile(ordered, 0.75)
+    q1_s = _quantile(ordered, Decimal("0.25"))
+    median_s = _quantile(ordered, Decimal("0.5"))
+    q3_s = _quantile(ordered, Decimal("0.75"))
     iqr_s = q3_s - q1_s
+
+    def render_ms(value: Decimal) -> str:
+        rendered = (value * Decimal(1000)).quantize(
+            MS_RENDER_QUANTUM, rounding=ROUND_HALF_EVEN
+        )
+        return _decimal_string(rendered)
+
     return {
         "sample_count": len(ordered),
-        "q1_s": q1_s,
-        "median_s": median_s,
-        "q3_s": q3_s,
-        "iqr_s": iqr_s,
-        "q1_ms": round(q1_s * 1000.0, MS_DECIMALS),
-        "median_ms": round(median_s * 1000.0, MS_DECIMALS),
-        "q3_ms": round(q3_s * 1000.0, MS_DECIMALS),
-        "iqr_ms": round(iqr_s * 1000.0, MS_DECIMALS),
+        "q1_s": _decimal_string(q1_s),
+        "median_s": _decimal_string(median_s),
+        "q3_s": _decimal_string(q3_s),
+        "iqr_s": _decimal_string(iqr_s),
+        "q1_ms": render_ms(q1_s),
+        "median_ms": render_ms(median_s),
+        "q3_ms": render_ms(q3_s),
+        "iqr_ms": render_ms(iqr_s),
     }
 
 
-def _read_records(raw: bytes) -> tuple[list[float], list[float]]:
-    """Parse all retained rows, enforcing the pinned schema and file ordering."""
+def _parse_decimal_literal(
+    row: dict[str | None, str | list[str] | None],
+    field: str,
+    row_number: int,
+) -> tuple[str, Decimal]:
+    value = row.get(field)
+    if not isinstance(value, str) or value.strip() == "":
+        raise IssuanceRefused(
+            "record_field_missing", f"row {row_number} is missing {field}"
+        )
+    try:
+        parsed = Decimal(value)
+    except (InvalidOperation, ValueError) as exc:
+        raise IssuanceRefused(
+            "record_field_invalid",
+            f"row {row_number} field {field} is not a decimal: {value!r}",
+        ) from exc
+    if not parsed.is_finite():
+        raise IssuanceRefused(
+            "record_field_invalid",
+            f"row {row_number} field {field} is not finite: {value!r}",
+        )
+    return value, parsed
+
+
+def _record_from_group(group: list[_ParsedRow]) -> SamplerRecord:
+    first = group[0]
+    rails = [row.rail for row in group]
+    starts = {row.interval_start_literal for row in group}
+    ends = {row.interval_end_literal for row in group}
+    if (
+        len(group) != len(EXPECTED_RAILS)
+        or set(rails) != EXPECTED_RAILS
+        or len(starts) != 1
+        or len(ends) != 1
+    ):
+        raise IssuanceRefused(
+            "record_rail_set_mismatch",
+            "timestamp_s literal "
+            f"{first.timestamp_literal!r} has rails {rails!r}, "
+            f"interval_start_s literals {sorted(starts)!r}, and "
+            f"interval_end_s literals {sorted(ends)!r}; expected one row "
+            f"per rail {sorted(EXPECTED_RAILS)!r} with identical intervals",
+        )
+    return SamplerRecord(
+        timestamp_literal=first.timestamp_literal,
+        timestamp_s=first.timestamp_s,
+        interval_start_literal=first.interval_start_literal,
+        interval_start_s=first.interval_start_s,
+        interval_end_literal=first.interval_end_literal,
+        interval_end_s=first.interval_end_s,
+    )
+
+
+def _read_records(raw: bytes) -> tuple[list[SamplerRecord], int]:
+    """Parse rows into contiguous, exact-decimal three-rail records."""
 
     try:
         text = raw.decode("utf-8")
@@ -153,9 +261,13 @@ def _read_records(raw: bytes) -> tuple[list[float], list[float]]:
             f"{EXPECTED_RECORD_SCHEMA!r}, found {tuple(reader.fieldnames or ())!r}",
         )
 
-    widths: list[float] = []
-    timestamps: list[float] = []
-    previous_timestamp: float | None = None
+    groups: list[list[_ParsedRow]] = []
+    current_group: list[_ParsedRow] = []
+    completed_timestamp_literals: set[str] = set()
+    previous_timestamp: Decimal | None = None
+    previous_timestamp_literal: str | None = None
+    rail_row_count = 0
+
     for row_number, row in enumerate(reader, start=2):
         if None in row:
             raise IssuanceRefused(
@@ -163,47 +275,90 @@ def _read_records(raw: bytes) -> tuple[list[float], list[float]]:
                 f"row {row_number} has fields beyond the pinned schema",
             )
 
-        parsed: dict[str, float] = {}
-        for field in REQUIRED_STATISTIC_FIELDS:
-            value = row.get(field)
-            if value is None or value.strip() == "":
+        parsed = {
+            field: _parse_decimal_literal(row, field, row_number)
+            for field in REQUIRED_STATISTIC_FIELDS
+        }
+        timestamp_literal, timestamp_s = parsed["timestamp_s"]
+        start_literal, interval_start_s = parsed["interval_start_s"]
+        end_literal, interval_end_s = parsed["interval_end_s"]
+
+        if (
+            current_group
+            and timestamp_literal != current_group[0].timestamp_literal
+        ):
+            completed_literal = current_group[0].timestamp_literal
+            completed_timestamp_literals.add(completed_literal)
+            groups.append(current_group)
+            current_group = []
+            if timestamp_literal in completed_timestamp_literals:
                 raise IssuanceRefused(
-                    "record_field_missing", f"row {row_number} is missing {field}"
-                )
-            try:
-                parsed[field] = float(value)
-            except ValueError as exc:
-                raise IssuanceRefused(
-                    "record_field_invalid",
-                    f"row {row_number} field {field} is not a float: {value!r}",
-                ) from exc
-            if not math.isfinite(parsed[field]):
-                raise IssuanceRefused(
-                    "record_field_invalid",
-                    f"row {row_number} field {field} is not finite: {value!r}",
+                    "records_not_contiguous",
+                    f"row {row_number} returns to timestamp_s literal "
+                    f"{timestamp_literal!r} after another record began",
                 )
 
-        timestamp = parsed["timestamp_s"]
-        if previous_timestamp is not None and timestamp < previous_timestamp:
+        if previous_timestamp is not None and timestamp_s < previous_timestamp:
             raise IssuanceRefused(
                 "timestamps_non_monotone",
-                f"row {row_number} timestamp_s {timestamp!r} follows "
-                f"{previous_timestamp!r}",
+                f"row {row_number} timestamp_s {timestamp_literal!r} follows "
+                f"{previous_timestamp_literal!r}",
             )
-        previous_timestamp = timestamp
+        previous_timestamp = timestamp_s
+        previous_timestamp_literal = timestamp_literal
 
-        width = parsed["interval_end_s"] - parsed["interval_start_s"]
-        if width <= 0.0:
+        width = interval_end_s - interval_start_s
+        if width <= Decimal(0):
             raise IssuanceRefused(
                 "record_interval_not_positive",
-                f"row {row_number} has interval width {width!r}",
+                f"row {row_number} has interval width {_decimal_string(width)}",
             )
-        widths.append(width)
-        timestamps.append(timestamp)
 
-    if not widths:
-        raise IssuanceRefused("record_set_empty", "power_trace.csv has no records")
-    return widths, timestamps
+        rail = row.get("rail")
+        current_group.append(
+            _ParsedRow(
+                row_number=row_number,
+                timestamp_literal=timestamp_literal,
+                timestamp_s=timestamp_s,
+                rail=rail if isinstance(rail, str) else "",
+                interval_start_literal=start_literal,
+                interval_start_s=interval_start_s,
+                interval_end_literal=end_literal,
+                interval_end_s=interval_end_s,
+            )
+        )
+        rail_row_count += 1
+
+    if current_group:
+        groups.append(current_group)
+    if not groups:
+        raise IssuanceRefused(
+            "record_set_empty", "power_trace.csv has no sampler records"
+        )
+    return [_record_from_group(group) for group in groups], rail_row_count
+
+
+def _verify_tiling(records: list[SamplerRecord]) -> tuple[Decimal, int]:
+    """Verify the exact-end and bounded-start conditions for DG-075."""
+
+    end_mismatches = [
+        record.timestamp_literal
+        for record in records
+        if record.interval_end_literal != record.timestamp_literal
+    ]
+    gaps = [
+        abs(record.interval_start_s - previous.timestamp_s)
+        for previous, record in zip(records, records[1:])
+    ]
+    max_gap = max(gaps, default=Decimal(0))
+    if end_mismatches or max_gap > TILING_TOLERANCE_S:
+        raise IssuanceRefused(
+            "records_do_not_tile",
+            f"end/timestamp literal mismatches={len(end_mismatches)}, "
+            f"max boundary gap={_decimal_string(max_gap)} s, "
+            f"allowed={_decimal_string(TILING_TOLERANCE_S)} s",
+        )
+    return max_gap, sum(gap != Decimal(0) for gap in gaps)
 
 
 def _git_commit(repository_root: Path) -> str:
@@ -225,6 +380,52 @@ def _git_commit(repository_root: Path) -> str:
             "git_commit_invalid", f"git rev-parse returned {commit!r}"
         )
     return commit
+
+
+def _method_disclosure() -> dict[str, str]:
+    return {
+        "population": (
+            "A sampler record is one contiguous group sharing an exact "
+            "timestamp_s literal. Each group has exactly one ane_power, "
+            "cpu_power, and gpu_power row with byte-identical interval "
+            "endpoint literals; one width per group enters DG-071."
+        ),
+        "arithmetic": (
+            "Parse timestamp_s, interval_start_s, and interval_end_s "
+            "literals directly as exact decimals; compute widths, spacings, "
+            "quantiles, and IQR without binary floating point."
+        ),
+        "quantile": (
+            "Order n values ascending. At probability p, h = (n - 1) * p "
+            "(0-based) and linearly interpolate exactly between the two "
+            "neighbouring order statistics; this is Hyndman-Fan type 7 "
+            "(numpy linear and R type 7 are cross-references)."
+        ),
+        "median": (
+            "Median is the p = 0.5 quantile, the mean of the two middle "
+            "values when n is even."
+        ),
+        "iqr": (
+            "IQR is Q(0.75) - Q(0.25), computed exactly before rendering."
+        ),
+        "millisecond_rendering": (
+            "Multiply exact seconds by 1000 and round to four decimal "
+            "places with round-half-even; renderings are JSON strings."
+        ),
+        "float64_replication": (
+            "A float64 replication (numpy `linear`, R type 7) is guaranteed "
+            "to agree only to three decimals because a float64 at 1.78e9 s "
+            "has spacing 2.4e-7 s, coarser than the file's 1e-7 s literals; "
+            "the digits characterise the retained bytes, not the sampler's "
+            "physical timing resolution. Worked example: median 120.9186 "
+            "ms exact vs 120.9185 ms float64."
+        ),
+        "dg075_dependence": (
+            "DG-075 is the DG-071 distribution minus the first record: "
+            "consecutive timestamp differences are the widths of records "
+            "2 through n up to the retained writer's endpoint convention."
+        ),
+    }
 
 
 def build_payload(
@@ -257,16 +458,20 @@ def build_payload(
             f"expected {expected_bundle_sha256}, observed {observed_sha256}",
         )
 
-    widths, timestamps = _read_records(raw)
-    unique_timestamps = sorted(set(timestamps))
-    if len(unique_timestamps) < 2:
+    records, rail_row_count = _read_records(raw)
+    max_tiling_gap_s, nonzero_tiling_boundaries = _verify_tiling(records)
+    if len(records) < 2:
         raise IssuanceRefused(
             "insufficient_unique_timestamps",
-            "at least two distinct timestamp_s values are required",
+            "at least two distinct timestamp_s literals are required",
         )
+    widths = [
+        record.interval_end_s - record.interval_start_s for record in records
+    ]
+    ordered_timestamps = sorted(record.timestamp_s for record in records)
     spacings = [
         later - earlier
-        for earlier, later in zip(unique_timestamps, unique_timestamps[1:])
+        for earlier, later in zip(ordered_timestamps, ordered_timestamps[1:])
     ]
 
     script_raw = script_path.read_bytes()
@@ -280,16 +485,21 @@ def build_payload(
             "sha256": observed_sha256,
             "record_schema": list(EXPECTED_RECORD_SCHEMA),
         },
-        "record_count": len(widths),
-        "distinct_timestamp_count": len(unique_timestamps),
-        "duplicate_timestamp_count": len(timestamps) - len(unique_timestamps),
+        "sampler_record_count": len(records),
+        "rail_row_count": rail_row_count,
+        "rails": sorted(EXPECTED_RAILS),
+        "max_tiling_gap_s": _decimal_string(max_tiling_gap_s),
+        "tiling_gap_nonzero_boundaries": nonzero_tiling_boundaries,
+        "method": _method_disclosure(),
         "statistics": {
             "DG-071": {
-                "statistic": "interval_end_s - interval_start_s",
+                "statistic": "interval_end_s - interval_start_s per sampler record",
                 **_describe(widths),
             },
             "DG-075": {
-                "statistic": "consecutive unique timestamp_s difference",
+                "statistic": (
+                    "consecutive differences of sorted distinct timestamp_s literals"
+                ),
                 **_describe(spacings),
             },
         },
@@ -313,32 +523,70 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         f"- Input: `{source['path']}`",
         f"- Input SHA-256: `{source['sha256']}`",
-        f"- Retained record count: {payload['record_count']}",
-        f"- Distinct timestamp count: {payload['distinct_timestamp_count']}",
-        f"- Duplicate timestamps dropped: {payload['duplicate_timestamp_count']}",
+        f"- Sampler records: {payload['sampler_record_count']}",
+        f"- Rail rows: {payload['rail_row_count']}",
+        f"- Rails: {', '.join(payload['rails'])}",
+        f"- Maximum absolute tiling gap (s): {payload['max_tiling_gap_s']}",
+        "- Nonzero tiling-gap boundaries: "
+        f"{payload['tiling_gap_nonzero_boundaries']}",
         f"- Producer: `{producer['script_path']}`",
         f"- Producer SHA-256: `{producer['script_sha256']}`",
         f"- Git commit: `{producer['git_commit']}`",
         "",
-        "Milliseconds are renderings rounded to six decimals. The unrounded ",
-        "seconds below are the issued values of record.",
+        "## Method",
+        "",
+        "A sampler record is one contiguous group sharing an exact "
+        "`timestamp_s` literal. Every group must contain exactly one row "
+        "for each of `ane_power`, `cpu_power`, and `gpu_power`, with "
+        "byte-identical `interval_start_s` and `interval_end_s` literals. "
+        "DG-071 uses one exact interval width per sampler record.",
+        "",
+        "The timestamp and endpoint literals are parsed directly as exact "
+        "decimals. Widths, spacings, quantiles, and IQR never pass through "
+        "binary floating point.",
+        "",
+        "For the n values sorted ascending, the quantile at probability p "
+        "uses the exact 0-based position h = (n−1)·p and exact linear "
+        "interpolation between the two neighbouring order statistics "
+        "(Hyndman–Fan type 7; numpy `linear` and R type 7 are "
+        "cross-references). Median is the p = 0.5 quantile, which is the "
+        "mean of the two middle values for even n. IQR is Q3 − Q1, computed "
+        "exactly before rendering.",
+        "",
+        "Exact seconds below are JSON-string values of record. Milliseconds "
+        "are renderings: value × 1000 rounded to four decimal places with "
+        "round-half-even. A separately rendered IQR can differ from the "
+        "difference of rendered quartiles by one unit in the last place.",
+        "",
+        "A float64 replication (numpy `linear`, R type 7) is guaranteed to "
+        "agree only to three decimals because a float64 at 1.78e9 s has "
+        "spacing 2.4e-7 s, coarser than the file's 1e-7 s literals; the "
+        "digits characterise the retained bytes, not the sampler's physical "
+        "timing resolution.",
+        "",
+        "Worked example: median 120.9186 ms exact vs 120.9185 ms float64.",
+        "",
+        "DG-075 is the DG-071 distribution minus the first record: every "
+        "record's `interval_end_s` literal equals its `timestamp_s` literal, "
+        "and every later `interval_start_s` is within 0.000001 s of the "
+        "previous timestamp; its consecutive timestamp differences are the "
+        "widths of records 2–n up to the retained writer's endpoint "
+        "convention.",
         "",
         "| Registry row | Sample count | Q1 (ms) | Median (ms) | "
         "Q3 (ms) | IQR (ms) |",
         "|---|---:|---:|---:|---:|---:|",
-        f"| DG-071 | {dg071['sample_count']} | {dg071['q1_ms']:.6f} | "
-        f"{dg071['median_ms']:.6f} | {dg071['q3_ms']:.6f} | "
-        f"{dg071['iqr_ms']:.6f} |",
-        f"| DG-075 | {dg075['sample_count']} | {dg075['q1_ms']:.6f} | "
-        f"{dg075['median_ms']:.6f} | {dg075['q3_ms']:.6f} | "
-        f"{dg075['iqr_ms']:.6f} |",
+        f"| DG-071 | {dg071['sample_count']} | {dg071['q1_ms']} | "
+        f"{dg071['median_ms']} | {dg071['q3_ms']} | {dg071['iqr_ms']} |",
+        f"| DG-075 | {dg075['sample_count']} | {dg075['q1_ms']} | "
+        f"{dg075['median_ms']} | {dg075['q3_ms']} | {dg075['iqr_ms']} |",
         "",
         "| Registry row | Q1 (s) | Median (s) | Q3 (s) | IQR (s) |",
         "|---|---:|---:|---:|---:|",
-        f"| DG-071 | {dg071['q1_s']!r} | {dg071['median_s']!r} | "
-        f"{dg071['q3_s']!r} | {dg071['iqr_s']!r} |",
-        f"| DG-075 | {dg075['q1_s']!r} | {dg075['median_s']!r} | "
-        f"{dg075['q3_s']!r} | {dg075['iqr_s']!r} |",
+        f"| DG-071 | {dg071['q1_s']} | {dg071['median_s']} | "
+        f"{dg071['q3_s']} | {dg071['iqr_s']} |",
+        f"| DG-075 | {dg075['q1_s']} | {dg075['median_s']} | "
+        f"{dg075['q3_s']} | {dg075['iqr_s']} |",
         "",
     ]
     return "\n".join(lines)
@@ -412,8 +660,8 @@ def main(argv: list[str] | None = None) -> int:
     for row_id in REGISTRY_ROW_IDS:
         row = payload["statistics"][row_id]
         print(
-            f"{row_id} median_ms={row['median_ms']:.6f} "
-            f"iqr_ms={row['iqr_ms']:.6f}"
+            f"{row_id} median_ms={row['median_ms']} "
+            f"iqr_ms={row['iqr_ms']}"
         )
     return 0
 
