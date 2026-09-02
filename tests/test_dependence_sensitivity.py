@@ -1333,6 +1333,30 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
             )
             self.assertEqual(word, expected_word)
 
+    def test_sheet_slots_threads_a_disagreeing_example_word_through_the_production_path(self) -> None:
+        # Counterfactual on the PRODUCTION path: substitute the real disagreement
+        # command for the example command; the example_agreement_word slot must
+        # read "disagree". Kills a literal in _execute_sheet_command, a literal
+        # at the sheet_slots threading site, and a word sniffed from stdout
+        # (the disagreement stdout carries other `true` tokens).
+        _, disagreement_command = dependence_sensitivity._sheet_commands()
+        with patch.object(
+            dependence_sensitivity,
+            "_sheet_commands",
+            return_value=(disagreement_command, disagreement_command),
+        ):
+            slots = dependence_sensitivity.sheet_slots(TEMPLATE.read_text(encoding="utf-8"))
+        self.assertEqual(slots["example_agreement_word"], "disagree")
+        self.assertEqual(
+            slots["example_stdout_fragment"], '"direction_gate_outcomes_agree": false'
+        )
+
+    def test_execute_sheet_command_refuses_a_non_boolean_agreement_field(self) -> None:
+        payload = {"comparison": {"direction_gate_outcomes_agree": 0}}
+        command = shlex.join([sys.executable, "-c", f"import json; print(json.dumps({payload!r}))"])
+        with self.assertRaisesRegex(dependence_sensitivity.SheetRenderError, "non-boolean"):
+            dependence_sensitivity._execute_sheet_command(command)
+
     def test_template_digit_and_code_citation_lint_has_a_closed_shape_allowlist(self) -> None:
         template = TEMPLATE.read_text(encoding="utf-8")
         math_spans = [
