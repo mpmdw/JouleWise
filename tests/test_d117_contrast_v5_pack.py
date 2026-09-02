@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 import unittest
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest import mock
 
 from joulewise import (
@@ -968,6 +968,268 @@ class D117ContrastV5PackTests(unittest.TestCase):
             self.assertEqual(len(reviewed_commit), 40)
             self.assertEqual(verified["status"], "PASS")
             self.assertEqual(verified["reason_codes"], [])
+
+    def test_decode_rotation_is_the_ruled_modulo_eight_cycle(self) -> None:
+        """Ruling 171a R-2 fixes eight prompts and (block - 1) modulo 8."""
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-rotation-") as temporary:
+            self.configure(self.write_prefill_pin(Path(temporary)))
+            self.assertEqual(len(self.generator.DECODE_PROFILE["prompts"]), 8)
+            self.assertEqual(
+                [self.generator.decode_prompt_index(block) for block in range(1, 17)],
+                [(block - 1) % 8 for block in range(1, 17)],
+            )
+
+    def test_gamma_identity_roster_is_exact_and_rejects_three_units(self) -> None:
+        """Ruling 171a R-7 requires exactly four ordered A/B identity units."""
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-roster-") as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+            pack = self.generate_pack(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            units = tree["arm_attachments"]["identity_pin_projection"][
+                "identity_units"
+            ]
+
+            self.generator.validate_gamma_identity_unit_roster(tree)
+            self.assertEqual(
+                [unit["identity_unit_id"] for unit in units],
+                ["A/decode", "A/prefill_p512", "B/decode", "B/prefill_p512"],
+            )
+            self.assertIn("qwen3-1p7b", units[0]["producer_plan_reference"]["plan_id"])
+            self.assertIn("qwen3-8b", units[2]["producer_plan_reference"]["plan_id"])
+
+            units.pop()
+            with self.assertRaisesRegex(ValueError, "gamma_identity_unit_roster_invalid"):
+                self.generator.validate_gamma_identity_unit_roster(tree)
+
+    def test_decode_declaration_is_rule_derived_not_folded_from_emission(self) -> None:
+        """M1 dies: an emitted drift cannot rewrite R-7's registered 4/4/2 census."""
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-rule-census-") as temporary:
+            root = Path(temporary)
+            self.init_fixture_git(root)
+            self.configure(self.write_prefill_pin(root))
+            real_builder = self.generator.build_tree
+
+            def drift_before_builder(*args, **kwargs):
+                science_rows = args[3]
+                row = next(
+                    item
+                    for item in science_rows
+                    if item["arm"] == "A" and item["measurement_arm"] == "decode"
+                )
+                staging_root = next(root.glob(".d117-v5-stage-*"))
+                staged_pack = staging_root / self.generator.active_generation().pack_rel
+                config_path = staged_pack / row["config_path"]
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                current_sha = config["workload_profile"]["suite_manifest_sha256"]
+                replacement = next(
+                    member
+                    for member in self.generator.decode_declared_suite_manifest_set("A")
+                    if member["suite_manifest_sha256"] != current_sha
+                )
+                config["workload_profile"].update(
+                    suite_manifest_ref=replacement["suite_manifest_ref"],
+                    suite_manifest_sha256=replacement["suite_manifest_sha256"],
+                )
+                raw = self.generator.render_json(config)
+                config_path.write_bytes(raw)
+                row["config_sha256"] = hashlib.sha256(raw).hexdigest()
+                return real_builder(*args, **kwargs)
+
+            with (
+                mock.patch.object(
+                    self.generator, "build_tree", side_effect=drift_before_builder
+                ),
+                mock.patch.object(
+                    self.generator,
+                    "validate_prospective_analysis_manifest_v3",
+                    return_value=[],
+                ),
+            ):
+                pack = self.generate_pack(root)
+
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            declaration = unit["declared_identity"]["workload_profile"][
+                "suite_manifest_set"
+            ]
+            self.assertEqual(
+                [member["declared_member_count"] for member in declaration],
+                [4, 4, 2, 2, 2, 2, 2, 2],
+            )
+            self.commit_fixture(root, "commit emitted manifest census drift")
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+            self.assertIn("suite manifest census", str(raised.exception))
+
+    def test_generated_v5_pack_refuses_tampered_declared_manifest_bytes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-manifest-auth-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            manifest_ref = unit["declared_identity"]["workload_profile"][
+                "suite_manifest_set"
+            ][0]["suite_manifest_ref"]
+            relative = Path(*PurePosixPath(manifest_ref).parts[3:])
+            manifest_path = pack / relative
+            raw = bytearray(manifest_path.read_bytes())
+            raw[len(raw) // 2] ^= 1
+            manifest_path.write_bytes(bytes(raw))
+            self.commit_fixture(root, "tamper one declared manifest byte")
+
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_environment_dirty",
+            )
+            self.assertIn("unauthenticated", str(raised.exception))
+
+    def test_generated_v5_verify_refuses_tampered_declared_manifest_bytes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-manifest-verify-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            self.freeze_identity_fixture(root, pack)
+            self.commit_fixture(root, "freeze v5 identity projection")
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            manifest_ref = unit["declared_identity"]["workload_profile"][
+                "suite_manifest_set"
+            ][0]["suite_manifest_ref"]
+            manifest_path = pack / Path(*PurePosixPath(manifest_ref).parts[3:])
+            raw = bytearray(manifest_path.read_bytes())
+            raw[len(raw) // 2] ^= 1
+            manifest_path.write_bytes(bytes(raw))
+
+            with (
+                mock.patch.object(
+                    identity_pins,
+                    "model_artifact_identity",
+                    new=fake_model_artifact_identity,
+                ),
+                mock.patch.object(
+                    identity_pins,
+                    "_runtime_probe_metadata",
+                    side_effect=self.runtime_probe_metadata,
+                ),
+                mock.patch.object(
+                    identity_pins,
+                    "_mint_git_anchor",
+                    side_effect=lambda: (
+                        root.resolve(),
+                        self.git(root, "rev-parse", "HEAD"),
+                    ),
+                ),
+            ):
+                result = identity_pins.verify_frozen_projection(
+                    pack,
+                    root / "window-custody",
+                    "bracket-manifest-tamper",
+                )
+
+            self.assertEqual(result["status"], "REFUSE")
+            self.assertEqual(
+                result["reason_codes"],
+                ["readiness_identity_environment_dirty"],
+            )
+
+    def test_generated_v5_pack_refuses_extra_byte_identical_decode_member(self) -> None:
+        """M4's emitted >= declared mutant would accept this extra member."""
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-extra-member-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            source = pack / unit["config_inventory"][0]["path"]
+            extra_path = "00_extra_byte_identical_decode.json"
+            (pack / extra_path).write_bytes(source.read_bytes())
+            unit["config_inventory"].append(
+                {
+                    "path": extra_path,
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                }
+            )
+            unit["config_inventory"].sort(key=lambda row: row["path"])
+            self.write_identity_tree(pack, tree)
+            self.commit_fixture(root, "add extra byte-identical decode member")
+
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertIn("suite manifest census", str(raised.exception))
+
+    def test_generated_v5_pack_refuses_one_member_runtime_pin_drift(self) -> None:
+        """M10 dies when one member derives through different runtime metadata."""
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-runtime-member-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            target = json.loads(
+                (pack / unit["config_inventory"][0]["path"]).read_text(encoding="utf-8")
+            )["run_id"]
+            original = identity_pins.derive_model_runtime_config_from_metadata
+
+            def derive_with_one_drift(config, metadata):
+                if config.get("run_id") == target:
+                    metadata = copy.deepcopy(metadata)
+                    metadata["adapters"]["runtime"]["prepare_metadata"][
+                        "version"
+                    ] = "synthetic-mlx-drifted"
+                return original(config, metadata)
+
+            with (
+                mock.patch.object(
+                    identity_pins,
+                    "derive_model_runtime_config_from_metadata",
+                    new=derive_with_one_drift,
+                ),
+                self.assertRaises(identity_pins.IdentityPinProjectionError) as raised,
+            ):
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_projection_mint_divergence",
+            )
+            self.assertIn("members do not share runtime pins", str(raised.exception))
 
     def test_generated_v5_pack_refuses_unlisted_decode_manifest(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-identity-unlisted-") as temporary:

@@ -560,6 +560,24 @@ one-identity-per-manifest rules are re-run against current configuration bytes.
 The frozen receipt remains the expected side of the comparison; the live
 derivation never edits its declaration or census.
 
+### Analysis-gate definitions
+
+- **U8** is the arm-readiness mapper and record that authenticates the pack's
+  required freeze evidence before any launch can be authorized.
+- **U11** is the identity-pin projection subsystem and its projection-evidence
+  row inside the U8 freeze receipt.
+- **Launch lineage** is the authenticated receipt chain from a collected bundle
+  back to the consumed arm authorization and its exact pack digest.
+- The **exact-cell route** directly selects a bound floor cell only when the
+  consumer has one scientific identity and the cell carries that same identity
+  and runtime stack.
+- **Condition-family transport** is the ruled path from calibrated source cells
+  to a compatible consumer condition family without requiring exact scientific
+  identity equality.
+- A **transport group** is the floor artifact's declaration of the bound source
+  cells, compatible consumer families, runtime stack, and admissible stress
+  envelope used by condition-family transport.
+
 ### Analysis consumption
 
 For successor packs, every accepted bundle carries an authenticated launch
@@ -952,7 +970,5 @@ projection-input allowlist and the exclusion of packaging versions that do not
 change a hashed output. Ruling 150a R-150-2 owns the scheduled launch-time
 recheck. D-119 is the source of the rule that assurance wording may be no
 stronger than the evidence named with it. D-131 is the broader pack-specific
-alpha/beta/gamma roster policy that the generic validator does not enforce.
-The internal subsystem labels U8 and U11 refer, respectively, to the readiness
-mapper and the identity-pin projection-evidence row; the mechanism text uses
-their plain meanings instead.
+alpha/beta/gamma roster policy; the `_v5` GAMMA generator enforces its exact
+ordered four-unit roster in addition to the generic validator.

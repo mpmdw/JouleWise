@@ -3,11 +3,14 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Mapping
 from unittest import mock
 
+from joulewise import arm_readiness, identity_pins
+from joulewise.arm_readiness import committed_pack_tree_sha256
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorEvidenceBinding,
@@ -23,6 +26,7 @@ except ImportError:  # RED staging: production helper lands with the cure.
     _frozen_consumer_identity_set = None
 from joulewise.identity_pins import scientific_config_identity_sha256
 from joulewise.suite import SuiteManifest, suite_manifest_sha256
+from tests import test_d117_contrast_v5_pack as d117_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -337,6 +341,164 @@ class RealizedIdentityDispatchTests(unittest.TestCase):
 
 
 class FrozenConsumerIdentitySetTests(unittest.TestCase):
+    def _generated_frozen_gate_pack(
+        self, root: Path
+    ) -> tuple[d117_fixture.D117ContrastV5PackTests, Path]:
+        fixture = d117_fixture.D117ContrastV5PackTests()
+        fixture.setUp()
+        fixture.init_fixture_git(root)
+        fixture.configure(fixture.write_prefill_pin(root))
+        pack = fixture.generate_pack(root)
+        fixture.commit_fixture(root, "generated unprojected v5 pack")
+        fixture.freeze_identity_fixture(root, pack)
+
+        tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        identity_reference = projection["projection_receipt"]
+        assert isinstance(identity_reference, Mapping)
+        freeze_receipt = {
+            "schema_version": "joulewise.arm_readiness_freeze_receipt.v1",
+            "receipt_kind": "freeze",
+            "receipt_id": "freeze-0001",
+            "status": "PASS",
+            "arm_disposition": "NOT_APPLICABLE",
+            "issued_at_utc": "2026-09-02T00:00:00Z",
+            "pack_identity": {
+                "pack_id": pack.name,
+                "plan_id": tree["plan"]["plan_id"],
+                "window_id": tree["window_identity"]["window_id"],
+                "pack_root": str(pack.resolve()),
+                "plan_path": tree["plan"]["path"],
+                "plan_sha256": tree["plan"]["actual_sha256"],
+            },
+            "row_registry": copy.deepcopy(
+                tree["arm_attachments"]["arm_readiness"]["row_registry"]
+            ),
+            "evidence": [
+                {
+                    "evidence_id": "u11-freeze-projection",
+                    "receipt_kind": "freeze_projection",
+                    "namespace": "PACK",
+                    "path": identity_reference["path"],
+                    "sha256": identity_reference["sha256"],
+                    "schema_version": identity_pins.IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
+                    "status": "PASS",
+                }
+            ],
+            "rows": [
+                {
+                    "row_id": "desk.identity_pin_projection",
+                    "evaluation_phase": "FREEZE_AND_ARM",
+                    "applicability": "REQUIRED",
+                    "verdict": "PASS",
+                    "predicate_id": "desk.identity_pin_projection.v1",
+                    "evidence_ids": ["u11-freeze-projection"],
+                }
+            ],
+            "refusals": [],
+            "supersedes": None,
+            "assurance": copy.deepcopy(arm_readiness.ASSURANCE),
+        }
+        arm_readiness.validate_freeze_receipt(freeze_receipt)
+        freeze_raw = arm_readiness.render_json(freeze_receipt)
+        freeze_sha = hashlib.sha256(freeze_raw).hexdigest()
+        freeze_relative = "arm_readiness.freeze.receipts/freeze-0001.json"
+        freeze_path = pack / freeze_relative
+        freeze_path.parent.mkdir(parents=True, exist_ok=True)
+        freeze_path.write_bytes(freeze_raw)
+        freeze_path.with_name(f"{freeze_path.name}.sha256").write_bytes(
+            arm_readiness.gnu_sidecar(freeze_sha, freeze_path.name)
+        )
+        tree["arm_attachments"]["arm_readiness"]["freeze_receipt"] = {
+            "path": freeze_relative,
+            "sha256": freeze_sha,
+        }
+        fixture.write_identity_tree(pack, tree)
+        fixture.commit_fixture(root, "bind synthetic U8 freeze receipt")
+        return fixture, pack
+
+    def _generated_transport_case(
+        self,
+        pack: Path,
+        *,
+        include_lineage: bool = True,
+    ) -> tuple[
+        Mapping[str, Any],
+        FloorEvidenceBinding,
+        Mapping[str, Any],
+        str,
+        list[BundleEvidence],
+    ]:
+        tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+        projection = tree["arm_attachments"]["identity_pin_projection"]
+        identity_receipt = json.loads(
+            (pack / projection["projection_receipt"]["path"]).read_text(
+                encoding="utf-8"
+            )
+        )
+        unit = next(
+            item
+            for item in identity_receipt["identity_units"]
+            if item["identity_unit_id"] == "A/decode"
+        )
+        distinct: dict[str, Mapping[str, Any]] = {}
+        for row in unit["config_inventory"]:
+            config = json.loads((pack / row["path"]).read_text(encoding="utf-8"))
+            distinct.setdefault(scientific_config_identity_sha256(config), config)
+        configs = list(distinct.values())[:2]
+        self.assertEqual(len(configs), 2)
+        lineage = (
+            {
+                "pack_root": str(pack.resolve()),
+                "pack_sha256": committed_pack_tree_sha256(pack),
+            }
+            if include_lineage
+            else None
+        )
+        evidence = [
+            _bundle_evidence(
+                f"generated-{index}",
+                config,
+                _stack_metadata_for(config),
+                launch_lineage=lineage,
+            )
+            for index, config in enumerate(configs)
+        ]
+        stack = floor_stack_identity(configs[0], evidence[0].metadata)
+        assert stack is not None
+        stack_sha = identity_pins.stack_identity_sha256(stack)
+        condition_id = unit["consumer_bindings"][0]["family"]
+        selector = {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase",
+        }
+        artifact = {
+            "cells": [],
+            "transport_groups": [
+                {
+                    "backend": "powermetrics",
+                    **selector,
+                    "stack_identity_sha256": stack_sha,
+                    "source_cell_ids": ["transport-source"],
+                    "allowed_consumer_condition_families": [
+                        {
+                            "condition_family_id": condition_id,
+                            "condition_family_sha256": "c" * 64,
+                        }
+                    ],
+                }
+            ],
+        }
+        binding = FloorEvidenceBinding(
+            bound_cell_ids=frozenset({"transport-source"}),
+            cell_scientific_identity_sha256={},
+            cell_stack_identity_sha256={},
+            bound_bundle_sha256s=frozenset(),
+            problems_by_cell={},
+            global_problems=(),
+        )
+        return artifact, binding, {"floor_selector": selector}, condition_id, evidence
+
     def test_u8_freeze_receipt_reaches_committed_v3_member_identity_set(self) -> None:
         pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
         receipt = json.loads(
@@ -352,7 +514,10 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
             "v3-lineage-probe",
             _scalar_config(),
             _metadata_for(_scalar_config(), 512),
-            launch_lineage={"pack_root": str(pack)},
+            launch_lineage={
+                "pack_root": str(pack),
+                "pack_sha256": committed_pack_tree_sha256(pack),
+            },
         )
         expected = frozenset(
             scientific_config_identity_sha256(
@@ -365,6 +530,67 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
             _frozen_consumer_identity_set([evidence], condition_family_id),
             expected,
         )
+
+    def test_successor_lineage_requires_every_row_to_name_one_pack_root(self) -> None:
+        evidence = _bundle_evidence(
+            "missing-pack-root",
+            _scalar_config(),
+            _metadata_for(_scalar_config(), 512),
+            launch_lineage={"pack_sha256": "a" * 64},
+        )
+
+        self.assertEqual(
+            _frozen_consumer_identity_set([evidence], "condition-family"),
+            frozenset(),
+        )
+
+    def test_generated_pack_gate_and_caller_refuse_stale_receipt_bytes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-pack-tamper-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+            case = self._generated_transport_case(pack)
+            self.assertIsNotNone(floor_request_for_evidence(*case))
+
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            receipt_path = pack / tree["arm_attachments"]["identity_pin_projection"][
+                "projection_receipt"
+            ]["path"]
+            raw = bytearray(receipt_path.read_bytes())
+            raw[len(raw) // 2] ^= 1
+            receipt_path.write_bytes(bytes(raw))
+
+            self.assertIsNone(floor_request_for_evidence(*case))
+
+    def test_generated_pack_gate_refuses_plan_receipt_config_set_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-config-set-") as temporary:
+            root = Path(temporary)
+            fixture, pack = self._generated_frozen_gate_pack(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            unit["model_runtime_config"]["config_set_sha256"] = "f" * 64
+            fixture.write_identity_tree(pack, tree)
+            fixture.commit_fixture(root, "drift plan config-set binding")
+
+            self.assertIsNone(
+                floor_request_for_evidence(*self._generated_transport_case(pack))
+            )
+
+    def test_generated_multi_identity_evidence_without_lineage_refuses(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-no-lineage-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+
+            self.assertIsNone(
+                floor_request_for_evidence(
+                    *self._generated_transport_case(pack, include_lineage=False)
+                )
+            )
 
     def test_multi_identity_transport_requires_declared_subset_and_skips_exact_cell(
         self,
@@ -403,7 +629,7 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
                     "key": {
                         "backend": "powermetrics",
                         **selector,
-                        "condition_family_id": condition_id,
+                        "condition_family_id": "different-exact-cell-family",
                         "condition_family_sha256": "d" * 64,
                     },
                 }
@@ -435,9 +661,15 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
         )
         contrast = {"floor_selector": selector}
 
-        with mock.patch(
-            "joulewise.analysis_engine.inputs._frozen_consumer_identity_set",
-            return_value=frozenset(identities),
+        with (
+            mock.patch(
+                "joulewise.analysis_engine.inputs._frozen_consumer_identity_set",
+                return_value=frozenset(identities),
+            ),
+            mock.patch(
+                "joulewise.analysis_engine.inputs.scientific_config_identity_sha256",
+                side_effect=AssertionError("identity was recomputed"),
+            ),
         ):
             request = floor_request_for_evidence(
                 artifact,
@@ -449,6 +681,20 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
 
         self.assertIsNotNone(request)
         self.assertEqual(request.condition_family_sha256, "c" * 64)
+
+        artifact["cells"][0]["key"]["condition_family_id"] = condition_id
+        with mock.patch(
+            "joulewise.analysis_engine.inputs._frozen_consumer_identity_set",
+            return_value=frozenset(identities),
+        ):
+            same_condition_refused = floor_request_for_evidence(
+                artifact,
+                binding,
+                contrast,
+                condition_id,
+                evidence,
+            )
+        self.assertIsNone(same_condition_refused)
 
         with mock.patch(
             "joulewise.analysis_engine.inputs._frozen_consumer_identity_set",

@@ -1538,6 +1538,49 @@ def _declared_suite_manifest_members(
     return members, common_profile
 
 
+def _declared_manifest_path(pack_root: Path, manifest_ref: str) -> Path:
+    """Resolve one declared suite manifest as a regular file below its pack."""
+
+    posix = PurePosixPath(manifest_ref)
+    parts = posix.parts
+    pack_indexes = [index for index, part in enumerate(parts) if part == pack_root.name]
+    if len(pack_indexes) > 1:
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            f"declared suite manifest path is ambiguous: {manifest_ref}",
+        )
+    relative_parts = (
+        parts[pack_indexes[0] + 1 :] if pack_indexes else parts
+    )
+    if not relative_parts:
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            f"declared suite manifest path is empty below pack: {manifest_ref}",
+        )
+    relative = PurePosixPath(*relative_parts).as_posix()
+    try:
+        return _resolve_config_path(pack_root, relative)
+    except IdentityPinProjectionError as exc:
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            f"declared suite manifest is unauthenticated: {manifest_ref}",
+            observed={"suite_manifest_ref": manifest_ref},
+        ) from exc
+
+
+def _distinct_manifest_identity_refusal_reason(
+    declared_distinct_count: int,
+    observed_distinct_identities: Iterable[str],
+) -> str | None:
+    """Return the existing refusal when manifest/identity cardinality differs."""
+
+    return (
+        "readiness_identity_environment_dirty"
+        if len(set(observed_distinct_identities)) != declared_distinct_count
+        else None
+    )
+
+
 def _derive_projection_units(
     pack_root: Path, projection: Mapping[str, Any]
 ) -> tuple[list[dict[str, Any]], str, list[dict[str, Any]]]:
@@ -1564,6 +1607,27 @@ def _derive_projection_units(
             if suite_declaration is not None
             else {}
         )
+        for manifest_sha, member in declared_by_manifest.items():
+            manifest_ref = member["suite_manifest_ref"]
+            manifest_path = _declared_manifest_path(pack_root, manifest_ref)
+            try:
+                observed_manifest_sha = _sha256_bytes(manifest_path.read_bytes())
+            except OSError as exc:
+                raise IdentityPinProjectionError(
+                    "readiness_identity_environment_dirty",
+                    f"declared suite manifest is unauthenticated: {manifest_ref}",
+                    observed={"suite_manifest_ref": manifest_ref},
+                ) from exc
+            if observed_manifest_sha != manifest_sha:
+                raise IdentityPinProjectionError(
+                    "readiness_identity_environment_dirty",
+                    f"declared suite manifest is unauthenticated: {manifest_ref}",
+                    observed={
+                        "suite_manifest_ref": manifest_ref,
+                        "declared_sha256": manifest_sha,
+                        "observed_sha256": observed_manifest_sha,
+                    },
+                )
         scientific_hashes: set[str] = set()
         manifest_counts: dict[str, int] = {}
         manifest_scientific_hashes: dict[str, set[str]] = {}
@@ -1634,9 +1698,12 @@ def _derive_projection_units(
                     f"identity unit {unit_id!r} manifest class has multiple scientific identities",
                     observed={"suite_manifest_sha256": divergent_manifests},
                 )
-            if len(scientific_hashes) != len(declared_by_manifest):
+            cardinality_refusal = _distinct_manifest_identity_refusal_reason(
+                len(declared_by_manifest), scientific_hashes
+            )
+            if cardinality_refusal is not None:
                 raise IdentityPinProjectionError(
-                    "readiness_identity_environment_dirty",
+                    cardinality_refusal,
                     f"identity unit {unit_id!r} scientific identity count differs from declared manifests",
                     observed={
                         "declared_manifest_count": len(declared_by_manifest),

@@ -9,7 +9,7 @@ import json
 import math
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
@@ -1113,6 +1113,13 @@ def render_json(value: Any) -> bytes:
         json.dumps(thread_generation_identity(value), indent=2, ensure_ascii=False)
         + "\n"
     ).encode("utf-8")
+
+
+def render_suite_manifest_bytes(value: dict[str, Any]) -> bytes:
+    """Render exactly the effective bytes named by suite_manifest_sha256."""
+
+    effective = SuiteManifest.from_mapping(value).to_dict()
+    return (json.dumps(effective, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -2816,6 +2823,43 @@ def build_tree(
     }
 
 
+def validate_gamma_identity_unit_roster(tree: Mapping[str, Any]) -> None:
+    """Enforce R-7's exact ordered GAMMA roster and producer-plan mapping."""
+
+    expected = [
+        (
+            f"{arm}/{measurement_arm}",
+            {
+                "plan_id": (
+                    f"plan-d117-floor-{MODEL_ID_TOKENS[arm]}-"
+                    f"decode-prefill-p{PREFILL_LENGTH}-v5"
+                ),
+                "path": f"../{FLOOR_PACKS[arm].name}/calibration_plan.json",
+            },
+        )
+        for arm, measurement_arm in (
+            ("A", "decode"),
+            ("A", PREFILL_ARM),
+            ("B", "decode"),
+            ("B", PREFILL_ARM),
+        )
+    ]
+    try:
+        units = tree["arm_attachments"]["identity_pin_projection"]["identity_units"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("gamma_identity_unit_roster_invalid: roster is absent") from exc
+    observed = [
+        (unit.get("identity_unit_id"), unit.get("producer_plan_reference"))
+        for unit in units
+        if isinstance(unit, Mapping)
+    ]
+    if observed != expected:
+        raise ValueError(
+            "gamma_identity_unit_roster_invalid: expected ordered "
+            + ", ".join(unit_id for unit_id, _producer in expected)
+        )
+
+
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
     identity = active_generation()
@@ -3018,7 +3062,9 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     write_bytes(out / "decode_workload_candidate.json", decode_workload_bytes)
     for arm in ("A", "B"):
         for prompt_index in range(len(DECODE_PROFILE["prompts"])):
-            suite_bytes = render_json(decode_suite_manifest(arm, prompt_index))
+            suite_bytes = render_suite_manifest_bytes(
+                decode_suite_manifest(arm, prompt_index)
+            )
             write_bytes(out / decode_suite_relpath(arm, prompt_index), suite_bytes)
 
     declaration_bytes = render_json(consumer_declaration())
@@ -3184,6 +3230,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
         declaration_sha,
         decode_workload_sha,
     )
+    validate_gamma_identity_unit_roster(tree)
     tree_bytes = (
         (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
         if active_generation().preserve_current_frozen_bytes

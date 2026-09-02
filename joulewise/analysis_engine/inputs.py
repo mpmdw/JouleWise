@@ -38,6 +38,7 @@ from joulewise.arm_readiness import (
     LaunchLineageError,
     authenticate_bundle_launch_lineage,
     authenticate_launch_lineage,
+    committed_pack_tree_sha256,
     gnu_sidecar,
     parse_json_bytes,
     validate_freeze_receipt,
@@ -64,6 +65,7 @@ from joulewise.identity_pins import (
     STACK_IDENTITY_DOMAIN,
     IdentityPinProjectionError,
     build_stack_identity as floor_stack_identity,
+    canonical_json_sha256,
     identity_unit_config_set_sha256,
     scientific_config_identity,
     scientific_config_identity_sha256,
@@ -3874,15 +3876,27 @@ def _frozen_consumer_identity_set(
         return None
     if len(authenticated_rows) != len(evidence):
         return frozenset()
-    pack_roots = {
-        row.get("pack_root")
+    if any(
+        not isinstance(row.get("pack_root"), str) or not row.get("pack_root")
         for row in authenticated_rows
-        if isinstance(row.get("pack_root"), str) and row.get("pack_root")
-    }
+    ):
+        return frozenset()
+    pack_roots = {row["pack_root"] for row in authenticated_rows}
     if len(pack_roots) != 1:
+        return frozenset()
+    if any(
+        not isinstance(row.get("pack_sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", row["pack_sha256"]) is None
+        for row in authenticated_rows
+    ):
+        return frozenset()
+    pack_hashes = {row["pack_sha256"] for row in authenticated_rows}
+    if len(pack_hashes) != 1:
         return frozenset()
     try:
         pack_root = Path(next(iter(pack_roots))).resolve(strict=True)
+        if committed_pack_tree_sha256(pack_root) != next(iter(pack_hashes)):
+            return frozenset()
         tree, _tree_raw = _load_json_object(
             pack_root / "plan_tree.json", "consumer identity plan tree"
         )
@@ -3989,6 +4003,17 @@ def _frozen_consumer_identity_set(
         if len(matching_units) != 1:
             return frozenset()
         unit = matching_units[0]
+        projection_units = [
+            candidate
+            for candidate in projection["identity_units"]
+            if candidate["identity_unit_id"] == unit["identity_unit_id"]
+        ]
+        if (
+            len(projection_units) != 1
+            or projection_units[0]["model_runtime_config"]["config_set_sha256"]
+            != unit["model_runtime_config"]["config_set_sha256"]
+        ):
+            return frozenset()
         identities: set[str] = set()
         for row in unit["config_inventory"]:
             config_path = _lexical_child_path(
@@ -4051,7 +4076,7 @@ def floor_request_for_evidence(
         identity = scientific_config_identity(row.raw_config) if isinstance(row.raw_config, Mapping) else None
         if identity is None:
             return None
-        consumer_identities.add(scientific_config_identity_sha256(row.raw_config))
+        consumer_identities.add(canonical_json_sha256(identity))
     if not consumer_identities:
         return None
     declared_consumer_identities = _frozen_consumer_identity_set(
@@ -4078,33 +4103,34 @@ def floor_request_for_evidence(
     if len(consumer_stack_hashes) != 1:
         return None
     consumer_stack_hash = next(iter(consumer_stack_hashes))
+    matches: list[Mapping[str, Any]] = []
+    same_condition_seen = False
+    for cell in artifact.get("cells", []):
+        if not isinstance(cell, Mapping):
+            continue
+        key = cell.get("key")
+        cell_id = cell.get("cell_id")
+        if not isinstance(key, Mapping) or not isinstance(cell_id, str):
+            continue
+        same_condition = (
+            key.get("backend") == backend
+            and key.get("metric") == selector.get("metric")
+            and key.get("window_class") == selector.get("window_class")
+            and key.get("condition_family_id") == condition_family_id
+        )
+        same_condition_seen = same_condition_seen or same_condition
+        if (
+            consumer_identity is None
+            or not same_condition
+            or cell_id not in binding.bound_cell_ids
+            or binding.cell_scientific_identity_sha256.get(cell_id)
+            != consumer_identity
+            or binding.cell_stack_identity_sha256.get(cell_id)
+            != consumer_stack_hash
+        ):
+            continue
+        matches.append(cell)
     if consumer_identity is not None:
-        matches: list[Mapping[str, Any]] = []
-        same_condition_seen = False
-        for cell in artifact.get("cells", []):
-            if not isinstance(cell, Mapping):
-                continue
-            key = cell.get("key")
-            cell_id = cell.get("cell_id")
-            if not isinstance(key, Mapping) or not isinstance(cell_id, str):
-                continue
-            same_condition = (
-                key.get("backend") == backend
-                and key.get("metric") == selector.get("metric")
-                and key.get("window_class") == selector.get("window_class")
-                and key.get("condition_family_id") == condition_family_id
-            )
-            same_condition_seen = same_condition_seen or same_condition
-            if (
-                not same_condition
-                or cell_id not in binding.bound_cell_ids
-                or binding.cell_scientific_identity_sha256.get(cell_id)
-                != consumer_identity
-                or binding.cell_stack_identity_sha256.get(cell_id)
-                != consumer_stack_hash
-            ):
-                continue
-            matches.append(cell)
         if len(matches) == 1:
             cell = matches[0]
             return FloorRequest(
@@ -4119,8 +4145,8 @@ def floor_request_for_evidence(
                 # the complete parent cell has passed every external binding.
                 consumer_stress={},
             )
-        if matches or same_condition_seen:
-            return None
+    if matches or same_condition_seen:
+        return None
 
     transport_matches: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
     for group in artifact.get("transport_groups", []):
