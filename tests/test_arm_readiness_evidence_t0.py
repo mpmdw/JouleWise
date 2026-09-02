@@ -846,6 +846,20 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             "PASS",
         )
 
+    def test_issuance_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+        self.assertEqual(
+            self._author_with_r1_age(600_000_000_000)["status"],
+            "PASS",
+        )
+
+    def test_t0_liveness_constant_matches_minimum_idle_interval(self) -> None:
+        """Both constants encode the ruled 11 × 45 s + 105 s provenance."""
+
+        self.assertEqual(
+            readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
+            t0._MIN_IDLE_NS,
+        )
+
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
         fake_mlx = ModuleType("mlx")
         fake_mlx.__path__ = []

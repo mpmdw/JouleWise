@@ -62,6 +62,9 @@ class ClockProbePredicateLivenessTests(unittest.TestCase):
     def test_t0_liveness_bound_passes_at_600s_minus_1ns(self) -> None:
         self.assertTrue(self._predicate_passes(599_999_999_999))
 
+    def test_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+        self.assertTrue(self._predicate_passes(600_000_000_000))
+
     def test_t0_liveness_bound_refuses_negative(self) -> None:
         self.assertFalse(self._predicate_passes(-1))
 

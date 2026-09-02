@@ -6475,10 +6475,7 @@ def _clock_probe_predicate_passes(
         and 0 <= value["r1_batch_duration_ns"] <= 30_000_000_000
         and value["r1_batch_duration_ns"] == r1_duration
         and value["reference_server_count"] >= 2
-        # D-170 / COLD-GATE-RULING item 3: this is a liveness/hang detector,
-        # not a metrology bound.  Its 600 s provenance is eleven governed
-        # post-R1 ``_fresh_probe`` sites * 45 s plus 105 s for ungoverned
-        # filesystem/git work, equal to arm_readiness_evidence_t0._MIN_IDLE_NS.
+        # D-170 item 3 ruled 600 s liveness provenance: 11 * 45 s + 105 s; see reason-code-coverage-delta.md §6.3.
         and 0
         <= (valid_until - 21_600_000_000_000)
         - value["r1_batch_finished_monotonic_ns"]

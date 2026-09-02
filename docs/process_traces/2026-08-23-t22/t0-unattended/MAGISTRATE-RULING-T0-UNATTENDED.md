@@ -76,8 +76,9 @@ their D-150 item-2 code-stamped 6 h horizon exactly (Sol retracted its
 numeric predicate relations recomputed by `_predicate_passes` — never
 another hard-coded boolean: R0→authoring span within [600 s, 3600 s] on
 RAW anchors; R1 batch duration ≤30 s; R1-completion→validity-origin ≤5 s
-(oldest participating R1 result ≤35 s old at issuance); receipt deadline
-= validity origin + exactly 21_600_000_000_000 ns. **Standing fence:** any
+(oldest participating R1 result ≤35 s old at issuance);
+[STRUCK 2026-09-02 — T26 cold gate item 3 (COLD-GATE-RULING.md) replaces the ≤5 s / ≤35 s relation with the ordinary-clock 600 s liveness bound; see the dated addendum at the end of this file.]
+receipt deadline = validity origin + exactly 21_600_000_000_000 ns. **Standing fence:** any
 consumption-time SNTP recency tighter than 6 h is a de-facto horizon
 change and requires an Ed ruling — it must not travel as "predicate
 recency."
@@ -148,3 +149,17 @@ floor") are carried into the implementation brief as accuracy notes.
   depend on it.
 - T0-CLOCK-ROW-RENAME-01 (new row, post-`_v4` gated): the coupled
   rename + any horizon successor, one registry churn.
+
+## Addendum 2026-09-02 — item 3 liveness bound (T26 cold gate)
+
+The T26 cold gate struck this text from the Horizon paragraph above:
+
+> R1-completion→validity-origin ≤5 s (oldest participating R1 result ≤35 s old at issuance)
+
+It is replaced by the exact conjunct
+`0 <= validity_origin_monotonic_ns − r1_batch_finished_monotonic_ns <= 600_000_000_000`
+on ordinary `CLOCK_MONOTONIC`. At landing `e40e7502`, the production site is
+`joulewise/arm_readiness.py:6485`.
+
+The 6 h horizon, the [600 s, 3600 s] R0 span, the 30 s R1 batch bound, and
+the standing fence are UNCHANGED.

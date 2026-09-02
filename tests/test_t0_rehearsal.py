@@ -571,6 +571,12 @@ class T0RehearsalTests(unittest.TestCase):
             ("PASS", None),
         )
 
+    def test_rehearsal_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+        self.assertEqual(
+            self._run_rehearsal_arm_liveness_boundary(600_000_000_000),
+            ("PASS", None),
+        )
+
     def _evaluate(
         self,
         *,
