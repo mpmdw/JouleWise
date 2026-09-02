@@ -623,6 +623,21 @@ class PromptRealizationExpectationTests(ReaderTestCase):
         self.assertIn("prompt_realization_mismatch", problems[0])
         self.assertIn("token_hash_domain", problems[0])
 
+    def test_coherent_registration_and_realization_yield_no_problem(self) -> None:
+        # Mutation guard (luna delta r4, mutant g): a comparator that flags
+        # every bundle -- `if True:` on any of the three comparisons -- passed
+        # every mismatch row above, because each asserts only that its own
+        # field is named.  The coherent bundle is the counterfactual: all
+        # three comparisons agree, so the reader must report nothing.
+        writer = self.make_prompt_bundle("prompt-coherent")
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(problems, [])
+        for field in ("token_count", "token_ids_sha256", "token_hash_domain"):
+            with self.subTest(field=field):
+                self.assertNotIn(field, " ".join(BundleReader(writer.path).problems()))
+
     def test_one_count_surface_mutation_is_evidence_inconsistent(self) -> None:
         writer = self.make_prompt_bundle(
             "prompt-count-inconsistent", tokenize_count=4
