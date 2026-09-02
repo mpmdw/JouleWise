@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import functools
 import hashlib
+import io
 import inspect
 import json
 import re
@@ -553,6 +554,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
     def test_dominance_finalizes_without_sidecar_and_closeout_refuses_absence(
         self,
     ) -> None:
+        """build_d165_dominance_closeout returns the named refusal artifact."""
+
         with tempfile.TemporaryDirectory() as temporary:
             fixture = install_synthetic_finalization_fixture(
                 Path(temporary),
@@ -590,41 +593,51 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         )
         self.assertIsNone(closeout["branch"])
 
-    def test_structural_arm_and_floor_errors_are_input_malformed(self) -> None:
-        for label in ("arms", "floor"):
-            with self.subTest(label=label):
-                _, manifest, floor, sidecar = self.build()
-                if label == "arms":
-                    manifest["arms"] = {"not": "an arm array"}
-                    manifest["manifest_id"] = calculate_manifest_id(manifest)
-                    manifest_bytes = _file_json_bytes(manifest)
-                    floor_bytes = _file_json_bytes(floor)
-                    sidecar_bytes = _file_json_bytes(sidecar)
-                else:
-                    floor["cells"] = {"not": "a floor-cell array"}
-                    manifest_bytes, floor_bytes, sidecar_bytes = (
-                        _reseal_test_sources(manifest, floor, sidecar)
-                    )
-                    source_errors = core._source_precondition_errors(
-                        manifest,
-                        floor,
-                        sidecar,
-                        floor_artifact_bytes=floor_bytes,
-                        replay_sidecar_bytes=sidecar_bytes,
-                    )
-                    self.assertEqual(
-                        source_errors[0], "closeout_input_malformed"
-                    )
-                    continue
-                closeout = build_d165_dominance_closeout(
-                    manifest_bytes,
-                    floor_bytes,
-                    sidecar_bytes,
-                )
-                self.assertEqual(
-                    closeout["refusal_reason"], "closeout_input_malformed"
-                )
-                self.assertIsNone(closeout["branch"])
+    def test_builder_floor_cells_not_list_raises_input_malformed(self) -> None:
+        """build_d165_dominance_closeout stops on a non-list floor census."""
+
+        _, manifest, floor, sidecar = self.build()
+        floor["cells"] = {"not": "a list"}
+        manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
+            manifest, floor, sidecar
+        )
+        with self.assertRaisesRegex(ValueError, r"^closeout_input_malformed$"):
+            build_d165_dominance_closeout(
+                manifest_bytes,
+                floor_bytes,
+                sidecar_bytes,
+            )
+
+    def test_builder_manifest_id_precedes_malformed_floor_stop(self) -> None:
+        """build_d165_dominance_closeout surfaces its first source precondition."""
+
+        _, manifest, floor, sidecar = self.build()
+        floor["cells"] = {"not": "a list"}
+        _, floor_bytes, sidecar_bytes = _reseal_test_sources(
+            manifest, floor, sidecar
+        )
+        manifest["manifest_id"] = "forged-manifest-id"
+        with self.assertRaises(ValueError) as raised:
+            build_d165_dominance_closeout(
+                _file_json_bytes(manifest),
+                floor_bytes,
+                sidecar_bytes,
+            )
+        self.assertEqual(str(raised.exception), "finalized_manifest_id_mismatch")
+
+    def test_builder_arms_not_list_returns_named_refusal_artifact(self) -> None:
+        """build_d165_dominance_closeout can truthfully build this refusal."""
+
+        _, manifest, floor, sidecar = self.build()
+        manifest["arms"] = {"not": "an arm array"}
+        manifest["manifest_id"] = calculate_manifest_id(manifest)
+        closeout = build_d165_dominance_closeout(
+            _file_json_bytes(manifest),
+            _file_json_bytes(floor),
+            _file_json_bytes(sidecar),
+        )
+        self.assertEqual(closeout["refusal_reason"], "closeout_input_malformed")
+        self.assertIsNone(closeout["branch"])
 
     def test_forged_sidecar_bytes_cannot_pair_with_closeout_built_from_other_bytes(
         self,
@@ -737,6 +750,31 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             ),
             [],
         )
+
+    def test_source_preconditions_authenticate_manifest_before_other_fields(
+        self,
+    ) -> None:
+        """_source_precondition_errors authenticates manifest_id before fields."""
+
+        _, manifest, floor, sidecar = self.build()
+        floor_bytes = _file_json_bytes(floor)
+        sidecar_bytes = _file_json_bytes(sidecar)
+        for field, value in (
+            ("schema_version", "bogus.v0"),
+            ("freeze_status", "draft"),
+        ):
+            with self.subTest(field=field):
+                mutated_manifest = copy.deepcopy(manifest)
+                mutated_manifest[field] = value
+                mutated_manifest["manifest_id"] = "forged-manifest-id"
+                errors = core._source_precondition_errors(
+                    mutated_manifest,
+                    floor,
+                    sidecar,
+                    floor_artifact_bytes=floor_bytes,
+                    replay_sidecar_bytes=sidecar_bytes,
+                )
+                self.assertEqual(errors[0], "finalized_manifest_id_mismatch")
 
     def test_validate_catches_unhashable_closeout_census_as_named_neither(self) -> None:
         closeout, manifest, floor, sidecar = self.build()
@@ -1062,74 +1100,113 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                     [expected],
                 )
 
-    def test_builder_guard_matrix_refuses_named_invalid_sources(self) -> None:
+    def test_builder_structural_floor_guard_matrix_is_input_malformed(self) -> None:
+        """build_d165_dominance_closeout stops on short or duplicate floors."""
+
         manifest = finalized_manifest()
         floor = floor_artifact()
         sidecar = replay_sidecar(floor)
-        cases = []
-
         short_floor = copy.deepcopy(floor)
         short_floor["cells"].pop()
-        cases.append(
-            (
-                "floor census",
-                manifest,
-                short_floor,
-                sidecar,
-                "floor_artifact.cells: D-165 requires exactly four cells",
-            )
-        )
-        missing_component = copy.deepcopy(floor)
-        del missing_component["cells"][0]["absolute"]
-        cases.append(
-            (
-                "component census",
-                manifest,
-                missing_component,
-                sidecar,
-                ".absolute: missing component",
-            )
-        )
-        invalid_corner = copy.deepcopy(floor)
-        invalid_corner["cells"][0]["absolute"][
-            "corner_widened_unguarded_floor_j"
-        ] = "forged"
-        cases.append(
-            (
-                "corner operand",
-                manifest,
-                invalid_corner,
-                sidecar,
-                "corner_widened_unguarded_floor_j: invalid",
-            )
-        )
-        wrong_manifest_schema = copy.deepcopy(manifest)
-        wrong_manifest_schema["schema_version"] = "forged-schema"
-        cases.append(
-            (
-                "manifest schema",
-                wrong_manifest_schema,
-                floor,
-                sidecar,
-                "manifest_id: source schema mismatch",
-            )
-        )
-
-        for guard, manifest_value, floor_value, sidecar_value, expected in cases:
+        duplicate_floor = copy.deepcopy(floor)
+        duplicate_floor["cells"][1]["cell_id"] = duplicate_floor["cells"][0][
+            "cell_id"
+        ]
+        for guard, floor_value in (
+            ("three cells", short_floor),
+            ("duplicate cell_id", duplicate_floor),
+        ):
             with self.subTest(guard=guard):
-                manifest_for_case = copy.deepcopy(manifest_value)
-                sidecar_for_case = copy.deepcopy(sidecar_value)
-                manifest_bytes, floor_bytes, sidecar_bytes = (
-                    _reseal_test_sources(
-                        manifest_for_case, floor_value, sidecar_for_case
-                    )
+                manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
+                    copy.deepcopy(manifest), floor_value, copy.deepcopy(sidecar)
                 )
-                with self.assertRaisesRegex(ValueError, expected):
+                with self.assertRaisesRegex(
+                    ValueError, r"^closeout_input_malformed$"
+                ):
                     build_d165_dominance_closeout(
                         manifest_bytes,
                         floor_bytes,
                         sidecar_bytes,
                     )
+
+    def test_builder_component_guards_use_first_source_precondition(self) -> None:
+        """build_d165_dominance_closeout follows _source_precondition_errors."""
+
+        manifest = finalized_manifest()
+        floor = floor_artifact()
+        sidecar = replay_sidecar(floor)
+        missing_component = copy.deepcopy(floor)
+        del missing_component["cells"][0]["absolute"]
+        invalid_corner = copy.deepcopy(floor)
+        invalid_corner["cells"][0]["absolute"][
+            "corner_widened_unguarded_floor_j"
+        ] = "forged"
+        for guard, floor_value in (
+            ("missing component", missing_component),
+            ("invalid corner", invalid_corner),
+        ):
+            with self.subTest(guard=guard):
+                manifest_for_case = copy.deepcopy(manifest)
+                sidecar_for_case = copy.deepcopy(sidecar)
+                manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
+                    manifest_for_case, floor_value, sidecar_for_case
+                )
+                expected = core._source_precondition_errors(
+                    manifest_for_case,
+                    floor_value,
+                    sidecar_for_case,
+                    floor_artifact_bytes=floor_bytes,
+                    replay_sidecar_bytes=sidecar_bytes,
+                )[0]
+                self.assertIn("cannot align with floor artifact", expected)
+                with self.assertRaises(ValueError) as raised:
+                    build_d165_dominance_closeout(
+                        manifest_bytes,
+                        floor_bytes,
+                        sidecar_bytes,
+                    )
+                self.assertEqual(str(raised.exception), expected)
+
+    def test_builder_schema_guards_use_named_source_precondition(self) -> None:
+        """build_d165_dominance_closeout routes _source_reference failures."""
+
+        manifest = finalized_manifest()
+        floor = floor_artifact()
+        sidecar = replay_sidecar(floor)
+        wrong_manifest_schema = copy.deepcopy(manifest)
+        wrong_manifest_schema["schema_version"] = "forged-schema"
+        wrong_floor_schema = copy.deepcopy(floor)
+        wrong_floor_schema["schema_version"] = "forged-schema"
+        cases = (
+            (
+                "manifest schema",
+                wrong_manifest_schema,
+                floor,
+                "finalized_manifest: schema is not finalized v3",
+            ),
+            (
+                "floor schema",
+                manifest,
+                wrong_floor_schema,
+                "floor_artifact: schema is not detection_floor_artifact.v2",
+            ),
+        )
+        for guard, manifest_value, floor_value, expected in cases:
+            with self.subTest(guard=guard):
+                manifest_for_case = copy.deepcopy(manifest_value)
+                sidecar_for_case = copy.deepcopy(sidecar)
+                manifest_bytes, floor_bytes, sidecar_bytes = (
+                    _reseal_test_sources(
+                        manifest_for_case, floor_value, sidecar_for_case
+                    )
+                )
+                with self.assertRaises(ValueError) as raised:
+                    build_d165_dominance_closeout(
+                        manifest_bytes,
+                        floor_bytes,
+                        sidecar_bytes,
+                    )
+                self.assertEqual(str(raised.exception), expected)
 
         attachment_cases: list[
             tuple[str, bytes, bytes, bytes, str]
@@ -1319,6 +1396,17 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                     closeout["refusal_reason"], "floor_member_census_mismatch"
                 )
                 self.assertIsNone(closeout["branch"])
+
+    def test_floor_member_census_direct_call_rejects_malformed_floor(self) -> None:
+        """_floor_member_census_error guards malformed floor cells directly."""
+
+        floor = floor_artifact()
+        sidecar = replay_sidecar(floor)
+        floor["cells"] = {"not": "a list"}
+        self.assertEqual(
+            core._floor_member_census_error(floor, sidecar),
+            "closeout_input_malformed",
+        )
 
     def test_floor_cell_unresolved_does_not_fall_back_to_another_floor_cell(
         self,
@@ -1585,6 +1673,44 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             )
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(json.loads(output.read_text(encoding="utf-8")), expected)
+
+    def test_cli_malformed_floor_writes_no_partial_output(self) -> None:
+        """cli_module.main reports the builder stop and creates no output."""
+
+        _, manifest, floor, sidecar = self.build()
+        floor["cells"] = {"not": "a list"}
+        manifest_bytes, floor_bytes, sidecar_bytes = _reseal_test_sources(
+            manifest, floor, sidecar
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest_path = root / "manifest.json"
+            floor_path = root / "floor.json"
+            sidecar_path = root / "sidecar.json"
+            manifest_path.write_bytes(manifest_bytes)
+            floor_path.write_bytes(floor_bytes)
+            sidecar_path.write_bytes(sidecar_bytes)
+            output = root / "closeout.json"
+            stderr = io.StringIO()
+            with mock.patch.object(sys, "stderr", stderr):
+                result = cli_module.main(
+                    [
+                        "--finalized-manifest",
+                        str(manifest_path),
+                        "--floor-artifact",
+                        str(floor_path),
+                        "--replay-sidecar",
+                        str(sidecar_path),
+                        "--output",
+                        str(output),
+                    ]
+                )
+            self.assertEqual(result, 2)
+            self.assertEqual(
+                stderr.getvalue(),
+                "d165_dominance_closeout_refused: closeout_input_malformed\n",
+            )
+            self.assertFalse(output.exists())
 
     def test_cli_refuses_to_overwrite_an_existing_output(self) -> None:
         _, manifest, floor, sidecar = self.build()

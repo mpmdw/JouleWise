@@ -9,7 +9,7 @@ import json
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.dominance_closeout import (  # noqa: E402
     CLOSEOUT_SCHEMA_VERSION,
+    CLOSEOUT_INPUT_MALFORMED,
     CLOSEOUT_INPUT_MALFORMED_SOURCE,
     FINALIZED_MANIFEST_SCHEMA_VERSION,
     FLOOR_ARTIFACT_SCHEMA_VERSION,
@@ -68,9 +69,23 @@ def build_d165_dominance_closeout(
         replay_sidecar_bytes, label="replay_sidecar"
     )
 
+    try:
+        source_errors = _source_precondition_errors(
+            finalized_manifest,
+            floor_artifact,
+            replay_sidecar,
+            floor_artifact_bytes=floor_artifact_bytes,
+            replay_sidecar_bytes=replay_sidecar_bytes,
+        )
+    except TypeError:
+        source_errors = [CLOSEOUT_INPUT_MALFORMED_SOURCE]
+
+    def _stop(fallback: str) -> NoReturn:
+        raise ValueError(source_errors[0] if source_errors else fallback)
+
     floor_cells, floor_errors = _floor_cell_map(floor_artifact)
     if floor_errors:
-        raise ValueError("; ".join(floor_errors))
+        _stop(CLOSEOUT_INPUT_MALFORMED)
 
     independent_ratios: list[dict[str, Any]] = []
     for cell_id, cell in floor_cells.items():
@@ -80,16 +95,19 @@ def build_d165_dominance_closeout(
         ):
             component_record = cell.get(component)
             if not isinstance(component_record, Mapping):
-                raise ValueError(
+                _stop(
                     f"floor_artifact.cells[{cell_id!r}].{component}: missing component"
                 )
-            point = _point_unguarded_floor_from_component(
-                component_record,
-                parent_key=parent_key,
-            )
+            try:
+                point = _point_unguarded_floor_from_component(
+                    component_record,
+                    parent_key=parent_key,
+                )
+            except ValueError as exc:
+                _stop(str(exc))
             corner = component_record.get("corner_widened_unguarded_floor_j")
             if isinstance(corner, bool) or not isinstance(corner, (int, float)):
-                raise ValueError(
+                _stop(
                     f"floor_artifact.cells[{cell_id!r}].{component}."
                     "corner_widened_unguarded_floor_j: invalid"
                 )
@@ -142,24 +160,13 @@ def build_d165_dominance_closeout(
                 )
             )
 
-    try:
-        source_errors = _source_precondition_errors(
-            finalized_manifest,
-            floor_artifact,
-            replay_sidecar,
-            floor_artifact_bytes=floor_artifact_bytes,
-            replay_sidecar_bytes=replay_sidecar_bytes,
-        )
-    except TypeError:
-        source_errors = [CLOSEOUT_INPUT_MALFORMED_SOURCE]
     global_fields = _expected_global_fields(
         independent_ratios,
         common_mode_ratios,
         source_errors,
     )
-    closeout = {
-        "schema_version": CLOSEOUT_SCHEMA_VERSION,
-        "sources": {
+    try:
+        source_references = {
             "finalized_manifest": _source_reference(
                 finalized_manifest,
                 identity_key="manifest_id",
@@ -175,7 +182,12 @@ def build_d165_dominance_closeout(
                 identity_key="sidecar_id",
                 expected_schema=REPLAY_SCHEMA_VERSION,
             ),
-        },
+        }
+    except ValueError as exc:
+        _stop(str(exc))
+    closeout = {
+        "schema_version": CLOSEOUT_SCHEMA_VERSION,
+        "sources": source_references,
         "finalized_manifest_sha256": hashlib.sha256(
             finalized_manifest_bytes
         ).hexdigest(),

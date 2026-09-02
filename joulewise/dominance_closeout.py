@@ -1299,9 +1299,15 @@ def _floor_member_census_error(
     floor_artifact: object,
     replay_sidecar: object,
 ) -> str | None:
-    """Bind common-mode sidecar blocks to the sealed floor block census."""
+    """Bind sidecar blocks to the floor census.
 
-    floor_cells, _ = _floor_cell_map(floor_artifact)
+    ``_source_precondition_errors`` calls this only after floor alignment has
+    passed, but the guard keeps direct callers fail-closed on malformed cells.
+    """
+
+    floor_cells, floor_errors = _floor_cell_map(floor_artifact)
+    if floor_errors:
+        return CLOSEOUT_INPUT_MALFORMED
     sidecar_cells = _sidecar_cell_map(replay_sidecar)
     for cell_id, sidecar_cell in sidecar_cells.items():
         comparative = sidecar_cell.get("comparative")
@@ -1400,9 +1406,7 @@ def _contrast_floor_binding_error(
         if not isinstance(arm_id, str) or not arm_id or arm_id in arm_by_id:
             return CLOSEOUT_INPUT_MALFORMED
         arm_by_id[arm_id] = arm
-    floor_cells, floor_errors = _floor_cell_map(floor_artifact)
-    if floor_errors:
-        return CLOSEOUT_INPUT_MALFORMED
+    floor_cells, _ = _floor_cell_map(floor_artifact)
     sidecar_cells = _sidecar_cell_map(replay_sidecar)
     for contrast in contrasts:
         if not isinstance(contrast, Mapping):
@@ -1469,13 +1473,6 @@ def _source_precondition_errors(
     if not isinstance(finalized_manifest, Mapping):
         errors.append("finalized_manifest: source object is required")
     else:
-        if (
-            finalized_manifest.get("schema_version")
-            != FINALIZED_MANIFEST_SCHEMA_VERSION
-        ):
-            errors.append("finalized_manifest: schema is not finalized v3")
-        if finalized_manifest.get("freeze_status") != "finalized":
-            errors.append("finalized_manifest: freeze_status must be finalized")
         if not isinstance(
             finalized_manifest.get("manifest_id"), str
         ) or not finalized_manifest.get("manifest_id"):
@@ -1487,6 +1484,13 @@ def _source_precondition_errors(
                 expected_manifest_id = None
             if finalized_manifest.get("manifest_id") != expected_manifest_id:
                 errors.append("finalized_manifest_id_mismatch")
+        if (
+            finalized_manifest.get("schema_version")
+            != FINALIZED_MANIFEST_SCHEMA_VERSION
+        ):
+            errors.append("finalized_manifest: schema is not finalized v3")
+        if finalized_manifest.get("freeze_status") != "finalized":
+            errors.append("finalized_manifest: freeze_status must be finalized")
     if (
         not isinstance(floor_artifact, Mapping)
         or floor_artifact.get("schema_version") != FLOOR_ARTIFACT_SCHEMA_VERSION

@@ -473,29 +473,41 @@ are:
 - `floor_artifact_source_hash_mismatch`: the supplied floor bytes differ from
   the aggregate floor artifact sealed by the finalized manifest.
 - `closeout_input_malformed`: an arms or floor-cell structure needed for floor
-  binding is malformed rather than merely unresolved.
+  binding is malformed rather than merely unresolved, including a floor `cells`
+  array that is not a list of exactly four unique cell objects.
 - `closeout_input_malformed: source.census_or_block_membership` or
   `closeout_input_malformed: closeout.independent_ratios`: an unhashable JSON
   element prevents a required set/map census at the named entry path.
 
-**Refusal precedence.** After the byte-to-mapping decode, the close-out first
-authenticates the finalized mapping by recomputing its `manifest_id` with
-`calculate_manifest_id`; `finalized_manifest_id_mismatch` masks every later
-refusal. This is intentional: no field of an unauthenticated manifest is read
-as authority. For an authenticated manifest, source checks then run in this
-order: floor schema and artifact identity; manifest-sealed floor-byte digest;
+**Refusal precedence.** After the byte-to-mapping decode, source checks run in
+this order: finalized-manifest mapping type; `manifest_id` presence and
+recomputation with `calculate_manifest_id`; the remaining finalized-manifest
+fields; floor schema and artifact identity; manifest-sealed floor-byte digest;
 sidecar attachment presence, digest, and identity; sidecar schema and replay;
 floor/sidecar cell alignment; contrast-arm floor binding; and finally the
-positioned, count-checked floor-member census. Only after those source checks
-does the builder compute the eight ordinary and four common-mode records and
-their close-out census.
+positioned, count-checked floor-member census. A non-mapping manifest cannot be
+hashed, so its mapping-type failure necessarily comes first. Otherwise,
+`finalized_manifest_id_mismatch` masks every later refusal: no field of an
+unauthenticated manifest is read as authority. The code accumulates reasons and
+surfaces only the first reason in this order. Only after these source checks does
+the builder compute the eight ordinary and four common-mode records and their
+close-out census.
 
 Each named attachment failure is a stop: it selects neither branch, leaves both
 prose licenses false, and records that exact name as `refusal_reason`.
 
-A floor artifact with other than four unique complete cells cannot support the
-required eight-record ordinary census. The source precondition is
-`closeout_input_malformed`; this is a neither-branch stop, not branch B.
+A floor artifact with other than four unique complete cells, where each complete
+cell carries the `absolute` and `comparative` components the builder reads,
+cannot support the required eight-record ordinary census. The source
+precondition is `closeout_input_malformed`; this is a neither-branch stop, not
+branch B.
+
+When the floor cannot support the twelve-record census, or a source's
+schema/identity reference cannot be formed, the builder writes no close-out: the
+CLI exits 2 and prints `d165_dominance_closeout_refused: <reason>` where
+`<reason>` is the same first precedence-ordered stop reason a refusal record
+would have carried. A refusal record is written only when all twelve records can
+be truthfully built.
 
 `validate_d165_closeout` decodes its three required source-byte arguments, then
 rejects missing or extra keys, a census other than
