@@ -153,7 +153,7 @@ def _row(
     freeze_reference = dict(attachment["freeze_receipt"])
     expected_freeze_path = "arm_readiness.freeze.receipts/freeze-0004.json"
     if freeze_reference.get("path") != expected_freeze_path:
-        raise BuildError("the v4 pinset requires freeze-0004 exactly")
+        raise BuildError("the _v5 pinset requires freeze-0004 exactly")
     freeze_raw = _show(repository, current_head, f"{relative}/{expected_freeze_path}")
     if readiness.sha256_bytes(freeze_raw) != freeze_reference.get("sha256"):
         raise BuildError("freeze receipt differs from the plan-tree binding")
@@ -265,7 +265,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         ].values()
     )
     if len(args.pack_root) != 3:
-        raise BuildError("exactly three v4 pack roots are required")
+        raise BuildError("exactly three _v5 pack roots are required")
     normalized = [_relative_pack(repository, item) for item in args.pack_root]
     if {root.name for root, _relative in normalized} != expected_ids:
         raise BuildError("pack roots do not equal the registry successor roster")
