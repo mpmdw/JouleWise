@@ -39,6 +39,7 @@ DOMINANCE_THRESHOLD = 2.0
 DOMINANCE_COMPARISON = "greater_than_or_equal"
 DOMINANCE_ZERO_DENOMINATOR_REASON = "dominance_ratio_zero_denominator"
 FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH = "floor_artifact_source_hash_mismatch"
+CLOSEOUT_INPUT_MALFORMED = "closeout_input_malformed"
 CLOSEOUT_INPUT_MALFORMED_SOURCE = (
     "closeout_input_malformed: source.census_or_block_membership"
 )
@@ -1182,6 +1183,8 @@ def _sidecar_floor_alignment_errors(
     replay_sidecar: object,
 ) -> list[str]:
     floor_cells, errors = _floor_cell_map(floor_artifact)
+    if errors:
+        return [CLOSEOUT_INPUT_MALFORMED]
     sidecar_cells = _sidecar_cell_map(replay_sidecar)
     if set(sidecar_cells) != set(floor_cells):
         errors.append("replay_sidecar.cells: cell census does not match floor artifact")
@@ -1298,9 +1301,7 @@ def _floor_member_census_error(
 ) -> str | None:
     """Bind common-mode sidecar blocks to the sealed floor block census."""
 
-    floor_cells, floor_errors = _floor_cell_map(floor_artifact)
-    if floor_errors:
-        return "floor_member_census_mismatch"
+    floor_cells, _ = _floor_cell_map(floor_artifact)
     sidecar_cells = _sidecar_cell_map(replay_sidecar)
     for cell_id, sidecar_cell in sidecar_cells.items():
         comparative = sidecar_cell.get("comparative")
@@ -1386,33 +1387,33 @@ def _contrast_floor_binding_error(
     """Recheck every finalized contrast arm against its resolved floor cell."""
 
     if not isinstance(finalized_manifest, Mapping):
-        return "floor_cell_unresolved"
+        return CLOSEOUT_INPUT_MALFORMED
     arms = finalized_manifest.get("arms")
     contrasts = finalized_manifest.get("contrasts")
     if not isinstance(arms, list) or not isinstance(contrasts, list):
-        return "floor_cell_unresolved"
+        return CLOSEOUT_INPUT_MALFORMED
     arm_by_id: dict[str, Mapping[str, Any]] = {}
     for arm in arms:
         if not isinstance(arm, Mapping):
-            return "floor_cell_unresolved"
+            return CLOSEOUT_INPUT_MALFORMED
         arm_id = arm.get("arm_id")
         if not isinstance(arm_id, str) or not arm_id or arm_id in arm_by_id:
-            return "floor_cell_unresolved"
+            return CLOSEOUT_INPUT_MALFORMED
         arm_by_id[arm_id] = arm
     floor_cells, floor_errors = _floor_cell_map(floor_artifact)
     if floor_errors:
-        return "floor_cell_unresolved"
+        return CLOSEOUT_INPUT_MALFORMED
     sidecar_cells = _sidecar_cell_map(replay_sidecar)
     for contrast in contrasts:
         if not isinstance(contrast, Mapping):
-            return "floor_cell_unresolved"
+            return CLOSEOUT_INPUT_MALFORMED
         measurement_arm = contrast.get("measurement_arm")
         if not isinstance(measurement_arm, str) or not measurement_arm:
-            return "floor_cell_unresolved"
+            return CLOSEOUT_INPUT_MALFORMED
         for arm_label in ("A", "B"):
             arm = arm_by_id.get(f"{measurement_arm}:{arm_label}")
             if arm is None:
-                return "floor_cell_unresolved"
+                return CLOSEOUT_INPUT_MALFORMED
             floor_cell_id = arm.get("floor_cell_id")
             if not isinstance(floor_cell_id, str) or not floor_cell_id:
                 return "floor_cell_unresolved"

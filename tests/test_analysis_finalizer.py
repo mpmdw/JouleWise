@@ -553,9 +553,16 @@ def install_synthetic_finalization_fixture(
 
 
 class AnalysisFinalizerTests(unittest.TestCase):
-    def test_legacy_finalization_is_byte_unchanged_without_floor_identity_fields(
+    def test_legacy_finalization_matches_parent_projection_without_floor_identity_fields(
         self,
     ) -> None:
+        """Pin the parent-tree projection against unconditional arm widening.
+
+        Counterfactual: dropping the ``if dominance_enabled`` guard when the
+        finalizer derives arms adds the new keys here, changes the projection
+        id, and must fail this test.
+        """
+
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
             manifest = finalize_prospective_analysis_manifest_v3(
@@ -570,15 +577,114 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 output_dir=fixture["root"],
             )
         legacy_projection = copy.deepcopy(manifest)
-        for arm in legacy_projection["arms"]:
-            arm.pop("floor_cell_id", None)
-            arm.pop("floor_stack_identity", None)
+        evidence = legacy_projection["evidence"]
+        # The synthetic receipt fixture embeds current-time data in these five
+        # derived digests.  Neutralizing only those fields leaves the stable
+        # parent-tree projection, including every arm key, under test.
+        evidence["whole_window_verdict"]["sha256"] = "<fixture-volatile>"
+        evidence["bracket_binding"]["sha256"] = "<fixture-volatile>"
+        evidence["bracket_binding"]["binding_digest"] = "<fixture-volatile>"
+        evidence["calibration_ledger"]["sha256"] = "<fixture-volatile>"
+        evidence["calibration_ledger"]["terminal_head"]["head_digest"] = (
+            "<fixture-volatile>"
+        )
         self.assertEqual(
-            manifest["manifest_id"], calculate_manifest_id(legacy_projection)
+            calculate_manifest_id(legacy_projection),
+            "am-9de7ad2df26f98f8997036d45a658dd07a33c8df240b09969d8d7343efde7e8f",
+        )
+        self.assertEqual(
+            sorted(manifest),
+            [
+                "arms",
+                "blocks",
+                "condition_families",
+                "contrasts",
+                "design",
+                "entries",
+                "evidence",
+                "families",
+                "finalization_contract",
+                "freeze_status",
+                "lineage",
+                "manifest_id",
+                "replacement_policy",
+                "schema_version",
+            ],
         )
         for arm in manifest["arms"]:
             self.assertNotIn("floor_cell_id", arm)
             self.assertNotIn("floor_stack_identity", arm)
+
+    def test_legacy_finalization_refuses_supplied_dominance_sidecar(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            sidecar_path = fixture["root"] / "dominance_replay_sidecar.json"
+            _write_json(
+                sidecar_path,
+                {
+                    "schema_version": "joulewise.d165_dominance_replay.v1",
+                    "sidecar_id": "test-sidecar",
+                },
+            )
+            with self.assertRaises(AnalysisManifestFinalizationError) as raised:
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                    dominance_replay_sidecar_path=sidecar_path,
+                )
+        self.assertEqual(
+            raised.exception.reason_code,
+            "analysis_finalization_attachment_invalid",
+        )
+
+    def test_finalized_arm_floor_identity_pair_is_shape_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(
+                Path(tmp), dominance_criterion={"rule_id": "test-dominance"}
+            )
+            sidecar_path = fixture["root"] / "dominance_replay_sidecar.json"
+            _write_json(
+                sidecar_path,
+                {
+                    "schema_version": "joulewise.d165_dominance_replay.v1",
+                    "sidecar_id": "test-sidecar",
+                },
+            )
+            manifest = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+                dominance_replay_sidecar_path=sidecar_path,
+            )
+            attacked = copy.deepcopy(manifest)
+            attacked["arms"][0].pop("floor_stack_identity")
+            attacked["manifest_id"] = calculate_manifest_id(attacked)
+            manifest_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            reasons = {
+                refusal.reason_code
+                for refusal in validate_finalized_analysis_manifest_v3(
+                    attacked,
+                    manifest_path=manifest_path,
+                    custody_root=fixture["root"],
+                )
+            }
+        self.assertIn("analysis_manifest_finalized_invalid", reasons)
 
     def test_cli_maps_fuzz_shaped_prospective_value_to_closed_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

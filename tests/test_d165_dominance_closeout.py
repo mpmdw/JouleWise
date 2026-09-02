@@ -543,6 +543,89 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             [],
         )
 
+    def test_worked_sidecar_digest_matches_contract_literal(self) -> None:
+        sidecar_bytes = _file_json_bytes(replay_sidecar(floor_artifact()))
+        self.assertEqual(
+            hashlib.sha256(sidecar_bytes).hexdigest(),
+            "69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735",
+        )
+
+    def test_dominance_finalizes_without_sidecar_and_closeout_refuses_absence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = install_synthetic_finalization_fixture(
+                Path(temporary),
+                dominance_criterion=generator.dominance_criterion_registration(),
+            )
+            floor = json.loads(fixture["floor_path"].read_bytes())
+            sidecar = replay_sidecar(floor)
+            manifest = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            closeout = build_d165_dominance_closeout(
+                _file_json_bytes(manifest),
+                _file_json_bytes(floor),
+                _file_json_bytes(sidecar),
+            )
+        self.assertEqual(
+            set(manifest["evidence"]),
+            {
+                "aggregate_floor_artifact",
+                "bracket_binding",
+                "calibration_ledger",
+                "whole_window_verdict",
+            },
+        )
+        self.assertEqual(
+            closeout["refusal_reason"], "manifest_lacks_replay_sidecar"
+        )
+        self.assertIsNone(closeout["branch"])
+
+    def test_structural_arm_and_floor_errors_are_input_malformed(self) -> None:
+        for label in ("arms", "floor"):
+            with self.subTest(label=label):
+                _, manifest, floor, sidecar = self.build()
+                if label == "arms":
+                    manifest["arms"] = {"not": "an arm array"}
+                    manifest["manifest_id"] = calculate_manifest_id(manifest)
+                    manifest_bytes = _file_json_bytes(manifest)
+                    floor_bytes = _file_json_bytes(floor)
+                    sidecar_bytes = _file_json_bytes(sidecar)
+                else:
+                    floor["cells"] = {"not": "a floor-cell array"}
+                    manifest_bytes, floor_bytes, sidecar_bytes = (
+                        _reseal_test_sources(manifest, floor, sidecar)
+                    )
+                    source_errors = core._source_precondition_errors(
+                        manifest,
+                        floor,
+                        sidecar,
+                        floor_artifact_bytes=floor_bytes,
+                        replay_sidecar_bytes=sidecar_bytes,
+                    )
+                    self.assertEqual(
+                        source_errors[0], "closeout_input_malformed"
+                    )
+                    continue
+                closeout = build_d165_dominance_closeout(
+                    manifest_bytes,
+                    floor_bytes,
+                    sidecar_bytes,
+                )
+                self.assertEqual(
+                    closeout["refusal_reason"], "closeout_input_malformed"
+                )
+                self.assertIsNone(closeout["branch"])
+
     def test_forged_sidecar_bytes_cannot_pair_with_closeout_built_from_other_bytes(
         self,
     ) -> None:

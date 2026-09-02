@@ -3690,12 +3690,7 @@ def _authenticate_finalization_inputs(
 
     dominance_enabled = _dominance_floor_identity_enabled(prospective)
     dominance_attachment: dict[str, Any] | None = None
-    if dominance_enabled:
-        if dominance_replay_sidecar_path is None:
-            raise AnalysisManifestFinalizationError(
-                "analysis_finalization_attachment_invalid",
-                "dominance replay sidecar is required by the prospective registration",
-            )
+    if dominance_enabled and dominance_replay_sidecar_path is not None:
         sidecar_path, sidecar_relative = _path_under_root(
             dominance_replay_sidecar_path,
             custody_input,
@@ -3719,7 +3714,7 @@ def _authenticate_finalization_inputs(
             "schema_version": sidecar["schema_version"],
             "sidecar_id": sidecar["sidecar_id"],
         }
-    elif dominance_replay_sidecar_path is not None:
+    elif not dominance_enabled and dominance_replay_sidecar_path is not None:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_invalid",
             "legacy prospective manifest may not attach a dominance replay sidecar",
@@ -4119,6 +4114,50 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             "collection lookup identity/projection rule differs from prospective authority",
         )
 
+    dominance_enabled = _dominance_floor_identity_enabled(prospective)
+    arms = value.get("arms")
+    allowed_arm_key_sets = {
+        frozenset(_LEGACY_ARM_KEYS),
+        frozenset(ARM_KEYS),
+    }
+    expected_arm_keys = ARM_KEYS if dominance_enabled else _LEGACY_ARM_KEYS
+    observed_arm_key_sets: set[frozenset[str]] = set()
+    if not isinstance(arms, list):
+        _refusal(
+            refusals,
+            "analysis_manifest_finalized_invalid",
+            "manifest.arms must be an array",
+        )
+        return tuple(refusals)
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, Mapping):
+            _refusal(
+                refusals,
+                "analysis_manifest_finalized_invalid",
+                f"manifest.arms[{index}] must be an object",
+            )
+            continue
+        arm_keys = frozenset(arm)
+        observed_arm_key_sets.add(arm_keys)
+        if arm_keys not in allowed_arm_key_sets:
+            _refusal(
+                refusals,
+                "analysis_manifest_finalized_invalid",
+                f"manifest.arms[{index}] does not have a complete finalized arm shape",
+            )
+    if len(observed_arm_key_sets) > 1:
+        _refusal(
+            refusals,
+            "analysis_manifest_finalized_invalid",
+            "manifest.arms do not use one consistent finalized arm shape",
+        )
+    if observed_arm_key_sets != {frozenset(expected_arm_keys)}:
+        _refusal(
+            refusals,
+            "analysis_manifest_finalized_invalid",
+            "manifest.arms floor identity fields do not match prospective dominance registration",
+        )
+
     finalized_families = value.get("families")
     if isinstance(finalized_families, list):
         for family in finalized_families:
@@ -4152,7 +4191,11 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
 
     evidence = value.get("evidence")
     expected_evidence_keys = set(_FINALIZED_EVIDENCE_KEYS)
-    if _dominance_floor_identity_enabled(prospective):
+    if (
+        dominance_enabled
+        and isinstance(evidence, Mapping)
+        and _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence
+    ):
         expected_evidence_keys.add(_DOMINANCE_REPLAY_SIDECAR_ROLE)
     if not _exact_refusal_keys(
         evidence,
@@ -4179,7 +4222,7 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             unknown_code="analysis_manifest_finalized_invalid",
         ):
             return tuple(refusals)
-    if _DOMINANCE_REPLAY_SIDECAR_ROLE in expected_evidence_keys:
+    if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence:
         if not _exact_refusal_keys(
             evidence.get(_DOMINANCE_REPLAY_SIDECAR_ROLE),
             _FINALIZED_DOMINANCE_REPLAY_KEYS,

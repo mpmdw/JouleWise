@@ -514,6 +514,24 @@ class AnalysisManifestV3Tests(unittest.TestCase):
         self.assertIsNone(contrast["equivalence"])
         self.assertIsNone(contrast["mde"])
 
+    def test_legacy_v3_arms_refuse_each_floor_identity_key(self) -> None:
+        for key, value in (
+            ("floor_cell_id", "cell-forbidden-on-prospective"),
+            ("floor_stack_identity", {}),
+        ):
+            with self.subTest(key=key):
+                candidate = copy.deepcopy(self.manifest)
+                candidate["arms"][0][key] = value
+                reidentify(candidate)
+                errors = validate_analysis_manifest_v3(
+                    candidate,
+                    manifest_dir=CAMPAIGN_DIR,
+                )
+                self.assertTrue(errors)
+                self.assertTrue(
+                    any("manifest.arms[0]" in error for error in errors)
+                )
+
     def test_every_physical_position_is_consumed_once(self) -> None:
         consumed = [
             entry_id

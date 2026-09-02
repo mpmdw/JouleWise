@@ -21,8 +21,10 @@ The **close-out builder** is the function that reads the exact bytes of the
 finalized manifest, floor artifact, and sidecar and produces the one decision
 record defined below. **Lineage** is the chain of custody between those physical
 files: each link names an identity and digest so a later reader can prove which
-bytes fed the next link. A **census** is an exact inventory—both membership and
-count—such as four cell identities producing eight ordinary records. **Neither
+bytes fed the next link. A **census** is an exact, positioned, count-checked
+comparison of two lists. For example, floor members `[A1=a, B1=b, B2=c, A2=d]`
+and sidecar members `[A1=b, B1=a, B2=c, A2=d]` fail the census: the A1/B1 swap
+preserves the member set and count but not the positioned list. **Neither
 branch** is the fail-closed state used when the evidence cannot truthfully select
 A or B: `branch` and both `all_*_pass` fields are null, both prose licenses are
 false, and `refusal_reason` names the broken link.
@@ -55,7 +57,7 @@ the physical files do not support:
 |---|---|---|
 | Ordinary R | A widened floor alone does not say whether attribution uncertainty dominates repeatability. | A 2.0 J corner-widened floor divided by a 1.0 J point floor gives R = 2.0 and passes; 1.5 J / 1.0 J gives R = 1.5 and selects B when every record is complete. |
 | Shared/local split and replay | Giving every block an independent timing sign can claim combinations that one shared clock edge cannot physically take. | Measured block `b01` has `delta_j = 0.21462565134537215`, `shared_width_j = 0.2617693341828027`, and `local_width_j = 0.048579253149402035`. With the authenticated `shared_edge_bound_s = 0.03678263869781979`, the two-block replay gives point 2.430576610260499 J, corner 8.830437643102993 J, and R_cm = 3.6330628731577335. |
-| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar bytes hash to `69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735`; changing one operand changes that digest and yields `replay_sidecar_digest_mismatch`. |
+| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar is produced by `replay_sidecar` in `tests/test_d165_dominance_closeout.py:196`; its bytes hash to `69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735`. Reproduce the pinned digest with `TMPDIR=<scratch> python3 -m unittest tests.test_d165_dominance_closeout.D165DominanceCloseoutTests.test_worked_sidecar_digest_matches_contract_literal`; changing one operand changes the digest and yields `replay_sidecar_digest_mismatch`. |
 | Exact census | Twelve plausible records can still omit a physical cell and duplicate another. | Cells `cell-decode-a`, `cell-decode-b`, `cell-prefill_p256-a`, and `cell-prefill_p256-b` must yield exactly eight ordinary slots (4 × 2 components) and four R_cm slots (4 × 1 comparative component). |
 | Byte-only source custody | A parsed object and an authenticated byte string supplied through two channels can describe different artifacts. | A close-out built from sidecar bytes X must validate against X. If block 0's energy operands are multiplied by 0.9 and its split/result are recomputed into bytes Y, validation still refuses because X's stored file digest does not equal Y's digest, even though Y is internally consistent. |
 | Manifest-sealed floor | A close-out canonical digest can authenticate a newly rendered floor Y while the finalized manifest separately seals floor X; both digests can be individually valid but authenticate different artifacts. | The worked manifest seals floor X as `5be2fdc561e93b40810d6707f531e1d8668f2a675586a2d6ddbeccbc4dbe8a8c`. Changing one corner from 2.0 J to 2.1 J produces floor Y at `39221b0503af3479db2bad595c2e7201a522b0e5e1dc4b426562e7b538854099`; the builder records `floor_artifact_source_hash_mismatch` and selects neither branch. |
@@ -192,6 +194,10 @@ invalid member windows, or a stored result that differs from a fresh replay.
 
 ### Stage-2 mint interface
 
+**STAGE-2 mint interface (clauses 8 and 9):** at this stage-1 head,
+`d165_replay_blocks_from_mint_inputs` has no production caller; stage 1 only
+fixes the signature that the stage-2 mint must call.
+
 `joulewise.dominance_closeout.d165_replay_blocks_from_mint_inputs` is the only
 sanctioned constructor for sidecar block records. It accepts exactly the four
 values the mint holds at the call to
@@ -234,8 +240,16 @@ the validated producer output and the manifest-sealed sidecar.
 
 ### Finalized-manifest attachment
 
-The finalized manifest's `evidence` object must contain
-`dominance_replay_sidecar`, with exactly these fields:
+In stage 1, a dominance-enabled finalized manifest may carry either the four
+legacy evidence roles or those four plus `dominance_replay_sidecar`. The
+finalizer seals the sidecar when a path is supplied. A finalized manifest
+without the role is nevertheless fail-closed at its consumer: the close-out
+refuses it as `manifest_lacks_replay_sidecar`. Stage 2 clause 7 makes the row
+required through the prospective pre-registration mechanism. A legacy
+prospective supplied a sidecar path refuses as
+`analysis_finalization_attachment_invalid`; an invalid supplied sidecar schema
+or identity refuses with that same code. When present,
+`dominance_replay_sidecar` has exactly these fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -253,10 +267,25 @@ presence-coupled pair `floor_cell_id` and `floor_stack_identity`.
 `floor_stack_identity` is the eleven-field governed identity returned by
 `build_stack_identity` for that arm's authenticated bundle members. For an
 `exact_stack_only` arm whose finalizer selector resolves exactly one eligible
-sealed floor cell, the value is that floor cell's `cell_id`; otherwise it is
-null. Legacy prospective manifests gain neither field and finalize to the same
-bytes and `manifest_id` as before. The finalizer does not read the
-`dominance_criterion` value.
+sealed floor cell, `floor_cell_id` is that cell's `cell_id`; otherwise
+`floor_cell_id` is null. Legacy prospective manifests gain neither field and
+finalize to the same bytes and `manifest_id` as before. The finalizer does not
+read the `dominance_criterion` value.
+
+In `joulewise.identity_pins.STACK_IDENTITY_FIELDS` order, the eleven
+`floor_stack_identity` fields are `hardware_unit`, `os_version`,
+`runtime_version`, `kernel_library`, `model_artifact_sha256`, `quantization`,
+`tokenizer_identity`, `sampler_output_policy`, `batching_concurrency_policy`,
+`measurement_boundary_label`, and `telemetry_backend`; they are the complete
+runtime-governed identity required by `stack_identity_sha256`, so dropping any
+one cannot stand in for this object.
+
+The distinct seven-field `realized_stack_identity` contains `device_boundary`,
+`model`, `model_artifact`, `quantization`, `runtime`, `telemetry`, and
+`tokenizer`, as built by
+`joulewise.analysis_engine.inputs.realized_scientific_identity`; it cannot
+stand in because it is a scientific cross-block identity and is rejected by
+the eleven-field `stack_identity_sha256` schema.
 
 The close-out maps each contrast arm through `arms[].floor_cell_id`; null is
 the named stop `floor_cell_unresolved`. It then rechecks that the named sealed
@@ -270,12 +299,16 @@ unchanged and is not accepted in its place. A resolved sidecar cell whose
 `comparative.estimator` is not `common_mode`, or which has no replay, stops
 with `cell_not_common_mode`.
 
-For every sidecar cell, the close-out binds each sidecar block by `block_id` to
-the sealed floor cell's `comparative.blocks[]`. Both sides must contain exactly
-`n_blocks` unique block ids, with no absent, extra, or duplicated id. For each
+For every sidecar cell whose `comparative.estimator` is `common_mode`, the
+close-out binds each sidecar block by `block_id` to the sealed floor cell's
+`comparative.blocks[]`. `n_blocks` is the floor comparative record's integer
+count of A/B/B/A blocks. Both sides must contain exactly `n_blocks` unique
+block ids, with no absent, extra, or duplicated id. For each
 matched block, the positioned `members` maps must agree exactly at A1, B1, B2,
 and A2 after projecting each sealed floor member row to `position` →
-`bundle_id`, and `delta_j` must agree under the registered `_close` tolerance.
+`bundle_id`, and `delta_j` must agree under the registered
+`joulewise.detection_floor._close` tolerance: for expected value `x`, absolute
+error is at most `min(max(1e-12, 1e-12 * abs(x)), 1e-6)` joules.
 Any mismatch stops with `floor_member_census_mismatch`. The manifest's
 contrast block namespace is not used for this census.
 
@@ -433,21 +466,36 @@ are:
   `floor_stack_identity`, or fails the sealed floor-side selector recheck.
 - `cell_not_common_mode`: a resolved floor cell or its sidecar cell lacks the
   required common-mode replay shape.
-- `finalized_manifest_id_mismatch`: `manifest_id` is not the value recomputed
-  by `analysis_manifest_v3.calculate_manifest_id` from the supplied finalized
-  manifest bytes.
+- `finalized_manifest_id_mismatch`: the supplied UTF-8 JSON bytes are decoded
+  into a finalized-manifest mapping, and `manifest_id` is not the value
+  recomputed from that decoded mapping by
+  `analysis_manifest_v3.calculate_manifest_id`.
 - `floor_artifact_source_hash_mismatch`: the supplied floor bytes differ from
   the aggregate floor artifact sealed by the finalized manifest.
+- `closeout_input_malformed`: an arms or floor-cell structure needed for floor
+  binding is malformed rather than merely unresolved.
 - `closeout_input_malformed: source.census_or_block_membership` or
   `closeout_input_malformed: closeout.independent_ratios`: an unhashable JSON
   element prevents a required set/map census at the named entry path.
+
+**Refusal precedence.** After the byte-to-mapping decode, the close-out first
+authenticates the finalized mapping by recomputing its `manifest_id` with
+`calculate_manifest_id`; `finalized_manifest_id_mismatch` masks every later
+refusal. This is intentional: no field of an unauthenticated manifest is read
+as authority. For an authenticated manifest, source checks then run in this
+order: floor schema and artifact identity; manifest-sealed floor-byte digest;
+sidecar attachment presence, digest, and identity; sidecar schema and replay;
+floor/sidecar cell alignment; contrast-arm floor binding; and finally the
+positioned, count-checked floor-member census. Only after those source checks
+does the builder compute the eight ordinary and four common-mode records and
+their close-out census.
 
 Each named attachment failure is a stop: it selects neither branch, leaves both
 prose licenses false, and records that exact name as `refusal_reason`.
 
 A floor artifact with other than four unique complete cells cannot support the
-required eight-record ordinary census. The builder refuses to emit a close-out
-at all; this is also a neither-branch stop, not branch B.
+required eight-record ordinary census. The source precondition is
+`closeout_input_malformed`; this is a neither-branch stop, not branch B.
 
 `validate_d165_closeout` decodes its three required source-byte arguments, then
 rejects missing or extra keys, a census other than
