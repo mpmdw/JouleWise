@@ -133,3 +133,28 @@ $ cd /Users/edr/code/JouleWise-wt-dx && git diff --stat
 The full module (`tests.test_paper_round7_artifacts`, ~8 min retained-corpus
 replay) is executed by the fresh pass over this commit and by the rebuilt
 integration tree before merge; no test reads the docstring.
+
+Replayed at the branch head `81e4d491` on 2026-09-02 (the integration tree
+`0e248e3a` = main + t26-a + t26-c + dx + t26-b failed
+`test_dated_magistrate_rulings_carry_executed_evidence` on this file because
+the block above carries no exit status and no `file:line` citation in the
+form that test, which arrives with the t26-a branch, requires — the
+evidence itself was never in doubt). The three raise sites and the
+catch, after the docstring edit shifted the file by sixteen lines:
+`scripts/check_paper_round7_artifacts.py:899`, `:920`, `:949`, catch `:1027`,
+class `:143`.
+
+```
+$ cd /Users/edr/code/JouleWise-wt-dx && grep -n "^class ArtifactsUnavailable\|raise ArtifactsUnavailable\|except ArtifactsUnavailable" scripts/check_paper_round7_artifacts.py
+143:class ArtifactsUnavailable(RuntimeError):
+899:            raise ArtifactsUnavailable(str(path))
+920:                raise ArtifactsUnavailable(
+949:                raise ArtifactsUnavailable(
+1027:        except ArtifactsUnavailable as exc:
+$ cd /Users/edr/code/JouleWise-wt-dx && python3 scripts/check_paper_round7_artifacts.py --help | grep -c "exactly three sites"
+1
+exit=0
+$ cd /Users/edr/code/JouleWise-wt-dx && python3 scripts/check_paper_round7_artifacts.py --literals-only | tail -1
+R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0
+exit=0
+```
