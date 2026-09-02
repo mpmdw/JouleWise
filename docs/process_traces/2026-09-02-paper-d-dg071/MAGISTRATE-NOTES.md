@@ -34,7 +34,12 @@ evidence in the addendum and in file 26.
 | Fix round 4 (bench) + re-issue | magistrate | 34 | `70147173` → artifact `ebd947a0` | synthesis adopts Opus's remedy + the cold seat's gloss; 500-record differential bundle (CI) + retained-bundle value-of-record pin (bench, skipTest in CI); mutants `[:8]`/`[:400]`/`[:406]`/rev-parse all die; twice byte-identical AND byte-identical when replayed at the artifact's own commit; values of record unchanged |
 | Fresh pass (op-loop §5) | Sol high (253), read-only, detached worktree | 35, 36 | `b6b4013b` | BLOCKER 0 / SHOULD-FIX 1 / NIT 1. SF1: the re-scoped provenance test still passed a `git rev-parse HEAD^` producer (fixture shape); N1: the provenance prose compared a SHA-256 with a commit id. Both cured at the bench (`6b6deb2f`, six fixture lines + one sentence), re-issued `2eea71fe`, byte-identical when replayed at its own commit; file 36 carries the escalation-trigger statement (a residual narrowed by the cure, not a recurrence — a third fixture-shape survivor fires the standing trigger) |
 | Fresh pass 2 (op-loop §5, over `6b6deb2f`) | terra high (254), read-only, detached worktree | 37 | `dfe69194` | BLOCKER 0 / SHOULD-FIX 1 / NIT 1; replay byte-identical, hash comparison actionable, values of record unchanged. G1-SF1: the provenance fixture still passes a `scripts/` directory-pathspec lookup and a `--diff-filter=A` lookup; G1-N1: fixture-tuned `HEAD~2` survives. Third fixture-shape survivor → file 36's own trigger fires: no bench fix |
-| Cold gate + consult (rule 11: standing trigger and second fix round on the same defect) | cold Fable seat (packet-only) + Opus 5 contract-lens refuter + Sol xhigh (255) consult, parallel, read-only | 38, 39, 40, 41, 42 | `73417fee` | Sol 255 (file 39): rejects the P1/P2′/P3 closure claim with five executed counterexamples on merge/rename/extra-ref histories (`--first-parent`, `--follow`, `--diff-filter=M`, `--no-merges`, `--all` all pass the proposed fixture and are wrong outside it); cure = pin the disclosed command (`subprocess.run` args) + one real-git smoke; merge now with a kernel row; Q5: the trigger should have fired at SF1. Cold seat and Opus: see files 40–41; synthesis file 42 |
+| Cold gate + consult (rule 11: standing trigger and second fix round on the same defect) | cold Fable seat (packet-only) + Opus 5 contract-lens refuter + Sol xhigh (255) consult, parallel, read-only | 38, 39, 40, 41, 42 | `73417fee` | Sol 255 (file 39): rejects the P1/P2′/P3 closure claim with five executed counterexamples on merge/rename/extra-ref histories (`--first-parent`, `--follow`, `--diff-filter=M`, `--no-merges`, `--all` all pass the proposed fixture and are wrong outside it); cure = pin the disclosed command (`subprocess.run` args) + one real-git smoke; merge now with a kernel row; Q5: the trigger should have fired at SF1. Cold seat (file 40): the packet's cure adds no discriminating power (all power is in the history), `--first-parent` proven WRONG on the real repository (PR merge commits), axis-derived F2 history pair offered with code. Opus (file 41): BLOCKER ×2 against the packet's cure (H1 regresses the `--diff-filter=M` kill; `--all` passes with P3 green and is reader-harmful), P1/P2′/P3 not a unique characterization on merge histories, generated-history differential built (30/30 base, every wrong implementation dies); Q3 frame rejected as a manufactured-harm question. UNANIMOUS: candidate cure withdrawn, #276 merges now, test-only cure on main under kernel row `DG071-PROVENANCE-TEST-01` (argv pin + F2 pair + add-only shape; fallback = the differential), severities affirmed, file 36 was wrong and the trigger should have fired at SF1. Synthesis file 42; two process proposals go to Ed, not installed |
+
+The producer, test module and artifact are as at `6b6deb2f` / `2eea71fe`
+after the gate: the gate changed no code. Post-review commits after the last
+fresh pass (terra 254 over `6b6deb2f`) are custody, notes and the kernel row
+only, so no further §5 pass is owed.
 
 Three model families reviewed the producer (Sol, terra/luna, Opus) plus the
 blind Fable seat; the physics refutation was found independently by two
@@ -116,6 +121,9 @@ Adopting Opus 249 §6 (file 22) with the magistrate's reading:
 | `2610cd21` | These notes through fresh pass 2's launch |
 | `e6687638` | terra 254 custody (37) |
 | `73417fee` | Cold-gate packet on the fixture-shape class (38) |
+| `d3119939` | Sol 255 custody (39) |
+| `9ab5838a` | Merge main (t26 install wave, gate ledger, dx registry) |
+| (this commit) | Cold seat + Opus custody (40, 41), synthesis (42), kernel row `DG071-PROVENANCE-TEST-01` + `test_gen_state` literal (bookkeeping, no producer or test-module change) |
 
 ## Follow-ups outside this PR
 
