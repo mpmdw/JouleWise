@@ -59,6 +59,16 @@ G2A_PROBE_LOOP = (
     "done\n"
 )
 
+G2A_INPUT_CHECK = (
+    "# Authenticate every probe input before ledger readiness or reservation.\n"
+    'PYTHONPATH="$REPO" "$PY" "$REPO/scripts/generate_g2a_probe_inputs.py" check \\\n'
+    '  --root "$G2A_ROOT" \\\n'
+    '  --panel "$REPO/configs/model_panels/qwen3_4bit.json" \\\n'
+    '  --ledger "$CALIBRATION_LEDGER" \\\n'
+    '  --head-pin "$LEDGER_HEAD_PIN" \\\n'
+    '  --campaign-policy "$POLICY"\n'
+)
+
 
 def _replace_once(source: str, old: str, new: str, *, label: str) -> str:
     if source.count(old) != 1:
@@ -156,6 +166,7 @@ def render_g2a_generated_region(runbook: str) -> str:
         '"$G2A_OPERATOR_LOG_ROOT" "$G2A_TRANSCRIPT_ROOT" '
         '"$G2A_QUARANTINE_ROOT"\n\n'
         f"{helpers}"
+        f"{G2A_INPUT_CHECK}\n"
         f"{reservation}\n"
         'cd "$REPO"\n'
         'echo "$(timestamp) g2a_chain_start" >> "$G2A_OPERATOR_LOG_ROOT/window-chain.log"\n'
