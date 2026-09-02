@@ -360,6 +360,18 @@ class NightDriverTests(unittest.TestCase):
         self.assertNotIn("<integer>7</integer>", installer)
         self.assertEqual(installer.count("sudo"), 0)
 
+    def test_sidecar_digest_accepts_shasum_form_and_refuses_malformed_forms(self) -> None:
+        # The seam with the gate: `gen_g2_phase_d.py --emit-chain` writes GNU
+        # shasum form; the driver (and the gate) must read it, not bare hex
+        # only.  Wrong basename / extra tokens / uppercase / empty refuse.
+        digest = "ab" * 32
+        self.assertEqual(self.driver._sidecar_digest(f"{digest}  chain.zsh\n", "chain.zsh"), digest)
+        self.assertEqual(self.driver._sidecar_digest(f"{digest}\n", "chain.zsh"), digest)
+        self.assertIsNone(self.driver._sidecar_digest(f"{digest}  other.zsh\n", "chain.zsh"))
+        self.assertIsNone(self.driver._sidecar_digest(f"{digest}  a  b\n", "chain.zsh"))
+        self.assertIsNone(self.driver._sidecar_digest(f"{digest.upper()}\n", "chain.zsh"))
+        self.assertIsNone(self.driver._sidecar_digest("", "chain.zsh"))
+
     def test_driver_reason_codes_are_registered_and_are_not_literal_call_sites(self) -> None:
         registered = night_gate.NIGHT_GATE_REASON_CODES | night_gate.NIGHT_DRIVER_REASON_CODES
         source = SCRIPT_PATH.read_text(encoding="utf-8")

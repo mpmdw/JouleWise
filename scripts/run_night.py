@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -58,6 +59,27 @@ COURIER_ARGV = (
 
 def _sha256_path(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+_SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _sidecar_digest(sidecar_text: str, chain_basename: str) -> str | None:
+    """Return the digest a ``shasum``-form sidecar names, or None if malformed.
+
+    Accepted: ``<64 lowercase hex>`` alone, or followed by exactly one token
+    equal to ``chain_basename``.  Anything else (uppercase, extra tokens, a
+    different filename, empty) is malformed and refuses upstream.
+    """
+
+    tokens = sidecar_text.split()
+    if not tokens or len(tokens) > 2:
+        return None
+    if _SHA256_HEX_RE.fullmatch(tokens[0]) is None:
+        return None
+    if len(tokens) == 2 and tokens[1] != chain_basename:
+        return None
+    return tokens[0]
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -617,8 +639,12 @@ def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
         chain_sha256 = _sha256_path(chain_path) if chain_path.is_file() else None
         sidecar_path = Path(plan.chain_sha256_path)
         sidecar_text = sidecar_path.read_text(encoding="utf-8") if sidecar_path.is_file() else ""
-        expected = f"{chain_sha256}\n" if chain_sha256 is not None else ""
-        if chain_sha256 is None or sidecar_text != expected:
+        # The sidecar is GNU ``shasum`` form (``<hex>  <basename>``), the
+        # form ``gen_g2_phase_d.py --emit-chain`` writes and the gate parses:
+        # first token is the digest, an optional second token must name the
+        # chain file.  Bare hex stays accepted.
+        expected = _sidecar_digest(sidecar_text, chain_path.name)
+        if chain_sha256 is None or expected is None or chain_sha256 != expected:
             refusal = _write_driver_refusal(
                 night_dir / "refusal.json",
                 plan,
