@@ -81,31 +81,63 @@ ratio forbids the subtitle. -->
 
 ## 1. Introduction
 
-<!-- BUILD AFTER DATA, IN THIS ORDER:
-1. Power is averaged over records with start and end times; moving a software
-   phase edge across a record moves integrated energy between phases.
-2. Prompt processing reads the prompt through the first output token; token
-   generation emits later output tokens. Introduce these plain phrases before
-   the shorthand “prefill” and “decode”.
-3. Explain why repeats reduce ordinary run-to-run spread but cannot remove a
-   boundary displacement shared by the runs.
-4. Introduce the corrected rate-aware clock mapping and in-window pulse
-   calibration.
-5. Define a cell as runs sharing phase, workload, model, hardware, software,
-   and counter boundary; define its resolution bound as the largest false
-   difference admitted by the registered calculation.
-6. Ask RQ-ATTRIBUTION-DOMINANCE only after Section 4's inputs have been
-   summarized in plain words: did allowed edge movement at least double every
-   component's point-only bound, both with independently moved edges and with
-   the timing error shared inside each four-run comparison?
-7. Introduce the fixed identities [FILL:V5-ID-001] and [FILL:V5-ID-002] and the
-   workload pins [FILL:V5-WL-001]–[FILL:V5-WL-004]. The stopped final pin reads
-   [FILL:V5-WL-005] — “The selected prefill prompt pin is omitted: its
-   G2-a-bound `joulewise.prefill_prompt_pin.v2` record has not issued (registry
-   row V5-WL-005).” Call the pair a demonstration of the decision rule, not a
-   scaling experiment.
-8. State the short-prefill question and scope. Do not insert result prose here
-   until Sections 3 and 6 are filled. -->
+<!-- BUILD NOW — source: results-fill-registry V5-ID-001/002 and V5-WL-001–005; reviewer C4; magistrate R-B2. Physical mechanism, research question, and frozen pins are written now; only measurement-dependent values retain registered omissions. -->
+
+This capstone asks a measurement question before it asks a model-comparison
+question. macOS `powermetrics` is the power sampler used here. Its sampling
+record averages processor power from its recorded start time to its recorded
+end time. A phase edge is the runtime time
+that divides one part of an inference request from the next. Moving that edge
+within a sampling record moves the record's integrated energy from one phase
+to the other even though it leaves the request total unchanged.
+
+Prompt processing reads the prompt through production of the first output
+token; this paper calls it *prefill*. Token generation emits the later output
+tokens; this paper calls it *decode*. Repeating the same request can narrow
+ordinary run-to-run scatter, but it cannot remove a shared boundary
+displacement: if every repeat assigns the same slice of one record to the
+wrong phase, averaging repeats preserves that reassignment.
+
+JouleWise therefore calibrates edge placement inside each measurement window,
+one uninterrupted measurement session, with commanded GPU pulses. It also uses
+a rate-aware clock mapping: rather
+than assuming the computer's wall clock and its never-adjusted monotonic clock
+advance at exactly the same rate, it retains every fixed-rate, offset mapping
+that the bracketed readings and power-record labels permit. The calibration
+and mapping bound how far an edge may move before phase energy is recomputed.
+
+A cell is the set of runs with one phase, workload, model, hardware, software,
+and power-counter boundary. Its resolution bound is the largest false
+phase-energy difference admitted by the fixed calculation for that cell. The
+research question is whether permitted edge movement at least doubles each
+source of false difference. A point-only bound uses the recorded edge times;
+the matching edge-moved bound repeats the same calculation with the allowed
+edge positions. The comparison first moves each run's edges separately and
+then moves together the timing shared by the four-run A/B/B/A comparison—A,
+then B, then B, then A. In plain terms, the question is whether uncertainty
+about where the phase starts or ends is at least as large as the ordinary
+variation already present in the repeated measurements.
+
+The fixed demonstration compares the small model `qwen3-1p7b`, revision
+`3b1b1768f8f8cf8351c712464f906e86c2b8269e`, with the large model `qwen3-8b`,
+revision `545dc4251c05440727734bcd94334791f6ab0192`. <!-- V5-ID-001; V5-ID-002 -->
+Its token-generation workload is the ordered eight-prompt `real_prompts_v1`
+set, whose prompt-set SHA-256 fingerprint—an identifier of exact file bytes—is
+`20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474`. <!-- V5-WL-001 -->
+Both conditions use the same `tokenizer.json` SHA-256
+`aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4` and the
+same applied chat-template SHA-256
+`87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5`, with
+reasoning disabled. <!-- V5-WL-002; V5-WL-003 --> Greedy generation forces
+512 output tokens for one rendered prompt in each run. <!-- V5-WL-004 --> The
+selected prefill record is omitted because its pre-collection selection record
+has not issued. <!-- [FILL:V5-WL-005] — The selected prefill prompt pin is omitted: its G2-a-bound `joulewise.prefill_prompt_pin.v2` record has not issued (registry row V5-WL-005). -->
+This fixed pair demonstrates the decision rule; it is not a scaling experiment.
+
+The short-prefill question is narrower: when prompt processing is brief, do
+enough sampling-record intervals overlap it to support a phase reduction? A
+failure of that support requirement is a measurement refusal, not evidence of
+zero prompt-processing energy and not a model comparison.
 
 ## 2. In-window calibration method
 
@@ -158,46 +190,87 @@ The following table and arithmetic reconstruct one retained diagnostic capture f
 
 ## 3. Instrument characterization
 
-<!-- BUILD FRESH:
-1. State each characterization question in physical words.
-2. For each row, state the calculation, fixed threshold, independent unit,
-   minimum count, and exact refusal consequence.
-3. Explain the 40-point slope limit analytically: because an ordinary
-   least-squares slope is a fixed weighted sum of energies, choose each lower
-   or upper endpoint by the sign of its weight; this requires two endpoint
-   vectors, not 2^40 enumeration. Contrast that linear calculation with the
-   nonlinear mean-and-standard-deviation corner calculation, which refuses
-   above 16 observations.
-4. State that five identical-condition blocks test only whether those five
-   intervals fit inside an earlier comparator; they do not establish a
-   population-coverage percentage.
-5. Fill the surviving characterization rows only from an issued authenticated
-   report. Until then, [FILL:DS-02] — “The phase-consistency characterization
-   result is omitted: its named supplier is an unissued authenticated report
-   (registry row DS-02).” [FILL:DS-03] — “The workload-response characterization
-   result is omitted: its named supplier is an unissued authenticated report
-   (registry row DS-03).” [FILL:DS-05] — “The phase-accounting characterization
-   result is omitted: its named supplier is an unissued authenticated report
-   (registry row DS-05).” [FILL:DS-06] — “The drift-and-recovery
-   characterization result is omitted: its named supplier is an unissued
-   authenticated report (registry row DS-06).” DS-04 and DS-07 are retired
-   future-work rows; DS-01 is the separate phase-cell hold. -->
+<!-- Source: characterization_result_schema_v1; reviewer D3 and C5. -->
+
+Instrument characterization asks four physical questions before any campaign
+result may rely on the instrument. Does energy change with the amount of work
+in the planned way? Under identical conditions, do repeated paired blocks stay
+inside a comparator—an upper limit fixed from earlier, disjoint evidence? Do
+the two phase energies account for their enclosing request without leaking
+dependence across the phase boundary? And do held-out reference probes, kept
+out of the allowance calculation, remain inside the drift allowance—the
+maximum within-window change assigned from its designated references—while the
+machine recovers within the declared settling convention, its fixed maximum
+recovery time? An admitted bundle is a run that passed its frozen entry and
+evidence checks.
+
+| Question | Calculation and fixed comparison | Independent unit, minimum basis, and refusal consequence |
+|---|---|---|
+| Workload response | Complete every registered (fixed-before-collection) workload level; fit whole-request and token-generation energy against output length; require the lowest allowed slope to be positive and the largest departure from the fitted line to fit both one admitted bundle's timing half-width—half its allowed timing range—and an independently issued same-cell floor. | The unit is an admitted bundle. The slope and residual checks require forty admitted bundles, and the level-completeness check requires all five levels. Failure withdraws the affected per-token conversion; a response may then be reported only at its individual workload levels. |
+| Identical-condition response | At every registered workload magnitude, form each A/B/B/A block's interval of allowed differences. Every interval must contain zero; the mean interval and largest absolute block difference must also fit inside the earlier comparator. | The unit is an A/B/B/A block. The ladder requires all three magnitudes and at least five blocks at each magnitude. A failed block or comparator check withdraws that cell's floor from claim use, so every contrast using it becomes not resolvable—that is, too small to clear its false-difference bound—until the floor is re-derived. |
+| Phase accounting | Compare the sum of the two phase energies with the enclosing request, allowing no positive double count beyond numerical rounding and no negative residual larger than the retained unphased gap can contain. Test whether prompt-processing energy stays inside both a resolution band and an earlier floor band as later output changes; keep the shared session timing term separate from member-local timing; require both bracket captures to lie in their registered band and no admitted member to carry the timing or sampling flags. | The main checks use admitted bundles and require at least twenty-four; the bracket check requires two captures, and the floor-label check requires every floor cell. Failure withdraws or narrows phase-specific claims: affected members become diagnostic, and an accounting failure narrows the result to request-total energy. |
+| Drift and recovery | Construct the drift allowance from its designated references, then test it only with held-out reference probes; require each probe's deviation to fit within that allowance. Separately measure time from a sustained workload to the first passing cooldown exit and compare it with the fixed settling convention. | Reference roles must be fixed for at least six reference members; containment needs at least three held-out probes, and recovery needs at least three sustained-hold/cooldown pairs. A containment failure re-derives every floor carrying that allowance; a recovery failure raises the settling interval in a successor policy and re-examines windows collected under the old one. |
+
+The workload-response slope has a special exact calculation. Ordinary
+least-squares fitting chooses the straight line whose squared vertical
+departures from the observed energies are smallest. With fixed output levels,
+its slope is a fixed weighted sum, \(\hat\beta=\sum_i w_iE_i\), of the forty
+energies. Each energy has an allowed lower endpoint \(L_i\) and upper endpoint
+\(U_i\). To obtain the smallest allowed slope, use \(L_i\) wherever
+\(w_i>0\) and \(U_i\) wherever \(w_i<0\); to obtain the largest, reverse
+those choices. A zero weight changes neither result. Thus the positive-slope
+screen at its fixed zero threshold—the numerical cutoff the slope must
+exceed—needs two endpoint vectors, not
+\(2^{40}\) combinations. <!-- C1.2/C1.3: fixed forty-bundle design and zero threshold; reviewer D3 -->
+This shortcut does not apply to the separate corner calculation: it
+recalculates a mean and sample standard deviation at every joint endpoint
+choice. Changing one endpoint changes both quantities and the largest
+residual, so this nonlinear calculation refuses exact enumeration above sixteen
+observations.
+
+The identical-condition result has a deliberately narrow meaning. If five
+blocks at one magnitude have intervals contained by the earlier comparator,
+that establishes containment for those five measured blocks only. It neither
+estimates a percentage of a wider population nor supplies an independent
+coverage guarantee. <!-- reviewer C5: containment caveat -->
+
+An authenticated report is one whose expected evidence fingerprints and named
+inputs agree. The phase-consistency characterization result is omitted: its
+named supplier is an unissued authenticated report. <!-- [FILL:DS-02] — “The phase-consistency characterization result is omitted: its named supplier is an unissued authenticated report (registry row DS-02).” -->
+The workload-response characterization result is omitted: its named supplier
+is an unissued authenticated report. <!-- [FILL:DS-03] — “The workload-response characterization result is omitted: its named supplier is an unissued authenticated report (registry row DS-03).” -->
+The phase-accounting characterization result is omitted: its named supplier is
+an unissued authenticated report. <!-- [FILL:DS-05] — “The phase-accounting characterization result is omitted: its named supplier is an unissued authenticated report (registry row DS-05).” -->
+The drift-and-recovery characterization result is omitted: its named supplier
+is an unissued authenticated report. <!-- [FILL:DS-06] — “The drift-and-recovery characterization result is omitted: its named supplier is an unissued authenticated report (registry row DS-06).” -->
 
 ### Pilot observations under the retired calculation
 
-<!-- BUILD FRESH, IN THIS ORDER:
-1. Label every number here “pilot evidence under the retired calculation, not
-   a current instrument property or campaign result.”
-2. Point-only component bounds: [FILL:DG-044] [FILL:DG-045] [FILL:DG-046].
-3. Full corner-re-evaluated component bounds: [FILL:DG-047]
-   [FILL:DG-048] [FILL:DG-049].
-4. Their independent-edge ratios: [FILL:DG-050] [FILL:DG-051]
-   [FILL:DG-052].
-5. Timing range and basis: [FILL:DG-053]–[FILL:DG-056].
-6. Corrected-anchor sensitivity, if issued: [FILL:DG-059]–[FILL:DG-066].
-7. If the older code-generated “attribution-limited” label is mentioned, say
-   that positive interval width could trigger it and that it does not select
-   this paper's result. -->
+<!-- Source: results-fill-registry DG-044–DG-066; reviewer D2; magistrate R-B1. -->
+
+These values are pilot evidence under the retired calculation, not a current
+instrument property or campaign result. For prompt processing, token
+generation, and short prompt processing respectively, the point-only component
+bounds were 0.2888 J, 0.4934 J, and 0.3113 J. <!-- DG-044; DG-045; DG-046 -->
+Re-evaluating the complete component calculation at its jointly worst allowed
+edge endpoints gave 3.153 J, 2.922 J, and 2.184 J. <!-- DG-047; DG-048; DG-049 -->
+The corresponding independently moved-edge ratios were 10.92, 5.92, and 7.02.
+<!-- DG-050; DG-051; DG-052 -->
+
+Across the thirty recorded timing members, the retained timing bound ranged
+from 25.6 ms to 31.1 ms. <!-- DG-053; DG-054; DG-055 --> Those members are not
+thirty independent timing draws, because repeated members can share timing
+sources. <!-- DG-056 -->
+
+The current named bracket screen is 9.724 ms. <!-- DG-059 --> The same screen
+is rendered elsewhere as 0.009724 s, as a 9.724-ms reference, and again as
+9.724 ms; these are unit or prose renderings of that one screen, not separate
+sensitivity results. <!-- DG-060; DG-061; DG-062 --> The older 10.818-ms
+screen is retired and is not a current result. <!-- DG-063 --> The superseded
+calibration corpus contained nineteen captures; the current corpus contains
+seventeen. <!-- DG-064; DG-065 --> Separately, the historical short-prefill
+diagnostic population contained 50 bundles. <!-- DG-066 -->
+<!-- ANCHOR-CORRECTION: awaiting registry decision -->
 
 ## 4. How the method bounds a false phase-energy difference
 
@@ -1201,15 +1274,15 @@ The inventory excludes literal field names and reason names inside quoted omissi
 
 | Term | First reader-facing home | Status | Definition or disposition |
 |---|---|---|---|
-| prompt processing / prefill | 2. In-window calibration method | glossed-at-first-use | Prompt work through the first output token; the shorthand follows the physical phrase. |
-| token generation / decode | 2. In-window calibration method | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
+| prompt processing / prefill | 1. Introduction | glossed-at-first-use | Prompt work through the first output token; the shorthand follows the physical phrase. |
+| token generation / decode | 1. Introduction | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
 | phase boundary | 2. In-window calibration method | glossed-at-first-use | Runtime-recorded time separating prompt processing and token generation. |
-| powermetrics | 2. In-window calibration method | glossed-at-first-use | The macOS sampler and its shared interval-average CPU, GPU, and neural-engine record are stated at first use. |
-| sampling record | 2. In-window calibration method | built-before | The preceding clause builds the one start-to-end average-power record before naming its use in phase assignment. |
+| powermetrics | 1. Introduction | glossed-at-first-use | The macOS power sampler and its start-to-end interval-average record are stated at first use. |
+| sampling record | 1. Introduction | built-before | The preceding clause builds the one start-to-end average-power record before naming its phase-edge consequence. |
 | repeatability / repetition / random scatter | 2. In-window calibration method | audience-vocabulary | Ordinary metrology words for between-repeat spread and repeated observation. |
 | systematic reassignment | 2. In-window calibration method | built-before | The joule moved from one phase to the other is worked physically before this label. |
-| science window / measurement window | Bracketed pulse-train algorithm | glossed-at-first-use | One uninterrupted measurement session; Figure 2 later diagrams the same window. |
-| SHA-256 / SHA-256 fingerprint | Bracketed pulse-train algorithm | glossed-at-first-use | A digest that identifies exact file bytes. |
+| science window / measurement window | 1. Introduction | glossed-at-first-use | One uninterrupted measurement session; Figure 2 later diagrams the same window. |
+| SHA-256 / SHA-256 fingerprint | 1. Introduction | glossed-at-first-use | A fingerprint that identifies exact file bytes. |
 | warm-up pulses | Bracketed pulse-train algorithm | glossed-at-first-use | The first use says the three pulses are discarded. |
 | base-two varied-gap schedule | Bracketed pulse-train algorithm | glossed-at-first-use | Its gaps step through powers of two to keep pulse edges from repeatedly aligning with samples. |
 | sampler cadence | Bracketed pulse-train algorithm | audience-vocabulary | Requested 100-ms sampling cadence is textbook/plain-English measurement vocabulary. |
@@ -1220,7 +1293,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | clock-anchor bound | Bracketed pulse-train algorithm | glossed-at-first-use | The appositive gives the uncertainty in placing the trace on wall-clock time and points to the construction next. |
 | complete / completeness | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English criteria words; the surrounding lists state what must be present. |
 | refused / refuses | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English rejection verbs used consistently for a calculation that cannot authorize evidence. |
-| monotonic clock | Bracketed pulse-train algorithm | glossed-at-first-use | A counter that advances but is never corrected to civil time. |
+| monotonic clock | 1. Introduction | glossed-at-first-use | A counter that advances but is never corrected to civil time. |
 | straight-line clock mappings / rate-aware model | Bracketed pulse-train algorithm | glossed-at-first-use | The retained linear rate-and-offset mappings and the unequal fixed-rate correction are stated in the same paragraph. |
 | missing / malformed | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English input rejection conditions. |
 | unbounded | Bracketed pulse-train algorithm | glossed-at-first-use | The allowed rate reaches the edge of its search box. |
@@ -1241,28 +1314,28 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | Worked current-capture arithmetic | One diagnostic reconstruction | glossed-at-first-use | The bold label introduces a raw-stamp-to-maximal-pulse diagnostic calculation. |
 | onset lag / offset lag / pulse residual | One diagnostic reconstruction | glossed-at-first-use | Observed edge minus its matching commanded edge; the residual is the largest endpoint magnitude before the anchor term. |
 | record clipping / clip a record | 4. How the method bounds a false phase-energy difference | glossed-at-first-use | Keep only record time inside the phase and multiply duration by average power; the joule example is worked. |
-| cell | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Runs sharing phase, workload, model, hardware, software, and processor-power definition. |
-| false-difference components / false-difference | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The next two sentences split the cell's false-difference sources into absolute and comparative components. |
+| cell | 1. Introduction | glossed-at-first-use | Runs sharing phase, workload, model, hardware, software, and power-counter boundary. |
+| false-difference components / false-difference | 3. Instrument characterization | glossed-at-first-use | The table names the false-difference bound that a contrast must clear before it is resolvable. |
 | absolute component / comparative component | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Same-model repeat spread versus A/B/B/A block-difference spread. |
 | point-only unguarded bound | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The complete component formula at recorded energies before the multiplier and allowance. |
 | admitted energy | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Energy from a run that passed Section 5 entry checks and may bear a claim. |
 | independent units | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | One run for the absolute component or one four-run block for the comparative component. |
-| independent-edge corner bound / corner | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Every joint lower-or-upper endpoint choice is enumerated and the complete formula recalculated. |
+| independent-edge corner bound / corner | 3. Instrument characterization | glossed-at-first-use | The corner calculation is the recalculation at every joint endpoint choice. |
 | independent-edge ratio \(R\) / dominates | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Complete corner bound divided by the matching point bound; dominates means \(R\ge2\). |
-| threshold / exact equality | Comparing the boundary-moved and point-only bounds | audience-vocabulary | Plain-English comparison words; the fixed threshold is 2 and equality passes. |
-| authenticated / unauthenticated | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Expected SHA-256 fingerprints and named inputs agree, or a required fingerprint, match, or check is absent. |
-| registered rounding / registered | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Rounding fixed before collection in fingerprinted plan bytes. |
+| threshold / exact equality | 3. Instrument characterization | glossed-at-first-use | A threshold is the numerical cutoff that the positive slope must exceed. |
+| authenticated / unauthenticated | 3. Instrument characterization | glossed-at-first-use | Expected evidence fingerprints and named inputs agree, or they do not. |
+| registered rounding / registered | 3. Instrument characterization | glossed-at-first-use | Registered means fixed before collection; the later rounding rule remains fixed in fingerprinted plan bytes. |
 | reintegrate | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
 | onset set / offset set / zero-shift value | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
 | shared lower and upper excursions | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
 | binary64 / member-envelope integral sum | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The usual 64-bit float format and a nonnegative four-member joule scale that covers the integrals before contrast. |
 | ulp | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local half-width / shared sign / local sign | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The member-local changes form one block half-width; enumeration uses one common sign and one per-block local sign. |
-| half-width | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The local half-width is \(\ell_j=(r_{j1}+r_{j2}+r_{j3}+r_{j4})/2\). |
+| half-width | 3. Instrument characterization | glossed-at-first-use | A timing half-width is half an allowed timing range. |
 | shared-error ratio / \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | built-before | The complete shared/local replay quotient is constructed immediately before it is named. |
 | not_applicable / absolute \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A uniform shared shift cancels when the absolute formula subtracts its cell mean. |
 | two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
-| resolution bound / cell floor | Adding publication safeguards after the ratio | glossed-at-first-use | Largest false phase-energy difference the cell admits; artifact name for the maximum guarded component. |
+| resolution bound / cell floor | 1. Introduction | glossed-at-first-use | Largest false phase-energy difference the fixed cell calculation admits; cell floor is the artifact name for its guarded form. |
 | small-sample multiplier / \(g(n)\) | Adding publication safeguards after the ratio | glossed-at-first-use | The adjacent displayed formula widens five-to-nine-unit results and returns no publishable component below five. |
 | directional comparison / directional comparisons | Adding publication safeguards after the ratio | glossed-at-first-use | The expected direction is fixed before collection. |
 | Holm step-down correction / raw probability | Adding publication safeguards after the ratio | glossed-at-first-use | One two-comparison correction controls any false direction claim at 0.05; the later worked ordering supplies mechanics. |
@@ -1277,7 +1350,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | serially correlated | Adding publication safeguards after the ratio | glossed-at-first-use | Adjacent block errors are treated as serially correlated. |
 | decision-interval sign check / direction gate | Adding publication safeguards after the ratio | forward-pointer-next-paragraph | The first use explicitly says the direction gate is in the next paragraph, which defines both intervals and the fixed direction. |
 | magnitude check / direction check | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute estimate must clear the cell floor; both complete intervals must remain on the fixed direction. |
-| not resolvable | Adding publication safeguards after the ratio | glossed-at-first-use | The estimate does not clear the cell floor; it is not zero. |
+| not resolvable | 3. Instrument characterization | glossed-at-first-use | The contrast is too small to clear its false-difference bound; it is not zero. |
 | measurement interval / decision interval / deterministic bound | Adding publication safeguards after the ratio | glossed-at-first-use | Total-standard-error interval; that interval extended by authenticated non-random maximum displacements. |
 | signed clearance or shortfall | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute point estimate minus cell floor, with positive clearance and nonpositive shortfall. |
 | A — every required ratio passes / B — an authenticated, evaluable ratio is below 2 / Refusal — a required ratio is missing, unauthenticated, or has a zero denominator / outcome A / outcome B | Outcome sentence forms | glossed-at-first-use | The three bold forms state all-pass, evaluable-below-two, and cannot-evaluate dispositions. |

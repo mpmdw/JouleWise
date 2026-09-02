@@ -166,10 +166,14 @@ number appears. In order, report the three complete unguarded point bounds
 `DG-044`–`DG-046`, the three complete unguarded corner-re-evaluated bounds
 `DG-047`–`DG-049`, and the three ratios `DG-050`–`DG-052`; state that they are
 10.92, 5.92, and 7.02 and are not `_v5` outcomes. Then report the timing range
-and member basis from `DG-053`–`DG-056`, followed by the corrected-anchor
-sensitivity rows `DG-059`–`DG-066` if issued. Delete the old positive-width
-predicate as an outcome criterion; if its artifact label is mentioned, call it
-an older diagnostic label and state that it does not select the paper's result.
+and member basis from `DG-053`–`DG-056`. Treat `DG-059`–`DG-062` as the
+current 9.724-ms bracket screen in its named renderings; retain `DG-063` as the
+retired 10.818-ms screen; distinguish the superseded and current corpus counts
+in `DG-064` and `DG-065`; and keep `DG-066` as the separate historical
+short-prefill diagnostic population. These are distinct registry roles, not a
+single sensitivity series. Delete the old positive-width predicate as an
+outcome criterion; if its artifact label is mentioned, call it an older
+diagnostic label and state that it does not select the paper's result.
 
 ## 4. The resolution bound and how it is composed — frozen lines 109–114 — REWRITE
 
