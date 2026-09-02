@@ -172,6 +172,7 @@ EXPECTED_IDS = {
     # marker-ruling consequences)
     "T0-CLOCK-ROW-RENAME-01",
     "T0-UNATTENDED-01",
+    "T0-LIVENESS-BOUND-EMPIRICAL-01",
     "UNATTENDED-LAUNCH-01",
     # 2026-09-01 D-169 stage-1 split (MAGISTRATE-RULING-UNATTENDED-STAGE1,
     # cold gate coldgate-e10): night gate, night driver, launchd rehearsal
@@ -619,9 +620,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # ED-D118-NA-TIER-E2-01, and D110-MINT-DEP-RECONCILE-01: 116 + 4 = 120;
         # the dx/t26-a cold gate (2026-09-02, sections A2 and B4) registers
         # R7F-DX-PROSE-SCAN-01 and the five S9 rows not already in the kernel
-        # (01b, 02, 03, 05, 06): 120 + 6 = 126.
+        # (01b, 02, 03, 05, 06): 120 + 6 = 126; the T26 item-3 lane
+        # (2026-09-02, PHYS-1 limitation) registers
+        # T0-LIVENESS-BOUND-EMPIRICAL-01: 126 + 1 = 127.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 126)
+        self.assertEqual(len(self.tasks), 127)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -773,9 +776,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # D-167 retired the D-117 sequence and installed G2-a, G2-b, and the
         # transaction at ranks 2/3/4. G2-a is the dependency-ready lane head.
         # The later scored _v6 leg adds one net quiet-Mac row, so 13 becomes
-        # 14 after the D-167 replacement.
+        # 14 after the D-167 replacement; T0-LIVENESS-BOUND-EMPIRICAL-01
+        # (T26 item 3, PHYS-1 limitation, 2026-09-02) makes it 15.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 14)
+        self.assertEqual(len(quiet), 15)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)

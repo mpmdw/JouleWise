@@ -330,3 +330,48 @@ separately labelled written dissent presented to Ed (charter §5).
 > at HEAD. `.md:N` is a document pointer and satisfies nothing.
 
 Replaces the Enforcement paragraph above (`:281-290` at 2d24ef70), which fired on zero files at install; the rule body is unchanged.
+
+## Addendum 2026-09-02 — item 3 drift-envelope rationale
+
+This addendum corrects item 3's stated metrology rationale; it moves no ruled
+number. The `3.68 ppm × age` calculation states accumulated oscillator drift
+only and implicitly assumes zero initial reference error. The predicate admits
+`reference_bound_seconds <= 0.5 s`, so the guaranteed error envelope at age
+`t` is instead
+
+```text
+reference_bound_seconds + 3.68e-6 × t
+```
+
+For Sol's admitted `reference_bound_seconds = 0.499 s` example, the envelope is
+`0.499 + 3.68e-6 × 1830 = 0.5057344 s` (0.5057 s rounded) at the real-path
+oldest-sample horizon, and
+`0.499 + 3.68e-6 × (21_600 + 600 + 30) = 0.5808064 s` (0.5808 s rounded)
+under the standalone 6 h + 600 s + 30 s envelope. At the admitted 0.5-second
+ceiling, the corresponding guaranteed maxima are 0.5067344 s and 0.5818064 s.
+
+This correction does not justify restoring the struck five-second issuance
+bound: that bound was not the carrier of the initial reference error or the
+oscillator-drift guarantee. The 600 s liveness bound, the 6 h horizon, the
+[600 s, 3600 s] R0 span, the 30 s R1 batch bound, both 5 ms anchor gates, and
+the standing fence are unchanged. Any change to a ruled number still requires
+a cold gate.
+
+### Correction to item 3's "cannot false-refuse a healthy night" premise (2026-09-02, magistrate; disclosed to Ed)
+
+Item 3's text above says: "A successful path is strictly below every
+probe ceiling, so the bound cannot false-refuse a healthy night." That
+sentence is contradicted by the installed lane's own analysis
+(`docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md`
+§6.3.1): the fixed bounded subprocess subtotal between R1 completion and the
+validity-origin stamp is 495 s of governed probe waits plus 220 s of eleven
+20 s git ceilings — 715 s, already above the ruled 600 s before untimed
+startup, I/O, hashing and scans. The ruled number (600 s), its inclusive
+`<=`, the liveness labelling and the clock typing are NOT changed by this
+correction: the premise that is withdrawn is the safety claim, not the
+bound. What replaces it is an obligation, carried by kernel row
+`T0-LIVENESS-BOUND-EMPIRICAL-01`: no retained receipt yet carries both
+stamps, so the real R1→stamp interval is unmeasured; a refusal on this
+conjunct in a real night is a fail-closed false refusal to be measured and
+brought back to a cold gate, never relaxed in place. Found by the Opus 5
+counter-review at gate item 6 (trace `2026-09-02-t26-item-3/17`, F-9).

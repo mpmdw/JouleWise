@@ -158,7 +158,7 @@ The T26 cold gate struck this text from the Horizon paragraph above:
 
 It is replaced by the exact conjunct
 `0 <= validity_origin_monotonic_ns − r1_batch_finished_monotonic_ns <= 600_000_000_000`
-on ordinary `CLOCK_MONOTONIC`. At landing `e40e7502`, the production site is
+on the ordinary monotonic clock (`time.monotonic_ns`, `CLOCK_UPTIME_RAW` on Darwin — not `CLOCK_MONOTONIC_RAW`, which stays reserved for the anchor physics). At landing `e40e7502`, the production site is
 `joulewise/arm_readiness.py:6485`.
 
 The 6 h horizon, the [600 s, 3600 s] R0 span, the 30 s R1 batch bound, and

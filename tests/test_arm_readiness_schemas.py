@@ -45,7 +45,8 @@ TEST_BOOT_SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 # R1 at 2_000_000_000 ns, so the sample EVIDENCE horizon of R1 + 6 h + 1 s sits
 # inside the ruled 600 s window (`_MIN_IDLE_NS`); the previous 10**30 horizon
 # was rejected by the liveness predicate. The sample ARM keeps 10**30 because
-# arm consumption is checked against the live monotonic clock.
+# `sample_arm` carries no clock PROBE fact (empty evidence/rows), so the
+# liveness conjunct in `_clock_probe_predicate_passes` never runs against it.
 SAMPLE_VALID_UNTIL_NS = 2_000_000_000 + 21_600_000_000_000 + 1_000_000_000
 
 

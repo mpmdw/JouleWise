@@ -6475,7 +6475,9 @@ def _clock_probe_predicate_passes(
         and 0 <= value["r1_batch_duration_ns"] <= 30_000_000_000
         and value["r1_batch_duration_ns"] == r1_duration
         and value["reference_server_count"] >= 2
-        # D-170 item 3 ruled 600 s liveness provenance: 11 * 45 s + 105 s; see reason-code-coverage-delta.md §6.3.
+        # D-170 / COLD-GATE-RULING item 3: a liveness/hang detector, NOT a
+        # metrology bound. 600 s = 11 post-R1 _fresh_probe sites * 45 s + 105 s;
+        # see reason-code-coverage-delta.md §6.3 and its §6.3.1 limitation.
         and 0
         <= (valid_until - 21_600_000_000_000)
         - value["r1_batch_finished_monotonic_ns"]

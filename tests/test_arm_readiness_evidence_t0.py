@@ -852,12 +852,43 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             "PASS",
         )
 
-    def test_t0_liveness_constant_matches_minimum_idle_interval(self) -> None:
-        """Both constants encode the ruled 11 × 45 s + 105 s provenance."""
+    def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
+        """The ruled 600 s = (post-R1 ``_fresh_probe`` sites) × 45 s + 105 s.
 
+        Cold gate T26 item 3 states the constant's provenance as eleven
+        governed post-R1 probe sites times ``_PROBE_TIMEOUT_SECONDS`` plus
+        105 s of ungoverned work. This test counts the sites by AST so the
+        derivation is enforced, not asserted: a twelfth post-R1 site (or a
+        removed one) fails here instead of silently changing the governed
+        envelope. The one site inside ``_fresh_clock_reference_batch`` IS
+        R1 and is excluded. The equality with ``_MIN_IDLE_NS`` that the
+        ruling noted is a coincidence of two unrelated quantities (anchor
+        span floor, idle capture floor) and is deliberately not pinned.
+        """
+
+        import ast
+
+        tree = ast.parse(Path(t0.__file__).read_text(encoding="utf-8"))
+        sites_by_function: dict[str, int] = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            calls = [
+                call
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Name)
+                and call.func.id == "_fresh_probe"
+            ]
+            if calls:
+                sites_by_function[node.name] = len(calls)
+        self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
+        post_r1_sites = sum(sites_by_function.values())
+        self.assertEqual(post_r1_sites, 11, sites_by_function)
+        self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
         self.assertEqual(
             readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
-            t0._MIN_IDLE_NS,
+            (post_r1_sites * t0._PROBE_TIMEOUT_SECONDS + 105) * 1_000_000_000,
         )
 
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
