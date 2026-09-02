@@ -30,7 +30,9 @@ GEN_STATE_MODULE = _load_module("gen_state_for_test", ROOT / "scripts" / "gen_st
 class CheckGateLedgerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.temporary = tempfile.TemporaryDirectory(dir=os.environ["TMPDIR"])
+        # TMPDIR is optional: CI runners do not export it (luna 232 caught the
+        # KeyError on the pr-fast job); the seats' exported scratchpad masked it.
+        cls.temporary = tempfile.TemporaryDirectory(dir=os.environ.get("TMPDIR"))
         cls.repo = Path(cls.temporary.name) / "repo"
         cls.repo.mkdir()
         (cls.repo / "evidence.txt").write_text("evidence\n", encoding="utf-8")
