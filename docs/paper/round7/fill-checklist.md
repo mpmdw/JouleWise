@@ -26,6 +26,8 @@ draft in place.
   separate from RF's 43 comparisons. The literals-only tail
   `R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0` is not sufficient before a
   fill batch.
+  R7F also censes all 16 non-identity DX placements once the mandatory standing sentence appears and prints `R7F PLACED n/16` immediately before its `COMPARED` tail.
+  Prose placement (a rendered literal without its marker inside the DX region) is not covered by R7F until kernel row `R7F-DX-PROSE-SCAN-01` closes.
 - **STOP_FILL:** no insertion when a required artifact, field, identity pin,
   replay, branch predicate, or registered rendering is absent or malformed.
 - **`[PREFILL_LENGTH]`:** the G2-a selection record's

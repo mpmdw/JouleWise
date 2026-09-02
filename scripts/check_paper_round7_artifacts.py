@@ -107,6 +107,9 @@ FIELD_RE = re.compile(r"\b(?P<source>XD|AQ)#(?P<path>[A-Za-z0-9_.]+)")
 RENDER_RE = re.compile(r"R7F_RENDER=(?P<rule>[a-z0-9_]+)")
 FILL_RE = re.compile(r"\[FILL:(DX-[0-9]{3})\]")
 
+# docs/paper/results-fill-registry.md:747, mandatory standing sentence head.
+DX_STANDING_SENTENCE_HEAD = "“The following are diagnostic-era instrument statistics"
+
 
 class RegistryError(RuntimeError):
     """The registry cannot be interpreted without guessing."""
@@ -166,7 +169,8 @@ class Comparison:
 
 
 def _comparison(label: str, expected: Any, observed: Any) -> Comparison:
-    return Comparison(label, str(expected), str(observed), expected == observed)
+    match = type(expected) is type(observed) and expected == observed
+    return Comparison(label, str(expected), str(observed), match)
 
 
 def _source_size(metadata: str | None) -> int | None:
@@ -337,16 +341,18 @@ def load_json_artifacts(
     for code in ("XD", "AQ"):
         path = repository_root / spec.sources[code].path
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"), parse_float=Decimal)
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             comparisons.append(_comparison(f"JSON {code}", "valid JSON", f"{type(exc).__name__}: {exc}"))
         else:
             artifacts[code] = payload
             comparisons.append(_comparison(f"JSON {code}", "valid JSON", "valid JSON"))
     if "XD" in artifacts:
-        comparisons.append(
-            _comparison("XD schema", spec.sources["XD"].schema, artifacts["XD"].get("schema"))
-        )
+        try:
+            schema = _typed(artifacts["XD"].get("schema"), "str", "XD#schema")
+        except ValueError as exc:
+            schema = f"REFUSED: {exc}"
+        comparisons.append(_comparison("XD schema", spec.sources["XD"].schema, schema))
     return artifacts, comparisons
 
 
@@ -383,33 +389,40 @@ def check_supplier_fields(
     return comparisons
 
 
-def _decimal(value: Any) -> Decimal:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
-        raise ValueError(f"not a decimal scalar: {value!r}")
-    return Decimal(str(value))
+def _typed(value: Any, kind: str, field: str) -> Any:
+    if kind == "int" and isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if (
+        kind == "number"
+        and isinstance(value, (int, Decimal))
+        and not isinstance(value, bool)
+    ):
+        return Decimal(value)
+    if kind == "bool" and type(value) is bool:
+        return value
+    if kind == "str" and type(value) is str:
+        return value
+    raise ValueError(
+        f"{field}: expected {kind}, found {type(value).__name__}: {value!r}"
+    )
 
 
-def _fixed(value: Any, places: int) -> str:
-    return f"{_decimal(value):.{places}f}"
+def _decimal(value: Any, field: str) -> Decimal:
+    return _typed(value, "number", field)
 
 
-def _signed(value: Any, places: int) -> str:
-    decimal = _decimal(value)
+def _exact_int(value: Any, field: str) -> int:
+    return _typed(value, "int", field)
+
+
+def _fixed(value: Any, places: int, field: str) -> str:
+    return f"{_decimal(value, field):.{places}f}"
+
+
+def _signed(value: Any, places: int, field: str) -> str:
+    decimal = _decimal(value, field)
     sign = "−" if decimal < 0 else "+"
     return f"{sign}{abs(decimal):.{places}f}"
-
-
-def _exact_int(value: Any) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"not an exact integer: {value!r}")
-    return value
-
-
-def _exact_int_field(value: Any, field: str) -> int:
-    try:
-        return _exact_int(value)
-    except ValueError as exc:
-        raise ValueError(f"{field}: {exc}") from exc
 
 
 def _row_values(row: DXRow, artifacts: dict[str, Any]) -> list[Any]:
@@ -420,20 +433,27 @@ def render_row(row: DXRow, spec: RegistrySpec, artifacts: dict[str, Any]) -> str
     rule = row.render_rule
     values = _row_values(row, artifacts)
     if rule == "signed_1_ms" and len(values) == 1:
-        return f"{_signed(values[0], 1)} ms"
+        return f"{_signed(values[0], 1, row.field_refs[0].label)} ms"
     if rule in {"positive_count_of_count", "negative_count_of_count"} and len(values) == 2:
-        first = _exact_int_field(values[0], row.field_refs[0].label)
-        count = _exact_int_field(values[1], row.field_refs[1].label)
+        first = _exact_int(values[0], row.field_refs[0].label)
+        count = _exact_int(values[1], row.field_refs[1].label)
         return f"{first} of {count}"
     if rule == "fixed_1_ms" and len(values) == 1:
-        return f"{_fixed(values[0], 1)} ms"
+        return f"{_fixed(values[0], 1, row.field_refs[0].label)} ms"
     if rule == "ratio_percent_1" and len(values) == 2:
-        value = Decimal(100) * _decimal(values[0]) / _decimal(values[1])
+        value = (
+            Decimal(100)
+            * _decimal(values[0], row.field_refs[0].label)
+            / _decimal(values[1], row.field_refs[1].label)
+        )
         return f"{value:.1f} %"
     if rule == "difference_1_ms" and len(values) == 2:
-        return f"{_decimal(values[0]) - _decimal(values[1]):.1f} ms"
+        difference = _decimal(
+            values[0], row.field_refs[0].label
+        ) - _decimal(values[1], row.field_refs[1].label)
+        return f"{difference:.1f} ms"
     if rule == "integer" and len(values) == 1:
-        return str(_exact_int_field(values[0], row.field_refs[0].label))
+        return str(_exact_int(values[0], row.field_refs[0].label))
     if rule == "derived_refused_counts" and len(values) == 3:
         derived, refused, _ = values
         summary = artifacts["AQ"].get("summary")
@@ -442,10 +462,10 @@ def render_row(row: DXRow, spec: RegistrySpec, artifacts: dict[str, Any]) -> str
             raise ValueError(
                 "AQ#summary.v3_refusals_by_token is not exclusively anchor_unresolved"
             )
-        derived_i = _exact_int_field(derived, "AQ#summary.v3_derived_count")
-        refused_i = _exact_int_field(refused, "AQ#summary.v3_refused_count")
+        derived_i = _exact_int(derived, "AQ#summary.v3_derived_count")
+        refused_i = _exact_int(refused, "AQ#summary.v3_refused_count")
         population = summary.get("population_size")
-        population_i = _exact_int_field(population, "AQ#summary.population_size")
+        population_i = _exact_int(population, "AQ#summary.population_size")
         if derived_i + refused_i != population_i:
             raise ValueError(
                 "AQ#summary v3_derived_count + v3_refused_count does not equal population_size"
@@ -460,37 +480,45 @@ def render_row(row: DXRow, spec: RegistrySpec, artifacts: dict[str, Any]) -> str
         )
     if rule == "flip_count_refused_by_v3" and len(values) == 2:
         count, flips = values
-        count_i = _exact_int_field(count, "AQ#summary.admissibility_flip_count")
+        count_i = _exact_int(count, "AQ#summary.admissibility_flip_count")
         if not isinstance(flips, list) or len(flips) != count_i:
             raise ValueError("admissibility_flips does not match admissibility_flip_count")
-        if any(
-            not isinstance(flip, dict) or flip.get("flip_direction") != "refused_by_v3"
-            for flip in flips
-        ):
-            raise ValueError("not every admissibility flip is refused_by_v3")
+        for index, flip in enumerate(flips):
+            if not isinstance(flip, dict):
+                raise ValueError(f"AQ#summary.admissibility_flips[{index}] is not a dict")
+            direction = _typed(
+                flip.get("flip_direction"),
+                "str",
+                f"AQ#summary.admissibility_flips[{index}].flip_direction",
+            )
+            if direction != "refused_by_v3":
+                raise ValueError("not every admissibility flip is refused_by_v3")
         bucket_word = "both" if count_i == 2 else "all"
         return f"{count_i} ({bucket_word} refused_by_v3)"
     if rule == "control_count" and len(values) == 3:
         reproduced, population, failures = values
-        reproduced_i = _exact_int_field(
+        reproduced_i = _exact_int(
             reproduced, "AQ#summary.control_v2_reproduces_stored_count"
         )
-        population_i = _exact_int_field(population, "AQ#summary.population_size")
+        population_i = _exact_int(population, "AQ#summary.population_size")
         if not isinstance(failures, list):
             raise ValueError("control reproduction failure count is unavailable: not a list")
         if len(failures) != 1:
             raise ValueError(
                 f"control reproduction failure count is {len(failures)}, expected 1"
             )
-        return f"{reproduced_i} of {population_i}; failure {failures[0]}"
+        failure = _typed(
+            failures[0], "str", "AQ#summary.control_v2_reproduction_failures[0]"
+        )
+        return f"{reproduced_i} of {population_i}; failure {failure}"
     if rule == "signed_6_ms" and len(values) == 1:
-        return f"{_signed(values[0], 6)} ms"
+        return f"{_signed(values[0], 6, row.field_refs[0].label)} ms"
     if rule == "fixed_6_ms" and len(values) == 1:
-        return f"{_fixed(values[0], 6)} ms"
+        return f"{_fixed(values[0], 6, row.field_refs[0].label)} ms"
     if rule == "fixed_2_percent" and len(values) == 1:
-        return f"{_fixed(values[0], 2)} %"
+        return f"{_fixed(values[0], 2, row.field_refs[0].label)} %"
     if rule == "signed_2_percent" and len(values) == 1:
-        return f"{_signed(values[0], 2)} %"
+        return f"{_signed(values[0], 2, row.field_refs[0].label)} %"
     raise ValueError(f"unsupported or ill-shaped renderer {rule} with {len(values)} values")
 
 
@@ -516,9 +544,15 @@ def check_gates(artifacts: dict[str, Any]) -> list[Comparison]:
     comparisons: list[Comparison] = []
     for source, path, _row_id in GATE_SPECS:
         try:
-            value = resolve_field(artifacts[source], path)
+            value = _typed(
+                resolve_field(artifacts[source], path),
+                "bool",
+                f"{source}#{path}",
+            )
         except (KeyError, TypeError):
             value = "MISSING"
+        except ValueError as exc:
+            value = f"REFUSED: {exc}"
         comparisons.append(_comparison(f"gate {source}#{path}", True, value))
     return comparisons
 
@@ -529,6 +563,11 @@ def _svg_shapes(root: ET.Element, fill: str, tag: str) -> list[ET.Element]:
     if len(groups) != 1:
         raise ValueError(f"expected one SVG group with fill {fill}, found {len(groups)}")
     return [child for child in groups[0] if child.tag == f"{namespace}{tag}"]
+
+
+def _geometry(value: Decimal) -> float:
+    # Tolerance arithmetic only; the rendered literal is the Decimal.
+    return float(value)
 
 
 def check_figure(
@@ -580,24 +619,34 @@ def check_figure(
             recovered_index = (x - 118.0) * 58.0 / (962.0 - 118.0)
             recovered_value = (476.0 - y) * 50.0 / (476.0 - 150.0) - 20.0
             pulse = pulses[index]
-            if not isinstance(pulse, dict) or value_key not in pulse:
-                observed = (
-                    f"REFUSED: per_pulse[{index}] is not a dict"
-                    if not isinstance(pulse, dict)
-                    else f"REFUSED: per_pulse[{index}] lacks {value_key}"
-                )
+            if not isinstance(pulse, dict):
                 comparisons.append(
                     _comparison(
                         f"figure {name} mark {index}",
                         f"per_pulse dict with {value_key}",
-                        observed,
+                        f"REFUSED: per_pulse[{index}] is not a dict",
                     )
                 )
                 continue
-            expected_value = float(pulse[value_key])
+            try:
+                expected_value = _typed(
+                    pulse[value_key],
+                    "number",
+                    f"XD#per_pulse[{index}].{value_key}",
+                )
+            except (KeyError, ValueError) as exc:
+                comparisons.append(
+                    _comparison(
+                        f"figure {name} mark {index}",
+                        "present and matching",
+                        f"REFUSED: {exc}",
+                    )
+                )
+                continue
             match = (
                 abs(recovered_index - index) <= X_INDEX_TOLERANCE
-                and abs(recovered_value - expected_value) <= Y_VALUE_TOLERANCE_MS
+                and abs(recovered_value - _geometry(expected_value))
+                <= Y_VALUE_TOLERANCE_MS
             )
             comparisons.append(
                 Comparison(
@@ -649,6 +698,48 @@ def check_skeleton_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
     return comparisons
 
 
+def _placement_row_ids(spec: RegistrySpec) -> tuple[str, ...]:
+    return tuple(row_id for row_id in spec.rows if row_id not in IDENTITY_ROWS)
+
+
+def _placed_row_count(skeleton_text: str, spec: RegistrySpec) -> int:
+    return sum(
+        skeleton_text.count(f"[FILL:{row_id}]") >= 1
+        for row_id in _placement_row_ids(spec)
+    )
+
+
+def check_placement(
+    skeleton_text: str, spec: RegistrySpec | None = None
+) -> list[Comparison]:
+    """Census DX placements after the mandatory standing sentence is present."""
+
+    if spec is None:
+        repository_root = Path(__file__).resolve().parent.parent
+        spec = parse_registry(repository_root / REGISTRY_RELATIVE_PATH)
+    row_ids = _placement_row_ids(spec)
+    n_standing = skeleton_text.count(DX_STANDING_SENTENCE_HEAD)
+    if n_standing == 0:
+        marker_count = skeleton_text.count("[FILL:DX-")
+        return [
+            Comparison(
+                "placement standing sentence",
+                "0 [FILL:DX- markers",
+                f"{marker_count} [FILL:DX- markers",
+                marker_count == 0,
+            )
+        ]
+    return [
+        Comparison(
+            f"placement {row_id}",
+            "≥1",
+            str(skeleton_text.count(f"[FILL:{row_id}]")),
+            skeleton_text.count(f"[FILL:{row_id}]") >= 1,
+        )
+        for row_id in row_ids
+    ]
+
+
 def digest_half(
     repository_root: Path, registry_path: Path, skeleton_path: Path
 ) -> tuple[RegistrySpec | None, list[Comparison]]:
@@ -670,6 +761,11 @@ def digest_half(
         comparisons.append(_comparison("successor skeleton", "readable", f"{type(exc).__name__}: {exc}"))
     else:
         comparisons.extend(check_skeleton_literals(skeleton_text, spec))
+        comparisons.extend(
+            comparison
+            for comparison in check_placement(skeleton_text, spec)
+            if not comparison.match
+        )
     return spec, comparisons
 
 
@@ -689,18 +785,29 @@ def _required_corpus_paths(corpus_root: Path, repository_root: Path, spec: Regis
         corpus_root / "runs" / "instrument_validation",
     ]
     try:
-        aq = json.loads((repository_root / spec.sources["AQ"].path).read_text(encoding="utf-8"))
+        aq = json.loads(
+            (repository_root / spec.sources["AQ"].path).read_text(encoding="utf-8"),
+            parse_float=Decimal,
+        )
     except (OSError, UnicodeError, json.JSONDecodeError):
         return required
     captures = aq.get("captures", [])
     if isinstance(captures, list):
-        for capture in captures:
-            if isinstance(capture, dict) and isinstance(capture.get("validation_id"), str):
+        for index, capture in enumerate(captures):
+            if isinstance(capture, dict):
+                try:
+                    validation_id = _typed(
+                        capture.get("validation_id"),
+                        "str",
+                        f"AQ#captures[{index}].validation_id",
+                    )
+                except ValueError:
+                    continue
                 required.append(
                     corpus_root
                     / "runs"
                     / "instrument_validation"
-                    / capture["validation_id"]
+                    / validation_id
                     / "instrument_evidence.json"
                 )
     return required
@@ -826,6 +933,24 @@ def _print_comparisons(comparisons: Iterable[Comparison]) -> None:
             )
 
 
+def _print_tail(
+    token: str,
+    comparisons: list[Comparison],
+    skeleton_path: Path,
+    spec: RegistrySpec | None,
+) -> None:
+    total = len(_placement_row_ids(spec)) if spec is not None else 16
+    try:
+        skeleton_text = skeleton_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        placed = 0
+    else:
+        placed = _placed_row_count(skeleton_text, spec) if spec is not None else 0
+    print(f"R7F PLACED {placed}/{total}")
+    mismatches = sum(not comparison.match for comparison in comparisons)
+    print(f"{token} {len(comparisons)} / MISMATCHES {mismatches}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -856,9 +981,8 @@ def main(argv: list[str] | None = None) -> int:
     spec, comparisons = digest_half(repository_root, registry_path, skeleton_path)
     if any(not comparison.match for comparison in comparisons) or spec is None:
         _print_comparisons(comparisons)
-        mismatches = sum(not comparison.match for comparison in comparisons)
         token = "R7F LITERALS-ONLY COMPARED" if args.literals_only else "R7F COMPARED"
-        print(f"{token} {len(comparisons)} / MISMATCHES {mismatches}")
+        _print_tail(token, comparisons, skeleton_path, spec)
         return 2
 
     if not args.literals_only:
@@ -872,7 +996,7 @@ def main(argv: list[str] | None = None) -> int:
     _print_comparisons(comparisons)
     mismatches = sum(not comparison.match for comparison in comparisons)
     token = "R7F LITERALS-ONLY COMPARED" if args.literals_only else "R7F COMPARED"
-    print(f"{token} {len(comparisons)} / MISMATCHES {mismatches}")
+    _print_tail(token, comparisons, skeleton_path, spec)
     return 0 if mismatches == 0 else 2
 
 

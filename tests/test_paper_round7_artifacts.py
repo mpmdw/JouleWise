@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 from contextlib import redirect_stderr, redirect_stdout
+from decimal import Decimal
 import hashlib
 import importlib.util
 import io
@@ -86,24 +87,28 @@ def _copy_checker_inputs(root: Path) -> None:
         shutil.copy2(ROOT / relative_path, target)
 
 
-def _update_scratch_aq_pin(root: Path) -> None:
-    aq_path = root / FENCE.EXPECTED_SOURCE_PATHS["AQ"]
+def _update_scratch_json_pin(root: Path, code: str) -> None:
+    artifact_path = root / FENCE.EXPECTED_SOURCE_PATHS[code]
     registry_path = root / FENCE.REGISTRY_RELATIVE_PATH
     registry_text = registry_path.read_text(encoding="utf-8")
-    old_pin = FENCE.parse_registry_text(registry_text).sources["AQ"]
-    new_sha256 = hashlib.sha256(aq_path.read_bytes()).hexdigest()
-    new_size = aq_path.stat().st_size
+    old_pin = FENCE.parse_registry_text(registry_text).sources[code]
+    new_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    new_size = artifact_path.stat().st_size
     registry_text = registry_text.replace(old_pin.sha256, new_sha256)
     old_source = (
-        f"- AQ = {old_pin.path}, sha256 {new_sha256} "
+        f"- {code} = {old_pin.path}, sha256 {new_sha256} "
         f"({old_pin.size:,} B)"
     )
-    new_source = f"- AQ = {old_pin.path}, sha256 {new_sha256} ({new_size:,} B)"
+    new_source = f"- {code} = {old_pin.path}, sha256 {new_sha256} ({new_size:,} B)"
     if old_source not in registry_text:
-        raise AssertionError("scratch AQ source pin was not found")
+        raise AssertionError(f"scratch {code} source pin was not found")
     registry_path.write_text(
         registry_text.replace(old_source, new_source, 1), encoding="utf-8"
     )
+
+
+def _update_scratch_aq_pin(root: Path) -> None:
+    _update_scratch_json_pin(root, "AQ")
 
 
 def _run_scratch_checker(root: Path) -> subprocess.CompletedProcess[str]:
@@ -204,6 +209,63 @@ class RegistryAndDigestTests(unittest.TestCase):
             SKELETON_PATH.read_text(encoding="utf-8"), self.spec
         )
         self.assertTrue(all(row.match for row in comparisons), comparisons)
+
+    def test_comparison_requires_identical_python_types(self) -> None:
+        for expected, observed in ((True, 1), (True, 1.0), (1, 1.0)):
+            with self.subTest(expected=expected, observed=observed):
+                self.assertFalse(FENCE._comparison("x", expected, observed).match)
+        self.assertTrue(
+            FENCE._comparison("x", Decimal("1"), Decimal("1.0")).match
+        )
+
+    def test_typed_resolver_accepts_and_refuses_dictated_shapes(self) -> None:
+        rejected = {
+            "int": (Decimal("15.9"), Decimal("15.0"), True, "15", None),
+            "number": ("4.05", True, None, []),
+            "bool": (1, Decimal("1.0"), "true", None),
+            "str": (1, True, None),
+        }
+        for kind, values in rejected.items():
+            for value in values:
+                with self.subTest(kind=kind, value=value):
+                    with self.assertRaises(ValueError) as raised:
+                        FENCE._typed(value, kind, "SRC#path")
+                    self.assertEqual(
+                        str(raised.exception),
+                        f"SRC#path: expected {kind}, found "
+                        f"{type(value).__name__}: {value!r}",
+                    )
+
+        accepted = (
+            (15, "int", 15, int),
+            (15, "number", Decimal(15), Decimal),
+            (Decimal("4.05"), "number", Decimal("4.05"), Decimal),
+            (True, "bool", True, bool),
+            ("x", "str", "x", str),
+        )
+        for value, kind, expected, expected_type in accepted:
+            with self.subTest(kind=kind, value=value):
+                observed = FENCE._typed(value, kind, "SRC#path")
+                self.assertEqual(observed, expected)
+                self.assertIs(type(observed), expected_type)
+
+    def test_placement_rows_are_the_16_parsed_nonidentity_rows(self) -> None:
+        expected = {
+            *(f"DX-{number:03d}" for number in range(10, 18)),
+            *(f"DX-{number:03d}" for number in range(20, 28)),
+        }
+        self.assertEqual(set(FENCE._placement_row_ids(self.spec)), expected)
+        self.assertEqual(len(FENCE._placement_row_ids(self.spec)), 16)
+
+    def test_standing_sentence_head_is_pinned_to_the_registry(self) -> None:
+        self.assertIn(FENCE.DX_STANDING_SENTENCE_HEAD, self.text)
+
+    def test_current_skeleton_passes_zero_placement_census(self) -> None:
+        skeleton_text = SKELETON_PATH.read_text(encoding="utf-8")
+        comparisons = FENCE.check_placement(skeleton_text, self.spec)
+        self.assertEqual(len(comparisons), 1)
+        self.assertTrue(comparisons[0].match, comparisons)
+        self.assertEqual(FENCE._placed_row_count(skeleton_text, self.spec), 0)
 
 
 class RefusalTests(unittest.TestCase):
@@ -402,6 +464,22 @@ class RefusalTests(unittest.TestCase):
         self.assertEqual(comparisons[0].label, "replay XS exit")
         self.assertFalse(comparisons[0].match)
 
+    def test_renamed_out_flag_in_pinned_command_is_refused(self) -> None:
+        mutated = FENCE.F4_REPLAY_COMMAND.replace("--out ", "--outt ", 1)
+        self.assertNotEqual(mutated, FENCE.F4_REPLAY_COMMAND)
+        with mock.patch.object(FENCE, "F4_REPLAY_COMMAND", mutated), mock.patch.object(
+            FENCE, "_required_corpus_paths", return_value=[]
+        ):
+            comparisons = FENCE.replay_half(ROOT, ROOT, self.spec)
+
+        self.assertEqual(len(comparisons), 1)
+        self.assertEqual(comparisons[0].label, "replay F4 command")
+        self.assertFalse(comparisons[0].match)
+        self.assertEqual(
+            comparisons[0].observed,
+            "pinned F4 command must contain exactly one --out",
+        )
+
     def test_missing_json_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -511,6 +589,190 @@ class RefusalTests(unittest.TestCase):
         self.assertIn("R7F_RENDER=signed_2_percent", output)
 
 
+class TypedArtifactCliTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.spec = FENCE.parse_registry(REGISTRY_PATH)
+
+    def test_string_number_in_aq_is_refused_by_dx026(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-aq-string-number-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            aq_path = root / FENCE.EXPECTED_SOURCE_PATHS["AQ"]
+            aq_text = aq_path.read_text(encoding="utf-8")
+            mutated = aq_text.replace(
+                '"max_absolute_pct": 4.046812,',
+                '"max_absolute_pct": "4.046812",',
+                1,
+            )
+            self.assertNotEqual(mutated, aq_text)
+            aq_path.write_text(mutated, encoding="utf-8")
+            _update_scratch_json_pin(root, "AQ")
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("row DX-026", output)
+        self.assertIn("expected number, found str", output)
+
+    def test_integer_bool_in_xd_is_refused_by_gate(self) -> None:
+        self.assertFalse(FENCE._comparison("P2 bool/int", True, 1).match)
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-xd-int-bool-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            xd_path = root / FENCE.EXPECTED_SOURCE_PATHS["XD"]
+            xd_text = xd_path.read_text(encoding="utf-8")
+            mutated = xd_text.replace(
+                '"b_fiducial_s_matches_exactly": true,',
+                '"b_fiducial_s_matches_exactly": 1,',
+                1,
+            )
+            self.assertNotEqual(mutated, xd_text)
+            xd_path.write_text(mutated, encoding="utf-8")
+            _update_scratch_json_pin(root, "XD")
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("gate XD#calibration_gate.b_fiducial_s_matches_exactly", output)
+        self.assertIn("expected bool, found int", output)
+
+    def test_string_per_pulse_number_is_refused_by_figure(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-xd-string-pulse-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            xd_path = root / FENCE.EXPECTED_SOURCE_PATHS["XD"]
+            xd_text = xd_path.read_text(encoding="utf-8")
+            mutated = xd_text.replace(
+                '"onset_best_fit_lag_ms": 16.0,',
+                '"onset_best_fit_lag_ms": "16.0",',
+                1,
+            )
+            self.assertNotEqual(mutated, xd_text)
+            xd_path.write_text(mutated, encoding="utf-8")
+            _update_scratch_json_pin(root, "XD")
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("figure onset mark 0", output)
+        self.assertIn("expected number, found str", output)
+
+    def test_json_integer_is_accepted_for_number_and_renders_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-xd-integer-number-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            xd_path = root / FENCE.EXPECTED_SOURCE_PATHS["XD"]
+            xd_text = xd_path.read_text(encoding="utf-8")
+            mutated = xd_text.replace(
+                '"median_absolute_deviation_ms": 4.0,',
+                '"median_absolute_deviation_ms": 4,',
+                1,
+            )
+            self.assertNotEqual(mutated, xd_text)
+            xd_path.write_text(mutated, encoding="utf-8")
+            _update_scratch_json_pin(root, "XD")
+
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertIn("ok   row DX-015", output)
+
+    def test_decimal_loader_preserves_fixed_literal_across_float_roundtrip_edge(self) -> None:
+        token = "1.0000014999999999999999"
+        self.assertEqual(f"{Decimal(token):.6f}", "1.000001")
+        self.assertEqual(f"{Decimal(str(float(token))):.6f}", "1.000002")
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-aq-decimal-token-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            aq_path = root / FENCE.EXPECTED_SOURCE_PATHS["AQ"]
+            aq_text = aq_path.read_text(encoding="utf-8")
+            mutated = aq_text.replace(
+                '"max_absolute_ms": 1.090519,',
+                f'"max_absolute_ms": {token},',
+                1,
+            )
+            self.assertNotEqual(mutated, aq_text)
+            aq_path.write_text(mutated, encoding="utf-8")
+
+            registry_path = root / FENCE.REGISTRY_RELATIVE_PATH
+            registry_text = registry_path.read_text(encoding="utf-8")
+            mutated_registry = registry_text.replace(
+                "| 1.090519 ms |", "| 1.000001 ms |", 1
+            )
+            self.assertNotEqual(mutated_registry, registry_text)
+            registry_path.write_text(mutated_registry, encoding="utf-8")
+            _update_scratch_json_pin(root, "AQ")
+
+            artifacts, json_checks = FENCE.load_json_artifacts(
+                root, FENCE.parse_registry(registry_path)
+            )
+            self.assertTrue(all(check.match for check in json_checks), json_checks)
+            loaded = artifacts["AQ"]["summary"]["delta_v3_vs_stored_absolute"][
+                "max_absolute_ms"
+            ]
+            self.assertIs(type(loaded), Decimal)
+            self.assertEqual(loaded, Decimal(token))
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertIn("ok   row DX-025", output)
+
+    def test_standing_sentence_with_15_markers_refuses_the_16th(self) -> None:
+        row_ids = FENCE._placement_row_ids(self.spec)
+        missing = row_ids[-1]
+        skeleton = [FENCE.DX_STANDING_SENTENCE_HEAD]
+        skeleton.extend(
+            f"[FILL:{row_id}] {self.spec.rows[row_id].marker}"
+            for row_id in row_ids[:-1]
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-placement-missing-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                "\n".join(skeleton) + "\n", encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn(f"MISMATCH placement {missing}", output)
+        self.assertIn("R7F PLACED 15/16", output)
+
+    def test_marker_without_standing_sentence_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-placement-no-standing-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                "[FILL:DX-010] +13.0 ms\n", encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("MISMATCH placement standing sentence", output)
+        self.assertIn("observed '1 [FILL:DX- markers'", output)
+
+
 class InvocationTests(unittest.TestCase):
     def test_literals_only_cli_passes(self) -> None:
         with tempfile.TemporaryDirectory(
@@ -531,10 +793,13 @@ class InvocationTests(unittest.TestCase):
                 check=False,
             )
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        lines = completed.stdout.splitlines()
+        self.assertEqual(lines[-2], "R7F PLACED 0/16")
         self.assertEqual(
-            completed.stdout.splitlines()[-1],
+            lines[-1],
             "R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0",
         )
+        self.assertLess(lines.index("R7F PLACED 0/16"), len(lines) - 1)
 
     def test_absent_corpus_exits_three_and_names_path(self) -> None:
         with tempfile.TemporaryDirectory(
