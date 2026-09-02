@@ -45,12 +45,13 @@ findings into landed fixes, each through the full adversarial cycle
 (implementer, two reviewers from different model families, a fix round,
 a re-audit of the fix by a third model, and — whenever a fix has to be
 tried twice — a cold reviewer with no memory of the discussion). Four
-lanes are in flight: the paper's dependence-sensitivity sheet (every
-number bound to code or an executed command; PR #256, review complete);
-a reader-side check that the prompt the machine actually tokenized is
-the one the plan registered (re-audit complete, one test gap closed at
-the bench; PR #258); the prompt-length probe's pin loader (re-audit
-clean; PR #257); and a correction to the dominance close-out, where the cold reviewers showed
+lanes are in flight, each as its own pull request awaiting the slow CI
+queue: the paper's dependence-sensitivity sheet (every number bound to
+code or an executed command; review complete); a reader-side check that
+the prompt the machine actually tokenized is the one the plan registered
+(re-audit complete, one test gap closed at the bench); the prompt-length
+probe's pin loader (re-audit clean); and a correction to the dominance
+close-out, where the cold reviewers showed
 the design compared block identities across two naming schemes that
 can never match in production — the corrected design binds each block
 by its recorded members and delta instead, and is being implemented
