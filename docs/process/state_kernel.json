@@ -1278,6 +1278,55 @@
       "status_note": "This is the post-campaign consumer of the close-out for the dominance-sentence fill. It starts only after both the sidecar emitter and successor renderer exist; fixture proof does not move the live fill before the final G3 check.",
       "stop_card": null
     },
+    "DG071-PROVENANCE-TEST-01": {
+      "acceptance": {
+        "evidence": [
+          "tests/test_issue_dg071_dg075_statistics.py asserts the exact argv the PROVENANCE_DISCLOSURE names (git log -1 --format=%H -- <script path>, cwd = repository_root) against a mocked subprocess.run",
+          "The real-git fixture is the cold seat's F2 pair (file 40): repository A ends at the producer's last change so it IS HEAD; repository B merges it --no-ff, changes another script, adds an empty commit, and carries a later producer change on a ref HEAD does not reach; every commit carries a distinct pinned timestamp; the shape facts are asserted with git",
+          "An add-only repository shape is retained so the --diff-filter=M refusal kill is not lost (file 41 finding 1)",
+          "The mutant table replayed at the bench kills every named candidate in files 39-41 (HEAD, HEAD^, HEAD~k, unscoped, scripts/ pathspec, glob pathspec, --diff-filter=A, --diff-filter=M, --first-parent, --all, --no-merges) — --follow is not a target",
+          "The PR touches ONLY the test file; the producer, the artifact and the eight values of record are byte-unchanged"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DG071-PROVENANCE-TEST-01/acceptance",
+          "label": "DG071-PROVENANCE-TEST-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The DG-071/DG-075 provenance test pins the disclosed git command and exercises it on a history pair derived from the command's axes, so no further fixture enumeration is needed."
+      },
+      "authority": {
+        "label": "Fixture-shape cold gate synthesis (files 38-42, 2026-09-02)",
+        "path": "docs/process_traces/2026-09-02-paper-d-dg071/42-magistrate-synthesis-fixture-shape-gate.md"
+      },
+      "dependencies": [],
+      "fallback": {
+        "action": "The next spend is the Opus seeded generated-history differential with an independent oracle (file 41 Q2), never another hand-added fixture feature.",
+        "condition": "A wrong implementation survives the argv pin + F2 pair + add-only shape.",
+        "pointer": {
+          "anchor": "q2--cure-shape-refute-it-does-not-close-the-class-and-in-one-respect-it-makes-coverage-worse-than-what-is-already-committed",
+          "label": "Opus 5 refutation, Q2 — generated-history differential",
+          "path": "docs/process_traces/2026-09-02-paper-d-dg071/41-coldgate-opus-refutation-fixture-shape.md"
+        }
+      },
+      "fences": [
+        {
+          "authority": {
+            "label": "Fixture-shape cold gate, Q3 (unanimous: test-only cure)",
+            "path": "docs/process_traces/2026-09-02-paper-d-dg071/42-magistrate-synthesis-fixture-shape-gate.md"
+          },
+          "rule": "The cure PR touches only tests/test_issue_dg071_dg075_statistics.py. Any edit to scripts/issue_dg071_dg075_statistics.py changes producer.script_sha256, moves the reference command's answer away from the recorded commit, and voids the byte-identical replay; such an edit is a re-issue, not this row."
+        }
+      ],
+      "flags": [],
+      "goal": "Land the fixture-shape gate's ruled provenance-test shape (argv pin + F2 history pair + add-only shape) as a test-only PR on main after PR #276 merges, closing terra 254 G1-SF1/G1-N1 without a fourth in-PR fix round.",
+      "id": "DG071-PROVENANCE-TEST-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 94,
+      "status": "queued",
+      "status_note": "Opened 2026-09-02 by the fixture-shape cold gate (three seats unanimous on merge-now + kernel row). The committed test admits eight of thirteen wrong git-command candidates (file 41 Q4); the artifact and its provenance fields are verified correct by all three seats, so this is a should-fix on regression protection, not a reader-facing defect.",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [

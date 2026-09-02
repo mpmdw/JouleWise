@@ -1,0 +1,13 @@
+```json
+{"schema":"claude-codex-report/v1","genre":"implementation","status":"clean","completion":"complete","summary":"Cured all three custody findings without changing statistics, estimators, or rounding.","workspace":{"base_requested":"/Users/edr/code/JouleWise-wt-paper-d","base_mode":"exact","head_start":"1baf8c4c5f1c1e671cfd4b10fdd76452b1fdc8c5","head_end":"1baf8c4c5f1c1e671cfd4b10fdd76452b1fdc8c5","upstream_end":"1baf8c4c5f1c1e671cfd4b10fdd76452b1fdc8c5","branch":"feat/2026-09-02-paper-d"},"pathspec":["scripts/issue_dg071_dg075_statistics.py","tests/test_issue_dg071_dg075_statistics.py"],"unowned_dirty":[],"verdict":{"implementation":"implemented","acceptance":"ready"},"verification":[{"id":"V1","kind":"test","cmd":"TMPDIR=<scratchpad>/codex-fix-round1-d PYTHONDONTWRITEBYTECODE=1 /Users/edr/code/JouleWise/.venv/bin/python -m unittest tests.test_issue_dg071_dg075_statistics","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["........","----------------------------------------------------------------------","Ran 8 tests in 0.120s","","OK"]},"expected":{"exit_code":0,"tail_regex":"Ran 8 tests in .*\\n\\nOK"}},{"id":"V2","kind":"smoke","cmd":"TMPDIR=<scratchpad>/codex-fix-round1-d PYTHONDONTWRITEBYTECODE=1 /Users/edr/code/JouleWise/.venv/bin/python scripts/issue_dg071_dg075_statistics.py --out <scratchpad>/codex-fix-round1-d/dg071-dg075-statistics.json","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["DG-071 median_ms=120.918512 iqr_ms=5.975008","DG-075 median_ms=120.922327 iqr_ms=5.894899"]},"expected":{"exit_code":0,"tail_regex":"DG-071 median_ms=120\\.918512 iqr_ms=5\\.975008\\nDG-075 median_ms=120\\.922327 iqr_ms=5\\.894899"}},{"id":"V3","kind":"inspection","cmd":"shasum -a 256 <scratchpad>/codex-fix-round1-d/dg071-dg075-statistics.json","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["65db48de335cc57f595aa86d48a9ac331bb4836bb47cea23d0e3cf2372f5b5d8  <scratchpad>/codex-fix-round1-d/dg071-dg075-statistics.json"]},"expected":{"exit_code":0,"tail_regex":"^65db48de335cc57f595aa86d48a9ac331bb4836bb47cea23d0e3cf2372f5b5d8"}}],"flags":[]}
+```
+
+## Change
+
+The artifact now records `runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv`; absolute paths remain refusal-only. Added cross-checkout byte-determinism coverage, biting `record_field_missing` CLI coverage with exit 2, and six-decimal Q1/Q3 millisecond Markdown columns.
+
+Real replay remained unchanged:
+
+- DG-071: median `0.12091851234436035 s`; IQR `0.005975008010864258 s`
+- DG-075: median `0.12092232704162598 s`; IQR `0.005894899368286133 s`
+- Artifact SHA-256: `65db48de335cc57f595aa86d48a9ac331bb4836bb47cea23d0e3cf2372f5b5d8`

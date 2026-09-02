@@ -21,6 +21,8 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # 2026-09-02 paper-d fixture-shape cold gate (files 38-42).
+    "DG071-PROVENANCE-TEST-01",
     # 2026-08-27 T26 end-of-sprint kernel wave (WAVE-ROWS.md ledger: S5 sweep,
     # paper ruling item 16, D-156 Q1-B/Q4-B, S2 producers, S11 F4, D-160 R-3
     # in flight, D-158 A-5, D-160 R-4, D-158 R-3, S3 delta2 D4/D3, S9-04/09/10/11/12/13)
@@ -625,9 +627,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # (2026-09-02, PHYS-1 limitation) registers
         # T0-LIVENESS-BOUND-EMPIRICAL-01: 126 + 1 = 127; the census-guard
         # cold gate (2026-09-02, files 22-25) registers
-        # T0-PROBE-CENSUS-RESOURCE-01: 127 + 1 = 128.
+        # T0-PROBE-CENSUS-RESOURCE-01: 127 + 1 = 128; the paper-d
+        # fixture-shape cold gate (2026-09-02, files 38-42) registers
+        # DG071-PROVENANCE-TEST-01: 128 + 1 = 129.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 128)
+        self.assertEqual(len(self.tasks), 129)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
