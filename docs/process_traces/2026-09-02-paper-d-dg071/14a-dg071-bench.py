@@ -29,3 +29,7 @@ ts=sorted(float(t) for t in groups); d=[b-a for a,b in zip(ts,ts[1:])]
 print("DG-075 float64 405 q1/med/q3 ms",stats(d))
 print("widths[1:] == diffs?", all(abs(a-b)<1e-9 for a,b in zip(w_rec[1:],d)), "n",len(d))
 print("min width ms",min(w_rec)*1000,"count<112.5ms",sum(1 for x in w_rec if x*1000<112.5),"in band 111.8-112.5",sum(1 for x in w_rec if 111.8<=x*1000<=112.5))
+# tiling check: interval_start_s of record k vs timestamp_s of record k-1 (text compare)
+ks=list(groups); mism=[i for i in range(1,len(ks)) if groups[ks[i]][0]["interval_start_s"]!=ks[i-1]]
+print("records whose interval_start_s != previous timestamp_s:",len(mism),"max gap us",max(abs(float(groups[ks[i]][0]["interval_start_s"])-float(ks[i-1]))*1e6 for i in mism) if mism else 0)
+print("interval_end_s == timestamp_s for all records:", all(g[0]["interval_end_s"]==t for t,g in groups.items()))
