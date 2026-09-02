@@ -41,7 +41,10 @@ STANDING TEMPLATE — resume the standing loop
 dependencies are satisfied, and continue under the ordinary rules. A
 refusal night's first item is to read the refusal reason and detail and
 cure the cause before re-arming; never re-arm the same plan on the same
-signature twice (standing escalation trigger).
+signature twice (standing escalation trigger). Once the handback is read,
+run `scripts/install_night_agent.sh --plan <plan> --hour H --minute M
+--uninstall` so the dead-man job stops firing every 07:00 (cold gate D1,
+`docs/process_traces/2026-09-01-unattended/coldgate-d1-RULING.md`).
 
 Per night the magistrate replaces this section with the named next lane
 (for a `DIAGNOSTIC_NO_PACK` G2-a night: run the summarizer over the pushed
