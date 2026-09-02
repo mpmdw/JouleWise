@@ -62,8 +62,8 @@ a9/a10 desk replay; ED-QUAL-L4-1 decisive replay. ONE home: RUN_STATE
 **L10 `_v5` PRE-WINDOW — Ed's portion.** Review the preserved L10-A record,
 including the G2-b verdict, bracket binding, exact finalizer-refusal result,
 and matching before/after tree hashes, before recording GO for the claim-bearing
-transaction ([V5-TRANSACTION-GO-01 acceptance](state_kernel.json#L5094),
-[ruling 89 R-4](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L74)).
+transaction (`state_kernel.json` `/tasks/V5-TRANSACTION-GO-01/acceptance`,
+[ruling 89 R-4:74–78](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
 
 ## What happens after this sitting
 
