@@ -32,7 +32,8 @@ evidence in the addendum and in file 26.
 | Delta re-audit 3 | terra xhigh (252), execution lens, detached worktree | 29, 30 | `6846363d` | golden re-derived by hand (D1), eight values replicated from Method alone (D5); BLOCKER 2: B1 = `sorted(values[:400])` survives (no test at the paper's cardinality), B2 = brief D4's sha expectation fails; D6 states the same-signature recurrence → rule-11 cold gate |
 | Cold gate (rule 11, mandatory) | cold Fable seat (packet-only) + Opus 5 contract-lens refuter, parallel, read-only | 31, 32, 33 | `5f105823` (= `6846363d` code) | both: B1 should-fix (residual / ruled-shape gap, not a recurrence), closure (a) both halves, no second consult; B2 a brief defect. Split on B2's remedy: cold seat prose-only, Opus redefine `git_commit` as the script's last commit; Opus adds M1 (the two-checkout test asserted a false property) |
 | Fix round 4 (bench) + re-issue | magistrate | 34 | `70147173` → artifact `ebd947a0` | synthesis adopts Opus's remedy + the cold seat's gloss; 500-record differential bundle (CI) + retained-bundle value-of-record pin (bench, skipTest in CI); mutants `[:8]`/`[:400]`/`[:406]`/rev-parse all die; twice byte-identical AND byte-identical when replayed at the artifact's own commit; values of record unchanged |
-| Fresh pass (op-loop §5) | Sol high (253), read-only, detached worktree | 35 | `b6b4013b` | (pending at the time of writing; recorded in the terminal review) |
+| Fresh pass (op-loop §5) | Sol high (253), read-only, detached worktree | 35, 36 | `b6b4013b` | BLOCKER 0 / SHOULD-FIX 1 / NIT 1. SF1: the re-scoped provenance test still passed a `git rev-parse HEAD^` producer (fixture shape); N1: the provenance prose compared a SHA-256 with a commit id. Both cured at the bench (`6b6deb2f`, six fixture lines + one sentence), re-issued `2eea71fe`, byte-identical when replayed at its own commit; file 36 carries the escalation-trigger statement (a residual narrowed by the cure, not a recurrence — a third fixture-shape survivor fires the standing trigger) |
+| Fresh pass 2 (op-loop §5, over `6b6deb2f`) | terra high (254), read-only, detached worktree | 37 | `dfe69194` | (pending at the time of writing; recorded in the terminal review) |
 
 Three model families reviewed the producer (Sol, terra/luna, Opus) plus the
 blind Fable seat; the physics refutation was found independently by two
@@ -107,6 +108,10 @@ Adopting Opus 249 §6 (file 22) with the magistrate's reading:
 | `70147173` | Fix round 4 (bench, per cold gate): provenance definition, widened differential, retained pin, M1, N1 |
 | `ebd947a0` | Re-issue at 70147173 + cold-gate custody (32, 33) |
 | `b6b4013b` | Cold-gate synthesis and fix-round-4 disposition (34) |
+| `eba264f0` | These notes through fix round 4 |
+| `6b6deb2f` | Sol 253 cures: provenance fixture history (SF1), `git show` comparison in the provenance prose (N1) |
+| `2eea71fe` | Re-issue at 6b6deb2f + Sol 253 custody (35) |
+| `dfe69194` | Sol 253 disposition with replay evidence (36) |
 
 ## Follow-ups outside this PR
 
