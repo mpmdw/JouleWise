@@ -1904,27 +1904,120 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
       "stop_card": null
     },
+    "L10-A-G2B-CONTRACT-PREFIX-01": {
+      "acceptance": {
+        "evidence": [
+          "Step 1 strict validation and step 2 reduction ran on the G2-b shakedown block at the transaction head, outputs only under the L10 custody root",
+          "Step 5 finalization on a scratch custody copy refused with exactly the singleton reason analysis_finalization_member_cover_mismatch (any other reason, or a successful finalization, is FAIL)",
+          "The record carries proof_scope L10_A_G2B_CONTRACT_PREFIX, the head, and the G2-b root tree hash before and after (equal), and the magistrate ratified it before Ed's GO"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/L10-A-G2B-CONTRACT-PREFIX-01/acceptance",
+          "label": "L10-A-G2B-CONTRACT-PREFIX-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The pre-window prefix of the claim edge (validate, reduce, refusing finalizer) ran on the real G2-b block at the transaction head and left the G2-b root byte-unchanged."
+      },
+      "authority": {
+        "label": "Ruling 89 R-1 (L10 ladder; L10-A gates V5-TRANSACTION-01)",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the G2-b shakedown root exists with its verdict and bracket binding",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-G2B-SHAKEDOWN-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "Ruling 89 R-1/R-2/R-4",
+            "path": "docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md"
+          },
+          "rule": "L10-A reads the G2-b shakedown root only through strict validation, reduction, and a refusing finalizer on a scratch copy; the root stays byte-unchanged (tree hash recorded before and after) and the G2-b immutability fence is not amended; every L10 step is a bench desk command (no sudo, no [QUIET-MAC])"
+        },
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 ruling R-1",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Same head, production pack: a synthetic or smoke-scoped replay does not discharge this row (D-160 R-1 forbids a synthetic clean leg standing in for the real edge)"
+        },
+        {
+          "authority": {
+            "label": "S9-12 cure column (RUNBOOK + W-LIST)",
+            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+          },
+          "rule": "Schedule and record only (RUNBOOK + W-LIST): this row does not change the claim edge; defects the rehearsal finds are routed to their owning rows"
+        }
+      ],
+      "flags": [],
+      "goal": "Execute L10-A at the bench before the first claim-bearing _v5 arm: step 1 strict validation and step 2 reduction of the G2-b shakedown block (outputs only under the L10 custody root), and step 5 finalization on a scratch custody copy that must refuse with exactly the singleton reason analysis_finalization_member_cover_mismatch; record the G2-b tree hash before and after (byte-unchanged) and a ratified record with proof_scope L10_A_G2B_CONTRACT_PREFIX.",
+      "id": "L10-A-G2B-CONTRACT-PREFIX-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 119,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-01 from ruling 89 R-1 (docs/process/v5-l10-rehearsal-phase.md carries the runsheet). Split out of L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 so the transaction can gate on a row that closes BEFORE the window; the parent row keeps the full ladder (L10-B before the real mint, L10-C before publication) and cannot close before the transaction.",
+      "stop_card": null
+    },
     "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01": {
       "acceptance": {
         "evidence": [
-          "The real-transaction runbook (or its post-mint successor) carries a named phase that re-runs the full claim edge at the transaction head on the production pack before any window is spent, with its evidence custodied",
-          "The pre-window worklist carries the entry and the _v4 night is sequenced behind it",
-          "The executed rehearsal record exists, custodied, before the first spent window"
+          "L10-A (pre-window, bench lane): step 1 strict validation and step 2 reduction of the G2-b shakedown block, outputs only under the L10 custody root, plus step 5 finalization on a scratch custody copy refusing with exactly the singleton reason analysis_finalization_member_cover_mismatch; record carries proof_scope L10_A_G2B_CONTRACT_PREFIX and the G2-b tree hash before and after (byte-unchanged)",
+          "L10-B (after the ALPHA/BETA floor arms, before the real mint): steps 3-4 on a scratch copy of the real floor-producer corpus; record carries proof_scope L10_B_FLOOR_PRODUCER",
+          "L10-C (after the last consuming arm, before any claim is published): steps 5-7 in positive form on a scratch copy of the campaign corpus; record carries proof_scope L10_C_FULL_EDGE",
+          "The row closes only when all three records exist, custodied; L10-A alone does not close it (ruling 89 R-1)"
         ],
         "pointer": {
           "json_pointer": "/tasks/L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01/acceptance",
           "label": "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The same-head full-claim-edge sacrificial replay is a scheduled, recorded pre-window step, not an unscheduled ruling."
+        "summary": "The same-head full-claim-edge sacrificial replay is a three-part ladder (L10-A pre-window on the G2-b block, L10-B before the real mint, L10-C before publication), each part recorded and custodied; ruling 89 re-sequenced D-160's obligation without reducing it."
       },
       "authority": {
         "label": "S9-12 (the L10 sacrificial rehearsal ruled to precede any spent window has no schedule); the ruling is the WO-CONSUMPTION-EDGE contract adoption, item 4",
         "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "L10-C needs a scratch copy of the completed campaign corpus",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-TRANSACTION-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the L10-A record exists and is ratified",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "L10-A-G2B-CONTRACT-PREFIX-01"
+        }
+      ],
       "fallback": null,
       "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "Ruling 89 R-1/R-2/R-4",
+            "path": "docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md"
+          },
+          "rule": "L10-A reads the G2-b shakedown root only through strict validation, reduction, and a refusing finalizer on a scratch copy; the root stays byte-unchanged (tree hash recorded before and after) and the G2-b immutability fence is not amended; every L10 step is a bench desk command (no sudo, no [QUIET-MAC])"
+        },
         {
           "authority": {
             "anchor": "rulings",
@@ -1947,7 +2040,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 113,
-      "status": "queued",
+      "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED.",
       "stop_card": null
     },
@@ -4950,7 +5043,7 @@
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family.",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. NEEDS-RULING (ruling 89 R-6, 2026-09-01): The G2-b runsheet's B-SUPPLY demands a real v5 aggregate-floor artifact before G2-b, but the _v5 floor-producer corpus is collected by the transaction's ALPHA/BETA arms (registry roster); one of the two is wrong. Also: the runsheet spells the floor pack ids with underscores (d117_floor_qwen3_1p7b_v5) while the generator emits hyphenated model tokens (d117_floor_qwen3-1p7b_v5). Rule before the desk day.",
       "stop_card": null
     },
     "V5-NIGHTLY-G3-01": {
@@ -5038,6 +5131,15 @@
         "path": "docs/decision_log.md"
       },
       "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the L10-A record (proof_scope L10_A_G2B_CONTRACT_PREFIX) exists and is ratified before the first claim-bearing arm (ruling 89 R-1)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "L10-A-G2B-CONTRACT-PREFIX-01"
+        },
         {
           "evidence": null,
           "kind": "task",
