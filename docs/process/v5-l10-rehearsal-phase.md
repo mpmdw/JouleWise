@@ -44,11 +44,12 @@ These definitions precede the procedure:
   the finalizer states that the passed basis must cover all 80
   ([analysis_manifest_v3.py:3048–3049](../../joulewise/analysis_manifest_v3.py)).
   G2-b is one A/B/B/A block, hence one of those ten blocks. Refusal at this
-  gate is the desired L10-A outcome: it proves custody, frozen semantics,
-  verdict-basis, bracket-byte, and ledger-head checks all passed before the
-  finalizer discovered that one block cannot cover 80 members
-  ([SHAKEDOWN-G2-RUNSHEET.md:1150–1158](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md),
-  [89-RULING-l10-corpus-precondition.md:39–49](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
+  gate is the desired L10-A outcome: the member-cover singleton proves
+  prospective-manifest validation; the verdict's schema, status, and basis;
+  and the present members' config, metadata, and summary hashes and identity
+  paths. It does not prove bracket-byte or ledger-head authentication; the
+  reusable G3 provenance block run at F1 on the night proves those on real
+  bytes ([97-RULING-g2b-floor-precondition.md, R-6h](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 - A **tree hash** here is SHA-256 over the sorted relative-path/file-digest
   pairs in a directory; it changes when a file byte or relative path changes.
 - The **Claim gate** is the final governed code path that computes registered
@@ -119,10 +120,11 @@ do not substitute fixtures, smoke artifacts, or an older generation
 ([89-RULING-l10-corpus-precondition.md:80–90](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
 The missing G2-a config producer is outside this phase because it precedes pack
 generation: the only current source is a runsheet-rendering helper, not a
-producer ([gen_g2_phase_d.py:54](../../scripts/gen_g2_phase_d.py)). R-6's
-conflict about a pre-window floor artifact versus the ALPHA/BETA floor corpus
-remains with `V5-G2B-SHAKEDOWN-01`, not this docs lane
-([89-RULING-l10-corpus-precondition.md:92–95](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
+producer ([gen_g2_phase_d.py:54](../../scripts/gen_g2_phase_d.py)). Ruling 97
+R-6a resolves the `V5-G2B-SHAKEDOWN-01` conflict: it strikes the pre-window
+aggregate-floor precondition and replaces it with an empty `$CUSTODY_ROOT/floors`
+directory plus an intentionally absent finalizer attachment path
+([97-RULING-g2b-floor-precondition.md, R-6a](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 
 ## C. Execution record
 
@@ -176,13 +178,15 @@ fi
 ```
 
 Before L10-A, the magistrate must have completed the runbook's authenticated
-staging unit: the production pack is copied into
-`$CUSTODY_ROOT/prospective`, the selected floor artifact into
-`$CUSTODY_ROOT/floors`, and the completed calibration ledger plus head pin
-into `$CUSTODY_ROOT/calibration` ([SHAKEDOWN-G2-RUNSHEET.md:587–602](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md)).
-The L10-A staging commands below copy those exact transaction-custodied source
-directories, so the magistrate can identify both the owner and the source of
-each finalizer input before the refusal checker starts.
+staging unit: the production pack is copied into `$CUSTODY_ROOT/prospective`,
+`$CUSTODY_ROOT/floors` exists and is **EMPTY**, and the completed calibration
+ledger plus head pin are copied into `$CUSTODY_ROOT/calibration`. No floor is
+staged for L10-A; L10-B's mint is the first producer of a floor
+([97-RULING-g2b-floor-precondition.md, R-6a and R-6c](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+The L10-A staging commands below copy the exact transaction-custodied source
+directories and the harmless empty `floors/` directory, so the magistrate can
+identify both the owner and the source of each present finalizer input before
+the refusal checker starts.
 
 The two FIRST CHECK floor inputs are not present in the source pack at this
 head ([v5-artifact-flow.md:29–30](v5-artifact-flow.md)). Their exact custody paths above are fixed for the transaction; their
@@ -258,12 +262,12 @@ L10-A runs steps 1, 2, and 5 before the claim-bearing window. It gates
 ([89-RULING-l10-corpus-precondition.md:39–58](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md),
 `state_kernel.json` `/tasks/L10-A-G2B-CONTRACT-PREFIX-01/acceptance`).
 
-The G2-b root is staged before step 5. The magistrate stages each input as
-follows: `RUNS_ROOT` to `l10-a-staging/g2b`, the complete prospective pack
-subtree from `$CUSTODY_ROOT/prospective` to `l10-a-staging/prospective`, the
-complete calibration subtree to `l10-a-staging/calibration`, and the floor
-inputs to `l10-a-staging/floors`. Thus the custody root passed to the checker
-contains every finalizer input, not only the G2-b root:
+The G2-b root is staged before step 5. The magistrate stages each present input
+as follows: `RUNS_ROOT` to `l10-a-staging/g2b`, the complete prospective pack
+subtree from `$CUSTODY_ROOT/prospective` to `l10-a-staging/prospective`, and
+the complete calibration subtree to `l10-a-staging/calibration`.
+`l10-a-staging/floors` is deliberately empty. Thus the custody root passed to
+the checker contains every present finalizer input, not only the G2-b root:
 
 ```sh
 export L10_A_STAGING_ROOT="$L10_CUSTODY_ROOT/l10-a-staging"
@@ -273,7 +277,7 @@ export L10_A_STAGING_ROOT="$L10_CUSTODY_ROOT/l10-a-staging"
 /usr/bin/ditto "$RUNS_ROOT/." "$L10_A_STAGING_ROOT/g2b/"
 /usr/bin/ditto "$CUSTODY_ROOT/prospective/." "$L10_A_STAGING_ROOT/prospective/"
 /usr/bin/ditto "$CUSTODY_ROOT/calibration/." "$L10_A_STAGING_ROOT/calibration/"
-/usr/bin/ditto "$CUSTODY_ROOT/floors/." "$L10_A_STAGING_ROOT/floors/"
+/usr/bin/ditto "$CUSTODY_ROOT/floors/." "$L10_A_STAGING_ROOT/floors/"  # harmless: the source directory is empty
 g2b_tree_hash "$RUNS_ROOT" > "$L10_CUSTODY_ROOT/g2b-tree-staged.sha256"
 g2b_tree_hash "$L10_A_STAGING_ROOT/g2b" > "$L10_CUSTODY_ROOT/g2b-tree-staged-copy.sha256"
 /usr/bin/cmp "$L10_CUSTODY_ROOT/g2b-tree-staged.sha256" \
@@ -283,22 +287,16 @@ for required in \
   "$L10_A_STAGING_ROOT/prospective/plan_tree.json" \
   "$L10_A_STAGING_ROOT/g2b/whole-window-verdict.json" \
   "$L10_A_STAGING_ROOT/g2b/bracket-binding.json" \
-  "$L10_A_STAGING_ROOT/calibration/calibration_observation_ledger.jsonl" \
-  "$L10_A_STAGING_ROOT/floors/d117-v5-aggregate-floor.json"; do
+  "$L10_A_STAGING_ROOT/calibration/calibration_observation_ledger.jsonl"; do
   test -f "$required"
 done
 ```
 
-The reader must see those six files and the complete three staged subtrees
-before invoking step 5. If any staged pack-relative input is absent, the
+The reader must see those five files, the complete three staged subtrees, and
+the empty `floors/` directory before invoking step 5. If any staged pack-relative input is absent, the
 checker returns `analysis_finalization_prospective_invalid`; that is an
 incomplete-staging bug and this procedure scores it **FAIL**, not a failed
 member-cover proof ([SHAKEDOWN-G2-RUNSHEET.md:1152–1156](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md)).
-The containment rule is explicit in `_copy_path`: it calls
-`relative_to(custody_root)` at
-[check_window_provenance.py:467–474](../../scripts/check_window_provenance.py),
-and every finalizer input is passed through `_copy_path` at
-[check_window_provenance.py:505–515](../../scripts/check_window_provenance.py).
 
 1. **Strict validation — L10-A / BENCH / BOUNDARY-PROVEN.** Enumerate the
    actual `run_id` values from the G2-b campaign manifests, then validate each:
@@ -344,9 +342,20 @@ The staged root is the `--custody-root`; the G2-b source root is never passed
 as a finalizer input. The scratch directory is a sibling of the staged root,
 so the checker can copy the staged custody without changing the source:
 
+The aggregate-floor argument below is deliberately an absent path. If the
+finalizer has first authenticated the verdict, member cover, bracket,
+ledger-head, and campaign-log inputs, that absent attachment draws
+`analysis_finalization_attachment_missing`. This one-block L10-A invocation
+instead correctly stops earlier at the member-cover gate; that is the expected
+L10-A outcome, not a failure. An observed
+`analysis_finalization_attachment_missing` is a STOP and ruling, never a cue
+to stage a floor ([97-RULING-g2b-floor-precondition.md, R-6a, R-6c, and R-6h](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
+
 ```sh
 export L10_A_SCRATCH_ROOT="$L10_CUSTODY_ROOT/l10-a-scratch"
 /bin/mkdir -p "$L10_A_SCRATCH_ROOT"
+test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" && test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"
+test ! -e "$L10_A_STAGING_ROOT/floors/d117-v5-aggregate-floor.json" && test -z "$(/bin/ls -A "$L10_A_STAGING_ROOT/floors")"
 "$PY" scripts/check_window_provenance.py --expect-finalize-refusal \
   --scratch-dir "$L10_A_SCRATCH_ROOT" \
   --prospective-manifest "$L10_A_STAGING_ROOT/prospective/analysis_manifest_v3.json" \
@@ -359,6 +368,8 @@ export L10_A_SCRATCH_ROOT="$L10_CUSTODY_ROOT/l10-a-scratch"
   --aggregate-floor-artifact "$L10_A_STAGING_ROOT/floors/d117-v5-aggregate-floor.json" \
   --output-dir "$L10_A_STAGING_ROOT/analysis-output" \
   > "$L10_CUSTODY_ROOT/transcripts/l10-a-finalization.txt"
+test ! -e "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" && test -z "$(/bin/ls -A "$CUSTODY_ROOT/floors")"
+test ! -e "$L10_A_STAGING_ROOT/floors/d117-v5-aggregate-floor.json" && test -z "$(/bin/ls -A "$L10_A_STAGING_ROOT/floors")"
 g2b_tree_hash "$RUNS_ROOT" > "$L10_CUSTODY_ROOT/g2b-tree-after.sha256"
 /usr/bin/cmp "$L10_CUSTODY_ROOT/g2b-tree-before.sha256" \
   "$L10_CUSTODY_ROOT/g2b-tree-after.sha256"
@@ -376,7 +387,10 @@ write outside L10 custody is **FAIL** ([89-RULING-l10-corpus-precondition.md:39�
 
 L10-B begins in a fresh shell after the ALPHA/BETA floor arms. Re-export every
 variable used by this part; the producer corpus is the transaction-custodied
-path below, not G2-b:
+path below, not G2-b. Ruling 97 R-6f moves the floor containment/symlink leg
+here: L10-B's floor artifact must live under the custody root and must not be a
+symlink, because L10-B is the first phase that produces a floor
+([97-RULING-g2b-floor-precondition.md, R-6f](../process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md)).
 
 ```sh
 export REPO="$(/usr/bin/git rev-parse --show-toplevel)"
