@@ -61,6 +61,7 @@ from joulewise.axi_decode_config import (
 )
 from joulewise.schemas import (
     BenchmarkConfig,
+    PromptTokenExpectation,
     RunStatus,
     SchemaError,
     summary_validation_problems,
@@ -945,6 +946,16 @@ def _prompt_realization_problems(
         # Config schema validation owns malformed registrations.  This check
         # owns only realized evidence for a structurally valid expectation.
         return []
+    # The raw config dict is not validated on this path, so the registered
+    # operand is canonicalized through the same constructor the schema uses;
+    # a registration the constructor refuses is never compared against.
+    try:
+        registered = PromptTokenExpectation.from_mapping(expectation)
+    except SchemaError as error:
+        return [
+            "prompt_realization_evidence_missing: ill-formed registration at "
+            f"config.workload_profile.prompt_token_expectation ({error})"
+        ]
     if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
         return []
 
@@ -1051,11 +1062,11 @@ def _prompt_realization_problems(
         ]
 
     differing: list[str] = []
-    if expectation.get("token_count") != realized_token_count:
+    if registered.token_count != realized_token_count:
         differing.append("token_count")
-    if expectation.get("token_ids_sha256") != token_ids_sha256:
+    if registered.token_ids_sha256 != token_ids_sha256:
         differing.append("token_ids_sha256")
-    if expectation.get("token_hash_domain") != token_hash_domain:
+    if registered.token_hash_domain != token_hash_domain:
         differing.append("token_hash_domain")
     if differing:
         return [

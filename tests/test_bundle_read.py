@@ -542,30 +542,59 @@ class PromptRealizationExpectationTests(ReaderTestCase):
         self.assertNotIn("token_count", problems[0])
 
     def test_hash_comparison_binds_every_character_not_a_prefix(self) -> None:
-        # Mutation guard: a prefix-only, suffix-only, or character-multiset
-        # comparison would each accept one of these realized hashes, and a
-        # case-folded comparison would accept the upper-case one. None may
-        # pass: the tail, head, and permutation differences are mismatches,
-        # and the upper-case form is ill-formed evidence (the lowercase
-        # validator refuses it before any comparison).
-        cases = (
-            ("a" * 64, "a" * 56 + "b" * 8, "prompt_realization_mismatch"),
-            ("a" * 64, "b" + "a" * 63, "prompt_realization_mismatch"),
-            ("a" * 32 + "b" * 32, "b" * 32 + "a" * 32, "prompt_realization_mismatch"),
-            ("a" * 64, "A" * 64, "prompt_realization_evidence_missing"),
-        )
-        for index, (expected_hash, realized_hash, expected_code) in enumerate(cases):
+        # Mutation guard: flipping ONE nibble at the head, the two middle
+        # positions, and the tail kills any comparator that looks at a prefix
+        # or a suffix; the same-multiset permutation kills a sorted-character
+        # comparator (a nibble flip changes the multiset, so it cannot).  An
+        # upper-case realized hash is refused as ill-formed evidence before
+        # comparison; the registered operand is canonicalized, so both sides
+        # are lowercase by construction and case folding is unobservable.
+        registered = "a" * 64
+        vectors = [
+            (registered, registered[:position] + "b" + registered[position + 1 :])
+            for position in (0, 31, 32, 63)
+        ]
+        vectors.append(("a" * 32 + "b" * 32, "b" * 32 + "a" * 32))
+        for index, (registered, realized) in enumerate(vectors):
             writer = self.make_prompt_bundle(
-                f"prompt-hash-tail-mismatch-{index}",
-                expected_hash=expected_hash,
-                realized_hash=realized_hash,
+                f"prompt-hash-nibble-{index}",
+                expected_hash=registered,
+                realized_hash=realized,
             )
 
             problems = self.prompt_problems(writer)
 
-            self.assertEqual(len(problems), 1, (realized_hash, problems))
-            self.assertIn(expected_code, problems[0])
+            self.assertEqual(len(problems), 1, (index, realized, problems))
+            self.assertIn("prompt_realization_mismatch", problems[0])
             self.assertIn("token_ids_sha256", problems[0])
+
+        writer = self.make_prompt_bundle(
+            "prompt-hash-upper-realized",
+            expected_hash="a" * 64,
+            realized_hash="A" * 64,
+        )
+        problems = self.prompt_problems(writer)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_evidence_missing", problems[0])
+        self.assertIn("token_ids_sha256", problems[0])
+
+    def test_registered_operand_is_canonicalized_before_comparison(self) -> None:
+        # The reader compares against the raw config.json dict, which this
+        # path does not schema-validate.  A registration the constructor
+        # refuses (upper-case hex here) must never reach the comparison as a
+        # case-folded equal: it is ill-formed registration evidence.
+        writer = self.make_prompt_bundle("prompt-hash-upper-registered")
+        config_path = writer.path / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        expectation = config["workload_profile"]["prompt_token_expectation"]
+        expectation["token_ids_sha256"] = expectation["token_ids_sha256"].upper()
+        config_path.write_text(json.dumps(config) + "\n", encoding="utf-8")
+
+        problems = self.prompt_problems(writer)
+
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("prompt_realization_evidence_missing", problems[0])
+        self.assertIn("config.workload_profile.prompt_token_expectation", problems[0])
 
     def test_count_and_hash_mutation_is_one_problem_naming_both(self) -> None:
         writer = self.make_prompt_bundle(
