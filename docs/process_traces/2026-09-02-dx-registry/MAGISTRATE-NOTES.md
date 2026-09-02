@@ -39,3 +39,21 @@ b36d1e85 R7F fix round 2a (Sol 216): Opus 207 B1/B2/S3/N1-N5 closures
 3f1677b7 dx-registry fix round 1: R7F refusal-bucket partition, exact-integer rendering, exact F4 replay command, signed DX-027 (four defect-shaped regressions)
 2a6d3841 dx-registry: Sol 174 landing — 19 DX rows, round-7 artifact fence (R7F) + tests, checklist placement (seat landing, pre-review)
 ```
+
+## Terminal review (gate item 12) — 2026-09-02, magistrate, full session context
+
+Merge candidate: the head carrying this note; commits after the terra 244
+fresh pass are `c3cdd486` (item-9 replay custody, text only) and this note.
+Reviewed at the bench with the merge-base diff (`403998e1...HEAD`): the
+branch is additive — `scripts/check_paper_round7_artifacts.py` (+1040) and
+its 44-test module, `docs/paper/results-fill-registry.md` (+60, bench-only
+registry), `docs/paper/round7/fill-checklist.md`, and one behavioural change
+to `scripts/paper_anchor_correction_quantified.py` (`PopulationUnavailable`
+→ message on stderr, exit 3, per the r7f-unavailable cold-gate ruling;
+`8d084abc` replayed the executed-evidence block). The two-dot diff shows
+main files the branch predates (projection-02 trace, night driver,
+identity pins) as deletions; the three-dot diff and the integration tree
+858f553e confirm the merge keeps them. Item 9: 858f553e ran the canonical
+suite: Ran 4820, OK (skipped=125), file 23 (file 16, the earlier R7F replay
+at 8efbb200, is superseded for item 9 by file 23). Verdict: MERGE, third in
+the wave, after t26-c.
