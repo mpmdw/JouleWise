@@ -132,6 +132,11 @@ DERIVATION_FIELDS = {
     "git_commit",
 }
 CHECK_FIELDS = {"check_id", "status", "expected", "observed"}
+_PROMPT_REALIZATION_FIELDS = {
+    "token_count",
+    "token_ids_sha256",
+    "token_hash_domain",
+}
 PRODUCER_PLAN_REFERENCE_FIELDS = {"plan_id", "path"}
 CONSUMER_BINDING_FIELDS = {"arm", "family", "measurement_arm"}
 CONFIG_INVENTORY_FIELDS = {"path", "sha256"}
@@ -1248,13 +1253,48 @@ def _declared_identity_from_config(config: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _runtime_probe_metadata(config: BenchmarkConfig) -> Mapping[str, Any]:
+def _prompt_realization_triple(
+    value: object, *, config_path: str
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != _PROMPT_REALIZATION_FIELDS:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"registered prompt realization is missing or ill-typed for config {config_path}",
+        )
+    token_count = value.get("token_count")
+    token_ids_sha256 = value.get("token_ids_sha256")
+    token_hash_domain = value.get("token_hash_domain")
+    if (
+        isinstance(token_count, bool)
+        or not isinstance(token_count, int)
+        or token_count <= 0
+        or not isinstance(token_ids_sha256, str)
+        or _LOWER_SHA256_RE.fullmatch(token_ids_sha256) is None
+        or not isinstance(token_hash_domain, str)
+        or not token_hash_domain
+    ):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"registered prompt realization is missing or ill-typed for config {config_path}",
+        )
+    return {
+        "token_count": token_count,
+        "token_ids_sha256": token_ids_sha256,
+        "token_hash_domain": token_hash_domain,
+    }
+
+
+def _runtime_probe_metadata(
+    config: BenchmarkConfig,
+    realization_configs: Sequence[tuple[str, BenchmarkConfig]] = (),
+) -> Mapping[str, Any]:
     """Probe the configured adapters; deliberately private for test stubbing."""
 
     from joulewise.adapters import resolve_runtime, resolve_telemetry
     from joulewise.clock import SystemClock
 
     clock = SystemClock()
+    realization_path = realization_configs[0][0] if realization_configs else None
     runtime, runtime_failure = resolve_runtime(config, clock)
     telemetry, telemetry_failure = resolve_telemetry(config, clock)
     if runtime is None or telemetry is None:
@@ -1264,29 +1304,58 @@ def _runtime_probe_metadata(config: BenchmarkConfig) -> Mapping[str, Any]:
             or "configured adapter is unavailable"
         )
         raise IdentityPinProjectionError(
-            "readiness_identity_artifact_unreadable", str(message)
+            "readiness_identity_artifact_unreadable",
+            str(message) + (f" for config {realization_path}" if realization_path else ""),
         )
     prepare = runtime.prepare(config)
     if not prepare.ok:
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable",
-            prepare.message or "runtime prepare refused identity projection",
+            (prepare.message or "runtime prepare refused identity projection")
+            + (f" for config {realization_path}" if realization_path else ""),
         )
     try:
         projector = getattr(runtime, "identity_projection_metadata", None)
         if not callable(projector):
             raise IdentityPinProjectionError(
                 "readiness_identity_artifact_unreadable",
-                f"runtime adapter {runtime.name!r} has no identity projection probe",
+                f"runtime adapter {runtime.name!r} has no identity projection probe"
+                + (f" for config {realization_path}" if realization_path else ""),
             )
+        representative_path = next(
+            (
+                path
+                for path, candidate in realization_configs
+                if candidate is config
+            ),
+            realization_path,
+        )
+        realization_path = representative_path
         workload = projector(config)
+        prompt_realizations: list[dict[str, Any]] = []
+        for path, candidate in realization_configs:
+            realization_path = path
+            candidate_workload = workload if candidate is config else projector(candidate)
+            realization = (
+                candidate_workload.get("prompt_realization")
+                if isinstance(candidate_workload, Mapping)
+                else None
+            )
+            prompt_realizations.append(
+                {
+                    "config_path": path,
+                    **_prompt_realization_triple(realization, config_path=path),
+                }
+            )
         device = telemetry.device_metadata(config)
     except IdentityPinProjectionError:
         raise
     except Exception as exc:  # noqa: BLE001 - adapter failures become closed refusals
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable",
-            f"identity projection probe failed: {type(exc).__name__}: {exc}",
+            f"identity projection probe failed"
+            + (f" for config {realization_path}" if realization_path else "")
+            + f": {type(exc).__name__}: {exc}",
         ) from exc
     finally:
         try:
@@ -1294,12 +1363,15 @@ def _runtime_probe_metadata(config: BenchmarkConfig) -> Mapping[str, Any]:
         except Exception as exc:  # noqa: BLE001 - cleanup must precede quiet settle
             raise IdentityPinProjectionError(
                 "readiness_identity_artifact_unreadable",
-                f"runtime cleanup failed: {type(exc).__name__}: {exc}",
+                f"runtime cleanup failed"
+                + (f" for config {realization_path}" if realization_path else "")
+                + f": {type(exc).__name__}: {exc}",
             ) from exc
         if not cleanup.ok:
             raise IdentityPinProjectionError(
                 "readiness_identity_artifact_unreadable",
-                cleanup.message or "runtime cleanup refused after identity projection",
+                (cleanup.message or "runtime cleanup refused after identity projection")
+                + (f" for config {realization_path}" if realization_path else ""),
             )
     prepare_identity = {
         name: prepare.metadata[name]
@@ -1314,7 +1386,7 @@ def _runtime_probe_metadata(config: BenchmarkConfig) -> Mapping[str, Any]:
         )
         if name in prepare.metadata
     }
-    return {
+    metadata = {
         "platform": platform.platform(),
         "machine": platform.machine(),
         "device": device,
@@ -1325,6 +1397,10 @@ def _runtime_probe_metadata(config: BenchmarkConfig) -> Mapping[str, Any]:
         },
         "workload_provenance": workload,
     }
+    # Ruling 44c P-2: legacy configs retain the exact pre-catcher key set.
+    if realization_configs:
+        metadata["prompt_realizations"] = prompt_realizations
+    return metadata
 
 
 def _read_unit_configs(
@@ -1372,6 +1448,7 @@ def _derive_projection_units(
         configs, config_inventory = _read_unit_configs(pack_root, unit)
         declared = unit["declared_identity"]
         scientific_hashes: set[str] = set()
+        typed_configs: list[BenchmarkConfig] = []
         for config in configs:
             observed_declared = _declared_identity_from_config(config)
             if observed_declared != declared:
@@ -1381,6 +1458,7 @@ def _derive_projection_units(
                     observed=observed_declared,
                 )
             scientific_hashes.add(scientific_config_identity_sha256(config))
+            typed_configs.append(BenchmarkConfig.from_mapping(dict(config)))
         if len(scientific_hashes) != 1:
             raise IdentityPinProjectionError(
                 "readiness_identity_environment_dirty",
@@ -1388,6 +1466,12 @@ def _derive_projection_units(
                 observed={"config_set_sha256": sorted(scientific_hashes)},
             )
         representative = configs[0]
+        typed_representative = typed_configs[0]
+        realization_configs = [
+            (inventory["path"], typed_config)
+            for inventory, typed_config in zip(config_inventory, typed_configs)
+            if typed_config.workload_profile.prompt_token_expectation is not None
+        ]
         artifact = model_artifact_identity(declared["model_source"])
         if artifact.get("status") != "ok":
             raise IdentityPinProjectionError(
@@ -1396,8 +1480,86 @@ def _derive_projection_units(
                 f"{artifact.get('reason')}",
                 observed=artifact,
             )
-        typed = BenchmarkConfig.from_mapping(representative)
-        metadata = _runtime_probe_metadata(typed)
+        metadata = (
+            _runtime_probe_metadata(typed_representative, realization_configs)
+            if realization_configs
+            else _runtime_probe_metadata(typed_representative)
+        )
+        prompt_checks: list[dict[str, Any]] = []
+        if realization_configs:
+            realization_rows = metadata.get("prompt_realizations")
+            if not isinstance(realization_rows, list):
+                raise IdentityPinProjectionError(
+                    "readiness_identity_artifact_unreadable",
+                    "registered prompt realization is missing or ill-typed for config "
+                    f"{realization_configs[0][0]}",
+                )
+            if len(realization_rows) != len(realization_configs):
+                missing_index = min(len(realization_rows), len(realization_configs) - 1)
+                raise IdentityPinProjectionError(
+                    "readiness_identity_artifact_unreadable",
+                    "registered prompt realization is missing or ill-typed for config "
+                    f"{realization_configs[missing_index][0]}",
+                )
+            for (config_path, typed_config), raw_row in zip(
+                realization_configs, realization_rows
+            ):
+                if (
+                    not isinstance(raw_row, Mapping)
+                    or set(raw_row) != _PROMPT_REALIZATION_FIELDS | {"config_path"}
+                    or raw_row.get("config_path") != config_path
+                ):
+                    raise IdentityPinProjectionError(
+                        "readiness_identity_artifact_unreadable",
+                        "registered prompt realization is missing or ill-typed for config "
+                        f"{config_path}",
+                    )
+                observed_realization = _prompt_realization_triple(
+                    {
+                        field: raw_row[field]
+                        for field in _PROMPT_REALIZATION_FIELDS
+                    },
+                    config_path=config_path,
+                )
+                expectation = typed_config.workload_profile.prompt_token_expectation
+                assert expectation is not None
+                expected_realization = {
+                    "token_count": expectation.token_count,
+                    "token_ids_sha256": expectation.token_ids_sha256,
+                    "token_hash_domain": expectation.token_hash_domain,
+                }
+                differing = [
+                    field
+                    for field in (
+                        "token_count",
+                        "token_ids_sha256",
+                        "token_hash_domain",
+                    )
+                    if expected_realization[field] != observed_realization[field]
+                ]
+                if differing:
+                    raise IdentityPinProjectionError(
+                        "readiness_identity_environment_dirty",
+                        f"config {config_path} registered prompt realization differs for "
+                        + ", ".join(differing),
+                        observed={
+                            "config_path": config_path,
+                            "differing_fields": differing,
+                            "expected": expected_realization,
+                            "observed": observed_realization,
+                        },
+                    )
+                prompt_checks.append(
+                    {
+                        "check_id": (
+                            f"{unit_id}:{config_path}:"
+                            "shared_mint_projection:prompt_realization"
+                        ),
+                        "status": "PASS",
+                        "expected": expected_realization,
+                        "observed": observed_realization,
+                    }
+                )
         workload = metadata.get("workload_provenance")
         observed_model = workload.get("model") if isinstance(workload, Mapping) else None
         observed_artifact = (
@@ -1531,6 +1693,7 @@ def _derive_projection_units(
                 "observed": runtime_config,
             }
         )
+        checks.extend(prompt_checks)
     return receipt_units, canonical_json_sha256(projection_input_units), checks
 
 
