@@ -1147,6 +1147,18 @@ quietly relaxed in a later round.
 **Blocked work:** the five-second upper half of RF-17 is COLD-GATE-PENDING. The
 implemented interim work is not blocked and is not provisional.
 
+**COLD-GATE DISPOSITION (2026-09-02; D-170): RESOLVED.** The cold-gate ruling
+([item 3](../../../2026-08-27-t26/process-proposals/COLD-GATE-RULING.md#item-3--the-t-0-rulings-5-s-issuance-bound))
+strikes the five-second bound and its 35-second corollary and installs
+`0 <= (valid_until_monotonic_ns - 21_600_000_000_000) -
+r1_batch_finished_monotonic_ns <= 600_000_000_000` on the ordinary monotonic
+clock as a liveness/hang detector, not a metrology bound. The constant remains
+grounded in the eleven post-R1 governed `_fresh_probe` sites times the 45-second
+timeout (495 seconds), plus 105 seconds for ungoverned filesystem/Git work,
+equal to `_MIN_IDLE_NS` (600 seconds). Issuance and ARM both enforce the shared
+predicate; refusal reuses `evidence_author_t0_predicate_refused`, so no reason
+code or REASON_CODE_COVERAGE delta is added.
+
 ### 6.4 D-078 capture-code disposition
 
 `evidence_author_t0_capture_clock_observation_invalid` is REUSED-UNCHANGED: its prompt emission sites are removed, but its registered spelling, D-078 entry, exact twelve-code set, and exact-count test remain untouched (`scripts/capture_t0_step.py:83-100`; `docs/decision_log.md:9571-9588`; `tests/test_capture_t0_step.py:624-631`).

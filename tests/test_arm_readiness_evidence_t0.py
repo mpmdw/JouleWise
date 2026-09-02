@@ -795,6 +795,57 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
 
+    def _author_with_r1_age(self, age_ns: int) -> dict[str, object]:
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        clock_state = {"now": SYNTHETIC_MONOTONIC_NS}
+        original_batch = t0._fresh_clock_reference_batch
+
+        def finish_r1_then_advance(context, *, kind):
+            result = original_batch(context, kind=kind)
+            clock_state["now"] += age_ns
+            return result
+
+        clock = t0._DerivationClock(
+            monotonic_ns=lambda: clock_state["now"],
+            utc_now=lambda: SYNTHETIC_UTC_NOW,
+            sample_anchor=lambda: t0._clock_reference.ClockAnchor(
+                realtime_ns=(
+                    SYNTHETIC_REALTIME_OFFSET_NS + SYNTHETIC_MONOTONIC_NS
+                ),
+                monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
+                read_skew_ns=1_000,
+            ),
+        )
+        with (
+            author_environment(repository),
+            mock.patch.object(t0, "_production_clock", return_value=clock),
+            mock.patch.object(
+                t0,
+                "_fresh_clock_reference_batch",
+                side_effect=finish_r1_then_advance,
+            ),
+        ):
+            return author_arm_readiness_evidence_t0(pack, custody)
+
+    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_600s_plus_1ns(
+        self,
+    ) -> None:
+        with self.assertRaises(T0EvidenceAuthoringError) as caught:
+            self._author_with_r1_age(600_000_000_001)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_predicate_refused",
+        )
+
+    def test_issuance_passes_t0_when_r1_batch_is_600s_minus_1ns_old(
+        self,
+    ) -> None:
+        self.assertEqual(
+            self._author_with_r1_age(599_999_999_999)["status"],
+            "PASS",
+        )
+
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
         fake_mlx = ModuleType("mlx")
         fake_mlx.__path__ = []

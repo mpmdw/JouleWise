@@ -543,6 +543,34 @@ class FixtureBuilder:
 class T0RehearsalTests(unittest.TestCase):
     maxDiff = None
 
+    def _run_rehearsal_arm_liveness_boundary(
+        self, age_ns: int
+    ) -> tuple[str, str | None]:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = FixtureBuilder(Path(temporary.name)).build()
+        bundle = cli.load_evidence_bundle(root)
+        _artifact, receipt, fact = rehearsal._clock_receipt(bundle)
+        value = fact["value"]
+        receipt["valid_until_monotonic_ns"] = (
+            value["r1_batch_finished_monotonic_ns"]
+            + 21_600_000_000_000
+            + age_ns
+        )
+        return rehearsal._run_real_arm_boundary(receipt, 4_999_999)
+
+    def test_rehearsal_t0_liveness_bound_refuses_at_600s_plus_1ns(self) -> None:
+        self.assertEqual(
+            self._run_rehearsal_arm_liveness_boundary(600_000_000_001),
+            ("REFUSE", "readiness_clock_preflight_refused"),
+        )
+
+    def test_rehearsal_t0_liveness_bound_passes_at_600s_minus_1ns(self) -> None:
+        self.assertEqual(
+            self._run_rehearsal_arm_liveness_boundary(599_999_999_999),
+            ("PASS", None),
+        )
+
     def _evaluate(
         self,
         *,
