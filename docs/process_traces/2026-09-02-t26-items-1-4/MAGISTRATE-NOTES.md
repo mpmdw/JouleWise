@@ -3,7 +3,7 @@
 Lane: install of T26 cold-gate verdicts items 1 and 4 plus the D-170 entry, and
 the Q1/Q2 process-rule install.
 Branch `feat/2026-09-02-t26-install`; PR #273.
-Files 01–16 in this directory are the seat briefs and the sealed reports, in
+Files 01–17b in this directory are the seat briefs and the sealed reports, in
 gauntlet order.
 
 ## Gauntlet record
@@ -24,6 +24,7 @@ gauntlet order.
 | S9 rows draft (SF1 kernel half) | sol high (236), detached worktree | 15 (brief, report, draft JSON) | 10845c14 | envelope `"status": "clean"`, `"completion": "complete"`; seven rows drafted — two of them (S9-04, S9-12) turned out to pre-exist; see the dated addendum on the cold-gate ruling |
 | Fix round 2 (Opus findings) | terra xhigh (235) | 16 (brief, report) | "@ 10845c14" | envelope `"status": "clean"`, `"completion": "complete"`; wrapper `run_status=SCOPE_VIOLATION rc=77 scope_action=failed_preserved` caused ONLY by the magistrate's untracked files 14/14b in the worktree (`unowned_dirty`); the seat's edits are all inside its six-file scope and were used as landed |
 | Bench | magistrate (bench) | commit below | — | kernel: five S9 rows registered, D-170 dep applied in place to GAMMA-UNIT-ROSTER-GUARD-01 / L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01, R7F-DX-PROSE-SCAN-01 registered (126 tasks); comment chain in `tests/test_gen_state.py` reconstructed from kernel commit counts; M6c regex + "no start dependency" mutant made multi-row; dated addendum on the cold-gate ruling (B4 site correction, PD-1 evidence) |
+| Delta re-audit 2 | luna xhigh (238) | 17 (brief, report), 17b | "@ c05cf181" | `VERDICT: SHOULD-FIX 2` + 1 nit (date gloss names the wrong date source; addendum evidence block not replayable; stale WAVE-ROWS provenance) — all three cured at the bench per 17b; execution lens clean (luna's own mutants), kernel lens clean |
 
 ## Bench commits (from `git show --stat`)
 

@@ -289,7 +289,11 @@ exit 0
 §B4 directs the S9 rows S9-01b/02/03/04/05/06/12 to "register at the bench
 with the hard/start/pending dep". Applying it at the bench showed that two of
 the seven already exist in the kernel from the 2026-08-27 end-of-sprint wave
-(`docs/process_traces/2026-08-27-t26/WAVE-ROWS.md`): S9-04 is
+(registered by commit `d01fd4c5`, PR #220, which the rows' own `status_note`
+cites through `docs/process_traces/2026-08-27-t26/WAVE-ROWS.md`; that file's
+"S9 shortlist should-fixes not yet owned" line at `:18` was written before the
+same wave registered these two rows and was not updated — the commit is the
+provenance, the WAVE-ROWS line is stale): S9-04 is
 `GAMMA-UNIT-ROSTER-GUARD-01` (agent rank 109) and S9-12 is
 `L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01` (agent rank 113). The packet's
 "none exist" premise checked task IDs for an `S9-` prefix, not the rows'
@@ -308,15 +312,14 @@ is pending") were NOT applied — a fence is a rule, the sweep's "gates windows"
 column is a judgment, and window gating is the night-loop lane's scope.
 
 ```text
-$ git show 10845c14:docs/process/state_kernel.json > $S/tmp235/kernel-10845c14.json
-$ python3 - <<'PY'   # census of rows whose JSON cites an S9-nn label, kernel at 10845c14
-import json,re
-k=json.load(open('$S/tmp235/kernel-10845c14.json'))
+$ git show 10845c14:docs/process/state_kernel.json | python3 -c "
+import json,re,sys
+k=json.load(sys.stdin)
 print(len(k['tasks']))
 for kid,v in k['tasks'].items():
     m=sorted(set(re.findall(r'S9-\d+[a-z]?',json.dumps(v))))
     if m: print(kid, m, v['status'])
-PY
+"   # census of rows whose JSON cites an S9-nn label, kernel at 10845c14 (replayable; re-executed 2026-09-02 after luna 238 K1)
 120
 AUTHENTICATOR-ALLOWLIST-GUARD-01 ['S9-09'] queued
 COLLECTOR-MANIFEST-SHA-IDENTITY-01 ['S9-01'] blocked

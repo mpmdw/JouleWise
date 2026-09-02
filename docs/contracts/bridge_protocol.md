@@ -74,8 +74,9 @@ Required fields:
 > its own; the contract-lens refuter enumerates the ruling's clauses independently
 > and opens the map only after recording its own list (S2;
 > `docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
-> Custodied `*-impl.md` reports dated ≥ 2026-09-03 (the date in the report's
-> filename or first heading, on or after the rule's ratification day — earlier
+> Custodied `*-impl.md` reports dated ≥ 2026-09-03 (the date is the
+> `YYYY-MM-DD` prefix of a dated directory component of the report's path under
+> `docs/process_traces/`, on or after the rule's ratification day — earlier
 > reports are not re-graded) carry the heading (S1, shape test;
 > `docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
 
