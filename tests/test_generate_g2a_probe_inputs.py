@@ -443,6 +443,10 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
 
     def test_probe_workload_shape_matches_v5_prefill_except_diagnostic_name(self) -> None:
         self._build()
+        ladder = json.loads(
+            (self.root / "window-plan/prefill-prompt-ladder.json").read_text()
+        )
+        rung = next(row for row in ladder["rungs"] if row["prefill_tokens"] == 512)
         config = json.loads(
             (
                 self.root
@@ -450,18 +454,43 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
             ).read_text()
         )
         probe_workload = config["workload_profile"]
+        arm = "A"
         with mock.patch.multiple(
             issuer.d117_v5,
             PREFILL_LENGTH=512,
             PREFILL_PROMPT_TEXT=probe_workload["prompt_text"],
+            PREFILL_TOKEN_IDS={arm: rung["prompt_token_ids"]},
+            PREFILL_TOKEN_IDS_SHA256={arm: rung["prompt_token_ids_sha256"]},
         ):
-            v5_workload = issuer.d117_v5.workload_for("prefill")
+            v5_workload = issuer.d117_v5.workload_for("prefill", arm)
         self.assertEqual(
             {key: value for key, value in probe_workload.items() if key != "name"},
             {key: value for key, value in v5_workload.items() if key != "name"},
         )
         self.assertEqual(probe_workload["name"], "g2a_prefill_p512_diagnostic")
         self.assertEqual(v5_workload["name"], "df_ph_prefill_p512_candidate")
+
+    def test_probe_expectation_matches_each_realized_ladder_rung(self) -> None:
+        self._build()
+        ladder = json.loads(
+            (self.root / "window-plan/prefill-prompt-ladder.json").read_text()
+        )
+        for rung in ladder["rungs"]:
+            length = rung["prefill_tokens"]
+            with self.subTest(prefill_tokens=length):
+                config = json.loads(
+                    (
+                        self.root
+                        / f"prefill-probe-configs/small-p{length}"
+                        / f"g2a-small-p{length:04d}-r01.json"
+                    ).read_text()
+                )
+                expectation = config["workload_profile"]["prompt_token_expectation"]
+                self.assertEqual(expectation["token_count"], rung["prefill_tokens"])
+                self.assertEqual(
+                    expectation["token_ids_sha256"],
+                    rung["prompt_token_ids_sha256"],
+                )
 
     def test_check_is_read_only(self) -> None:
         self._build_and_bind()
