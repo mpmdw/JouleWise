@@ -4,9 +4,9 @@ Lane: the DG-071 (sampler-record interval width) and DG-075 (record spacing)
 statistics producer `scripts/issue_dg071_dg075_statistics.py`, its test
 module, and the issued artifact `docs/paper/round7/dg071-dg075-statistics.{json,md}`
 over the retained a10 bundle `p2015-df-ph-decode-abs-r03` (read-only, sha
-pinned). Branch `feat/2026-09-02-paper-d`; PR #276. Files 01–28 in this
-directory are the seat briefs, the sealed reports and the magistrate
-dispositions, in gauntlet order; `14a-dg071-bench.py` and
+pinned). Branch `feat/2026-09-02-paper-d`; PR #276. Files 01–35 in this
+directory are the seat briefs, the sealed reports, the cold-gate packet and
+rulings, and the magistrate dispositions, in gauntlet order; `14a-dg071-bench.py` and
 `26a-golden-check.py` are the replayable bench scripts behind the executed
 evidence in the addendum and in file 26.
 
@@ -29,7 +29,10 @@ evidence in the addendum and in file 26.
 | Opus counter-review (gate item 6) | Opus 5 (249), contract lens | 22, 23 | `8ab397b5` | BLOCKER 0 / SHOULD-FIX 5 / NIT 5; C-1 = two MORE surviving mutants of the same class → escalation |
 | Consult (rule 11 standing trigger) | Sol xhigh (250), read-only | 24, 25, 26 | `8ab397b5` | coverage SHAPE ruled: one hand-derived golden bundle with full-payload equality + Markdown/stdout projection, plus a fixed-seed differential against an independent reference; golden re-derived at the bench (`26a-golden-check.py`) |
 | Fix round 3 | luna xhigh (251), third family | 27, 28 | `447a0f2b` | landed `6d30c105`; six mutants killed at the bench; Method glosses (Opus C-3/C-4/C-10) and prune (C-6); re-issue `6846363d` twice byte-identical, values of record unchanged |
-| Delta re-audit 3 | terra xhigh (252), execution lens, detached worktree | 29, 30 | `6846363d` | (pending at the time of writing; recorded below when custodied) |
+| Delta re-audit 3 | terra xhigh (252), execution lens, detached worktree | 29, 30 | `6846363d` | golden re-derived by hand (D1), eight values replicated from Method alone (D5); BLOCKER 2: B1 = `sorted(values[:400])` survives (no test at the paper's cardinality), B2 = brief D4's sha expectation fails; D6 states the same-signature recurrence → rule-11 cold gate |
+| Cold gate (rule 11, mandatory) | cold Fable seat (packet-only) + Opus 5 contract-lens refuter, parallel, read-only | 31, 32, 33 | `5f105823` (= `6846363d` code) | both: B1 should-fix (residual / ruled-shape gap, not a recurrence), closure (a) both halves, no second consult; B2 a brief defect. Split on B2's remedy: cold seat prose-only, Opus redefine `git_commit` as the script's last commit; Opus adds M1 (the two-checkout test asserted a false property) |
+| Fix round 4 (bench) + re-issue | magistrate | 34 | `70147173` → artifact `ebd947a0` | synthesis adopts Opus's remedy + the cold seat's gloss; 500-record differential bundle (CI) + retained-bundle value-of-record pin (bench, skipTest in CI); mutants `[:8]`/`[:400]`/`[:406]`/rev-parse all die; twice byte-identical AND byte-identical when replayed at the artifact's own commit; values of record unchanged |
+| Fresh pass (op-loop §5) | Sol high (253), read-only, detached worktree | 35 | `b6b4013b` | (pending at the time of writing; recorded in the terminal review) |
 
 Three model families reviewed the producer (Sol, terra/luna, Opus) plus the
 blind Fable seat; the physics refutation was found independently by two
@@ -47,6 +50,15 @@ where a wrong computation differs — surfaced in two consecutive rounds
 (delta 2, counter-review), which is rule 11's standing escalation trigger;
 the spend went to a consult (Sol 250) for the coverage shape, not a third
 pair of hand-added fixtures, and round 3 implemented the ruled shape.
+Delta 3 then found that the ruled shape's differential (2–8 records) never
+reached the paper's own cardinality (406 records) and that the artifact's
+`git_commit` line — the checkout HEAD at issue time — could never equal the
+commit a reader checks out; reinterpreting a seat's "recurrence" verdict is
+a rule-11 cold-gate trigger, so a cold Fable seat and an Opus refuter ruled
+(both: should-fix, not blocker; close it, do not consult again). The fix is
+one line in the differential, ten literals on the retained bundle, and one
+function so the artifact names the commit that produced it rather than the
+commit that happened to be checked out.
 
 ## Overbuild / merge-ability prune (gate item 8)
 
@@ -67,7 +79,8 @@ Adopting Opus 249 §6 (file 22) with the magistrate's reading:
   refusal is testable"). Any edit to the producer changes
   `producer.script_sha256` and forces an artifact re-issue plus a fresh
   pass; a help-string clause does not justify that cycle. Carried to the
-  next touch of the producer.
+  next touch of the producer — which fix round 4 was; the clause was still
+  not taken there (the round was bounded to the cold-gate remedies).
 - **Not overbuilt, checked:** the artifact's Method section is long because
   the replication bar demands it (terra 248 D9 replicated the digits from
   it in 24 lines; delta 3 D5 repeats the exercise on the round-3 prose).
@@ -90,6 +103,10 @@ Adopting Opus 249 §6 (file 22) with the magistrate's reading:
 | `447a0f2b` | Sol 250 custody (25) + ruling (26, 26a) |
 | `6d30c105` | Fix round 3 (luna 251) |
 | `6846363d` | Re-issue at 6d30c105 + custody 27–28 |
+| `5f105823` | Delta 3 custody (29, 30) + cold-gate packet (31) + these notes |
+| `70147173` | Fix round 4 (bench, per cold gate): provenance definition, widened differential, retained pin, M1, N1 |
+| `ebd947a0` | Re-issue at 70147173 + cold-gate custody (32, 33) |
+| `b6b4013b` | Cold-gate synthesis and fix-round-4 disposition (34) |
 
 ## Follow-ups outside this PR
 
