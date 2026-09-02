@@ -1,5 +1,12 @@
 # Identity-pin projection receipt contract
 
+In plain words: before a measurement campaign is collected, a script checks
+that the model weights, tokenizer, runtime, and configuration files on disk
+are the exact ones the campaign registered. That check is the
+**identity-pin projection**; the file it writes recording what it checked
+and found is the **receipt**; this document is the contract that fixes
+both. Each term is built from its physical inputs in §1.
+
 Status: executable contract for
 `joulewise.identity_pin_projection_receipt.v1`. The implementation in
 `joulewise/identity_pins.py` is authoritative when this text and code differ.
