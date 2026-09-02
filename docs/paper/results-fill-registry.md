@@ -721,6 +721,62 @@ pin that expanded census. No fence or test change is made by this registration.
 | DG-127 — Appendix A.3.6 difference in milliseconds, line 650 | 28.9 ms | Round 1000 × DG-126 to one decimal place | retained 20260722 capture / calibration-bound continuation | DERIVE | DIAGNOSTIC_ERA / APPENDIX_ONLY_REGISTRY_BOUND; NOT REPLAY_FENCED | DRAFT, AUTH |
 | DG-128 — Appendix A.3.8 retained calibration corpus table, lines 1153–1169 | 17 b_fiducial_s bounds (table) | S17#derivation_corpus.members[].b_fiducial_s; `corpus_doubles_from_17_to_34` (`joulewise/calibration_bracketing.py:207`) regenerates both Section 2 constants and this table | diagnostic calibration / n17 | MEASURED | DIAGNOSTIC_ERA / n17 | DRAFT, AUTH |
 
+#### Successor-draft desk analyses (round 7) — DX rows
+
+These rows are a separate successor-draft namespace. They do not extend the
+closed DG census of draft-v1 diagnostic sites, and they carry issued values
+rather than `[PENDING...]` markers. `R7_FENCED` means digest- and field-checked
+in CI by R7F, with byte-identical replay when the retained corpus is present.
+It does not mean RF-fenced: RF remains the Section 2 replay fence and its
+43-comparison census is unchanged.
+
+Path abbreviations below are exact:
+
+- XD = docs/paper/round7/excursion-decomposition.json, sha256 21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b (33,765 B), schema joulewise-excursion-decomposition/v1
+- XS = scripts/paper_excursion_decomposition.py, sha256 8733ff03d885f9c9519fddcb0906bc59e8025d7a3a3a969c09d5abe551822c7b (49b258d2, #240)
+- F4 = docs/paper/figures/fig4_edge_excursions.svg, sha256 6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf
+- AQ = docs/paper/round7/anchor-correction-quantified.json, sha256 c09077149c66411d1873838de5c21aa1b7c97d8df24ea66a163d679cb31f50fc (54,280 B)
+- AS = scripts/paper_anchor_correction_quantified.py, sha256 41cbbf08176f9bfe1c6cfd526e1776f0324893c62f62cd76d1ff8128b8beb47f (0438566b, #242)
+- R7F = scripts/check_paper_round7_artifacts.py
+
+Wherever a DX value is printed, the opening standing sentence is mandatory:
+“The following are diagnostic-era instrument statistics — a desk
+re-derivation (XS over XD; AS over AQ) over retained captures whose energy
+values D-078 voids for claim use; they characterise the timing calibration of
+the instrument and are not evidence for any `_v5` result.” The same prose must
+say that the values were re-derived under the current claim-bearing v3 anchor,
+`XD#anchor_method =
+powermetrics_native_second_rate_aware_set_membership_v1`, and that re-deriving
+a historical corpus under the current method does not make it a supplier for a
+claim. It must retain draft-v2-skeleton line 1137 verbatim: one capture,
+59/118 values, sample statistics with no coverage or independence claim. The
+anchor-delta sentence must say that its numeric deltas cover the 12 captures
+v3 derived, alongside the 3 refusals and the one control failure. Floor ratios
+were not recomputed. “Repeatably” is prohibited for these numbers; print the
+DX-012 and DX-013 counts instead. Any F4 caption uses D-119 wording.
+
+| Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
+|---|---|---|---|---|---|---|
+| DX-001 — XD artifact identity; no draft site | 21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b | sha256(XD), 33,765 bytes, `XD#schema = joulewise-excursion-decomposition/v1`; producer XS is separately pinned above; `R7F_RENDER=source_sha256_xd` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-002 — AQ artifact identity; no draft site | c09077149c66411d1873838de5c21aa1b7c97d8df24ea66a163d679cb31f50fc | sha256(AQ), 54,280 bytes; producer AS is separately pinned above; `AQ#worked_capture_gate.matches_exactly` must be true; `R7F_RENDER=source_sha256_aq` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-003 — F4 figure identity; no draft site | 6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf | sha256(F4), bound to parent DX-001 and `XD#replay_command`; full replay is `python3 scripts/paper_excursion_decomposition.py --corpus-root /Users/edr/code/JouleWise --out docs/paper/round7/excursion-decomposition.json --svg docs/paper/figures/fig4_edge_excursions.svg`. XD's own replay command omits `--svg`; no XD re-issue occurs in this round. `R7F_RENDER=source_sha256_f4` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, F4, R7F |
+| DX-010 — successor-draft onset best-fit lag median | +13.0 ms | `XD#summary.onset_best_fit_lag.median_ms`, parent DX-001; render an explicit sign and one decimal followed by ` ms`; `R7F_RENDER=signed_1_ms` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-011 — successor-draft offset best-fit lag median | −5.5 ms | `XD#summary.offset_best_fit_lag.median_ms`, parent DX-001; render a Unicode minus and one decimal followed by ` ms`; `R7F_RENDER=signed_1_ms` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-012 — successor-draft positive-onset count | 59 of 59 | `XD#summary.onset_best_fit_lag.count_positive` of `XD#summary.onset_best_fit_lag.count`, parent DX-001; render both exact integers as `positive of count`; `R7F_RENDER=positive_count_of_count` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-013 — successor-draft negative-offset count | 49 of 59 | `XD#summary.offset_best_fit_lag.count_negative` of `XD#summary.offset_best_fit_lag.count`, parent DX-001; render both exact integers as `negative of count`; `R7F_RENDER=negative_count_of_count` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-014 — successor-draft onset median absolute deviation | 2.5 ms | `XD#summary.onset_best_fit_lag.median_absolute_deviation_ms`, parent DX-001; render one decimal followed by ` ms`; `R7F_RENDER=fixed_1_ms` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-015 — successor-draft offset median absolute deviation | 4.0 ms | `XD#summary.offset_best_fit_lag.median_absolute_deviation_ms`, parent DX-001; render one decimal followed by ` ms`; `R7F_RENDER=fixed_1_ms` | retained 20260722 capture / 59-pulse calibration | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-016 — successor-draft onset-bias share of the fiducial bound | 43.2 % | Derive 100 × `XD#summary.onset_best_fit_lag.median_ms` / `XD#bound_terms.b_fiducial_ms`, parent DX-001; round once to one decimal and append ` %`; `R7F_RENDER=ratio_percent_1` | retained 20260722 capture / 59-pulse calibration | DERIVE | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-017 — successor-draft worst-onset excess above the median | 14.0 ms | Derive `XD#summary.onset_best_fit_lag.max_ms` − `XD#summary.onset_best_fit_lag.median_ms`, parent DX-001; render one decimal followed by ` ms`; `R7F_RENDER=difference_1_ms` | retained 20260722 capture / 59-pulse calibration | DERIVE | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | XD, XS, R7F |
+| DX-020 — successor-draft anchor-correction population | 15 | `AQ#summary.population_size`, parent DX-002; render as an exact integer; `R7F_RENDER=integer` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-021 — successor-draft v3 derived and refused counts | 12 derived / 3 refused (all anchor_unresolved) | `AQ#summary.v3_derived_count`, `AQ#summary.v3_refused_count`, and `AQ#summary.v3_refusals_by_token.anchor_unresolved`, parent DX-002; render exact counts and require every refusal token to be `anchor_unresolved`; `R7F_RENDER=derived_refused_counts` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-022 — successor-draft admissibility flips | 2 (both refused_by_v3) | `AQ#summary.admissibility_flip_count` and `AQ#summary.admissibility_flips`, parent DX-002; render the exact count and require every `flip_direction` to equal `refused_by_v3`; `R7F_RENDER=flip_count_refused_by_v3` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-023 — successor-draft v2 control reproduction | 14 of 15; failure 20260722T213749-563b9849 | `AQ#summary.control_v2_reproduces_stored_count` of `AQ#summary.population_size`, with `AQ#summary.control_v2_reproduction_failures`, parent DX-002; render exact integers and the sole exact failure ID; `R7F_RENDER=control_count` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-024 — successor-draft median absolute-bound delta | +0.154318 ms | `AQ#summary.delta_v3_vs_stored_absolute.median_ms`, parent DX-002; render an explicit sign and six decimals followed by ` ms`; `R7F_RENDER=signed_6_ms` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-025 — successor-draft maximum absolute-bound delta magnitude | 1.090519 ms | `AQ#summary.delta_v3_vs_stored_absolute.max_absolute_ms`, parent DX-002; render six decimals followed by ` ms`; `R7F_RENDER=fixed_6_ms` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-026 — successor-draft maximum relative delta magnitude | 4.05 % | `AQ#summary.delta_v3_vs_stored_relative.max_absolute_pct`, parent DX-002; round once to two decimals and append ` %`; `R7F_RENDER=fixed_2_percent` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+| DX-027 — successor-draft median relative delta | 0.61 % | `AQ#summary.delta_v3_vs_stored_relative.median_pct`, parent DX-002; the issued artifact names this field `median_pct` (not `median_abs_pct`); round once to two decimals and append ` %`; `R7F_RENDER=fixed_2_percent` | 15 retained instrument_validation captures, v2 era | MEASURED | DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; SUCCESSOR_DRAFT_ONLY | AQ, AS, R7F |
+
 ### Renderer-only metatokens
 
 These are present in the template's bracket census but are not independently
