@@ -297,6 +297,16 @@ the empty `floors/` directory before invoking step 5. If any staged pack-relativ
 checker returns `analysis_finalization_prospective_invalid`; that is an
 incomplete-staging bug and this procedure scores it **FAIL**, not a failed
 member-cover proof ([SHAKEDOWN-G2-RUNSHEET.md:1152–1156](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md)).
+The reason every present input must sit under the staging root is the
+checker's containment rule, which is explicit in `_copy_path`: it calls
+`relative_to(custody_root)` at
+[check_window_provenance.py:467–474](../../scripts/check_window_provenance.py),
+and every finalizer input it copies is passed through `_copy_path` at
+[check_window_provenance.py:505–515](../../scripts/check_window_provenance.py).
+An input outside the custody root is therefore refused before any check
+runs. Ruling 97 R-6f moves only the FLOOR's containment/symlink leg to
+L10-B (the first phase that has a floor); the rule above still binds the
+prospective, calibration, and G2-b inputs at L10-A.
 
 1. **Strict validation — L10-A / BENCH / BOUNDARY-PROVEN.** Enumerate the
    actual `run_id` values from the G2-b campaign manifests, then validate each:
