@@ -703,6 +703,29 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
             self.assertIn(resolution.status, {"exact", "transported"})
             self.assertEqual(resolution.reason_codes, ())
 
+    def test_missing_pack_root_refuses_with_unauthenticated_label(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-missing-root-") as temporary:
+            root = Path(temporary)
+            _fixture, pack = self._generated_frozen_gate_pack(root)
+            case = self._generated_exact_case(pack)
+            missing_pack = root / "missing-pack-root"
+            self.assertFalse(missing_pack.exists())
+            for row in case[4]:
+                assert isinstance(row.launch_lineage, dict)
+                row.launch_lineage["pack_root"] = str(missing_pack.resolve())
+
+            self.assertEqual(
+                _frozen_consumer_identity_set(case[4], case[3]),
+                frozenset(),
+            )
+            resolution = self._production_floor_resolution(case)
+
+            self.assertEqual(resolution.status, "refused")
+            self.assertEqual(
+                resolution.reason_codes,
+                ("consumer_identity_set_unauthenticated",),
+            )
+
     def test_u8_freeze_receipt_reaches_committed_v3_member_identity_set(self) -> None:
         pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
         receipt = json.loads(

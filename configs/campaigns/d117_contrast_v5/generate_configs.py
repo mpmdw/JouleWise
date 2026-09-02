@@ -1318,7 +1318,6 @@ def workload_for(
             "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
             "repetitions": 1,
             "warmup_runs": 1,
-            "prompt_tokens": DECODE_PROMPT_TOKENS["A"],
             "output_tokens": 512,
         }
     if arm not in {"A", "B"}:

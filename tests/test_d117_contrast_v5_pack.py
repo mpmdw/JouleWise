@@ -861,6 +861,43 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 (pack / "analysis_manifest_v3.json").read_text(encoding="utf-8")
             )
             plan = json.loads((pack / "calibration_plan.json").read_text())
+            decode_workload = plan["stack_scope"]["measurement_arms"]["decode"][
+                "workload"
+            ]
+            self.assertEqual(
+                decode_workload,
+                {
+                    "name": "real_prompts_v1_chat_rendered",
+                    "repetitions": 1,
+                    "warmup_runs": 1,
+                    "output_tokens": 512,
+                },
+            )
+            self.assertNotIn("prompt_tokens", decode_workload)
+            # R-2 (ruling 171a): the shared plan workload is the decode common
+            # profile alone. Each unit's declared profile is the TYPED profile
+            # (null-valued typed-only fields present) plus the per-arm
+            # suite_manifest_set; with the set and the null fields removed it
+            # must equal the plan workload exactly, for BOTH arms.
+            tree = json.loads(
+                (pack / "plan_tree.json").read_text(encoding="utf-8")
+            )
+            decode_units = [
+                unit
+                for unit in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if unit["identity_unit_id"].endswith("/decode")
+            ]
+            self.assertEqual(len(decode_units), 2)
+            for unit in decode_units:
+                declared = dict(unit["declared_identity"]["workload_profile"])
+                self.assertIn("suite_manifest_set", declared)
+                del declared["suite_manifest_set"]
+                self.assertEqual(
+                    {key: value for key, value in declared.items() if value is not None},
+                    decode_workload,
+                )
             configs = [
                 path
                 for path in pack.rglob("*.json")

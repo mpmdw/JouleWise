@@ -8461,6 +8461,11 @@ the declared set, never a re-typed workload. The digest field is
 `config_set_sha256`: a single member uses its scientific hash, while several
 members use the R-1 domain-separated set digest.
 
+*Addendum 2026-09-02 (Opus counter-review nit 2, trace
+`2026-09-02-decode-identity-set/28`): the set digest above is ruling 171a
+R-5 (unit config-set digest), not R-1; R-1 is "exact identities stay
+exact". The original line stands as written.*
+
 ### D-078 registry amendment — 2026-08-11: identity-pin readiness refusals
 
 The closed readiness-refusal vocabulary gains

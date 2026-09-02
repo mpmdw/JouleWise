@@ -448,18 +448,28 @@ file defining those functions).
 For each identity unit, freeze performs the following comparison before it
 probes runtime metadata or writes anything:
 
-1. It authenticates every inventoried configuration's raw bytes against that
-   row's digest and parses the configuration through `BenchmarkConfig`.
+1. It reads every inventoried configuration's raw bytes, requires their
+   SHA-256 to equal that inventory row's digest, and parses each as a JSON
+   object. Typing through `BenchmarkConfig` happens later, per
+   configuration, inside the comparison of steps 2–3.
 2. When `suite_manifest_set` is absent, the legacy rule applies: every complete
    typed declaration must equal the stored declaration and every configuration
    must have the same member scientific identity.
 3. When `suite_manifest_set` is present, freeze validates every exact
    three-field declared member, removes only `suite_manifest_set` from the
-   stored workload to obtain the declared common workload profile, and removes
-   only `suite_manifest_ref` and `suite_manifest_sha256` from each typed
-   emitted workload to obtain its observed common workload profile. Every
-   observed common profile and every non-workload declaration field must equal
-   the declaration.
+   stored workload to obtain the declared common workload profile. It then
+   resolves each declared member's `suite_manifest_ref` — a
+   repository-relative path, of which only the part after the pack directory's
+   name is kept — as a regular, non-symlink file whose resolved path stays
+   below the pack root, reads it, and requires its SHA-256 to equal the
+   member's declared `suite_manifest_sha256`. A reference that cannot be
+   resolved that way, a file that cannot be read, or a digest that differs
+   refuses with reason code `readiness_identity_environment_dirty` ("declared
+   suite manifest is unauthenticated") before any configuration's declaration
+   is compared. It removes only `suite_manifest_ref` and
+   `suite_manifest_sha256` from each typed emitted workload to obtain its
+   observed common workload profile. Every observed common profile and every
+   non-workload declaration field must equal the declaration.
 4. Each emitted configuration's manifest digest must name one declared member,
    and its manifest reference must equal the reference paired with that digest.
    Freeze constructs the emitted census without dropping duplicate
@@ -478,12 +488,17 @@ probes runtime metadata or writes anything:
    equal, and supplies the unit config-set digest defined in section 4, never a
    hash selected by set iteration.
 
-The identity projection authenticates the inventoried configuration bytes. It
-does not independently open the suite-manifest files to recompute their
-digests; manifest-file authentication remains with the pack and suite gates.
-Within this contract, an unauthenticated manifest binding means a configuration
-digest or reference not present as the exact declared pair, and that condition
-refuses in step 4.
+The identity projection therefore authenticates two kinds of bytes inside the
+campaign-pack directory (the pack root) before it compares any declaration:
+every inventoried configuration's raw bytes against its inventory digest (step
+1) and, when a suite-manifest set is declared, every declared manifest member's
+file against its declared digest (step 3). Within this contract, an
+unauthenticated manifest binding means either a declared manifest member whose
+reference cannot be resolved below the pack root, whose file cannot be read, or
+whose file bytes do not hash to its declared `suite_manifest_sha256` — each
+refuses in step 3 with `readiness_identity_environment_dirty` — or a
+configuration whose manifest digest and reference are not present as the exact
+declared pair, which refuses in step 4.
 
 On the first successful freeze it writes:
 
@@ -590,6 +605,20 @@ gate selects the one receipt unit whose `consumer_bindings.family` equals the
 requested condition-family ID. It authenticates that unit's inventoried config
 bytes, re-derives their distinct member identity set, and checks the resulting
 unit config-set digest against the receipt.
+
+That root is the machine-absolute pack path recorded when the arm was consumed.
+Bundle loading authenticates the launch lineage before any evidence row exists:
+it replays the consumed arm and resolves the recorded pack root strictly, as it
+resolves the consumption receipt, the launch manifest, the window root and the
+lifecycle receipts, so a bundle whose arming-time paths no longer exist is
+refused at input loading (`launch_binding_mismatch`, or
+`launch_consumption_missing` when the consumption receipt itself is gone) and
+never reaches this gate. Analysis of successor-lineage bundles therefore runs
+on the filesystem that armed them; making the lineage relocatable is a separate
+design lane, not a property of this gate. Called directly with a lineage whose
+pack root does not resolve, the gate refuses with
+`consumer_identity_set_unauthenticated`, the same label as any pack it cannot
+authenticate.
 
 The evidence member identities must be nonempty and a subset of that frozen
 set. Any outside identity or unreadable binding returns no floor request. A
@@ -987,9 +1016,10 @@ bytes. Arrow B is too late to save the night, which is the interval owned by
 | One prepare, all config projections, one cleanup | `tests.test_identity_pins.PromptRealizationProjectionTests.test_runtime_probe_prepares_and_cleans_up_once_for_two_configs` |
 | Realization rows are inside `projection_input_sha256` and the receipt | `tests.test_identity_pins.PromptRealizationProjectionTests.test_projection_input_sha256_binds_realization_rows` |
 | Generated v5 manifest rotation freezes and arm-verifies | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_freezes_and_verifies` |
+| Declared manifest file bytes are authenticated at freeze and arm re-verification | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_refuses_tampered_declared_manifest_bytes` and `test_generated_v5_verify_refuses_tampered_declared_manifest_bytes` |
 | Unlisted manifest, wrong census, old retyped declaration, and drifted member tag refuse | `tests.test_d117_contrast_v5_pack.D117ContrastV5PackTests.test_generated_v5_pack_refuses_unlisted_decode_manifest`, `test_generated_v5_pack_refuses_declared_census_off_by_one`, `test_generated_v5_pack_refuses_retyped_decode_declaration`, and `test_generated_v5_pack_refuses_drifted_member_tag` |
 | Analysis reaches the U8-bound frozen set and admits only subset-bound multi-identity transport | `tests.test_analysis_inputs.FrozenConsumerIdentitySetTests.test_u8_freeze_receipt_reaches_committed_v3_member_identity_set` and `test_multi_identity_transport_requires_declared_subset_and_skips_exact_cell` |
-| Analysis labels unauthenticated declarations and undeclared identities on the production path, with an authenticated control | `tests.test_analysis_inputs.FrozenConsumerIdentitySetTests.test_production_refuses_unauthenticated_frozen_identity_set_with_named_reason`, `test_production_refuses_identity_outside_authenticated_set_with_named_reason`, `test_production_refuses_legacy_multi_identity_without_declaration_with_named_reason`, and `test_production_accepts_same_authenticated_fixture_without_receipt_perturbation` |
+| Analysis labels a directly missing pack root, unauthenticated declarations, and undeclared identities on the production path, with an authenticated control | `tests.test_analysis_inputs.FrozenConsumerIdentitySetTests.test_missing_pack_root_refuses_with_unauthenticated_label`, `test_production_refuses_unauthenticated_frozen_identity_set_with_named_reason`, `test_production_refuses_identity_outside_authenticated_set_with_named_reason`, `test_production_refuses_legacy_multi_identity_without_declaration_with_named_reason`, and `test_production_accepts_same_authenticated_fixture_without_receipt_perturbation` |
 | Operator cannot pass or serialize identity overrides | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_cli_and_public_arm_callables_accept_no_identity_values`, `test_cli_refuses_unknown_identity_override_options`, and `test_unprojected_pack_refuses_serialized_operator_pin_values` |
 | Closed five-code vocabulary | `tests.test_identity_pins.DerivationOnlyArmPathTests.test_projection_reason_vocabulary_is_closed` and `test_projection_reasons_are_registered_in_d078_decision_vocabulary` |
 | Every projection refusal code becomes an arm-readiness row refusal | `tests.test_arm_readiness_integration.ArmReadinessIntegrationTests.test_all_five_u11_refusals_propagate_through_identity_row` |
