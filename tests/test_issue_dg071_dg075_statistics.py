@@ -248,6 +248,39 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         float_median_ms = (float_widths[1] + float_widths[2]) * 500
         self.assertEqual(f"{float_median_ms:.4f}", "120.9185")
 
+    def test_millisecond_rendering_ties_round_half_even_through_main(
+        self,
+    ) -> None:
+        """Counterfactual: ROUND_HALF_UP would print 1.2345 for 1.23445 ms.
+
+        Two records of identical width make every quantile equal that width,
+        so the rendering rule alone decides the digits. terra 248 SF-EXEC-01.
+        """
+
+        cases = {
+            # 1.23445 ms: preceding digit even -> stays 1.2344 (half-up: 1.2345)
+            "even": ("0.00123445", "1.2344"),
+            # 1.23455 ms: preceding digit odd -> rounds to 1.2346 (both rules)
+            "odd": ("0.00123455", "1.2346"),
+        }
+        for name, (width_s, expected_ms) in cases.items():
+            first_end = Decimal("1") + Decimal(width_s)
+            second_end = first_end + Decimal(width_s)
+            self._write_records(
+                [
+                    (str(first_end), "1", str(first_end)),
+                    (str(second_end), str(first_end), str(second_end)),
+                ]
+            )
+            out = self.root / f"tie-{name}.json"
+            exit_code, stderr, _ = self._run_main(out)
+            self.assertEqual(exit_code, 0, stderr)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            for row_id in ("DG-071", "DG-075"):
+                self.assertEqual(
+                    payload["statistics"][row_id]["median_ms"], expected_ms
+                )
+
     def test_method_disclosure_is_replicable_from_both_artifacts(self) -> None:
         out = self.root / "method.json"
         payload = self._issue(out)
@@ -432,9 +465,19 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         )
 
     def test_record_rail_set_mismatch_refusal_reaches_main(self) -> None:
-        """Counterfactuals: a record lacks a rail or one sibling end differs."""
+        """Counterfactuals: a record lacks a rail, or one sibling end or
+        start literal differs (the start case kills the `len(starts) != 1`
+        guard mutant — terra 248 SF-EXEC-02)."""
 
         fixtures = {
+            "different-start": [
+                ("10", "cpu_power", "9", "10"),
+                ("10", "gpu_power", "9.0000001", "10"),
+                ("10", "ane_power", "9", "10"),
+                ("11", "cpu_power", "10", "11"),
+                ("11", "gpu_power", "10", "11"),
+                ("11", "ane_power", "10", "11"),
+            ],
             "missing-rail": [
                 ("10", "cpu_power", "9", "10"),
                 ("10", "gpu_power", "9", "10"),
