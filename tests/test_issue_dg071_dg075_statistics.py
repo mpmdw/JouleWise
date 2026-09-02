@@ -255,10 +255,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         golden_sha256 = (
             "cc31866f096948d8af0e8c55f80a432086dfb753f907d52825fea00da9e2d58f"
         )
-        self.assertEqual(
-            self._sha256(),
-            "cc31866f096948d8af0e8c55f80a432086dfb753f907d52825fea00da9e2d58f",
-        )
+        self.assertEqual(self._sha256(), golden_sha256)
         payload = ISSUER.build_payload(
             self.bundle,
             expected_bundle_path=self.bundle,
@@ -389,6 +386,20 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                     "2–n up to the endpoint convention above, i.e. to within the "
                     "largest tiling gap."
                 ),
+                "provenance": (
+                    "Provenance. The producer commit is the last commit in the "
+                    "repository's history that changed the producer script (`git "
+                    "log -1 --format=%H -- scripts/issue_dg071_dg075_statistics.py`), "
+                    "not the commit the issuer happened to have checked out. A "
+                    "committed artifact cannot name the commit that contains it, so "
+                    "recording the checkout would make byte-exact replay impossible "
+                    "at exactly the commit a reader checks out; recording the "
+                    "script's last commit means re-running the producer from any "
+                    "checkout in which the script is unchanged since that commit "
+                    "reproduces both files byte for byte. The producer SHA-256 is "
+                    "recorded beside it: an uncommitted edit to the producer shows "
+                    "as a mismatch between the two."
+                ),
             },
             "producer": {
                 "script_path": "scripts/issue_dg071_dg075_statistics.py"
@@ -472,10 +483,16 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         rng = random.Random(20260902)
         gaps = [Decimal(value) for value in ("0", "0.0000001", "-0.0000001", "0.0000003", "-0.0000003", "0.000001", "-0.000001")]
         numeric_fields = ("sample_count", "q1_s", "median_s", "q3_s", "iqr_s", "q1_ms", "median_ms", "q3_ms", "iqr_ms")
+        # Bundle 0 has more records than the retained bundle (406) so that a
+        # computation which is right below some record count and wrong above
+        # it (e.g. a cap `sorted(values[:N])`, N < 406) cannot agree with the
+        # reference here while changing the published values; the other
+        # bundles stay small enough to be read by hand.
         for bundle_number in range(12):
             records = []
             previous = None
-            for record_number in range(rng.randint(2, 8)):
+            record_total = 500 if bundle_number == 0 else rng.randint(2, 8)
+            for record_number in range(record_total):
                 width = Decimal(rng.randint(900000, 1300000)) / Decimal("10000000")
                 start = Decimal("1784978888.0000000") if previous is None else previous + rng.choice(gaps)
                 end = start + width
@@ -592,8 +609,11 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         self.assertIn("last place", method["iqr"])
         self.assertIn("numpy `linear`, R type 7", method["float64_replication"])
         self.assertIn("Tiling.", method["tiling"])
+        self.assertIn("Provenance.", method["provenance"])
+        self.assertIn("last commit", method["provenance"])
         docstring = " ".join((ISSUER.__doc__ or "").split())
         for phrase in (
+            "the last commit that changed this script",
             "A literal is the character string exactly as written in the file",
             "parsed directly as exact decimals",
             "h = (n−1)·p",
@@ -614,6 +634,8 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             "DG-075 is the DG-071 distribution minus the first record",
             markdown,
         )
+        self.assertIn("- Producer commit (last commit that changed", markdown)
+        self.assertIn("Provenance. The producer commit is the last commit", markdown)
 
     def test_two_runs_are_byte_identical(self) -> None:
         first = self.root / "first" / "issued.json"
@@ -626,41 +648,81 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             second.with_suffix(".md").read_bytes(),
         )
 
-    def test_two_checkout_roots_produce_byte_identical_json(self) -> None:
+    def test_producer_commit_is_the_scripts_last_commit_not_head(self) -> None:
+        """Two checkouts at DIFFERENT heads, same script commit: identical bytes.
+
+        Counterfactual: a producer recording ``git rev-parse HEAD`` yields two
+        different ``git_commit`` values here (the heads differ) and can never
+        be replayed byte for byte at the commit that contains its artifact.
+        """
+
         checkouts = [self.root / "checkout-a", self.root / "checkout-b"]
         fixture_raw = self.bundle.read_bytes()
-        git_environment = {
-            **os.environ,
-            "GIT_AUTHOR_NAME": "Fixture Author",
-            "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
-            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00+00:00",
-            "GIT_COMMITTER_NAME": "Fixture Committer",
-            "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
-            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00+00:00",
-        }
+        script_raw = SCRIPT_PATH.read_bytes()
+
+        def git_environment(date: str) -> dict[str, str]:
+            return {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Fixture Author",
+                "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+                "GIT_AUTHOR_DATE": date,
+                "GIT_COMMITTER_NAME": "Fixture Committer",
+                "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
+                "GIT_COMMITTER_DATE": date,
+            }
+
+        def git(checkout: Path, *arguments: str, date: str) -> str:
+            completed = subprocess.run(
+                ["git", "-c", "commit.gpgSign=false", *arguments],
+                cwd=checkout,
+                env=git_environment(date),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return completed.stdout.strip()
+
         outputs = []
-        for checkout in checkouts:
+        script_commits = []
+        for index, checkout in enumerate(checkouts):
             fixture = checkout / ISSUER.PINNED_BUNDLE_REPOSITORY_PATH
             fixture.parent.mkdir(parents=True)
             fixture.write_bytes(fixture_raw)
-            subprocess.run(
-                ["git", "init", "--quiet"], cwd=checkout, check=True
+            script = checkout / ISSUER.SCRIPT_REPOSITORY_PATH
+            script.parent.mkdir(parents=True)
+            script.write_bytes(script_raw)
+            git(checkout, "init", "--quiet", date="2000-01-01T00:00:00+00:00")
+            # The script commit is identical in both repositories (same tree,
+            # message and pinned dates); the later empty commit differs by date
+            # so the two HEADs are different commits.
+            git(
+                checkout,
+                "add",
+                ISSUER.SCRIPT_REPOSITORY_PATH,
+                date="2000-01-01T00:00:00+00:00",
             )
-            subprocess.run(
-                [
-                    "git",
-                    "-c",
-                    "commit.gpgSign=false",
-                    "commit",
-                    "--quiet",
-                    "--allow-empty",
-                    "-m",
-                    "fixture",
-                ],
-                cwd=checkout,
-                env=git_environment,
-                check=True,
+            git(
+                checkout,
+                "commit",
+                "--quiet",
+                "-m",
+                "producer",
+                date="2000-01-01T00:00:00+00:00",
             )
+            script_commits.append(
+                git(checkout, "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00")
+            )
+            git(
+                checkout,
+                "commit",
+                "--quiet",
+                "--allow-empty",
+                "-m",
+                "later",
+                date=f"2000-01-0{index + 2}T00:00:00+00:00",
+            )
+            head = git(checkout, "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00")
+            self.assertNotEqual(head, script_commits[-1])
             out = checkout / "issued.json"
             exit_code, stderr, _ = self._run_main(
                 out,
@@ -670,7 +732,11 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             )
             self.assertEqual(exit_code, 0, stderr)
             outputs.append(out.read_bytes())
+            payload = json.loads(outputs[-1])
+            self.assertEqual(payload["producer"]["git_commit"], script_commits[-1])
+            self.assertNotEqual(payload["producer"]["git_commit"], head)
 
+        self.assertEqual(script_commits[0], script_commits[1])
         self.assertEqual(outputs[0], outputs[1])
         payload = json.loads(outputs[0])
         self.assertEqual(
@@ -679,6 +745,51 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             "p2015-df-ph-decode-abs-r03/power_trace.csv",
         )
         self.assertFalse(payload["input_bundle"]["path"].startswith("/"))
+
+    def test_retained_bundle_values_of_record(self) -> None:
+        """Pin the numbers the paper prints, on the retained bundle itself.
+
+        The retained corpus is gitignored, so this runs only where it exists
+        (the bench); CI enforces the same cardinality regime through the
+        500-record differential bundle instead.
+        """
+
+        if not ISSUER.PINNED_BUNDLE_PATH.is_file():
+            self.skipTest(
+                "runs_window corpus absent (clean checkout without bundles)"
+            )
+        out = self.root / "retained.json"
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = ISSUER.main(
+                ["--repository-root", str(ROOT), "--out", str(out)]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("DG-071 median_ms=120.9186 iqr_ms=5.9508", stdout.getvalue())
+        self.assertIn("DG-075 median_ms=120.9224 iqr_ms=5.8949", stdout.getvalue())
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(payload["input_bundle"]["sha256"], ISSUER.PINNED_BUNDLE_SHA256)
+        self.assertEqual(payload["sampler_record_count"], 406)
+        self.assertEqual(payload["max_tiling_gap_s"], "0.0000004")
+        self.assertEqual(payload["tiling_gap_nonzero_boundaries"], 100)
+        dg071 = payload["statistics"]["DG-071"]
+        dg075 = payload["statistics"]["DG-075"]
+        self.assertEqual(
+            [dg071[key] for key in ("sample_count", "q1_ms", "median_ms", "q3_ms", "iqr_ms")],
+            [406, "116.9720", "120.9186", "122.9227", "5.9508"],
+        )
+        self.assertEqual(
+            [dg075[key] for key in ("sample_count", "q1_ms", "median_ms", "q3_ms", "iqr_ms")],
+            [405, "117.0321", "120.9224", "122.9270", "5.8949"],
+        )
+        self.assertEqual(
+            [dg071[key] for key in ("q1_s", "median_s", "q3_s", "iqr_s")],
+            ["0.116971950", "0.12091860", "0.122922700", "0.005950750"],
+        )
+        self.assertEqual(
+            [dg075[key] for key in ("q1_s", "median_s", "q3_s", "iqr_s")],
+            ["0.1170321", "0.1209224", "0.122927", "0.0058949"],
+        )
 
     def test_bundle_path_mismatch_refusal_reaches_main(self) -> None:
         """Counterfactual: --bundle names a file other than the path pin."""
@@ -857,7 +968,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             )
 
     def test_git_commit_invalid_refusal_reaches_main(self) -> None:
-        """Counterfactual: git returns a non-40-hex HEAD for valid input."""
+        """Counterfactual: git returns a non-40-hex commit for valid input."""
 
         completed = mock.Mock(stdout="not-a-commit\n")
         with mock.patch.object(
@@ -865,6 +976,17 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         ):
             self._assert_main_refusal(
                 "git_commit_invalid", "git-invalid.json"
+            )
+
+    def test_uncommitted_script_refusal_reaches_main(self) -> None:
+        """Counterfactual: the producer script has no commit (git log is empty)."""
+
+        completed = mock.Mock(stdout="\n")
+        with mock.patch.object(
+            ISSUER.subprocess, "run", return_value=completed
+        ):
+            self._assert_main_refusal(
+                "git_commit_invalid", "git-uncommitted.json"
             )
 
     def test_output_path_invalid_refusal_reaches_main(self) -> None:

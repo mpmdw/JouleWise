@@ -60,7 +60,13 @@ Usage::
         --out /path/to/dg071-dg075-statistics.json
 
 The companion Markdown rendering is written beside the JSON with a ``.md``
-suffix.  Both files are byte-deterministic for a fixed checkout and input.
+suffix.  Both files are byte-deterministic for a fixed input and a fixed
+producer: the ``git_commit`` they record is the last commit that changed this
+script (``git log -1 --format=%H -- scripts/issue_dg071_dg075_statistics.py``),
+not the checkout's HEAD, so re-running the producer from any checkout in which
+the script is unchanged since that commit reproduces both files byte for byte.
+The script's SHA-256 is recorded beside it, so an uncommitted edit to the
+producer shows as a mismatch between the two.
 """
 
 from __future__ import annotations
@@ -107,6 +113,18 @@ EXPECTED_RAILS = frozenset(("cpu_power", "gpu_power", "ane_power"))
 REGISTRY_ROW_IDS = ("DG-071", "DG-075")
 SCHEMA_VERSION = "joulewise.paper.dg071-dg075-statistics.v2"
 SCRIPT_REPOSITORY_PATH = "scripts/issue_dg071_dg075_statistics.py"
+PROVENANCE_DISCLOSURE = (
+    "Provenance. The producer commit is the last commit in the repository's "
+    "history that changed the producer script (`git log -1 --format=%H -- "
+    f"{SCRIPT_REPOSITORY_PATH}`), not the commit the issuer happened to have "
+    "checked out. A committed artifact cannot name the commit that contains "
+    "it, so recording the checkout would make byte-exact replay impossible at "
+    "exactly the commit a reader checks out; recording the script's last "
+    "commit means re-running the producer from any checkout in which the "
+    "script is unchanged since that commit reproduces both files byte for "
+    "byte. The producer SHA-256 is recorded beside it: an uncommitted edit to "
+    "the producer shows as a mismatch between the two."
+)
 MS_RENDER_QUANTUM = Decimal("0.0001")
 TILING_TOLERANCE_S = Decimal("0.000001")
 REFUSAL_EXIT_CODE = 2
@@ -375,9 +393,17 @@ def _verify_tiling(records: list[SamplerRecord]) -> tuple[Decimal, int]:
 
 
 def _git_commit(repository_root: Path) -> str:
+    """Return the last commit that changed the producer script, not HEAD.
+
+    A committed artifact cannot contain the hash of the commit that contains
+    it, so recording HEAD would make byte-exact replay impossible at the very
+    commit a reader checks out. The last commit touching the script is stable
+    across every later commit that leaves the script unchanged.
+    """
+
     try:
         completed = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            ["git", "log", "-1", "--format=%H", "--", SCRIPT_REPOSITORY_PATH],
             cwd=repository_root,
             check=True,
             capture_output=True,
@@ -385,12 +411,19 @@ def _git_commit(repository_root: Path) -> str:
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise IssuanceRefused(
-            "git_commit_unavailable", f"could not read repository HEAD: {exc}"
+            "git_commit_unavailable",
+            f"could not read the producer's last commit: {exc}",
         ) from exc
     commit = completed.stdout.strip()
+    if commit == "":
+        raise IssuanceRefused(
+            "git_commit_invalid",
+            f"{SCRIPT_REPOSITORY_PATH} has no commit in this repository "
+            "(the producer script is uncommitted)",
+        )
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
         raise IssuanceRefused(
-            "git_commit_invalid", f"git rev-parse returned {commit!r}"
+            "git_commit_invalid", f"git log returned {commit!r}"
         )
     return commit
 
@@ -472,6 +505,7 @@ def _method_disclosure(
             "2–n up to the endpoint convention above, i.e. to within the "
             "largest tiling gap."
         ),
+        "provenance": PROVENANCE_DISCLOSURE,
     }
 
 
@@ -585,7 +619,8 @@ def render_markdown(payload: dict[str, Any]) -> str:
         f"{payload['tiling_gap_nonzero_boundaries']}",
         f"- Producer: `{producer['script_path']}`",
         f"- Producer SHA-256: `{producer['script_sha256']}`",
-        f"- Git commit: `{producer['git_commit']}`",
+        "- Producer commit (last commit that changed the producer; defined "
+        f"under Method): `{producer['git_commit']}`",
         "",
         "## Method",
         "",
@@ -647,6 +682,8 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "consecutive timestamp differences equal the widths of records 2–n "
         "up to the endpoint convention above, i.e. to within the largest tiling "
         "gap.",
+        "",
+        PROVENANCE_DISCLOSURE,
         "",
         "| Registry row | Sample count | Q1 (ms) | Median (ms) | "
         "Q3 (ms) | IQR (ms) |",
