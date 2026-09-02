@@ -162,6 +162,22 @@ an older rehearsal directory. Before each numbered step, repeat
 `test "$(/usr/bin/git rev-parse HEAD)" = "$TRANSACTION_HEAD"` and stop on any
 mismatch. No command below needs `sudo`, and none is a `[QUIET-MAC]` collection.
 
+> **OPEN RULING — corpus precondition (magistrate, 2026-09-01).** The paragraph
+> above cannot be satisfied before a window is spent: evidence "bound to the
+> authenticated production pack" exists only after the `_v5` transaction has
+> collected it, and this phase is sequenced BEFORE that transaction (§D). The
+> kernel row's fence ("same head, production pack; synthetic does not
+> discharge") and D-160 R-1/R-2 leave three candidate corpora, none of which
+> satisfies every clause: (i) D-160 R-2's live ~20-minute run on a real tiny
+> quarantined family generation (real evidence, not the production pack);
+> (ii) the retained a9/a10 corpus used by ED-L10-1 (real, claim-eligible,
+> Qwen2.5 `_v3` pack, not `_v5`); (iii) the production pack itself (only
+> after the window — then the rehearsal is no longer a rehearsal). Which corpus
+> discharges this phase, and under which relaxation of the fence, is a
+> reinterpretation of a ruled fence and is therefore consulted (Sol xhigh +
+> Opus contract lens), not ruled solo. Until that ruling lands, `RUNS_ROOT`
+> and `PRODUCER_RUNS_ROOT` are unset and C2 must not start.
+
 The **BOUNDARY-PROVEN** label means the command shape and fail-closed boundary
 are already represented by the governed flow and tests. **ED-FIRST** means its
 first execution on the production checkout and outside-repository custody must
