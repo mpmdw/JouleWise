@@ -736,8 +736,12 @@ Path abbreviations below are exact:
 - XS = scripts/paper_excursion_decomposition.py, sha256 8733ff03d885f9c9519fddcb0906bc59e8025d7a3a3a969c09d5abe551822c7b (49b258d2, #240)
 - F4 = docs/paper/figures/fig4_edge_excursions.svg, sha256 6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf
 - AQ = docs/paper/round7/anchor-correction-quantified.json, sha256 c09077149c66411d1873838de5c21aa1b7c97d8df24ea66a163d679cb31f50fc (54,280 B)
-- AS = scripts/paper_anchor_correction_quantified.py, sha256 41cbbf08176f9bfe1c6cfd526e1776f0324893c62f62cd76d1ff8128b8beb47f (0438566b, #242)
+- AS = scripts/paper_anchor_correction_quantified.py, sha256 e3e4355c8f388d5e60a4291f3aee4fbd4b4d45217f4156373d6e8dd398b9e693 (b36d1e85, #272)
 - R7F = scripts/check_paper_round7_artifacts.py
+
+AS was re-pinned in #272 from 41cbbf08 (0438566b, #242): its `main` now
+returns exit 3 on `PopulationUnavailable` instead of raising; the AQ payload
+bytes are unchanged (AQ sha256 above is the same).
 
 Wherever a DX value is printed, the opening standing sentence is mandatory:
 “The following are diagnostic-era instrument statistics — a desk
