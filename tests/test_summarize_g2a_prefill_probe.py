@@ -418,6 +418,18 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
         )
 
     def test_desk_chain_actual_artifacts_reach_v5_loader(self) -> None:
+        # `build-probes` hashes each panel entry's on-disk `tokenizer.json`
+        # (`_validate_panel`), so the desk chain needs the local model mirrors;
+        # CI has none and must skip by name rather than fail on a missing
+        # artifact.
+        panel = json.loads(PANEL.read_text(encoding="utf-8"))
+        missing = [
+            entry["model_id"]
+            for entry in panel["entries"]
+            if not Path(entry["source"]).expanduser().joinpath("tokenizer.json").is_file()
+        ]
+        if missing:
+            self.skipTest(f"local model mirrors absent (CI environment): {missing}")
         identity = {
             "os_build": "25F84",
             "hardware_model": "Mac15,9",
@@ -468,6 +480,7 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                         "1",
                     ]
                 )
+                self.assertEqual(build_code, 0)
                 plan_root = root / "window-plan"
                 ladder_path = plan_root / "prefill-prompt-ladder.json"
                 ladder = json.loads(ladder_path.read_text())
