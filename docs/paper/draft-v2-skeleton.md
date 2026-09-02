@@ -808,19 +808,137 @@ B. -->
 
 ### Further limitations
 
-<!-- BUILD IN THIS ORDER: pulse-to-inference transfer; one physical machine and
-software/counter boundary; internal CPU/GPU/neural-engine counter joules with
-no external gain check; dependence among ten blocks in one window; incomplete
-independent floor re-reduction; trusted-operator rather than adversarial
-provenance. State what evidence would close each limit. -->
+<!-- Source: docs/paper/round7/survival-map.md; reviewer items C9, D6, D7, D8, D9, D11; ranked items 12, 15, 16. -->
+
+First, the pulse-to-inference transfer is untested. The calibration commands
+long, square GPU work and measures how its reported edges differ from the
+commanded edges, whereas inference has a different sequence of GPU work at the
+transition from prompt processing to token generation. A difference in those
+two physical edge responses could make the pulse-derived timing bound either
+too narrow or unnecessarily wide; its effect on the reported phase energies is
+unquantified. The retained diagnostic capture's pulse-derived bound was
+\(0.030067931757111657\) s. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA / REPLAY_FENCED. --> This is a calibration value, not a bound on real inference. The concrete closing check is the inserted-gap
+experiment in the next subsection: command a no-work interval inside real
+inference, fit both of its independently stamped edges, and compare the
+largest absolute residual with the pulse-derived bound; an exceedance would
+withdraw transfer rather than inflate the bound after seeing the result.
+
+Second, the evidence covers one physical machine and one software/counter
+boundary. The machine, operating-system build, inference framework, sampler,
+and power channels are a single configuration, so a different chip, firmware,
+software build, or sampler implementation could change the edge response, the
+power scale, or both; the direction and size of that change are unquantified.
+An independent reader could close this limit by repeating the complete
+calibration, admission, workload, and analysis protocol on another Apple
+Silicon machine and comparing the resulting transfer check, cell floors, and
+contrast decisions under the same pre-registered workload.
+
+Third, the reported joules come from internal CPU, GPU, and neural-engine
+counter channels, with no external gain check. CPU, GPU, and neural-engine
+power share the same start-to-end averaging window, so the same phase edges
+clip all three channels before their energies are summed; no separate timing
+bound for the CPU or neural-engine channel is issued. <!-- Reviewer D8; the channel-window answer is fixed by the Section 2 record definition. -->
+An external power meter—a separate instrument measuring the machine's physical
+input—could test whether the counter's whole-request totals track physical
+energy over several controlled loads; without that comparison, a gain error,
+meaning a mismatch between reported and physical energy, could move the
+absolute and comparative joule values upward or downward by an unquantified
+amount, although it does not by itself validate a phase split. We report joules
+rather than counter-internal units because watts integrated over seconds give
+an interpretable energy quantity, while the unmeasured gain means that quantity
+is validated only on the counter's reported scale. <!-- Reviewer D7; ranked item 16. -->
+
+Fourth, the ten blocks in one measurement window are not automatically ten
+independent physical draws. Consecutive records inside a block share the same
+local machine state, and blocks can share the calibration bracket, thermal
+trajectory, background activity, neighbouring sampler behavior, and serial
+change across the window; a deterministic allowance can widen an interval but
+does not make those observations independent. Positive dependence would make
+an independence-based repeat standard error and tail probability too small,
+while its direction and size here are unquantified.
+
+<!-- Source: docs/paper/round7/dependence-sensitivity.md; reviewer item D6; ranked item 15. -->
+The sampling unit—the smallest observation treated as a separate draw—is one
+complete A/B/B/A block, never one of its four member runs. For block \(i\),
+\(d_i=(B_{i1}+B_{i2}-A_{i1}-A_{i2})/2\); with \(n\) complete blocks, the repeat
+standard error is \(SE_{\mathrm{repeat}}=s/\sqrt{n}\), and the two independent
+uncertainty sources combine as
+
+\[
+SE_{\mathrm{total}}=\sqrt{SE_{\mathrm{repeat}}^2+SE_{\mathrm{metrology}}^2}.
+\]
+
+The registered independent-block model uses \(\nu=n-1\) degrees of freedom,
+which is nine for the pre-registered ten-block design; a dependence sensitivity
+model changes only the repeat term to
+\(SE_{\mathrm{repeat,model}}=s\sqrt{V}/\sqrt{n}=s/\sqrt{n_{\mathrm{eff}}}\)
+and uses its model-specific degrees of freedom, while retaining the issued
+metrology input and its paired A/B covariance. Under the AR(1) sensitivity
+model, \(\nu=\min(n-1,\lfloor n_{\mathrm{eff}}\rfloor-1)\); a named fixed-
+halving sensitivity case uses \(\nu=4\). <!-- Pre-registered design/model constants from the dependence sheet; not measured values. -->
+If any member is absent, invalid, or not admitted, its contrast cannot enter
+the registered claim procedure: the analysis uses no shortened set, outcome-
+driven replacement, or top-up, and it does not calculate the registered result
+unless all ten complete blocks are present. The A/B/B/A order cancels a
+straight-line drift within a block, whereas \(A_k\) is one family-level
+allowance for remaining across-window curvature and repeatability added once to
+the component floor, so it is not an additional member or block charge. <!-- Reviewer D9; ranked item 16. -->
+The identical-condition null's statistical power is limited to departures large
+enough to clear the fixed comparison floor relative to its repeat scatter; no
+percentage is printed because no authenticated null-characterization result
+has issued, so a pass does not establish equality. <!-- DS-03; KEY_FROZEN / VALUE_UNISSUED. Reviewer D11; ranked item 16. -->
+The exact closing check is to retain all blocks in collection order, rerun the
+registered independent-block calculation and every pre-registered dependence
+sensitivity model, and compare their total standard errors, degrees of freedom,
+intervals, and direction gates without changing the member set.
+
+Fifth, the final cell floor is not yet independently re-reducible. An outside
+reader cannot presently rebuild every admitted member and every allowed timing
+width from the primary bytes, verify that the same members and widths reached
+the floor artifact, and then replay the claim gates; an omitted member,
+substituted width, or stale derived file could therefore change the reported
+floor in an unquantified direction. The concrete closing evidence is a released
+archive and its file-fingerprint list plus a re-reduction that reconstructs
+those members and widths from primary bytes, byte-compares the complete set
+with the floor artifact, and refuses before analysis on any mismatch; this
+limit remains open until that check is available. <!-- DS-34; SUPPLIER_UNKNOWN; no release locator issued. -->
+
+Sixth, the provenance is trusted-operator rather than adversarial. The hashes
+and refusal records can expose an accidental edit or inconsistent derived file,
+but an operator who controls acquisition, hashing, and analysis could replace
+the primary files and recompute the records consistently; the possible effect
+on any reported value is therefore unquantified and could favor a claimed
+contrast. A reader could close this limit only with independently held
+acquisition evidence—for example, a separate operator or laboratory retaining
+append-only, signed raw records and comparing them with the analysis archive—so
+that the person producing the claim cannot rewrite the evidence and its
+fingerprints alone.
 
 ### Future work
 
-<!-- BUILD FRESH. First: an approximately 500-ms inserted gap in about ten real
-inference runs, with both edges fitted by the existing estimator and residual
-compared with the pulse-derived bound. Then external-meter gain validation and
-another-machine replication. Keep all other research-bank questions outside
-this paper's answer set. Use the registered campaign generation throughout. -->
+<!-- Source: docs/paper/round7/survival-map.md; reviewer items C1 and M1; ranked item 16 / TRANSFER-FIDUCIAL-01. -->
+
+Future work begins with an inserted-gap fiducial: a commanded interval of no
+GPU work placed between prompt processing and token generation in real
+inference. Before collection, specify which model, prompt, tokenizer, generation
+rules, gap placement, edge-fitting rule, and pass/fail rule, retaining the same
+registered campaign generation for every run. In each of about ten otherwise
+identical real-workload runs, stamp the start and end of an approximately
+500-ms gap with the paired clocks, retain the surrounding power records, and
+use the existing edge estimator on both the falling and rising edges; report
+the signed residual for each edge and use the largest absolute residual as the
+primary comparison with the pulse-derived bound. <!-- TRANSFER-FIDUCIAL-01; approximately 500 ms and about ten runs are pre-registered design constants, not measured values. -->
+
+The primary decision must be fixed before looking at the residuals: all tested
+gap edges inside the pulse-derived bound support transfer for this workload and
+machine, while any edge outside it leaves the phase claim conditional and is
+reported as a transfer failure rather than absorbed into a new bound. The same
+window must retain its before-and-after calibration bracket and all refusal
+records, and a reader must be able to recompute both edge residuals from the
+stamps and power trace. A later external-meter study can compare whole-request
+counter joules with physical input energy over controlled loads, and a separate
+Apple Silicon machine can repeat the complete protocol; characterization and
+other research-bank questions remain outside this capstone's answer set.
 
 ## 8. Related work
 
