@@ -323,7 +323,7 @@ class MlxRuntimeAdapter:
                 "runtime backend 'mlx' identity projection called before prepare",
             )
         _, sampler = self._sampler_for_generation()
-        return {
+        metadata = {
             "model": {
                 "name": config.model.name,
                 "source": config.model.source,
@@ -338,6 +338,15 @@ class MlxRuntimeAdapter:
                 "stop_condition": "requested_tokens_emitted",
             },
         }
+        if config.workload_profile.prompt_token_expectation is not None:
+            token_ids, _, prompt_text = self._prompt_for_workload(config)
+            realized = prompt_provenance(token_ids, text=prompt_text)
+            metadata["prompt_realization"] = {
+                "token_count": realized["realized_token_count"],
+                "token_ids_sha256": realized["token_ids_sha256"],
+                "token_hash_domain": realized["token_hash_domain"],
+            }
+        return metadata
 
     def warmup(
         self, config: BenchmarkConfig, context: RunContext | None = None
