@@ -55,6 +55,10 @@ read -r deadman_hour deadman_minute < <(
   cd "$repo"
   /usr/bin/python3 -c 'from scripts.run_night import DEADMAN_HOUR, DEADMAN_MINUTE; print(DEADMAN_HOUR, DEADMAN_MINUTE)'
 )
+if (( ! uninstall && hour == deadman_hour )); then
+  print "refusing --hour $hour: it is the dead-man hour (DEADMAN_HOUR=$deadman_hour); arm the night in another hour" >&2
+  exit 2
+fi
 
 if [[ -n "$render_only" ]]; then
   launch_dir="${render_only:A}"
@@ -116,8 +120,12 @@ if (( uninstall )); then
   exit 0
 fi
 
-if [[ -e "$custody_root/night/chain.started" && ! -e "$custody_root/night/chain.exited" ]]; then
-  print "refusing install: chain.started exists without chain.exited" >&2
+existing_night_records=()
+for record in receipt.json result.json refusal.json chain.started chain.exited courier.json courier.sent; do
+  [[ -e "$custody_root/night/$record" ]] && existing_night_records+=("$record")
+done
+if (( ${#existing_night_records[@]} )); then
+  print "refusing install: existing night records: ${existing_night_records[*]}" >&2
   exit 3
 fi
 

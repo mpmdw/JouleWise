@@ -359,11 +359,105 @@ class NightDriverTests(unittest.TestCase):
         self.assertEqual(self.driver.dead_man(self.plan_path), 0)
         self.driver.run_courier.assert_not_called()
 
+    def test_dead_man_stands_down_immediately_after_t0_on_empty_night(self) -> None:
+        night = self.custody / "night"
+        night.mkdir()
+        entries_before = set(night.iterdir())
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(
+            self.driver.time, "time", return_value=self.t0_epoch_s + 1
+        ), mock.patch.object(self.driver.subprocess, "Popen") as spawn, mock.patch.object(
+            self.driver.subprocess, "run"
+        ) as run_command, mock.patch.object(self.driver.os, "killpg") as kill_group:
+            exit_code = self.driver.dead_man(self.plan_path)
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        self.assertEqual(set(night.iterdir()), entries_before)
+        self.assertEqual(set(self.custody.iterdir()), {night, self.custody / "night.log"})
+        lines = (self.custody / "night.log").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn(f"completion epoch {int(completion_epoch_s)}; standing down", lines[0])
+        spawn.assert_not_called()
+        run_command.assert_not_called()
+        kill_group.assert_not_called()
+        self.resolve_mock.assert_not_called()
+        self.driver.run_courier.assert_not_called()
+        self.driver._durable_record.assert_not_called()
+
+    def test_dead_man_stands_down_one_second_before_completion_epoch(self) -> None:
+        night = self.custody / "night"
+        night.mkdir()
+        entries_before = set(night.iterdir())
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s - 1
+        ), mock.patch.object(self.driver.subprocess, "Popen") as spawn, mock.patch.object(
+            self.driver.subprocess, "run"
+        ) as run_command, mock.patch.object(self.driver.os, "killpg") as kill_group:
+            exit_code = self.driver.dead_man(self.plan_path)
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        self.assertEqual(set(night.iterdir()), entries_before)
+        self.assertEqual(set(self.custody.iterdir()), {night, self.custody / "night.log"})
+        spawn.assert_not_called()
+        run_command.assert_not_called()
+        kill_group.assert_not_called()
+        self.resolve_mock.assert_not_called()
+        self.driver.run_courier.assert_not_called()
+        self.driver._durable_record.assert_not_called()
+
+    def test_dead_man_absent_marker_at_completion_epoch_couriers(self) -> None:
+        night = self.custody / "night"
+        night.mkdir()
+        plan = self.driver._load_plan(self.plan_path)
+        with mock.patch.object(
+            self.driver.time,
+            "time",
+            return_value=plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S,
+        ):
+            exit_code = self.driver.dead_man(self.plan_path)
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        self.assertTrue((night / "censuses.jsonl").is_file())
+        self.driver.run_courier.assert_called_once()
+
+    def test_dead_man_empty_start_marker_waits_until_completion_epoch(self) -> None:
+        night = self.custody / "night"
+        night.mkdir()
+        (night / "chain.started").write_text("", encoding="utf-8")
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(self.driver.subprocess, "Popen") as spawn, mock.patch.object(
+            self.driver.subprocess, "run"
+        ) as run_command, mock.patch.object(self.driver.os, "killpg") as kill_group, mock.patch.object(
+            self.driver.time, "time", return_value=self.t0_epoch_s + 2
+        ):
+            early_exit = self.driver.dead_man(self.plan_path)
+        self.assertEqual(early_exit, self.driver.EXIT_GO)
+        self.assertFalse((night / "chain.exited").exists())
+        self.driver.run_courier.assert_not_called()
+        spawn.assert_not_called()
+        run_command.assert_not_called()
+        kill_group.assert_not_called()
+
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s
+        ), mock.patch.object(self.driver.os, "killpg") as completion_kill_group:
+            completion_exit = self.driver.dead_man(self.plan_path)
+        self.assertEqual(completion_exit, self.driver.EXIT_GO)
+        exited = json.loads((night / "chain.exited").read_text())
+        self.assertIs(exited["launch_failed"], True)
+        self.driver.run_courier.assert_called_once()
+        completion_kill_group.assert_not_called()
+
     def test_dead_man_couriers_after_an_empty_start_marker_without_killpg(self) -> None:
         night = self.custody / "night"
         night.mkdir()
         (night / "chain.started").write_text("", encoding="utf-8")
-        with mock.patch.object(self.driver.os, "killpg") as kill_group:
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s
+        ), mock.patch.object(self.driver.os, "killpg") as kill_group:
             exit_code = self.driver.dead_man(self.plan_path)
         self.assertEqual(exit_code, self.driver.EXIT_GO)
         exited = json.loads((night / "chain.exited").read_text())
@@ -386,7 +480,11 @@ class NightDriverTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with mock.patch.object(self.driver.os, "killpg") as kill_group:
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s
+        ), mock.patch.object(self.driver.os, "killpg") as kill_group:
             exit_code = self.driver.dead_man(self.plan_path)
         self.assertEqual(exit_code, self.driver.EXIT_GO)
         exited = json.loads((night / "chain.exited").read_text())
@@ -681,7 +779,11 @@ class NightDriverTests(unittest.TestCase):
             json.dumps({"pid": 7171, "pgid": 7171, "epoch_s": time.time()}),
             encoding="utf-8",
         )
-        with mock.patch.object(self.driver.os, "killpg", side_effect=ProcessLookupError):
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s
+        ), mock.patch.object(self.driver.os, "killpg", side_effect=ProcessLookupError):
             exit_code = self.driver.dead_man(self.plan_path)
         exited = json.loads((night / "chain.exited").read_text())
         self.assertEqual(exit_code, 0)
@@ -697,7 +799,11 @@ class NightDriverTests(unittest.TestCase):
             json.dumps({"pid": 7272, "pgid": 7272, "epoch_s": time.time()}),
             encoding="utf-8",
         )
-        with mock.patch.object(self.driver.os, "killpg") as kill_group:
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s
+        ), mock.patch.object(self.driver.os, "killpg") as kill_group:
             exit_code = self.driver.dead_man(self.plan_path)
         refusal = json.loads((night / "refusal.json").read_text())
         self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
@@ -709,12 +815,17 @@ class NightDriverTests(unittest.TestCase):
     def test_dead_man_refuses_a_fresh_live_courier_lock(self) -> None:
         night = self.custody / "night"
         night.mkdir()
+        plan = self.driver._load_plan(self.plan_path)
+        completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + self.driver.COURIER_DEADLINE_S
         (night / "courier.lock").write_text(
-            json.dumps({"pid": os.getpid(), "epoch_s": time.time()}),
+            json.dumps({"pid": os.getpid(), "epoch_s": completion_epoch_s}),
             encoding="utf-8",
         )
         (night / "courier.heartbeat").write_text("alive\n", encoding="utf-8")
-        exit_code = self.driver.dead_man(self.plan_path)
+        with mock.patch.object(
+            self.driver.time, "time", return_value=completion_epoch_s
+        ):
+            exit_code = self.driver.dead_man(self.plan_path)
         refusal = json.loads((night / "refusal.json").read_text())
         self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
         self.assertEqual(refusal["refusal"]["reason"], self.driver._CODES["courier_running"])
@@ -1005,6 +1116,120 @@ class NightDriverTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 2)
         self.assertIn("courier unavailable", completed.stderr)
+
+    def test_installer_refuses_the_dead_man_hour_before_rendering(self) -> None:
+        root = self.root / "dead-man-hour"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        environment, _courier = self._installer_environment(root)
+        launcher = root / "launchctl-stub"
+        launcher.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
+        launcher.chmod(0o755)
+        completed = subprocess.run(
+            [
+                "/bin/zsh",
+                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
+                "--plan",
+                str(plan),
+                "--hour",
+                str(self.driver.DEADMAN_HOUR),
+                "--minute",
+                "2",
+                "--launchctl-bin",
+                str(launcher),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn(
+            f"refusing --hour {self.driver.DEADMAN_HOUR}: it is the dead-man hour "
+            f"(DEADMAN_HOUR={self.driver.DEADMAN_HOUR})",
+            completed.stderr,
+        )
+        launch_dir = root / "home" / "Library" / "LaunchAgents"
+        self.assertFalse((launch_dir / "com.joulewise.night.plist").exists())
+        self.assertFalse((launch_dir / "com.joulewise.night.deadman.plist").exists())
+
+    def test_installer_refuses_a_stale_courier_sent_before_bootstrap(self) -> None:
+        root = self.root / "stale-courier"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        environment, _courier = self._installer_environment(root)
+        custody_night = root / "custody" / "night"
+        custody_night.mkdir(parents=True)
+        (custody_night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        launch_log = root / "launch.log"
+        launcher = root / "launchctl-stub"
+        launcher.write_text(
+            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        environment["LAUNCH_LOG"] = str(launch_log)
+        completed = subprocess.run(
+            [
+                "/bin/zsh",
+                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
+                "--plan",
+                str(plan),
+                "--hour",
+                "1",
+                "--minute",
+                "2",
+                "--launchctl-bin",
+                str(launcher),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 3)
+        self.assertIn("courier.sent", completed.stderr)
+        self.assertFalse(launch_log.exists())
+
+    def test_installer_uninstalls_with_stale_courier_sent(self) -> None:
+        root = self.root / "stale-uninstall"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        environment, _courier = self._installer_environment(root)
+        custody_night = root / "custody" / "night"
+        custody_night.mkdir(parents=True)
+        (custody_night / "courier.sent").write_text("sent\n", encoding="utf-8")
+        launch_log = root / "launch.log"
+        launcher = root / "launchctl-stub"
+        launcher.write_text(
+            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        environment["LAUNCH_LOG"] = str(launch_log)
+        completed = subprocess.run(
+            [
+                "/bin/zsh",
+                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
+                "--plan",
+                str(plan),
+                "--hour",
+                str(self.driver.DEADMAN_HOUR),
+                "--minute",
+                "2",
+                "--uninstall",
+                "--launchctl-bin",
+                str(launcher),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        calls = launch_log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
+        self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
 
     def test_installer_refuses_active_chain_and_rolls_back_partial_bootstrap(self) -> None:
         root = self.root / "install"

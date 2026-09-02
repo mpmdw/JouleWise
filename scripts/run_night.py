@@ -868,6 +868,10 @@ def _next_deadman_epoch(t0_epoch_s: float) -> float:
     return deadman.timestamp()
 
 
+def _completion_epoch_s(plan: NightPlan) -> float:
+    return plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S
+
+
 def _existing_record(night_dir: Path) -> Path | None:
     return next(
         (night_dir / name for name in _WRITE_ONCE_RECORDS if (night_dir / name).exists()),
@@ -1036,7 +1040,7 @@ def run_night(
         )
 
     deadman_epoch_s = _next_deadman_epoch(plan.t0_epoch_s)
-    completion_epoch_s = plan.t0_epoch_s + plan.window_max_s + COURIER_DEADLINE_S
+    completion_epoch_s = _completion_epoch_s(plan)
     if completion_epoch_s >= deadman_epoch_s:
         _write_standard_refusal_result(
             custody_root,
@@ -1262,6 +1266,14 @@ def dead_man(plan_path: Path, *, courier_bin: Path | None = None) -> int:
     if sent.exists():
         _fsync_path(sent)
         _append_log(custody_root, "dead-man skipped: courier already sent")
+        return EXIT_GO
+    completion_epoch_s = _completion_epoch_s(plan)
+    if time.time() < completion_epoch_s:
+        _append_log(
+            custody_root,
+            "dead-man fired before the night's completion epoch "
+            f"{int(completion_epoch_s)}; standing down",
+        )
         return EXIT_GO
 
     resolved_courier, courier_error = _resolve_courier_bin(courier_bin)
