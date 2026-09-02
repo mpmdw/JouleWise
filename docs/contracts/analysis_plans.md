@@ -100,7 +100,7 @@ writes the file, both checkable:
 pack freeze is a later, separate act: a D-134 freeze receipt is minted over the
 whole pack tree, and from that point the pack's bytes are never repaired
 (D-140). A prospective manifest is born with `freeze_status: "frozen"` at
-generation time — at `_v4`, that is runbook step C1 — hours or days before the
+generation time — at `_v5`, that is runbook step C1 — hours or days before the
 receipt at step C8 exists. There is no contradiction, because the two words
 describe different objects: `freeze_status` describes the *analysis contract*
 inside the file, and the receipt describes the *pack* the file sits in. A reader

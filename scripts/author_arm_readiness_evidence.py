@@ -65,16 +65,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         # D-139: a successor pack refuses to freeze without an authenticated
         # predecessor, so the emitted sequence must carry the flag or it
-        # deadlocks the operator.  The predecessor of `<family>_v<N>` is its
-        # sibling `<family>_v<N-1>` under the same campaigns root; that is a
-        # mechanical derivation from the pack ID, so it is done here rather
+        # deadlocks the operator.  The ruled _v5 family chains to a NON-adjacent
+        # predecessor (the Qwen3 `_v5` packs succeed the Qwen2.5 `_v3` packs;
+        # no `_v4` exists), so the freeze gate's own map is consulted first
+        # and the sibling rule `<family>_v<N-1>` applies only outside it; the
+        # derivation is mechanical either way, so it is done here rather
         # than typed by hand at 2am.  A first-generation pack opens the chain
         # and must NOT carry the flag.
         generation = readiness._PACK_GENERATION_RE.search(root.name)
-        if generation is not None and int(generation.group(1)) > 1:
+        predecessor_name = readiness._RULED_V5_PREDECESSOR_PACK_IDS.get(root.name)
+        if predecessor_name is None and (
+            generation is not None and int(generation.group(1)) > 1
+        ):
             predecessor_name = (
                 f"{root.name[: generation.start()]}_v{int(generation.group(1)) - 1}"
             )
+        if predecessor_name is not None:
             predecessor_relative = (
                 (root.parent / predecessor_name)
                 .relative_to(cli_repository)

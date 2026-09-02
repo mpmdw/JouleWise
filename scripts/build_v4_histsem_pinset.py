@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the versioned `_v4` receipt-histsem pinset from local Git objects."""
+"""Build the versioned `_v5` receipt-histsem pinset from local Git objects."""
 
 from __future__ import annotations
 
@@ -136,7 +136,7 @@ def _row(
     # The pre-authoring test asks only whether EVIDENCE AUTHORING had already
     # happened at the historical coordinate, so it consults the authoring
     # subset, not the full custody frozenset.  U11 projection receipts are
-    # committed per pack BEFORE authoring under the ruled _v4 order (runsheet
+    # committed per pack BEFORE authoring under the ruled _v5 order (runsheet
     # §3.2), so their presence here is correct.  `_delta` above keeps the full
     # frozenset: a projection receipt is still an admissible post-authoring
     # addition.  See `_HISTSEM_AUTHORING_CUSTODY_DIRECTORIES`.
@@ -153,7 +153,7 @@ def _row(
     freeze_reference = dict(attachment["freeze_receipt"])
     expected_freeze_path = "arm_readiness.freeze.receipts/freeze-0004.json"
     if freeze_reference.get("path") != expected_freeze_path:
-        raise BuildError("the v4 pinset requires freeze-0004 exactly")
+        raise BuildError("the _v5 pinset requires freeze-0004 exactly")
     freeze_raw = _show(repository, current_head, f"{relative}/{expected_freeze_path}")
     if readiness.sha256_bytes(freeze_raw) != freeze_reference.get("sha256"):
         raise BuildError("freeze receipt differs from the plan-tree binding")
@@ -265,7 +265,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         ].values()
     )
     if len(args.pack_root) != 3:
-        raise BuildError("exactly three v4 pack roots are required")
+        raise BuildError("exactly three _v5 pack roots are required")
     normalized = [_relative_pack(repository, item) for item in args.pack_root]
     if {root.name for root, _relative in normalized} != expected_ids:
         raise BuildError("pack roots do not equal the registry successor roster")
@@ -282,7 +282,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         for root, relative in sorted(normalized, key=lambda item: item[1])
     ]
     # Chain composition (D-151 condition 6 / runsheet §3.7): the successor is
-    # MEMBER 2 of the code-enumerated chain and carries ONLY the three _v4
+    # MEMBER 2 of the code-enumerated chain and carries ONLY the three _v5
     # rows. The v1 rows stay in the immutable member-1 artifact; copying them
     # here would make the chain union refuse on duplicate identities. The
     # base is still validated above and used for collision screening.

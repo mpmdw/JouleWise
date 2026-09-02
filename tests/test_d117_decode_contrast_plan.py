@@ -1445,14 +1445,14 @@ class D117GammaPlanTest(unittest.TestCase):
 
     @unittest.skip(
         "STRUCTURAL-BLOCKED: generator targets uninstalled _v2 family while "
-        "the registry installs _v4"
+        "the registry installs _v5"
     )
     def test_authenticated_freeze_transition_preserves_frozen_bytes(self) -> None:
         """Blocked because this fixture generates an uninstalled `_v2` family.
 
         This drives the committed ``_v1`` generators to build the NEXT
         generation in a temporary checkout, with ``--family-suffix _v2``.  The
-        ruled registry installs only the ``_v4`` family, so the generated
+        ruled registry installs only the ``_v5`` family, so the generated
         ``_v2`` pack is refused at admission: the recorded refusal is
         ``readiness_row_registry_mismatch`` where this test expects
         ``readiness_successor_chain_invalid``.  The `_v3` packs already exist;
