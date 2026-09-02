@@ -23,6 +23,9 @@ from joulewise.analysis_manifest_v3 import (
     AnalysisManifestV3Error,
     frozen_family_block_strata,
 )
+from joulewise.whole_window import (
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+)
 
 from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
@@ -60,6 +63,10 @@ _SUPERSESSION_AUDIT_KEYS = {
     "validated_count",
     "status",
 }
+_SUPERSESSION_FINDING_KEYS = {"reason_code", "bundle_ids"}
+_SUPERSESSION_FINDING_REASON_CODES = frozenset(
+    {REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS}
+)
 _AUTHENTICATED_SHA_BASIS_KEYS = {"kind", "sha256"}
 _AUTHENTICATED_SHA_SET_BASIS_KEYS = {"kind", "sha256s"}
 _ENGINE_KEYS = {
@@ -1068,13 +1075,65 @@ def validate_claim_verdicts(
             floor_root_ids: set[str] = set()
             for audit_index, audit in enumerate(supersession_audit):
                 audit_where = f"artifact.supersession_audit[{audit_index}]"
-                if not _exact_keys(
+                if not _exact_keys_with_optional_group(
                     audit,
                     _SUPERSESSION_AUDIT_KEYS,
+                    {"findings"},
                     audit_where,
                     errors,
                 ):
                     continue
+                findings = audit.get("findings")
+                findings_nonempty = isinstance(findings, list) and bool(findings)
+                if "findings" in audit:
+                    if not findings_nonempty:
+                        errors.append(
+                            f"{audit_where}.findings: must be a nonempty array"
+                        )
+                    else:
+                        for finding_index, finding in enumerate(findings):
+                            finding_where = (
+                                f"{audit_where}.findings[{finding_index}]"
+                            )
+                            if not _exact_keys(
+                                finding,
+                                _SUPERSESSION_FINDING_KEYS,
+                                finding_where,
+                                errors,
+                            ):
+                                continue
+                            reason_code = finding["reason_code"]
+                            if (
+                                not isinstance(reason_code, str)
+                                or reason_code
+                                not in _SUPERSESSION_FINDING_REASON_CODES
+                            ):
+                                errors.append(
+                                    f"{finding_where}.reason_code: invalid"
+                                )
+                            bundle_ids = finding["bundle_ids"]
+                            if (
+                                not isinstance(bundle_ids, list)
+                                or not bundle_ids
+                                or any(
+                                    not isinstance(bundle_id, str)
+                                    or not bundle_id
+                                    for bundle_id in bundle_ids
+                                )
+                            ):
+                                errors.append(
+                                    f"{finding_where}.bundle_ids: must be a "
+                                    "nonempty array of nonempty strings"
+                                )
+                            elif bundle_ids != sorted(set(bundle_ids)):
+                                errors.append(
+                                    f"{finding_where}.bundle_ids: must be sorted "
+                                    "and duplicate-free"
+                                )
+                    if audit.get("status") != "refused":
+                        errors.append(
+                            f"{audit_where}.findings: only a refused row may carry findings"
+                        )
                 scope = audit["scope"]
                 root_id = audit["evidence_root_id"]
                 if scope == "analysis_corpus":
@@ -1156,7 +1215,12 @@ def validate_claim_verdicts(
                         )
                 elif status == "refused":
                     supersession_refused = True
-                    if counts_valid and raw_count == validated_count and basis_valid:
+                    if (
+                        counts_valid
+                        and raw_count == validated_count
+                        and basis_valid
+                        and not findings_nonempty
+                    ):
                         errors.append(
                             f"{audit_where}.status: authenticated equal counts cannot be refused"
                         )
