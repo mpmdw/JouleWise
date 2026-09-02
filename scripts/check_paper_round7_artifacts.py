@@ -13,21 +13,37 @@ pulse index (0.005 * 58 / 844, rounded upward).
 
 The default invocation additionally re-runs both producers into a directory
 under TMPDIR and requires byte identity for XD, AQ, and the XS-produced F4.
-An absent retained corpus exits 3 and names the missing resolved path; a
-producer that itself exits 3 (its own corpus preflight) also exits 3 and
-reports the producer's output.  Neither is ever a pass.  ``--literals-only``
-runs only the always-on digest/field/literal half.
+Three things end that replay half with exit 3: this script's own preflight
+finds a required corpus entry absent, or either producer exits 3 from its own
+preflight (absent input, or a present input whose bytes do not match the
+sha256 the producer retains).  None is ever a pass.  ``--literals-only`` runs
+only the always-on digest/field/literal half.
 
-Exit codes: 0 for agreement, 2 for any mismatch, 3 for an absent corpus.
+Exit codes: 0 when every comparison agrees, 2 when any comparison mismatches
+(including a producer that fails with a code other than 3), and 3 when the
+replay half ends as above.  The digest half runs first and returns 2 on its
+own mismatches before any replay.  Within the replay half, exit 3 preempts 2:
+the comparisons a stopped replay had already collected are discarded, so an
+AS exit 3 discards the XD and F4 byte comparisons, and a mismatch coexisting
+with a stop is reported as 3 with no ``MISMATCH`` line.  Exit 3 also does not
+mean "a file was absent": a producer exits 3 when a required file is present
+but its bytes do not match the retained sha256.
 Successful full replay ends with ``R7F COMPARED n / MISMATCHES m``;
-``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.
-An unavailable corpus instead ends with ``R7F CORPUS UNAVAILABLE: <detail>``
-and prints no ``COMPARED`` line.  ``<detail>`` is the missing resolved path
-when this script's own preflight finds a required corpus file absent, or the
-producer's stdout+stderr flattened to one line (lines joined by `` | ``) when a
-producer exits 3.  The path is printed after ``Path.resolve()``, so a consumer
-must compare against the resolved form of what it passed, never the as-given
-argument.
+``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.  A
+stopped replay instead ends with ``R7F CORPUS UNAVAILABLE: <detail>`` and
+prints no ``COMPARED`` line.  ``<detail>`` is written at exactly three sites
+and is therefore exactly one of three things: (i) the first required corpus
+path the preflight finds absent -- name components joined onto the corpus root
+after ``Path.resolve()``, so the root is resolved but the joined remainder is
+not, and the path may name a directory (``<root>/runs/instrument_validation``)
+rather than a file; (ii) a producer's stdout and stderr concatenated,
+stripped, split into lines and rejoined with `` | `` on one line, when that
+producer exits 3 having written something; (iii) the resolved corpus root,
+when a producer exits 3 having written nothing.  Only (i) is a missing path;
+(iii) is a path that exists.  A consumer must therefore compare paths against
+the resolved form of the corpus root it passed, never the as-given argument --
+and must never stat ``<detail>`` unconditionally, because in forms (ii) and
+(iii) it is not a missing path.
 """
 
 from __future__ import annotations
