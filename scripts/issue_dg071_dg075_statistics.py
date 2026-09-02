@@ -4,37 +4,54 @@
 The governing convention is the ``Addendum 2026-09-02`` at the end of
 ``docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md``.
 
-DG-071 is the median with IQR of ``interval_end_s - interval_start_s``
-over sampler records.  A sampler record is one contiguous group of CSV rows
-with a byte-identical ``timestamp_s`` literal.  Each group must contain one
-row for each of ``ane_power``, ``cpu_power``, and ``gpu_power``, and all three
-rows must carry byte-identical interval endpoint literals.  One width, never
-one width per rail row, enters the sample.
+A sampler record is one contiguous group of CSV rows — consecutive rows in
+file order — that share one `timestamp_s` literal. A literal is the character
+string exactly as written in the file, before any numeric conversion; two
+literals are equal only when their characters are identical. Every group must
+contain exactly one row for each of `ane_power`, `cpu_power` and `gpu_power`,
+and the three rows' `interval_start_s` and `interval_end_s` literals must be
+identical; a timestamp literal that reappears after another group has begun is
+refused. DG-071 uses one interval width, `interval_end_s − interval_start_s`,
+per sampler record.
 
-DG-075 is the median with IQR of the differences between consecutive sorted
-distinct timestamp literals.  Issuance requires every record's
-``interval_end_s`` literal to equal its ``timestamp_s`` literal and every
-later ``interval_start_s`` value to be within 0.000001 exact decimal seconds
-of the previous record's timestamp.  Thus DG-075 is the DG-071 distribution
-minus the first record, up to the retained writer's endpoint convention.
+The timestamp and endpoint literals are parsed directly as exact decimals.
+Widths, spacings, quantiles and IQR never pass through binary floating point.
 
-``timestamp_s``, ``interval_start_s``, and ``interval_end_s`` are parsed
-directly from their literals with ``Decimal``.  Widths, spacings, quantiles,
-and IQR never pass through binary floating point.  For a sorted sample of n
-values and probability p, the quantile position is exactly h = (n - 1) * p
-(0-based), with exact linear interpolation between its two neighbouring
-order statistics (Hyndman-Fan type 7; numpy ``linear`` and R type 7 are
-cross-references).  The median is the p = 0.5 quantile, hence the mean of the
-two middle values for even n.  IQR is Q(0.75) - Q(0.25), computed before any
-rendering.  Exact seconds are JSON strings.  Milliseconds are JSON strings
-formed by multiplying by 1000 and rounding to four decimal places using
-round-half-even.
+For the n values sorted ascending, the quantile at probability p uses the
+exact 0-based position h = (n−1)·p and exact linear interpolation between the
+two neighbouring order statistics — the sorted values at positions ⌊h⌋ and
+⌊h⌋+1 (Hyndman–Fan type 7; numpy `linear` and R type 7 are cross-references).
+The median is the p = 0.5 quantile, which is the mean of the two middle values
+for even n. IQR is Q3 − Q1, computed exactly before rendering.
 
-A float64 replication (numpy ``linear``, R type 7) is guaranteed to agree
-only to three decimals because a float64 at 1.78e9 s has spacing 2.4e-7 s,
-coarser than the file's 1e-7 s literals; the digits characterise the retained
-bytes, not the sampler's physical timing resolution.  Worked example: median
-120.9186 ms exact vs 120.9185 ms float64.
+The exact seconds in the second table are the values of record: the
+authoritative numbers, which nothing downstream re-derives. The millisecond
+columns are renderings of them — value × 1000, rounded to four decimal places
+with round-half-even, meaning a value exactly halfway between two four-decimal
+neighbours goes to the one whose last digit is even — and are never re-used as
+inputs. Because rounding is applied after subtraction, a rendered IQR can
+differ from the difference of the rendered quartiles by one unit in the last
+place.
+
+A float64 replication (numpy `linear`, R type 7) is guaranteed to agree only
+to three decimals because a float64 at 1.78e9 s has spacing 2.4e-7 s, coarser
+than the file's 1e-7 s literals; the digits characterise the retained bytes,
+not the sampler's physical timing resolution. Worked example: median 120.9186
+ms exact vs 120.9185 ms float64.
+
+Tiling. The records tile when each record's interval ends exactly at its own
+timestamp (`interval_end_s` literal identical to `timestamp_s` literal) and
+begins where the previous record ended (`interval_start_s` of record k within
+0.000001 s of `timestamp_s` of record k−1); the producer refuses otherwise.
+The tiling gap at a boundary is |interval_start_s(k) − timestamp_s(k−1)| in
+exact decimal seconds; the header reports the largest gap and the number of
+boundaries whose gap is not zero. The writer formatted the interval endpoints
+and the timestamp from two separately rounded binary floats, so the seventh
+decimal can differ. This is the endpoint convention referred to next.
+
+DG-075 is the DG-071 distribution minus the first record: its consecutive
+timestamp differences equal the widths of records 2–n up to the endpoint
+convention above, i.e. to within the largest tiling gap.
 
 Usage::
 
@@ -105,7 +122,6 @@ class IssuanceRefused(RuntimeError):
 
 @dataclass(frozen=True)
 class _ParsedRow:
-    row_number: int
     timestamp_literal: str
     timestamp_s: Decimal
     rail: str
@@ -121,7 +137,6 @@ class SamplerRecord:
 
     timestamp_literal: str
     timestamp_s: Decimal
-    interval_start_literal: str
     interval_start_s: Decimal
     interval_end_literal: str
     interval_end_s: Decimal
@@ -236,7 +251,6 @@ def _record_from_group(group: list[_ParsedRow]) -> SamplerRecord:
     return SamplerRecord(
         timestamp_literal=first.timestamp_literal,
         timestamp_s=first.timestamp_s,
-        interval_start_literal=first.interval_start_literal,
         interval_start_s=first.interval_start_s,
         interval_end_literal=first.interval_end_literal,
         interval_end_s=first.interval_end_s,
@@ -317,7 +331,6 @@ def _read_records(raw: bytes) -> tuple[list[SamplerRecord], int]:
         rail = row.get("rail")
         current_group.append(
             _ParsedRow(
-                row_number=row_number,
                 timestamp_literal=timestamp_literal,
                 timestamp_s=timestamp_s,
                 rail=rail if isinstance(rail, str) else "",
@@ -382,48 +395,82 @@ def _git_commit(repository_root: Path) -> str:
     return commit
 
 
-def _method_disclosure() -> dict[str, str]:
+def _method_disclosure(
+    *, max_tiling_gap_s: str, nonzero_tiling_boundaries: int, record_count: int
+) -> dict[str, str]:
     return {
         "population": (
-            "A sampler record is one contiguous group sharing an exact "
-            "timestamp_s literal. Each group has exactly one ane_power, "
-            "cpu_power, and gpu_power row with byte-identical interval "
-            "endpoint literals; one width per group enters DG-071."
+            "A sampler record is one contiguous group of CSV rows — "
+            "consecutive rows in file order — that share one `timestamp_s` "
+            "literal. A literal is the character string exactly as written "
+            "in the file, before any numeric conversion; two literals are "
+            "equal only when their characters are identical. Every group "
+            "must contain exactly one row for each of `ane_power`, "
+            "`cpu_power` and `gpu_power`, and the three rows' `interval_start_s` "
+            "and `interval_end_s` literals must be identical; a timestamp "
+            "literal that reappears after another group has begun is refused. "
+            "DG-071 uses one interval width, `interval_end_s − "
+            "interval_start_s`, per sampler record."
         ),
         "arithmetic": (
-            "Parse timestamp_s, interval_start_s, and interval_end_s "
-            "literals directly as exact decimals; compute widths, spacings, "
-            "quantiles, and IQR without binary floating point."
+            "The timestamp and endpoint literals are parsed directly as exact "
+            "decimals. Widths, spacings, quantiles and IQR never pass through "
+            "binary floating point."
         ),
         "quantile": (
-            "Order n values ascending. At probability p, h = (n - 1) * p "
-            "(0-based) and linearly interpolate exactly between the two "
-            "neighbouring order statistics; this is Hyndman-Fan type 7 "
-            "(numpy linear and R type 7 are cross-references)."
+            "For the n values sorted ascending, the quantile at probability p "
+            "uses the exact 0-based position h = (n−1)·p and exact linear "
+            "interpolation between the two neighbouring order statistics — "
+            "the sorted values at positions ⌊h⌋ and ⌊h⌋+1 (Hyndman–Fan type 7; "
+            "numpy `linear` and R type 7 are cross-references)."
         ),
         "median": (
-            "Median is the p = 0.5 quantile, the mean of the two middle "
-            "values when n is even."
+            "The median is the p = 0.5 quantile, which is the mean of the two "
+            "middle values for even n."
         ),
         "iqr": (
-            "IQR is Q(0.75) - Q(0.25), computed exactly before rendering."
+            "IQR is Q3 − Q1, computed exactly before rendering. Because "
+            "rounding is applied after subtraction, a rendered IQR can differ "
+            "from the difference of the rendered quartiles by one unit in the "
+            "last place."
         ),
         "millisecond_rendering": (
-            "Multiply exact seconds by 1000 and round to four decimal "
-            "places with round-half-even; renderings are JSON strings."
+            "The exact seconds in the second table are the values of record: "
+            "the authoritative numbers, which nothing downstream re-derives. "
+            "The millisecond columns are renderings of them — value × 1000, "
+            "rounded to four decimal places with round-half-even, meaning a "
+            "value exactly halfway between two four-decimal neighbours goes "
+            "to the one whose last digit is even — and are never re-used as "
+            "inputs."
         ),
         "float64_replication": (
             "A float64 replication (numpy `linear`, R type 7) is guaranteed "
             "to agree only to three decimals because a float64 at 1.78e9 s "
             "has spacing 2.4e-7 s, coarser than the file's 1e-7 s literals; "
             "the digits characterise the retained bytes, not the sampler's "
-            "physical timing resolution. Worked example: median 120.9186 "
-            "ms exact vs 120.9185 ms float64."
+            "physical timing resolution. Worked example: median 120.9186 ms "
+            "exact vs 120.9185 ms float64."
+        ),
+        "tiling": (
+            "Tiling. The records tile when each record's interval ends exactly "
+            "at its own timestamp (`interval_end_s` literal identical to "
+            "`timestamp_s` literal) and begins where the previous record ended "
+            "(`interval_start_s` of record k within 0.000001 s of `timestamp_s` "
+            "of record k−1); the producer refuses otherwise. The tiling gap at "
+            "a boundary is |interval_start_s(k) − timestamp_s(k−1)| in exact "
+            "decimal seconds; the header reports the largest gap and the "
+            "number of boundaries whose gap is not zero. In this bundle "
+            f"{nonzero_tiling_boundaries} of {record_count - 1} boundaries have "
+            f"a nonzero gap, the largest {max_tiling_gap_s} s: the writer "
+            "formatted the interval endpoints and the timestamp from two "
+            "separately rounded binary floats, so the seventh decimal can "
+            "differ. This is the endpoint convention referred to next."
         ),
         "dg075_dependence": (
-            "DG-075 is the DG-071 distribution minus the first record: "
-            "consecutive timestamp differences are the widths of records "
-            "2 through n up to the retained writer's endpoint convention."
+            "DG-075 is the DG-071 distribution minus the first record: its "
+            "consecutive timestamp differences equal the widths of records "
+            "2–n up to the endpoint convention above, i.e. to within the "
+            "largest tiling gap."
         ),
     }
 
@@ -475,7 +522,8 @@ def build_payload(
     ]
 
     script_raw = script_path.read_bytes()
-    return {
+    max_tiling_gap_text = _decimal_string(max_tiling_gap_s)
+    payload = {
         "schema_version": SCHEMA_VERSION,
         "registry_row_ids": list(REGISTRY_ROW_IDS),
         "input_bundle": {
@@ -488,9 +536,8 @@ def build_payload(
         "sampler_record_count": len(records),
         "rail_row_count": rail_row_count,
         "rails": sorted(EXPECTED_RAILS),
-        "max_tiling_gap_s": _decimal_string(max_tiling_gap_s),
+        "max_tiling_gap_s": max_tiling_gap_text,
         "tiling_gap_nonzero_boundaries": nonzero_tiling_boundaries,
-        "method": _method_disclosure(),
         "statistics": {
             "DG-071": {
                 "statistic": "interval_end_s - interval_start_s per sampler record",
@@ -509,6 +556,12 @@ def build_payload(
             "git_commit": _git_commit(repository_root),
         },
     }
+    payload["method"] = _method_disclosure(
+        max_tiling_gap_s=payload["max_tiling_gap_s"],
+        nonzero_tiling_boundaries=payload["tiling_gap_nonzero_boundaries"],
+        record_count=payload["sampler_record_count"],
+    )
+    return payload
 
 
 def render_markdown(payload: dict[str, Any]) -> str:
@@ -526,8 +579,9 @@ def render_markdown(payload: dict[str, Any]) -> str:
         f"- Sampler records: {payload['sampler_record_count']}",
         f"- Rail rows: {payload['rail_row_count']}",
         f"- Rails: {', '.join(payload['rails'])}",
-        f"- Maximum absolute tiling gap (s): {payload['max_tiling_gap_s']}",
-        "- Nonzero tiling-gap boundaries: "
+        f"- Largest tiling gap (s; defined under Method): "
+        f"{payload['max_tiling_gap_s']}",
+        "- Boundaries with a nonzero tiling gap (see Method): "
         f"{payload['tiling_gap_nonzero_boundaries']}",
         f"- Producer: `{producer['script_path']}`",
         f"- Producer SHA-256: `{producer['script_sha256']}`",
@@ -535,43 +589,64 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         "## Method",
         "",
-        "A sampler record is one contiguous group sharing an exact "
-        "`timestamp_s` literal. Every group must contain exactly one row "
-        "for each of `ane_power`, `cpu_power`, and `gpu_power`, with "
-        "byte-identical `interval_start_s` and `interval_end_s` literals. "
-        "DG-071 uses one exact interval width per sampler record.",
+        "A sampler record is one contiguous group of CSV rows — consecutive "
+        "rows in file order — that share one `timestamp_s` literal. A literal "
+        "is the character string exactly as written in the file, before any "
+        "numeric conversion; two literals are equal only when their characters "
+        "are identical. Every group must contain exactly one row for each of "
+        "`ane_power`, `cpu_power` and `gpu_power`, and the three rows' "
+        "`interval_start_s` and `interval_end_s` literals must be identical; "
+        "a timestamp literal that reappears after another group has begun is "
+        "refused. DG-071 uses one interval width, `interval_end_s − "
+        "interval_start_s`, per sampler record.",
         "",
         "The timestamp and endpoint literals are parsed directly as exact "
-        "decimals. Widths, spacings, quantiles, and IQR never pass through "
+        "decimals. Widths, spacings, quantiles and IQR never pass through "
         "binary floating point.",
         "",
-        "For the n values sorted ascending, the quantile at probability p "
-        "uses the exact 0-based position h = (n−1)·p and exact linear "
-        "interpolation between the two neighbouring order statistics "
-        "(Hyndman–Fan type 7; numpy `linear` and R type 7 are "
-        "cross-references). Median is the p = 0.5 quantile, which is the "
-        "mean of the two middle values for even n. IQR is Q3 − Q1, computed "
-        "exactly before rendering.",
+        "For the n values sorted ascending, the quantile at probability p uses "
+        "the exact 0-based position h = (n−1)·p and exact linear interpolation "
+        "between the two neighbouring order statistics — the sorted values at "
+        "positions ⌊h⌋ and ⌊h⌋+1 (Hyndman–Fan type 7; numpy `linear` and R "
+        "type 7 are cross-references). The median is the p = 0.5 quantile, "
+        "which is the mean of the two middle values for even n. IQR is Q3 − "
+        "Q1, computed exactly before rendering.",
         "",
-        "Exact seconds below are JSON-string values of record. Milliseconds "
-        "are renderings: value × 1000 rounded to four decimal places with "
-        "round-half-even. A separately rendered IQR can differ from the "
-        "difference of rendered quartiles by one unit in the last place.",
+        "The exact seconds in the second table are the values of record: the "
+        "authoritative numbers, which nothing downstream re-derives. The "
+        "millisecond columns are renderings of them — value × 1000, rounded to "
+        "four decimal places with round-half-even, meaning a value exactly "
+        "halfway between two four-decimal neighbours goes to the one whose last "
+        "digit is even — and are never re-used as inputs. Because rounding is "
+        "applied after subtraction, a rendered IQR can differ from the "
+        "difference of the rendered quartiles by one unit in the last place.",
         "",
         "A float64 replication (numpy `linear`, R type 7) is guaranteed to "
-        "agree only to three decimals because a float64 at 1.78e9 s has "
-        "spacing 2.4e-7 s, coarser than the file's 1e-7 s literals; the "
-        "digits characterise the retained bytes, not the sampler's physical "
-        "timing resolution.",
+        "agree only to three decimals because a float64 at 1.78e9 s has spacing "
+        "2.4e-7 s, coarser than the file's 1e-7 s literals; the digits "
+        "characterise the retained bytes, not the sampler's physical timing "
+        "resolution. Worked example: median 120.9186 ms exact vs 120.9185 ms "
+        "float64.",
         "",
-        "Worked example: median 120.9186 ms exact vs 120.9185 ms float64.",
+        "Tiling. The records tile when each record's interval ends exactly at "
+        "its own timestamp (`interval_end_s` literal identical to `timestamp_s` "
+        "literal) and begins where the previous record ended (`interval_start_s` "
+        "of record k within 0.000001 s of `timestamp_s` of record k−1); the "
+        "producer refuses otherwise. The tiling gap at a boundary is "
+        "|interval_start_s(k) − timestamp_s(k−1)| in exact decimal seconds; the "
+        "header reports the largest gap and the number of boundaries whose gap "
+        "is not zero. In this bundle "
+        f"{payload['tiling_gap_nonzero_boundaries']} of "
+        f"{payload['sampler_record_count'] - 1} boundaries have a nonzero gap, "
+        f"the largest {payload['max_tiling_gap_s']} s: the writer formatted the "
+        "interval endpoints and the timestamp from two separately rounded "
+        "binary floats, so the seventh decimal can differ. This is the endpoint "
+        "convention referred to next.",
         "",
-        "DG-075 is the DG-071 distribution minus the first record: every "
-        "record's `interval_end_s` literal equals its `timestamp_s` literal, "
-        "and every later `interval_start_s` is within 0.000001 s of the "
-        "previous timestamp; its consecutive timestamp differences are the "
-        "widths of records 2–n up to the retained writer's endpoint "
-        "convention.",
+        "DG-075 is the DG-071 distribution minus the first record: its "
+        "consecutive timestamp differences equal the widths of records 2–n "
+        "up to the endpoint convention above, i.e. to within the largest tiling "
+        "gap.",
         "",
         "| Registry row | Sample count | Q1 (ms) | Median (ms) | "
         "Q3 (ms) | IQR (ms) |",
