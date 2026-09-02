@@ -159,6 +159,11 @@ EXPECTED_IDS = {
     "T0-CLOCK-ROW-RENAME-01",
     "T0-UNATTENDED-01",
     "UNATTENDED-LAUNCH-01",
+    # 2026-09-01 D-169 stage-1 split (MAGISTRATE-RULING-UNATTENDED-STAGE1,
+    # cold gate coldgate-e10): night gate, night driver, launchd rehearsal
+    "NIGHT-GATE-01",
+    "NIGHT-DRIVER-01",
+    "NIGHT-REHEARSAL-01",
     "FIXTURE-MODERNIZATION-01",
     # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
     # to the shared driver at E-2, closed T22: H4 driver + 4s nominal cure,
@@ -542,9 +547,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows: 108 - 6 + 8 = 110 exact live records. D-168 then registers
         # four close-out and renderer rows: 110 + 4 = 114. Ruling 89 R-1
         # (2026-09-01) splits L10-A-G2B-CONTRACT-PREFIX-01 out of the L10
-        # row: 114 + 1 = 115.
+        # row: 114 + 1 = 115. The D-169 stage-1 ruling (2026-09-01) splits
+        # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118; #258
+        # registers its two realized-prefill rows: 118 + 2 = 120.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 117)
+        self.assertEqual(len(self.tasks), 120)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
