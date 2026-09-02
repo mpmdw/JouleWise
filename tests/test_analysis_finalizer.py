@@ -862,6 +862,15 @@ class AnalysisFinalizerTests(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(path.read_bytes(), first_bytes)
             self.assertEqual(
+                first["lineage"]["prospective_manifest_id"],
+                fixture["prospective"]["manifest_id"],
+            )
+            self.assertEqual(
+                len(fixture["prospective"]["finalization_contract"]["required_attachments"]),
+                4,
+            )
+            self.assertNotIn("dominance_replay_sidecar", first["evidence"])
+            self.assertEqual(
                 hashlib.sha256(path.read_bytes()).hexdigest(),
                 hashlib.sha256(first_bytes).hexdigest(),
             )

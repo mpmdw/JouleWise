@@ -194,9 +194,17 @@ invalid member windows, or a stored result that differs from a fresh replay.
 
 ### Stage-2 mint interface
 
-**STAGE-2 mint interface (clauses 8 and 9):** at this stage-1 head,
-`d165_replay_blocks_from_mint_inputs` has no production caller; stage 1 only
-fixes the signature that the stage-2 mint must call.
+**STAGE-2 mint interface (clauses 8 and 9):** the generalized authenticated
+mint now captures the complete comparative recomputation at both the gate and
+the evidence-binding pass. `bind_v2_floor_artifact_evidence` returns its
+legacy evidence mapping together with that pass's recomputation record. The
+four records are keyed by authenticated `cell_id` and compared byte-for-byte
+with the gate records before any output write. A mismatch refuses
+`d165_replay_recomputation_divergence`; a common-mode cell without the replay
+output flag refuses `d165_replay_output_required_for_common_mode` at its first
+selection. The gate recomputation runs once per cell and the binding
+recomputation runs once per cell; sidecar assembly is after the four-cell
+binding pass, so it cannot duplicate emission from either estimator call.
 
 `joulewise.dominance_closeout.d165_replay_blocks_from_mint_inputs` is the only
 sanctioned constructor for sidecar block records. It accepts exactly the four
@@ -238,18 +246,38 @@ operator-only adversary model, their physical correctness rests on the
 stage-2 per-cell recomputation-divergence check and on byte identity between
 the validated producer output and the manifest-sealed sidecar.
 
+The v2 CLI accepts optional `--d165-replay-out`. It is optional to parse but
+not optional for a mint whose first authenticated common-mode cell selects
+the registered estimator. Supplying it to a v2 mint with no common-mode cell
+refuses `d165_replay_output_unused_without_common_mode`. The floor, statement,
+and sidecar destinations are all checked for collisions and pre-existing
+files before the first exclusive write. They are then written as one
+transactional sequence; a later write failure removes the floor and
+statement already written by that sequence. The floor payload and statement
+renderer remain the legacy outputs, and the sidecar is the only new file.
+
 ### Finalized-manifest attachment
 
-In stage 1, a dominance-enabled finalized manifest may carry either the four
-legacy evidence roles or those four plus `dominance_replay_sidecar`. The
-finalizer seals the sidecar when a path is supplied. A finalized manifest
-without the role is nevertheless fail-closed at its consumer: the close-out
-refuses it as `manifest_lacks_replay_sidecar`. Stage 2 clause 7 makes the row
-required through the prospective pre-registration mechanism. A legacy
-prospective supplied a sidecar path refuses as
-`analysis_finalization_attachment_invalid`; an invalid supplied sidecar schema
-or identity refuses with that same code. When present,
-`dominance_replay_sidecar` has exactly these fields:
+`prospective_finalization_required_attachments` retains the four legacy rows
+by default and accepts an explicit optional-role argument. The existing
+required-role/schema constants are not widened. The single presence-only
+predicate `_dominance_floor_identity_enabled` governs the optional role: a
+prospective manifest with `dominance_criterion` in every contrast must declare
+exactly five rows, including `dominance_replay_sidecar`; criterion-present
+without that row refuses as
+`analysis_prospective_dominance_replay_attachment_missing`. Legacy D-134-form
+four-row packs (no `dominance_criterion`) still validate and finalize
+byte-identically; pre-D-134 packs (`as_generated_pre_d134_freeze`) are outside
+the promise and are retired by D-167.
+
+Finalization requires the sidecar path under that same predicate and seals its
+path, file hash, schema, and sidecar identity. Omitting it refuses as
+`analysis_finalization_attachment_missing`; supplying it to a legacy
+prospective refuses as `analysis_finalization_attachment_invalid`. An invalid
+sidecar schema or identity uses that same invalid-attachment refusal. A
+finalized manifest without the role is nevertheless fail-closed at its
+consumer: the close-out refuses it as `manifest_lacks_replay_sidecar`. When
+present, `dominance_replay_sidecar` has exactly these fields:
 
 | Field | Type | Meaning |
 |---|---|---|

@@ -507,15 +507,14 @@ class BinderTests(unittest.TestCase):
                     source_cell["provenance"][component_name]["campaign_log"]
                 )
             )
-        registered = registered_component()
-        component = SimpleNamespace(
-            spec_cell=(
-                registered.spec_cell
-                if common_mode
-                else comparative_component.spec_cell
-            ),
-            widths_j=default_widths,
-        )
+        if common_mode:
+            registered = registered_component()
+            component = SimpleNamespace(
+                spec_cell=registered.spec_cell,
+                widths_j=default_widths,
+            )
+        else:
+            component = comparative_component
         self.assertEqual(mint1.validate_floor_artifact(artifact), [])
         kwargs = self.binder_kwargs(mint1, component, artifact)
         kwargs.update(
@@ -598,14 +597,38 @@ class BinderTests(unittest.TestCase):
         group["point_floor_diagnostics"] = {cell["cell_id"]: diagnostics}
 
     def test_default_binding_is_exactly_the_pinned_binder(self) -> None:
-        _plan, _absolute, component = seven_b_components()
-        expected = {"absolute": ("a",), "comparative": ("b",)}
-        core = self.core(return_value=expected)
-        result = estimator.bind_v2_floor_artifact_evidence(
-            **self.binder_kwargs(core, component, self.artifact(0.5))
-        )
-        self.assertEqual(result, expected)
-        core.bind_floor_artifact_evidence.assert_called_once()
+        with tempfile.TemporaryDirectory() as tmp:
+            helper, artifact, kwargs, _widths = self.actual_binder_fixture(
+                tmp,
+                width_delta=0.0,
+                common_mode=False,
+            )
+            stack = artifact["cells"][0]["source_regime"]["stack_identity"]
+            with (
+                mock.patch.object(mint1, "build_stack_identity", return_value=stack),
+                mock.patch.object(
+                    mint1,
+                    "_authenticated_consumption_summaries",
+                    side_effect=helper._synthetic_consumption,
+                ),
+            ):
+                expected = mint1.bind_floor_artifact_evidence(
+                    artifact,
+                    kwargs["floor_path"],
+                    kwargs["evidence_roots"],
+                    strict_validator=kwargs["strict_validator"],
+                    calibration_ledger_snapshot=kwargs[
+                        "calibration_ledger_snapshot"
+                    ],
+                    calibration_bracket_binding=kwargs[
+                        "calibration_bracket_binding"
+                    ],
+                )
+                rebound, recomputation = estimator.bind_v2_floor_artifact_evidence(
+                    **kwargs
+                )
+            self.assertEqual(rebound, expected)
+            self.assertEqual(recomputation.estimator_path, estimator._DEFAULT_PATH)
 
     def test_default_binding_retains_pinned_one_e_minus_twelve_tolerance(
         self,
@@ -627,8 +650,11 @@ class BinderTests(unittest.TestCase):
                     side_effect=helper._synthetic_consumption,
                 ),
             ):
-                rebound = estimator.bind_v2_floor_artifact_evidence(**kwargs)
+                rebound, recomputation = estimator.bind_v2_floor_artifact_evidence(
+                    **kwargs
+                )
             self.assertEqual(set(rebound), {"absolute", "comparative"})
+            self.assertEqual(recomputation.estimator_path, estimator._DEFAULT_PATH)
 
     def test_common_mode_binding_accepts_only_exact_rederived_width(self) -> None:
         component = registered_component()
@@ -646,16 +672,26 @@ class BinderTests(unittest.TestCase):
             return verified
 
         core = self.core(side_effect=verify_substituted_copy)
-        recomputation = SimpleNamespace(exact_widths_j=(width,))
+        recomputation = SimpleNamespace(
+            estimator_path=estimator._COMMON_MODE_PATH,
+            exact_widths_j=(width,),
+            block_inputs=(object(),),
+        )
         with mock.patch.object(
             estimator,
             "recompute_comparative_estimate",
             return_value=recomputation,
         ):
-            result = estimator.bind_v2_floor_artifact_evidence(
+            rebound, actual_recomputation = estimator.bind_v2_floor_artifact_evidence(
                 **self.binder_kwargs(core, component, artifact)
             )
-        self.assertEqual(result, verified)
+        self.assertEqual(rebound, verified)
+        self.assertEqual(
+            actual_recomputation.estimator_path, estimator._COMMON_MODE_PATH
+        )
+        self.assertIsInstance(actual_recomputation.block_inputs, tuple)
+        self.assertTrue(actual_recomputation.block_inputs)
+        self.assertEqual(actual_recomputation.exact_widths_j, (width,))
         self.assertEqual(artifact, self.artifact(width))
 
     def test_one_ulp_downward_common_mode_width_refuses(self) -> None:
@@ -1018,7 +1054,11 @@ class BinderTests(unittest.TestCase):
                 mock.patch.object(
                     estimator,
                     "recompute_comparative_estimate",
-                    return_value=SimpleNamespace(exact_widths_j=exact_widths),
+                    return_value=SimpleNamespace(
+                        estimator_path=estimator._COMMON_MODE_PATH,
+                        exact_widths_j=exact_widths,
+                        block_inputs=(object(),),
+                    ),
                 ),
             ):
                 pre_fix_result = self.pre_fix_swallow_negative_control(kwargs)
@@ -1028,12 +1068,20 @@ class BinderTests(unittest.TestCase):
                     mint1._record_rows("absolute", artifact["cells"][0])
                 )
                 strict_hashes.clear()
-                rebound = estimator.bind_v2_floor_artifact_evidence(**kwargs)
+                rebound, recomputation = estimator.bind_v2_floor_artifact_evidence(
+                    **kwargs
+                )
             self.assertEqual(binder_outcomes, ["raised", "completed"])
             self.assertEqual(rebound["absolute"], tuple(strict_hashes[:absolute_n]))
             self.assertEqual(
                 rebound["comparative"], tuple(strict_hashes[absolute_n:])
             )
+            self.assertEqual(
+                recomputation.estimator_path, estimator._COMMON_MODE_PATH
+            )
+            self.assertIsInstance(recomputation.block_inputs, tuple)
+            self.assertTrue(recomputation.block_inputs)
+            self.assertEqual(recomputation.exact_widths_j, exact_widths)
             self.assertEqual(
                 artifact["cells"][0]["comparative"][
                     "admissible_half_widths_j"

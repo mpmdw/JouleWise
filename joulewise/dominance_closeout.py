@@ -186,6 +186,7 @@ __all__ = [
     "dominance_ratio",
     "split_common_mode_block_width",
     "d165_replay_blocks_from_mint_inputs",
+    "build_d165_replay_sidecar",
     "replay_common_mode_dominance",
     "canonical_json_sha256",
     "validate_d165_replay_sidecar",
@@ -439,6 +440,146 @@ def d165_replay_blocks_from_mint_inputs(
             raise ValueError(reason) from exc
         records.append(record)
     return records
+
+
+def build_d165_replay_sidecar(
+    floor_artifact: Mapping[str, Any],
+    recomputations: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Assemble and validate one replay sidecar from mint recomputations.
+
+    The floor artifact supplies the four cell identities and independent floor
+    operands.  Each recomputation supplies the authenticated common-mode
+    projection when its estimator path is ``common_mode``; block records are
+    constructed only through :func:`d165_replay_blocks_from_mint_inputs`.
+    """
+
+    if not isinstance(floor_artifact, Mapping):
+        raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+    artifact_id = floor_artifact.get("artifact_id")
+    if not isinstance(artifact_id, str) or not artifact_id:
+        raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+    cells = floor_artifact.get("cells")
+    if not isinstance(cells, list) or len(cells) != 4:
+        raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+    floor_cells: dict[str, Mapping[str, Any]] = {}
+    for cell in cells:
+        if not isinstance(cell, Mapping) or not isinstance(cell.get("cell_id"), str):
+            raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+        cell_id = cell["cell_id"]
+        if not cell_id or cell_id in floor_cells:
+            raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+        floor_cells[cell_id] = cell
+    if not isinstance(recomputations, Mapping) or set(recomputations) != set(
+        floor_cells
+    ):
+        raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+
+    sidecar_cells: list[dict[str, Any]] = []
+    for cell_id, floor_cell in floor_cells.items():
+        record = recomputations[cell_id]
+        estimator = getattr(record, "estimator_path", None)
+        if estimator not in {"default", "common_mode"}:
+            raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+        try:
+            absolute = floor_cell["absolute"]
+            comparative_floor = floor_cell["comparative"]
+            absolute_point = _point_unguarded_floor_from_component(
+                absolute, parent_key="max_abs_residual_j"
+            )
+            comparative_point = _point_unguarded_floor_from_component(
+                comparative_floor, parent_key="max_abs_delta_j"
+            )
+            absolute_record = _build_independent_record(
+                point_unguarded_floor_j=absolute_point,
+                corner_widened_unguarded_floor_j=absolute[
+                    "corner_widened_unguarded_floor_j"
+                ],
+            )
+            comparative_independent = _build_independent_record(
+                point_unguarded_floor_j=comparative_point,
+                corner_widened_unguarded_floor_j=comparative_floor[
+                    "corner_widened_unguarded_floor_j"
+                ],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(CLOSEOUT_INPUT_MALFORMED) from exc
+
+        comparative: dict[str, Any] = {
+            "independent": comparative_independent,
+            "estimator": estimator,
+        }
+        if estimator == "common_mode":
+            bracket = getattr(record, "calibration_bracket", None)
+            bound = getattr(record, "shared_edge_bound_s", None)
+            block_inputs = getattr(record, "block_inputs", None)
+            comparative_blocks = getattr(record, "comparative_blocks", None)
+            if (
+                not isinstance(bracket, Mapping)
+                or block_inputs is None
+                or comparative_blocks is None
+                or bound is None
+            ):
+                raise ValueError(CLOSEOUT_INPUT_MALFORMED)
+            try:
+                block_ids = [block["block_id"] for block in comparative_blocks]
+                block_deltas = [block["delta_j"] for block in comparative_blocks]
+                block_members = [
+                    {
+                        member["position"]: member["bundle_id"]
+                        for member in block["members"]
+                    }
+                    for block in comparative_blocks
+                ]
+                replay_blocks = d165_replay_blocks_from_mint_inputs(
+                    block_ids,
+                    block_deltas,
+                    block_inputs,
+                    block_members,
+                )
+                bracket_copy = json.loads(json.dumps(bracket, allow_nan=False))
+                result = replay_common_mode_dominance(
+                    [_raw_replay_block(block) for block in replay_blocks],
+                    calibration_bracket=bracket_copy,
+                    shared_edge_bound_s=bound,
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(CLOSEOUT_INPUT_MALFORMED) from exc
+            comparative["common_mode_replay"] = {
+                "inputs": {
+                    "calibration_bracket": bracket_copy,
+                    "calibration_bracket_sha256": canonical_json_sha256(
+                        bracket_copy
+                    ),
+                    "shared_edge_bound_s": bound,
+                    "blocks": replay_blocks,
+                },
+                "result": result,
+            }
+
+        sidecar_cells.append(
+            {
+                "cell_id": cell_id,
+                "absolute": {
+                    "independent": absolute_record,
+                    "common_mode": {
+                        "status": "not_applicable",
+                        "reason": ABSOLUTE_COMMON_MODE_REASON,
+                    },
+                },
+                "comparative": comparative,
+            }
+        )
+
+    sidecar = {
+        "schema_version": REPLAY_SCHEMA_VERSION,
+        "sidecar_id": f"{artifact_id}::d165-replay",
+        "cells": sidecar_cells,
+    }
+    errors = validate_d165_replay_sidecar(sidecar)
+    if errors:
+        raise ValueError(f"built D-165 replay sidecar is invalid: {errors[0]}")
+    return sidecar
 
 
 def replay_common_mode_dominance(

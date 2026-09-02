@@ -75,6 +75,9 @@ class _ComparativeRecomputation:
     estimate: Any
     exact_widths_j: tuple[float, ...]
     comparative_record: Mapping[str, Any]
+    block_inputs: tuple[Any, ...] | None = None
+    calibration_bracket: Mapping[str, Any] | None = None
+    shared_edge_bound_s: float | None = None
 
 
 def _assert_common_mode_contract() -> None:
@@ -488,6 +491,9 @@ def recompute_comparative_estimate(
         declared_calibration_scope=declared_calibration_scope,
     )
     comparative_blocks, deltas = _comparative_layout(comparative_component, core)
+    block_inputs: tuple[Any, ...] | None = None
+    bracket: Mapping[str, Any] | None = None
+    shared_edge_bound_s: float | None = None
     if path == _DEFAULT_PATH:
         estimate = core.comparative_false_effect_floor(
             deltas,
@@ -524,7 +530,7 @@ def recompute_comparative_estimate(
         member_by_id = {
             member.bundle_id: member for member in comparative_component.members
         }
-        block_inputs = []
+        raw_block_inputs = []
         for spec_block in comparative_component.spec_cell["blocks"]:
             ids = spec_block["members"]
             block_members = [
@@ -534,7 +540,7 @@ def recompute_comparative_estimate(
                 )
                 for position in _ABBA_POSITIONS
             ]
-            block_inputs.append(
+            raw_block_inputs.append(
                 floor_extraction._common_mode_block_inputs_from_evidence(
                     block_members,
                     runs_root=Path(runs_root),
@@ -542,6 +548,7 @@ def recompute_comparative_estimate(
                     shared_edge_bound_s=shared_edge_bound_s,
                 )
             )
+        block_inputs = tuple(raw_block_inputs)
         estimate = floor_extraction._common_mode_floor_from_block_inputs(
             deltas,
             block_inputs,
@@ -563,6 +570,9 @@ def recompute_comparative_estimate(
         estimate=estimate,
         exact_widths_j=widths,
         comparative_record=comparative_record,
+        block_inputs=block_inputs,
+        calibration_bracket=bracket,
+        shared_edge_bound_s=shared_edge_bound_s,
     )
 
 
@@ -600,8 +610,10 @@ def bind_v2_floor_artifact_evidence(
     declared_calibration_scope: str,
     calibration_ledger_snapshot: Any,
     calibration_bracket_binding: Mapping[str, Any],
-) -> Mapping[str, tuple[str, ...]]:
-    """Preserve the pinned binder and add exact spec-selected v2 widths."""
+) -> tuple[
+    Mapping[str, tuple[str, ...]], _ComparativeRecomputation | None
+]:
+    """Preserve the pinned binder and return its replay record when selected."""
 
     _authenticate_mint_launch_lineage(
         comparative_component,
@@ -615,11 +627,22 @@ def bind_v2_floor_artifact_evidence(
         declared_calibration_scope=declared_calibration_scope,
     )
     if path == _DEFAULT_PATH:
-        return core.bind_floor_artifact_evidence(
+        legacy_result = core.bind_floor_artifact_evidence(
             artifact,
             floor_path,
             evidence_roots,
             strict_validator=strict_validator,
+            calibration_ledger_snapshot=calibration_ledger_snapshot,
+            calibration_bracket_binding=calibration_bracket_binding,
+        )
+        return legacy_result, recompute_comparative_estimate(
+            core=core,
+            comparative_component=comparative_component,
+            runs_root=Path(runs_root),
+            calibration_acceptance=calibration_acceptance,
+            calibration_acceptance_sha256=calibration_acceptance_sha256,
+            calibration_allowance_projection=calibration_allowance_projection,
+            declared_calibration_scope=declared_calibration_scope,
             calibration_ledger_snapshot=calibration_ledger_snapshot,
             calibration_bracket_binding=calibration_bracket_binding,
         )
@@ -692,4 +715,4 @@ def bind_v2_floor_artifact_evidence(
         raise _MintEstimatorError(
             "artifact common-mode widths differ from authenticated source bytes"
         )
-    return legacy_result
+    return legacy_result, recomputation

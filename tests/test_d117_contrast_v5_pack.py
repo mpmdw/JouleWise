@@ -15,7 +15,9 @@ from unittest import mock
 
 from joulewise import detection_floor, dominance_closeout, floor_mint_estimator
 from joulewise.analysis_manifest_v3 import (
+    DOMINANCE_REPLAY_SIDECAR_ROLE,
     analysis_semantics_sha256_v1,
+    prospective_finalization_required_attachments,
     validate_prospective_analysis_manifest_v3,
 )
 from joulewise.aggregate import student_t_critical_95
@@ -686,6 +688,18 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 plan_tree_path=pack / "plan_tree.json",
             )
             self.assertEqual(refusals, ())
+            # D-165 clause 7e (ruling R-1): the generator declares exactly the
+            # accessor's five-row shape, replay-sidecar row included, so a
+            # dominance-enabled pack cannot ship a four-row contract.
+            self.assertEqual(
+                manifest["finalization_contract"]["required_attachments"],
+                prospective_finalization_required_attachments(
+                    optional_roles=(DOMINANCE_REPLAY_SIDECAR_ROLE,)
+                ),
+            )
+            self.assertEqual(
+                len(manifest["finalization_contract"]["required_attachments"]), 5
+            )
             registrations = [
                 cell["floor_estimator_registration"] for cell in plan["floor_cells"]
             ] + [
