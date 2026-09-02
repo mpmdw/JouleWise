@@ -2299,7 +2299,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "active",
-      "status_note": "Stage 2 of the unattended lane. Driver and gate are on main (PRs 264, 265). HARVEST 2026-09-02: acceptance items 2 and 3 MET — plan rehearsal-20260902 fired from the installed LaunchAgent at 02:56, verdict REHEARSAL_ONLY, chain exit 0, receipt REFUSED night_refused_agent_present (the planted refusal: agent sessions deliberately left running), results branch night-results/20260902 (b5353d7) on origin, courier email delivered (Gmail message id 1a0618d143537010). First censuses.jsonl record: a single hit, the pre-existing zsh PR-watcher (pid 17991); the driver did NOT see its own --courier-bin claude argv — bench prediction confirmed (BSD pgrep excludes its ancestors). LaunchAgent uninstalled the same morning at the armed commit 8856f87a; dead-man firing stopped. Two courier-side findings for the refinement list: (1) courier.json named by the handback is absent from the custody root; (2) the installer's `command -v claude` preflight fails under the courier session's minimal PATH — uninstall needed ~/.local/bin prepended (adjacent to Opus 143 B1/B2). Next: the 'installed the morning before' stand-down rehearsal (coldgate-d1 R-7 amendment), then the stage-1 plan email to Ed before any DIAGNOSTIC_NO_PACK plan is armed. Stage-2 refinement list: night-scoped night/<YYYYMMDD>/ dir (Opus S4); per-block body digests instead of line-number pins for the G2-a chain fence (Opus fresh pass on the fence re-pin); installer PATH entry must come from the UNRESOLVED courier parent (install_night_agent.sh :A-then-:h yields the versions/ dir — inert while --courier-bin is absolute; Opus 143 B1); fallback to `which claude` when the pinned version file is GC'd by a self-update (143 B2); symlink fixture for the installer test (143 B3); clock-pin comment says UTC-runner, is a date bomb (143 A1).",
+      "status_note": "Stage 2 of the unattended lane. Driver and gate are on main (PRs 264, 265). HARVEST 2026-09-02: acceptance items 2 and 3 MET — plan rehearsal-20260902 fired from the installed LaunchAgent at 02:56, verdict REHEARSAL_ONLY, chain exit 0, receipt REFUSED night_refused_agent_present (the planted refusal: agent sessions deliberately left running), results branch night-results/20260902 (b5353d7) on origin, courier email delivered (Gmail message id 1a0618d143537010). First censuses.jsonl record: a single hit, the pre-existing zsh PR-watcher (pid 17991); the driver did NOT see its own --courier-bin claude argv — bench prediction confirmed (BSD pgrep excludes its ancestors). LaunchAgent uninstalled the same morning at the armed commit 8856f87a; dead-man firing stopped. Two courier-side findings for the refinement list: (1) courier.json named by the handback is absent from the custody root; (2) the installer's `command -v claude` preflight fails under the courier session's minimal PATH — uninstall needed ~/.local/bin prepended (adjacent to Opus 143 B1/B2). Next: the 'installed the morning before' stand-down rehearsal (coldgate-d1 R-7 amendment), then the stage-1 plan email to Ed before any DIAGNOSTIC_NO_PACK plan is armed. Stage-2 refinement list: 143 B1/B2/B3/A1 + the minimal-PATH uninstall preflight LANDED via PR #268 (merge 67032576; gate: Sol seat killed mid-verification -> lead harvest commit e8101154 -> independent Opus audit, 1 blocker: unpinned clock in the new B2 test, red on any UTC runner -> bench fix round 030a1532 -> delta re-audit CONFIRMED-CLEAN -> CI green 18/18). Still open: night-scoped night/<YYYYMMDD>/ dir (Opus S4); per-block body digests instead of line-number pins for the G2-a chain fence; courier.json custody artifact (design item); two non-gating audit nits — relative PATH entry robustness in the rendered plist, and no substitution log line when the substitute itself fails is_file/X_OK.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -4813,6 +4813,52 @@
       "status_note": "S-0 CLONE PROOF COMPLETE (2026-08-25): estate 10 ran END TO END with zero failures at BASE f125ae70 (runsheet r6 head), CI run 32915894409 green, fifth _v4 mint, clone mint head 9a6f8880. Executed: the scripted band 1.1-3.7 with three real MLX U11 freezes; 3.8 marker build with the S0-O2 deferral disclosed and candidate verify PASS; Ed's step-6 YES over hC adbd116d7dcaa3dd5b0d6f1e5c9127282232b29ea74b03b9c6b8077ec9da36bc; 3.9 all three packs ARMED and verified with the C+hC pair, clean-arm residue empty, eleven-kind census PASS; 3.10 local green in the clone (published half deferred BY DESIGN); 4 probe battery ALL GREEN including the six r6 re-derived probes and the post-fixation shape-preserving re-mint byte pin; 4.10 fixation equal to the mint-time record; magistrate 5 acceptance read ALL BOXES PASS. Record: docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md. Ten estates were cut; estates 1-9 each terminated on a real instrument defect now cured on main (S0-O2 marker build, S0-O3 successor-digest siting, the confirmation-supply family, D-154 pack_root, the anchor remaps, probe reachability), with estate 6 STRUCK under the D-153 sweep synthesis, estate 7 STRUCK as instrument failure under D-154 R-4 (its positive results retained as executability evidence, never claim custody), and estate 9's probe-block failures dispositioned ordinary-defect - every struck estate's custody preserved READ-ONLY. REMAINING SCOPE IS THE REAL TRANSACTION ONLY: Ed's D-150(1) live permission prompts and the D-150a reboot; a quiet machine window; the real commit-freeze window close; the published-green half that 3.10 deferred, at the real published head; and post-window fixation ordering per D-153. Retained verbatim: BIG per D-144, and the magistrate's own reading of the transaction transcript remains the final verification gate.",
       "stop_card": null
     },
+    "V5-DECODE-IDENTITY-SET-01": {
+      "acceptance": {
+        "evidence": [
+          "The generated GAMMA pack freezes and verify_frozen_projection passes (the ruled red test turns green)",
+          "A decode member re-pointed to an unlisted manifest, a census count off by one, a declaration re-typed from workload_for, and a drifted member tag each REFUSE with a named reason",
+          "A single-identity unit's config_set_sha256 is byte-identical to a committed v3 receipt value",
+          "The dominance-criterion registration digest pinned in the pack, closeout, and night-gate tests is unchanged",
+          "All three _v5 packs are re-frozen and verified by a live P-8 runbook re-run"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-DECODE-IDENTITY-SET-01/acceptance",
+          "label": "V5-DECODE-IDENTITY-SET-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The current _v5 generator's packs freeze and verify against the real tokenizers with every exact identity intact, and every ruled counterfactual refuses."
+      },
+      "authority": {
+        "label": "Ruling 171a decode-unit identity under prompt rotation",
+        "path": "docs/process_traces/2026-09-02-projection-02/171a-RULING-decode-identity.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "PR #269 merged 2026-09-02 (e4f52e34)",
+            "path": "docs/process_traces/2026-09-02-projection-02/pr269-gate-record.md"
+          },
+          "kind": "task",
+          "required": "the fix branches from the projection-02 merge head so the realization rows and the decode-set declaration land in one freeze",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "V5-PREFILL-REALIZED-PROJECTION-02"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make generated _v5 decode units freezable without weakening any exact identity: the generator declares each decode unit's closed manifest set from the pre-registered prompt-rotation rule (never folded from emitted configs), freeze compares declaration to emission fail-closed (extra, missing, duplicate, or unauthenticated member refuses), one scientific identity per manifest class, and the unit config_set_sha256 becomes the identity hash for a single-identity unit (byte-identical to every committed receipt) or SHA256 over the sorted distinct member hashes under the domain string joulewise.identity_unit_config_set.v1; the analysis gate admits a non-empty subset of the frozen unit's declared set. The dominance-criterion registration digest 1c0a4a11 must not move.",
+      "id": "V5-DECODE-IDENTITY-SET-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "partial",
+      "status_note": "Defect found at the bench 2026-09-02 while running the P-8 throwaway freeze against the real Qwen tokenizers (PR #269 post-merge obligation): A/decode and B/decode hold 20 configs rotating over 8 prompt manifests, so freeze_projection refuses at the declaration check (declaration re-typed from workload_for with a hardcoded decode prompt) and again at the one-identity-per-unit check; prefill_p512 units freeze. Three-seat consult 171 (Sol, Opus, blind Fable) -> ruling 171a R-1..R-10 -> cold gate (cold Fable 182 + Opus contract refuter 183) affirmed. Sol xhigh implementation seat in flight on fix/2026-09-02-decode-identity-set off e4f52e34: red generated-pack test first, then the cure; refuters with distinct lenses and a different-model delta re-audit follow. Closure = live P-8 runbook re-run freezing and verifying all three _v5 packs, after which the night lane may name the first pack-bound night. D-131 cl.2/cl.3 amendment text (R-7) is owed to the decision log at the bench.",
+      "stop_card": null
+    },
     "V5-DESK-DAY-01": {
       "acceptance": {
         "evidence": [
@@ -4845,6 +4891,15 @@
           "state": "satisfied",
           "strength": "advisory",
           "target": "D165-CLOSEOUT-CORE-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the three _v5 packs cannot be generated and frozen until decode units carry a declared manifest set (ruling 171a R-9 closure = live P-8 re-run)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-DECODE-IDENTITY-SET-01"
         },
         {
           "evidence": null,
@@ -5019,6 +5074,51 @@
       "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d and ordering regression R-6e landed together in PR #262 (2026-09-01, branch feat/2026-09-01-ruling-97-runsheet; terra 99 + magistrate bench), merged 2026-09-01 (1c63f9a7).",
       "stop_card": null
     },
+    "V5-LAUNCH-REALIZATION-RECHECK-01": {
+      "acceptance": {
+        "evidence": [
+          "launch_window.py re-derives the projection after verify_consumed_launch and refuses readiness_identity_environment_dirty on any digest or unit mismatch",
+          "A post-arm tokenizer mutation test asserts refusal before RunBundleWriter.create",
+          "The refusal is emitted with no chain.started file present",
+          "The launch-path change passes the required council and delta-review gates"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-LAUNCH-REALIZATION-RECHECK-01/acceptance",
+          "label": "V5-LAUNCH-REALIZATION-RECHECK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A tokenizer or model-file drift that lands after the arm receipt is refused by the launch step before any bundle is created, and the refusal leaves the chain un-started."
+      },
+      "authority": {
+        "label": "Ruling 150a post-arm realization recheck (R-150-2)",
+        "path": "docs/process_traces/2026-09-02-projection-02/150a-RULING-post-arm-recheck.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "V5-PREFILL-REALIZED-PROJECTION-02 landed 2026-09-02: PR #269 merged (e4f52e34) — realized-prompt rows inside the frozen projection at freeze and arm, identity-pin projection contract doc; gate: terra 149 execution + luna 150 causality + Opus 151 contract refuters, Sol 155 fix round, luna 157/181 delta re-audits, Opus 159 near-final pass, terra 163 pedagogy, CI 18/18 + full suite 4711 OK on the integration tree",
+            "path": "docs/process_traces/2026-09-02-projection-02/pr269-gate-record.md"
+          },
+          "kind": "task",
+          "required": "the freeze/arm realization catcher (projection-02) is merged so the launch recheck re-derives a projection that already carries the realization rows",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "V5-PREFILL-REALIZED-PROJECTION-02"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the post-arm identity window: the launch step that precedes collection (scripts/launch_window.py, immediately after verify_consumed_launch succeeds) re-derives the identity projection the way arm_readiness_evidence_t0.py does and refuses readiness_identity_environment_dirty on any projection-digest or unit mismatch BEFORE the chain reaches RunBundleWriter.create; the recheck reuses the existing derivation helpers and adds no new identity code.",
+      "id": "V5-LAUNCH-REALIZATION-RECHECK-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 6,
+      "status": "queued",
+      "status_note": "Ruling 150a R-150-2 (luna causality refuter F1 on projection-02, downgraded from BLOCKER to SHOULD-FIX with written dissent in the PR #269 gate record). The gap is pre-existing and not specific to prompt realization: _replay_consumed_arm replays the whole arm receipt, so every identity unit has the same post-arm window. Regressions ruled: (1) a post-arm tokenizer mutation is refused before RunBundleWriter.create; (2) the refusal is emitted with the chain NOT started (no chain.started file). Enters the launch path — council trigger.",
+      "stop_card": null
+    },
     "V5-NIGHTLY-G3-01": {
       "acceptance": {
         "evidence": [
@@ -5085,50 +5185,6 @@
       "status_note": "Installed by D-167 and re-homed from the G3 portion of PIPELINE-SMOKE-LIVE-01. A desk script is agent-lane work; the quiet-machine collection it checks remains in V5-TRANSACTION-01.",
       "stop_card": null
     },
-    "V5-PREFILL-REALIZED-PROJECTION-02": {
-      "acceptance": {
-        "evidence": [
-          "The freeze projection derives the prompt realization from the registered prompt text on the collection stack",
-          "Arm-time projection re-verification refuses a count, ids-hash, or domain mismatch before collection",
-          "The arm-critical identity_pins.py change passes the required council and delta-review gates"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/V5-PREFILL-REALIZED-PROJECTION-02/acceptance",
-          "label": "V5-PREFILL-REALIZED-PROJECTION-02 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Freeze and arm identity projection catch prompt-realization drift before the first measured bundle."
-      },
-      "authority": {
-        "label": "Ruling 44c deferred identity-projection catcher",
-        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "V5-PREFILL-REALIZED-IDS-CHECK-01 landed 2026-09-01: PR #258 merged (35577a64) — registered operand canonicalized, whole-hash + coherent-bundle mutation guards; realized-prefill check non-waivable at every bundle consumer",
-            "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
-          },
-          "kind": "task",
-          "required": "the shared bundle-reader prompt-realization fence is implemented and reviewed first",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "advisory",
-          "target": "V5-PREFILL-REALIZED-IDS-CHECK-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Add the identity-pin projection catcher for registered prefill prompt realization at freeze and arm.",
-      "id": "V5-PREFILL-REALIZED-PROJECTION-02",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 6,
-      "status": "queued",
-      "status_note": "Enters identity_pins.py — council trigger.",
-      "stop_card": null
-    },
     "V5-TRANSACTION-01": {
       "acceptance": {
         "evidence": [
@@ -5156,6 +5212,15 @@
           "state": "pending",
           "strength": "hard",
           "target": "L10-A-G2B-CONTRACT-PREFIX-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "ruling 150a R-150-3: no _v5 night may be armed for CLAIM use until the launch-step realization recheck lands (rehearsal and DIAGNOSTIC_NO_PACK nights unaffected)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-LAUNCH-REALIZATION-RECHECK-01"
         },
         {
           "evidence": null,
@@ -5617,5 +5682,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-01"
+  "updated": "2026-09-02"
 }
