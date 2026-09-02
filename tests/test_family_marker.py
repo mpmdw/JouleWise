@@ -711,6 +711,11 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             with self.subTest(error=type(error).__name__):
                 buffer = io.BytesIO()
                 stdout = mock.Mock(buffer=buffer)
+                # Python 3.14 argparse asks the stream whether it is a tty
+                # before colorizing help; a bare Mock answers with a Mock and
+                # os.isatty raises TypeError.
+                stdout.fileno.side_effect = io.UnsupportedOperation("fileno")
+                stdout.isatty.return_value = False
                 with (
                     mock.patch.object(
                         module.readiness,
