@@ -541,6 +541,30 @@ class PromptRealizationExpectationTests(ReaderTestCase):
         self.assertIn("token_ids_sha256", problems[0])
         self.assertNotIn("token_count", problems[0])
 
+    def test_hash_comparison_binds_every_character_not_a_prefix(self) -> None:
+        # Mutation guard: a prefix-only comparison would accept two hashes
+        # that share their first 56 characters and differ only in the tail;
+        # a case-folded comparison would accept an upper-case realized hash.
+        # Neither may pass: the tail difference is a mismatch, and the
+        # upper-case form is ill-formed evidence (the lowercase validator
+        # refuses it before any comparison).
+        cases = (
+            ("a" * 56 + "b" * 8, "prompt_realization_mismatch"),
+            ("A" * 64, "prompt_realization_evidence_missing"),
+        )
+        for index, (realized_hash, expected_code) in enumerate(cases):
+            writer = self.make_prompt_bundle(
+                f"prompt-hash-tail-mismatch-{index}",
+                expected_hash="a" * 64,
+                realized_hash=realized_hash,
+            )
+
+            problems = self.prompt_problems(writer)
+
+            self.assertEqual(len(problems), 1, (realized_hash, problems))
+            self.assertIn(expected_code, problems[0])
+            self.assertIn("token_ids_sha256", problems[0])
+
     def test_count_and_hash_mutation_is_one_problem_naming_both(self) -> None:
         writer = self.make_prompt_bundle(
             "prompt-count-hash-mismatch",
