@@ -9,7 +9,7 @@ WRITE_SCOPE: []
 Checkout: `/Users/edr/code/JouleWise-wt-paper-d2` (detached at `8096cb80`).
 Read-only: write NOTHING under the checkout. `TMPDIR` = a subdirectory you
 create under
-`/private/tmp/claude-501/-Users-edr-code-JouleWise/540125d5-d8ee-49d1-8e6e-17050e77212d/scratchpad/`.
+`<scratchpad>/`.
 Python `/Users/edr/code/JouleWise/.venv/bin/python`. Do NOT run canonical
 `python3 -m unittest discover`; you MAY run
 `python -m unittest tests.test_issue_dg071_dg075_statistics` (22 tests

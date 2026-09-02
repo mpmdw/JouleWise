@@ -107,3 +107,45 @@ interval_end_s == timestamp_s for all records: True
 (File 14a reads the bundle by its repo-relative path, so it runs only from
 a checkout that holds the retained corpus — the main checkout, not a linked
 worktree.)
+
+### Correction 2026-09-02 (magistrate, after the Opus counter-review of PR #276, findings C-2 and C-7)
+
+Two sentences of item 4 above are corrected; the operative rule the producer
+implements is unchanged.
+
+1. The parenthetical "(≤ 2.4e-7 s, 100 of 405 boundaries differ by exactly
+   that; the writer formatted two floats)" describes the boundary gaps
+   measured on **float64 parses** of the endpoints: all 100 nonzero gaps are
+   exactly one float64 ulp at 1.78e9 s, 2.384185791015625e-7 s. Measured on
+   the **decimal literals** — the values of record under item 2 — the same
+   100 boundaries differ by 1e-7 s (4 boundaries), 2e-7 s (49), 3e-7 s (46)
+   and 4e-7 s (1); the maximum is 4e-7 s, which is what the artifact's
+   `max_tiling_gap_s` (`"0.0000004"`) reports. Both numbers are correct for
+   the object they describe; the sentence did not say which. The producer's
+   ≤ 1e-6 s tolerance covers both.
+2. "`interval_end_s == timestamp_s` for every record" means **literal**
+   (character-string) equality, which is what the producer, the fix-round-2
+   brief (C4) and the artifact's Method section all require; `"10.0"` versus
+   `"10.00"` refuses `records_do_not_tile`. Relaxing this to numeric equality
+   would be a new convention, not a correction, and is not made here.
+
+#### Executed evidence (magistrate, 2026-09-02, from `/Users/edr/code/JouleWise`)
+
+```
+$ python3 - <<'PY'
+import csv
+from decimal import Decimal
+from collections import Counter
+rows=list(csv.DictReader(open("runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv")))
+recs=[];seen=None
+for r in rows:
+    if r["timestamp_s"]!=seen: recs.append(r); seen=r["timestamp_s"]
+gd=[abs(Decimal(b["interval_start_s"])-Decimal(a["timestamp_s"])) for a,b in zip(recs,recs[1:])]
+gf=[abs(float(b["interval_start_s"])-float(a["timestamp_s"])) for a,b in zip(recs,recs[1:])]
+print("records",len(recs),"decimal gap histogram",sorted(Counter(str(g) for g in gd if g!=0).items()),"max",max(gd))
+print("float64 gap histogram",sorted(Counter(repr(g) for g in gf if g!=0).items()))
+PY
+records 406 decimal gap histogram [('1E-7', 4), ('2E-7', 49), ('3E-7', 46), ('4E-7', 1)] max 4E-7
+float64 gap histogram [('2.384185791015625e-07', 100)]
+exit=0
+```
