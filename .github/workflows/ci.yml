@@ -36,6 +36,11 @@ jobs:
         run: python scripts/verify_receipt_histsem.py --repository-root . --require-published
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
+      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zsh
+          test -x /bin/zsh
       - name: Unit tests (stdlib core only, per D-009/D-017)
         # test_calibration_exits AND test_calibration_writer_crash_matrix
         # are intentionally absent here (both carry exclusive_modules
@@ -301,6 +306,11 @@ jobs:
           python-version: "3.11"
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
+      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q zsh
+          test -x /bin/zsh
       - name: Fast tier - light modules only (NOT A GATE; full suite still runs)
         env:
           SHARD_INDEX: ${{ matrix.shard }}
