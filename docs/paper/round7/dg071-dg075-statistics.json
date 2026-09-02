@@ -1,6 +1,4 @@
 {
-  "distinct_timestamp_count": 406,
-  "duplicate_timestamp_count": 812,
   "input_bundle": {
     "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv",
     "record_schema": [
@@ -13,41 +11,59 @@
     ],
     "sha256": "6945160964bc8667f4bfcc1ba7b500f81045fce8301ef7aadce45a188d3e06e9"
   },
-  "producer": {
-    "git_commit": "681f30ce6c4f2afd5325cc944150643f63739185",
-    "script_path": "scripts/issue_dg071_dg075_statistics.py",
-    "script_sha256": "6efc3ec75ca6f59a86b8a68ff1049abbb5fba4cdf4500cb585ee3b13ead62f51"
+  "max_tiling_gap_s": "0.0000004",
+  "method": {
+    "arithmetic": "Parse timestamp_s, interval_start_s, and interval_end_s literals directly as exact decimals; compute widths, spacings, quantiles, and IQR without binary floating point.",
+    "dg075_dependence": "DG-075 is the DG-071 distribution minus the first record: consecutive timestamp differences are the widths of records 2 through n up to the retained writer's endpoint convention.",
+    "float64_replication": "A float64 replication (numpy `linear`, R type 7) is guaranteed to agree only to three decimals because a float64 at 1.78e9 s has spacing 2.4e-7 s, coarser than the file's 1e-7 s literals; the digits characterise the retained bytes, not the sampler's physical timing resolution. Worked example: median 120.9186 ms exact vs 120.9185 ms float64.",
+    "iqr": "IQR is Q(0.75) - Q(0.25), computed exactly before rendering.",
+    "median": "Median is the p = 0.5 quantile, the mean of the two middle values when n is even.",
+    "millisecond_rendering": "Multiply exact seconds by 1000 and round to four decimal places with round-half-even; renderings are JSON strings.",
+    "population": "A sampler record is one contiguous group sharing an exact timestamp_s literal. Each group has exactly one ane_power, cpu_power, and gpu_power row with byte-identical interval endpoint literals; one width per group enters DG-071.",
+    "quantile": "Order n values ascending. At probability p, h = (n - 1) * p (0-based) and linearly interpolate exactly between the two neighbouring order statistics; this is Hyndman-Fan type 7 (numpy linear and R type 7 are cross-references)."
   },
-  "record_count": 1218,
+  "producer": {
+    "git_commit": "29181d6cdf7bcea89540c52eba39965363f5446f",
+    "script_path": "scripts/issue_dg071_dg075_statistics.py",
+    "script_sha256": "d769f05b050d56e49e55b1aac3d30a21e1a1ad7ddd181f7d15ad62988edf4899"
+  },
+  "rail_row_count": 1218,
+  "rails": [
+    "ane_power",
+    "cpu_power",
+    "gpu_power"
+  ],
   "registry_row_ids": [
     "DG-071",
     "DG-075"
   ],
-  "schema_version": "joulewise.paper.dg071-dg075-statistics.v1",
+  "sampler_record_count": 406,
+  "schema_version": "joulewise.paper.dg071-dg075-statistics.v2",
   "statistics": {
     "DG-071": {
-      "iqr_ms": 5.975008,
-      "iqr_s": 0.005975008010864258,
-      "median_ms": 120.918512,
-      "median_s": 0.12091851234436035,
-      "q1_ms": 116.951942,
-      "q1_s": 0.11695194244384766,
-      "q3_ms": 122.92695,
-      "q3_s": 0.12292695045471191,
-      "sample_count": 1218,
-      "statistic": "interval_end_s - interval_start_s"
+      "iqr_ms": "5.9508",
+      "iqr_s": "0.005950750",
+      "median_ms": "120.9186",
+      "median_s": "0.12091860",
+      "q1_ms": "116.9720",
+      "q1_s": "0.116971950",
+      "q3_ms": "122.9227",
+      "q3_s": "0.122922700",
+      "sample_count": 406,
+      "statistic": "interval_end_s - interval_start_s per sampler record"
     },
     "DG-075": {
-      "iqr_ms": 5.894899,
-      "iqr_s": 0.005894899368286133,
-      "median_ms": 120.922327,
-      "median_s": 0.12092232704162598,
-      "q1_ms": 117.032051,
-      "q1_s": 0.11703205108642578,
-      "q3_ms": 122.92695,
-      "q3_s": 0.12292695045471191,
+      "iqr_ms": "5.8949",
+      "iqr_s": "0.0058949",
+      "median_ms": "120.9224",
+      "median_s": "0.1209224",
+      "q1_ms": "117.0321",
+      "q1_s": "0.1170321",
+      "q3_ms": "122.9270",
+      "q3_s": "0.122927",
       "sample_count": 405,
-      "statistic": "consecutive unique timestamp_s difference"
+      "statistic": "consecutive differences of sorted distinct timestamp_s literals"
     }
-  }
+  },
+  "tiling_gap_nonzero_boundaries": 100
 }
