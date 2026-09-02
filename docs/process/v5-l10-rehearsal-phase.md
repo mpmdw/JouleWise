@@ -11,7 +11,9 @@ that same head using the authenticated generated pack
 The historical item 2 asked for a synthetic exact-80-member directory of run bundles.
 D-160 F-1 shows that no synthetic bundle can pass the claim code path without
 a production code change ([04-MAGISTRATE-RULING.md:10–17](../process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md));
-ruling 89 R-1 therefore replaces that item with the real-corpus ladder below
+ruling 89 R-1 (a **ruling** is a written magistrate decision recorded in a
+process trace; it binds every later step of this document) therefore replaces
+that item with the real-corpus ladder below
 ([89-RULING-l10-corpus-precondition.md:39–45](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
 
 ED-L10-1 was never executed and has no closure record, so the retained a9/a10
@@ -86,7 +88,9 @@ These definitions precede the procedure:
   ([89-RULING-l10-corpus-precondition.md:80–90](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
 - A **spent window** is the `[QUIET-MAC]` collection for the claim-bearing
   transaction night; D-167(1) distinguishes diagnostic windows at lead
-  discretion from the transaction on Ed's GO ([decision_log.md:10409](../decision_log.md)).
+  discretion from the transaction on Ed's GO — Ed's one recorded approval,
+  tracked as kernel row `V5-TRANSACTION-GO-01`, that the claim-bearing
+  transaction may spend its window ([decision_log.md:10409](../decision_log.md)).
 - **BENCH** means the magistrate runs a desk command with no `sudo`, no
   `[QUIET-MAC]` collection, and writes only below `$L10_CUSTODY_ROOT`; a
   **FIRST CHECK** is a named production artifact/adapter existence check made
@@ -499,11 +503,19 @@ before step 3 ([89-RULING-l10-corpus-precondition.md:50–52](../process_traces/
      --project-commit "$PROJECT_COMMIT" --project-tree-state clean \
      --consumption-semantics-id "$CONSUMPTION_SEMANTICS_ID"
    test ! -L "$AGGREGATE_FLOOR_ARTIFACT"
-   case "$AGGREGATE_FLOOR_ARTIFACT" in
-     "$L10_CUSTODY_ROOT"/*) ;;
+   FLOOR_REAL_DIR="$(cd "$(dirname "$AGGREGATE_FLOOR_ARTIFACT")" && pwd -P)"
+   FLOOR_REAL="$FLOOR_REAL_DIR/$(basename "$AGGREGATE_FLOOR_ARTIFACT")"
+   CUSTODY_REAL="$(cd "$L10_CUSTODY_ROOT" && pwd -P)"
+   case "$FLOOR_REAL" in
+     "$CUSTODY_REAL"/*) ;;
      *) exit 1 ;;
    esac
    ```
+
+   The containment check compares canonical paths: `pwd -P` resolves every
+   symlink and `..` segment in both the floor's directory and the custody
+   root, so `$L10_CUSTODY_ROOT/../escaped.json` or a symlinked directory
+   inside custody fails the guard instead of matching a textual prefix.
 
    The finalizer's own containment/symlink leg
    (`analysis_manifest_v3.py:1491–1507`) is first exercised on the production
@@ -553,8 +565,11 @@ cd "$REPO"
 The campaign corpus is copied to scratch custody before positive finalization
 ([89-RULING-l10-corpus-precondition.md:50–58](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md)).
 `EVIDENCE_ROOT_ID` is read from the authenticated prospective manifest's
-`.evidence_root_id` field; `CALIBRATION_LEDGER` is the exact runbook path
-under transaction custody ([real-transaction-runbook.md:1359–1370](../process_traces/2026-08-22-t20/real-transaction-runbook.md)).
+`.evidence_root_id` field; `CALIBRATION_LEDGER` is the calibration ledger
+(the append-only record of every calibration capture,
+[v5-artifact-flow.md:3](v5-artifact-flow.md)) at the path exported above
+under transaction custody, the same value the artifact flow's Finalization
+row passes as `--calibration-ledger` ([v5-artifact-flow.md:22](v5-artifact-flow.md)).
 The results-fill input is not derivable until the named successor emits the
 fixed path; the source renderer accepts a path via `render_from_manifest`
 ([render_results_fills.py:945](../../scripts/render_results_fills.py)).
