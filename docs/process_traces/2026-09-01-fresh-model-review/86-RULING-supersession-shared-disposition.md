@@ -49,3 +49,44 @@ selects). Mutation table for the cure round: (m1) restore latest-wins in
 membership; (m3) D-093 scan drops the multi-row report; (m4) reason code
 retyped as a different string in one consumer — each must be killed by a
 named test.
+
+## Addendum (2026-09-01 19:10) — R-6: the D-093 persisted finding wire
+
+Sol's phase-2 cure (`87-sol-supersession-cure`, rc=79 NEEDS_RULING, landed
+uncommitted then committed at the bench as `6633dd94` on
+`feat/2026-09-01-supersession-exhibit`) refuses a multi-row bundle in
+`supersession_visibility_scan` by setting `status: "refused"` and attaching
+`findings: [{reason_code, bundle_ids}]`. Two facts force a ruling:
+
+1. D-093's audit row has no reason wire: `_SUPERSESSION_AUDIT_KEYS`
+   (`joulewise/analysis_engine/artifact.py:55-62`) is an exact six-key set,
+   so `findings` is rejected as an unrecognized key.
+2. Without a finding, the refusal itself is inadmissible: the persisted
+   validator rejects "authenticated equal counts cannot be refused"
+   (`artifact.py:1159-1161`) — a multi-row bundle has `raw_count ==
+   validated_count` (every row is individually valid) on an authenticated
+   basis. So the reader-side cure cannot be expressed in the persisted
+   artifact at all without a schema change. The wire is load-bearing.
+
+**R-6 (ruled).** Admit `findings` as an OPTIONAL key of the audit row via
+`_exact_keys_with_optional_group` (required = the six keys, optional =
+`{"findings"}`). When present: a nonempty list; each element exactly
+`{"reason_code", "bundle_ids"}`; `reason_code` ∈ the closed set
+`{REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS}` (extension by
+ruling only — record the set as a module constant next to
+`_SUPERSESSION_AUDIT_KEYS`); `bundle_ids` a nonempty, sorted, duplicate-free
+list of nonempty strings. `findings` present ⇒ `status == "refused"`;
+`status == "clean"` ⇒ `findings` absent. The "authenticated equal counts
+cannot be refused" check is relaxed ONLY when a nonempty `findings` list is
+present. Retained corpora carry no persisted `supersession_audit` block
+(`grep -rl supersession_audit runs*` → nothing), so no historical artifact
+changes validity. Scope expands to `joulewise/analysis_engine/artifact.py`
+and its pinning tests (`tests/test_analysis_claims.py`,
+`tests/test_analysis_integration.py`); regressions required: (a) persisted
+row with a valid finding validates; (b) finding with an unknown key /
+unknown reason / empty or duplicated `bundle_ids` refuses; (c) `clean` +
+`findings` refuses; (d) `refused` with equal authenticated counts and NO
+findings still refuses (the existing rule survives). This is the FIRST fix
+round on this defect (the prior round was a partial landing, not a failed
+one), so no cold gate is triggered; the delta re-audit runs on a different
+model (terra).
