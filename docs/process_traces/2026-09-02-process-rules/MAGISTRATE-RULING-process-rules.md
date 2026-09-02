@@ -152,3 +152,11 @@ Charter digest: `shasum -a 256 docs/process/coldgate_charter.md` →
 `099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81` (both
 seats, verified before merits). Q1 home anchors: `docs/contracts/bridge_protocol.md:48-49`
 (`ACCEPTANCE`/`VERIFICATION` bullets), `:787` (§10 heading).
+
+## Addendum 2026-09-02 (Sol 241 fresh pass, F3) — packet basename
+
+The gate-record paragraph above names the packet as `coldgate-process.md`.
+The custodied file is `PACKET-coldgate-process.md` in this directory
+(`test -e docs/process_traces/2026-09-02-process-rules/coldgate-process.md`
+returns 1; `test -e docs/process_traces/2026-09-02-process-rules/PACKET-coldgate-process.md`
+returns 0). The body is left as sealed; this addendum is the correction.
