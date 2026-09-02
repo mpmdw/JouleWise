@@ -1,0 +1,65 @@
+name: gate-ledger
+
+# ==================================================================
+# ADVISORY GATE-LEDGER CHECK (T26 cold gate item 2, D-170). NOT A
+# REQUIRED STATUS CHECK.
+# Every fresh PR is red by construction because the template seeds twelve
+# NOT-RUN rows; that deliberate nudge keeps an incomplete ledger visible.
+#
+# Read this before touching anything below. This job validates the
+# twelve-row "Gate ledger (D-118 / D-121)" table that
+# .github/pull_request_template.md seeds into every PR body: each key
+# 1-12 present exactly once, no row empty or NOT-RUN, every `RUN <path>`
+# resolving at the PR head under scripts/gen_state.py's pointer rules,
+# every `RUN <sha>` a commit the checkout knows, and item 12 naming the
+# PR's final head sha. It targets the MISTAKE class (a forgotten item);
+# a deliberately pasted block is out of the threat model (D-161).
+# The PR head sha is checked out explicitly because the merge ref is not the PR head.
+#
+# It lives in its own workflow, not ci.yml, because it must also fire on
+# `edited` (the ledger is filled by editing the PR body after the review
+# rounds) and widening ci.yml's untyped `pull_request` trigger would
+# re-run the whole ~17-minute matrix on every body edit.
+#
+# ADVISORY until Ed makes it a required status check (kernel row
+# ED-BRANCH-PROTECTION-E1-01). Do not promote this job to a required
+# check here; that is a lead-gated branch-protection change and must be
+# proposed, not applied. The D-072 self-merge condition already binds
+# independently: the magistrate self-merges only when this job is green
+# on the final head.
+# ==================================================================
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited, reopened, ready_for_review]
+
+concurrency:
+  group: gate-ledger-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate-ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so `RUN <sha>` rows naming earlier commits of the
+          # branch resolve with `git cat-file -e <sha>^{commit}`.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Validate the twelve-row gate ledger in the PR body
+        # The body is passed through the environment, never interpolated
+        # into the script line (a body is attacker-shaped text).
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          python3 scripts/check_gate_ledger.py \
+            --body-file "$RUNNER_TEMP/pr-body.md" \
+            --head-sha "$PR_HEAD_SHA" \
+            --repo-root .
