@@ -189,6 +189,27 @@ class NightGateTests(unittest.TestCase):
             night_gate.D166_REGISTRATION_SHA256,
         )
 
+    def test_d166_registration_file_hashes_to_the_ruled_literal(self) -> None:
+        # The gate hashes the FILE at plan.registration_path the way the
+        # driver reads it (utf-8 text re-encoded); the tracked registration
+        # file must therefore carry exactly the canonical D-166 bytes.
+        from pathlib import Path
+
+        from configs.campaigns.d117_contrast_v5.generate_configs import (
+            dominance_criterion_registration,
+        )
+        from joulewise.analysis_manifest_v3 import canonical_json_bytes
+
+        path = Path(night_gate.__file__).resolve().parents[1] / night_gate.D166_REGISTRATION_PATH
+        text = path.read_text(encoding="utf-8")
+        self.assertEqual(
+            canonical_json_bytes(dominance_criterion_registration()), text.encode("utf-8")
+        )
+        self.assertEqual(
+            night_gate.D166_REGISTRATION_SHA256,
+            hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        )
+
     def test_an_exit_one_census_with_only_whitespace_is_clean(self) -> None:
         source = FakeProbeSource()
         source.results[night_gate.AGENT_CENSUS_ARGV] = result(

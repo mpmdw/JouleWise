@@ -26,6 +26,11 @@ RECEIPT_CLASSES = (
 D166_REGISTRATION_SHA256 = (
     "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b"
 )
+# Tracked file whose bytes are canonical_json_bytes(dominance_criterion_registration());
+# a night plan's registration_path points at it (repo-relative or absolute).
+D166_REGISTRATION_PATH = (
+    "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
+)
 AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "codex|claude|t3")
 
 PMSET_BATT_ARGV = ("/usr/bin/pmset", "-g", "batt")
