@@ -119,8 +119,11 @@ class NightDriverTests(unittest.TestCase):
         self.chain = self.root / "chain.zsh"
         self.chain.write_text("echo chain\n", encoding="utf-8")
         self.sidecar = self.root / "chain.zsh.sha256"
+        # GNU shasum form, exactly what `gen_g2_phase_d.py --emit-chain` writes;
+        # both the gate and the driver must read it.
         self.sidecar.write_text(
-            hashlib.sha256(self.chain.read_bytes()).hexdigest() + "\n", encoding="utf-8"
+            hashlib.sha256(self.chain.read_bytes()).hexdigest() + "  chain.zsh\n",
+            encoding="utf-8",
         )
         self.registration = self.root / "registration.json"
         self.registration.write_text('{"registered":true}\n', encoding="utf-8")

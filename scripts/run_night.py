@@ -20,7 +20,6 @@ from typing import Any, Callable, Mapping
 from joulewise.night_gate import (
     NIGHT_DRIVER_REASON_CODES,
     NIGHT_GATE_REASON_CODES,
-    RESULT_SCHEMA,
     SCHEMA,
     NightPlan,
     ProbeResult,
@@ -31,6 +30,9 @@ from joulewise.night_gate import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# The result record is the driver's to define (gate fix round 1, S5): the
+# gate emits receipts, the driver emits result.json and validates it here.
+RESULT_SCHEMA = "joulewise.unattended_night_result.v1"
 PROBE_TIMEOUT_S = 30
 CENSUS_INTERVAL_S = 30
 COURIER_DEADLINE_S = 600
