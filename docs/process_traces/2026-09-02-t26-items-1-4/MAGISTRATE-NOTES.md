@@ -194,3 +194,25 @@ b180b426 decision index: order D-150/D-150a/D-150b rows to match body order (exp
 38a7de0a T26 items 1+4 (Sol 193): D-170 entry + D-118/D-160 pointers, How-To closed status set + 'open (installs via)' form, four docs_freshness tests, T-0 Horizon AMENDED line, M0 line, trace README
 300ca7f2 T26-RULING-INSTALL-01: kernel rows for installing the uninstalled T26 cold-gate verdicts (+ Ed items E1/E2, transaction decision dependency)
 ```
+
+## Terminal review (gate item 12) — 2026-09-02, magistrate, full session context
+
+Merge candidate: the head that carries this note (named in the PR ledger row
+12); the only commits after the Sol 241 fresh pass (`9ea3ec7f`) are
+`3209ea43` (item-9 replay custody, 21-line text file) and this note.
+Reviewed at the bench with `git diff --stat 403998e1...HEAD` and the full
+diffs of the non-trace files: `scripts/gen_state.py` (+30: a satisfied
+`kind: decision` dependency must point at a `tests/…py` file whose label
+names a `def test_` defined there — the decided≠done fence, which is what
+D-170 installs), `tests/test_gen_state.py`, `tests/test_docs_freshness.py`
+(17 new tests covering decision-index vocabulary, terminal-decision
+counterfactuals, dated-ruling executed evidence, clause-map shape and
+mutations, decision-reference resolution), `docs/contracts/bridge_protocol.md`
+§1 "Clause map (ruling installs)" (the ≥ 2026-09-03 date fence for custodied
+`*-impl.md` reports is deliberate: earlier reports are not re-graded),
+`docs/agent_playbook.md` M0 pointer, `docs/decision_log.md` D-170, the
+kernel rows. The branch is additive against main (no deletions outside
+`TASK_QUEUE.md` regeneration). Item 9: the integration tree 858f553e
+(main + all four wave heads) ran the canonical suite: Ran 4820, OK
+(skipped=125), file 20. Verdict: MERGE, first in the wave (t26-a → t26-c →
+dx → t26-b).
