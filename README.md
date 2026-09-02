@@ -40,28 +40,31 @@ worked example's 30 ms calibration bound into its four physical parts
 placement limit + ~1 ms clock term) — the paper's first plotted
 measured data.
 
-**Now (updated 2026-09-01):** the fresh-model review is turning its
-findings into landed fixes, each through the full adversarial cycle
-(implementer, two reviewers from different model families, a fix round,
-a re-audit of the fix by a third model, and — whenever a fix has to be
-tried twice — a cold reviewer with no memory of the discussion). Four
-lanes are in flight, each as its own pull request awaiting the slow CI
-queue: the paper's dependence-sensitivity sheet (every number bound to
-code or an executed command; review complete); a reader-side check that
-the prompt the machine actually tokenized is the one the plan registered
-(re-audit complete, one test gap closed at the bench); the prompt-length
-probe's pin loader (re-audit clean); and a correction to the dominance
-close-out, where the cold reviewers showed
-the design compared block identities across two naming schemes that
-can never match in production — the corrected design binds each block
-by its recorded members and delta instead, and is being implemented
-now. The cold reviewers caught the lead's own errors twice this block;
-both are recorded in the council log.
+**Now (updated 2026-09-01, later):** the four pull requests above have all
+merged, each after its full adversarial cycle. The one lane still open is
+the one Ed asked for first: an unattended measurement night, so that the
+machine can run its own quiet-hour experiments without anyone at the
+keyboard. The night driver now exists as a reviewed branch — it counts
+running agent processes before starting (and refuses if any are found),
+starts the measurement chain exactly once, records every outcome as a
+signed file, and sends a morning summary email through a headless
+assistant session; a separate 07:00 "dead-man" job reports the night even
+if the driver itself died. Its third fix round closed every earlier
+finding, and the re-audit of that round found one new one: for a fraction
+of a second between claiming the night and launching the chain, the
+progress marker is an empty file, and the dead-man job could misread that
+empty file as a failed launch. Because this is the second fix on the same
+marker, the rules require a cold review — three reviewers from three model
+families, none with memory of the discussion — before the fourth fix is
+written. That review is running now.
 
-**Next:** one instrumented evening at the machine measures the four
-candidate prompt lengths; a desk day then pins the choice, generates
-the final plan, and re-proves it end-to-end in a throwaway clone; the
-transaction night follows (≈ 2026-09-02/03), then about a week of
+**Next:** land the fourth fix under the cold ruling, install the night
+jobs, rehearse one stub night end to end (results pushed, email
+delivered), then email Ed the plan for the first real instrumented night
+— which launches without his hand unless he replies no. That night
+measures the four candidate prompt lengths; a desk day then pins the
+choice, generates the final plan, and re-proves it end-to-end in a
+throwaway clone; the transaction night follows, then about a week of
 collection and the paper's results fill.
 
 ## Current State
