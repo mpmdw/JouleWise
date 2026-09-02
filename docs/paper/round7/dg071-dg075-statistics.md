@@ -8,8 +8,8 @@
 - Largest tiling gap (s; defined under Method): 0.0000004
 - Boundaries with a nonzero tiling gap (see Method): 100
 - Producer: `scripts/issue_dg071_dg075_statistics.py`
-- Producer SHA-256: `c745bcf50a80181f254ae704c8c1921e62545fe719b279876c20e016630b5386`
-- Git commit: `6d30c105d42d7e161e252d94ed1f9c1910e78b6a`
+- Producer SHA-256: `404e6a5614619dbb03916016b0284addfff3ce2458a5ea31ce60be834a16b859`
+- Producer commit (last commit that changed the producer; defined under Method): `701471732488b56952beb47393e08c68285a5ea2`
 
 ## Method
 
@@ -26,6 +26,8 @@ A float64 replication (numpy `linear`, R type 7) is guaranteed to agree only to 
 Tiling. The records tile when each record's interval ends exactly at its own timestamp (`interval_end_s` literal identical to `timestamp_s` literal) and begins where the previous record ended (`interval_start_s` of record k within 0.000001 s of `timestamp_s` of record k−1); the producer refuses otherwise. The tiling gap at a boundary is |interval_start_s(k) − timestamp_s(k−1)| in exact decimal seconds; the header reports the largest gap and the number of boundaries whose gap is not zero. In this bundle 100 of 405 boundaries have a nonzero gap, the largest 0.0000004 s: the writer formatted the interval endpoints and the timestamp from two separately rounded binary floats, so the seventh decimal can differ. This is the endpoint convention referred to next.
 
 DG-075 is the DG-071 distribution minus the first record: its consecutive timestamp differences equal the widths of records 2–n up to the endpoint convention above, i.e. to within the largest tiling gap.
+
+Provenance. The producer commit is the last commit in the repository's history that changed the producer script (`git log -1 --format=%H -- scripts/issue_dg071_dg075_statistics.py`), not the commit the issuer happened to have checked out. A committed artifact cannot name the commit that contains it, so recording the checkout would make byte-exact replay impossible at exactly the commit a reader checks out; recording the script's last commit means re-running the producer from any checkout in which the script is unchanged since that commit reproduces both files byte for byte. The producer SHA-256 is recorded beside it: an uncommitted edit to the producer shows as a mismatch between the two.
 
 | Registry row | Sample count | Q1 (ms) | Median (ms) | Q3 (ms) | IQR (ms) |
 |---|---:|---:|---:|---:|---:|
