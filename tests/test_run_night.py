@@ -161,10 +161,11 @@ class NightDriverTests(unittest.TestCase):
             self.driver, "make_probes", return_value=self.source.probes()
         )
         self.probes_mock = self.probes_patch.start()
+        self.real_resolve_courier_bin = self.driver._resolve_courier_bin
         self.resolve_patch = mock.patch.object(
             self.driver,
             "_resolve_courier_bin",
-            return_value=(self.courier, None),
+            return_value=(self.courier, None, None),
         )
         self.resolve_mock = self.resolve_patch.start()
         self.real_durable_record = self.driver._durable_record
@@ -664,7 +665,7 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("unattended", completed.stdout)
 
     def test_missing_courier_is_a_durable_driver_refusal(self) -> None:
-        self.resolve_mock.return_value = (None, "not executable")
+        self.resolve_mock.return_value = (None, "not executable", None)
         exit_code, calls = self._run_night()
         night = self.custody / "night"
         refusal = json.loads((night / "refusal.json").read_text())
@@ -698,10 +699,9 @@ class NightDriverTests(unittest.TestCase):
         old_deadline = self.driver.COURIER_DEADLINE_S
         self.driver.COURIER_DEADLINE_S = 0
         try:
-            # Pin the clock inside the night: run_courier's dead-man hand-off reads
-            # the wall clock, and the fixture's absolute t0 puts its dead-man at
-            # 07:00 local on 2026-09-02 — already past on a UTC runner, where the
-            # courier then hands off with attempted == 0.
+            # Pin the clock inside the night: the fixture's absolute t0 is a fixed
+            # 2026-09-02 date, so its 07:00 local dead-man is in the past for any
+            # real clock after that morning.
             with mock.patch.object(
                 self.driver.subprocess, "Popen", side_effect=spawn
             ), mock.patch.object(
@@ -721,6 +721,56 @@ class NightDriverTests(unittest.TestCase):
         pushes = [argv for argv in run_argv if "push" in argv]
         self.assertEqual(len(pushes), 2)
         self.assertTrue(all(argv[-1].startswith("HEAD:night-results/") for argv in pushes))
+
+    def test_deleted_pinned_courier_falls_back_and_records_substitution(self) -> None:
+        pinned = self.root / "versions" / "2.1.252"
+        pinned.parent.mkdir()
+        pinned.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
+        pinned.chmod(0o755)
+        fallback = self.root / "bin" / "claude"
+        fallback.parent.mkdir()
+        fallback.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
+        fallback.chmod(0o755)
+        pinned.unlink()
+
+        calls, spawn = self._popen_recorder()
+        self.resolve_mock.side_effect = self.real_resolve_courier_bin
+        self.driver.run_courier = self.real_run_courier
+        old_deadline = self.driver.COURIER_DEADLINE_S
+        self.driver.COURIER_DEADLINE_S = 0
+        try:
+            with mock.patch.object(
+                self.driver.shutil, "which", return_value=str(fallback)
+            ), mock.patch.object(
+                self.driver.subprocess, "Popen", side_effect=spawn
+            ), mock.patch.object(self.driver.time, "sleep"):
+                exit_code = self.driver.run_night(self.plan_path, courier_bin=pinned)
+        finally:
+            self.driver.COURIER_DEADLINE_S = old_deadline
+
+        self.assertEqual(exit_code, self.driver.EXIT_COURIER_FAILED)
+        courier_calls = [argv for argv in calls if argv[0] == str(fallback)]
+        self.assertEqual(len(courier_calls), 4)
+        self.assertFalse((self.custody / "night" / "refusal.json").exists())
+        attempts = [
+            json.loads(line)
+            for line in (
+                self.custody / "night" / "courier.attempts.jsonl"
+            ).read_text(encoding="utf-8").splitlines()
+        ]
+        expected_substitution = {"requested": str(pinned), "used": str(fallback)}
+        self.assertTrue(attempts)
+        self.assertTrue(
+            all(
+                attempt["courier_bin_substitution"] == expected_substitution
+                for attempt in attempts
+            )
+        )
+        night_log = (self.custody / "night.log").read_text(encoding="utf-8")
+        self.assertIn(
+            f"courier binary substituted requested={pinned} used={fallback}",
+            night_log,
+        )
 
     def test_write_once_rerun_preserves_the_first_nights_records(self) -> None:
         first_exit, first_calls = self._run_night()
@@ -1060,10 +1110,69 @@ class NightDriverTests(unittest.TestCase):
         environment = os.environ.copy()
         environment["HOME"] = str(root / "home")
         environment["PATH"] = f"{binary_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
-        # The installer renders the courier through zsh's `:A` (symlinks
-        # resolved), so the expectation must be the resolved path too: a
-        # default macOS TMPDIR lives under /var -> /private/var.
-        return environment, courier.resolve()
+        return environment, courier
+
+    def _installer_symlink_environment(
+        self, root: Path
+    ) -> tuple[dict[str, str], Path, Path]:
+        binary_dir = root / "bin"
+        versions_dir = root / "share" / "claude" / "versions"
+        binary_dir.mkdir()
+        versions_dir.mkdir(parents=True)
+        version = versions_dir / "2.1.252"
+        version.write_text("#!/bin/zsh\nexit 0\n", encoding="utf-8")
+        version.chmod(0o755)
+        courier = binary_dir / "claude"
+        courier.symlink_to(version)
+        environment = os.environ.copy()
+        environment["HOME"] = str(root / "home")
+        environment["PATH"] = f"{binary_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
+        return environment, courier, version.resolve()
+
+    def test_installer_symlinked_courier_renders_resolved_binary_and_lookup_path(
+        self,
+    ) -> None:
+        root = self.root / "symlink-render"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        environment, courier, resolved_courier = self._installer_symlink_environment(
+            root
+        )
+        rendered = root / "rendered"
+        completed = subprocess.run(
+            [
+                "/bin/zsh",
+                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
+                "--plan",
+                str(plan),
+                "--hour",
+                "1",
+                "--minute",
+                "2",
+                "--render-only",
+                str(rendered),
+            ],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        night = plistlib.loads((rendered / "com.joulewise.night.plist").read_bytes())
+        rendered_path = night["EnvironmentVariables"]["PATH"]
+        self.assertEqual(
+            night["ProgramArguments"][-2:],
+            ["--courier-bin", str(resolved_courier)],
+        )
+        self.assertEqual(
+            rendered_path,
+            f"{courier.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+        )
+        with mock.patch.dict(os.environ, {"PATH": rendered_path}, clear=True):
+            found, error, substitution = self.real_resolve_courier_bin(None)
+        self.assertEqual(found, courier)
+        self.assertIsNone(error)
+        self.assertIsNone(substitution)
 
     def test_installer_renders_working_directory_path_binary_and_distinct_logs(self) -> None:
         root = self.root / "render"
@@ -1095,7 +1204,10 @@ class NightDriverTests(unittest.TestCase):
         expected_path = f"{courier.parent}:/usr/bin:/bin:/usr/sbin:/sbin"
         self.assertEqual(night["WorkingDirectory"], str(REPO_ROOT))
         self.assertEqual(night["EnvironmentVariables"]["PATH"], expected_path)
-        self.assertEqual(night["ProgramArguments"][-2:], ["--courier-bin", str(courier)])
+        self.assertEqual(
+            night["ProgramArguments"][-2:],
+            ["--courier-bin", str(courier.resolve())],
+        )
         self.assertNotEqual(night["StandardOutPath"], deadman["StandardOutPath"])
         self.assertNotEqual(night["StandardErrorPath"], deadman["StandardErrorPath"])
 
@@ -1271,6 +1383,45 @@ class NightDriverTests(unittest.TestCase):
                 str(launcher),
             ],
             env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        calls = launch_log.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
+        self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
+
+    def test_installer_uninstalls_without_courier_on_minimal_path(self) -> None:
+        root = self.root / "minimal-path-uninstall"
+        root.mkdir()
+        plan = self._installer_plan(root)
+        launch_log = root / "launch.log"
+        launcher = root / "launchctl-stub"
+        launcher.write_text(
+            "#!/bin/zsh\nprint -r -- \"$*\" >> \"$LAUNCH_LOG\"\nexit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        completed = subprocess.run(
+            [
+                "/bin/zsh",
+                str(REPO_ROOT / "scripts" / "install_night_agent.sh"),
+                "--plan",
+                str(plan),
+                "--hour",
+                str(self.driver.DEADMAN_HOUR),
+                "--minute",
+                "2",
+                "--uninstall",
+                "--launchctl-bin",
+                str(launcher),
+            ],
+            env={
+                "HOME": str(root / "home"),
+                "PATH": "/usr/bin:/bin",
+                "LAUNCH_LOG": str(launch_log),
+            },
             capture_output=True,
             text=True,
             check=False,

@@ -44,13 +44,17 @@ actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"
   exit 3
 }
 custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
-courier_bin="$(command -v claude || true)"
-[[ -n "$courier_bin" && -x "$courier_bin" ]] || {
-  print "courier unavailable: command -v claude found no executable" >&2
-  exit 2
-}
-courier_bin="${courier_bin:A}"
-courier_path="${courier_bin:h}:/usr/bin:/bin:/usr/sbin:/sbin"
+courier_bin=""
+courier_path=""
+if (( ! uninstall )); then
+  courier_bin="$(command -v claude || true)"
+  [[ -n "$courier_bin" && -x "$courier_bin" ]] || {
+    print "courier unavailable: command -v claude found no executable" >&2
+    exit 2
+  }
+  courier_path="${courier_bin:h}:/usr/bin:/bin:/usr/sbin:/sbin"
+  courier_bin="${courier_bin:A}"
+fi
 read -r deadman_hour deadman_minute < <(
   cd "$repo"
   /usr/bin/python3 -c 'from scripts.run_night import DEADMAN_HOUR, DEADMAN_MINUTE; print(DEADMAN_HOUR, DEADMAN_MINUTE)'
