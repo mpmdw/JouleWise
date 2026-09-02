@@ -1231,7 +1231,7 @@
       "priority": "p1_phase_gate",
       "rank": 69,
       "status": "active",
-      "status_note": "The implementation is on branch feat/d165-dominance-closeout-core. Two independent reviews found relabelled-cell and forged-sidecar failures; the ruled repair round is in progress.",
+      "status_note": "The implementation is on branch feat/d165-dominance-closeout-core (PR #254). Two independent reviews found relabelled-cell and forged-sidecar failures; the ruled repair (rulings 70c/70g/70h) is stage 1 on the stacked branch feat/d165-closeout-stage1-identity, PR #261 (supersedes #254): floor_cell_id + eleven-field floor_stack_identity, sealed-floor block census, content-derived manifest-id authentication, exact default/common-mode shapes. 2026-09-01: Opus contract refuter returned one blocker (stage-2 clause-7 sidecar requirement pre-empted via an unruled gate) plus six should-fix; magistrate ruled the fixes (sidecar optional in stage 1, ARM_KEYS census, real pre-change byte pin, refusal-name routing, contract replication-bar items) and Sol fix round 1 is in flight; terra execution refuter re-runs on the fixed head. Stage 2 (clauses 7-11, 13, 14) starts only after stage-1 refuters pass.",
       "stop_card": null
     },
     "D165-E2E-REPLAY-01": {
@@ -4199,7 +4199,7 @@
       "priority": "p1_phase_gate",
       "rank": 101,
       "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware. 2026-09-01 status: divergence exhibited (trace 78) and the reader alignment landed on PR #260 (feat/2026-09-01-supersession-exhibit); terra delta re-audit found the regressions were helper-only, cured by fix round r7 (commit bc1489c3: production-seam tests driving _whole_window_campaign_membership, _validate_row_uncached, load_analysis_inputs -> analyze_claims -> validate_claim_verdicts; mutations m1/m2/m3/m5 killed at the seams); luna delta re-audit of r7 in flight; retained corpus rebaselined at 40 campaign logs, all clean.",
       "stop_card": null
     },
     "T0-CLOCK-ROW-RENAME-01": {
@@ -5043,7 +5043,7 @@
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d owed to the runbook stream; ordering regression R-6e owed.",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family. RULED 97 (2026-09-01, docs/process_traces/2026-09-01-fresh-model-review/97-RULING-g2b-floor-precondition.md R-6a..h): the aggregate-floor clause of B-SUPPLY is struck — no floor bytes are staged, floors/ stays empty and is asserted empty before and after F2; canonical pack ids are the generator's hyphenated forms (d117_floor_qwen3-1p7b_v5, d117_floor_qwen3-8b_v5, d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5); runsheet edits R-6d and ordering regression R-6e landed together in PR #262 (2026-09-01, branch feat/2026-09-01-ruling-97-runsheet; terra 99 + magistrate bench), merge pending green CI.",
       "stop_card": null
     },
     "V5-NIGHTLY-G3-01": {
