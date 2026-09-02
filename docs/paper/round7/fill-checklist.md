@@ -21,6 +21,19 @@ draft in place.
   path, SHA-256, and provenance.
 - **Replay fence:** `scripts/check_paper_replay_fence.py`; require the exact
   successful tail `COMPARED 43` / `MISMATCHES 0` before and after every batch.
+- **Round-7 artifact fence:** `scripts/check_paper_round7_artifacts.py`; its
+  successful tail is `R7F COMPARED n / MISMATCHES 0` where `n` is
+  placement-dependent: 181 comparisons plus one per placed DX literal, plus 3
+  in full replay (the XD, AQ, and F4 byte identities). With zero markers
+  placed the tails are therefore `R7F COMPARED 184 / MISMATCHES 0` (full
+  replay) and `R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0`; a complete
+  16-marker batch ends `R7F COMPARED 200 / MISMATCHES 0`. The fill-batch PR
+  restates the exact tail observed before and after the batch, and rewrites
+  the zero-placement pins in `tests/test_paper_round7_artifacts.py` in the
+  same commit that places the markers. The literals-only tail is separate
+  from RF's 43 comparisons and is not sufficient before a fill batch.
+  R7F also censes all 16 non-identity DX placements once the mandatory standing sentence appears and prints `R7F PLACED n/16` immediately before its `COMPARED` tail.
+  Prose placement (a rendered literal without its marker inside the DX region) is not covered by R7F until kernel row `R7F-DX-PROSE-SCAN-01` closes.
 - **STOP_FILL:** no insertion when a required artifact, field, identity pin,
   replay, branch predicate, or registered rendering is absent or malformed.
 - **`[PREFILL_LENGTH]`:** the G2-a selection record's
@@ -244,10 +257,26 @@ Their old pause mechanism is contradicted by retained bytes: records tile with
 no meaningful gap, and the former 111.8–112.5 ms band is the bottom of the
 width distribution rather than its range.
 
-| Placement row | Draft site | Supplier status and exact omission |
+| Placement row | Draft site | Supplier status and placement |
 |---|---|---|
 | DG-071 | line 256, first diagnostic `[PENDING]` | Ratified median with interquartile range (IQR: the middle value and the spread of its middle half) of `interval_end_s - interval_start_s` over the hash-pinned cited R03P; see the [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md). Until issued: “The sampling-record width is omitted: its median-with-IQR statistic is ratified but not issued (registry row DG-071).” |
 | DG-075 | line 256, second diagnostic `[PENDING]` | Ratified median with IQR of consecutive unique `timestamp_s` differences over the same hash-pinned R03P; see the [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md). The records tile, so this is the same record-period distribution apart from endpoint convention and merged intervals. Until issued: “The record spacing is omitted: its median-with-IQR statistic is ratified but not issued (registry row DG-075).” |
+| DX-010 | successor-draft excursion prose, onset median | Place only as `[FILL:DX-010]` under the mandatory DX standing paragraph; R7F checks the rendered literal. |
+| DX-011 | successor-draft excursion prose, offset median | Place only as `[FILL:DX-011]` under the mandatory DX standing paragraph; R7F checks the rendered literal. |
+| DX-012 | successor-draft excursion prose, positive-onset count | Place only as `[FILL:DX-012]`; print the count instead of “repeatably.” |
+| DX-013 | successor-draft excursion prose, negative-offset count | Place only as `[FILL:DX-013]`; print the count instead of “repeatably.” |
+| DX-014 | successor-draft excursion prose, onset MAD | Place only as `[FILL:DX-014]` under the mandatory DX standing paragraph. |
+| DX-015 | successor-draft excursion prose, offset MAD | Place only as `[FILL:DX-015]` under the mandatory DX standing paragraph. |
+| DX-016 | successor-draft excursion prose, bias share | Place only as `[FILL:DX-016]`; use the registered derivation and rounding. |
+| DX-017 | successor-draft excursion prose, worst-onset excess | Place only as `[FILL:DX-017]`; use the registered derivation and rounding. |
+| DX-020 | successor-draft anchor prose, population | Place only as `[FILL:DX-020]` under the mandatory DX standing paragraph. |
+| DX-021 | successor-draft anchor prose, derived/refused counts | Place only as `[FILL:DX-021]`; keep the three refusals in the anchor-delta sentence. |
+| DX-022 | successor-draft anchor prose, admissibility flips | Place only as `[FILL:DX-022]` under the mandatory DX standing paragraph. |
+| DX-023 | successor-draft anchor prose, v2 control | Place only as `[FILL:DX-023]`; keep the named control failure in the anchor-delta sentence. |
+| DX-024 | successor-draft anchor prose, median bound delta | Place only as `[FILL:DX-024]` under the mandatory DX standing paragraph. |
+| DX-025 | successor-draft anchor prose, maximum bound delta | Place only as `[FILL:DX-025]` under the mandatory DX standing paragraph. |
+| DX-026 | successor-draft anchor prose, maximum relative delta | Place only as `[FILL:DX-026]` under the mandatory DX standing paragraph. |
+| DX-027 | successor-draft anchor prose, median relative delta | Place only as `[FILL:DX-027]`; use AQ's real `median_pct` field and registered rounding. |
 | DS-34 | line 348, release hold | Until the release checklist issues repository, archive, and digest locators: “Repository and archive locators are omitted: the release checklist has not issued the registered locator set (registry row DS-34).” |
 
 Replace the two explanatory `[[NEEDS-VALUE:...]]` notes only in the working copy:
@@ -331,18 +360,19 @@ STOP_FILL {"label": "SUPPLIER_UNKNOWN", "reason": "the registry freezes this tok
 
    registry = Path("docs/paper/results-fill-registry.md").read_text(encoding="utf-8")
    checklist = Path("docs/paper/round7/fill-checklist.md").read_text(encoding="utf-8")
-   pattern = r"^\| ((?:DS|PG|DG)-[0-9]+[a-z]?) \|"
+   pattern = r"^\| ((?:DS|PG|DG|DX)-[0-9]+[a-z]?) \|"
    placed = Counter(re.findall(pattern, checklist, re.M))
    expected = [
        "DS-01", "DS-08a", *[f"DS-{n:02d}" for n in range(9, 35)],
        "PG-01", "PG-02", *[f"PG-{n:02d}" for n in range(4, 9)],
        "DG-071", "DG-075",
+       *[f"DX-{n:03d}" for n in (*range(10, 18), *range(20, 28))],
    ]
-   assert len(expected) == 37
+   assert len(expected) == 53
    assert set(placed) == set(expected), (set(expected) - set(placed), set(placed) - set(expected))
    assert all(placed[row] == 1 for row in expected), placed
    assert len(re.findall(r"^\| (?:DS|PG|DG)-[0-9]+[a-z]? — .*[[](?:PENDING|RESULT PENDING ISSUED ARTIFACTS|REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST)", registry, re.M)) == 37
-   print("ROWS 37/37 PLACED ONCE")
+   print("ROWS 53/53 PLACED ONCE; RF PENDING CENSUS 37")
    PY
    ```
 

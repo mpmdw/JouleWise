@@ -313,3 +313,20 @@ verdicts; on item 3's constant the refuter preferred 495 s or per-row
 stamping, this instance rules 600 s now and refers per-row stamping
 (L2) to the magistrate. The magistrate may overrule any item only by a
 separately labelled written dissent presented to Ed (charter §5).
+
+## Addendum 2026-09-02 — item 4 enforcement (dx cold gate B1)
+
+> Selected files: (a) every `docs/process_traces/<dated-dir>/**/*MAGISTRATE-RULING*.md`
+> whose dated directory component (`YYYY-MM-DD` prefix, any depth) is
+> ≥ 2026-08-29, except the closed list
+> `2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md` (predates the
+> install; custodied files are not edited in place); (b) every `**/*RULING*.md`
+> under a dated directory ≥ 2026-09-03, excluding `NEEDS-RULING-*` inputs.
+> The selected set must be non-empty. Each selected file must contain a
+> `## Executed evidence` heading whose section (to the next `^## `) satisfies
+> ONE of: (1) a fenced block with a line matching `^\$ .+` AND a different line
+> matching `^\s*(?:exit|EXIT|rc|exit code|exit status)[\s=:]+\d+\s*$`; or (2) a
+> citation `[A-Za-z0-9_./-]+\.(?:py|sh|json|toml|ya?ml):\d+` whose path exists
+> at HEAD. `.md:N` is a document pointer and satisfies nothing.
+
+Replaces the Enforcement paragraph above (`:281-290` at 2d24ef70), which fired on zero files at install; the rule body is unchanged.

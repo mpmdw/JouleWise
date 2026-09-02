@@ -1,0 +1,24 @@
+    def test_multiline_producer_unavailable_is_flattened_to_last_line(self) -> None:
+        completed_producer = subprocess.CompletedProcess(
+            ["stub-producer"],
+            3,
+            "producer line one\nproducer line two\n",
+            "",
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=completed_producer),
+            redirect_stdout(output),
+        ):
+            exit_code = FENCE.main(["--corpus-root", str(ROOT)])
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(exit_code, 3, output.getvalue())
+        self.assertTrue(
+            lines[-1].startswith("R7F CORPUS UNAVAILABLE: "), output.getvalue()
+        )
+        self.assertIn("producer line one | producer line two", lines[-1])
+        self.assertFalse(any("COMPARED" in line for line in lines))
+

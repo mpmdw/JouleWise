@@ -1,0 +1,4 @@
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+PASS built G2-a prompt ladder, configs, and manifests
+PASS bound G2-a inputs to the calibration window
+exit=0
