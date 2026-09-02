@@ -123,7 +123,8 @@ Adopting Opus 249 §6 (file 22) with the magistrate's reading:
 | `73417fee` | Cold-gate packet on the fixture-shape class (38) |
 | `d3119939` | Sol 255 custody (39) |
 | `9ab5838a` | Merge main (t26 install wave, gate ledger, dx registry) |
-| (this commit) | Cold seat + Opus custody (40, 41), synthesis (42), kernel row `DG071-PROVENANCE-TEST-01` + `test_gen_state` literal (bookkeeping, no producer or test-module change) |
+| `e7425eef` | Cold seat + Opus custody (40, 41), synthesis (42), kernel row `DG071-PROVENANCE-TEST-01` + `test_gen_state` literal (bookkeeping, no producer or test-module change) |
+| (this commit) | File 43: integration replay `f79d193b` (4847 OK skipped=125) + byte-identical reissue at `e7425eef`; ledger rows 9–12 (docs only) |
 
 ## Follow-ups outside this PR
 
