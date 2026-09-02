@@ -127,6 +127,17 @@ class CheckGateLedgerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
 
+    def test_escaped_backtick_outside_code_span_does_not_open_a_span(self) -> None:
+        # terra 208 I1: a backslash-escaped literal backtick is valid GFM and
+        # must not swallow the evidence cell as an unterminated code span.
+        body = self.body().replace(
+            "| 4 | gate 4 |",
+            r"| 4 | gate \` literal tick |",
+        )
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
     def test_unstructured_evidence_is_refused_with_one_message(self) -> None:
         result = self.run_checker(
             self.body().replace("RUN evidence.txt", "ran it, trust me", 1),

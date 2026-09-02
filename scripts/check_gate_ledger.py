@@ -25,6 +25,13 @@ def _split_table_row(line: str) -> list[str]:
     index = 0
     while index < len(line):
         char = line[index]
+        if char == "`" and code_ticks is None and backslashes % 2 == 1:
+            # GFM: a backslash-escaped backtick outside a code span is a
+            # literal backtick, never a span opener.
+            cell.append(char)
+            backslashes = 0
+            index += 1
+            continue
         if char == "`":
             end = index + 1
             while end < len(line) and line[end] == "`":
