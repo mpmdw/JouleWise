@@ -2,7 +2,7 @@
 
 Lane: DX registry / round-7 artifact fence (ruling 168a).
 Branch `feat/2026-09-02-dx-registry`; PR #272.
-Files 01–21 in this directory are the seat briefs, the sealed reports, and the
+Files 01–22a in this directory are the seat briefs, the sealed reports, and the
 bench replay records, in gauntlet order.
 
 ## Gauntlet record
@@ -24,6 +24,8 @@ bench replay records, in gauntlet order.
 | Delta re-audit 3 | terra xhigh (239) | 20 (brief, report), 20b | "@ 7fc87a7f" | `VERDICT: SHOULD-FIX 1` (docstring over-specifies the UNAVAILABLE detail as a path; doc-only, cured at the bench per 20b; contract arithmetic, AS-branch flattening, env-override isolation and scope all confirmed) |
 | Bench | magistrate (bench) | commit 9be7a229 | — | docstring: the UNAVAILABLE detail is the preflight resolved path OR the producer's flattened output (terra 239 SF cure) |
 | Final-head fresh pass | sol high (240) | 21 (brief, report) | "@ 9be7a229" | `VERDICT: SHOULD-FIX 1` — the same docstring sentence a THIRD time (silent exit-3 producer falls back to the resolved corpus root, not documented). Full module Ran 45, OK (472 s); literals-only 181 / 0; CI clean-checkout skip path confirmed statically. Charter §3 trigger 1 (second fix round on the same defect) — COLD GATE convened, packet in `docs/process_traces/2026-09-02-coldgate-r7f-unavailable/`; no further edit to the sentence until it rules |
+| Cold gate ruling (r7f-unavailable) | cold Fable instance + Opus 5 contract-lens refuter, blind, parallel | `../2026-09-02-coldgate-r7f-unavailable/` (00-PACKET, 01, 02, MAGISTRATE-RULING) | packet @ 4c88b941; cure = 3efa807e | Both seats ADOPT (a): docstring-only, enumeration derived from the closed three-site `ArtifactsUnavailable` census; Opus refutations R-A1–R-A4 (directory entry, root-only resolve, AS exit 3 discards collected XD/F4 comparisons, sha256 drift is producer exit 3) bench-verified and folded into the operative text; behaviour questions registered as `R7F-EXIT3-SEMANTICS-01` (post-merge kernel batch). No code or test change |
+| Final-head fresh pass 2 (§5, over the cold-gate commit) | terra high (243 → protocol failure; 244 → consumed), detached worktree | 22 (brief, report), 22a (the 243 report) | "@ 3efa807e" | 243: content CLEAN but the JSON envelope was 8459 bytes > the wrapper's 8192-byte cap → `report_parse=invalid`, `run_status=ACCEPTANCE_FAILED rc=65` — protocol failure under the contract, NOT consumed; relaunched as 244 with the size rule in the brief. 244: `VERDICT: CLEAN`, envelope 2119 bytes valid; `co_code` identical between 4c88b941 and 3efa807e (docstring-only); full module `Ran 45`, `OK` (482 s) via `R7F_CORPUS_ROOT`; full replay `R7F PLACED 0/16`, `R7F COMPARED 184 / MISMATCHES 0`; literals-only 181 / 0; census closure confirmed (class, three raises, one catch); ruling evidence replays; custody sha256 of files 01/02 match the ruling |
 
 ## Commits on this branch
 
