@@ -336,6 +336,19 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
         self.assertNotIn("/custody/registration.json", source.read_calls)
 
+    def test_an_agent_present_outranks_the_unbuilt_transaction_class(self) -> None:
+        # R-3 census-first: the zero-agent fence is checked before the class
+        # table, so a TRANSACTION_PACK plan on a busy machine names the agent,
+        # not the unbuilt stage (terra delta re-audit 125, S1 observation).
+        source = FakeProbeSource()
+        source.results[night_gate.AGENT_CENSUS_ARGV] = result(
+            night_gate.AGENT_CENSUS_ARGV, exit_code=0, stdout="42 claude\n"
+        )
+        receipt = self.evaluate(make_plan("TRANSACTION_PACK"), source)
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("night_refused_agent_present", receipt.refusal.reason)
+        self.assertIn("42 claude", receipt.refusal.detail)
+
     def test_every_class_round_trips_through_the_consumer_validator(self) -> None:
         for receipt_class in night_gate.RECEIPT_CLASSES:
             with self.subTest(receipt_class=receipt_class):
