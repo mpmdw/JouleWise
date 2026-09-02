@@ -28,6 +28,10 @@ script_dir="${0:A:h}"
 repo="${script_dir:h}"
 template="$repo/configs/launchd/com.joulewise.night.plist.template"
 [[ -f "$template" ]] || { print "template not found: $template" >&2; exit 2; }
+/usr/bin/grep -q "KeepAlive" "$template" && {
+  print "template must not contain KeepAlive" >&2
+  exit 3
+}
 plan="${plan:A}"
 plan_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repo_head"])' "$plan")"
 actual_head="$(git -C "$repo" rev-parse HEAD)"
@@ -36,6 +40,10 @@ actual_head="$(git -C "$repo" rev-parse HEAD)"
   exit 3
 }
 custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
+read -r deadman_hour deadman_minute < <(
+  cd "$repo"
+  /usr/bin/python3 -c 'from scripts.run_night import DEADMAN_HOUR, DEADMAN_MINUTE; print(DEADMAN_HOUR, DEADMAN_MINUTE)'
+)
 launch_dir="$HOME/Library/LaunchAgents"
 mkdir -p "$launch_dir" "$custody_root/night"
 uid="$(id -u)"
@@ -79,7 +87,7 @@ if (( uninstall )); then
 fi
 
 render "$night_label" run "$night_plist" "$hour" "$minute"
-render "$deadman_label" dead-man "$deadman_plist" 7 0
+render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute"
 for plist in "$night_plist" "$deadman_plist"; do
   label="${plist:t:r}"
   launchctl bootout "gui/$uid/$label" 2>/dev/null || true

@@ -12,11 +12,13 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from joulewise.night_gate import (
+    NIGHT_DRIVER_REASON_CODES,
+    NIGHT_GATE_REASON_CODES,
     RESULT_SCHEMA,
     SCHEMA,
     NightPlan,
@@ -32,9 +34,16 @@ PROBE_TIMEOUT_S = 30
 CENSUS_INTERVAL_S = 30
 COURIER_DEADLINE_S = 600
 COURIER_BACKOFF_S = (60, 180, 600)
+DEADMAN_HOUR = 7
+DEADMAN_MINUTE = 0
 COURIER_ALLOWED_TOOLS = (
     "Read,Glob,Grep,Bash,Edit,Write,mcp__claude_ai_Gmail__send_message"
 )
+
+_CODES = {
+    code[6:]: code
+    for code in NIGHT_GATE_REASON_CODES | NIGHT_DRIVER_REASON_CODES
+}
 COURIER_ARGV = (
     "/usr/bin/env",
     "claude",
@@ -69,15 +78,31 @@ def _refusal_mapping(reason: str, detail: str, evidence: Any = None) -> dict[str
     return {"reason": reason, "detail": detail, "evidence": evidence}
 
 
+def _json_value(value: Any) -> Any:
+    if isinstance(value, ProbeResult):
+        return {
+            "argv": list(value.argv),
+            "exit_code": value.exit_code,
+            "stdout": value.stdout,
+            "stderr": value.stderr,
+            "monotonic_ns": value.monotonic_ns,
+        }
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
 def _refusal_from_object(refusal: Any) -> dict[str, Any] | None:
     if refusal is None:
         return None
     if isinstance(refusal, Mapping):
-        return dict(refusal)
+        return _json_value(refusal)
     return {
         "reason": getattr(refusal, "reason", None),
         "detail": getattr(refusal, "detail", None),
-        "evidence": getattr(refusal, "evidence", None),
+        "evidence": _json_value(getattr(refusal, "evidence", None)),
     }
 
 
@@ -175,7 +200,20 @@ def _append_census(path: Path, probe: ProbeResult, refusal: Any) -> None:
         handle.write(json.dumps(_census_record(probe, refusal), sort_keys=True) + "\n")
 
 
-def _terminate_process_group(process: subprocess.Popen[Any]) -> int | None:
+def _record_chain_exit(night_dir: Path, exit_code: int | None) -> None:
+    _write_json(
+        night_dir / "chain.exited",
+        {
+            "exit_code": exit_code,
+            "epoch": time.time(),
+            "monotonic_ns": time.monotonic_ns(),
+        },
+    )
+
+
+def _terminate_process_group(
+    process: subprocess.Popen[Any], night_dir: Path | None = None
+) -> int | None:
     """Stop a child session, leaving no retry path for the measurement chain."""
 
     try:
@@ -183,14 +221,20 @@ def _terminate_process_group(process: subprocess.Popen[Any]) -> int | None:
     except (ProcessLookupError, PermissionError):
         pass
     try:
-        return process.wait(timeout=30)
+        exit_code = process.wait(timeout=30)
+        if night_dir is not None:
+            _record_chain_exit(night_dir, exit_code)
+        return exit_code
     except subprocess.TimeoutExpired:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except (ProcessLookupError, PermissionError):
             pass
         try:
-            return process.wait(timeout=30)
+            exit_code = process.wait(timeout=30)
+            if night_dir is not None:
+                _record_chain_exit(night_dir, exit_code)
+            return exit_code
         except subprocess.TimeoutExpired:
             return process.poll()
 
@@ -228,9 +272,9 @@ def _run_chain_once(
                 census_count += 1
                 if refusal is not None:
                     return (
-                        _terminate_process_group(process),
+                        _terminate_process_group(process, night_dir),
                         _refusal_mapping(
-                            "night_aborted_agent_present",
+                            _CODES["aborted_agent_present"],
                             "agent census refused while the chain was running",
                             _census_record(probe, refusal),
                         ),
@@ -238,7 +282,9 @@ def _run_chain_once(
                     )
                 next_census = now + CENSUS_INTERVAL_S
             time.sleep(min(1.0, max(0.01, next_census - time.monotonic())))
-        return process.wait(), None, census_count
+        exit_code = process.wait()
+        _record_chain_exit(night_dir, exit_code)
+        return exit_code, None, census_count
 
 
 def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
@@ -247,6 +293,8 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
         night_dir / "receipt.json",
         night_dir / "refusal.json",
         night_dir / "result.json",
+        night_dir / "chain.started",
+        night_dir / "chain.exited",
         night_dir / "censuses.jsonl",
         night_dir / "chain.stdout.log",
         night_dir / "chain.stderr.log",
@@ -295,6 +343,8 @@ def _durable_record(custody_root: Path, night_dir: Path, plan: NightPlan) -> Non
             night_dir / "receipt.json",
             night_dir / "refusal.json",
             night_dir / "result.json",
+            night_dir / "chain.started",
+            night_dir / "chain.exited",
             night_dir / "censuses.jsonl",
             custody_root / "night.log",
         ):
@@ -422,6 +472,49 @@ def _load_plan(path: Path) -> NightPlan:
     return NightPlan.from_mapping(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _next_deadman_epoch(t0_epoch_s: float) -> float:
+    t0 = datetime.fromtimestamp(t0_epoch_s)
+    deadman = t0.replace(
+        hour=DEADMAN_HOUR,
+        minute=DEADMAN_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    if deadman <= t0:
+        deadman += timedelta(days=1)
+    return deadman.timestamp()
+
+
+def _claim_chain_start(night_dir: Path, plan: NightPlan) -> bool:
+    claim_path = night_dir / "chain.started"
+    payload = _json_bytes(
+        {
+            "plan_id": plan.plan_id,
+            "epoch": time.time(),
+            "monotonic_ns": time.monotonic_ns(),
+            "driver_pid": os.getpid(),
+        }
+    )
+    try:
+        descriptor = os.open(
+            claim_path,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            0o600,
+        )
+    except FileExistsError:
+        return False
+    try:
+        offset = 0
+        while offset < len(payload):
+            written = os.write(descriptor, payload[offset:])
+            if written <= 0:
+                raise OSError("could not write chain start claim")
+            offset += written
+    finally:
+        os.close(descriptor)
+    return True
+
+
 def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
     plan = _load_plan(plan_path)
     custody_root = Path(plan.custody_root)
@@ -431,6 +524,41 @@ def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
+    deadman_epoch_s = _next_deadman_epoch(plan.t0_epoch_s)
+    completion_epoch_s = (
+        plan.t0_epoch_s
+        + plan.window_max_s
+        + COURIER_DEADLINE_S
+        + sum(COURIER_BACKOFF_S)
+    )
+    if completion_epoch_s >= deadman_epoch_s:
+        refusal = _write_driver_refusal(
+            night_dir / "refusal.json",
+            plan,
+            _CODES["plan_overruns_deadman"],
+            (
+                f"t0_epoch_s={plan.t0_epoch_s}; window_max_s={plan.window_max_s}; "
+                f"courier_deadline_s={COURIER_DEADLINE_S}; "
+                f"courier_backoff_s={sum(COURIER_BACKOFF_S)}; "
+                f"deadman_epoch_s={deadman_epoch_s}"
+            ),
+        )
+        _write_result(
+            custody_root,
+            night_dir,
+            plan,
+            "REFUSED",
+            None,
+            refusal["reason"],
+            started_epoch_s,
+            started_monotonic_ns,
+            None,
+            0,
+        )
+        _append_log(custody_root, "night plan overran dead-man")
+        _durable_record(custody_root, night_dir, plan)
+        run_courier(custody_root, plan)
+        return 3
     probes = make_probes()
     receipt = evaluate_night(plan, probes)
     receipt_path = night_dir / "receipt.json"
@@ -441,7 +569,7 @@ def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
         refusal = _write_driver_refusal(
             night_dir / "refusal.json",
             plan,
-            "night_receipt_class_invalid",
+            _CODES["receipt_class_invalid"],
             "rehearsal requires receipt class REHEARSAL_STUB",
         )
         _write_result(
@@ -489,14 +617,12 @@ def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
         chain_sha256 = _sha256_path(chain_path) if chain_path.is_file() else None
         sidecar_path = Path(plan.chain_sha256_path)
         sidecar_text = sidecar_path.read_text(encoding="utf-8") if sidecar_path.is_file() else ""
-        expected = (
-            f"{chain_sha256}  {chain_path.name}\n" if chain_sha256 is not None else ""
-        )
+        expected = f"{chain_sha256}\n" if chain_sha256 is not None else ""
         if chain_sha256 is None or sidecar_text != expected:
             refusal = _write_driver_refusal(
                 night_dir / "refusal.json",
                 plan,
-                "night_chain_digest_mismatch",
+                _CODES["chain_digest_mismatch"],
                 "chain bytes do not match the arm-time SHA-256 sidecar",
                 {"actual": chain_sha256, "expected": expected, "sidecar": sidecar_text},
             )
@@ -524,6 +650,30 @@ def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
     else:
         command = ["/bin/zsh", str(command_path)]
 
+    if not _claim_chain_start(night_dir, plan):
+        refusal = _write_driver_refusal(
+            night_dir / "refusal.json",
+            plan,
+            _CODES["chain_already_started"],
+            "chain.started already exists; the night chain is once-only",
+        )
+        _write_result(
+            custody_root,
+            night_dir,
+            plan,
+            "REFUSED",
+            None,
+            refusal["reason"],
+            started_epoch_s,
+            started_monotonic_ns,
+            chain_sha256,
+            0,
+        )
+        _append_log(custody_root, "night chain start claim refused")
+        _durable_record(custody_root, night_dir, plan)
+        run_courier(custody_root, plan)
+        return 3
+
     # _run_chain_once centralizes the no-retry rule.  Rehearsal only changes
     # the command, never the single-spawn accounting or census behavior.
     chain_exit_code, abort, census_count = _run_chain_once(
@@ -542,12 +692,6 @@ def run_night(plan_path: Path, *, rehearsal: bool = False) -> int:
         exit_code = 4
         aborted_reason = str(abort["reason"])
     elif rehearsal:
-        _write_driver_refusal(
-            night_dir / "refusal.json",
-            plan,
-            "night_rehearsal_only",
-            "rehearsal chains do not produce a GO result",
-        )
         verdict = "REHEARSAL_ONLY"
         exit_code = 3
         aborted_reason = None
@@ -581,6 +725,16 @@ def dead_man(plan_path: Path) -> int:
     if sent.exists():
         _append_log(custody_root, "dead-man skipped: courier already sent")
         return 0
+    night_dir = custody_root / "night"
+    if (night_dir / "chain.started").exists() and not (night_dir / "chain.exited").exists():
+        _write_driver_refusal(
+            night_dir / "refusal.json",
+            plan,
+            _CODES["chain_alive"],
+            "chain.started exists but chain.exited does not",
+        )
+        _append_log(custody_root, "dead-man refused while chain was alive")
+        return 3
     _append_log(custody_root, "dead-man starting courier")
     run_courier(custody_root, plan)
     return 0
