@@ -76,7 +76,6 @@ EXPECTED_IDS = {
     "V5-TRANSACTION-01",
     "V5-NIGHTLY-G3-01",
     # D-168 registers the close-out chain and the 126-key renderer successor.
-    "D165-CLOSEOUT-CORE-01",
     "D165-SIDECAR-EMIT-01",
     "RENDERER-V5-SUCCESSOR-01",
     "D165-E2E-REPLAY-01",
@@ -160,8 +159,6 @@ EXPECTED_IDS = {
     "UNATTENDED-LAUNCH-01",
     # 2026-09-01 D-169 stage-1 split (MAGISTRATE-RULING-UNATTENDED-STAGE1,
     # cold gate coldgate-e10): night gate, night driver, launchd rehearsal
-    "NIGHT-GATE-01",
-    "NIGHT-DRIVER-01",
     "NIGHT-REHEARSAL-01",
     "FIXTURE-MODERNIZATION-01",
     # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
@@ -549,9 +546,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # row: 114 + 1 = 115. The D-169 stage-1 ruling (2026-09-01) splits
         # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118; #258
         # registers its two realized-prefill rows: 118 + 2 = 120; the
-        # IDS-CHECK row retired at its 2026-09-01 merge: 120 - 1 = 119.
+        # NIGHT-GATE-01, NIGHT-DRIVER-01, D165-CLOSEOUT-CORE-01 retired at their
+        # 2026-09-02 merges (PRs 264, 265, 261): 119 - 3 = 116.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 119)
+        self.assertEqual(len(self.tasks), 116)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -757,11 +755,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         )
 
     def test_d168_closeout_rows_status_and_hard_start_dependencies(self):
+        # D165-CLOSEOUT-CORE-01 retired at its 2026-09-02 merge (PR 261);
+        # stage 2 is the active agent-lane row.
         expected = {
-            "D165-CLOSEOUT-CORE-01": ("active", set()),
-            "D165-SIDECAR-EMIT-01": (
-                "blocked", {"D165-CLOSEOUT-CORE-01"}
-            ),
+            "D165-SIDECAR-EMIT-01": ("active", set()),
             "RENDERER-V5-SUCCESSOR-01": (
                 "blocked", {"V5-G2A-PREFILL-PROBE-01"}
             ),
@@ -964,7 +961,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             kernel["tasks"][task_id]["lane"]: task_id
             for task_id in head_oracle["expected_selectable_task_ids"]
         }
-        expected_by_lane["agent"] = "D165-CLOSEOUT-CORE-01"
+        expected_by_lane["agent"] = "D165-SIDECAR-EMIT-01"
         self.assertEqual(set(expected_by_lane), set(gen_state.LANES))
 
         restart = rendered.split("## Restart By Machine-State Lane", 1)[1]
