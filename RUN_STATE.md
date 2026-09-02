@@ -5056,7 +5056,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- CONTINUE — A70 `D165-SIDECAR-EMIT-01`: Add the one sanctioned mint adapter that emits the separately hash-bound replay file while preserving the existing floor artifact byte for byte and keeping manifest finalization blind to results.
+- CONTINUE — A88 `NIGHT-REHEARSAL-01`: Prove the stage-1 machinery end to end before the first live night: bench cold-start measurement sets COURIER_DEADLINE_S; at least one REHEARSAL_STUB night fires FROM the installed LaunchAgent, pushes its results branch, and delivers the courier email; the stage-1 plan email naming the first armed date is SENT to Ed before arming.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

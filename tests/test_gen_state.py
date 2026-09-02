@@ -76,7 +76,6 @@ EXPECTED_IDS = {
     "V5-TRANSACTION-01",
     "V5-NIGHTLY-G3-01",
     # D-168 registers the close-out chain and the 126-key renderer successor.
-    "D165-SIDECAR-EMIT-01",
     "RENDERER-V5-SUCCESSOR-01",
     "D165-E2E-REPLAY-01",
     "V6-TOKEN-PIN-BINDING-01",
@@ -547,9 +546,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118; #258
         # registers its two realized-prefill rows: 118 + 2 = 120; the
         # NIGHT-GATE-01, NIGHT-DRIVER-01, D165-CLOSEOUT-CORE-01 retired at their
-        # 2026-09-02 merges (PRs 264, 265, 261): 119 - 3 = 116.
+        # 2026-09-02 merges (PRs 264, 265, 261): 119 - 3 = 116;
+        # D165-SIDECAR-EMIT-01 retired at its 2026-09-02 merge (PR 267):
+        # 116 - 1 = 115.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 116)
+        self.assertEqual(len(self.tasks), 115)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -755,16 +756,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         )
 
     def test_d168_closeout_rows_status_and_hard_start_dependencies(self):
-        # D165-CLOSEOUT-CORE-01 retired at its 2026-09-02 merge (PR 261);
-        # stage 2 is the active agent-lane row.
+        # D165-CLOSEOUT-CORE-01 (PR 261) and D165-SIDECAR-EMIT-01 (PR 267)
+        # retired at their 2026-09-02 merges; the sidecar edge on the
+        # end-to-end row is satisfied and only the renderer edge remains.
         expected = {
-            "D165-SIDECAR-EMIT-01": ("active", set()),
             "RENDERER-V5-SUCCESSOR-01": (
                 "blocked", {"V5-G2A-PREFILL-PROBE-01"}
             ),
             "D165-E2E-REPLAY-01": (
                 "blocked",
-                {"D165-SIDECAR-EMIT-01", "RENDERER-V5-SUCCESSOR-01"},
+                {"RENDERER-V5-SUCCESSOR-01"},
             ),
         }
         for tid, (status, hard_dependencies) in expected.items():
@@ -961,7 +962,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             kernel["tasks"][task_id]["lane"]: task_id
             for task_id in head_oracle["expected_selectable_task_ids"]
         }
-        expected_by_lane["agent"] = "D165-SIDECAR-EMIT-01"
+        expected_by_lane["agent"] = "NIGHT-REHEARSAL-01"
         self.assertEqual(set(expected_by_lane), set(gen_state.LANES))
 
         restart = rendered.split("## Restart By Machine-State Lane", 1)[1]
