@@ -56,16 +56,23 @@ class G2aNightChainTests(unittest.TestCase):
         )
         self.assertEqual(self.generator.inventory_g2a_shell_blocks(self.runsheet), independent)
 
-    def test_identity_date_preserves_reviewed_blocks(self) -> None:
+    def test_identity_date_equals_the_full_reviewed_reconstruction(self) -> None:
         blocks = _independent_fence_inventory(self.runsheet)
         chain = self.generator.render_g2a_night_chain(self.runsheet, "20260830")
-        self.assertTrue(chain.startswith("#!/bin/zsh\nset -euo pipefail\n"))
-        for start, end, body in (blocks[0], blocks[1], blocks[3], blocks[4]):
-            self.assertIn(f"# runsheet L{start}-{end}\n{body}", chain)
-        self.assertNotIn(blocks[2][2], chain)
-        self.assertIn('test -f "$G2A_INPUT_INVENTORY"', chain)
-        self.assertIn('test -f "$G2A_FROZEN_PLAN"', chain)
-        self.assertIn('test -f "$G2A_PROMPT_LADDER"', chain)
+        required_inputs = (
+            "# The desk producer runs while agents are present; require its outputs here.\n"
+            'test -f "$G2A_INPUT_INVENTORY"\n'
+            'test -f "$G2A_FROZEN_PLAN"\n'
+            'test -f "$G2A_PROMPT_LADDER"\n'
+        )
+        expected = "#!/bin/zsh\nset -euo pipefail\n"
+        for start, end, body in (blocks[0], blocks[1]):
+            expected += f"\n# runsheet L{start}-{end}\n{body}"
+        expected += "\n# arm-time input assertions\n" + required_inputs
+        for start, end, body in (blocks[3], blocks[4]):
+            expected += f"\n# runsheet L{start}-{end}\n{body}"
+        self.assertEqual(chain, expected)
+        self.assertNotEqual(chain + "# mutant line\n", expected)
 
     def test_date_substitution_is_confined_to_g2a_exports(self) -> None:
         blocks = _independent_fence_inventory(self.runsheet)

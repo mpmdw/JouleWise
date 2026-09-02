@@ -12,7 +12,16 @@
     <string>@@MODE@@</string>
     <string>--plan</string>
     <string>@@PLAN@@</string>
+    <string>--courier-bin</string>
+    <string>@@COURIER_BIN@@</string>
   </array>
+  <key>WorkingDirectory</key>
+  <string>@@REPO@@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@@PATH@@</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -21,9 +30,9 @@
     <integer>@@MINUTE@@</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>@@CUSTODY_ROOT@@/night/launchd.out</string>
+  <string>@@CUSTODY_ROOT@@/night/@@LOG_STEM@@.out</string>
   <key>StandardErrorPath</key>
-  <string>@@CUSTODY_ROOT@@/night/launchd.err</string>
+  <string>@@CUSTODY_ROOT@@/night/@@LOG_STEM@@.err</string>
   <key>RunAtLoad</key>
   <false/>
 </dict>

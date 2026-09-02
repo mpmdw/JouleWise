@@ -70,7 +70,10 @@ NIGHT_DRIVER_REASON_CODES = frozenset(
         "night_aborted_agent_present",   # census hit while the chain ran; chain group terminated
         "night_chain_already_started",   # O_EXCL claim on chain.started failed: never start the chain twice (D-078)
         "night_chain_alive",             # dead-man refused: the chain has not exited, so no agent may start
+        "night_courier_running",          # dead-man found a fresh courier lock owned by a live process
+        "night_courier_unavailable",      # the stamped courier binary is missing or not executable
         "night_plan_overruns_deadman",   # t0 + window_max_s + courier deadline is not before the dead-man hour
+        "night_record_exists",            # a write-once record proves this night was already invoked
     }
 )
 if NIGHT_GATE_REASON_CODES & NIGHT_DRIVER_REASON_CODES:
