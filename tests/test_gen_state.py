@@ -299,6 +299,52 @@ class TestKernelValidity(unittest.TestCase):
             raw = fh.read()
         self.assertEqual(raw, gen_state.canonical_bytes(json.loads(raw.decode("utf-8"))))
 
+    def test_satisfied_decision_dependency_requires_named_test_regression(self):
+        kernel = load_kernel()
+
+        def dependency(path, label):
+            return {
+                "evidence": {"path": path, "label": label},
+                "kind": "decision",
+                "required": "fixture decision dependency",
+                "scope": "close",
+                "state": "satisfied",
+                "strength": "hard",
+                "target": "D-170",
+            }
+
+        with self.subTest(mutation="M6b README placeholder pointer"):
+            with self.assertRaisesRegex(
+                gen_state.KernelError,
+                r"D-170.*test file under tests",
+            ):
+                gen_state._check_dependency(
+                    dependency("README.md", "placeholder pointer"),
+                    "tasks[T26-RULING-INSTALL-01].dependencies[0]",
+                    kernel,
+                )
+
+        with self.subTest(mutation="named producer regression is accepted"):
+            gen_state._check_dependency(
+                dependency(
+                    "tests/test_docs_freshness.py",
+                    "test_open_decisions_name_an_installing_kernel_task",
+                ),
+                "tasks[T26-RULING-INSTALL-01].dependencies[0]",
+                kernel,
+            )
+
+        with self.subTest(mutation="nonexistent test label"):
+            with self.assertRaisesRegex(
+                gen_state.KernelError,
+                r"D-170.*name a test defined in",
+            ):
+                gen_state._check_dependency(
+                    dependency("tests/test_docs_freshness.py", "test_does_not_exist"),
+                    "tasks[T26-RULING-INSTALL-01].dependencies[0]",
+                    kernel,
+                )
+
     def test_invalid_kernels_rejected(self):
         base = load_kernel()
         # Gate-shaped mutations need a live gate; the audit gate was CLEARED
