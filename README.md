@@ -40,28 +40,35 @@ pass/fail rule now requires the timing-aware uncertainty floor to be at
 least TWICE the naive floor, per component, pre-registered before any data
 exists.
 
-**Now (updated 2026-09-02):** the unattended-night rehearsals are running.
-The first stub night fired on its own from the macOS scheduler at 02:56
-this morning: results were pushed to a branch readable from a phone and
-the morning summary email arrived — the whole path worked with nobody at
-the keyboard. A second rehearsal is armed for tomorrow night to prove the
-"installed the morning before" case, whose 07:00 watchdog must notice the
-night hasn't happened yet and stand down quietly. Between the two nights,
-five small hardening fixes from the reviews landed (among them: the
-scheduler's PATH entry pointed at a directory that couldn't find the
-mail-courier program by name, and a courier binary deleted by a
-same-night self-update now falls back to the installed one and records
-the substitution). Earlier today the two parallel code lanes also landed:
-the dominance-verdict "replay" file and the freeze/arm-time re-tokenize
-check that stops tokenizer drift from silently changing what is measured.
+**Now (updated 2026-09-02):** two lanes run side by side. The
+unattended-night rehearsals continue: the first stub night fired on its own
+from the macOS scheduler at 02:56 this morning, pushed its results to a
+branch readable from a phone, and sent the morning summary email with
+nobody at the keyboard; a second rehearsal is armed for tomorrow night to
+prove the "installed the morning before" case, whose 07:00 watchdog must
+notice the night hasn't happened yet and stand down quietly. Five small
+hardening fixes from the reviews landed between the two nights. On the
+paper lane, the freeze/arm-time re-tokenize check (which stops tokenizer
+drift from silently changing what is measured) is on main, and the first
+real trial of it against the actual Qwen tokenizers found a plan-generator
+defect: the decode part of the plan rotates through eight prompt texts, and
+the identity check expected exactly one, so the plan could not be frozen.
+A three-model consult and a cold review settled the fix (the plan declares
+its closed set of eight prompts up front; the freeze refuses any extra,
+missing, or duplicated prompt) and it is being implemented now. The paper's
+second draft grew its threats-to-validity, limitations, and future-work
+sections, and its detector-calibration and workload-slope explanations now
+carry worked numeric examples all the way to the result, each reviewed for
+"could a reader rebuild this" as its own dimension.
 
-**Next:** harvest tomorrow's stand-down rehearsal, then
-email Ed the plan for the first real instrumented night — which launches
-without his hand unless he replies no. That night measures the four
-candidate prompt lengths; a desk day then pins the choice, generates the
-final plan, and re-proves it end-to-end in a throwaway clone; the
-transaction night follows, then about a week of collection and the
-paper's results fill.
+**Next:** land the plan-generator fix and re-freeze all three campaign
+plans against the real tokenizers; harvest tomorrow's stand-down rehearsal,
+then email Ed the plan for the first real instrumented night — which
+launches without his hand unless he replies no. That night measures the
+four candidate prompt lengths; a desk day then pins the choice, generates
+the final plan, and re-proves it end-to-end in a throwaway clone; the
+transaction night follows, then about a week of collection and the paper's
+results fill.
 
 ## Current State
 
