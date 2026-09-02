@@ -1060,7 +1060,10 @@ class NightDriverTests(unittest.TestCase):
         environment = os.environ.copy()
         environment["HOME"] = str(root / "home")
         environment["PATH"] = f"{binary_dir}:/usr/bin:/bin:/usr/sbin:/sbin"
-        return environment, courier
+        # The installer renders the courier through zsh's `:A` (symlinks
+        # resolved), so the expectation must be the resolved path too: a
+        # default macOS TMPDIR lives under /var -> /private/var.
+        return environment, courier.resolve()
 
     def test_installer_renders_working_directory_path_binary_and_distinct_logs(self) -> None:
         root = self.root / "render"
