@@ -487,6 +487,12 @@ def _config_for(
             "warmup_runs": 1,
             "output_tokens": 512,
             "prompt_text": rung["prompt_text"],
+            "prompt_token_expectation": {
+                "schema_version": "joulewise.prompt_token_expectation.v1",
+                "token_hash_domain": "joulewise.prompt_token_ids.v1",
+                "token_count": len(rung["prompt_token_ids"]),
+                "token_ids_sha256": rung["prompt_token_ids_sha256"],
+            },
         },
         "interconnect": {"name": "local"},
         "sampling": {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0},
