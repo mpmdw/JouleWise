@@ -63,6 +63,7 @@ OMITTED_OPTIONAL_KEYS = {
         "suite_manifest_sha256",
         "generator_sidecar_ref",
         "prompt_token_evidence_policy",
+        "prompt_token_expectation",
     },
 }
 OMITTED_TOP_LEVEL_KEYS = {"schema_extensions", "batch_policy", "speculation"}
@@ -332,6 +333,99 @@ class BenchmarkConfigTests(unittest.TestCase):
             SchemaError, "prompt_token_evidence_policy must be one of"
         ):
             BenchmarkConfig.from_mapping(data)
+
+    def test_prompt_token_expectation_is_closed_typed_and_exported(self) -> None:
+        data = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        workload = data["workload_profile"]
+        workload["prompt_tokens"] = None
+        workload["prompt_text"] = "registered prompt"
+        expectation = {
+            "schema_version": "joulewise.prompt_token_expectation.v1",
+            "token_hash_domain": "joulewise.prompt_token_ids.v1",
+            "token_count": 3,
+            "token_ids_sha256": "a" * 64,
+        }
+        workload["prompt_token_expectation"] = expectation
+
+        config = BenchmarkConfig.from_mapping(data)
+
+        self.assertEqual(
+            config.to_dict()["workload_profile"]["prompt_token_expectation"],
+            expectation,
+        )
+        self.assertEqual(config.config_warnings, ())
+        expectation_schema = BenchmarkConfig.json_schema()["$defs"][
+            "workload_profile"
+        ]["properties"]["prompt_token_expectation"]["oneOf"][1]
+        self.assertFalse(expectation_schema["additionalProperties"])
+        self.assertEqual(set(expectation_schema["required"]), set(expectation))
+
+    def test_prompt_token_expectation_rejects_malformed_registration(self) -> None:
+        base = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        base["workload_profile"]["prompt_tokens"] = None
+        base["workload_profile"]["prompt_text"] = "registered prompt"
+        expectation = {
+            "schema_version": "joulewise.prompt_token_expectation.v1",
+            "token_hash_domain": "joulewise.prompt_token_ids.v1",
+            "token_count": 3,
+            "token_ids_sha256": "a" * 64,
+        }
+        cases = (
+            ("schema", {**expectation, "schema_version": "v2"}, "schema_version"),
+            ("domain", {**expectation, "token_hash_domain": "text"}, "token_hash_domain"),
+            ("zero-count", {**expectation, "token_count": 0}, "token_count"),
+            ("bool-count", {**expectation, "token_count": True}, "token_count"),
+            ("uppercase-hash", {**expectation, "token_ids_sha256": "A" * 64}, "token_ids_sha256"),
+            ("half-registration", {key: value for key, value in expectation.items() if key != "token_count"}, "token_count"),
+            ("unknown-key", {**expectation, "trust": True}, "unknown key"),
+        )
+        for label, invalid, message in cases:
+            data = copy.deepcopy(base)
+            data["workload_profile"]["prompt_token_expectation"] = invalid
+            with self.subTest(label=label), self.assertRaisesRegex(
+                SchemaError, message
+            ):
+                BenchmarkConfig.from_mapping(data)
+
+    def test_prompt_token_expectation_requires_prompt_text_source(self) -> None:
+        data = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        data["workload_profile"]["prompt_token_expectation"] = {
+            "schema_version": "joulewise.prompt_token_expectation.v1",
+            "token_hash_domain": "joulewise.prompt_token_ids.v1",
+            "token_count": 32,
+            "token_ids_sha256": "a" * 64,
+        }
+        with self.assertRaisesRegex(
+            SchemaError, "prompt_token_expectation requires prompt_text"
+        ):
+            BenchmarkConfig.from_mapping(data)
+
+    def test_legacy_config_to_dict_bytes_remain_golden_identical(self) -> None:
+        path = ROOT / "configs" / "examples" / "mock_local.json"
+        legacy = json.loads(path.read_text())
+        rendered = (
+            json.dumps(
+                BenchmarkConfig.from_mapping(legacy).to_dict(),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+
+        self.assertEqual(
+            hashlib.sha256(rendered).hexdigest(),
+            "15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355",
+        )
+        self.assertNotIn(
+            "prompt_token_expectation",
+            BenchmarkConfig.from_mapping(legacy).to_dict()["workload_profile"],
+        )
 
     def test_json_schema_has_required_contract_fields(self) -> None:
         schema = BenchmarkConfig.json_schema()
@@ -972,6 +1066,7 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                     "suite_manifest_sha256",
                     "generator_sidecar_ref",
                     "prompt_token_evidence_policy",
+                    "prompt_token_expectation",
                 }
             },
         )
@@ -988,6 +1083,7 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                     expected = {
                         "generator_sidecar_ref",
                         "prompt_token_evidence_policy",
+                        "prompt_token_expectation",
                     }
                     if suite_ref is None and suite_sha is None:
                         expected.update({"suite_manifest_ref", "suite_manifest_sha256"})

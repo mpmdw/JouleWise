@@ -67,6 +67,11 @@ _PROMPT_SOURCE_FIELDS = (
     "suite_manifest_ref",
 )
 _SUITE_MANIFEST_PAIR = ("suite_manifest_ref", "suite_manifest_sha256")
+PROMPT_TOKEN_EXPECTATION_SCHEMA = "joulewise.prompt_token_expectation.v1"
+PROMPT_TOKEN_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
+_PROMPT_TOKEN_EXPECTATION_KEYS = frozenset(
+    {"schema_version", "token_hash_domain", "token_count", "token_ids_sha256"}
+)
 
 SUMMARY_WRITER_KEYS_V0_1 = frozenset(
     {
@@ -177,6 +182,7 @@ _CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
             "suite_manifest_sha256",
             "generator_sidecar_ref",
             "prompt_token_evidence_policy",
+            "prompt_token_expectation",
             "repetitions",
             "warmup_runs",
         }
@@ -301,6 +307,13 @@ def _validate_workload_semantics(values: Mapping[str, Any]) -> None:
         raise SchemaError(
             "workload_profile prompt sources are mutually exclusive: "
             + ", ".join(prompt_sources)
+        )
+    if (
+        values.get("prompt_token_expectation") is not None
+        and values.get("prompt_text") is None
+    ):
+        raise SchemaError(
+            "workload_profile.prompt_token_expectation requires prompt_text"
         )
 
 
@@ -827,6 +840,61 @@ class HardwareTarget:
 
 
 @dataclass(frozen=True)
+class PromptTokenExpectation:
+    schema_version: str
+    token_hash_domain: str
+    token_count: int
+    token_ids_sha256: str
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "PromptTokenExpectation":
+        data = _require_mapping(
+            data, "workload_profile.prompt_token_expectation"
+        )
+        _require_exact_keys(
+            data,
+            "workload_profile.prompt_token_expectation",
+            _PROMPT_TOKEN_EXPECTATION_KEYS,
+        )
+        schema_version = _require_string(
+            data.get("schema_version"),
+            "workload_profile.prompt_token_expectation.schema_version",
+        )
+        if schema_version != PROMPT_TOKEN_EXPECTATION_SCHEMA:
+            raise SchemaError(
+                "workload_profile.prompt_token_expectation.schema_version must be "
+                f"'{PROMPT_TOKEN_EXPECTATION_SCHEMA}'"
+            )
+        token_hash_domain = _require_string(
+            data.get("token_hash_domain"),
+            "workload_profile.prompt_token_expectation.token_hash_domain",
+        )
+        if token_hash_domain != PROMPT_TOKEN_HASH_DOMAIN:
+            raise SchemaError(
+                "workload_profile.prompt_token_expectation.token_hash_domain must be "
+                f"'{PROMPT_TOKEN_HASH_DOMAIN}'"
+            )
+        token_ids_sha256 = data.get("token_ids_sha256")
+        if (
+            not isinstance(token_ids_sha256, str)
+            or _SHA256_HEX_RE.fullmatch(token_ids_sha256) is None
+        ):
+            raise SchemaError(
+                "workload_profile.prompt_token_expectation.token_ids_sha256 "
+                "must be 64 lowercase hexadecimal characters"
+            )
+        return cls(
+            schema_version=schema_version,
+            token_hash_domain=token_hash_domain,
+            token_count=_positive_int(
+                data.get("token_count"),
+                "workload_profile.prompt_token_expectation.token_count",
+            ),
+            token_ids_sha256=token_ids_sha256,
+        )
+
+
+@dataclass(frozen=True)
 class WorkloadProfile:
     name: str
     prompt_tokens: int | None = None
@@ -837,6 +905,7 @@ class WorkloadProfile:
     suite_manifest_sha256: str | None = None
     generator_sidecar_ref: str | None = None
     prompt_token_evidence_policy: PromptTokenEvidencePolicy | None = None
+    prompt_token_expectation: PromptTokenExpectation | None = None
     repetitions: int = 1
     warmup_runs: int = 1
 
@@ -873,6 +942,13 @@ class WorkloadProfile:
                 PromptTokenEvidencePolicy,
                 data.get("prompt_token_evidence_policy"),
                 "workload_profile.prompt_token_evidence_policy",
+            ),
+            prompt_token_expectation=(
+                PromptTokenExpectation.from_mapping(
+                    data["prompt_token_expectation"]
+                )
+                if data.get("prompt_token_expectation") is not None
+                else None
             ),
             repetitions=_positive_int(repetitions, "workload_profile.repetitions"),
             warmup_runs=_positive_int(warmup_runs, "workload_profile.warmup_runs"),
@@ -1058,6 +1134,8 @@ class BenchmarkConfig:
             del workload["generator_sidecar_ref"]
         if workload.get("prompt_token_evidence_policy") is None:
             del workload["prompt_token_evidence_policy"]
+        if workload.get("prompt_token_expectation") is None:
+            del workload["prompt_token_expectation"]
         model = data["model"]
         if model.get("tokenizer_json_sha256") is None:
             del model["tokenizer_json_sha256"]
@@ -1217,12 +1295,59 @@ class BenchmarkConfig:
                                 None,
                             ],
                         },
+                        "prompt_token_expectation": {
+                            "oneOf": [
+                                {"type": "null"},
+                                {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [
+                                        "schema_version",
+                                        "token_hash_domain",
+                                        "token_count",
+                                        "token_ids_sha256",
+                                    ],
+                                    "properties": {
+                                        "schema_version": {
+                                            "const": PROMPT_TOKEN_EXPECTATION_SCHEMA
+                                        },
+                                        "token_hash_domain": {
+                                            "const": PROMPT_TOKEN_HASH_DOMAIN
+                                        },
+                                        "token_count": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                        },
+                                        "token_ids_sha256": {
+                                            "type": "string",
+                                            "pattern": r"^[0-9a-f]{64}$",
+                                        },
+                                    },
+                                },
+                            ]
+                        },
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
                     },
                     "allOf": [
                         _exactly_one_non_null_schema(_PROMPT_SOURCE_FIELDS),
                         _paired_nullable_fields_schema(_SUITE_MANIFEST_PAIR),
+                        {
+                            "if": {
+                                "required": ["prompt_token_expectation"],
+                                "properties": {
+                                    "prompt_token_expectation": {
+                                        "not": {"type": "null"}
+                                    }
+                                },
+                            },
+                            "then": {
+                                "required": ["prompt_text"],
+                                "properties": {
+                                    "prompt_text": {"type": "string"}
+                                },
+                            },
+                        },
                     ],
                 },
                 "interconnect": {

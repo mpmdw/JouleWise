@@ -1207,7 +1207,9 @@ def metric_for(measurement_arm: str) -> str:
     return "phase_energy_j.decode" if measurement_arm == "decode" else "phase_energy_j.prefill"
 
 
-def workload_for(measurement_arm: str) -> dict[str, Any]:
+def workload_for(
+    measurement_arm: str, arm: str | None = None
+) -> dict[str, Any]:
     if measurement_arm == "decode":
         return {
             "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
@@ -1216,12 +1218,20 @@ def workload_for(measurement_arm: str) -> dict[str, Any]:
             "prompt_tokens": DECODE_PROMPT_TOKENS["A"],
             "output_tokens": 512,
         }
+    if arm not in {"A", "B"}:
+        raise ValueError("prompt_realization_registration_missing: prefill arm")
     return {
         "name": f"df_ph_prefill_p{PREFILL_LENGTH}_candidate",
         "repetitions": 1,
         "warmup_runs": 1,
         "output_tokens": 512,
         "prompt_text": PREFILL_PROMPT_TEXT,
+        "prompt_token_expectation": {
+            "schema_version": "joulewise.prompt_token_expectation.v1",
+            "token_hash_domain": "joulewise.prompt_token_ids.v1",
+            "token_count": len(PREFILL_TOKEN_IDS[arm]),
+            "token_ids_sha256": PREFILL_TOKEN_IDS_SHA256[arm],
+        },
     }
 
 
@@ -1636,7 +1646,7 @@ def build_plan(
                         arm: arm_plan(measurement_arm, arm, family_bytes, domain_hashes)
                         for arm in ("A", "B")
                     },
-                    "workload": workload_for(measurement_arm),
+                    "workload": workload_for(measurement_arm, "A"),
                 }
                 for measurement_arm in ("decode", PREFILL_ARM)
             },
@@ -1769,7 +1779,7 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
             "suite_manifest_sha256": suite_manifest_sha256(suite),
         }
     else:
-        workload = workload_for(run["measurement_arm"])
+        workload = workload_for(run["measurement_arm"], run["arm"])
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
@@ -2469,12 +2479,12 @@ def build_tree(
                     "model_revision": MODELS[arm]["revision"],
                     "quantization": dict(QUANTIZATION),
                     "workload_profile": {
-                        **workload_for(measurement_arm),
+                        **workload_for(measurement_arm, arm),
                         "prompt_tokens": (
-                            workload_for(measurement_arm).get("prompt_tokens")
+                            workload_for(measurement_arm, arm).get("prompt_tokens")
                         ),
                         "prompt_text": (
-                            workload_for(measurement_arm).get("prompt_text")
+                            workload_for(measurement_arm, arm).get("prompt_text")
                         ),
                         "dataset_ref": None,
                     },
@@ -3052,6 +3062,8 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     )
     write_bytes(out / "README.md", readme_bytes())
 
+    validate_prompt_realization_registration(out)
+
     analysis_value = json.loads(
         (out / "analysis_manifest_v3.json").read_text(encoding="utf-8")
     )
@@ -3075,6 +3087,169 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
         "prompt_sha256": prompt_sha,
         "consumer_declaration_sha256": declaration_sha,
     }
+
+
+def validate_prompt_realization_registration(pack_root: Path) -> None:
+    """Refuse a closed pack whose realized-prompt registration is not joined."""
+
+    def refuse(code: str, detail: str) -> None:
+        raise ValueError(f"{code}: {detail}")
+
+    try:
+        candidate = json.loads(
+            (pack_root / "prefill_prompt_candidate.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        per_model = candidate["token_count_basis"]["per_model"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        refuse("prompt_realization_registration_invalid", f"prompt candidate: {exc}")
+    if not isinstance(per_model, list):
+        refuse(
+            "prompt_realization_registration_invalid",
+            "prompt candidate per_model must be a list",
+        )
+
+    candidate_by_model: dict[str, dict[str, Any]] = {}
+    for row in per_model:
+        if not isinstance(row, dict) or not isinstance(row.get("model_id"), str):
+            refuse(
+                "prompt_realization_registration_invalid",
+                "prompt candidate per_model row is malformed",
+            )
+        model_id = row["model_id"]
+        token_ids = row.get("token_ids")
+        token_count = row.get("token_count")
+        token_ids_sha256 = row.get("token_ids_sha256")
+        if (
+            model_id in candidate_by_model
+            or not isinstance(token_ids, list)
+            or isinstance(token_count, bool)
+            or not isinstance(token_count, int)
+            or token_count <= 0
+            or token_count != len(token_ids)
+            or not isinstance(token_ids_sha256, str)
+            or len(token_ids_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in token_ids_sha256)
+            or token_ids_sha256 != _token_ids_sha256(token_ids)
+        ):
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"prompt candidate row for {model_id!r} is invalid",
+            )
+        candidate_by_model[model_id] = row
+
+    family_counts: dict[str, int] = {}
+    for arm in ("A", "B"):
+        try:
+            family = json.loads(
+                (pack_root / family_relpath(PREFILL_ARM, arm)).read_text(
+                    encoding="utf-8"
+                )
+            )
+            family_count = family["workload_profile"]["prompt_tokens"]
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"prefill family {arm}: {exc}",
+            )
+        if (
+            isinstance(family_count, bool)
+            or not isinstance(family_count, int)
+            or family_count <= 0
+        ):
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"prefill family {arm} prompt_tokens is invalid",
+            )
+        family_counts[arm] = family_count
+
+    expected_keys = {
+        "schema_version",
+        "token_hash_domain",
+        "token_count",
+        "token_ids_sha256",
+    }
+    config_paths = sorted(
+        path
+        for path in pack_root.glob("[0-9][0-9]_*/*.json")
+        if path.name != "order_manifest.json"
+    )
+    if not config_paths:
+        refuse(
+            "prompt_realization_registration_missing", "no generated configs"
+        )
+    for config_path in config_paths:
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            workload = config["workload_profile"]
+            model_name = config["model"]["name"]
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"{config_path.relative_to(pack_root)}: {exc}",
+            )
+        is_prefill = isinstance(workload.get("prompt_text"), str)
+        if not is_prefill:
+            if "prompt_token_expectation" in workload:
+                refuse(
+                    "prompt_realization_registration_invalid",
+                    f"{config_path.relative_to(pack_root)}: decode config carries expectation",
+                )
+            continue
+        if "prompt_token_expectation" not in workload:
+            refuse(
+                "prompt_realization_registration_missing",
+                f"{config_path.relative_to(pack_root)}",
+            )
+        expectation = workload.get("prompt_token_expectation")
+        if not isinstance(expectation, dict) or set(expectation) != expected_keys:
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"{config_path.relative_to(pack_root)}: expectation schema",
+            )
+        count = expectation.get("token_count")
+        token_hash = expectation.get("token_ids_sha256")
+        if (
+            expectation.get("schema_version")
+            != "joulewise.prompt_token_expectation.v1"
+            or expectation.get("token_hash_domain")
+            != "joulewise.prompt_token_ids.v1"
+            or isinstance(count, bool)
+            or not isinstance(count, int)
+            or count <= 0
+            or not isinstance(token_hash, str)
+            or len(token_hash) != 64
+            or any(character not in "0123456789abcdef" for character in token_hash)
+        ):
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"{config_path.relative_to(pack_root)}: expectation value",
+            )
+        matching_arms = [
+            arm for arm in ("A", "B") if MODELS[arm]["name"] == model_name
+        ]
+        if len(matching_arms) != 1:
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"{config_path.relative_to(pack_root)}: model arm is unresolved",
+            )
+        arm = matching_arms[0]
+        candidate_row = candidate_by_model.get(MODEL_IDS[arm])
+        if not isinstance(candidate_row, dict):
+            refuse(
+                "prompt_realization_registration_invalid",
+                f"{config_path.relative_to(pack_root)}: candidate row is missing",
+            )
+        if (
+            count != candidate_row["token_count"]
+            or token_hash != candidate_row["token_ids_sha256"]
+            or count != family_counts[arm]
+        ):
+            refuse(
+                "prompt_realization_registration_inconsistent",
+                f"{config_path.relative_to(pack_root)}: config/candidate/family disagree",
+            )
 
 
 def actual_pack_paths(pack_root: Path) -> set[Path]:

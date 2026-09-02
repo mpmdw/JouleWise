@@ -5297,6 +5297,79 @@
       "status_note": "Installed by D-167 and re-homed from the G3 portion of PIPELINE-SMOKE-LIVE-01. A desk script is agent-lane work; the quiet-machine collection it checks remains in V5-TRANSACTION-01.",
       "stop_card": null
     },
+    "V5-PREFILL-REALIZED-IDS-CHECK-01": {
+      "acceptance": {
+        "evidence": [
+          "Every generated _v5 prefill config carries the arm-derived closed prompt-token expectation while every decode config omits it",
+          "BundleReader refuses missing, inconsistent, or mismatched succeeded-bundle realization evidence with the ruled named reason",
+          "The first mismatching member stops a max-failures-one campaign before its second child and no waiver, including scope any, restores usability",
+          "Legacy configs remain byte-identical and a retained corpus without the expectation gains zero validation problems"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-PREFILL-REALIZED-IDS-CHECK-01/acceptance",
+          "label": "V5-PREFILL-REALIZED-IDS-CHECK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The authenticated per-config prefill expectation is checked against coherent realized prompt evidence at every bundle consumer and is non-waivable."
+      },
+      "authority": {
+        "label": "Ruling 44c realized-prefill check placement",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "A `_v5` prefill bundle whose realized prompt token count, ids hash, or hash domain differs from the registered expectation in its own `config.json` is refused by `BundleReader.problems()` with a named reason, stops the night on first occurrence, is unwaivable, and is excluded neither-branch at every consumer.",
+      "id": "V5-PREFILL-REALIZED-IDS-CHECK-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "partial",
+      "status_note": "Implemented on branch, pending review.",
+      "stop_card": null
+    },
+    "V5-PREFILL-REALIZED-PROJECTION-02": {
+      "acceptance": {
+        "evidence": [
+          "The freeze projection derives the prompt realization from the registered prompt text on the collection stack",
+          "Arm-time projection re-verification refuses a count, ids-hash, or domain mismatch before collection",
+          "The arm-critical identity_pins.py change passes the required council and delta-review gates"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-PREFILL-REALIZED-PROJECTION-02/acceptance",
+          "label": "V5-PREFILL-REALIZED-PROJECTION-02 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Freeze and arm identity projection catch prompt-realization drift before the first measured bundle."
+      },
+      "authority": {
+        "label": "Ruling 44c deferred identity-projection catcher",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/44c-RULING-realized-prefill-check.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared bundle-reader prompt-realization fence is implemented and reviewed first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "V5-PREFILL-REALIZED-IDS-CHECK-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add the identity-pin projection catcher for registered prefill prompt realization at freeze and arm.",
+      "id": "V5-PREFILL-REALIZED-PROJECTION-02",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 6,
+      "status": "queued",
+      "status_note": "Enters identity_pins.py — council trigger.",
+      "stop_card": null
+    },
     "V5-TRANSACTION-01": {
       "acceptance": {
         "evidence": [
