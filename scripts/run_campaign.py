@@ -148,6 +148,7 @@ from joulewise.whole_window import (  # noqa: E402
     MINTED_CONSUMPTION_SEMANTICS_ID,
     OCCURRENCE_SUPERSESSION_SCHEMA,
     PROSPECTIVE_MEMBER_FAILURE_REASON_CODES,
+    REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
     SupersessionRecorderError,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
@@ -159,6 +160,7 @@ from joulewise.whole_window import (  # noqa: E402
     load_neg8_drift_bound_artifact,
     mint_neg8_drift_bound_artifact,
     ordinary_present_bundle_paths,
+    recognizable_occurrence_supersession_counts,
     require_occurrence_supersession_recordable,
     source_manifest_descriptors,
     supersession_entry_sha256,
@@ -276,6 +278,7 @@ class OrdinaryOccurrenceResolution:
     selected_path: Path | None = None
     supersession: dict[str, Any] | None = None
     present_paths: tuple[Path, ...] = ()
+    refusal_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -5357,19 +5360,23 @@ def _valid_supersession_entries(
         lines = log_path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return []
-    entries: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for line in lines:
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if (
-            isinstance(value, dict)
-            and value.get("record_type") == "campaign_occurrence_supersession"
-            and validate_occurrence_supersession_entry(value, runs_dir)
-        ):
-            entries.append(value)
-    return entries
+        if isinstance(value, dict):
+            rows.append(value)
+    counts = recognizable_occurrence_supersession_counts(rows)
+    return [
+        value
+        for value in rows
+        if value.get("record_type") == "campaign_occurrence_supersession"
+        and isinstance(value.get("bundle_id"), str)
+        and counts.get(value.get("bundle_id"), 0) == 1
+        and validate_occurrence_supersession_entry(value, runs_dir)
+    ]
 
 
 def _matching_supersession(
@@ -5378,6 +5385,9 @@ def _matching_supersession(
     occurrences: Sequence[Mapping[str, Any]],
     policy_sha256: str,
 ) -> dict[str, Any] | None:
+    counts = recognizable_occurrence_supersession_counts(entries)
+    if counts.get(bundle_id, 0) > 1:
+        return None
     selected = dict(occurrences[-1])
     superseded = [dict(value) for value in occurrences[:-1]]
     matches = [
@@ -5419,6 +5429,17 @@ def _resolve_ordinary_occurrence(
         for entry, valid in zip(raw_entries, validations, strict=True)
         if entry.get("bundle_id") == bundle_id
     ]
+    if recognizable_occurrence_supersession_counts(raw_entries).get(
+        bundle_id, 0
+    ) > 1:
+        return OrdinaryOccurrenceResolution(
+            bundle_id,
+            "ambiguous",
+            present_paths=present,
+            refusal_reasons=(
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_MULTIPLE_ROWS,
+            ),
+        )
     # A malformed recognizable record for the same bundle remains evidence of
     # a competing disposition; it may not be filtered into invisibility.
     if any(not valid for _entry, valid in relevant):
@@ -5889,10 +5910,17 @@ def _whole_window_campaign_membership(
         if len(eligible_candidates) > 1 or len(candidates) > 1 or ambiguous_duplicate
         else "whole_window_campaign_membership_unresolved"
     )
+    refusal_reasons = sorted(
+        {
+            reason
+            for resolution in all_resolutions
+            for reason in resolution.refusal_reasons
+        }
+    )
     return WholeWindowMembershipResolution(
         sources=tuple(WholeWindowMemberSource(path=path) for path in fallback),
         source_manifests=(),
-        conditions=(condition,),
+        conditions=tuple([condition, *refusal_reasons]),
         occurrence_supersessions=tuple(retained_supersessions),
         occurrence_resolutions=tuple(all_resolutions),
         membership_binding=membership_binding,
