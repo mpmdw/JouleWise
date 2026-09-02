@@ -22,6 +22,13 @@ TOKENIZER_JSON = Path(
 )
 
 
+def _panel_tokenizer_sha() -> str:
+    entries = json.loads(PANEL.read_text())["entries"]
+    hashes = {entry["tokenizer_json_sha256"] for entry in entries}
+    assert len(hashes) == 1, hashes
+    return next(iter(hashes))
+
+
 class _FakeRuntimeTokenizer:
     def encode(self, text: str, add_special_tokens: bool = True) -> list[int]:
         if not add_special_tokens:
@@ -97,6 +104,24 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         )
         self.tokenizer_patch.start()
         self.addCleanup(self.tokenizer_patch.stop)
+        # The producer authenticates each panel entry's local `tokenizer.json`
+        # bytes against the panel's pinned sha (`_validate_panel`); the mirrors
+        # live only on the measurement machine, so the suite stands in the
+        # pinned hash for that ONE filename and hashes every other path for
+        # real. `test_panel_tokenizer_bytes_mismatch_refuses` drives the check
+        # itself; `test_real_tokenizer_retokenizes_each_rung_to_exact_length`
+        # covers the real bytes where they exist.
+        self.tokenizer_bytes_sha = _panel_tokenizer_sha()
+        real_sha256_path = probe._sha256_path
+
+        def _sha256_path_with_stub(path: Path) -> str:
+            if path.name == "tokenizer.json":
+                return self.tokenizer_bytes_sha
+            return real_sha256_path(path)
+
+        self.sha_patch = mock.patch.object(probe, "_sha256_path", _sha256_path_with_stub)
+        self.sha_patch.start()
+        self.addCleanup(self.sha_patch.stop)
 
     def _build(self, **overrides: object) -> None:
         arguments = {
@@ -234,6 +259,15 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
             "model_panel_refused|pair_tokenizer_identity_mismatch|model_tokenizer_json_sha256_mismatch",
         ):
             self._build(panel_path=path)
+
+    def test_panel_tokenizer_bytes_mismatch_refuses(self) -> None:
+        """Drive `_validate_panel`'s local-bytes check: the panel pin is intact but
+        the model directory's `tokenizer.json` hashes to something else."""
+        self.tokenizer_bytes_sha = "f" * 64
+        with self.assertRaisesRegex(
+            probe.G2AProbeError, "model_tokenizer_json_sha256_mismatch"
+        ):
+            self._build()
 
     def test_duplicate_run_id_refuses(self) -> None:
         self._build_and_bind()
