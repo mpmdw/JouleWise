@@ -743,7 +743,9 @@ class NightDriverTests(unittest.TestCase):
                 self.driver.shutil, "which", return_value=str(fallback)
             ), mock.patch.object(
                 self.driver.subprocess, "Popen", side_effect=spawn
-            ), mock.patch.object(self.driver.time, "sleep"):
+            ), mock.patch.object(self.driver.time, "sleep"), mock.patch.object(
+                self.driver.time, "time", return_value=self.t0_epoch_s + 1
+            ):
                 exit_code = self.driver.run_night(self.plan_path, courier_bin=pinned)
         finally:
             self.driver.COURIER_DEADLINE_S = old_deadline
