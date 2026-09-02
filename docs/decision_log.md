@@ -11,9 +11,24 @@ be re-derived by a future agent gets an entry here.
 - When you make a new decision of this kind during a run, add an entry, link it
   from the run report, and reference its ID (`D-NNN`) in the code review or doc
   that applies it.
-- Statuses: `accepted` (binding until revisited), `open` (criteria defined,
-  evidence pending), `proposed` (recorded, awaiting Ed's ratification),
-  `superseded by D-NNN`.
+- Statuses are a closed set: `accepted` (binding design choice), `adopted`
+  (binding ruling incorporated into the project), `ratified` (binding choice
+  approved by its named authority), `open` (criteria defined, evidence
+  pending), `proposed` (recorded and awaiting its named authority's approval),
+  `superseded` (replaced by a named later decision), `recorded` (documented
+  fact or disposition), `executed` (authorized act completed with evidence),
+  and `adjudicated` (dispute resolved by an authorized decision-maker). Use
+  `superseded by D-NNN` to name the replacing decision.
+- Use `open (installs via <TASK-ID>)` when an entry carries an implementation
+  clause: a value that enters a manifest, a check that code refuses on, a
+  runbook line, or generator output. `<TASK-ID>` is the identifier of the task
+  in `docs/process/state_kernel.json` that carries the uninstalled clauses. A
+  task that the clause GATES — meaning the task must not start until the clause
+  is installed — holds a hard-start dependency with `kind: decision` and the
+  decision ID as its target. That dependency moves to `satisfied` only with an
+  evidence pointer to the regression that FAILS when the ruled value is absent
+  at the producer. The status then moves to `accepted` or `adopted`, and the
+  entry body names the installing pull request or commit.
 - Every entry must include Options Considered and Considerations. A decision
   without recorded alternatives is not auditable.
 - Revisit triggers are part of the contract: when a trigger fires, the decision
@@ -194,6 +209,7 @@ be re-derived by a future agent gets an entry here.
 | D-167 | KERNEL RECONCILED TO LIVE `_v5` STATE; WINDOW-COUNCIL-GATE RETIRED BY SUPERSESSION (magistrate, 2026-09-01, on Ed's direction the same day: "live state of code is ground truth… docs are context"). The kernel's [QUIET-MAC] lane still carried the retired Qwen2.5 `_v3` packs (Q2–Q4) under WINDOW-COUNCIL-GATE (08-15 NOT-READY; 08-20 sitting 13/13 NOT-READY; sitting-3 rows A67–A69 never started) while the live campaign is the `_v5` Qwen3 pair (D-164/165/166) with D-162's modular proof gate (G1 desk / G2 shakedown / G3 nightly) and the `_v5` prep gauntlet (#241, #229, #246, #248) as its readiness evidence. RULING: (1) WINDOW-COUNCIL-GATE is retired by supersession — the readiness evidence for a `_v5` window is D-162's G1/G2/G3 plus Ed's authorization (08-28: diagnostic windows at lead discretion; the transaction on Ed's go); the charter and the 08-15/08-20 sittings remain as record, and their still-open work orders survive only where re-homed to a `_v5` row with a stated reason. (2) Q2–Q4 are RETIRED; `_v5` rows are installed: G2-a probe evening, the desk day (rung pin + pack generation + throwaway-clone re-proof), G2-b/transaction, nightly G3, TRANSFER-FIDUCIAL-01 post-campaign, the `_v6` scored leg post-fiducial. (3) A67–A69 are retired by supersession. Soundness fences unchanged: pre-registration, evidence immutability, D-078 no-retry, D-149 T-0 mechanical conditions (2)–(5). | adopted (magistrate on Ed's 09-01 direction) |
 | D-168 | D-165 CLOSE-OUT ARTIFACT OWNERSHIP: SIDECAR + CLOSE-OUT, ONE PREDICATE HOME (magistrate, 2026-09-01). Scout `06-ratio-closeout-scout.md` established that the ordinary ratio operands exist in every minted `joulewise.detection_floor_artifact.v2` cell, that no issued artifact preserves the per-block shared/local width split R_cm needs (extraction sums them; the mint discards the private records), and that the frozen 109-key renderer cannot carry the 126-key `_v5` registry. RULING: (1) the floor artifact is unchanged; the mint emits a separately hash-bound `joulewise.d165_dominance_replay.v1` sidecar (per comparative cell: authenticated shared-edge bound, every block's raw replay inputs, derived shared/local widths, replayed point floor, common-mode corner floor, ratio, pass flag; per cell and component: the independent ratio record). (2) Close-out artifact `joulewise.d165_dominance_closeout.v1`: exactly eight ordinary ratios and four comparative R_cm values; globals `all_independent_pass`, `all_required_common_mode_pass`, `branch` (A/B), `dominance_sentence_licensed`, `subtitle_licensed`, `refusal_reason`; any missing, unauthenticated, or zero-denominator result selects NEITHER branch and stops filling. (3) `dominance_ratio`, `split_common_mode_block_width`, `replay_common_mode_dominance` have ONE home, `joulewise/dominance_closeout.py`, imported by the `_v5` generator so registration and production cannot drift. (4) Order: core + builder → mint sidecar emission → successor renderer (after the G2-a selection record) → end-to-end fixture replay; each stream under exhaustive WRITE_SCOPE with a distinct-lens refuter and delta re-audit. (5) RENDERER-V5-SUCCESSOR-01 and the close-out rows are kernel-registered by the D-167 follow-up. Authority: `docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md`; core lane refuted by terra (17) + luna (18), fix round in flight. | adopted (magistrate) |
 | D-169 | UNATTENDED LOOP FIRST (Ed directive, in-thread 2026-09-01; supersedes D-127 §5's "built OFF the night-critical path" ordering): the D-127 autonomous window loop is the TOP lane and is built BEFORE the remaining `_v5` transaction ladder, so the magistrate drives measurement windows entirely without Ed present. Ed's words: "why are quiet windows still gated by me? why can't you do this? i'm tired of having to be at the machine" and, on D-127 §5: "bad. that should be done first. so you can drive the experiments entirely." Owning rows: `UNATTENDED-LAUNCH-01` (GO-receipt consumer in `scripts/launch_window.py`, launch-then-verify relaunch harness, independent launchd fallback) and the `T0-UNATTENDED-01` remainder (rehearsal evaluator blockers). UNCHANGED: the zero-agent capture fence (D-127 §2); D-115 install conditions and Ed personally running the single privileged install command (D-127 §3); the D-118/D-121 gauntlet on every merge. Ed-hands residue is limited to what rulings literally require — never per-window presence; before any further window date is requested from Ed, the unattended plan with that one command is delivered to him. | adopted (Ed, in-thread; transcribed by the magistrate) |
+| D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | open (installs via T26-RULING-INSTALL-01) |
 
 ---
 
@@ -7811,6 +7827,8 @@ regardless of CI state. The D-072 self-merge authority is CONDITIONED on
 this ledger being complete — it was never a license to merge on green
 alone.
 
+**AMENDED by D-170 (T26 cold gate item 2, 2026-09-02):** the gate ledger has a tracked form — see D-170.
+
 **Scope note:** a burn/liberal-delegation license (Ed, 2026-08-07)
 increases the volume of work fed INTO this gate. It never reduces the
 gate. If throughput and gate completeness conflict, throughput yields.
@@ -10328,6 +10346,8 @@ normative home: `docs/contracts/receipt_histsem_verifier.md` §"Adopted A93 ruli
 Index row carries the operative detail. Trace:
 `docs/process_traces/2026-08-27-t26/smoke-corpus-consult/`.
 
+**AMENDED by D-170 (T26 cold gate item 4, 2026-09-02):** evidence-path rulings and addenda require an executed-evidence custody input or code-path proof — see D-170.
+
 
 ## D-161: threat-model prune (Ed, 2026-08-27)
 
@@ -10446,3 +10466,98 @@ timer with the agent absent during capture and relaunched afterwards with
 liveness proof. The lane's mechanical scout and its design consult
 (three seats) are the first spend under this ruling; the plan delivered to
 Ed names the single privileged command that remains his under D-115.
+
+## D-170: T26 cold-gate verdict installation (magistrate, 2026-09-02)
+
+**Date:** 2026-09-02. **Status:** OPEN (installs via
+`T26-RULING-INSTALL-01`). The magistrate moves this entry to `adopted` only
+after all three installing pull requests land and names those pull requests
+here. The installing state-kernel row is `T26-RULING-INSTALL-01`; its three
+branches are `feat/2026-09-02-t26-install` (items 1 and 4, documentation and
+tests), `feat/2026-09-02-t26-liveness` (item 3), and
+`feat/2026-09-02-t26-gateledger` (item 2). Authority is the four-item ruling in
+`docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md`.
+
+**Item 1 — ruling-status semantics.** “A decision-log entry that carries an
+implementation clause (a value that enters a manifest, a check code refuses
+on, a runbook line, a generator output) is recorded with index status `open
+(installs via <TASK-ID>)`,” and the task the clause gates carries a pending
+hard-start `kind: decision` dependency; satisfaction requires an evidence
+pointer to a producer regression that fails when the ruled value is absent.
+This is the prospective status and dependency rule, not a retrospective
+registration of all 460 clauses
+(`COLD-GATE-RULING.md:67-86`; enforcement at `:88-101`).
+
+**Item 2 — D-118 gate ledger, amends D-118 additively.** “The gate ledger has
+a tracked form. (a) `.github/pull_request_template.md` seeds twelve rows keyed
+`1`–`12` (D-118 items 1–11, D-121 item 12), each to be filled `RUN
+<repo-relative-path | commit-sha>` or `NOT-RUN`; item 12 names the final head
+sha. (b) CI job `gate-ledger` (`pull_request: [opened, synchronize, edited,
+ready_for_review]`) fails when any of the twelve keys is missing, any row reads
+`NOT-RUN` or is empty, any `RUN` path does not resolve at the PR head (reuse
+`gen_state.py` `_check_pointer` path rules), or item 12's sha is not the PR
+head. The job is labelled ADVISORY in its own header until Ed makes it a
+required status check; the D-072 self-merge condition is that the job is green
+on the final head. (c) The pasted-block risk is DELIBERATE operator conduct and
+is out of the threat model by D-161; the job targets the MISTAKE class (a
+forgotten item), which is what the three forcing instances were.”
+(`COLD-GATE-RULING.md:128-143`).
+
+**Item 3 — T-0 issuance horizon.** “The 5 s constant and the 35 s corollary are
+STRUCK; the upper relation is retained as a well-typed LIVENESS bound on the
+consumer's clock, one-constant change.” The ruled relation is
+`0 ≤ (valid_until_monotonic_ns − 21_600_000_000_000) − r1_batch_finished_monotonic_ns ≤ 600_000_000_000`,
+with both endpoints from `context.clock.monotonic_ns()`: ordinary monotonic,
+not `CLOCK_MONOTONIC_RAW`. The 600 s allowance is eleven 45 s governed probe
+ceilings plus 105 s for intervening filesystem and Git work; it is a
+liveness/hang detector, not a metrology bound. The code and boundary regressions land on the
+liveness sibling branch; this entry only points to that implementation and the
+dated T-0 ruling amendment (`COLD-GATE-RULING.md:196-215`).
+
+**Item 4 — executed evidence, amends D-160 R-5.** “A ruling or addendum whose
+dispositive premise asserts that an evidence-production path does or does not
+yield a named artifact is INADMISSIBLE unless the consult's custody directory
+carries, as a listed packet input, either (a) an execution record — exact argv,
+working-tree revision, exit code, produced-or-absent artifact path — or (b) a
+code-path proof citing the `file:line` at which the path refuses. The duty
+falls on whoever ASSEMBLES the packet or DRAFTS the addendum, never on the
+adjudicating seat; a seat that finds neither input returns the question UNRULED
+and the ruling is recorded `open (installs via …)` per item 1. Binds addenda
+and placement notes exactly as it binds the original ruling.”
+(`COLD-GATE-RULING.md:270-282`).
+
+**Where recorded and discharged.** Item 1's log-status form and Mission M0
+line, item 3's dated T-0 Horizon line, item 4's D-160 pointer and prospective
+shape test, and this decision entry land through
+`feat/2026-09-02-t26-install`. Item 2's tracked pull-request template,
+advisory CI job, and the one-line pointer in `docs/orchestration.md` land
+through `feat/2026-09-02-t26-gateledger`; its additive D-118 pointer lands
+here, while the external `operation-loop` skill pointer is a magistrate bench
+edit outside this repository. Item
+3's predicate, boundary regressions, and PR #212 §6.3 disposition update land
+through `feat/2026-09-02-t26-liveness`. Item 4's packet-input-list amendment is
+deferred to charter v3 because it requires a charter digest and Ed
+re-ratification; its consult-brief `Executed:` requirement has no tracked
+template home in this repository and is carried by the magistrate's scratchpad
+template. Item 2's remaining authority decisions are routed to Ed as
+`ED-BRANCH-PROTECTION-E1-01` (make `gate-ledger` and the named CI jobs required
+on protected `main`, with `enforce_admins` Ed's choice) and
+`ED-D118-NA-TIER-E2-01` (rule on an `N/A <reason>` tier and docs-only
+exemption). Until E1, `gate-ledger` is advisory; until E2, docs-only pull
+requests fill all twelve rows or use the existing direct-commit practice
+(`COLD-GATE-RULING.md:145-158`, `:248-251`, `:287-300`).
+
+**Options Considered.** (1) Selected: install the ruling through one kernel row
+and three bounded branches, keeping D-170 open until all three land. (2) Mark
+D-170 adopted when only its documentation lands; rejected because it would
+repeat the ruled decided-but-not-done failure. (3) Put all mechanisms on one
+branch; rejected because the gate-ledger, hardware-adjacent liveness predicate,
+and documentation tests have distinct verification and review surfaces.
+
+**Considerations.** The cold gate's four AMEND verdicts are controlling text;
+this entry records them by pointer and does not reinterpret them. The pending
+decision dependency on D-170 is carried by the transaction task the liveness
+clause gates, `V5-TRANSACTION-01`, while the installing row names the complete
+three-branch acceptance. The status transition requires producer-side
+regression evidence from the sibling implementations, so documentation alone
+cannot close this decision.

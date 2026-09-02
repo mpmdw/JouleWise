@@ -8,6 +8,7 @@ literals. Decision-index completeness is a separate structural invariant.
 from __future__ import annotations
 
 import html
+import json
 import re
 import unittest
 from pathlib import Path
@@ -24,6 +25,18 @@ CAPSULE_DOC_PATHS = (
 GENERATED_SITE_PATHS = tuple(
     str(path.relative_to(ROOT)) for path in sorted((ROOT / "docs/site").glob("*.html"))
 )
+
+DECISION_STATUS_TOKENS = {
+    "accepted",
+    "adopted",
+    "ratified",
+    "open",
+    "proposed",
+    "superseded",
+    "recorded",
+    "executed",
+    "adjudicated",
+}
 
 FORBIDDEN_VOLATILE_FACTS = {
     "suite result count": re.compile(
@@ -72,6 +85,49 @@ def _without_code(text: str) -> str:
     text = re.sub(r"`[^`\n]*`", "", text)
     text = re.sub(r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>", "", text, flags=re.DOTALL | re.IGNORECASE)
     return html.unescape(re.sub(r"<[^>]+>", " ", text))
+
+
+def _decision_index_rows(text: str | None = None) -> list[tuple[str, str]]:
+    """Return decision ids and final-column status cells from the Markdown index."""
+    text = _read("docs/decision_log.md") if text is None else text
+    index = _between(text, "## Index\n", "\n---\n")
+    return re.findall(
+        r"^\| (D-\d{3}[a-z]?) \|.*\| ([^|]+) \|$", index, flags=re.MULTILINE
+    )
+
+
+def _dated_magistrate_rulings() -> list[Path]:
+    trace_root = ROOT / "docs/process_traces"
+    rulings = []
+    for path in trace_root.glob("*/**/*MAGISTRATE-RULING*.md"):
+        dated_directory = path.relative_to(trace_root).parts[0]
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}(?:-.+)?", dated_directory):
+            if dated_directory[:10] >= "2026-08-29":
+                rulings.append(path)
+    return sorted(rulings)
+
+
+def _has_executed_evidence(text: str) -> bool:
+    section = re.search(
+        r"^## Executed evidence\s*$\n(.*?)(?=^## |\Z)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if section is None:
+        return False
+    body = section.group(1)
+    citation = re.search(
+        r"[A-Za-z0-9_./-]+\.(?:py|md|json|sh|toml|yml):\d+", body
+    )
+    fenced_blocks = re.findall(
+        r"^```[^\n]*\n(.*?)^```\s*$", body, flags=re.MULTILINE | re.DOTALL
+    )
+    execution_record = any(
+        re.search(r"^\$ .+", block, flags=re.MULTILINE)
+        and re.search(r"^.*\bexit\b.*$", block, flags=re.MULTILINE | re.IGNORECASE)
+        for block in fenced_blocks
+    )
+    return citation is not None or execution_record
 
 
 def _documents() -> dict[str, str]:
@@ -177,12 +233,78 @@ class DocsFreshnessTests(unittest.TestCase):
     def test_decision_index_matches_decision_bodies(self) -> None:
         text = _read("docs/decision_log.md")
         index = _between(text, "## Index\n", "\n---\n")
-        index_ids = re.findall(r"^\| (D-\d{3}) \|", index, flags=re.MULTILINE)
-        body_ids = re.findall(r"^## (D-\d{3}):", text, flags=re.MULTILINE)
+        index_ids = re.findall(r"^\| (D-\d{3}[a-z]?) \|", index, flags=re.MULTILINE)
+        body_ids = re.findall(r"^## (D-\d{3}[a-z]?):", text, flags=re.MULTILINE)
 
         self.assertEqual(len(index_ids), len(set(index_ids)), "duplicate decision index row")
         self.assertEqual(len(body_ids), len(set(body_ids)), "duplicate decision body")
         self.assertEqual(body_ids, index_ids)
+
+    def test_decision_index_status_vocabulary_is_closed(self) -> None:
+        for decision_id, status in _decision_index_rows():
+            with self.subTest(decision_id=decision_id):
+                leading_token = re.match(r"[a-z]+", status)
+                self.assertIsNotNone(
+                    leading_token, f"{decision_id}: status has no leading token: {status!r}"
+                )
+                self.assertIn(
+                    leading_token.group(0),
+                    DECISION_STATUS_TOKENS,
+                    f"{decision_id}: status token is outside the closed vocabulary: {status!r}",
+                )
+
+    def test_open_decisions_name_an_installing_kernel_task(self) -> None:
+        tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+        for decision_id, status in _decision_index_rows():
+            if re.match(r"[a-z]+", status).group(0) != "open":
+                continue
+            with self.subTest(decision_id=decision_id):
+                installing = re.fullmatch(
+                    r"open \(installs via ([A-Z0-9-]+)\)", status
+                )
+                decision_number = int(re.match(r"D-(\d{3})", decision_id).group(1))
+                if decision_number < 170 and installing is None:
+                    continue
+                self.assertIsNotNone(
+                    installing,
+                    f"{decision_id}: prospective open status must name its installing task: {status!r}",
+                )
+                task_id = installing.group(1)
+                self.assertIn(
+                    task_id,
+                    tasks,
+                    f"{decision_id}: installing kernel task does not exist: {task_id}",
+                )
+                dependent_tasks = [
+                    candidate_id
+                    for candidate_id, task in tasks.items()
+                    if any(
+                        dependency.get("kind") == "decision"
+                        and dependency.get("target") == decision_id
+                        for dependency in task.get("dependencies", [])
+                    )
+                ]
+                self.assertTrue(
+                    dependent_tasks,
+                    f"{decision_id}: no kernel task has a kind: decision dependency on this row",
+                )
+
+    def test_dated_magistrate_rulings_carry_executed_evidence(self) -> None:
+        # Install-time scan: MAGISTRATE-RULING-UNATTENDED-STAGE1.md is the only
+        # eligible file; it has no Rulings/RULED/Addendum heading, so is exempt.
+        trigger = re.compile(
+            r"^## (?:Rulings|RULED|Addendum)(?:\s.*)?$", flags=re.MULTILINE
+        )
+        for path in _dated_magistrate_rulings():
+            relative_path = path.relative_to(ROOT)
+            text = path.read_text(encoding="utf-8")
+            if trigger.search(text) is None:
+                continue
+            with self.subTest(path=str(relative_path)):
+                self.assertTrue(
+                    _has_executed_evidence(text),
+                    f"{relative_path}: dispositive ruling lacks a valid ## Executed evidence section",
+                )
 
     def test_current_sections_do_not_copy_volatile_literals(self) -> None:
         self.assertEqual([], _volatile_violations(_current_sections()))
