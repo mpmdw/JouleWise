@@ -599,11 +599,42 @@ declared condition-family transport group. Legacy evidence without successor
 launch lineage retains the historical single-identity route; it cannot use the
 multi-identity route.
 
-The analysis output distinguishes two identity failures by which step of the gate fails.
+The analysis output distinguishes two identity failures by which step of the
+gate fails.
 
-The gate refuses with `consumer_identity_set_unauthenticated` when successor launch lineage exists but any one of the following steps, taken in this order, fails: (1) every evidence row carries a launch-lineage record, and all rows name the same pack root and the same 64-hex pack digest; (2) the pack root exists and the digest of its committed file tree equals that pack digest; (3) the plan tree names a frozen projection (`state` is `frozen`) with a freeze-receipt reference of exactly `path` and `sha256`; (4) the U8 freeze receipt at that path has status `PASS`, its bytes hash to the referenced digest, its sidecar matches, and it carries exactly one `u11-freeze-projection` evidence row (namespace `PACK`, status `PASS`) whose `path` and `sha256` equal the plan's `projection_receipt` binding; (5) the frozen identity receipt at that path hashes to that digest, its sidecar matches, and it validates as a `freeze_projection` receipt with status `PASS`; (6) exactly one receipt unit has a consumer binding whose `family` equals the requested condition family, and exactly one projection unit carries that unit's ID with the same `config_set_sha256`; (7) every inventoried config file of that unit hashes to its inventory digest and parses as a JSON object; (8) the set of scientific identities re-derived from those configs is nonempty and folds to the unit's `config_set_sha256`. A parse or validation error at any step is the same refusal. Steps (3)–(8) read only files inside the pack root, so step (2) is what binds the pack to the launch: without it, an internally consistent pack the launch never consumed would authenticate.
+The gate refuses with `consumer_identity_set_unauthenticated` when successor
+launch lineage exists but any one of the following steps, taken in this order,
+fails: (1) every evidence row carries a launch-lineage record, and all rows
+name the same pack root and the same 64-hex pack digest; (2) the pack root
+exists and the digest of its committed file tree (the sha256 over the pack's
+committed files — each path, Git mode, byte length and content digest in path
+order — computed by `committed_pack_tree_sha256`, which itself fails, and so
+refuses here, if any file under the pack root is untracked, missing, or differs
+from its committed bytes) equals that pack digest, which is the same digest the
+launch lineage recorded at arm time; (3) the plan tree names a frozen
+projection (`state` is `frozen`) with a freeze-receipt reference of exactly
+`path` and `sha256`; (4) the U8 freeze receipt at that path has status `PASS`,
+its bytes hash to the referenced digest, its sidecar matches, and it carries
+exactly one `u11-freeze-projection` evidence row (namespace `PACK`, status
+`PASS`) whose `path` and `sha256` equal the plan's `projection_receipt`
+binding; (5) the frozen identity receipt at that path hashes to that digest,
+its sidecar matches, and it validates as a `freeze_projection` receipt with
+status `PASS`; (6) exactly one receipt unit has a consumer binding whose
+`family` equals the requested condition family, and exactly one projection unit
+carries that unit's ID with the same `config_set_sha256`; (7) every inventoried
+config file of that unit hashes to its inventory digest and parses as a JSON
+object; (8) the set of scientific identities re-derived from those configs is
+nonempty and folds to the unit's `config_set_sha256`. A parse or validation
+error at any step is the same refusal. Steps (3)–(8) read only files inside the
+pack root, so step (2) is what binds the pack to the launch: without it, an
+internally consistent pack the launch never consumed would authenticate.
 
-When all eight steps pass, the gate holds a nonempty frozen set of scientific identities. It then hashes each evidence row's scientific identity and refuses with `consumer_identity_undeclared` if any hash is outside that set. The same label is used for legacy evidence (no successor launch lineage) that contains two or more scientific identities, because no frozen set exists to declare them.
+When all eight steps pass, the gate holds a nonempty frozen set of scientific
+identities. It then hashes each evidence row's scientific identity and refuses
+with `consumer_identity_undeclared` if any hash is outside that set. The same
+label is used for legacy evidence (no successor launch lineage) that contains
+two or more scientific identities, because no frozen set exists to declare
+them.
 
 ### What happens after arm
 

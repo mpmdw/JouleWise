@@ -405,7 +405,23 @@ class SharedDerivationTests(unittest.TestCase):
         self.assertIn("suite_manifest_sha256", workload)
 
     def test_declared_manifest_identity_cardinality_refuses_synthetic_mismatch(self) -> None:
-        """Lines 1681/1695 plus manifest retention at 218 dominate line 1701."""
+        """Synthetic-set pin of a guard the production freeze path cannot reach.
+
+        ``_distinct_manifest_identity_refusal_reason`` (identity_pins.py, called
+        from the freeze census) is DOMINATED by the checks that precede its call:
+        every declared manifest must carry at least one member
+        (``manifest_counts != declared_counts`` raises first) and exactly one
+        scientific hash (``divergent_manifests`` raises next), and
+        ``scientific_config_identity`` retains
+        ``workload_profile.suite_manifest_sha256``, so two distinct manifests
+        always yield two distinct scientific hashes — executed proof in
+        ``test_distinct_manifest_bindings_produce_distinct_scientific_identities``
+        below. When the guard is reached, ``len(scientific_hashes)`` therefore
+        equals ``len(declared_by_manifest)`` and it cannot fire. This synthetic
+        call is the only site that exercises it (decode-identity cold gate,
+        docs/process_traces/2026-09-02-decode-identity-set/22 §Q3). Weakening a
+        preceding check to make it reachable is a protocol failure.
+        """
 
         self.assertIsNone(
             identity_pins._distinct_manifest_identity_refusal_reason(
