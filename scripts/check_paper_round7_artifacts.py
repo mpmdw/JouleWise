@@ -2,7 +2,9 @@
 """Fence the round-7 diagnostic desk artifacts registered as DX rows.
 
 The always-on half parses the DX registry subsection as the single source of
-digest, field-path, rendering, and row-value truth.  It checks the five pinned
+digest, field-path, rendering, and row-value truth (render rules may read
+additional artifact fields they name explicitly, as `derived_refused_counts`
+reads `AQ#summary.population_size`).  It checks the five pinned
 files, every supplier field, all artifact gates, every placed DX literal in the
 successor skeleton, and all 118 Figure 4 marks.  Figure coordinates are printed
 to 0.01 px; inverting the 326 px / 50 ms y scale therefore permits 0.0008 ms
@@ -11,14 +13,17 @@ pulse index (0.005 * 58 / 844, rounded upward).
 
 The default invocation additionally re-runs both producers into a directory
 under TMPDIR and requires byte identity for XD, AQ, and the XS-produced F4.
-An absent retained corpus exits 3 and names the missing path; it is never a
-pass.  ``--literals-only`` runs only the always-on digest/field/literal half.
+An absent retained corpus exits 3 and names the missing resolved path; it is
+never a pass.  ``--literals-only`` runs only the always-on digest/field/literal
+half.
 
 Exit codes: 0 for agreement, 2 for any mismatch, 3 for an absent corpus.
 Successful full replay ends with ``R7F COMPARED n / MISMATCHES m``;
 ``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.
-An unavailable corpus instead ends with ``R7F CORPUS UNAVAILABLE: <path>``
-and prints no ``COMPARED`` line.
+An unavailable corpus instead ends with ``R7F CORPUS UNAVAILABLE: <resolved path>``
+and prints no ``COMPARED`` line.  The path is printed after
+``Path.resolve()``, so a consumer must compare against the resolved form of
+what it passed, never the as-given argument.
 """
 
 from __future__ import annotations
@@ -829,6 +834,13 @@ def _producer_failure(label: str, completed: subprocess.CompletedProcess[str]) -
     return _comparison(f"replay {label} exit", 0, f"{completed.returncode}: {tail}")
 
 
+def _producer_unavailable_message(
+    completed: subprocess.CompletedProcess[str], fallback: Path
+) -> str:
+    output = (completed.stdout + completed.stderr).strip().splitlines()
+    return " | ".join(output) if output else str(fallback)
+
+
 def _replace_command_value(command: list[str], flag: str, value: Path) -> None:
     if command.count(flag) != 1:
         raise ValueError(f"pinned F4 command must contain exactly one {flag}")
@@ -885,7 +897,9 @@ def replay_half(
         xs = _run_producer(xs_command, repository_root)
         if xs.returncode != 0:
             if xs.returncode == 3:
-                raise ArtifactsUnavailable((xs.stdout + xs.stderr).strip() or str(corpus_root))
+                raise ArtifactsUnavailable(
+                    _producer_unavailable_message(xs, corpus_root)
+                )
             comparisons.append(_producer_failure("XS", xs))
             return comparisons
 
@@ -912,7 +926,9 @@ def replay_half(
         )
         if anchor.returncode != 0:
             if anchor.returncode == 3:
-                raise ArtifactsUnavailable((anchor.stdout + anchor.stderr).strip() or str(corpus_root))
+                raise ArtifactsUnavailable(
+                    _producer_unavailable_message(anchor, corpus_root)
+                )
             comparisons.append(_producer_failure("AS", anchor))
             return comparisons
         committed_aq = repository_root / spec.sources["AQ"].path

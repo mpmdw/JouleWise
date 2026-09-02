@@ -8,7 +8,8 @@ fence's 0.0008 ms y tolerance is the upward-rounded half-unit inversion
 
 The replay test is corpus-gated, like the Section 2 fence test.  A skip is not a
 pass: the CLI test separately proves that an absent corpus exits 3 and names
-the missing path.
+the missing path.  ``R7F_CORPUS_ROOT`` overrides the corpus root; point it at a
+directory without the corpus to skip the ~8-minute replay locally.
 """
 
 from __future__ import annotations
@@ -37,7 +38,9 @@ REGISTRY_PATH = Path(
     os.environ.get("R7F_REGISTRY", ROOT / "docs" / "paper" / "results-fill-registry.md")
 )
 SKELETON_PATH = ROOT / "docs" / "paper" / "draft-v2-skeleton.md"
-CORPUS_ROOT = Path("/Users/edr/code/JouleWise")
+CORPUS_ROOT = Path(
+    os.environ.get("R7F_CORPUS_ROOT", "/Users/edr/code/JouleWise")
+)
 SCRATCH_PARENT = Path(os.environ.get("TMPDIR", tempfile.gettempdir()))
 
 FENCE_SPEC = importlib.util.spec_from_file_location("check_paper_round7_artifacts", FENCE_PATH)
@@ -593,6 +596,30 @@ class TypedArtifactCliTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.spec = FENCE.parse_registry(REGISTRY_PATH)
+
+    def test_multiline_producer_unavailable_is_flattened_to_last_line(self) -> None:
+        completed_producer = subprocess.CompletedProcess(
+            ["stub-producer"],
+            3,
+            "producer line one\nproducer line two\n",
+            "",
+        )
+        output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=completed_producer),
+            redirect_stdout(output),
+        ):
+            exit_code = FENCE.main(["--corpus-root", str(ROOT)])
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(exit_code, 3, output.getvalue())
+        self.assertTrue(
+            lines[-1].startswith("R7F CORPUS UNAVAILABLE: "), output.getvalue()
+        )
+        self.assertIn("producer line one | producer line two", lines[-1])
+        self.assertFalse(any("COMPARED" in line for line in lines))
 
     def test_string_number_in_aq_is_refused_by_dx026(self) -> None:
         with tempfile.TemporaryDirectory(

@@ -22,10 +22,16 @@ draft in place.
 - **Replay fence:** `scripts/check_paper_replay_fence.py`; require the exact
   successful tail `COMPARED 43` / `MISMATCHES 0` before and after every batch.
 - **Round-7 artifact fence:** `scripts/check_paper_round7_artifacts.py`; its
-  exact successful full-replay tail is `R7F COMPARED 184 / MISMATCHES 0`,
-  separate from RF's 43 comparisons. The literals-only tail
-  `R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0` is not sufficient before a
-  fill batch.
+  successful tail is `R7F COMPARED n / MISMATCHES 0` where `n` is
+  placement-dependent: 181 comparisons plus one per placed DX literal, plus 3
+  in full replay (the XD, AQ, and F4 byte identities). With zero markers
+  placed the tails are therefore `R7F COMPARED 184 / MISMATCHES 0` (full
+  replay) and `R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0`; a complete
+  16-marker batch ends `R7F COMPARED 200 / MISMATCHES 0`. The fill-batch PR
+  restates the exact tail observed before and after the batch, and rewrites
+  the zero-placement pins in `tests/test_paper_round7_artifacts.py` in the
+  same commit that places the markers. The literals-only tail is separate
+  from RF's 43 comparisons and is not sufficient before a fill batch.
   R7F also censes all 16 non-identity DX placements once the mandatory standing sentence appears and prints `R7F PLACED n/16` immediately before its `COMPARED` tail.
   Prose placement (a rendered literal without its marker inside the DX region) is not covered by R7F until kernel row `R7F-DX-PROSE-SCAN-01` closes.
 - **STOP_FILL:** no insertion when a required artifact, field, identity pin,
