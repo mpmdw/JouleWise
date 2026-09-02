@@ -16,8 +16,23 @@ reports, in gauntlet order.
 | Delta re-audit 1 | terra xhigh (208) | 09, 10 | all nine closures CONFIRMED; seven round-1 classes KILLED; one should-fix **I1** |
 | Fix round 2 (bench) | magistrate | commit `2983cdd4` | `_split_table_row` guard: a backslash-escaped backtick outside a code span is a literal, never a span opener; test `test_escaped_backtick_outside_code_span_does_not_open_a_span` |
 | Delta re-audit 2 | luna xhigh (215) | 11, 12 | CLEAN; classification **NEW** (agrees with the magistrate's); seven adversarial edge cases traced against GFM cell boundaries, all correct |
+| Cold gate | Fable cold seat (222), Sol (221), Opus 207b counter-review | 13, 13b, 13c, 14, 15, 16 | L1 ADOPT (Opus's GFM reading; "NEW" overturned), L2 option (c) splitter + arity refusal, L3 same class / structural cure |
+| Fix round 3 | terra xhigh (223) | commit `5ed6f1e9` | L2/L3 verbatim + Opus S1–S5, N1–N9; M1–M5 KILLED |
+| Bench fix | magistrate | commit `55bf9f73` | F-9 regression bites (luna 227 SF1): numbered key after the indented heading; mutant `line.startswith("## ")` FAILS the test |
+| Delta re-audit 3 | luna xhigh (227) | 17 | `_split_table_row` models nothing beyond the pipe rule; B1 (D-170 absent on this branch) is a sibling-branch artefact — D-170 lands on `feat/2026-09-02-t26-install`, which merges first; SF1 fixed at the bench |
 
-## I1 same-signature classification (magistrate, confirmed by luna 215)
+## I1 same-signature classification (magistrate, confirmed by luna 215) — SUPERSEDED
+
+> SUPERSEDED 2026-09-02 by the cold gate `16-MAGISTRATE-RULING-gateledger-splitter.md`
+> §L1: the classification below ("NEW") was wrong at the class level. Round
+> 1's cure INVENTED a code-span model that GFM's table pre-pass does not have
+> (GFM §4.10: cell splitting consumes `\|` before inline parsing, so a raw
+> pipe splits even inside backticks); round 2 patched a defect internal to
+> that invention. Both rounds share the class "hand-rolled cell model ≠ GFM's
+> one rule", the STANDING ESCALATION TRIGGER fired, and the cold gate ruled
+> L2/L3 (Opus's splitter, refuse on arity). The text below is kept as the
+> record of the wrong call. Item 8's "nothing to prune" verdict is likewise
+> superseded: the code-span scanner WAS the prune target (removed in round 3).
 
 Round 1's defect class was "representation-blind pipe split" (a naive
 `line.split("|")`). The round-1 cure REPLACED it with a stateful GFM scanner;
