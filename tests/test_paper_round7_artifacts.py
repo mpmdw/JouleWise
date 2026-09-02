@@ -805,7 +805,10 @@ class InvocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(
             prefix="r7f-unavailable-", dir=SCRATCH_PARENT
         ) as directory:
-            scratch = Path(directory)
+            # The fence prints the RESOLVED corpus root; resolve here too so a
+            # symlinked TMPDIR (macOS /var -> /private/var) cannot fail the exact
+            # last-line comparison.
+            scratch = Path(directory).resolve()
             missing_root = scratch / "no-such-corpus"
             registry = _registry_with_current_source_pins(scratch)
             completed = subprocess.run(
