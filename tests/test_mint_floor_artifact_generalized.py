@@ -1721,7 +1721,7 @@ def freeze_mixed_estimator_v2_pinset(
                         ]
                     bracket = copy.deepcopy(component.whole_window_calibration_bracket)
                     for endpoint in bracket.values():
-                        endpoint["bracket_runs_root"] = str(evidence_root.resolve())
+                        endpoint["bracket_runs_root"] = str(evidence_root.absolute())
                         endpoint["bracket_plan_sha256"] = plan_sha256
                     order_manifest = copy.deepcopy(component.order_manifest)
                     order_manifest["calibration_plan_sha256"] = plan_sha256
@@ -1763,7 +1763,7 @@ def freeze_mixed_estimator_v2_pinset(
                 for role, cell in repaired_cells.items()
             }
             binding = copy.deepcopy(inputs.bracket_binding)
-            binding["runs_root"] = str(evidence_root.resolve())
+            binding["runs_root"] = str(evidence_root.absolute())
             binding["plan_sha256"] = plan_sha256
             binding["binding_digest"] = _fixture_canonical_sha256(
                 {key: value for key, value in binding.items() if key != "binding_digest"}
@@ -1775,7 +1775,7 @@ def freeze_mixed_estimator_v2_pinset(
                 inputs.authenticated_post_observation,
             ):
                 values = vars(observation).copy()
-                values["bracket_runs_root"] = str(evidence_root.resolve())
+                values["bracket_runs_root"] = str(evidence_root.absolute())
                 values["bracket_plan_sha256"] = plan_sha256
                 observations.append(SimpleNamespace(**values))
             mixed_inputs[plan_id] = replace(
@@ -6762,6 +6762,48 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     cell["comparative"]["admissible_half_widths_j"],
                     list(comparative.widths_j),
                 )
+
+    def test_phase0_base_floor_bytes_are_pinned(self) -> None:
+        """Pin bytes whose digest binds nine provenance SHA-256 scalars.
+
+        The scalars are ``cells[0..3].provenance.{absolute,comparative}``'s
+        ``extraction_report.sha256`` values plus ``provenance.calibration_plan.sha256``.
+        Their inputs record the evidence root as an absolute string, so the
+        fixed ``/tmp`` literal is load-bearing; this test must not be changed
+        to use a random ``TMPDIR``.
+        """
+
+        class StableTemporaryDirectory:
+            path = Path("/tmp/joulewise-test-d165-phase0-floor-pin")
+            _active = False
+
+            def __enter__(self):
+                if self.__class__._active:
+                    raise AssertionError(
+                        "nested tempfile.TemporaryDirectory is forbidden"
+                    )
+                shutil.rmtree(self.path, ignore_errors=True)
+                self.path.mkdir(parents=False, exist_ok=False)
+                self.__class__._active = True
+                return str(self.path)
+
+            def __exit__(self, _exc_type, _exc_value, _traceback):
+                self.__class__._active = False
+                return False
+
+        try:
+            with mock.patch.object(
+                tempfile, "TemporaryDirectory", StableTemporaryDirectory
+            ):
+                self.test_common_mode_full_cli_path_writes_bound_exact_artifact()
+                self.assertEqual(
+                    file_sha256(
+                        StableTemporaryDirectory.path / "floor.json"
+                    ),
+                    "9127a51d5f3cb53263c90afd5c63c94d29442a3f9127f11aa25d0498e3c72400",
+                )
+        finally:
+            shutil.rmtree(StableTemporaryDirectory.path, ignore_errors=True)
 
     def test_spec_swap_refuses_before_any_estimator_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
