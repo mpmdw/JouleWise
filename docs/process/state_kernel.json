@@ -1148,6 +1148,44 @@
       "status_note": "2026-08-03: minted from the two-week soundness sweep's finding that D-080 has never fired, plus Ed's validated concurrent-audit pattern (memory: concurrent-fable-audit-pattern). Non-blocking hardening.",
       "stop_card": null
     },
+    "D110-MINT-DEP-RECONCILE-01": {
+      "acceptance": {
+        "evidence": [
+          "The D-110 index status and its pending MINT-GENERALIZE-01 dependency are reconciled by an explicit magistrate or Ed disposition",
+          "The resulting decision-log status and kernel dependency state agree, with no terminal decision carrying a pending dependency"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D110-MINT-DEP-RECONCILE-01/acceptance",
+          "label": "D110-MINT-DEP-RECONCILE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Reconcile D-110's accepted index row with the pending MINT-GENERALIZE-01 decision dependency."
+      },
+      "authority": {
+        "label": "B3 terminal-decision dependency reconciliation for D-110",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "T26 cold-gate B3 terminal decision dependency rule",
+            "path": "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md"
+          },
+          "rule": "D-110 is below DECISION_RULE_FLOOR and remains an explicit pre-rule inconsistency until the bench records whether the accepted status or the pending dependency is stale"
+        }
+      ],
+      "flags": [],
+      "goal": "Resolve the known D-110 accepted-status and pending MINT-GENERALIZE-01 dependency inconsistency without weakening the terminal-decision check.",
+      "id": "D110-MINT-DEP-RECONCILE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 20,
+      "status": "queued",
+      "status_note": "Registered at the T26 FIX bench as the B3 D-110 reconciliation follow-up; the magistrate or Ed must record which side of the known inconsistency is stale.",
+      "stop_card": null
+    },
     "D144-SEATPASS-FOLLOWUPS": {
       "acceptance": {
         "evidence": [
@@ -4433,7 +4471,7 @@
       "acceptance": {
         "evidence": [
           "D-170 indexed `open (installs via T26-RULING-INSTALL-01)` carrying the four T26 verdicts by pointer, then moved to `adopted` naming the installing PR",
-          "tests.test_docs_freshness green with the status-vocabulary test, the `open`-pointer check, and the Executed-evidence shape test present and mutation-killed",
+          "tests.test_docs_freshness green with the status-vocabulary test, the open-pointer check, and the Executed-evidence shape test present; M7, M8, the $ echo exit fence, the .md:48-only citation, both-depth positive controls, and the NEEDS-RULING- exclusion are mutation-killed",
           "gate-ledger CI job advisory-green on its own PR; pull_request_template.md tracked",
           "arm_readiness boundary regressions (600 s +/- 1 ns at issuance and at arm) green; tests.test_arm_readiness_evidence_t0 and tests.test_t0_rehearsal green",
           "each of the four D-170 dependencies on this row moved to satisfied with an evidence pointer at the regression that fails when the ruled value is absent"
@@ -4449,7 +4487,17 @@
         "label": "Cold gate T26: ruling on the four process proposals (items 1-4 AMENDED)",
         "path": "docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "the four T26 verdict mechanisms are installed and each is proven by a regression that fails when the ruled value is absent",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-170"
+        }
+      ],
       "fallback": null,
       "fences": [
         {

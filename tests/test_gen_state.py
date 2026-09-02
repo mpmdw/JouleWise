@@ -90,6 +90,8 @@ EXPECTED_IDS = {
     # were found uninstalled; one installing row plus the two Ed items the
     # ruling routed (E1 branch protection, E2 the D-118 N/A tier).
     "T26-RULING-INSTALL-01",
+    # 2026-09-02 T26 fix round 1 (dx/t26-a cold gate B3): D-110 reconcile row.
+    "D110-MINT-DEP-RECONCILE-01",
     "ED-BRANCH-PROTECTION-E1-01",
     "ED-D118-NA-TIER-E2-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
@@ -604,7 +606,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # D165-SIDECAR-EMIT-01 retired at its 2026-09-02 merge (PR 267):
         # 116 - 1 = 115; 2026-09-02 T26 install wave: 116 + 3 = 119.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 119)
+        self.assertEqual(len(self.tasks), 120)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

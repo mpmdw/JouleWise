@@ -224,7 +224,9 @@ def _decision_reference_documents(root: Path) -> dict[str, str]:
 def _dangling_decision_references(
     documents: dict[str, str], body_ids: set[str]
 ) -> list[tuple[str, int, str]]:
-    token = re.compile(r"D-\d{3}[a-z]?")
+    # Boundaries on both sides: a hex UUID such as "B09C8BDD-187C-..." pasted
+    # into a proposal is not a decision reference (bench, luna 226 F2).
+    token = re.compile(r"(?<![0-9A-Za-z])D-\d{3}[a-z]?(?![0-9A-Za-z])")
     dangling = []
     for relative_path, text in sorted(documents.items()):
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -519,7 +521,7 @@ class DocsFreshnessTests(unittest.TestCase):
 
         with self.subTest(mutation="M6c"):
             adopted = _replace_decision_status(base_index, "D-170", "adopted")
-            with self.assertRaisesRegex(AssertionError, r"D-170.*adopted.*V5-TRANSACTION-01"):
+            with self.assertRaisesRegex(AssertionError, r"D-170.*adopted.*(?:T26-RULING-INSTALL-01|V5-TRANSACTION-01)"):
                 self._assert_terminal_decisions(base_tasks, adopted)
 
         with self.subTest(mutation="D-171 adopted without dependency"):
@@ -566,8 +568,19 @@ class DocsFreshnessTests(unittest.TestCase):
                     self._assert_open_decisions(base_tasks, mutated)
 
         with self.subTest(mutation="only V5 carries D-170 dependency"):
+            # Bench state after the B2 dependency was installed on the
+            # installer row: strip it again and limb 2 must fire.
+            only_v5 = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+            only_v5["T26-RULING-INSTALL-01"]["dependencies"] = [
+                dependency
+                for dependency in only_v5["T26-RULING-INSTALL-01"]["dependencies"]
+                if dependency.get("target") != "D-170"
+            ]
+            self.assertTrue(
+                any(d.get("target") == "D-170" for d in only_v5["V5-TRANSACTION-01"]["dependencies"])
+            )
             with self.assertRaisesRegex(AssertionError, r"D-170.*limb 2"):
-                self._assert_open_decisions(base_tasks, base_index)
+                self._assert_open_decisions(only_v5, base_index)
 
         with self.subTest(mutation="installer close dependency but no start dependency"):
             tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
@@ -600,8 +613,8 @@ class DocsFreshnessTests(unittest.TestCase):
             self._assert_index_rows_complete(malformed)
 
     def test_dated_magistrate_rulings_carry_executed_evidence(self) -> None:
-        # The filename is the trigger. Today the union is exactly
-        # 2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md.
+        # The filename is the trigger. Today the union is exactly the two
+        # 2026-09-02 magistrate rulings (coldgate-dx-t26a, process-rules).
         selected = _dated_magistrate_rulings()
         self.assertTrue(selected)
         self.assertEqual(
@@ -609,7 +622,10 @@ class DocsFreshnessTests(unittest.TestCase):
                 path.relative_to(ROOT).as_posix()
                 for path in selected
             ],
-            ["docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md"],
+            [
+                "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md",
+                "docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md",
+            ],
         )
         for path in selected:
             relative_path = path.relative_to(ROOT)
