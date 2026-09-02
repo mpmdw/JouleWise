@@ -853,6 +853,7 @@ def _load_prefill_prompt_pin(
         "exhausted_ladder_branch",
         "prefill_length",
         "tokenizer_json_sha256",
+        "special_token_policy",
         "prompt_text",
         "prompt_text_utf8_sha256",
         "prompt_token_ids",
@@ -866,6 +867,8 @@ def _load_prefill_prompt_pin(
         raise ValueError("prefill_prompt_pin_invalid: closed schema mismatch")
     if value["schema_version"] != "joulewise.prefill_prompt_pin.v2":
         raise ValueError("prefill_prompt_pin_invalid: unknown schema_version")
+    if value["special_token_policy"] != "add_special_tokens=true":
+        raise ValueError("prefill_prompt_pin_invalid: special_token_policy")
     if value["ladder_prompt_tokens"] != PREFILL_LADDER_PROMPT_TOKENS:
         raise ValueError("prefill_prompt_pin_invalid: ladder_prompt_tokens")
     if (

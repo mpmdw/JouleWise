@@ -280,6 +280,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
             "exhausted_ladder_branch": copy.deepcopy(PREFILL_EXHAUSTED_LADDER_BRANCH),
             "prefill_length": length,
             "tokenizer_json_sha256": tokenizer_sha,
+            "special_token_policy": "add_special_tokens=true",
             "prompt_text": target["prompt_text"],
             "prompt_text_utf8_sha256": target["prompt_text_utf8_sha256"],
             "prompt_token_ids": target["prompt_token_ids"],
@@ -414,6 +415,33 @@ class D117ContrastV5PackTests(unittest.TestCase):
             self.rewrite_prefill_pin(pin, post_hoc_override=True)
             with self.assertRaisesRegex(ValueError, "closed schema mismatch"):
                 self.configure(pin)
+
+    def test_prefill_prompt_pin_special_token_policy_refusals_are_exact(self) -> None:
+        cases = (
+            (
+                "mutated",
+                lambda value: value.__setitem__(
+                    "special_token_policy", "add_special_tokens=false"
+                ),
+                "prefill_prompt_pin_invalid: special_token_policy",
+            ),
+            (
+                "missing",
+                lambda value: value.pop("special_token_policy"),
+                "prefill_prompt_pin_invalid: closed schema mismatch",
+            ),
+        )
+        for name, mutate, reason in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                prefix="d117-v5-pin-policy-"
+            ) as temporary:
+                pin = self.write_prefill_pin(Path(temporary))
+                value = json.loads(pin.read_text(encoding="utf-8"))
+                mutate(value)
+                pin.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaises(ValueError) as raised:
+                    self.configure(pin)
+            self.assertEqual(str(raised.exception), reason)
 
     def test_prefill_prompt_pin_refuses_unresolved_g2a_record_hash(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-pin-v2-") as temporary:

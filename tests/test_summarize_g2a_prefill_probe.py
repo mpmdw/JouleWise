@@ -468,6 +468,10 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                         "1",
                     ]
                 )
+                plan_root = root / "window-plan"
+                ladder_path = plan_root / "prefill-prompt-ladder.json"
+                ladder = json.loads(ladder_path.read_text())
+                issuer._validate_ladder(ladder)
                 with mock.patch.object(
                     probe,
                     "_derive_live_vectors",
@@ -504,12 +508,9 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                     )
             self.assertEqual((build_code, bind_code), (0, 0))
 
-            plan_root = root / "window-plan"
             config_root = root / "prefill-probe-configs"
             inventory_path = plan_root / "g2a-input-inventory.json"
-            ladder_path = plan_root / "prefill-prompt-ladder.json"
             inventory = json.loads(inventory_path.read_text())
-            ladder = json.loads(ladder_path.read_text())
             by_length = {row["prefill_tokens"]: row for row in ladder["rungs"]}
             runs_root = root / "synthetic-runs"
             for stage in inventory["stages"]:
@@ -577,21 +578,12 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 )
             self.assertEqual((summary_code, selection_code, issue_code), (0, 0, 0))
             self.assertEqual(set(json.loads(pin_path.read_text())), issuer.PROMPT_PIN_KEYS)
-            try:
-                loaded = issuer.d117_v5._load_prefill_prompt_pin(
-                    pin_path,
-                    prefill_length=512,
-                    tokenizer_json_sha256=ladder["tokenizer_json_sha256"],
-                    panel_sha256=hashlib.sha256(PANEL.read_bytes()).hexdigest(),
-                )
-            except ValueError as exc:
-                self.assertEqual(
-                    str(exc), "prefill_prompt_pin_invalid: closed schema mismatch"
-                )
-                self.skipTest(
-                    "NEEDS_SCOPE: _load_prefill_prompt_pin must admit and validate "
-                    "special_token_policy"
-                )
+            loaded = issuer.d117_v5._load_prefill_prompt_pin(
+                pin_path,
+                prefill_length=512,
+                tokenizer_json_sha256=ladder["tokenizer_json_sha256"],
+                panel_sha256=hashlib.sha256(PANEL.read_bytes()).hexdigest(),
+            )
             self.assertEqual(loaded["special_token_policy"], "add_special_tokens=true")
 
 

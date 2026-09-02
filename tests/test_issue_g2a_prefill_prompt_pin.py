@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -238,6 +239,30 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             str(raised.exception), "prompt_pin_special_token_policy_invalid"
         )
 
+    def test_issuer_special_token_policy_matches_v5_loader_accepted_value(self) -> None:
+        tree = ast.parse(GENERATOR.read_text(encoding="utf-8"))
+        loader = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_load_prefill_prompt_pin"
+        )
+        comparisons = []
+        for node in ast.walk(loader):
+            if (
+                isinstance(node, ast.Compare)
+                and len(node.ops) == 1
+                and isinstance(node.left, ast.Subscript)
+                and isinstance(node.left.slice, ast.Constant)
+                and node.left.slice.value == "special_token_policy"
+                and len(node.comparators) == 1
+                and isinstance(node.comparators[0], ast.Constant)
+            ):
+                comparisons.append(
+                    (type(node.ops[0]).__name__, node.comparators[0].value)
+                )
+        self.assertEqual(comparisons, [("NotEq", issuer.SPECIAL_TOKEN_POLICY)])
+
     def test_text_that_does_not_retokenize_to_stored_ids_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -320,7 +345,6 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
 
     def test_issued_selected_and_no_clear_pins_are_accepted_by_v5_loader(self) -> None:
         for first_qualifying, expected in ((1024, 1024), (None, 4096)):
-            loader_scope_blocked = False
             with self.subTest(first_qualifying=first_qualifying), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 selection, summary, ladder_path, ladder = self.prepare(
@@ -330,24 +354,13 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                     root, selection, summary, ladder_path, ladder
                 )
                 generator = load_generator()
-                try:
-                    generator.configure_model_pair(
-                        PANEL,
-                        "qwen3-1p7b",
-                        "qwen3-8b",
-                        decode_workload_path=WORKLOAD,
-                        prefill_length=expected,
-                        prefill_prompt_pin_path=output,
-                    )
-                except ValueError as exc:
-                    self.assertEqual(
-                        str(exc), "prefill_prompt_pin_invalid: closed schema mismatch"
-                    )
-                    loader_scope_blocked = True
-            if loader_scope_blocked:
-                self.skipTest(
-                    "NEEDS_SCOPE: _load_prefill_prompt_pin must admit and validate "
-                    "special_token_policy"
+                generator.configure_model_pair(
+                    PANEL,
+                    "qwen3-1p7b",
+                    "qwen3-8b",
+                    decode_workload_path=WORKLOAD,
+                    prefill_length=expected,
+                    prefill_prompt_pin_path=output,
                 )
             self.assertEqual(code, 0)
             self.assertEqual(generator.PREFILL_LENGTH, expected)
