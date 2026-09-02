@@ -698,11 +698,17 @@ class NightDriverTests(unittest.TestCase):
         old_deadline = self.driver.COURIER_DEADLINE_S
         self.driver.COURIER_DEADLINE_S = 0
         try:
+            # Pin the clock inside the night: run_courier's dead-man hand-off reads
+            # the wall clock, and the fixture's absolute t0 puts its dead-man at
+            # 07:00 local on 2026-09-02 — already past on a UTC runner, where the
+            # courier then hands off with attempted == 0.
             with mock.patch.object(
                 self.driver.subprocess, "Popen", side_effect=spawn
             ), mock.patch.object(
                 self.driver.subprocess, "run", side_effect=run_command
-            ), mock.patch.object(self.driver.time, "sleep"):
+            ), mock.patch.object(self.driver.time, "sleep"), mock.patch.object(
+                self.driver.time, "time", return_value=self.t0_epoch_s + 1
+            ):
                 exit_code = self.driver.run_night(self.plan_path)
         finally:
             self.driver.COURIER_DEADLINE_S = old_deadline
