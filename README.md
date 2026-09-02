@@ -22,50 +22,43 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-09-01)
+## Current activity (refreshed each work block; last: 2026-09-02)
 
-**Just completed (2026-08-28/30): the campaign switched to newer models,
-and the paper's pass/fail rule got teeth.** Ed chose to run the
-measurement campaign on the newer Qwen3 model pair rather than the
-Qwen2.5 pair the previous plan froze; the design is unchanged, so this
-is a regeneration of the frozen plan, not a new experiment. Three blind
-reviewers of the paper draft then converged on a real weakness: the
-registered pass/fail rule was written so that almost any measurement
-would pass it. A fresh-eyes review board ruled the fix before any data
-exists: the paper's headline now requires the timing-aware uncertainty
-floor to be at least TWICE the naive floor, per component, pre-registered
-into the regenerated plan. Also landed: a desk analysis that splits the
-worked example's 30 ms calibration bound into its four physical parts
-(13 ms repeatable onset bias + 14 ms worst-pulse scatter + ~2 ms
-placement limit + ~1 ms clock term) — the paper's first plotted
-measured data.
+**Just completed (2026-09-01/02): the night driver is on main.** The
+unattended measurement night — the lane Ed asked for first, so the machine
+can run its own quiet-hour experiments with nobody at the keyboard — now
+has its driver merged after the full adversarial cycle: four fix rounds,
+each re-audited by a different model family, and a cold three-family
+review of the fourth. The driver counts running agent processes before it
+starts (and refuses if any are found), starts the measurement chain
+exactly once, records every outcome as a signed file, and mails a morning
+summary through a headless assistant session; a separate 07:00 "dead-man"
+job reports the night even if the driver itself died. Earlier in the
+block: the campaign switched to the newer Qwen3 model pair (a regeneration
+of the frozen plan, not a new experiment), and the paper's headline
+pass/fail rule now requires the timing-aware uncertainty floor to be at
+least TWICE the naive floor, per component, pre-registered before any data
+exists.
 
-**Now (updated 2026-09-01, later):** the four pull requests above have all
-merged, each after its full adversarial cycle. The one lane still open is
-the one Ed asked for first: an unattended measurement night, so that the
-machine can run its own quiet-hour experiments without anyone at the
-keyboard. The night driver now exists as a reviewed branch — it counts
-running agent processes before starting (and refuses if any are found),
-starts the measurement chain exactly once, records every outcome as a
-signed file, and sends a morning summary email through a headless
-assistant session; a separate 07:00 "dead-man" job reports the night even
-if the driver itself died. Its third fix round closed every earlier
-finding, and the re-audit of that round found one new one: for a fraction
-of a second between claiming the night and launching the chain, the
-progress marker is an empty file, and the dead-man job could misread that
-empty file as a failed launch. Because this is the second fix on the same
-marker, the rules require a cold review — three reviewers from three model
-families, none with memory of the discussion — before the fourth fix is
-written. That review is running now.
+**Now (updated 2026-09-02):** two code lanes are landing in parallel.
+(1) The dominance close-out's second stage: the floor-minting script will
+emit, once per campaign, a small "replay" file that lets anyone re-derive
+the paper's dominance verdict from the published floor artifact; a byte
+pin taken before the change proves the floor artifact itself is
+unaltered by it. (2) A pre-flight check for the prompt-length campaign:
+at freeze and again at arm time, the harness re-tokenizes every registered
+prompt with the same encoder the collection run will use and refuses if
+the token count or token hash differs from what the plan registered — so
+a tokenizer drift can never silently change what was measured.
 
-**Next:** land the fourth fix under the cold ruling, install the night
-jobs, rehearse one stub night end to end (results pushed, email
-delivered), then email Ed the plan for the first real instrumented night
-— which launches without his hand unless he replies no. That night
-measures the four candidate prompt lengths; a desk day then pins the
-choice, generates the final plan, and re-proves it end-to-end in a
-throwaway clone; the transaction night follows, then about a week of
-collection and the paper's results fill.
+**Next:** rehearse one stub night end to end (results pushed, email
+delivered), rehearse the "installed the morning before" stand-down, then
+email Ed the plan for the first real instrumented night — which launches
+without his hand unless he replies no. That night measures the four
+candidate prompt lengths; a desk day then pins the choice, generates the
+final plan, and re-proves it end-to-end in a throwaway clone; the
+transaction night follows, then about a week of collection and the
+paper's results fill.
 
 ## Current State
 
