@@ -2,7 +2,7 @@
 
 Lane: DX registry / round-7 artifact fence (ruling 168a).
 Branch `feat/2026-09-02-dx-registry`; PR #272.
-Files 01–20b in this directory are the seat briefs, the sealed reports, and the
+Files 01–21 in this directory are the seat briefs, the sealed reports, and the
 bench replay records, in gauntlet order.
 
 ## Gauntlet record
@@ -22,6 +22,8 @@ bench replay records, in gauntlet order.
 | Opus counter-review (gate item 6) | Opus 5 (Agent tool, read-only) | 19, 19b | 73f7fcc2 | `SHOULD-FIX 2`, `NIT 4`; "What I would not merge as-is: nothing". Disposition in 19b: SF2(a)/(b), NIT3, NIT4 to a luna fix round; SF1 checklist half at the bench, test half deferred to the fill-batch PR; NIT1/NIT2 recorded (D-161 prune) |
 | Fix round 3 (Opus findings) | luna high (237) | brief in scratchpad, report `19c` | "@ 73f7fcc2" | envelope `"status": "clean"`, `"completion": "complete"`; wrapper `run_status=SCOPE_VIOLATION rc=77 scope_action=failed_preserved` caused ONLY by the magistrate's untracked files 19/19b in the worktree (`unowned_dirty`); the seat's edits are all inside its two-file scope and were used as landed |
 | Delta re-audit 3 | terra xhigh (239) | 20 (brief, report), 20b | "@ 7fc87a7f" | `VERDICT: SHOULD-FIX 1` (docstring over-specifies the UNAVAILABLE detail as a path; doc-only, cured at the bench per 20b; contract arithmetic, AS-branch flattening, env-override isolation and scope all confirmed) |
+| Bench | magistrate (bench) | commit 9be7a229 | — | docstring: the UNAVAILABLE detail is the preflight resolved path OR the producer's flattened output (terra 239 SF cure) |
+| Final-head fresh pass | sol high (240) | 21 (brief, report) | "@ 9be7a229" | `VERDICT: SHOULD-FIX 1` — the same docstring sentence a THIRD time (silent exit-3 producer falls back to the resolved corpus root, not documented). Full module Ran 45, OK (472 s); literals-only 181 / 0; CI clean-checkout skip path confirmed statically. Charter §3 trigger 1 (second fix round on the same defect) — COLD GATE convened, packet in `docs/process_traces/2026-09-02-coldgate-r7f-unavailable/`; no further edit to the sentence until it rules |
 
 ## Commits on this branch
 
