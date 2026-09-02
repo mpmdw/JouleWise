@@ -232,11 +232,145 @@ TEMPLATE_DIGIT_ALLOWLIST = (
     r"SHA-256",
     r"UTF-8",
     r"H30",
-    r"95%",
-    r"95/95",
     r"A/B/B/A",
     r"AR\(1\)",
     r"Table \d",
+)
+TEMPLATE_MATH_DIGIT_ALLOWLIST = (
+    r"[AB]_\{i1\}",
+    r"[AB]_\{i2\}",
+    r"p_\{\(1\)\}",
+    r"p_\{\(2\)\}",
+    r"1/2",
+    r"\\nu/2",
+    r"i=2",
+    r"i-1",
+    r"\+2\\sum",
+    r"k=1",
+    r"\(1-k/n\)",
+    r"n-1",
+    r"\\rfloor-1",
+    r"\^2",
+    r"\)/2",
+)
+EXPECTED_AST_CITATION_TARGETS = {
+    "citation_two_sided_student_t_p_value": (
+        "joulewise/analysis_engine/distributions.py",
+        "two_sided_student_t_p_value",
+    ),
+    "citation_student_t_quantile": (
+        "joulewise/analysis_engine/distributions.py",
+        "student_t_quantile",
+    ),
+    "citation_beta_continued_fraction": (
+        "joulewise/analysis_engine/distributions.py",
+        "_beta_continued_fraction",
+    ),
+    "citation_ci_t_critical": (
+        "joulewise/analysis_engine/estimators.py",
+        "_ci_t_critical",
+    ),
+    "citation_evaluate_claim": (
+        "joulewise/analysis_engine/claims.py",
+        "evaluate_claim",
+    ),
+    "citation_estimate_paired_blocks": (
+        "joulewise/analysis_engine/estimators.py",
+        "estimate_paired_blocks",
+    ),
+    "citation_model_result": (
+        "scripts/dependence_sensitivity.py",
+        "_model_result",
+    ),
+}
+
+# Each rule maps a slot-name pattern to the context that licenses that name at
+# one occurrence. The sentinel replaces only the occurrence under inspection,
+# so byte-equal swaps cannot borrow context from another occurrence.
+PRE_EXAMPLE_SLOT_CONTEXT_RULES = (
+    # The generic “for example” cutoff is intentionally the independent model:
+    # the nearby degrees-of-freedom concept is instantiated by registered
+    # composition (nu=n-1), not by the later AR(1) sensitivity model.
+    (
+        r"independent_t_critical_three_dp",
+        r"(?:for example|the latter supplies) <<SLOT>>",
+    ),
+    (r"ar1_t_critical_three_dp", r"and <<SLOT>>, rounded"),
+    (r"coverage_percent", r"unadjusted two-sided <<SLOT>> interval"),
+    (
+        r"registered_alpha",
+        r"(?:\\\(\\alpha=|p_\{\(2\)\}.*?with \\\(|alpha option: \\\()<<SLOT>>",
+    ),
+    (r"registered_multiplicity", r"\\\(m=<<SLOT>>"),
+    (r"config_generator_path", r"\) in <<SLOT>> by its `family_alpha`"),
+    (r"alpha_over_two", r"p_\{\(1\)\}.*?with \\\(<<SLOT>>"),
+    (r"one_minus_alpha_over_two", r"t_\{<<SLOT>>"),
+    (r"citation_ci_t_critical", r"uses <<SLOT>>;"),
+    (
+        r"citation_evaluate_claim",
+        r"(?:Holm rejection \(|interval check in )<<SLOT>>",
+    ),
+    (
+        r"independent_degrees_integer",
+        r"Independent model: \\\(n-1=<<SLOT>>",
+    ),
+    (r"citation_estimate_paired_blocks", r"replicates <<SLOT>> and"),
+    (r"citation_two_sided_student_t_p_value", r"calls <<SLOT>> \(with"),
+    (r"citation_beta_continued_fraction", r"in <<SLOT>>\) for p"),
+    (r"citation_student_t_quantile", r"and <<SLOT>> for the critical"),
+    (r"citation_model_result", r"places at <<SLOT>>"),
+    (r"procedure_one", r"^<<SLOT>>\. \*\*Registered composition"),
+    (r"procedure_two", r"^<<SLOT>>\. \*\*AR\(1\) estimated-adjacency"),
+    (r"procedure_three", r"^<<SLOT>>\. \*\*Fixed effective-n halving"),
+    (
+        r"independent_v_integer",
+        r"^\$\{procedure_one\}\. \*\*Registered composition.*?\\\(V=<<SLOT>>",
+    ),
+    (
+        r"independent_effective_n_integer",
+        r"^\$\{procedure_one\}\. \*\*Registered composition.*?"
+        r"\\\(n_\{\\mathrm\{eff\}\}=<<SLOT>>",
+    ),
+    (
+        r"independent_degrees_integer",
+        r"^\$\{procedure_one\}\. \*\*Registered composition.*?\\nu=<<SLOT>>",
+    ),
+    (
+        r"ar1_v_baseline_integer",
+        r"^\$\{procedure_two\}\. \*\*AR\(1\) estimated-adjacency.*?"
+        r"\\\(V=<<SLOT>>",
+    ),
+    (
+        r"halving_effective_n_integer",
+        r"^\$\{procedure_three\}\. \*\*Fixed effective-n halving.*?"
+        r"\\\(n_\{\\mathrm\{eff\}\}=<<SLOT>>",
+    ),
+    (
+        r"halving_v_integer",
+        r"^\$\{procedure_three\}\. \*\*Fixed effective-n halving.*?"
+        r"\\\(V=<<SLOT>>",
+    ),
+    (
+        r"halving_degrees_integer",
+        r"^\$\{procedure_three\}\. \*\*Fixed effective-n halving.*?\\nu=<<SLOT>>",
+    ),
+    (r"zero_rho", r"(?:set to |\\hat\\rho=)<<SLOT>>"),
+    (r"correlation_abs_limit", r"\\ge<<SLOT>>"),
+    (r"registered_n_blocks", r"for \\\(n=<<SLOT>>"),
+    (r"rho_half", r"and \\\(\\rho=<<SLOT>>"),
+    (r"rho_half_variance_inflation", r"gives \\\(V=<<SLOT>>"),
+    (
+        r"rho_half_effective_n",
+        r"and \\\(n_\{\\mathrm\{eff\}\}=<<SLOT>>",
+    ),
+    (r"rho_nine_tenths", r"at \\\(\\rho=<<SLOT>>"),
+    (
+        r"rho_nine_tenths_effective_n",
+        r"n_\{\\mathrm\{eff\}\}=<<SLOT>>",
+    ),
+    (r"registered_direction_outcome_placeholder", r"direction gate <<SLOT>>,"),
+    (r"h30_link", r"\[retensing-plan\.md, H30\]\(<<SLOT>>\)"),
+    (r"h30_replacement", r"^> <<SLOT>>$"),
 )
 MANDATED_REFUSAL_ROW_NAMES = frozenset(
     {
@@ -995,8 +1129,14 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
                     model["degrees_of_freedom"]
                     / (model["degrees_of_freedom"] + model["t_statistic"] ** 2),
                 )
+        actual_targets = {
+            slot_name: (path.resolve().relative_to(REPO_ROOT).as_posix(), function_name)
+            for slot_name, (path, function_name) in dependence_sensitivity.AST_CITATION_SPECS.items()
+        }
+        self.assertEqual(actual_targets, EXPECTED_AST_CITATION_TARGETS)
         slots = dependence_sensitivity.sheet_slots(TEMPLATE.read_text(encoding="utf-8"))
-        for slot_name, (path, function_name) in dependence_sensitivity.AST_CITATION_SPECS.items():
+        for slot_name, (relative_path, function_name) in EXPECTED_AST_CITATION_TARGETS.items():
+            path = REPO_ROOT / relative_path
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             definitions = [
                 node
@@ -1006,7 +1146,6 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
             ]
             with self.subTest(citation=function_name):
                 self.assertEqual(len(definitions), 1)
-                relative_path = path.resolve().relative_to(REPO_ROOT).as_posix()
                 expected = (
                     f"`{function_name}` (`{relative_path}`, line {definitions[0].lineno})"
                 )
@@ -1032,6 +1171,149 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
         self.assertEqual(set(resolved), named_slots)
         self.assertTrue(all(isinstance(value, str) for value in resolved.values()))
 
+    def test_every_pre_example_slot_matches_a_closed_context_rule(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        pre_example = template[: template.index("## Worked pre-collection example")]
+        fixed_start = pre_example.index("## Fixed sensitivity procedure")
+        fixed_end = pre_example.index("## Pre-registered disagreement sentence")
+        procedure_starts = [
+            match.start()
+            for match in re.finditer(r"^\$\{procedure_(?:one|two|three)\}", pre_example, re.MULTILINE)
+        ]
+        covered_rules: set[int] = set()
+        for occurrence in TEMPLATE_SLOT_PATTERN.finditer(pre_example):
+            slot_name = occurrence.group("name")
+            matching_rules = [
+                (index, context_pattern)
+                for index, (slot_pattern, context_pattern) in enumerate(
+                    PRE_EXAMPLE_SLOT_CONTEXT_RULES
+                )
+                if re.fullmatch(slot_pattern, slot_name)
+            ]
+            with self.subTest(slot=slot_name, offset=occurrence.start()):
+                self.assertTrue(matching_rules, f"uncovered pre-example slot: {slot_name}")
+                if fixed_start <= occurrence.start() < fixed_end and procedure_starts[0] <= occurrence.start():
+                    scope_start = max(
+                        start for start in procedure_starts if start <= occurrence.start()
+                    )
+                    later_starts = [
+                        start for start in procedure_starts if start > occurrence.start()
+                    ]
+                    scope_end = min(later_starts, default=fixed_end)
+                else:
+                    scope_start = pre_example.rfind("\n", 0, occurrence.start()) + 1
+                    line_end = pre_example.find("\n", occurrence.end())
+                    scope_end = len(pre_example) if line_end < 0 else line_end
+                relative_start = occurrence.start() - scope_start
+                relative_end = occurrence.end() - scope_start
+                scope = pre_example[scope_start:scope_end]
+                occurrence_context = (
+                    scope[:relative_start] + "<<SLOT>>" + scope[relative_end:]
+                )
+                satisfied = [
+                    index
+                    for index, context_pattern in matching_rules
+                    if re.search(context_pattern, occurrence_context, re.DOTALL)
+                ]
+                self.assertTrue(
+                    satisfied,
+                    f"slot {slot_name} disagrees with its context: {occurrence_context!r}",
+                )
+                covered_rules.update(satisfied)
+        self.assertEqual(covered_rules, set(range(len(PRE_EXAMPLE_SLOT_CONTEXT_RULES))))
+
+    def test_correlation_limit_slot_is_bound_to_the_estimator_guard(self) -> None:
+        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
+        estimator = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "estimate_ar1_rho"
+        )
+        guard_limits = [
+            ast.literal_eval(node.comparators[0])
+            for node in ast.walk(estimator)
+            if isinstance(node, ast.Compare)
+            and len(node.ops) == 1
+            and isinstance(node.ops[0], ast.GtE)
+            and isinstance(node.left, ast.Call)
+            and isinstance(node.left.func, ast.Name)
+            and node.left.func.id == "abs"
+            and len(node.left.args) == 1
+            and isinstance(node.left.args[0], ast.Name)
+            and node.left.args[0].id == "rho_hat"
+        ]
+        self.assertEqual(len(guard_limits), 1)
+        guard_limit = float(guard_limits[0])
+        rendered_limit = dependence_sensitivity.sheet_slots(
+            TEMPLATE.read_text(encoding="utf-8")
+        )["correlation_abs_limit"]
+        expected = str(int(guard_limit)) if guard_limit.is_integer() else str(guard_limit)
+        self.assertEqual(rendered_limit, expected)
+        with self.assertRaisesRegex(ValueError, r"abs\(rho\) < 1"):
+            dependence_sensitivity.estimate_ar1_rho([1.0, -1.0] * 5, 0.0)
+
+    def test_renderer_refuses_registered_alpha_or_multiplicity_constant_drift(
+        self,
+    ) -> None:
+        self.assertEqual(dependence_sensitivity.render_sheet(), self._document())
+        for constant_name, mutation in (
+            ("REGISTERED_ALPHA", 0.1),
+            ("REGISTERED_MULTIPLICITY", 1),
+        ):
+            with self.subTest(constant=constant_name):
+                with patch.object(dependence_sensitivity, constant_name, mutation):
+                    with self.assertRaisesRegex(
+                        dependence_sensitivity.SheetRenderError,
+                        r"config generator .* expected",
+                    ):
+                        dependence_sensitivity.render_sheet()
+
+    def test_rendered_agreement_words_match_documented_command_payloads(self) -> None:
+        document = self._document()
+        commands = _extract_sheet_commands(document)
+        self.assertEqual(len(commands), 2)
+        payloads = []
+        for command in commands:
+            completed = subprocess.run(
+                shlex.split(command),
+                cwd=REPO_ROOT,
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payloads.append(json.loads(completed.stdout))
+
+        example_match = re.search(r"^The gates (?P<word>agree|disagree) in ", document, re.MULTILINE)
+        self.assertIsNotNone(example_match)
+        assert example_match is not None
+        example_agrees = payloads[0]["comparison"]["direction_gate_outcomes_agree"]
+        self.assertEqual(example_match.group("word"), "agree" if example_agrees else "disagree")
+
+        disagreement_match = re.search(
+            r"^That output has the registered-composition direction screen "
+            r"(?P<independent>passing|failing) while the AR\(1\) and halving screens "
+            r"(?P<nonregistered>pass|fail),",
+            document,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(disagreement_match)
+        assert disagreement_match is not None
+        disagreement_models = payloads[1]["models"]
+        independent_passes = disagreement_models["independent_blocks"]["direction_gate"]["passes"]
+        nonregistered_pass = all(
+            disagreement_models[name]["direction_gate"]["passes"]
+            for name in ("ar1_estimated_rho", "fixed_effective_n_halving")
+        )
+        self.assertEqual(
+            disagreement_match.group("independent"),
+            "passing" if independent_passes else "failing",
+        )
+        self.assertEqual(
+            disagreement_match.group("nonregistered"),
+            "pass" if nonregistered_pass else "fail",
+        )
+
     def test_template_digit_and_code_citation_lint_has_a_closed_shape_allowlist(self) -> None:
         template = TEMPLATE.read_text(encoding="utf-8")
         math_spans = [
@@ -1045,9 +1327,13 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
         self.assertNotRegex(outside_math, r"\d")
         for math_span in math_spans:
             without_slots = TEMPLATE_SLOT_PATTERN.sub("", math_span)
-            without_sum_limits = re.sub(r"_\{[a-z]=\d\}", "", without_slots)
+            without_permitted_digits = without_slots
+            for allowed_shape in TEMPLATE_MATH_DIGIT_ALLOWLIST:
+                without_permitted_digits = re.sub(
+                    allowed_shape, "", without_permitted_digits
+                )
             with self.subTest(math_span=math_span):
-                self.assertNotRegex(without_sum_limits, r"=\s*-?\d")
+                self.assertNotRegex(without_permitted_digits, r"\d")
         without_slots = TEMPLATE_SLOT_PATTERN.sub("", template)
         self.assertNotRegex(
             without_slots,
