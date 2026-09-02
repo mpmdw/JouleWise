@@ -1,175 +1,186 @@
-WRITE_SCOPE: ["configs/campaigns/d117_contrast_v5/generate_configs.py","joulewise/identity_pins.py","joulewise/analysis_engine/inputs.py","tests/test_d117_contrast_v5_pack.py","tests/test_identity_pins.py","tests/test_analysis_inputs.py","docs/contracts/identity_pin_projection.md"]
-ORIGIN: claude-fable-5 magistrate (JouleWise loop session) | HOP: 1 | GENRE: implementation
+ORIGIN: claude-code (Fable magistrate, JouleWise loop)
+HOP: 1
+WRITE_SCOPE: ["configs/campaigns/d117_contrast_v5/generate_configs.py", "joulewise/identity_pins.py", "joulewise/analysis_engine/inputs.py", "joulewise/analysis_engine/__init__.py", "tests/test_d117_contrast_v5_pack.py", "tests/test_identity_pins.py", "tests/test_analysis_inputs.py", "tests/test_analysis_engine.py", "docs/contracts/identity_pin_projection.md", "docs/phase_2/gamma_arm_readiness.md", "docs/contracts/d165_dominance_closeout.md", "docs/decision_log.md"]
+GENRE: implementation
+EFFORT: xhigh
+TMPDIR: use the exported TMPDIR (a scratchpad subdir); never /tmp.
 
-# FIX — decode-unit identity under prompt rotation (ruling 171a; D-131 cl.2/cl.3 amendment)
+# FIX round 1 — decode-identity set (branch fix/2026-09-02-decode-identity-set @ 1a608089)
 
-You are implementing a magistrate RULING, not a design. Where the ruling is
-silent you may choose; where it speaks you follow it verbatim. If a ruled
-clause cannot be implemented as written (a cited site does not exist, a
-required input is unreachable from the call path), STOP that clause and
-return early with a `NEEDS_RULING` flag naming the clause, the obstacle, and
-two concrete options — do NOT improvise a semantics. Everything else in the
-brief still gets done and reported.
+LINKED WORKTREE `/Users/edr/code/JouleWise-wt-decode-id`. Do NOT commit, do
+NOT rebase, do NOT run canonical `python3 -m unittest discover`; the
+magistrate commits. Never touch `runs*/`, `~/jw_models`, or any night custody
+root. Do not read or write `/Users/edr/code/JouleWise-wt-decode-id2` / `-id3`.
 
-Worktree: this linked worktree, branch `fix/2026-09-02-decode-identity-set`
-off the PR #269 merge head. You cannot commit (linked worktree; the magistrate
-commits). Never run `python -m unittest discover`; run named modules only.
-`TMPDIR` is preset to a scratchpad subdir — keep every temp path under it.
-NEVER edit `docs/process/state_kernel.json`, `docs/decision_log.md`, any
-`runs*/`, `configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/`, or any
-file outside WRITE_SCOPE.
+AUTHORITY: `docs/process_traces/2026-09-02-projection-02/171a-RULING-decode-identity.md`
+R-1..R-8 (read it first; R-7 `:86-100` is quoted below in F-K). Three
+refuters found the defects below — luna 202 (contract lens), Opus 204
+(analysis/consumer lens), terra 206 (execution lens: 14 mutations, 5
+survived). Apply the dictated closures exactly; anything that does not fit
+returns NEEDS_RULING, never improvisation.
 
-## Hard invariant (pinned; the run fails if it moves)
+HARD FENCE: `sha256(canonical_json_bytes(dominance_criterion_registration()))`
+in `configs/campaigns/d117_contrast_v5/generate_configs.py` MUST remain
+`1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b` (pinned at
+`tests/test_d165_dominance_closeout.py:1770`, `tests/test_night_gate.py:188`,
+`joulewise/night_gate.py:27`). Print it in the report after your edits.
+`configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/` and every committed
+receipt are frozen — never regenerate committed receipts; generate only into
+TMPDIR.
 
-`sha256(canonical_json_bytes(dominance_criterion_registration()))` in
-`configs/campaigns/d117_contrast_v5/generate_configs.py` must remain
-`1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b`
-(pinned at `tests/test_d117_contrast_v5_pack.py` ~:966-971,
-`tests/test_d165_dominance_closeout.py` ~:1616/1770, `tests/test_night_gate.py`
-~:188). Run those three modules at the end and report.
+## Dictated closures
 
-## The defect (verified at the bench and by the cold gate)
+### Blockers / material
 
-Generated `_v5` decode units (`A/decode`, `B/decode`) hold 20 configs that
-rotate over 8 prompt manifests (`suite_manifest_ref`/`suite_manifest_sha256`
-per config; histogram 4/4/2/2/2/2/2/2), so they yield 8 distinct
-`scientific_config_identity_sha256` values. `freeze_projection`
-(`joulewise/identity_pins.py`) refuses twice: FIRST at the declaration-
-equality check (the unit's `declared_identity` is re-typed from
-`workload_for()` in `generate_configs.py` ~:1305-1315, ~:1862-1875,
-~:2572-2588 with a hardcoded `DECODE_PROMPT_TOKENS["A"]` ~:1334, so it matches
-0/20 emitted decode configs), SECOND at the multiplicity check (one identity
-per unit). Prefill units (`prefill_p512`, one member) are fine. Locate the
-exact current lines yourself (`grep -n`); the numbers above are from main
-before #269 and may have shifted.
+F-A (luna F-R3-MANIFEST-CUSTODY, blocker). `joulewise/identity_pins.py:1593-1607`
+looks up `declared_by_manifest.get(manifest_sha)` and compares only
+`manifest_ref` to the declared reference; the manifest FILE bytes are never
+authenticated against the effective SHA, so a probe that changed one manifest
+byte still froze `PASS`. Closure: at freeze (and at verify, F-I), resolve each
+declared member's manifest path under the pack root, hash the bytes, and
+refuse with the EXISTING unauthenticated-member reason code when
+`sha256(bytes) != manifest_sha` (or the file is absent). Regression in
+`tests/test_d117_contrast_v5_pack.py`: generate into TMPDIR, flip one byte of
+one decode manifest, freeze → refused with that reason code.
 
-## Rulings to implement (R-1..R-8 of ruling 171a)
+F-B (Opus F1, MATERIAL). `joulewise/analysis_engine/inputs.py:3886-3888` reads
+`pack_root/plan_tree.json` by bare path inside the gate with no digest check;
+a self-consistent forgery (swapped `config_inventory`, recomputed
+`config_set_sha256`, re-rendered receipts + sidecars + both `plan_tree` refs)
+made the gate return the prefill unit's set `365b4a41…` instead of decode
+`604f6e22…`. Closure: authenticate the pack inside the gate — the lineage
+dict already carries `pack_sha256` (see `joulewise/arm_readiness.py:10371`,
+read-only) — by re-verifying the pack digest (or threading the authenticated
+`plan_tree_sha256` in and checking the read bytes against it) BEFORE any
+field is trusted; a mismatch returns the gate's refusal (None / fail-closed),
+never a set. Regression (F-D below) is the tampered-pack test.
 
-R-1 Exact identities stay exact. Do NOT redefine `scientific_config_identity`.
-Do NOT touch replacement matching (`inputs.py` ~:2911-2950), NEG-8, the bundle
-mint, the mint producer-pin compare, `_source_regime`, `bind_floor_artifact_evidence`,
-or `detection_floor.py`. Do NOT add any new key to `RECEIPT_UNIT_FIELDS` or
-`MODEL_RUNTIME_CONFIG_FIELDS` (exact-key validated; committed receipts must
-keep loading).
+F-C (Opus F2, MATERIAL). `inputs.py:4081`, `:4122`: the fail-closed
+`if matches or same_condition_seen: return None` guard moved INSIDE the
+`consumer_identity is not None` block, so a multi-identity `_v5` decode unit
+whose family has a same-condition exact cell silently takes a transported
+floor where the old code refused. Closure: the `same_condition_seen` scan and
+its refusal are unconditional; only the per-cell identity comparison is gated
+on single-identity. Regression in `tests/test_analysis_inputs.py`: a
+multi-identity evidence row with a same-condition exact cell present →
+`floor_request_for_evidence` returns None (not a transported floor).
 
-R-2 Declared closed set, from the RULE, never folded. The generator declares,
-per decode unit, inside `declared_identity.workload_profile` (a free mapping):
-`suite_manifest_set` = the ORDERED list of
-`{"suite_manifest_ref": <ref>, "suite_manifest_sha256": <effective sha>,
-"declared_member_count": <int>}` computed from the pre-registered rotation
-rule (decode prompt index = (block − 1) mod 8 over the block schedule — find
-the registered rule in the generator and USE it; do not re-derive from emitted
-configs), plus the common profile = the workload fields shared by every member
-(the config workload minus `suite_manifest_ref`/`suite_manifest_sha256`).
-The generator must NOT build the declaration by reading the configs it just
-emitted, and must NOT re-type it from `workload_for()`; remove the hardcoded
-`DECODE_PROMPT_TOKENS["A"]` use from the declaration path. Prefill units:
-single-member declaration, unchanged shape except that a one-element
-`suite_manifest_set` is acceptable if it simplifies the code (state which you
-chose).
+F-D (Opus F3, MATERIAL). `tests/test_analysis_inputs.py:438,:453` mock
+`_frozen_consumer_identity_set`; gutting the gate to `return frozenset()`
+stays green. Closure: add un-mocked tests that run gate + caller together
+against a pack generated into TMPDIR: (1) tampered pack (one receipt byte
+flipped after freeze, sidecars left stale) → `floor_request_for_evidence`
+returns None; (2) `config_set_sha256` mismatch between receipt and plan tree
+→ None; (3) multi-identity evidence without lineage → None (the legacy
+refusal at `inputs.py:~4065`). Then confirm by a scratch mutation (revert
+after) that `return frozenset()` in the gate now fails at least one of them.
 
-R-3 Freeze compares declaration to emission, fail-closed. In
-`freeze_projection` (and mirrored in `verify_frozen_projection` where the
-same comparison is re-run), per unit: (i) project each config's workload to
-the common profile and require equality with the declared common profile;
-(ii) require each config's manifest sha to be a declared member; (iii) require
-every declared member to be emitted with EXACTLY its declared count; (iv)
-refuse any extra, missing, duplicate, or unauthenticated (sha not matching the
-manifest bytes on disk, if the code already authenticates manifests — check)
-member. Refusal reasons use the existing refusal vocabulary style in the
-contract §7; add new reason tokens only if none fits, and document them.
+F-E (terra F1 / M1, blocker). Deriving the decode `suite_manifest_set`
+declaration by FOLDING emitted config rows (instead of the pre-registered
+rotation rule) survived every test. Closure per R-7 ("computed from the
+pre-registered rotation rule, never folded from emitted configs"): a test in
+`tests/test_d117_contrast_v5_pack.py` that wraps `build_tree` during
+generation, alters one staged decode config's manifest binding immediately
+before the real builder runs, and asserts the DECLARATION still equals the
+rule census `4/4/2/2/2/2/2/2` (a folding builder would change it) while the
+freeze REFUSES on the emitted≠declared census.
 
-R-4 One identity per manifest class. Within a unit, members binding the same
-manifest sha must share ONE `scientific_config_identity`; the number of
-distinct member identities must EQUAL the number of declared manifests. A
-drifted tag/note on any member therefore still refuses.
+F-F (terra F2 / M4, blocker). `identity_pins.py:1617` exact census equality
+replaced by `emitted >= declared` survived. Closure: test that adds an extra
+byte-identical decode config at a new, sorted inventory path in a TMPDIR
+pack → freeze refuses (extra member); document in the test docstring that
+`>=` would accept it.
 
-R-5 Unit config-set digest; no new key. The unit's `config_set_sha256`
-becomes: one distinct member identity → that identity hash (byte-identical
-to today for every committed receipt and the shared-mint producer pin);
-several → `SHA256("joulewise.identity_unit_config_set.v1" ‖ "\n" ‖
-"\n".join(sorted(distinct member scientific hashes)))` (hex digest of that
-UTF-8 byte string, exactly this construction). Replace the
-representative-config triple (`configs[0]` / `typed_configs[0]` used for the
-unit's identity, ~`identity_pins.py:1467-1468, 1614`) so that no unit-level
-value depends on set-iteration order; the representative may still be used
-for `_runtime_probe_metadata` if all members share runtime pins (assert that
-they do; refuse otherwise).
+F-G (terra F3 / M6, blocker). `identity_pins.py:1637` distinct-identity
+count equality has no independent kill (its mismatch state is hard to reach
+under the preceding checks). Closure: extract the cardinality check into a
+pure helper (declared distinct count vs observed distinct identities →
+refusal reason or None) and unit-test a synthetic mismatch in
+`tests/test_identity_pins.py`; the freeze path calls the helper.
 
-R-6(a) Analysis gate. `joulewise/analysis_engine/inputs.py` ~:3881
-(`if len(consumer_identities) != 1: return None`): consumer evidence
-identities must be NON-EMPTY and a SUBSET of the frozen consumer unit's
-declared set; any identity outside the set → return None (refuse); the
-exact-cell route (~:3905-3916) stays single-identity-only (if the evidence
-carries several identities, only the condition-family transport route may
-bind). The declared set is to be read from the FROZEN RECEIPT bound by the U8
-readiness record. INVESTIGATE how that receipt (or the frozen unit's member
-identity hashes) is reachable from this function's call path
-(`contrast`, `artifact`, evidence rows' metadata, the analysis manifest). If it
-is reachable, implement. If it is NOT reachable without a new plumbing
-decision, return `NEEDS_RULING` for R-6(a) ONLY with the two cheapest concrete
-plumbing options (file:line for each), and leave `:3881` unchanged — the rest
-of the fix still lands.
+F-H (terra F4 / M10, blocker). `identity_pins.py:1778` "all members share the
+runtime pins" assertion has no kill. Closure: freeze test whose metadata
+gives ONE member a different runtime version/pin → freeze refuses with the
+existing drifted-member reason code.
 
-R-6(b) Floor sites: UNCHANGED (the `_v5` floor units are ruled single-manifest).
-Add ONE test that a single-identity unit's `config_set_sha256` is
-byte-identical to a committed v3 receipt value (read
-`configs/campaigns/d117_floor_qwen25_1p5b_v3/identity_pin_projection.receipts/projection-0001.json`
-or the contrast v3 receipt; assert the code path reproduces that hash for a
-single-identity set).
+F-I (terra F5 / M11, blocker). `identity_pins.py:2384` verification-only
+current-vs-frozen runtime-triple comparison has no kill. Closure: freeze and
+commit with the normal fixture in TMPDIR, then re-verify after changing a
+runtime-version metadata field that leaves declared fields intact →
+verification refuses on the frozen/current triple mismatch.
 
-R-8 Regression, RED FIRST. In `tests/test_d117_contrast_v5_pack.py` add a
-generated-pack freeze + `verify_frozen_projection` PASS test built the way
-the existing pack tests build packs (temp git repo, `write_prefill_pin`,
-module-level model-artifact fake, a realistic `_runtime_probe_metadata` stub,
-`_mint_git_anchor` patched — look at the existing tests in that file and at
-`tests/test_identity_pins.py` ~:134/:246 for the fixture idiom). Each
-counterfactual is its OWN test method, named for what it refuses:
-(i) `test_generated_v5_pack_freezes_and_verifies` — the current generator's
-    GAMMA output freezes and verifies (this is the RED test: it must FAIL on
-    the pre-fix code at the declaration check, PASS after);
-(ii) one decode member re-pointed to an unlisted manifest → REFUSE;
-(iii) declared census count off by one → REFUSE;
-(iv) declaration re-typed from `workload_for()` (the old code path, reproduced
-     in the test) → REFUSE at the declaration check specifically (assert the
-     reason token);
-(v) one member with a drifted tag → REFUSE (R-4);
-(vi) single-identity `config_set_sha256` byte-identical to the v3 receipt
-     value (R-6(b) test above may live here or in test_identity_pins).
-In `tests/test_identity_pins.py` add unit tests for the set digest (two known
-hashes → the expected hex, computed by hand in the test) and for the
-common-profile projection.
+### Should-fix
 
-Contract: update `docs/contracts/identity_pin_projection.md` (§2 vocabulary,
-§6 freeze, §7 receipt schema, §10 tests) so a reader can REPLICATE the set
-digest and the freeze comparison from the text alone: define every term at
-first use, give the domain string verbatim, and extend the §8 worked example
-with a two-manifest decode unit (real hex digests you compute, clearly
-labelled as example values). Writing standard: no term does unpaid work; a
-reader must be able to rebuild the mechanism.
+F-J (luna F-R7-ROSTER). The generic validator only requires a non-empty
+unique-ID list; removing `B/prefill_p512` from a generated tree still froze
+PASS with three units. Closure: a pack-specific test asserting the GAMMA
+roster is EXACTLY the ordered four `A/decode, A/prefill_p512, B/decode,
+B/prefill_p512` with A → smaller-model producer plan and B → larger (per
+R-7), and that a three-unit tree is refused by the `_v5` pack's own check
+(add the check in `generate_configs.py` verification path ONLY if it can be
+done without touching `dominance_criterion_registration()`; otherwise pin it
+in `identity_pins.py` as a pack-declared roster the generic validator
+enforces when present).
 
-## Deliverable layout (so the magistrate can commit RED then CURE)
+F-K (luna F-R2-ROTATION). `decode_prompt_index` returns
+`(block − 1) % len(DECODE_PROFILE["prompts"])`; nothing pins the ruled
+`% 8`. Closure: test pins `len(DECODE_PROFILE["prompts"]) == 8` AND
+`decode_prompt_index(b) == (b − 1) % 8` for b in 1..16, with the ruling
+cited in the docstring. Do not change the production formula.
 
-Keep test additions and production changes in separate files as they are;
-the magistrate will stage `tests/` first, run (i) to confirm it is red, commit,
-then stage the cure. Therefore (i) must fail on the pre-fix code for the
-RIGHT reason (declaration check), and every other test module you touch must
-still IMPORT cleanly against the pre-fix code (guard any new symbol import
-with the pattern already used in the repo, or place the set-digest unit tests
-after the pack tests so that only the intended assertions fail).
+F-L (luna F-R7-DOC). Stale `prefill_p256` literals in governing text:
+`docs/phase_2/gamma_arm_readiness.md:11-13` and
+`docs/contracts/d165_dominance_closeout.md:61` → `prefill_p<N>` with one
+sentence "N is fixed by the G2-a prefill_prompt_pin.v2 record (512 for
+`_v5`; 256 was the `_v3` value)". In `docs/decision_log.md`, D-131 is NEVER
+edited in place: append to the D-131 entry body a dated paragraph
+"**Amendment (2026-09-02, ruling 171a R-7):**" quoting R-7 verbatim from
+`171a-RULING-decode-identity.md:86-100` (the cl.2 replacement text) and, for
+cl.3, one sentence naming the config-set digest (`config_set_sha256`; single
+member = scientific hash, several = domain-separated set digest per R-1).
+Index row for D-131 unchanged unless its status text must change — if so,
+report NEEDS_RULING with the current row.
 
-## Verification you must run and report (verbatim tails)
+F-M (Opus F6). Any authentication failure collapses to
+`unavailable_floor_resolution` (`joulewise/analysis_engine/__init__.py:422-423`),
+indistinguishable from an ordinary no-match. Closure: emit a distinct reason
+(e.g. `floor_identity_set_unauthenticated`) on the gate-refusal path; if a
+reason-code census test exists, extend it in the same change and say where;
+if the census lives in a file outside scope, return NEEDS_SCOPE naming it.
 
-- `python3 -m unittest tests.test_d117_contrast_v5_pack tests.test_identity_pins tests.test_analysis_inputs tests.test_mlx_runtime`
-- `python3 -m unittest tests.test_d165_dominance_closeout tests.test_night_gate` (digest pins)
-- the generator's own regeneration into a temp root (find its CLI in the file
-  header / existing tests) for GAMMA and, if the ALPHA/BETA floor plans are
-  generated by the same script, for those too; then `freeze_projection` +
-  `verify_frozen_projection` on each generated root under TMPDIR; report the
-  per-unit member counts, distinct-identity counts, and `config_set_sha256`.
-- `git diff --stat` and confirm nothing outside WRITE_SCOPE is dirty.
+F-N (luna F-PEDAGOGY). `docs/contracts/identity_pin_projection.md:565-580,
+949-958`: `U8`, `U11`, launch lineage, exact-cell route, condition-family
+transport, transport group are USED before they are defined. Closure:
+reorder or add a short definitions block BEFORE the analysis-gate section so
+every term is glossed in plain words at first use (Ed's first-use test);
+no term's meaning may arrive only in later text.
 
-FINAL message = `claude-codex-report/v1` envelope (genre implementation) with
-`verification` entries for each command above, `flags` for any NEEDS_RULING,
-followed by a prose "Change" section listing every ruled clause R-1..R-8 with
-CONFIRMED (file:line) or NOT DONE (why).
+### Nits (do them; they are one-liners)
+
+F-O (Opus F4). `inputs.py:3877-3882` `pack_roots` silently drops rows whose
+lineage lacks a `pack_root` string → require every authenticated row to
+carry the same non-empty `pack_root`; refuse otherwise.
+F-P (Opus F5). `inputs.py:4051-4054` hash the identity already in hand
+instead of recomputing.
+
+## Mutation check (report each: KILLED by <test> / SURVIVED)
+
+Re-run terra's five survivors after your closures: M1 (fold declaration from
+emitted rows), M4 (`>=` census), M6 (drop distinct-count equality), M10 (drop
+runtime-pin equality), M11 (drop verify-time triple comparison). Plus
+M-gate (`_frozen_consumer_identity_set` → `return frozenset()`), M-guard
+(re-nest the `same_condition_seen` refusal under `consumer_identity is not
+None`), M-manifest (skip the manifest-bytes hash in F-A). Revert every
+mutation; tree diff must equal your intended change only.
+
+## ACCEPTANCE
+
+- `python3 -m unittest tests.test_d117_contrast_v5_pack tests.test_identity_pins tests.test_analysis_inputs tests.test_analysis_engine tests.test_d165_dominance_closeout tests.test_night_gate tests.test_docs_freshness` green — paste exact tails.
+- Registration digest printed and equal to `1c0a4a11…783a2b`.
+- Regenerate the `_v5` GAMMA pack into TMPDIR and freeze+verify PASS (terra's V4 recipe: census `4/4/2/2/2/2/2/2`, decode 8 identities, prefill 1).
+- `git status --short` shows only in-scope files; no committed receipt changed (`git diff --stat -- configs/campaigns/*/identity_pin_projection.receipts` empty).
+- Same-signature statement: for each of luna 202 / Opus 204 / terra 206's findings say KILLED (by which test) or what remains.
+- `## Clause map` (mandatory): one row per closure F-A…F-P — production site `file:line`, biting test `file:line`, counterfactual (the one-site edit that test fails on) or `NOT PINNED: <reason>`.
+
+## VERIFICATION
+`git diff --stat` in the report; nothing outside WRITE_SCOPE touched.
