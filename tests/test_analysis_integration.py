@@ -661,9 +661,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.addCleanup(session_patch.stop)
 
     def test_production_two_row_audit_persists_and_stripped_finding_refuses(self):
-        """Call load_analysis_inputs->analyze_claims->validate_claim_verdicts.
+        """Insert two bundle ids in reverse lexical order, then call production.
 
-        The counterfactual input strips findings from the produced audit row.
+        ``load_analysis_inputs`` must call ``supersession_visibility_scan`` and
+        emit the ids sorted; the artifact must persist that exact finding.  The
+        counterfactual input then strips findings from the produced audit row.
         """
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -725,7 +727,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 fixture["floor_path"],
                 strict_validator=lambda path, strict=True: [],
             )
-            persisted = json.loads(render_claim_verdicts(artifact))
+            artifact_bytes = render_claim_verdicts(artifact)
+            persisted = json.loads(artifact_bytes)
             persisted_audit = next(
                 row
                 for row in persisted["supersession_audit"]
@@ -743,6 +746,13 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     }
                 ],
             )
+            expected_audit_bytes = "\n".join(
+                "    " + line
+                for line in json.dumps(
+                    dict(analysis_audit), indent=2, ensure_ascii=False
+                ).splitlines()
+            ).encode("utf-8")
+            self.assertIn(expected_audit_bytes, artifact_bytes)
             self.assertEqual(
                 validate_claim_verdicts(
                     persisted,
