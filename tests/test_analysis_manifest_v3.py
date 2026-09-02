@@ -26,6 +26,7 @@ from joulewise.analysis_manifest_v3 import (
     PROSPECTIVE_SCHEMA_VERSION,
     PROSPECTIVE_INTERNAL_ERROR_CODE,
     PROSPECTIVE_MALFORMED_VALUE_CODE,
+    PROSPECTIVE_DOMINANCE_REPLAY_ATTACHMENT_MISSING,
     PROSPECTIVE_REFUSAL_CODES,
     SEMANTICS_PROJECTION_RULE_ID,
     _ATTACHMENT_DECLARATION_KEYS,
@@ -363,26 +364,13 @@ def install_synthetic_prospective_fixture(
             "projection_rule_id": SEMANTICS_PROJECTION_RULE_ID,
             "namespace_rule_id": FINALIZED_NAMESPACE_RULE_ID,
             "output_basename_suffix": FINALIZED_BASENAME_SUFFIX,
-            "required_attachments": [
-                {
-                    "role": "whole_window_verdict",
-                    "schema_version": (
-                        "joulewise.idle_admission_whole_window_verdict.v1"
-                    ),
-                },
-                {
-                    "role": "bracket_binding",
-                    "schema_version": "joulewise.calibration_bracket_binding.v1",
-                },
-                {
-                    "role": "calibration_ledger",
-                    "schema_version": "joulewise.calibration_observation_ledger.v1",
-                },
-                {
-                    "role": "aggregate_floor_artifact",
-                    "schema_version": "joulewise.detection_floor_artifact.v2",
-                },
-            ],
+            "required_attachments": prospective_finalization_required_attachments(
+                optional_roles=(
+                    ("dominance_replay_sidecar",)
+                    if dominance_criterion is not None
+                    else ()
+                )
+            ),
         },
         "frozen_semantics_sha256": "",
     }
@@ -996,6 +984,52 @@ class AnalysisManifestV3Tests(unittest.TestCase):
         )
         self.assertIsNot(
             prospective_finalization_required_attachments(), declarations
+        )
+
+    def test_prospective_attachment_accessor_adds_dominance_role_only_when_asked(
+        self,
+    ) -> None:
+        declarations = prospective_finalization_required_attachments(
+            optional_roles=("dominance_replay_sidecar",)
+        )
+        self.assertEqual(len(declarations), 5)
+        self.assertEqual(
+            declarations[-1],
+            {
+                "role": "dominance_replay_sidecar",
+                "schema_version": "joulewise.d165_dominance_replay.v1",
+            },
+        )
+
+    def test_dominance_criterion_without_attachment_is_named_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path, plan_tree_path, prospective = (
+                install_synthetic_prospective_fixture(
+                    Path(tmp), dominance_criterion={"rule_id": "test-dominance"}
+                )
+            )
+            prospective["finalization_contract"]["required_attachments"] = (
+                prospective_finalization_required_attachments()
+            )
+            prospective["frozen_semantics_sha256"] = independent_semantics_sha256(
+                prospective
+            )
+            reidentify(prospective)
+            refusals = validate_prospective_analysis_manifest_v3(
+                prospective,
+                manifest_dir=manifest_path.parent,
+                plan_tree_path=plan_tree_path,
+            )
+        named = [
+            item
+            for item in refusals
+            if item.reason_code == PROSPECTIVE_DOMINANCE_REPLAY_ATTACHMENT_MISSING
+        ]
+        self.assertEqual(len(named), 1)
+        self.assertEqual(
+            named[0].detail,
+            "every dominance-enabled prospective manifest must declare the "
+            "dominance_replay_sidecar attachment role",
         )
 
     def test_checked_in_placeholder_manifest_is_not_a_frozen_prospective(self) -> None:

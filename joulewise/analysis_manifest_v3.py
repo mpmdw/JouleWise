@@ -19,7 +19,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 SCHEMA_VERSION = "joulewise.analysis_manifest.v3"
@@ -300,6 +300,9 @@ class AnalysisManifestV3Error(ValueError):
 
 PROSPECTIVE_MALFORMED_VALUE_CODE = "analysis_prospective_schema_invalid"
 PROSPECTIVE_INTERNAL_ERROR_CODE = "analysis_prospective_internal_error"
+PROSPECTIVE_DOMINANCE_REPLAY_ATTACHMENT_MISSING = (
+    "analysis_prospective_dominance_replay_attachment_missing"
+)
 FINALIZED_MALFORMED_VALUE_CODE = "analysis_manifest_finalized_invalid"
 FINALIZED_INTERNAL_ERROR_CODE = "analysis_manifest_internal_error"
 
@@ -320,6 +323,7 @@ PROSPECTIVE_REFUSAL_CODES = frozenset(
         "analysis_prospective_multiplicity_invalid",
         "analysis_prospective_floor_dependency_unresolved",
         "analysis_prospective_unresolved_slot",
+        PROSPECTIVE_DOMINANCE_REPLAY_ATTACHMENT_MISSING,
     }
 )
 _PROSPECTIVE_PREFILL_ARMS = frozenset(
@@ -1141,7 +1145,7 @@ _FINALIZED_EVIDENCE_KEYS = {
     "aggregate_floor_artifact",
 }
 _DOMINANCE_REPLAY_SIDECAR_ROLE = "dominance_replay_sidecar"
-_DOMINANCE_REPLAY_SIDECAR_SCHEMA = "joulewise.d165_dominance_replay.v1"
+_DOMINANCE_REPLAY_SIDECAR_SCHEMA = "joulewise.d165_" + "dominance_replay.v1"
 _FINALIZED_DOMINANCE_REPLAY_KEYS = {
     "path",
     "sha256",
@@ -1213,8 +1217,13 @@ _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS = {
     "aggregate_floor_artifact": _FLOOR_SCHEMA,
 }
 
+_OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS = {
+    _DOMINANCE_REPLAY_SIDECAR_ROLE: _DOMINANCE_REPLAY_SIDECAR_SCHEMA,
+}
 
-def prospective_finalization_required_attachments() -> list[dict[str, str]]:
+def prospective_finalization_required_attachments(
+    *, optional_roles: Sequence[str] = (),
+) -> list[dict[str, str]]:
     """Return fresh declaration rows for the governed finalization contract.
 
     The returned list has the exact JSON shape required at
@@ -1227,9 +1236,32 @@ def prospective_finalization_required_attachments() -> list[dict[str, str]]:
         raise AnalysisManifestV3Error(
             "finalization attachment role/schema constants disagree"
         )
+    try:
+        optional_roles = tuple(optional_roles)
+    except TypeError as exc:
+        raise AnalysisManifestV3Error(
+            "optional finalization attachment roles must be iterable"
+        ) from exc
+    try:
+        optional_role_set = set(optional_roles)
+    except TypeError as exc:
+        raise AnalysisManifestV3Error(
+            "unknown or duplicate optional finalization attachment role"
+        ) from exc
+    if len(optional_role_set) != len(optional_roles) or any(
+        role not in _OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS for role in optional_roles
+    ):
+        raise AnalysisManifestV3Error(
+            "unknown or duplicate optional finalization attachment role"
+        )
+    schemas = dict(_REQUIRED_ATTACHMENT_SCHEMA_VERSIONS)
+    schemas.update(
+        (role, _OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS[role])
+        for role in optional_roles
+    )
     return [
         {"role": role, "schema_version": schema_version}
-        for role, schema_version in _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS.items()
+        for role, schema_version in schemas.items()
     ]
 
 
@@ -2717,6 +2749,7 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
             "families must cover each frozen contrast exactly once",
         )
 
+    dominance_enabled = _dominance_floor_identity_enabled(value)
     contract = value.get("finalization_contract")
     if _exact_refusal_keys(
         contract,
@@ -2729,11 +2762,13 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
         assert isinstance(contract, Mapping)
         attachments = contract.get("required_attachments")
         roles: set[str] = set()
-        if not isinstance(attachments, list) or len(attachments) != 4:
+        expected_attachment_count = 5 if dominance_enabled else 4
+        if not isinstance(attachments, list) or len(attachments) != expected_attachment_count:
             _refusal(
                 refusals,
                 "analysis_prospective_schema_invalid",
-                "finalization contract must declare four attachment roles",
+                "finalization contract must declare "
+                f"{expected_attachment_count} attachment roles",
             )
         else:
             for index, attachment in enumerate(attachments):
@@ -2757,20 +2792,37 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
         expected_attachment_schemas = dict(
             _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS
         )
+        expected_attachment_roles = set(_REQUIRED_ATTACHMENT_ROLES)
+        if dominance_enabled:
+            expected_attachment_schemas.update(
+                _OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS
+            )
+            expected_attachment_roles.update(_OPTIONAL_ATTACHMENT_SCHEMA_VERSIONS)
         observed_attachment_schemas = {
             attachment.get("role"): attachment.get("schema_version")
             for attachment in attachments
             if isinstance(attachment, Mapping)
             and isinstance(attachment.get("role"), str)
         } if isinstance(attachments, list) else {}
-        if (
+        contract_mismatch = (
             contract.get("contract_id") != FINALIZATION_CONTRACT_ID
             or contract.get("projection_rule_id") != SEMANTICS_PROJECTION_RULE_ID
             or contract.get("namespace_rule_id") != FINALIZED_NAMESPACE_RULE_ID
             or contract.get("output_basename_suffix") != FINALIZED_BASENAME_SUFFIX
-            or roles != _REQUIRED_ATTACHMENT_ROLES
+            or roles != expected_attachment_roles
             or observed_attachment_schemas != expected_attachment_schemas
-        ):
+        )
+        # Dominance registration and its replay attachment are one
+        # pre-registration predicate.  A criterion-enabled manifest may not
+        # survive as a four-row "optional sidecar" declaration.
+        if dominance_enabled and _DOMINANCE_REPLAY_SIDECAR_ROLE not in roles:
+            _refusal(
+                refusals,
+                PROSPECTIVE_DOMINANCE_REPLAY_ATTACHMENT_MISSING,
+                "every dominance-enabled prospective manifest must declare "
+                "the dominance_replay_sidecar attachment role",
+            )
+        elif contract_mismatch:
             _refusal(
                 refusals,
                 "analysis_prospective_schema_invalid",
@@ -3690,6 +3742,11 @@ def _authenticate_finalization_inputs(
 
     dominance_enabled = _dominance_floor_identity_enabled(prospective)
     dominance_attachment: dict[str, Any] | None = None
+    if dominance_enabled and dominance_replay_sidecar_path is None:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_missing",
+            "dominance-enabled prospective manifest requires a dominance replay sidecar",
+        )
     if dominance_enabled and dominance_replay_sidecar_path is not None:
         sidecar_path, sidecar_relative = _path_under_root(
             dominance_replay_sidecar_path,
@@ -4191,11 +4248,7 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
 
     evidence = value.get("evidence")
     expected_evidence_keys = set(_FINALIZED_EVIDENCE_KEYS)
-    if (
-        dominance_enabled
-        and isinstance(evidence, Mapping)
-        and _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence
-    ):
+    if dominance_enabled:
         expected_evidence_keys.add(_DOMINANCE_REPLAY_SIDECAR_ROLE)
     if not _exact_refusal_keys(
         evidence,
@@ -4426,6 +4479,7 @@ __all__ = [
     "PROSPECTIVE_SCHEMA_VERSION",
     "PROSPECTIVE_INTERNAL_ERROR_CODE",
     "PROSPECTIVE_MALFORMED_VALUE_CODE",
+    "PROSPECTIVE_DOMINANCE_REPLAY_ATTACHMENT_MISSING",
     "PROSPECTIVE_REFUSAL_CODES",
     "SCHEMA_VERSION",
     "SEMANTICS_PROJECTION_RULE_ID",

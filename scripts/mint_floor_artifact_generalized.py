@@ -55,6 +55,7 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_d117_mint_consumption_report,
 )
 from joulewise import detection_floor  # noqa: E402
+from joulewise import dominance_closeout  # noqa: E402
 from joulewise import floor_mint_estimator as mint_estimator  # noqa: E402
 from joulewise.identity_pins import derive_model_runtime_config  # noqa: E402
 
@@ -202,6 +203,11 @@ class MintError(ValueError):
     """A pinset or delegated mint gate failed; no artifact may be written."""
 
 
+D165_REPLAY_OUTPUT_REQUIRED = "d165_replay_output_required_for_common_mode"
+D165_REPLAY_OUTPUT_UNUSED = "d165_replay_output_unused_without_common_mode"
+D165_REPLAY_RECOMPUTATION_DIVERGENCE = "d165_replay_recomputation_divergence"
+
+
 @dataclass(frozen=True)
 class PlanPins:
     plan_id: str
@@ -319,6 +325,9 @@ class V2CellRecomputation:
     comparative_estimate: Any
     comparative_widths_j: tuple[float, ...]
     comparative_record: Mapping[str, Any]
+    block_inputs: tuple[Any, ...] | None = None
+    calibration_bracket: Mapping[str, Any] | None = None
+    shared_edge_bound_s: float | None = None
 
 
 def _object(
@@ -2614,6 +2623,17 @@ def _v2_gate_postcollection(
         comparative_estimate=recomputed.estimate,
         comparative_widths_j=tuple(recomputed.exact_widths_j),
         comparative_record=copy.deepcopy(dict(recomputed.comparative_record)),
+        block_inputs=(
+            tuple(recomputed.block_inputs)
+            if getattr(recomputed, "block_inputs", None) is not None
+            else None
+        ),
+        calibration_bracket=(
+            copy.deepcopy(dict(getattr(recomputed, "calibration_bracket")))
+            if getattr(recomputed, "calibration_bracket", None) is not None
+            else None
+        ),
+        shared_edge_bound_s=getattr(recomputed, "shared_edge_bound_s", None),
     )
 
 
@@ -2902,6 +2922,7 @@ def _build_v2_artifacts(
     project_tree_state: str,
     origin_main_contains_head: bool | None = False,
     head_pin_commit_contained_in_origin_main: bool | None = False,
+    recomputation_sink: dict[str, V2CellRecomputation] | None = None,
 ) -> tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]:
     """Build the combined artifact and its two deterministic components.
 
@@ -2967,6 +2988,8 @@ def _build_v2_artifacts(
                 producer_inputs=inputs,
                 ledger_snapshot=calibration_ledger_snapshot,
             )
+            if recomputation_sink is not None:
+                recomputation_sink[cell_pins["cell_id"]] = recomputations[role]
 
         # Step 11 begins only after the complete producer projection matches.
         for cell_index, cell_pins in enumerate(producer["cells"]):
@@ -3840,6 +3863,106 @@ def _authenticate_v2_inputs(
     return result, evidence_roots, ledger_snapshot
 
 
+def _recomputation_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _recomputation_json_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_recomputation_json_value(item) for item in value]
+    fields = getattr(value, "__dataclass_fields__", None)
+    if isinstance(fields, Mapping):
+        return {
+            name: _recomputation_json_value(getattr(value, name))
+            for name in fields
+        }
+    return value
+
+
+def _recomputation_bytes(value: object) -> bytes:
+    payload = {
+        "estimator_path": getattr(value, "estimator_path", None),
+        "comparative_blocks": getattr(value, "comparative_blocks", None),
+        "estimate": getattr(
+            value,
+            "estimate",
+            getattr(value, "comparative_estimate", None),
+        ),
+        "exact_widths_j": getattr(
+            value,
+            "exact_widths_j",
+            getattr(value, "comparative_widths_j", None),
+        ),
+        "comparative_record": getattr(value, "comparative_record", None),
+        "block_inputs": getattr(value, "block_inputs", None),
+        "calibration_bracket": getattr(value, "calibration_bracket", None),
+        "shared_edge_bound_s": getattr(value, "shared_edge_bound_s", None),
+    }
+    return json.dumps(
+        _recomputation_json_value(payload),
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _validate_v2_recomputation_census(
+    gate_recomputations: Mapping[str, Any],
+    bind_recomputations: Mapping[str, Any],
+) -> None:
+    for cell_id, bind_recomputation in bind_recomputations.items():
+        gate_recomputation = gate_recomputations.get(cell_id)
+        if gate_recomputation is None or _recomputation_bytes(
+            gate_recomputation
+        ) != _recomputation_bytes(bind_recomputation):
+            raise MintError(D165_REPLAY_RECOMPUTATION_DIVERGENCE)
+
+
+def _write_v2_artifact_outputs(
+    *,
+    output_core: ModuleType,
+    artifact: Mapping[str, Any],
+    sidecar: Mapping[str, Any],
+    floor_path: Path,
+    statement_path: Path,
+    d165_replay_out: Path,
+) -> None:
+    paths = tuple(Path(path) for path in (floor_path, statement_path, d165_replay_out))
+    absolute_paths = tuple(path.absolute() for path in paths)
+    if len(set(absolute_paths)) != len(absolute_paths):
+        raise MintError("v2 artifact, statement, and replay outputs must differ")
+    for path in paths:
+        if path.exists():
+            raise MintError(f"refusing to overwrite existing output: {path}")
+    artifact_payload = (
+        json.dumps(artifact, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    statement_payload = output_core.render_single_count_statement(artifact).encode(
+        "utf-8"
+    )
+    sidecar_payload = (
+        json.dumps(sidecar, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    written: list[Path] = []
+    try:
+        for path, payload in (
+            (floor_path, artifact_payload),
+            (statement_path, statement_payload),
+            (d165_replay_out, sidecar_payload),
+        ):
+            written.append(path)
+            output_core._exclusive_write(path, payload)
+    except Exception:
+        for path in reversed(written):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        raise
+
+
 def mint_multi_cell_floor_artifact(
     *,
     pinset_path: Path,
@@ -3852,6 +3975,7 @@ def mint_multi_cell_floor_artifact(
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None = None,
     calibration_custody_store: Path | None = None,
+    d165_replay_out: Path | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
 
@@ -3867,6 +3991,7 @@ def mint_multi_cell_floor_artifact(
             strict_validator=strict_validator,
             consumption_semantics_id=consumption_semantics_id,
             calibration_custody_store=calibration_custody_store,
+            d165_replay_out=d165_replay_out,
         )
     try:
         with V2AuthenticationReadSession():
@@ -3881,6 +4006,7 @@ def mint_multi_cell_floor_artifact(
                 strict_validator=strict_validator,
                 consumption_semantics_id=consumption_semantics_id,
                 calibration_custody_store=calibration_custody_store,
+                d165_replay_out=d165_replay_out,
             )
     except V2AuthenticationInputError as exc:
         raise MintError(str(exc)) from exc
@@ -3898,6 +4024,7 @@ def _mint_multi_cell_floor_artifact_active(
     strict_validator: StrictValidator,
     consumption_semantics_id: str | None = None,
     calibration_custody_store: Path | None = None,
+    d165_replay_out: Path | None = None,
 ) -> Mapping[str, Any]:
     """Implementation body; caller guarantees one active v2 read session."""
 
@@ -3934,6 +4061,7 @@ def _mint_multi_cell_floor_artifact_active(
     head_pin_commit_contained = (
         _head_pin_commit_containment_in_origin_main(head_pin_path)
     )
+    gate_recomputations: dict[str, V2CellRecomputation] = {}
     artifact, components = _build_v2_artifacts(
         pinset=loaded,
         pinset_path=pinset_path,
@@ -3946,7 +4074,10 @@ def _mint_multi_cell_floor_artifact_active(
         head_pin_commit_contained_in_origin_main=(
             head_pin_commit_contained
         ),
+        recomputation_sink=gate_recomputations,
     )
+    bind_recomputations: dict[str, Any] = {}
+    common_mode_cells = 0
     for producer, component, expected in zip(
         loaded.value["producer_plans"],
         components,
@@ -3986,7 +4117,7 @@ def _mint_multi_cell_floor_artifact_active(
             producer_input = inputs[producer["plan"]["plan_id"]]
             cell_input = producer_input.cells[cell_pins["role"]]
             try:
-                mint_estimator.bind_v2_floor_artifact_evidence(
+                bind_result = mint_estimator.bind_v2_floor_artifact_evidence(
                     core=core,
                     artifact=single_cell_component,
                     floor_path=floor_path,
@@ -4013,6 +4144,32 @@ def _mint_multi_cell_floor_artifact_active(
                 )
             except (core.MintError, ValueError) as exc:
                 raise MintError(str(exc)) from exc
+            if (
+                isinstance(bind_result, tuple)
+                and len(bind_result) == 2
+            ):
+                _legacy_result, bind_recomputation = bind_result
+            else:
+                _legacy_result = bind_result
+                bind_recomputation = None
+            cell_id = cell_pins["cell_id"]
+            if bind_recomputation is None:
+                continue
+            bind_recomputations[cell_id] = bind_recomputation
+            _validate_v2_recomputation_census(
+                gate_recomputations, bind_recomputations
+            )
+            estimator_path = getattr(bind_recomputation, "estimator_path", None)
+            if estimator_path == "common_mode":
+                common_mode_cells += 1
+                if d165_replay_out is None:
+                    raise MintError(D165_REPLAY_OUTPUT_REQUIRED)
+            elif estimator_path == "default":
+                pass
+            else:
+                raise MintError(D165_REPLAY_RECOMPUTATION_DIVERGENCE)
+    if d165_replay_out is not None and common_mode_cells == 0:
+        raise MintError(D165_REPLAY_OUTPUT_UNUSED)
     errors = validate_floor_artifact(
         artifact=artifact,
         pinset_path=pinset_path,
@@ -4021,9 +4178,28 @@ def _mint_multi_cell_floor_artifact_active(
     if errors:
         raise MintError(f"post-bind v2 artifact validation failed: {errors[0]}")
     output_core = _fresh_original_core()
+    if d165_replay_out is None:
+        try:
+            output_core.write_outputs_exclusive(artifact, floor_path, statement_path)
+        except output_core.MintError as exc:
+            raise MintError(str(exc)) from exc
+        return artifact
     try:
-        output_core.write_outputs_exclusive(artifact, floor_path, statement_path)
+        sidecar = dominance_closeout.build_d165_replay_sidecar(
+            artifact,
+            bind_recomputations,
+        )
+        _write_v2_artifact_outputs(
+            output_core=output_core,
+            artifact=artifact,
+            sidecar=sidecar,
+            floor_path=floor_path,
+            statement_path=statement_path,
+            d165_replay_out=d165_replay_out,
+        )
     except output_core.MintError as exc:
+        raise MintError(str(exc)) from exc
+    except (TypeError, ValueError) as exc:
         raise MintError(str(exc)) from exc
     return artifact
 
@@ -4035,6 +4211,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--artifact-id")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--single-count-out", required=True, type=Path)
+    parser.add_argument("--d165-replay-out", type=Path)
     parser.add_argument("--v2-input-manifest", type=Path)
     parser.add_argument("--calibration-custody-store", type=Path)
     parser.add_argument("--calibration-plan", type=Path)
@@ -4091,6 +4268,7 @@ def main(argv: list[str] | None = None) -> int:
                     calibration_custody_store=(
                         args.calibration_custody_store
                     ),
+                    d165_replay_out=args.d165_replay_out,
                 )
             return 0
         loaded = load_pinset(args.pinset, args.pinset_sha256)
@@ -4100,6 +4278,8 @@ def main(argv: list[str] | None = None) -> int:
             raise MintError(
                 "--calibration-custody-store requires --v2-input-manifest"
             )
+        if args.d165_replay_out is not None:
+            raise MintError(D165_REPLAY_OUTPUT_UNUSED)
         legacy_fields = {
             "--artifact-id": args.artifact_id,
             "--calibration-plan": args.calibration_plan,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import ast
 import functools
 import hashlib
 import io
@@ -14,10 +15,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from configs.campaigns.d117_contrast_v5 import generate_configs as generator
 from joulewise.analysis_manifest_v3 import (
+    AnalysisManifestFinalizationError,
     calculate_manifest_id,
     finalize_prospective_analysis_manifest_v3,
 )
@@ -257,6 +260,58 @@ def replay_sidecar(
         "sidecar_id": "d165-test-replay",
         "cells": cells,
     }
+
+
+def builder_recomputations(
+    floor: dict,
+    sidecar: dict,
+    *,
+    default_cell_ids: frozenset[str] = frozenset(),
+) -> dict[str, SimpleNamespace]:
+    sidecar_cells = {cell["cell_id"]: cell for cell in sidecar["cells"]}
+    result: dict[str, SimpleNamespace] = {}
+    for floor_cell in floor["cells"]:
+        cell_id = floor_cell["cell_id"]
+        replay = sidecar_cells[cell_id]["comparative"].get(
+            "common_mode_replay"
+        )
+        if cell_id in default_cell_ids:
+            result[cell_id] = SimpleNamespace(
+                estimator_path="default",
+                comparative_blocks=tuple(
+                    copy.deepcopy(floor_cell["comparative"]["blocks"])
+                ),
+            )
+            continue
+        inputs = tuple(
+            _CommonModeBlockInputs(
+                onset_values_j=tuple(block["onset_sweep_j"]),
+                offset_values_j=tuple(block["offset_sweep_j"]),
+                zero_point_contrast_j=block["zero_point_contrast_j"],
+                bundle_residual_half_widths_j=tuple(
+                    block["bundle_residual_half_widths_j"]
+                ),
+                member_window_bounds_s=tuple(
+                    tuple(window) for window in block["member_window_bounds_s"]
+                ),
+                member_envelope_integral_sum_j=(
+                    block["member_envelope_integral_sum_j"]
+                ),
+            )
+            for block in replay["inputs"]["blocks"]
+        )
+        result[cell_id] = SimpleNamespace(
+            estimator_path="common_mode",
+            comparative_blocks=tuple(
+                copy.deepcopy(floor_cell["comparative"]["blocks"])
+            ),
+            block_inputs=inputs,
+            calibration_bracket=copy.deepcopy(
+                replay["inputs"]["calibration_bracket"]
+            ),
+            shared_edge_bound_s=replay["inputs"]["shared_edge_bound_s"],
+        )
+    return result
 
 
 def _recompute_sidecar_cell_result(sidecar: dict, cell_index: int = 0) -> None:
@@ -551,47 +606,103 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             "69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735",
         )
 
-    def test_dominance_finalizes_without_sidecar_and_closeout_refuses_absence(
-        self,
-    ) -> None:
-        """build_d165_dominance_closeout returns the named refusal artifact."""
+    def test_stage2_builder_uses_floor_identity_and_default_shape(self) -> None:
+        floor = floor_artifact()
+        default_id = floor["cells"][0]["cell_id"]
+        source_sidecar = replay_sidecar(
+            floor, default_cell_ids=frozenset({default_id})
+        )
+        built = core.build_d165_replay_sidecar(
+            floor,
+            builder_recomputations(
+                floor,
+                source_sidecar,
+                default_cell_ids=frozenset({default_id}),
+            ),
+        )
+        self.assertEqual(
+            built["sidecar_id"], f"{floor['artifact_id']}::d165-replay"
+        )
+        self.assertNotIn("lineage", built)
+        default_comparative = built["cells"][0]["comparative"]
+        self.assertEqual(set(default_comparative), {"independent", "estimator"})
+        self.assertEqual(default_comparative["estimator"], "default")
+        self.assertNotIn("common_mode_replay", default_comparative)
+        self.assertEqual(core.validate_d165_replay_sidecar(built), [])
+
+    def test_stage2_sidecar_ownership_ast_census(self) -> None:
+        production = {
+            ROOT / "joulewise" / "dominance_closeout.py": "owner",
+            ROOT / "joulewise" / "floor_mint_estimator.py": "adapter-consumer",
+            ROOT / "scripts" / "mint_floor_artifact_generalized.py": "mint-consumer",
+            ROOT / "joulewise" / "analysis_manifest_v3.py": "manifest-consumer",
+        }
+        schema_literal = "joulewise.d165_dominance_replay.v1"
+        owner_paths: list[Path] = []
+        record_literal_paths: list[Path] = []
+        reference_paths: dict[str, set[Path]] = {
+            "d165_replay_blocks_from_mint_inputs": set(),
+            "build_d165_replay_sidecar": set(),
+        }
+        for path in production:
+            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            if any(
+                isinstance(node, ast.Constant) and node.value == schema_literal
+                for node in ast.walk(tree)
+            ):
+                owner_paths.append(path)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Dict):
+                    keys = {
+                        key.value
+                        for key in node.keys
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    }
+                    if {"block_id", "delta_j"} <= keys:
+                        record_literal_paths.append(path)
+                if isinstance(node, ast.Name) and node.id in reference_paths:
+                    reference_paths[node.id].add(path)
+                if isinstance(node, ast.Attribute) and node.attr in reference_paths:
+                    reference_paths[node.attr].add(path)
+        self.assertEqual(owner_paths, [ROOT / "joulewise" / "dominance_closeout.py"])
+        self.assertEqual(
+            record_literal_paths, [ROOT / "joulewise" / "dominance_closeout.py"]
+        )
+        for name, paths in reference_paths.items():
+            self.assertTrue(paths <= {
+                ROOT / "joulewise" / "dominance_closeout.py",
+                ROOT / "joulewise" / "floor_mint_estimator.py",
+                ROOT / "scripts" / "mint_floor_artifact_generalized.py",
+            }, name)
+        self.assertIn(
+            ROOT / "scripts" / "mint_floor_artifact_generalized.py",
+            reference_paths["build_d165_replay_sidecar"],
+        )
+
+    def test_dominance_finalization_requires_sidecar(self) -> None:
+        """A criterion-enabled prospective pack cannot finalize without it."""
 
         with tempfile.TemporaryDirectory() as temporary:
             fixture = install_synthetic_finalization_fixture(
                 Path(temporary),
                 dominance_criterion=generator.dominance_criterion_registration(),
             )
-            floor = json.loads(fixture["floor_path"].read_bytes())
-            sidecar = replay_sidecar(floor)
-            manifest = finalize_prospective_analysis_manifest_v3(
-                fixture["prospective_path"],
-                plan_tree_path=fixture["plan_tree_path"],
-                custody_root=fixture["root"],
-                runs_root=fixture["runs_root"],
-                whole_window_verdict_path=fixture["verdict_path"],
-                bracket_binding_path=fixture["bracket_path"],
-                calibration_ledger_path=fixture["ledger_path"],
-                aggregate_floor_artifact_path=fixture["floor_path"],
-                output_dir=fixture["root"],
-            )
-            closeout = build_d165_dominance_closeout(
-                _file_json_bytes(manifest),
-                _file_json_bytes(floor),
-                _file_json_bytes(sidecar),
-            )
+            with self.assertRaises(AnalysisManifestFinalizationError) as raised:
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
         self.assertEqual(
-            set(manifest["evidence"]),
-            {
-                "aggregate_floor_artifact",
-                "bracket_binding",
-                "calibration_ledger",
-                "whole_window_verdict",
-            },
+            raised.exception.reason_code,
+            "analysis_finalization_attachment_missing",
         )
-        self.assertEqual(
-            closeout["refusal_reason"], "manifest_lacks_replay_sidecar"
-        )
-        self.assertIsNone(closeout["branch"])
 
     def test_builder_floor_cells_not_list_raises_input_malformed(self) -> None:
         """build_d165_dominance_closeout stops on a non-list floor census."""
