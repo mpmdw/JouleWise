@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import unittest
 from pathlib import Path
 from typing import Any, Mapping
+from unittest import mock
 
 from joulewise.analysis_engine.inputs import (
+    BundleEvidence,
+    FloorEvidenceBinding,
     _realized_identity_matches_config,
     _typed_config,
+    floor_request_for_evidence,
+    floor_stack_identity,
     realized_scientific_identity,
 )
+try:
+    from joulewise.analysis_engine.inputs import _frozen_consumer_identity_set
+except ImportError:  # RED staging: production helper lands with the cure.
+    _frozen_consumer_identity_set = None
+from joulewise.identity_pins import scientific_config_identity_sha256
 from joulewise.suite import SuiteManifest, suite_manifest_sha256
 
 
@@ -160,6 +171,60 @@ def _suite_config(manifest_sha256: str) -> dict[str, Any]:
     return config
 
 
+def _stack_metadata_for(config: Mapping[str, Any]) -> dict[str, Any]:
+    metadata = _metadata_for(config, 512)
+    typed = _typed_config(config)
+    assert typed is not None
+    metadata.update(platform="synthetic-macos-analysis-test", machine="arm64")
+    metadata["adapters"]["runtime"]["prepare_metadata"].update(
+        kernel_library="synthetic-metal",
+        batching_concurrency_policy="single-request sequential",
+        quantization=typed["quantization"]["name"],
+    )
+    metadata["workload_provenance"]["model"].update(
+        name=typed["model"]["name"],
+        source=typed["model"]["source"],
+        revision=typed["model"]["revision"],
+    )
+    metadata["workload_provenance"]["sampler"] = {
+        "kind": "greedy",
+        "temperature": 0.0,
+        "pinned": True,
+        "api": "synthetic.make_sampler",
+        "parameter": "temp",
+    }
+    metadata["workload_provenance"]["output_policy"].update(
+        name="fixed_budget_exact",
+        stop_condition="requested_tokens_emitted",
+    )
+    return metadata
+
+
+def _bundle_evidence(
+    bundle_id: str,
+    config: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    *,
+    launch_lineage: Mapping[str, Any] | None = None,
+) -> BundleEvidence:
+    return BundleEvidence(
+        entry={},
+        bundle_id=bundle_id,
+        relative_path=bundle_id,
+        path=Path(bundle_id),
+        summary=None,
+        metadata=metadata,
+        raw_config=config,
+        strict_problems=(),
+        base_reason_codes=(),
+        config_sha256=None,
+        summary_sha256=None,
+        replacement_classification="registered",
+        inclusion_status="included",
+        launch_lineage=launch_lineage,
+    )
+
+
 class RealizedIdentityDispatchTests(unittest.TestCase):
     def test_scalar_path_matches_legacy_for_true_and_false_verdicts(self) -> None:
         config = _scalar_config()
@@ -269,6 +334,134 @@ class RealizedIdentityDispatchTests(unittest.TestCase):
         self.assertFalse(
             _realized_identity_matches_config(config, metadata, manifest)
         )
+
+
+class FrozenConsumerIdentitySetTests(unittest.TestCase):
+    def test_u8_freeze_receipt_reaches_committed_v3_member_identity_set(self) -> None:
+        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
+        receipt = json.loads(
+            (
+                pack
+                / "identity_pin_projection.receipts"
+                / "projection-0001.json"
+            ).read_text(encoding="utf-8")
+        )
+        unit = receipt["identity_units"][0]
+        condition_family_id = unit["consumer_bindings"][0]["family"]
+        evidence = _bundle_evidence(
+            "v3-lineage-probe",
+            _scalar_config(),
+            _metadata_for(_scalar_config(), 512),
+            launch_lineage={"pack_root": str(pack)},
+        )
+        expected = frozenset(
+            scientific_config_identity_sha256(
+                json.loads((pack / row["path"]).read_text(encoding="utf-8"))
+            )
+            for row in unit["config_inventory"]
+        )
+
+        self.assertEqual(
+            _frozen_consumer_identity_set([evidence], condition_family_id),
+            expected,
+        )
+
+    def test_multi_identity_transport_requires_declared_subset_and_skips_exact_cell(
+        self,
+    ) -> None:
+        first = _suite_config("a" * 64)
+        second = _suite_config("b" * 64)
+        first_metadata = _stack_metadata_for(first)
+        second_metadata = _stack_metadata_for(second)
+        evidence = [
+            _bundle_evidence("first", first, first_metadata),
+            _bundle_evidence("second", second, second_metadata),
+        ]
+        identities = {
+            scientific_config_identity_sha256(first),
+            scientific_config_identity_sha256(second),
+        }
+        stack = floor_stack_identity(first, first_metadata)
+        assert stack is not None
+        stack_sha = hashlib.sha256(
+            b"joulewise.stack_identity.v1\0"
+            + json.dumps(
+                stack,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        condition_id = "rotating-decode-family"
+        selector = {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase",
+        }
+        artifact = {
+            "cells": [
+                {
+                    "cell_id": "exact-cell",
+                    "key": {
+                        "backend": "powermetrics",
+                        **selector,
+                        "condition_family_id": condition_id,
+                        "condition_family_sha256": "d" * 64,
+                    },
+                }
+            ],
+            "transport_groups": [
+                {
+                    "backend": "powermetrics",
+                    **selector,
+                    "stack_identity_sha256": stack_sha,
+                    "source_cell_ids": ["transport-source"],
+                    "allowed_consumer_condition_families": [
+                        {
+                            "condition_family_id": condition_id,
+                            "condition_family_sha256": "c" * 64,
+                        }
+                    ],
+                }
+            ],
+        }
+        binding = FloorEvidenceBinding(
+            bound_cell_ids=frozenset({"exact-cell", "transport-source"}),
+            cell_scientific_identity_sha256={
+                "exact-cell": scientific_config_identity_sha256(first)
+            },
+            cell_stack_identity_sha256={"exact-cell": stack_sha},
+            bound_bundle_sha256s=frozenset(),
+            problems_by_cell={},
+            global_problems=(),
+        )
+        contrast = {"floor_selector": selector}
+
+        with mock.patch(
+            "joulewise.analysis_engine.inputs._frozen_consumer_identity_set",
+            return_value=frozenset(identities),
+        ):
+            request = floor_request_for_evidence(
+                artifact,
+                binding,
+                contrast,
+                condition_id,
+                evidence,
+            )
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request.condition_family_sha256, "c" * 64)
+
+        with mock.patch(
+            "joulewise.analysis_engine.inputs._frozen_consumer_identity_set",
+            return_value=frozenset({scientific_config_identity_sha256(first)}),
+        ):
+            refused = floor_request_for_evidence(
+                artifact,
+                binding,
+                contrast,
+                condition_id,
+                evidence,
+            )
+        self.assertIsNone(refused)
 
 
 if __name__ == "__main__":

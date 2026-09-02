@@ -364,6 +364,66 @@ def rebind_frozen_chain(
 
 
 class SharedDerivationTests(unittest.TestCase):
+    def test_identity_unit_set_digest_uses_sorted_distinct_hashes(self) -> None:
+        first = "a" * 64
+        second = "b" * 64
+        expected = "ca2dd22172c13b472f1b191a1de7900d351c2debab9fdb4844b39e691255b5bf"
+
+        self.assertEqual(
+            identity_pins.identity_unit_config_set_sha256(
+                [second, first, second]
+            ),
+            expected,
+        )
+        self.assertEqual(
+            identity_pins.identity_unit_config_set_sha256([first]),
+            first,
+        )
+
+    def test_common_profile_projection_removes_only_member_manifest_binding(self) -> None:
+        workload = {
+            "name": "rotating-decode",
+            "output_tokens": 512,
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "suite_manifest_ref": "manifests/one.json",
+            "suite_manifest_sha256": "a" * 64,
+        }
+
+        projected = identity_pins.project_identity_unit_common_profile(workload)
+
+        self.assertEqual(
+            projected,
+            {
+                "name": "rotating-decode",
+                "output_tokens": 512,
+                "repetitions": 1,
+                "warmup_runs": 1,
+            },
+        )
+        self.assertIn("suite_manifest_ref", workload)
+        self.assertIn("suite_manifest_sha256", workload)
+
+    def test_single_identity_set_digest_matches_committed_v3_receipt(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        pack = root / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
+        receipt = read_json(
+            pack
+            / "identity_pin_projection.receipts"
+            / "projection-0001.json"
+        )
+        unit = receipt["identity_units"][0]
+        scientific_hashes = {
+            scientific_config_identity_sha256(read_json(pack / row["path"]))
+            for row in unit["config_inventory"]
+        }
+
+        self.assertEqual(len(scientific_hashes), 1)
+        self.assertEqual(
+            identity_pins.identity_unit_config_set_sha256(scientific_hashes),
+            unit["model_runtime_config"]["config_set_sha256"],
+        )
+
     def test_fixture_commits_start_no_detached_maintenance_process(self) -> None:
         """A fixture commit must leave nothing running behind it.
 

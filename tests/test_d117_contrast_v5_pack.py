@@ -8,12 +8,19 @@ import importlib.util
 import json
 import math
 import statistics
+import subprocess
 import tempfile
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 from unittest import mock
 
-from joulewise import detection_floor, dominance_closeout, floor_mint_estimator
+from joulewise import (
+    detection_floor,
+    dominance_closeout,
+    floor_mint_estimator,
+    identity_pins,
+)
 from joulewise.analysis_manifest_v3 import (
     DOMINANCE_REPLAY_SIDECAR_ROLE,
     analysis_semantics_sha256_v1,
@@ -109,6 +116,26 @@ def load_generator():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def fake_model_artifact_identity(source: str) -> dict[str, object]:
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    return {
+        "status": "ok",
+        "kind": "single_file",
+        "algorithm": "sha256",
+        "path": source,
+        "sha256": digest,
+        "inventory": [
+            {
+                "path": "weights.safetensors",
+                "resolved_path": f"{source}/weights.safetensors",
+                "sha256": digest,
+                "size_bytes": 1,
+                "symlink": False,
+            }
+        ],
+    }
 
 
 def calibration_basis() -> dict:
@@ -315,6 +342,170 @@ class D117ContrastV5PackTests(unittest.TestCase):
     def generate_pack(self, root: Path) -> Path:
         self.generator.generate(root, self.generator.GenerationIdentity())
         return root / "configs/campaigns" / PACK_ID
+
+    @staticmethod
+    def git(root: Path, *args: str) -> str:
+        return subprocess.run(
+            ("git", "-C", str(root), *args),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    def init_fixture_git(self, root: Path) -> None:
+        self.git(root, "init", "-q")
+        for key, value in (
+            ("maintenance.auto", "false"),
+            ("gc.auto", "0"),
+            ("maintenance.autoDetach", "false"),
+            ("gc.autoDetach", "false"),
+        ):
+            self.git(root, "config", "--local", key, value)
+        self.git(root, "config", "user.name", "D117 v5 Test")
+        self.git(root, "config", "user.email", "d117-v5-test@example.invalid")
+
+    def commit_fixture(self, root: Path, message: str) -> str:
+        self.git(root, "add", "--all")
+        self.git(root, "commit", "-q", "-m", message)
+        return self.git(root, "rev-parse", "HEAD")
+
+    def runtime_probe_metadata(
+        self,
+        config: BenchmarkConfig,
+        realization_configs: tuple[tuple[str, BenchmarkConfig], ...] = (),
+    ) -> dict[str, object]:
+        artifact = fake_model_artifact_identity(config.model.source)
+        metadata: dict[str, object] = {
+            "platform": "synthetic-macos-d117-v5-test",
+            "machine": "arm64",
+            "device": {
+                "device": config.hardware_target.id,
+                "telemetry": config.hardware_target.telemetry_backend,
+                "boundary": "synthetic package boundary",
+                "rail_manifest": ["cpu_power", "gpu_power", "ane_power"],
+            },
+            "quantization": asdict(config.quantization),
+            "adapters": {
+                "runtime": {
+                    "name": config.hardware_target.runtime_backend,
+                    "prepare_metadata": {
+                        "adapter": "mlx_runtime",
+                        "version": "synthetic-mlx-1",
+                        "kernel_library": "synthetic-metal-1",
+                        "batching_concurrency_policy": "single-request sequential",
+                        "quantization": config.quantization.name,
+                    },
+                },
+                "telemetry": {"name": config.hardware_target.telemetry_backend},
+            },
+            "workload_provenance": {
+                "model": {
+                    "name": config.model.name,
+                    "source": config.model.source,
+                    "revision": config.model.revision,
+                    "artifact_identity": artifact,
+                },
+                "tokenizer": {
+                    "backend": config.hardware_target.runtime_backend,
+                    "identifier": f"{config.model.source}/tokenizer.json",
+                    "revision": config.model.revision,
+                    "class": "SyntheticTokenizer",
+                    "vocab_size": 256,
+                },
+                "sampler": {
+                    "kind": "greedy",
+                    "temperature": 0.0,
+                    "pinned": True,
+                    "api": "synthetic.make_sampler",
+                    "parameter": "temp",
+                },
+                "output_policy": {
+                    "name": "fixed_budget_exact",
+                    "requested_tokens": config.workload_profile.output_tokens,
+                    "stop_condition": "requested_tokens_emitted",
+                },
+            },
+        }
+        if realization_configs:
+            metadata["prompt_realizations"] = [
+                {
+                    "config_path": path,
+                    "token_count": (
+                        candidate.workload_profile.prompt_token_expectation.token_count
+                    ),
+                    "token_ids_sha256": (
+                        candidate.workload_profile.prompt_token_expectation.token_ids_sha256
+                    ),
+                    "token_hash_domain": (
+                        candidate.workload_profile.prompt_token_expectation.token_hash_domain
+                    ),
+                }
+                for path, candidate in realization_configs
+            ]
+        return metadata
+
+    def identity_fixture(self, root: Path) -> tuple[Path, str]:
+        self.init_fixture_git(root)
+        self.configure(self.write_prefill_pin(root))
+        pack = self.generate_pack(root)
+        return pack, self.commit_fixture(root, "generated unprojected v5 pack")
+
+    @staticmethod
+    def write_identity_tree(pack: Path, tree: dict[str, object]) -> None:
+        raw = (json.dumps(tree, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        (pack / "plan_tree.json").write_bytes(raw)
+        (pack / "plan_tree.sha256").write_text(
+            f"{hashlib.sha256(raw).hexdigest()}  plan_tree.json\n",
+            encoding="ascii",
+        )
+
+    def mutate_unit_config(
+        self,
+        pack: Path,
+        unit_id: str,
+        mutate,
+        *,
+        inventory_index: int = 0,
+    ) -> None:
+        tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+        unit = next(
+            item
+            for item in tree["arm_attachments"]["identity_pin_projection"][
+                "identity_units"
+            ]
+            if item["identity_unit_id"] == unit_id
+        )
+        inventory = unit["config_inventory"][inventory_index]
+        path = pack / inventory["path"]
+        config = json.loads(path.read_text(encoding="utf-8"))
+        mutate(config)
+        raw = (json.dumps(config, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        path.write_bytes(raw)
+        inventory["sha256"] = hashlib.sha256(raw).hexdigest()
+        self.write_identity_tree(pack, tree)
+
+    def freeze_identity_fixture(self, root: Path, pack: Path) -> dict[str, object]:
+        with (
+            mock.patch.object(
+                identity_pins,
+                "model_artifact_identity",
+                new=fake_model_artifact_identity,
+            ),
+            mock.patch.object(
+                identity_pins,
+                "_runtime_probe_metadata",
+                side_effect=self.runtime_probe_metadata,
+            ),
+            mock.patch.object(
+                identity_pins,
+                "_mint_git_anchor",
+                side_effect=lambda: (
+                    root.resolve(),
+                    self.git(root, "rev-parse", "HEAD"),
+                ),
+            ),
+        ):
+            return dict(identity_pins.freeze_projection(pack))
 
     @staticmethod
     def science_config_paths(pack: Path) -> list[Path]:
@@ -738,6 +929,158 @@ class D117ContrastV5PackTests(unittest.TestCase):
             }
             self.assertEqual(second, first)
             self.assertEqual(list(root.glob(".d117-v5-stage-*")), [])
+
+    def test_generated_v5_pack_freezes_and_verifies(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-identity-pass-") as temporary:
+            root = Path(temporary)
+            pack, reviewed_commit = self.identity_fixture(root)
+
+            def git_anchor() -> tuple[Path, str]:
+                return root.resolve(), self.git(root, "rev-parse", "HEAD")
+
+            with (
+                mock.patch.object(
+                    identity_pins,
+                    "model_artifact_identity",
+                    new=fake_model_artifact_identity,
+                ),
+                mock.patch.object(
+                    identity_pins,
+                    "_runtime_probe_metadata",
+                    side_effect=self.runtime_probe_metadata,
+                ),
+                mock.patch.object(
+                    identity_pins,
+                    "_mint_git_anchor",
+                    side_effect=git_anchor,
+                ),
+            ):
+                frozen = identity_pins.freeze_projection(pack)
+                self.assertEqual(frozen["status"], "PASS")
+                self.assertTrue(frozen["mutated"])
+                self.commit_fixture(root, "freeze v5 identity projection")
+                verified = identity_pins.verify_frozen_projection(
+                    pack,
+                    root / "window-custody",
+                    "bracket-v5-identity",
+                )
+
+            self.assertEqual(len(reviewed_commit), 40)
+            self.assertEqual(verified["status"], "PASS")
+            self.assertEqual(verified["reason_codes"], [])
+
+    def test_generated_v5_pack_refuses_unlisted_decode_manifest(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-identity-unlisted-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit_b = next(
+                unit
+                for unit in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if unit["identity_unit_id"] == "B/decode"
+            )
+            other = json.loads(
+                (pack / unit_b["config_inventory"][0]["path"]).read_text(
+                    encoding="utf-8"
+                )
+            )["workload_profile"]
+
+            def repoint(config: dict[str, object]) -> None:
+                workload = config["workload_profile"]
+                workload["suite_manifest_ref"] = other["suite_manifest_ref"]
+                workload["suite_manifest_sha256"] = other["suite_manifest_sha256"]
+
+            self.mutate_unit_config(pack, "A/decode", repoint)
+            self.commit_fixture(root, "repoint one decode member")
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_environment_dirty",
+            )
+            self.assertIn("undeclared suite manifest", str(raised.exception))
+
+    def test_generated_v5_pack_refuses_declared_census_off_by_one(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-identity-census-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            member = unit["declared_identity"]["workload_profile"][
+                "suite_manifest_set"
+            ][0]
+            member["declared_member_count"] += 1
+            self.write_identity_tree(pack, tree)
+            self.commit_fixture(root, "drift declared decode census")
+
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_environment_dirty",
+            )
+            self.assertIn("suite manifest census", str(raised.exception))
+
+    def test_generated_v5_pack_refuses_retyped_decode_declaration(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-identity-retyped-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+            tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+            unit = next(
+                item
+                for item in tree["arm_attachments"]["identity_pin_projection"][
+                    "identity_units"
+                ]
+                if item["identity_unit_id"] == "A/decode"
+            )
+            old = self.generator.workload_for("decode", "A")
+            unit["declared_identity"]["workload_profile"] = {
+                **old,
+                "prompt_tokens": old.get("prompt_tokens"),
+                "prompt_text": old.get("prompt_text"),
+                "dataset_ref": None,
+            }
+            self.write_identity_tree(pack, tree)
+            self.commit_fixture(root, "restore old retyped decode declaration")
+
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_environment_dirty",
+            )
+            self.assertIn("config declaration differs from pack", str(raised.exception))
+
+    def test_generated_v5_pack_refuses_drifted_member_tag(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-identity-tag-") as temporary:
+            root = Path(temporary)
+            pack, _ = self.identity_fixture(root)
+
+            def drift_tag(config: dict[str, object]) -> None:
+                config["run_metadata"]["tags"].append("counterfactual-drift")
+
+            self.mutate_unit_config(pack, "A/decode", drift_tag)
+            self.commit_fixture(root, "drift one decode member tag")
+
+            with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
+                self.freeze_identity_fixture(root, pack)
+
+            self.assertEqual(
+                raised.exception.reason_code,
+                "readiness_identity_environment_dirty",
+            )
+            self.assertIn("multiple scientific identities", str(raised.exception))
 
     def test_prefill_configs_close_candidate_family_and_tree_registration(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-realization-") as temporary:
