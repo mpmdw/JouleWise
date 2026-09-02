@@ -1,0 +1,8 @@
+    if not args.literals_only:
+        try:
+            comparisons.extend(replay_half(repository_root, corpus_root, spec))
+        except ArtifactsUnavailable as exc:
+            _print_comparisons(comparisons)
+            print(f"R7F CORPUS UNAVAILABLE: {exc}")
+            return 3
+

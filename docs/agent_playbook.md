@@ -54,6 +54,10 @@ needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
    "What Is Next". If the stop card is ACTIVE, it overrides this
    playbook and the task queue until cleared.
 2. Read `TASK_QUEUE.md`'s Current Queue and Do-Not-Do-Yet list.
+   A pending `kind: decision` dependency in `state_kernel.json` is an
+   uninstalled ruling — the task is not selectable until the dependency is
+   satisfied with an evidence pointer (D-170).
+   A brief that installs a ruling carries the clause map as an `ACCEPTANCE` item — `docs/contracts/bridge_protocol.md` §1 Clause map (`docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
 3. Read the selected mission's own read-first list. Read `AGENT_PLAN.md`
    only at phase starts or when the project structure changes. Consult
    `docs/decision_log.md` by targeted decision ID, not as a whole-file

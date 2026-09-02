@@ -1,0 +1,9 @@
+The default invocation additionally re-runs both producers into a directory
+under TMPDIR and requires byte identity for XD, AQ, and the XS-produced F4.
+An absent retained corpus exits 3 and names the missing path; it is never a
+pass.  ``--literals-only`` runs only the always-on digest/field/literal half.
+
+Exit codes: 0 for agreement, 2 for any mismatch, 3 for an absent corpus.
+Successful full replay ends with ``R7F COMPARED n / MISMATCHES m``;
+``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.
+An unavailable corpus instead ends with ``R7F CORPUS UNAVAILABLE: <path>``

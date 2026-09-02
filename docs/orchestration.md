@@ -78,7 +78,8 @@ Every substantial session runs one conductor procedure:
    merge: a pre-merge oversight pass by 2–3 fresh reviewers with
    distinct angles (deep regression hunt; claim-to-evidence trace;
    merge-order simulation across sibling PRs), lead triage, fixes, CI
-   green. **Final-head rule:** any commit that lands after the last
+   green. Gate ledger: twelve-row PR-body table (`.github/pull_request_template.md`), checked by
+   `scripts/check_gate_ledger.py` in the advisory `gate-ledger` workflow — see D-170. **Final-head rule:** any commit that lands after the last
    review round gets one more fresh review before merge — no commit
    merges unreviewed, however small (its first application caught a
    crash path in a "trivial" post-review fix).

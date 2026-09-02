@@ -186,6 +186,36 @@ def _check_dependency(dep, where: str, kernel) -> None:
         if dep["evidence"] is None:
             fail(f"{where}: satisfied dependency requires evidence")
         _check_pointer(dep["evidence"], f"{where}.evidence", kernel)
+        if dep["kind"] == "decision":
+            evidence = dep["evidence"]
+            evidence_path = evidence["path"]
+            if re.fullmatch(r"tests/[A-Za-z0-9_/]+\.py", evidence_path) is None:
+                fail(
+                    f"{where}: satisfied decision dependency {dep['target']!r} "
+                    "requires evidence.path to be a test file under tests/: "
+                    f"{evidence_path!r}"
+                )
+            test_tokens = re.findall(
+                r"(?<![A-Za-z0-9_])(test_[a-z0-9_]+)(?![A-Za-z0-9_])",
+                evidence["label"],
+            )
+            target = os.path.join(ROOT, *evidence_path.split("/"))
+            try:
+                with open(target, encoding="utf-8") as fh:
+                    source = fh.read()
+            except OSError as exc:
+                fail(
+                    f"{where}: satisfied decision dependency {dep['target']!r} "
+                    f"cannot read regression file {evidence_path!r}: {exc}"
+                )
+            defined_tests = set(
+                re.findall(r"^\s*def (test_[a-z0-9_]+)\s*\(", source, flags=re.MULTILINE)
+            )
+            if not any(token in defined_tests for token in test_tokens):
+                fail(
+                    f"{where}: satisfied decision dependency {dep['target']!r} "
+                    f"evidence.label must name a test defined in {evidence_path!r}"
+                )
     else:
         if dep["evidence"] is not None:
             fail(f"{where}: pending dependency must have null evidence")
