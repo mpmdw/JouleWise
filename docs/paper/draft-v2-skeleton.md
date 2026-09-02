@@ -267,11 +267,14 @@ fifth block I_5    |      [-1 J------------+1 J]      |
 mean interval Ibar |     [-1.2 J----------+1.2 J]     |
 ```
 
-Diagram legend: `C` is the earlier comparator band; `I_1` through `I_5` are
-measured blocks' allowed-difference intervals; `Ibar` is their mean interval;
-`=` spans the comparator; `-` spans a block or mean interval; and square
-brackets are included endpoints. Five measured blocks leave every unmeasured
-block and the population distribution unknown, so a pass establishes only
+Diagram legend: `C` is the earlier comparator band; `I_1` through `I_5` are the
+five illustrative allowed-difference intervals; `Ibar` is their mean interval;
+`|` marks the comparator band's left and right boundaries on each block row;
+`=` spans the comparator; `-` is a schematic connector for a block or mean
+interval and is not drawn to a numerical scale; and square brackets mark
+included endpoints. The endpoint labels carry the numeric values. Five
+measured blocks leave every unmeasured block and the population distribution
+unknown, so a pass establishes only
 measured-block containment, never population coverage.
 
 For phase accounting, the residual
