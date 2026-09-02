@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import detection_floor, floor_mint_estimator
+from joulewise import detection_floor, dominance_closeout, floor_mint_estimator
 from joulewise.analysis_manifest_v3 import (
     analysis_semantics_sha256_v1,
     validate_prospective_analysis_manifest_v3,
@@ -572,8 +572,10 @@ class D117ContrastV5PackTests(unittest.TestCase):
         fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
         bracket = authenticated_bracket(fixture["operative_bound_s"])
 
+        # The replay now lives in the one-home module (D-168); the cap must
+        # refuse before that module ever calls the floor estimator.
         with mock.patch.object(
-            self.generator, "comparative_false_effect_floor"
+            dominance_closeout, "comparative_false_effect_floor"
         ) as floor:
             with self.assertRaisesRegex(
                 ValueError, "common_mode_replay_block_count_invalid"

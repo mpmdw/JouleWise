@@ -234,7 +234,10 @@ ARM_KEYS = {
     "model_tag",
     "cell_id",
     "realized_stack_identity",
+    "floor_cell_id",
+    "floor_stack_identity",
 }
+_LEGACY_ARM_KEYS = ARM_KEYS - {"floor_cell_id", "floor_stack_identity"}
 ENTRY_KEYS = {
     "entry_id",
     "config",
@@ -838,7 +841,7 @@ def validate_analysis_manifest_v3(
     else:
         for index, arm in enumerate(arms):
             where = f"manifest.arms[{index}]"
-            if not _exact_keys(arm, ARM_KEYS, where, errors):
+            if not _exact_keys(arm, _LEGACY_ARM_KEYS, where, errors):
                 continue
             arm_id = arm.get("arm_id")
             if arm_id not in ARM_FREEZE or arm_id in arm_by_id:
@@ -1136,6 +1139,14 @@ _FINALIZED_EVIDENCE_KEYS = {
     "bracket_binding",
     "calibration_ledger",
     "aggregate_floor_artifact",
+}
+_DOMINANCE_REPLAY_SIDECAR_ROLE = "dominance_replay_sidecar"
+_DOMINANCE_REPLAY_SIDECAR_SCHEMA = "joulewise.d165_dominance_replay.v1"
+_FINALIZED_DOMINANCE_REPLAY_KEYS = {
+    "path",
+    "sha256",
+    "schema_version",
+    "sidecar_id",
 }
 _FINALIZED_WHOLE_WINDOW_KEYS = {
     "path",
@@ -1924,6 +1935,11 @@ def _walk_finalized_input(value: object) -> None:
     evidence = _input_mapping(manifest.get("evidence"), "manifest.evidence")
     for role in _REQUIRED_ATTACHMENT_ROLES:
         _input_mapping(evidence.get(role), f"manifest.evidence.{role}")
+    if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence:
+        _input_mapping(
+            evidence.get(_DOMINANCE_REPLAY_SIDECAR_ROLE),
+            f"manifest.evidence.{_DOMINANCE_REPLAY_SIDECAR_ROLE}",
+        )
 
 
 def _validate_prospective_analysis_manifest_v3_unchecked(
@@ -3057,6 +3073,7 @@ def _derive_arms_and_entries(
     manifest_dir: Path,
     runs_root: Path,
     bundle_paths: Mapping[str, Path],
+    floor_arm_bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     # Local import avoids a module-import cycle: inputs imports this module to
     # validate both v3 siblings.  Realized identity reads config/metadata only,
@@ -3119,20 +3136,30 @@ def _derive_arms_and_entries(
             arm_id = f"{measurement_arm}:{arm_label}"
             cell_id = f"cell-{measurement_arm}-{arm_label.lower()}"
             model_tag = f"model-{condition_id}"
-            arms.append(
-                {
-                    "arm_id": arm_id,
-                    "condition_family_id": condition_id,
-                    "condition_family_sha256": condition[
-                        "canonical_domain_sha256"
-                    ],
-                    "model_tag": model_tag,
-                    "cell_id": cell_id,
-                    "realized_stack_identity": json.loads(
-                        json.dumps(identities[0])
-                    ),
-                }
-            )
+            arm = {
+                "arm_id": arm_id,
+                "condition_family_id": condition_id,
+                "condition_family_sha256": condition[
+                    "canonical_domain_sha256"
+                ],
+                "model_tag": model_tag,
+                "cell_id": cell_id,
+                "realized_stack_identity": json.loads(
+                    json.dumps(identities[0])
+                ),
+            }
+            if floor_arm_bindings is not None:
+                binding = floor_arm_bindings.get(arm_id)
+                if not isinstance(binding, Mapping):
+                    raise AnalysisManifestFinalizationError(
+                        "analysis_finalization_floor_dependency_unsatisfied",
+                        f"finalized floor binding is missing for {arm_id}",
+                    )
+                arm["floor_cell_id"] = binding["floor_cell_id"]
+                arm["floor_stack_identity"] = json.loads(
+                    json.dumps(binding["floor_stack_identity"])
+                )
+            arms.append(arm)
             for member in members:
                 entry_id = f"entry-{member['run_id']}"
                 entries.append(
@@ -3185,19 +3212,19 @@ def _derive_arms_and_entries(
 def _floor_consumer_contexts(
     prospective: Mapping[str, Any],
     bundle_paths: Mapping[str, Path],
-) -> dict[str, tuple[str, str]]:
+) -> dict[str, tuple[str, str, Mapping[str, Any]]]:
     """Derive each frozen condition's backend and governed stack hash."""
 
     from joulewise.identity_pins import build_stack_identity, stack_identity_sha256
 
-    contexts: dict[str, tuple[str, str]] = {}
+    contexts: dict[str, tuple[str, str, Mapping[str, Any]]] = {}
     for contrast in prospective["contrasts"]:
         for arm_label, condition_key in (
             ("A", "condition_a_id"),
             ("B", "condition_b_id"),
         ):
             condition_id = str(contrast[condition_key])
-            observed: set[tuple[str, str]] = set()
+            observed: dict[tuple[str, str], Mapping[str, Any]] = {}
             for member in contrast["members"]:
                 if member["arm"] != arm_label:
                     continue
@@ -3222,14 +3249,28 @@ def _floor_consumer_contexts(
                         "analysis_finalization_floor_dependency_unsatisfied",
                         f"realized floor selector is incomplete for {member['run_id']}",
                     )
-                observed.add((backend, stack_identity_sha256(stack)))
+                key = (backend, stack_identity_sha256(stack))
+                observed[key] = json.loads(json.dumps(stack))
             if len(observed) != 1:
                 raise AnalysisManifestFinalizationError(
                     "analysis_finalization_floor_dependency_unsatisfied",
                     f"realized floor selector varies within condition {condition_id}",
                 )
-            contexts[condition_id] = next(iter(observed))
+            (backend, expected_stack_sha), stack = next(iter(observed.items()))
+            contexts[condition_id] = (backend, expected_stack_sha, stack)
     return contexts
+
+
+def _dominance_floor_identity_enabled(prospective: Mapping[str, Any]) -> bool:
+    """Gate new arm identity fields on registration-key presence only."""
+
+    contrasts = prospective.get("contrasts")
+    return isinstance(contrasts, list) and bool(contrasts) and all(
+        isinstance(contrast, Mapping)
+        and isinstance(contrast.get("floor_estimator_registration"), Mapping)
+        and "dominance_criterion" in contrast["floor_estimator_registration"]
+        for contrast in contrasts
+    )
 
 
 def _authenticate_floor_dependencies(
@@ -3237,7 +3278,7 @@ def _authenticate_floor_dependencies(
     floor: Mapping[str, Any],
     *,
     bundle_paths: Mapping[str, Path],
-) -> None:
+) -> dict[str, dict[str, Any]]:
     """Authenticate every frozen selector and its complete transport group."""
 
     contexts = _floor_consumer_contexts(prospective, bundle_paths)
@@ -3249,6 +3290,7 @@ def _authenticate_floor_dependencies(
     groups = [
         row for row in floor.get("transport_groups", []) if isinstance(row, Mapping)
     ]
+    arm_bindings: dict[str, dict[str, Any]] = {}
     for contrast in prospective["contrasts"]:
         dependency = contrast["floor_dependency"]
         selector = dependency["floor_selector"]
@@ -3258,8 +3300,19 @@ def _authenticate_floor_dependencies(
             row["condition_family_id"]: row for row in bindings
         }
         for condition_id in selector["condition_family_ids"]:
+            if condition_id == contrast["condition_a_id"]:
+                arm_label = "A"
+            elif condition_id == contrast["condition_b_id"]:
+                arm_label = "B"
+            else:
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"selector condition is not an arm of {contrast['contrast_id']}",
+                )
             binding = binding_by_condition[condition_id]
-            expected_backend, expected_stack_sha = contexts[condition_id]
+            expected_backend, expected_stack_sha, floor_stack_identity = contexts[
+                condition_id
+            ]
             if selector["backend"] not in {"from_bundle", expected_backend}:
                 raise AnalysisManifestFinalizationError(
                     "analysis_finalization_floor_dependency_unsatisfied",
@@ -3334,6 +3387,25 @@ def _authenticate_floor_dependencies(
                     "analysis_finalization_floor_dependency_unsatisfied",
                     f"exact-stack floor cell is absent or ambiguous for {condition_id}",
                 )
+            arm_id = f"{contrast['measurement_arm']}:{arm_label}"
+            binding = {
+                "floor_cell_id": (
+                    direct[0]["cell_id"]
+                    if transport["mode"] == "exact_stack_only" and len(direct) == 1
+                    else None
+                ),
+                "floor_stack_identity": json.loads(
+                    json.dumps(floor_stack_identity)
+                ),
+            }
+            previous = arm_bindings.get(arm_id)
+            if previous is not None and previous != binding:
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"floor binding varies within finalized arm {arm_id}",
+                )
+            arm_bindings[arm_id] = binding
+    return arm_bindings
 
 
 def _authenticate_finalization_inputs(
@@ -3346,6 +3418,7 @@ def _authenticate_finalization_inputs(
     bracket_binding_path: Path,
     calibration_ledger_path: Path,
     aggregate_floor_artifact_path: Path,
+    dominance_replay_sidecar_path: Path | None = None,
 ) -> dict[str, Any]:
     schemas = _declared_attachment_schemas(prospective)
     custody_input = Path(custody_root).absolute()
@@ -3609,19 +3682,56 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_floor_dependency_unsatisfied",
             "aggregate floor artifact schema does not satisfy the frozen dependency",
         )
-    _authenticate_floor_dependencies(
+    floor_arm_bindings = _authenticate_floor_dependencies(
         prospective,
         floor,
         bundle_paths=bundle_paths,
     )
+
+    dominance_enabled = _dominance_floor_identity_enabled(prospective)
+    dominance_attachment: dict[str, Any] | None = None
+    if dominance_enabled and dominance_replay_sidecar_path is not None:
+        sidecar_path, sidecar_relative = _path_under_root(
+            dominance_replay_sidecar_path,
+            custody_input,
+            "dominance replay sidecar",
+        )
+        sidecar, sidecar_raw = _read_strict_object(
+            sidecar_path, "dominance replay sidecar"
+        )
+        if (
+            sidecar.get("schema_version") != _DOMINANCE_REPLAY_SIDECAR_SCHEMA
+            or not isinstance(sidecar.get("sidecar_id"), str)
+            or not sidecar.get("sidecar_id")
+        ):
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_attachment_invalid",
+                "dominance replay sidecar schema/identity is invalid",
+            )
+        dominance_attachment = {
+            "path": sidecar_relative,
+            "sha256": hashlib.sha256(sidecar_raw).hexdigest(),
+            "schema_version": sidecar["schema_version"],
+            "sidecar_id": sidecar["sidecar_id"],
+        }
+    elif not dominance_enabled and dominance_replay_sidecar_path is not None:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            "legacy prospective manifest may not attach a dominance replay sidecar",
+        )
 
     arms, entries, blocks = _derive_arms_and_entries(
         prospective,
         manifest_dir=manifest_dir,
         runs_root=resolved_runs,
         bundle_paths=bundle_paths,
+        floor_arm_bindings=(
+            floor_arm_bindings
+            if dominance_enabled
+            else None
+        ),
     )
-    return {
+    attachments = {
         "runs_root": resolved_runs,
         "arms": arms,
         "entries": entries,
@@ -3653,6 +3763,9 @@ def _authenticate_finalization_inputs(
             "artifact_id": floor["artifact_id"],
         },
     }
+    if dominance_attachment is not None:
+        attachments[_DOMINANCE_REPLAY_SIDECAR_ROLE] = dominance_attachment
+    return attachments
 
 
 def _build_finalized_manifest(
@@ -3753,6 +3866,10 @@ def _build_finalized_manifest(
             for role in sorted(_REQUIRED_ATTACHMENT_ROLES)
         },
     }
+    if _DOMINANCE_REPLAY_SIDECAR_ROLE in attachments:
+        manifest["evidence"][_DOMINANCE_REPLAY_SIDECAR_ROLE] = json.loads(
+            json.dumps(attachments[_DOMINANCE_REPLAY_SIDECAR_ROLE])
+        )
     finalized_semantics_sha = analysis_semantics_sha256_v1(manifest)
     if finalized_semantics_sha != prospective_semantics_sha:
         raise AnalysisManifestFinalizationError(
@@ -3815,6 +3932,7 @@ def finalize_prospective_analysis_manifest_v3(
     calibration_ledger_path: Path,
     aggregate_floor_artifact_path: Path,
     output_dir: Path,
+    dominance_replay_sidecar_path: Path | None = None,
 ) -> dict[str, Any]:
     """Derive one immutable finalized artifact without reading an effect value."""
 
@@ -3860,6 +3978,7 @@ def finalize_prospective_analysis_manifest_v3(
         bracket_binding_path=bracket_binding_path,
         calibration_ledger_path=calibration_ledger_path,
         aggregate_floor_artifact_path=aggregate_floor_artifact_path,
+        dominance_replay_sidecar_path=dominance_replay_sidecar_path,
     )
     tree_raw = tree_path.read_bytes()
     manifest = _build_finalized_manifest(
@@ -3995,6 +4114,50 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             "collection lookup identity/projection rule differs from prospective authority",
         )
 
+    dominance_enabled = _dominance_floor_identity_enabled(prospective)
+    arms = value.get("arms")
+    allowed_arm_key_sets = {
+        frozenset(_LEGACY_ARM_KEYS),
+        frozenset(ARM_KEYS),
+    }
+    expected_arm_keys = ARM_KEYS if dominance_enabled else _LEGACY_ARM_KEYS
+    observed_arm_key_sets: set[frozenset[str]] = set()
+    if not isinstance(arms, list):
+        _refusal(
+            refusals,
+            "analysis_manifest_finalized_invalid",
+            "manifest.arms must be an array",
+        )
+        return tuple(refusals)
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, Mapping):
+            _refusal(
+                refusals,
+                "analysis_manifest_finalized_invalid",
+                f"manifest.arms[{index}] must be an object",
+            )
+            continue
+        arm_keys = frozenset(arm)
+        observed_arm_key_sets.add(arm_keys)
+        if arm_keys not in allowed_arm_key_sets:
+            _refusal(
+                refusals,
+                "analysis_manifest_finalized_invalid",
+                f"manifest.arms[{index}] does not have a complete finalized arm shape",
+            )
+    if len(observed_arm_key_sets) > 1:
+        _refusal(
+            refusals,
+            "analysis_manifest_finalized_invalid",
+            "manifest.arms do not use one consistent finalized arm shape",
+        )
+    if observed_arm_key_sets != {frozenset(expected_arm_keys)}:
+        _refusal(
+            refusals,
+            "analysis_manifest_finalized_invalid",
+            "manifest.arms floor identity fields do not match prospective dominance registration",
+        )
+
     finalized_families = value.get("families")
     if isinstance(finalized_families, list):
         for family in finalized_families:
@@ -4027,9 +4190,16 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
                 )
 
     evidence = value.get("evidence")
+    expected_evidence_keys = set(_FINALIZED_EVIDENCE_KEYS)
+    if (
+        dominance_enabled
+        and isinstance(evidence, Mapping)
+        and _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence
+    ):
+        expected_evidence_keys.add(_DOMINANCE_REPLAY_SIDECAR_ROLE)
     if not _exact_refusal_keys(
         evidence,
-        _FINALIZED_EVIDENCE_KEYS,
+        expected_evidence_keys,
         "manifest.evidence",
         refusals,
         schema_code="analysis_manifest_finalized_invalid",
@@ -4047,6 +4217,16 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             evidence.get(role),
             keys,
             f"manifest.evidence.{role}",
+            refusals,
+            schema_code="analysis_manifest_finalized_invalid",
+            unknown_code="analysis_manifest_finalized_invalid",
+        ):
+            return tuple(refusals)
+    if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence:
+        if not _exact_refusal_keys(
+            evidence.get(_DOMINANCE_REPLAY_SIDECAR_ROLE),
+            _FINALIZED_DOMINANCE_REPLAY_KEYS,
+            f"manifest.evidence.{_DOMINANCE_REPLAY_SIDECAR_ROLE}",
             refusals,
             schema_code="analysis_manifest_finalized_invalid",
             unknown_code="analysis_manifest_finalized_invalid",
@@ -4083,6 +4263,11 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             calibration_ledger_path=custody / evidence["calibration_ledger"]["path"],
             aggregate_floor_artifact_path=custody
             / evidence["aggregate_floor_artifact"]["path"],
+            dominance_replay_sidecar_path=(
+                custody / evidence[_DOMINANCE_REPLAY_SIDECAR_ROLE]["path"]
+                if _DOMINANCE_REPLAY_SIDECAR_ROLE in evidence
+                else None
+            ),
         )
     except AnalysisManifestFinalizationError as exc:
         reason = (

@@ -1452,6 +1452,7 @@ def freeze_mixed_estimator_v2_pinset(
     root: Path,
     *,
     install_binding_evidence: bool = False,
+    source_stack_identity: dict | None = None,
 ) -> tuple[
     Path,
     str,
@@ -1466,6 +1467,40 @@ def freeze_mixed_estimator_v2_pinset(
         plan_id = producer["plan"]["plan_id"]
         source = source_inputs[plan_id]
         preliminary_cells = dict(source.cells)
+        if source_stack_identity is not None:
+            stack_sha256 = canonical_domain_sha256(
+                STACK_IDENTITY_DOMAIN, source_stack_identity
+            )
+            producer["model_runtime_config"].update(
+                {
+                    "model_artifact_sha256": source_stack_identity[
+                        "model_artifact_sha256"
+                    ],
+                    "runtime_identity_sha256": stack_sha256,
+                }
+            )
+            preliminary_cells = {
+                role: replace(
+                    cell,
+                    absolute=replace(
+                        cell.absolute,
+                        source_regime={
+                            **copy.deepcopy(cell.absolute.source_regime),
+                            "stack_identity": copy.deepcopy(source_stack_identity),
+                            "stack_identity_sha256": stack_sha256,
+                        },
+                    ),
+                    comparative=replace(
+                        cell.comparative,
+                        source_regime={
+                            **copy.deepcopy(cell.comparative.source_regime),
+                            "stack_identity": copy.deepcopy(source_stack_identity),
+                            "stack_identity_sha256": stack_sha256,
+                        },
+                    ),
+                )
+                for role, cell in preliminary_cells.items()
+            }
         decode = preliminary_cells["decode"]
         registered_spec_cell = copy.deepcopy(decode.comparative.spec_cell)
         registered_spec_cell.update(
