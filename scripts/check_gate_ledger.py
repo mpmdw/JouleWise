@@ -16,6 +16,43 @@ SHA_RE = re.compile(r"[0-9a-fA-F]{7,40}")
 LEDGER_HEADING = "## Gate ledger (D-118 / D-121)"
 
 
+def _split_table_row(line: str) -> list[str]:
+    """Split a GFM table row on unescaped pipes outside code spans."""
+    cells: list[str] = []
+    cell: list[str] = []
+    code_ticks: int | None = None
+    backslashes = 0
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if char == "`":
+            end = index + 1
+            while end < len(line) and line[end] == "`":
+                end += 1
+            tick_count = end - index
+            if code_ticks is None:
+                code_ticks = tick_count
+            elif code_ticks == tick_count:
+                code_ticks = None
+            cell.append(line[index:end])
+            backslashes = 0
+            index = end
+            continue
+        if char == "|" and code_ticks is None and backslashes % 2 == 0:
+            cells.append("".join(cell).strip())
+            cell = []
+        else:
+            cell.append(char)
+        backslashes = backslashes + 1 if char == "\\" else 0
+        index += 1
+    cells.append("".join(cell).strip())
+    if cells and not cells[0]:
+        cells.pop(0)
+    if cells and not cells[-1]:
+        cells.pop()
+    return cells
+
+
 def _ledger_rows(body: str) -> dict[int, list[str]]:
     """Return evidence cells for numbered rows in the named ledger section."""
     rows: dict[int, list[str]] = {}
@@ -28,7 +65,7 @@ def _ledger_rows(body: str) -> dict[int, list[str]]:
             break
         if not in_ledger or "|" not in line:
             continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        cells = _split_table_row(line.strip())
         if len(cells) != 3 or not cells[0].isdigit():
             continue
         key = int(cells[0])
@@ -39,6 +76,8 @@ def _ledger_rows(body: str) -> dict[int, list[str]]:
 
 def _valid_path(path: str, repo_root: Path) -> bool:
     # Copied verbatim from scripts/gen_state.py _check_pointer path checks.
+    if not isinstance(path, str) or not path:
+        return False
     if path.startswith("/") or path.startswith("~") or ".." in path.split("/") or "://" in path:
         return False
     target = os.path.join(repo_root, *path.split("/"))
@@ -84,15 +123,15 @@ def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
             continue
 
         target = match.group(1)
-        if SHA_RE.fullmatch(target):
+        if key == 12 and SHA_RE.fullmatch(target):
             if not _is_commit(target, repo_root):
                 defects.append(f"gate-ledger: item {key}: commit sha does not resolve: {target}")
-            elif key == 12 and not head_sha.lower().startswith(target.lower()):
+            elif not head_sha.lower().startswith(target.lower()):
                 defects.append(f"gate-ledger: item 12: sha is not the PR head")
         elif key == 12:
             defects.append("gate-ledger: item 12: final-head evidence must be a commit sha")
-        elif not _valid_path(target, repo_root):
-            defects.append(f"gate-ledger: item {key}: path does not resolve: {target}")
+        elif not (_is_commit(target, repo_root) or _valid_path(target, repo_root)):
+            defects.append(f"gate-ledger: item {key}: neither a commit nor a path: {target}")
     return defects
 
 
@@ -106,8 +145,14 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(sys.argv[1:] if argv is None else argv)
-    body = args.body_file.read_text(encoding="utf-8") if args.body_file else sys.stdin.read()
-    defects = check(body, args.head_sha, args.repo_root)
+    try:
+        if not args.repo_root.is_dir():
+            raise OSError(f"repository root does not exist: {args.repo_root}")
+        body = args.body_file.read_text(encoding="utf-8") if args.body_file else sys.stdin.read()
+        defects = check(body, args.head_sha, args.repo_root)
+    except (OSError, UnicodeError) as exc:
+        print(f"gate-ledger: input error: {exc}")
+        return 1
     if defects:
         print("\n".join(defects))
         return 1

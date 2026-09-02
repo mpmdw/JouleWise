@@ -12,6 +12,7 @@ name: gate-ledger
 # every `RUN <sha>` a commit the checkout knows, and item 12 naming the
 # PR's final head sha. It targets the MISTAKE class (a forgotten item);
 # a deliberately pasted block is out of the threat model (D-161).
+# The PR head sha is checked out explicitly because the merge ref is not the PR head.
 #
 # It lives in its own workflow, not ci.yml, because it must also fire on
 # `edited` (the ledger is filled by editing the PR body after the review
@@ -43,6 +44,7 @@ jobs:
         with:
           # Full history so `RUN <sha>` rows naming earlier commits of the
           # branch resolve with `git cat-file -e <sha>^{commit}`.
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - name: Validate the twelve-row gate ledger in the PR body
         # The body is passed through the environment, never interpolated

@@ -48,12 +48,14 @@ class CheckGateLedgerTests(unittest.TestCase):
             "| # | Gate item | Evidence |", "| --- | --- | --- |", *rows,
         ]) + "\n"
 
-    def run_checker(self, body: str) -> subprocess.CompletedProcess[str]:
+    def run_checker(
+        self, body: str, *, repo_root: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         body_file = Path(self.temporary.name) / "body.md"
         body_file.write_text(body, encoding="utf-8")
         return subprocess.run(
             [sys.executable, str(CHECKER), "--body-file", str(body_file),
-             "--head-sha", self.head, "--repo-root", str(self.repo)],
+             "--head-sha", self.head, "--repo-root", str(repo_root or self.repo)],
             text=True, capture_output=True, check=False,
         )
 
@@ -82,15 +84,68 @@ class CheckGateLedgerTests(unittest.TestCase):
 
     def test_unresolvable_path_is_refused(self) -> None:
         self.assert_rejected(self.body().replace("RUN evidence.txt", "RUN missing.txt", 1),
-                             "gate-ledger: item 1: path does not resolve: missing.txt")
+                             "gate-ledger: item 1: neither a commit nor a path: missing.txt")
 
     def test_escaping_path_is_refused(self) -> None:
-        self.assert_rejected(self.body().replace("RUN evidence.txt", "RUN ../x", 1),
-                             "gate-ledger: item 1: path does not resolve: ../x")
+        outside = Path(self.temporary.name) / "outside-evidence.txt"
+        outside.write_text("outside\n", encoding="utf-8")
+        tilde_target = self.repo / "~existing-evidence.txt"
+        tilde_target.write_text("tilde\n", encoding="utf-8")
+        targets = ("../outside-evidence.txt", "~existing-evidence.txt", str(outside))
+        for target in targets:
+            with self.subTest(target=target):
+                result = self.run_checker(
+                    self.body().replace("RUN evidence.txt", f"RUN {target}", 1),
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(
+                    result.stdout,
+                    f"gate-ledger: item 1: neither a commit nor a path: {target}\n",
+                )
 
-    def test_bad_sha_is_refused(self) -> None:
-        body = self.body().replace("RUN evidence.txt", "RUN deadbee", 1)
-        self.assert_rejected(body, "gate-ledger: item 1: commit sha does not resolve: deadbee")
+    def test_hex_string_that_is_neither_commit_nor_path_is_refused(self) -> None:
+        body = self.body().replace("RUN evidence.txt", "RUN badc0de", 1)
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: item 1: neither a commit nor a path: badc0de\n",
+        )
+
+    def test_hex_only_filename_is_accepted_as_a_path(self) -> None:
+        (self.repo / "deadbee").write_text("path evidence\n", encoding="utf-8")
+        result = self.run_checker(self.body().replace("RUN evidence.txt", "RUN deadbee", 1))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_pipe_inside_backticked_gate_item_does_not_lose_row(self) -> None:
+        body = self.body().replace(
+            "| 4 | gate 4 |",
+            r"| 4 | gate `escaped \| and raw |` |",
+        )
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_unstructured_evidence_is_refused_with_one_message(self) -> None:
+        result = self.run_checker(
+            self.body().replace("RUN evidence.txt", "ran it, trust me", 1),
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: item 1: evidence must be RUN <path-or-sha>\n",
+        )
+
+    def test_item_twelve_path_is_refused_even_when_it_exists(self) -> None:
+        result = self.run_checker(
+            self.body().replace(f"RUN {self.head}", "RUN evidence.txt"),
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: item 12: final-head evidence must be a commit sha\n",
+        )
 
     def test_item_twelve_sha_must_match_head(self) -> None:
         body = self.body().replace(f"RUN {self.head}", "RUN deadbee")
@@ -109,6 +164,16 @@ class CheckGateLedgerTests(unittest.TestCase):
         result = self.run_checker(body)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_missing_repo_root_is_an_input_error_without_traceback(self) -> None:
+        missing = Path(self.temporary.name) / "missing-repo"
+        result = self.run_checker(self.body(), repo_root=missing)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            f"gate-ledger: input error: repository root does not exist: {missing}\n",
+        )
+        self.assertEqual(result.stderr, "")
 
 
 if __name__ == "__main__":
