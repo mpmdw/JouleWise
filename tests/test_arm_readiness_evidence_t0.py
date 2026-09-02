@@ -870,6 +870,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
 
         tree = ast.parse(Path(t0.__file__).read_text(encoding="utf-8"))
         sites_by_function: dict[str, int] = {}
+        direct_call_names: set[int] = set()
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):
                 continue
@@ -880,8 +881,35 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 and isinstance(call.func, ast.Name)
                 and call.func.id == "_fresh_probe"
             ]
+            direct_call_names.update(id(call.func) for call in calls)
             if calls:
                 sites_by_function[node.name] = len(calls)
+        # The census counts direct calls, so it is only complete if direct
+        # calls are the ONLY way the module reaches ``_fresh_probe``. Any
+        # other reference — an alias (``probe = _fresh_probe``), a stored
+        # callback, an attribute lookup, or the name as a string for
+        # ``globals()[...]`` — would add a governed probe the census cannot
+        # see (Sol 256 F1), so every such reference fails here.
+        indirect = [
+            (type(node).__name__, getattr(node, "lineno", None))
+            for node in ast.walk(tree)
+            if (
+                isinstance(node, ast.Name)
+                and node.id == "_fresh_probe"
+                and id(node) not in direct_call_names
+            )
+            or (isinstance(node, ast.Attribute) and node.attr == "_fresh_probe")
+            or (isinstance(node, ast.Constant) and node.value == "_fresh_probe")
+        ]
+        self.assertEqual(indirect, [], "indirect _fresh_probe references")
+        self.assertEqual(
+            sum(
+                1
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef) and node.name == "_fresh_probe"
+            ),
+            1,
+        )
         self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
         post_r1_sites = sum(sites_by_function.values())
         self.assertEqual(post_r1_sites, 11, sites_by_function)

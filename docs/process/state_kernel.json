@@ -4615,7 +4615,7 @@
     "T0-LIVENESS-BOUND-EMPIRICAL-01": {
       "acceptance": {
         "evidence": [
-          "Closure route A: at least N >= 3 real T-0 rehearsal receipts carry both r1_batch_finished_monotonic_ns and validity_origin_monotonic_ns; each elapsed is reported; all are < 600 s; and the minimum observed margin below 600 s is stated. Closure route B: a cold-gate ruling re-rules the 600 s number."
+          "Closure route A: at least N >= 3 real T-0 rehearsal receipt bundles; for each, elapsed = validity_origin - r1_batch_finished_monotonic_ns, where r1_batch_finished_monotonic_ns is read from the clock.correct_and_prior_state row's fact payload (joulewise/arm_readiness_evidence_t0.py, the row payload built next to r1_batch_duration_ns) and validity_origin is recovered EXACTLY as valid_until_monotonic_ns - _validity_horizon_ns(kind) from any evidence receipt in the bundle (the author computes valid_until = validity_origin + horizon; no receipt carries validity_origin_monotonic_ns itself and the exact evidence-receipt key set forbids adding it without a schema change). Each elapsed is reported; all are < 600 s; the minimum observed margin below 600 s is stated. Closure route B: a cold-gate ruling re-rules the 600 s number."
         ],
         "pointer": {
           "json_pointer": "/tasks/T0-LIVENESS-BOUND-EMPIRICAL-01/acceptance",
@@ -4656,7 +4656,7 @@
       "priority": "p1_phase_gate",
       "rank": 110,
       "status": "queued",
-      "status_note": "Proposed 2026-09-02 from the T26 PHYS-1 registered limitation; no retained receipt currently carries both numeric stamps.",
+      "status_note": "Proposed 2026-09-02 from the T26 PHYS-1 registered limitation. No retained receipt carries a validity_origin stamp; the origin is recovered from valid_until minus the kind's horizon (Sol 256 F2 correction, 2026-09-02) — the route needs no producer or schema change.",
       "stop_card": null
     },
     "T0-REHEARSAL-PRODUCERS-01": {
