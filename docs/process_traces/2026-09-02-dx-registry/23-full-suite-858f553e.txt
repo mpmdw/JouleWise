@@ -1,0 +1,21 @@
+== gate item 9: lead full-suite replay on the integration tree 858f553e (2026-09-02)
+tree: 858f553e = main 403998e1 + dx 8d084abc (#272) + t26-a 9ea3ec7f (#273) + t26-c c8fa367d (#275) + t26-b d2cdff8b (#274); detached worktree /Users/edr/code/JouleWise-wt-integ2
+command: S=<scratchpad>; mkdir -p $S/tmpinteg3; cd /Users/edr/code/JouleWise-wt-integ2 && export TMPDIR=$S/tmpinteg3 R7F_CORPUS_ROOT=/Users/edr/code/JouleWise; python3 -m unittest discover -s tests > $S/suite-integ3-858f553e.txt 2>&1
+full output: 566 lines, sha256 d6f2ae890b476dc9ab15d473b63b99df57690ca9e0ecaf98323a955598b0eeb1 (retained in the magistrate's session scratchpad; the exact tail follows)
+== exact tail (last 12 lines)
+ok draft-off-000 attempt=0: bundle=<scratchpad>/tmpinteg3/tmp41z6zsxj/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=<scratchpad>/tmpinteg3/tmp41z6zsxj/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=<scratchpad>/tmpinteg3/tmp41z6zsxj/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=<scratchpad>/tmpinteg3/tmp41z6zsxj/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: <scratchpad>/tmpinteg3/tmp41z6zsxj/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  <scratchpad>/tmpinteg3/tmpmm27xga6/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+PASS built G2-a prompt ladder, configs, and manifests
+PASS bound G2-a inputs to the calibration window
+exit=0
+== summary lines (grep '^Ran \|^OK\|^FAILED')
+Ran 4820 tests in 4236.982s
+OK (skipped=125)
+exit=0
