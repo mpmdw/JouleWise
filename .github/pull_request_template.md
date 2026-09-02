@@ -1,6 +1,6 @@
 ## Gate ledger (D-118 / D-121)
 
-Fill every row as `RUN <repo-relative-path>`, `RUN <commit-sha>`, or `NOT-RUN`; item 12 must name the final head sha.
+Fill every row as `RUN <repo-relative-path>` or `RUN <commit-sha>` (a committed repo-relative artifact at the PR head or a commit sha: no `:N`, no `#anchor`, no URL); Evidence is plain text, no backticks; or `NOT-RUN`, which the advisory `gate-ledger` check reports as a defect until the row is filled. Item 12 must name the final head sha.
 
 Row labels are keys; the authoritative gate text is D-118 / D-121 in docs/decision_log.md (and D-170 for this ledger).
 

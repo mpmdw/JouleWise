@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +13,18 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts" / "check_gate_ledger.py"
+
+
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CHECKER_MODULE = _load_module("check_gate_ledger_for_test", CHECKER)
+GEN_STATE_MODULE = _load_module("gen_state_for_test", ROOT / "scripts" / "gen_state.py")
 
 
 class CheckGateLedgerTests(unittest.TestCase):
@@ -86,6 +99,12 @@ class CheckGateLedgerTests(unittest.TestCase):
         self.assert_rejected(self.body().replace("RUN evidence.txt", "RUN missing.txt", 1),
                              "gate-ledger: item 1: neither a commit nor a path: missing.txt")
 
+    def test_line_suffix_is_refused_as_a_path(self) -> None:
+        self.assert_rejected(
+            self.body().replace("RUN evidence.txt", "RUN evidence.txt:12", 1),
+            "gate-ledger: item 1: neither a commit nor a path: evidence.txt:12",
+        )
+
     def test_escaping_path_is_refused(self) -> None:
         outside = Path(self.temporary.name) / "outside-evidence.txt"
         outside.write_text("outside\n", encoding="utf-8")
@@ -118,14 +137,49 @@ class CheckGateLedgerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
 
-    def test_pipe_inside_backticked_gate_item_does_not_lose_row(self) -> None:
+    def test_unescaped_pipe_inside_backticked_gate_item_is_named_malformed(self) -> None:
         body = self.body().replace(
             "| 4 | gate 4 |",
-            r"| 4 | gate `escaped \| and raw |` |",
+            r"| 4 | gate `a | b` |",
+        )
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: item 4: row has 4 cells, expected 3 "
+            "(an unescaped | splits a cell even inside backticks; write \\|)\n",
+        )
+
+    def test_escaped_pipe_inside_backticked_gate_item_passes(self) -> None:
+        body = self.body().replace(
+            "| 4 | gate 4 |",
+            r"| 4 | gate `a \| b` |",
         )
         result = self.run_checker(body)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_extra_cell_in_numbered_row_is_named_malformed(self) -> None:
+        body = self.body().replace(
+            "| 4 | gate 4 | RUN evidence.txt |",
+            "| 4 | gate 4 | RUN evidence.txt | extra |",
+        )
+        self.assert_rejected(
+            body,
+            "gate-ledger: item 4: row has 4 cells, expected 3 "
+            "(an unescaped | splits a cell even inside backticks; write \\|)",
+        )
+
+    def test_missing_cell_in_numbered_row_is_named_malformed(self) -> None:
+        body = self.body().replace(
+            "| 4 | gate 4 | RUN evidence.txt |",
+            "| 4 | gate 4 |",
+        )
+        self.assert_rejected(
+            body,
+            "gate-ledger: item 4: row has 2 cells, expected 3 "
+            "(an unescaped | splits a cell even inside backticks; write \\|)",
+        )
 
     def test_escaped_backtick_outside_code_span_does_not_open_a_span(self) -> None:
         # terra 208 I1: a backslash-escaped literal backtick is valid GFM and
@@ -137,6 +191,126 @@ class CheckGateLedgerTests(unittest.TestCase):
         result = self.run_checker(body)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_split_table_row_matches_gfm_cell_rule(self) -> None:
+        cases = (
+            (r"| f\|oo |", ["f|oo"]),
+            (r"| b `\|` az |", ["b `|` az"]),
+            (r"| b **\|** im |", ["b **|** im"]),
+            ("| abc | def |", ["abc", "def"]),
+            ("| bar |", ["bar"]),
+            ("| bar | baz | boo |", ["bar", "baz", "boo"]),
+            ("abc | def", ["abc", "def"]),
+            ("| a `b | c` |", ["a `b", "c`"]),
+            (r"| a \\| b |", ["a " + "\\" * 2, "b"]),
+            (r"| a \\\| b |", ["a " + "\\" * 2 + "| b"]),
+        )
+        for line, expected in cases:
+            with self.subTest(line=line):
+                self.assertEqual(CHECKER_MODULE._split_table_row(line), expected)
+
+    def test_code_spanned_evidence_is_refused_as_not_plain_text(self) -> None:
+        bodies = (
+            (
+                self.body().replace("RUN evidence.txt", "RUN `evidence.txt`", 1),
+                "gate-ledger: item 1: evidence cell must be plain text (no backticks)",
+            ),
+            (
+                self.body().replace(f"RUN {self.head}", f"RUN `{self.head}`"),
+                "gate-ledger: item 12: evidence cell must be plain text (no backticks)",
+            ),
+        )
+        for body, expected in bodies:
+            with self.subTest(expected=expected):
+                self.assert_rejected(body, expected)
+
+    def test_numbered_row_after_blank_is_outside_ledger_table(self) -> None:
+        body = self.body() + "\n| 4 | duplicate outside the table | RUN evidence.txt |\n"
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: item 4: ledger row outside the ledger table\n",
+        )
+
+    def test_fenced_ledger_before_real_section_fails_closed(self) -> None:
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+        body = f"```markdown\n{template}\n```\n\n{self.body()}"
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("gate-ledger: 12/12 RUN", result.stdout)
+
+    def test_unrecognised_ledger_row_is_named(self) -> None:
+        body = self.body().replace(
+            "| 1 | gate 1 | RUN evidence.txt |",
+            "| **1** | bold key | RUN evidence.txt |\n| 1 | gate 1 | RUN evidence.txt |",
+        )
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: unrecognised ledger row: '**1**'\n")
+
+    def test_heading_drift_has_one_named_refusal(self) -> None:
+        body = self.body().replace(
+            "## Gate ledger (D-118 / D-121)",
+            "## Gate ledger (D-118/D-121)",
+        )
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: no '## Gate ledger (D-118 / D-121)' section in the PR body\n",
+        )
+
+    def test_lowercase_run_is_refused_as_not_uppercase(self) -> None:
+        body = self.body().replace("RUN evidence.txt", "run evidence.txt", 1)
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout,
+            "gate-ledger: item 1: evidence must start with RUN (uppercase)\n",
+        )
+
+    def test_indented_summary_terminates_the_ledger_section(self) -> None:
+        body = self.body() + "\n  ## Summary\n| **1** | ignored after summary | RUN evidence.txt |\n"
+        result = self.run_checker(body)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "gate-ledger: 12/12 RUN\n")
+
+    def test_valid_path_matches_gen_state_check_pointer(self) -> None:
+        nested = self.repo / "dir" / "nested.txt"
+        nested.parent.mkdir()
+        nested.write_text("nested\n", encoding="utf-8")
+        pointers = (
+            "evidence.txt",
+            "dir/nested.txt",
+            "missing.txt",
+            "dir",
+            "/absolute/evidence.txt",
+            "~evidence.txt",
+            "../evidence.txt",
+            "dir/../evidence.txt",
+            "https://example.invalid/evidence.txt",
+            "evidence.txt:12",
+            "",
+            r"evidence\\.txt",
+        )
+        original_root = GEN_STATE_MODULE.ROOT
+        GEN_STATE_MODULE.ROOT = str(self.repo)
+        try:
+            for pointer in pointers:
+                with self.subTest(pointer=pointer):
+                    checker_valid = CHECKER_MODULE._valid_path(pointer, self.repo)
+                    try:
+                        GEN_STATE_MODULE._check_pointer(
+                            {"path": pointer, "label": "evidence"}, "test.pointer", {}
+                        )
+                    except GEN_STATE_MODULE.KernelError:
+                        gen_state_valid = False
+                    else:
+                        gen_state_valid = True
+                    self.assertEqual(checker_valid, gen_state_valid)
+        finally:
+            GEN_STATE_MODULE.ROOT = original_root
 
     def test_unstructured_evidence_is_refused_with_one_message(self) -> None:
         result = self.run_checker(
@@ -185,6 +359,36 @@ class CheckGateLedgerTests(unittest.TestCase):
             f"gate-ledger: input error: repository root does not exist: {missing}\n",
         )
         self.assertEqual(result.stderr, "")
+
+    def test_workflow_text_pins_round1_fixes(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "gate-ledger.yml").read_text(encoding="utf-8")
+        self.assertIn("Every fresh PR is red by construction", workflow)
+        self.assertIn("ref: ${{ github.event.pull_request.head.sha }}", workflow)
+        self.assertIn("types: [opened, synchronize, edited, reopened, ready_for_review]", workflow)
+        self.assertNotIn("continue-on-error", workflow)
+        self.assertIn("permissions:\n  contents: read", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+
+    def test_shipped_template_is_refused_until_filled(self) -> None:
+        template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+        result = self.run_checker(template)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [f"gate-ledger: item {key}: NOT-RUN" for key in range(1, 13)],
+        )
+
+    def test_acceptance_command_aliases_refuse_the_template(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(CHECKER), "--root", str(ROOT), "--body",
+             str(ROOT / ".github" / "pull_request_template.md")],
+            text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [f"gate-ledger: item {key}: NOT-RUN" for key in range(1, 13)],
+        )
 
 
 if __name__ == "__main__":

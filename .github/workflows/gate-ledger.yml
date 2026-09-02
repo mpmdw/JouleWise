@@ -3,6 +3,8 @@ name: gate-ledger
 # ==================================================================
 # ADVISORY GATE-LEDGER CHECK (T26 cold gate item 2, D-170). NOT A
 # REQUIRED STATUS CHECK.
+# Every fresh PR is red by construction because the template seeds twelve
+# NOT-RUN rows; that deliberate nudge keeps an incomplete ledger visible.
 #
 # Read this before touching anything below. This job validates the
 # twelve-row "Gate ledger (D-118 / D-121)" table that
@@ -29,11 +31,14 @@ name: gate-ledger
 
 on:
   pull_request:
-    types: [opened, synchronize, edited, ready_for_review]
+    types: [opened, synchronize, edited, reopened, ready_for_review]
 
 concurrency:
   group: gate-ledger-${{ github.event.pull_request.number }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   gate-ledger:

@@ -17,41 +17,26 @@ LEDGER_HEADING = "## Gate ledger (D-118 / D-121)"
 
 
 def _split_table_row(line: str) -> list[str]:
-    """Split a GFM table row on unescaped pipes outside code spans."""
+    """Split a GFM table row exactly as the Tables extension does: on every
+    pipe, before inline parsing; the only exception is a backslash-escaped
+    pipe, literal "including inside other inline spans". No inline syntax is
+    modelled, on purpose.
+    """
     cells: list[str] = []
     cell: list[str] = []
-    code_ticks: int | None = None
     backslashes = 0
-    index = 0
-    while index < len(line):
-        char = line[index]
-        if char == "`" and code_ticks is None and backslashes % 2 == 1:
-            # GFM: a backslash-escaped backtick outside a code span is a
-            # literal backtick, never a span opener.
-            cell.append(char)
+    for char in line:
+        if char == "|":
+            if backslashes % 2 == 1:
+                cell.pop()  # The pre-pass consumes the escaping backslash.
+                cell.append("|")
+            else:
+                cells.append("".join(cell).strip())
+                cell = []
             backslashes = 0
-            index += 1
             continue
-        if char == "`":
-            end = index + 1
-            while end < len(line) and line[end] == "`":
-                end += 1
-            tick_count = end - index
-            if code_ticks is None:
-                code_ticks = tick_count
-            elif code_ticks == tick_count:
-                code_ticks = None
-            cell.append(line[index:end])
-            backslashes = 0
-            index = end
-            continue
-        if char == "|" and code_ticks is None and backslashes % 2 == 0:
-            cells.append("".join(cell).strip())
-            cell = []
-        else:
-            cell.append(char)
+        cell.append(char)
         backslashes = backslashes + 1 if char == "\\" else 0
-        index += 1
     cells.append("".join(cell).strip())
     if cells and not cells[0]:
         cells.pop(0)
@@ -60,25 +45,69 @@ def _split_table_row(line: str) -> list[str]:
     return cells
 
 
-def _ledger_rows(body: str) -> dict[int, list[str]]:
-    """Return evidence cells for numbered rows in the named ledger section."""
-    rows: dict[int, list[str]] = {}
-    in_ledger = False
+class _LedgerRows(dict[int, list[str]]):
+    """Ledger evidence rows plus section-level refusal context."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.defects: list[str] = []
+        self.heading_seen = False
+
+
+def _ledger_rows(body: str) -> tuple[_LedgerRows, set[int]]:
+    """Return evidence rows and malformed keys from the first ledger table."""
+    rows = _LedgerRows()
+    malformed: set[int] = set()
+    table_started = False
+    table_ended = False
     for line in body.splitlines():
-        if line.strip() == LEDGER_HEADING:
-            in_ledger = True
+        stripped = line.strip()
+        if stripped == LEDGER_HEADING:
+            # Fences are NOT modelled; a ledger quoted inside a fence BEFORE the real
+            # section will be read as the section (fail-closed: twelve NOT-RUN lines).
+            if not rows.heading_seen:
+                rows.heading_seen = True
             continue
-        if in_ledger and line.startswith("## "):
+        if not rows.heading_seen:
+            continue
+        if stripped.startswith("## "):
             break
-        if not in_ledger or "|" not in line:
+        is_pipe_line = "|" in stripped
+        if not table_started:
+            if not is_pipe_line:
+                continue
+            table_started = True
+        elif table_ended:
+            if is_pipe_line:
+                cells = _split_table_row(stripped)
+                if cells and cells[0].isdigit() and int(cells[0]) in KEYS:
+                    rows.defects.append(
+                        f"gate-ledger: item {int(cells[0])}: ledger row outside the ledger table"
+                    )
             continue
-        cells = _split_table_row(line.strip())
-        if len(cells) != 3 or not cells[0].isdigit():
+        elif not is_pipe_line:
+            table_ended = True
             continue
-        key = int(cells[0])
-        if key in KEYS:
-            rows.setdefault(key, []).append(cells[2])
-    return rows
+        cells = _split_table_row(stripped)
+        if not cells:
+            rows.defects.append("gate-ledger: unrecognised ledger row: ''")
+            continue
+        first = cells[0]
+        if first == "#" or re.fullmatch(r":?-{3,}:?", first):
+            continue
+        if not first.isdigit() or int(first) not in KEYS:
+            rows.defects.append(f"gate-ledger: unrecognised ledger row: {first!r}")
+            continue
+        key = int(first)
+        if len(cells) != 3:
+            malformed.add(key)
+            rows.defects.append(
+                f"gate-ledger: item {key}: row has {len(cells)} cells, expected 3 "
+                "(an unescaped | splits a cell even inside backticks; write \\|)"
+            )
+            continue
+        rows.setdefault(key, []).append(cells[2])
+    return rows, malformed
 
 
 def _valid_path(path: str, repo_root: Path) -> bool:
@@ -106,9 +135,13 @@ def _is_commit(sha: str, repo_root: Path) -> bool:
 
 def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
     """Return one refusal message per ledger defect."""
-    defects: list[str] = []
-    rows = _ledger_rows(body)
+    rows, malformed = _ledger_rows(body)
+    if not rows and not malformed and not rows.heading_seen:
+        return [f"gate-ledger: no {LEDGER_HEADING!r} section in the PR body"]
+    defects = list(rows.defects)
     for key in KEYS:
+        if key in malformed:
+            continue
         evidence_cells = rows.get(key, [])
         if not evidence_cells:
             defects.append(f"gate-ledger: item {key}: missing")
@@ -118,6 +151,9 @@ def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
             continue
 
         evidence = evidence_cells[0].strip()
+        if "`" in evidence:
+            defects.append(f"gate-ledger: item {key}: evidence cell must be plain text (no backticks)")
+            continue
         if not evidence:
             defects.append(f"gate-ledger: item {key}: evidence is empty")
             continue
@@ -126,7 +162,10 @@ def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
             continue
         match = re.fullmatch(r"RUN\s+(.+?)\s*", evidence)
         if not match:
-            defects.append(f"gate-ledger: item {key}: evidence must be RUN <path-or-sha>")
+            if re.match(r"(?i:run)\s+", evidence):
+                defects.append(f"gate-ledger: item {key}: evidence must start with RUN (uppercase)")
+            else:
+                defects.append(f"gate-ledger: item {key}: evidence must be RUN <path-or-sha>")
             continue
 
         target = match.group(1)
@@ -144,9 +183,11 @@ def check(body: str, head_sha: str, repo_root: Path) -> list[str]:
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--body-file", type=Path, help="PR body file; omit to read stdin")
-    parser.add_argument("--head-sha", required=True, help="PR head commit SHA")
-    parser.add_argument("--repo-root", type=Path, required=True, help="repository root")
+    parser.add_argument("--body-file", "--body", dest="body_file", type=Path,
+                        help="PR body file; omit to read stdin")
+    parser.add_argument("--head-sha", default="", help="PR head commit SHA")
+    parser.add_argument("--repo-root", "--root", dest="repo_root", type=Path,
+                        required=True, help="repository root")
     return parser.parse_args(argv)
 
 
