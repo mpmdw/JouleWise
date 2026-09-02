@@ -119,7 +119,7 @@ def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
     if re.fullmatch(r"[0-9]{8}", night_date) is None:
         raise ValueError("--night-date must be YYYYMMDD")
     blocks = inventory_g2a_shell_blocks(runsheet)
-    expected_ranges = [(161, 213), (237, 260), (283, 294), (298, 473), (484, 496)]
+    expected_ranges = [(252, 302), (326, 349), (372, 383), (387, 562), (573, 585)]
     observed_ranges = [(start, end) for start, end, _body in blocks]
     if observed_ranges != expected_ranges:
         raise ValueError(
