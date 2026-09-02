@@ -1,0 +1,30 @@
+== full replay @ 8efbb200 --corpus-root /Users/edr/code/JouleWise Wed Sep  2 07:55:30 PDT 2026
+ok   replay XD bytes
+ok   replay F4 bytes
+ok   replay AQ bytes
+R7F PLACED 0/16
+R7F COMPARED 184 / MISMATCHES 0
+EXIT=0
+== module suite failure detail
+FAIL: test_absent_corpus_exits_three_and_names_path (tests.test_paper_round7_artifacts.InvocationTests.test_absent_corpus_exits_three_and_names_path)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-dx/tests/test_paper_round7_artifacts.py", line 827, in test_absent_corpus_exits_three_and_names_path
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        completed.stdout.splitlines()[-1],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"R7F CORPUS UNAVAILABLE: {missing_root / 'runs_window_a_20260722' / 'instrument_validation' / '20260722T145535-e941c821' / 'instrument_evidence.json'}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 'R7F [16 chars]LE: /private/var/folders/p3/fpwjrcg55vb0zsn3kn[145 chars]json' != 'R7F [16 chars]LE: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m00[137 chars]json'
+- R7F CORPUS UNAVAILABLE: /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r7f-unavailable-s9s1x6lk/no-such-corpus/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/instrument_evidence.json
+?                         --------
++ R7F CORPUS UNAVAILABLE: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r7f-unavailable-s9s1x6lk/no-such-corpus/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/instrument_evidence.json
+
+
+----------------------------------------------------------------------
+Ran 44 tests in 464.741s
+
+FAILED (failures=1)

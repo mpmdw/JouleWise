@@ -1,0 +1,16 @@
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(completed.returncode, 3, completed.stdout + completed.stderr)
+        self.assertIn(str(missing_root), completed.stdout)
+        self.assertEqual(
+            completed.stdout.splitlines()[-1],
+            f"R7F CORPUS UNAVAILABLE: {missing_root / 'runs_window_a_20260722' / 'instrument_validation' / '20260722T145535-e941c821' / 'instrument_evidence.json'}",
+        )
+        self.assertFalse(
+            any("COMPARED" in line for line in completed.stdout.splitlines())
+        )
+
+

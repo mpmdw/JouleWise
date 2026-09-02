@@ -1,0 +1,8 @@
+            return comparisons
+        xs = _run_producer(xs_command, repository_root)
+        if xs.returncode != 0:
+            if xs.returncode == 3:
+                raise ArtifactsUnavailable(
+                    _producer_unavailable_message(xs, corpus_root)
+                )
+            comparisons.append(_producer_failure("XS", xs))

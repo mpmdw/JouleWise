@@ -1,0 +1,13 @@
+== 8efbb200 Wed Sep  2 07:47:05 PDT 2026
+----------------------------------------------------------------------
+Ran 44 tests in 475.984s
+
+FAILED (failures=1)
+== full replay
+ok   figure offset mark 54
+ok   figure offset mark 55
+ok   figure offset mark 56
+ok   figure offset mark 57
+ok   figure offset mark 58
+R7F CORPUS UNAVAILABLE: /Users/edr/code/JouleWise-wt-dx/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/instrument_evidence.json
+EXIT=3
