@@ -17,6 +17,7 @@ Do you rule a deliberate same-UID/in-process adversary OUT of the threat model
 on your single-operator machine? The three mechanisms already carry
 trusted-operator registered limitations; this call decides whether any get the
 stronger (costlier) cure:
+
 - Recorder check-to-grant race → if OUT: WO-RECORDER-GRANT-IDENTITY drops to
   its registered limitation (saves a cold gate + implementation). Design is
   ready if you want it anyway: `docs/process_traces/2026-08-16-grant-identity-consult/`.
@@ -25,6 +26,7 @@ stronger (costlier) cure:
   Consult: `docs/process_traces/2026-08-15-t0-capture-provenance-consult/`.
 - Launch-binding forged-context residual → already registered; the call makes
   it final. Custody: `docs/process_traces/2026-08-16-launch-f3-coldgate/`.
+
 Magistrate recommendation (given your 2026-08-16 direction): rule OUT for all
 three; spend nothing more on in-process defense.
 
@@ -57,16 +59,11 @@ quiet-state baseline** (gates the census WO — can ride ANY earlier tap);
 a9/a10 desk replay; ED-QUAL-L4-1 decisive replay. ONE home: RUN_STATE
 §Ed-owed + `docs/phase_2/window_runbook.md`.
 
-**L10 `_v5` PRE-WINDOW — exactly the Ed-hands portions.** After every FIRST
-CHECK in `docs/process/v5-l10-rehearsal-phase.md` passes: (1) open the clean
-production checkout and confirm its HEAD and authenticated `_v5` pack are the
-fixed transaction head; (2) provide the outside-repository transaction custody
-and read-only, production-pack-bound replay corpus paths; (3) run the seven
-ED-FIRST steps — Strict validation, Reduction, Floor extraction, Mint,
-Finalization, Claim gate, and Results fills — in that checkout; and (4) hash the
-artifacts and complete the proposed `l10-sacrificial-rehearsal-record.json`. No L10
-step uses `sudo` or starts a `[QUIET-MAC]` collection. The first claim-bearing
-`_v5` window waits for a PASS record.
+**L10 `_v5` PRE-WINDOW — Ed's portion.** Review the preserved L10-A record,
+including the G2-b verdict, bracket binding, exact finalizer-refusal result,
+and matching before/after tree hashes, before recording GO for the claim-bearing
+transaction ([V5-TRANSACTION-GO-01 acceptance](state_kernel.json#L5094),
+[ruling 89 R-4](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L74)).
 
 ## What happens after this sitting
 

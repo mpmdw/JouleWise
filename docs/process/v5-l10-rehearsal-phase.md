@@ -1,124 +1,88 @@
-# `_v5` L10 sacrificial rehearsal — PRE-WINDOW phase
+# `_v5` L10 sacrificial rehearsal — ladder phase
 
-## A. What this phase is, in the ruled words
+## A. Purpose, authority, and terms
 
-The original L10 definition is preserved here verbatim from the 2026-08-15
-consumption-edge consult:
+The adopted L10 schedule says that the sacrificial rehearsal re-runs the full
+edge at the same head before a window is spent; its authorized close is a
+same-HEAD, production-pack replay ([decision log:9156–9158](../decision_log.md#L9156),
+[decision log:9176–9178](../decision_log.md#L9176)).
 
-> L10 should run this `[AGENT]` sacrificial lifecycle entirely under `$TMPDIR` before gamma collection:
->
-> 1. Build the prospective manifest twice from the same pack; require byte equality, valid plan-tree pinning and identical semantic hashes.
-> 2. Use production writers/validators to create a synthetic exact-80-member corpus, passed whole-window verdict, exact evaluation basis, bracket binding, finalized ledger and aggregate floor artifact covering both frozen selectors.
-> 3. Finalize twice; require byte-identical idempotence and a valid finalized manifest.
-> 4. Run the real `analyze-claims` CLI on the finalized manifest. Require exactly the two frozen contrast IDs and the exact frozen family/multiplicity structure.
-> 5. Run two scientific scenarios: one above the decision bar and one below it. Both must finalize; only the claim outcome may differ.
-> 6. Independently compute the expected semantic projection rather than calling the production projector as the test oracle.
-> 7. Mutate orientation, metric, estimator, test, family membership, `m`, block/member identity, configuration SHA and floor dependency—one at a time and coupled on both sides while recomputing local IDs. Every case must still refuse because the frozen pack/tree digest or independent semantic projection disagrees.
-> 8. Exercise missing/failed verdict, missing/extra member, wrong evaluation basis, wrong bracket, stale ledger head, wrong floor bytes, absent prefill floor, unknown/duplicate keys, non-finite JSON, path escape/symlink, partial output, conflicting existing output, and direct prospective-manifest consumption.
-> 9. Re-run the historical v3 builder/validator and existing analysis fixture to prove no byte or behavior drift.
-> 10. Emit an immutable rehearsal receipt pinning HEAD, pack/tree/prospective hashes, finalizer and consumer code hashes, finalized-manifest and claim-artifact hashes, both contrast IDs, family semantic hash, and the complete refusal matrix.
+The historical ruled item 2 said, “Use production writers/validators to create
+a synthetic exact-80-member corpus.” D-160 F-1 proved that formulation
+unexecutable on merged code, because no synthetic bundle can become
+claim-consumable without a production-code change; ruling 89 R-1 therefore
+replaces it with the real-corpus ladder below
+([D-160 F-1](../process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md#L10),
+`docs/process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md:39-58`).
 
-The later adopted contract supplies the binding schedule: “the L10 sacrificial
-rehearsal re-runs the full edge at the same head before any window is spent.”
-The production-pack qualification is also explicit: the authorized close is a
-“same-HEAD, production-pack L10 sacrificial replay.” These words are in the
-[WO-CONSUMPTION-EDGE adoption and RULING-REQUIRED item (d)](../decision_log.md).
+ED-L10-1 was never executed and has no closure record, so retained a9/a10
+custody is not an L10 corpus source ([ROW-L10:501](
+../process_traces/2026-08-19-prep-sprint/ready-packet/rows/ROW-L10.md#L501)).
 
-For this `_v5` phase, the terms mean the following before any procedure uses
-them:
+- The **claim edge** is the ordered `_v5` artifact-flow sequence: Strict
+  validation, Reduction, Floor extraction, Mint, Finalization, Claim gate, and
+  Results fills ([artifact flow](v5-artifact-flow.md),
+  `89-RULING-l10-corpus-precondition.md:39-58`).
+- A **production pack** is the authenticated `_v5` configuration directory,
+  including its prospective manifest and plan tree, at the transaction head
+  ([kernel fence](state_kernel.json#L1927), [decision log:9176–9178](../decision_log.md#L9176)).
+- The **transaction head** is the Git commit recorded as
+  `transaction_head_git_sha`; a same-head check compares the checkout's
+  `git rev-parse HEAD` output with that value ([ruling 89 R-5](
+  ../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80)).
+- **Custody** is the append-only, outside-repository directory holding the
+  authenticated inputs, outputs, transcripts, and hashes for this work
+  ([transaction custody](../process_traces/2026-08-22-t20/real-transaction-runbook.md)).
+- A **scratch custody copy** is a disposable copy below
+  `$L10_CUSTODY_ROOT`; finalization writes there instead of to a source
+  custody directory ([G2-b F2](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#L1124)).
+- **Sacrificial** means qualification evidence, not campaign claim evidence.
+  `QUALIFICATION_ONLY_NOT_CLAIM_EVIDENCE` is a new literal for this phase,
+  rather than a token inherited from the ALPHA rehearsal card
+  ([ruling 89 R-5](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80)).
+- A **spent window** is the `[QUIET-MAC]` collection for the claim-bearing
+  transaction night; D-167(1) distinguishes diagnostic windows at lead
+  discretion from the transaction on Ed's GO
+  ([D-167(1)](../decision_log.md#L10407)).
 
-- The **claim edge** is the complete command sequence in the
-  [`_v5` artifact-flow table](v5-artifact-flow.md), beginning with **Strict
-  validation** and continuing through **Reduction**, **Floor extraction**,
-  **Mint**, **Finalization**, **Claim gate**, and **Results fills**, in that
-  order. “Full edge” means that no named step is skipped merely because a later
-  command could be invoked directly.
-- A **production pack** is the authenticated `_v5` pack directory generated and
-  checked at the transaction head, with its real prospective manifest and plan
-  tree. It is not a mock, synthetic, `pipeline_smoke`, smoke-scoped, or reduced
-  family. D-160 R-1 says a synthetic clean leg is not the pre-night proof; the
-  kernel fence therefore does not allow such a leg to discharge L10. See
-  [D-160 R-1](../process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md).
-- The **transaction head** is the one Git commit whose bytes the claim-bearing
-  transaction is allowed to execute. **Same head** means that `git rev-parse
-  HEAD` returns that identical full SHA before every step and that the record
-  pins it once as `transaction_head_git_sha`. The transaction's published-head
-  record identifies the commit; the production pack's `plan_tree.json`,
-  `analysis_manifest_v3.json`, and `arm_readiness.freeze.receipts/freeze-*.json`
-  then bind the authenticated pack identity and plan at that commit. It is not the later
-  **fixation commit**, which means the first commit after campaign close and
-  carries the successor-pinset SHA plus its loud-fail guard. D-153 A1 and A6
-  place that fixation after the last consuming arm; the rehearsal therefore
-  runs at the fixed transaction head, not at a guessed future fixation head.
-  See the [fixation and changed-set ruling](../process_traces/2026-08-24-packet5/04-MAGISTRATE-SYNTHESIS-PACKET5.md)
-  and the [historical transaction vocabulary](../process_traces/2026-08-22-t20/real-transaction-runbook.md).
-- **Custody** is the append-only, outside-repository directory that preserves
-  authenticated inputs, outputs, transcripts, and their hashes. The established
-  layout is `CAMPAIGN_ROOT`, `ANALYSIS_ROOT="$CAMPAIGN_ROOT/analysis"`,
-  `CUSTODY_ROOT="$ANALYSIS_ROOT/transaction"`, and a sibling `CLAIMS_ROOT`; the
-  L10 record lives below `CUSTODY_ROOT`. This follows the
-  [transaction-custody convention](../process_traces/2026-08-22-t20/real-transaction-runbook.md).
-  `scripts/window_status.sh` likewise keeps the commit-freeze sentinel outside
-  the repository because repository-local custody would create changed-set
-  residue.
-- **Sacrificial** means the run is qualification choreography evidence, never
-  claim evidence. Every output and the record carry the literal label
-  `QUALIFICATION_ONLY_NOT_CLAIM_EVIDENCE`, live below the rehearsal custody
-  directory, and are never copied into the claim-bearing transaction's
-  analysis or claims directories. This is the same evidence-use distinction as
-  the [ALPHA rehearsal card](rehearsal-operator-card.md). The separate custody
-  path is the refusal boundary: an operator must refuse any request to cite,
-  publish, or substitute a rehearsal output as campaign claim evidence.
-- A **spent window** is a `[QUIET-MAC]` collection launched for the `_v5`
-  claim-bearing night. **Before any window is spent** means after the
-  transaction head and production pack are fixed, but before the first such
-  collection command starts. The rehearsal itself is desk work: it launches no
-  collection and consumes no quiet-machine window.
+The ladder uses three physical corpora. The **G2-b shakedown corpus** is one
+real A/B/B/A block on its own non-claim root. The **floor-producer corpus** is
+the real corpus collected by the transaction's ALPHA and BETA floor arms. The
+**campaign corpus** is the complete claim-bearing corpus after its last
+consuming arm. Ruling 89 R-1 assigns these distinct roles
+(`89-RULING-l10-corpus-precondition.md:39-58`).
 
-This mechanism is forced by S9-01 and S9-07, not by a desire for another smoke
-test. S9-01 found that collection did not join to an analysis-manifest identity;
-S9-07 found that the finalizer had no operator step. Together they describe a
-claim edge that had never been driven end to end against its real pack. For
-example, a copied procedure that jumps from Mint to Claim gate would expose
-S9-07 only after a paid night, whereas this rehearsal stops at Finalization,
-records the missing artifact as FAIL, and routes the defect before collection.
-The source findings and the missing schedule are
-[S9-01, S9-07, and S9-12](../process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md).
+## B. FIRST CHECKS
 
-## B. Inputs the rehearsal needs that do not exist yet
+**FIRST CHECK** means a named production artifact or adapter whose presence is
+checked before the affected ladder part begins. These checks and the per-step
+head check are this phase's own refusals ([ruling 89 R-5](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80)).
 
-These are **FIRST CHECKS**. Run them at the transaction head before setting up
-any rehearsal output. A check passes only when its named production artifact or
-adapter exists and its owning row's acceptance is satisfied; a no-match result
-confirms that the check is still blocked. The exact absence probes below are
-copied from the `_v5` artifact-flow document.
-
-| Required input or adapter | Exact `rg` probe | Owning kernel row | Passing observation |
+| Required input or adapter | Exact `rg` probe | Owner | Passing observation |
 |---|---|---|---|
-| `_v5` extraction spec, schema `joulewise.detection_floor_extraction_spec.v1` | `rg -n 'detection_floor_extraction_spec' configs/campaigns/d117_contrast_v5` | **no owning row — NEEDS-ROW** | At least one match identifies the authenticated `_v5` spec consumed as `$EXTRACTION_SPEC`. |
-| `_v5` final pinset plus v2 input manifest, schemas `joulewise.floor_mint_pinset.v2` and `joulewise.floor_mint_inputs.v2` | `rg -n 'joulewise\.(floor_mint_pinset|floor_mint_inputs)\.v2' configs/campaigns/d117_contrast_v5` | **no owning row — NEEDS-ROW** | Matches identify both distinct authenticated inputs consumed as `$FINAL_PINSET` and `$V2_INPUT_MANIFEST`; one without the other is FAIL. |
-| Mint-artifact adapter that feeds `dominance_ratio` and `replay_common_mode_dominance` / `R_cm` | `rg -n 'dominance_ratio|replay_common_mode_dominance|R_cm' joulewise scripts` | `D165-SIDECAR-EMIT-01` (after `D165-CLOSEOUT-CORE-01`) | A production call site reads `joulewise.detection_floor_artifact.v2` and emits the separately bound replay/close-out artifact required by the owner. |
-| `joulewise.claim_verdicts.v1` to `joulewise.results_fill_input.v1` adapter | `rg -n 'claim_verdicts|claim-verdict' scripts/render_results_fills.py` | `RENDERER-V5-SUCCESSOR-01` | The frozen 109-key renderer remains unchanged; the owner must instead provide and document the successor adapter, so also run `rg -n 'claim_verdicts|claim-verdict' scripts --glob '*.py'` and require a match outside `render_results_fills.py`. |
+| `_v5` extraction spec, `joulewise.detection_floor_extraction_spec.v1` | `rg -n 'detection_floor_extraction_spec' configs/campaigns/d117_contrast_v5` | needs an owner row | A match identifies `$EXTRACTION_SPEC`. |
+| `_v5` final pinset and v2 input manifest | `rg -n 'joulewise\.(floor_mint_pinset|floor_mint_inputs)\.v2' configs/campaigns/d117_contrast_v5` | needs an owner row | Matches identify `$FINAL_PINSET` and `$V2_INPUT_MANIFEST`. |
+| Mint-artifact adapter for `dominance_ratio`, `replay_common_mode_dominance`, or `R_cm` | `rg -n 'dominance_ratio|replay_common_mode_dominance|R_cm' joulewise scripts` | `D165-SIDECAR-EMIT-01` | A production call site reads the issued floor artifact and emits the bound close-out artifact. |
+| `joulewise.claim_verdicts.v1` to `joulewise.results_fill_input.v1` adapter | `rg -n 'claim_verdicts|claim-verdict' scripts --glob '*.py'` | `RENDERER-V5-SUCCESSOR-01` | A successor call site outside the frozen renderer produces the fill input. |
 
-The exact probes currently return no matches. **This phase is BLOCKED until
-every FIRST CHECK passes.** Do not substitute fixtures, smoke artifacts, or an
-older generation to make a check appear green.
-
-The flow document's missing G2-a config producer is not another L10 FIRST CHECK:
-it lies before Pack generation, while the ruled claim edge begins at Strict
-validation after the authenticated production pack already exists.
+A missing input, owner, or required match is **BLOCKED** for the affected part;
+do not substitute fixtures, smoke artifacts, or an older generation
+([ruling 89 R-5](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80),
+[kernel fence](state_kernel.json#L1927)). The missing G2-a config producer is
+outside this phase because it precedes pack generation
+([ruling 89 R-5](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80)).
 
 ## C. Execution record
 
-### C1. Fixed inputs and custody paths
+### C1. Fixed inputs, custody, and lane
 
-On Ed's machine, in the clean production checkout, export the following literal
-roles. A **rehearsal custody root** is the append-only subdirectory dedicated to
-this qualification run; it is deliberately not the production analysis root or
-claims root.
+Set the durable roles at the reviewed transaction head. `RUNS_ROOT` is set
+before L10-A; `PRODUCER_RUNS_ROOT` and `CAMPAIGN_RUNS_ROOT` are set when their
+respective post-collection parts begin.
 
 ```sh
-export REPO='/absolute/path/to/the/production-checkout'
+export REPO='/absolute/path/to/the-production-checkout'
 export PY="$REPO/.venv/bin/python"
 export CAMPAIGN_ROOT='/absolute/path/to/the-v5-transaction-custody'
 export ANALYSIS_ROOT="$CAMPAIGN_ROOT/analysis"
@@ -126,21 +90,15 @@ export CUSTODY_ROOT="$ANALYSIS_ROOT/transaction"
 export CLAIMS_ROOT="$CAMPAIGN_ROOT/claims"
 export L10_CUSTODY_ROOT="$CUSTODY_ROOT/l10-sacrificial-rehearsal"
 export PACK_ROOT="$REPO/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
-export RUNS_ROOT='/absolute/path/to/the-read-only-production-pack-bound-replay-corpus'
-export PRODUCER_RUNS_ROOT='/absolute/path/to/the-read-only-authenticated-floor-producer-corpus'
+export RUNS_ROOT='/absolute/path/to/the-G2-b-shakedown-runs-root'
 export REDUCTION_ROOT="$L10_CUSTODY_ROOT/reductions"
-export ANALYSIS_CUSTODY_ROOT="$L10_CUSTODY_ROOT/analysis"
+export REHEARSAL_RECORD="$L10_CUSTODY_ROOT/l10-sacrificial-rehearsal-record.json"
 export EXTRACTION_SPEC='/absolute/path/from-FIRST-CHECK-1'
-export EXTRACTION_REPORT="$L10_CUSTODY_ROOT/floor-extraction.json"
 export FINAL_PINSET='/absolute/path/from-FIRST-CHECK-2'
 export V2_INPUT_MANIFEST='/absolute/path/from-FIRST-CHECK-2'
-export AGGREGATE_FLOOR_ARTIFACT="$L10_CUSTODY_ROOT/aggregate-floor.json"
-export SINGLE_COUNT_STATEMENT="$L10_CUSTODY_ROOT/single-count.txt"
-export FINALIZED_MANIFEST="$ANALYSIS_CUSTODY_ROOT/PROSPECTIVE_MANIFEST_ID.finalized.json"
-export CLAIM_VERDICTS="$L10_CUSTODY_ROOT/claim-verdicts.json"
-export RESULTS_FILL_INPUT="$L10_CUSTODY_ROOT/results-fill-input.json"
-export RESULTS_FILLS_MD="$L10_CUSTODY_ROOT/results-fills.md"
-export REHEARSAL_RECORD="$L10_CUSTODY_ROOT/l10-sacrificial-rehearsal-record.json"
+export CALIBRATION_LEDGER='/absolute/path/to/the-transaction-selected-ledger.jsonl'
+export EVIDENCE_ROOT_ID='declared-floor-producer-evidence-root-id'
+export RESULTS_FILL_INPUT='/absolute/path/from-FIRST-CHECK-4'
 cd "$REPO"
 export TRANSACTION_HEAD="$(/usr/bin/git rev-parse HEAD)"
 export PROJECT_COMMIT="$TRANSACTION_HEAD"
@@ -150,199 +108,309 @@ test "$TRANSACTION_HEAD" = "$(/usr/bin/git rev-parse refs/remotes/origin/main)"
 test -d "$PACK_ROOT/arm_readiness.freeze.receipts"
 export PACK_SHA256="$("$PY" -c 'import sys; from joulewise.arm_readiness import committed_pack_tree_sha256; print(committed_pack_tree_sha256(sys.argv[1]))' "$PACK_ROOT")"
 test ! -e "$L10_CUSTODY_ROOT"
-/bin/mkdir -p "$L10_CUSTODY_ROOT/transcripts" "$ANALYSIS_CUSTODY_ROOT"
+/bin/mkdir -p "$L10_CUSTODY_ROOT/transcripts" "$REDUCTION_ROOT"
 ```
 
-The two corpus roots must contain real, strict-valid, claim-eligible evidence
-bound to the authenticated production pack; a synthetic or smoke-scoped corpus
-is a failed precondition under D-160 R-1. The setup records the published common
-head as `TRANSACTION_HEAD`, requires freeze-receipt custody for the pack,
-computes the pack digest with `committed_pack_tree_sha256`, and refuses to reuse
-an older rehearsal directory. Before each numbered step, repeat
-`test "$(/usr/bin/git rev-parse HEAD)" = "$TRANSACTION_HEAD"` and stop on any
-mismatch. No command below needs `sudo`, and none is a `[QUIET-MAC]` collection.
+`RUNS_ROOT` is the G2-b shakedown runs root: real, strict-valid, same-head
+telemetry from the authenticated `_v5` contrast pack, with one A/B/B/A block
+and `bracket-binding.json` before `whole-window-verdict.json` beneath that root
+in NR-14 order. It is qualification-only, and ruling 89 R-1 keeps the L10-A read
+byte-unchanged while recording its tree hash before and after
+([G2-b acceptance](state_kernel.json#L4883), [ruling 89 R-1 and R-2](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
 
-> **OPEN RULING — corpus precondition (magistrate, 2026-09-01).** The paragraph
-> above cannot be satisfied before a window is spent: evidence "bound to the
-> authenticated production pack" exists only after the `_v5` transaction has
-> collected it, and this phase is sequenced BEFORE that transaction (§D). The
-> kernel row's fence ("same head, production pack; synthetic does not
-> discharge") and D-160 R-1/R-2 leave three candidate corpora, none of which
-> satisfies every clause: (i) D-160 R-2's live ~20-minute run on a real tiny
-> quarantined family generation (real evidence, not the production pack);
-> (ii) the retained a9/a10 corpus used by ED-L10-1 (real, claim-eligible,
-> Qwen2.5 `_v3` pack, not `_v5`); (iii) the production pack itself (only
-> after the window — then the rehearsal is no longer a rehearsal). Which corpus
-> discharges this phase, and under which relaxation of the fence, is a
-> reinterpretation of a ruled fence and is therefore consulted (Sol xhigh +
-> Opus contract lens), not ruled solo. Until that ruling lands, `RUNS_ROOT`
-> and `PRODUCER_RUNS_ROOT` are unset and C2 must not start.
+`PRODUCER_RUNS_ROOT` is the separate floor-producer corpus collected by the
+transaction's ALPHA and BETA arms. It does not exist pre-window and is used by
+L10-B only, while `CAMPAIGN_RUNS_ROOT` is the complete campaign corpus used by
+L10-C ([ruling 89 R-1](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
 
-The **BOUNDARY-PROVEN** label means the command shape and fail-closed boundary
-are already represented by the governed flow and tests. **ED-FIRST** means its
-first execution on the production checkout and outside-repository custody must
-be done by Ed. All seven production executions below are ED-FIRST; their command
-interfaces are boundary-proven, but a fixture run is not their execution.
+No synthetic or smoke-scoped corpus discharges this phase: the kernel fence
+requires the same head and production pack, and D-160 R-1 prohibits a
+synthetic clean leg ([kernel fence](state_kernel.json#L1927), [D-160 R-1](
+../process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md#L50)).
 
-### C2. Operator steps
+Before L10-A, write the G2-b tree hash to
+`$L10_CUSTODY_ROOT/g2b-tree-before.sha256`; repeat the same command after its
+finalization check, write `g2b-tree-after.sha256`, and compare the two files.
+A changed hash is **FAIL** ([ruling 89 R-2](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L60)).
 
-1. **Strict validation — ED-FIRST.** Input: each production-pack run bundle at
-   `$RUNS_ROOT/$RUN_ID`. For every manifest-declared run ID, run:
+```sh
+g2b_tree_hash() {
+  /usr/bin/find "$RUNS_ROOT" -type f -exec /usr/bin/shasum -a 256 {} + |
+    LC_ALL=C /usr/bin/sort | /usr/bin/shasum -a 256
+}
+g2b_tree_hash > "$L10_CUSTODY_ROOT/g2b-tree-before.sha256"
+```
+
+Before each numbered command, run
+`test "$(/usr/bin/git rev-parse HEAD)" = "$TRANSACTION_HEAD"`; a mismatch is
+this phase's own refusal ([ruling 89 R-5](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80)).
+
+Every L10 command is **BENCH**: the magistrate executes it at the bench with
+no `sudo`, no `[QUIET-MAC]` collection, and writes only below
+`$L10_CUSTODY_ROOT` ([ruling 89 R-4](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L74)).
+**BOUNDARY-PROVEN** means the command shape and fail-closed boundary already
+exist in the governed flow and tests ([artifact flow](v5-artifact-flow.md)).
+
+### C2. The three-part ladder
+
+#### L10-A — pre-window G2-b contract prefix
+
+L10-A runs steps 1, 2, and 5 before the claim-bearing window. It gates
+`V5-TRANSACTION-01` but does not close the whole L10 row
+([ruling 89 R-1](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
+
+1. **Strict validation — L10-A / BENCH / BOUNDARY-PROVEN.** For each
+   manifest-declared `$RUN_ID`, run:
 
    ```sh
-   "$PY" -m joulewise validate-bundle "$RUNS_ROOT/$RUN_ID" --strict
+   "$PY" -m joulewise validate-bundle "$RUNS_ROOT/$RUN_ID" --strict \
+     >> "$L10_CUSTODY_ROOT/transcripts/l10-a-strict-validation.txt"
    ```
 
-   Emitted artifact: no JSON artifact; exit `0` and `valid bundle: ...` are
-   captured in `$L10_CUSTODY_ROOT/transcripts/strict-validation.txt`. Custody:
-   transcript plus the SHA-256 and original custody path of every read-only
-   input bundle. Any missing or strict-invalid declared member is FAIL.
+   Record the input paths and SHA-256 digests with the transcript. A missing or
+   strict-invalid member is **FAIL** ([artifact flow:12](v5-artifact-flow.md#L12)).
 
-2. **Reduction — ED-FIRST.** Input: each strict-valid bundle. For every same
-   `$RUN_ID`, run the flow-table command with the rehearsal reduction root:
+2. **Reduction — L10-A / BENCH / BOUNDARY-PROVEN.** For each strict-valid
+   `$RUN_ID`, run:
 
    ```sh
-   /bin/mkdir -p "$REDUCTION_ROOT"; "$PY" -m joulewise reduce "$RUNS_ROOT/$RUN_ID" --output "$REDUCTION_ROOT/$RUN_ID.summary_metrics.rereduced.json"
+   "$PY" -m joulewise reduce "$RUNS_ROOT/$RUN_ID" \
+     --output "$REDUCTION_ROOT/$RUN_ID.summary_metrics.rereduced.json"
    ```
 
-   Emitted artifact: `$REDUCTION_ROOT/$RUN_ID.summary_metrics.rereduced.json`,
-   summary schema `0.1`. Custody: `L10_CUSTODY_ROOT/reductions/`. A missing,
-   overwritten, or in-bundle output is FAIL.
+   A missing, overwritten, or in-bundle output is **FAIL**
+   ([artifact flow:13](v5-artifact-flow.md#L13)).
 
-3. **Floor extraction — ED-FIRST.** Input: `$PRODUCER_RUNS_ROOT`, the FIRST
-   CHECK 1 spec, and the authenticated whole-window basis. Set
+5. **Finalization exact refusal — L10-A / BENCH / BOUNDARY-PROVEN.** Make the
+   scratch directory below `$L10_CUSTODY_ROOT`, then run the G2-b checker on
+   its scratch custody copy:
+
+   ```sh
+   export L10_A_SCRATCH_ROOT="$L10_CUSTODY_ROOT/l10-a-scratch"
+   /bin/mkdir -p "$L10_A_SCRATCH_ROOT"
+   "$PY" scripts/check_window_provenance.py --expect-finalize-refusal \
+     --scratch-dir "$L10_A_SCRATCH_ROOT" \
+     --prospective-manifest "$CUSTODY_ROOT/prospective/analysis_manifest_v3.json" \
+     --plan-tree "$CUSTODY_ROOT/prospective/plan_tree.json" \
+     --custody-root "$CUSTODY_ROOT" \
+     --runs-root "$RUNS_ROOT" \
+     --whole-window-verdict "$RUNS_ROOT/whole-window-verdict.json" \
+     --bracket-binding "$RUNS_ROOT/bracket-binding.json" \
+     --calibration-ledger "$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl" \
+     --aggregate-floor-artifact "$CUSTODY_ROOT/floors/d117-v5-aggregate-floor.json" \
+     --output-dir "$CUSTODY_ROOT" \
+     > "$L10_CUSTODY_ROOT/transcripts/l10-a-finalization.txt"
+   g2b_tree_hash > "$L10_CUSTODY_ROOT/g2b-tree-after.sha256"
+   /usr/bin/cmp "$L10_CUSTODY_ROOT/g2b-tree-before.sha256" \
+     "$L10_CUSTODY_ROOT/g2b-tree-after.sha256"
+   ```
+
+   The checker copies the source custody into `$L10_A_SCRATCH_ROOT` before it
+   invokes the finalizer; the source custody paths in the command are read
+   inputs ([G2-b F2](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#L1124)).
+
+   L10-A **PASS** is the singleton observed reason
+   `analysis_finalization_member_cover_mismatch` ([ruling 89 R-1](
+   ../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
+   Any other reason, a successful
+   finalization, a nonzero tree comparison, or a write outside L10 custody is
+   **FAIL** (`joulewise/analysis_manifest_v3.py:2590,2598`,
+   [current finalizer member-cover branch:2986,3048](../joulewise/analysis_manifest_v3.py#L2986),
+   [G2-b F2](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#L1124),
+   [ruling 89 R-1 and R-2](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
+
+#### L10-B — floor-producer extraction and rehearsal mint
+
+L10-B runs steps 3 and 4 after the ALPHA/BETA floor arms and immediately before
+the real production extraction and mint. Copy the real floor-producer corpus
+to a scratch directory below `$L10_CUSTODY_ROOT` before step 3
+([ruling 89 R-1](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L50)).
+
+```sh
+export PRODUCER_RUNS_ROOT='/absolute/path/to/the-real-floor-producer-corpus'
+export L10_B_PRODUCER_SCRATCH="$L10_CUSTODY_ROOT/l10-b-scratch/producer-runs"
+/usr/bin/ditto "$PRODUCER_RUNS_ROOT" "$L10_B_PRODUCER_SCRATCH"
+```
+
+3. **Floor extraction — L10-B / BENCH / BOUNDARY-PROVEN.** Set
    `COLLECTION_MANIFEST_ID`, `EVALUATION_BASIS_SHA256`, and
-   `CONSUMPTION_SEMANTICS_ID` from those authenticated inputs, then run:
+   `CONSUMPTION_SEMANTICS_ID` from the authenticated inputs, then run:
 
    ```sh
-   "$PY" scripts/extract_detection_floors.py --runs-root "$PRODUCER_RUNS_ROOT" --spec "$EXTRACTION_SPEC" --out "$EXTRACTION_REPORT" --manifest-id "$COLLECTION_MANIFEST_ID" --evaluation-basis-sha256 "$EVALUATION_BASIS_SHA256" --consumption-semantics-id "$CONSUMPTION_SEMANTICS_ID" --hash-bundles
+   export EXTRACTION_REPORT="$L10_CUSTODY_ROOT/l10-b-floor-extraction.json"
+   "$PY" scripts/extract_detection_floors.py \
+     --runs-root "$L10_B_PRODUCER_SCRATCH" --spec "$EXTRACTION_SPEC" \
+     --out "$EXTRACTION_REPORT" --manifest-id "$COLLECTION_MANIFEST_ID" \
+     --evaluation-basis-sha256 "$EVALUATION_BASIS_SHA256" \
+     --consumption-semantics-id "$CONSUMPTION_SEMANTICS_ID" --hash-bundles
    ```
 
-   Emitted artifact: `$EXTRACTION_REPORT`, schema
-   `joulewise.detection_floor_extraction.v1`. Custody:
-   `L10_CUSTODY_ROOT/floor-extraction.json`. A report that is not emitted is
-   FAIL; a report that honestly records non-extractable cells still supplies
-   evidence but cannot satisfy a later step that requires extractable cells.
+   An absent report is **FAIL** ([artifact flow:14](v5-artifact-flow.md#L14)).
 
-4. **Mint — ED-FIRST.** Input: the FIRST CHECK 2 pinset and input manifest,
-   their named extraction/calibration evidence, and the transaction-head SHA as
-   `PROJECT_COMMIT`. Set `FINAL_PINSET_SHA256`, `CALIBRATION_CUSTODY_STORE`, and
-   `CONSUMPTION_SEMANTICS_ID` from those authenticated inputs, then run:
+4. **Mint — L10-B / BENCH / BOUNDARY-PROVEN.** Set
+   `FINAL_PINSET_SHA256` and `CALIBRATION_CUSTODY_STORE` from the authenticated
+   inputs, then run:
 
    ```sh
-   "$PY" scripts/mint_floor_artifact_generalized.py --pinset "$FINAL_PINSET" --pinset-sha256 "$FINAL_PINSET_SHA256" --v2-input-manifest "$V2_INPUT_MANIFEST" --calibration-custody-store "$CALIBRATION_CUSTODY_STORE" --out "$AGGREGATE_FLOOR_ARTIFACT" --single-count-out "$SINGLE_COUNT_STATEMENT" --project-commit "$PROJECT_COMMIT" --project-tree-state clean --consumption-semantics-id "$CONSUMPTION_SEMANTICS_ID"
+   export AGGREGATE_FLOOR_ARTIFACT="$L10_CUSTODY_ROOT/l10-b-aggregate-floor.json"
+   export SINGLE_COUNT_STATEMENT="$L10_CUSTODY_ROOT/l10-b-single-count.txt"
+   "$PY" scripts/mint_floor_artifact_generalized.py \
+     --pinset "$FINAL_PINSET" --pinset-sha256 "$FINAL_PINSET_SHA256" \
+     --v2-input-manifest "$V2_INPUT_MANIFEST" \
+     --calibration-custody-store "$CALIBRATION_CUSTODY_STORE" \
+     --out "$AGGREGATE_FLOOR_ARTIFACT" --single-count-out "$SINGLE_COUNT_STATEMENT" \
+     --project-commit "$PROJECT_COMMIT" --project-tree-state clean \
+     --consumption-semantics-id "$CONSUMPTION_SEMANTICS_ID"
    ```
 
-   Emitted artifacts: `$AGGREGATE_FLOOR_ARTIFACT`, schema
-   `joulewise.detection_floor_artifact.v2`, and `$SINGLE_COUNT_STATEMENT`.
-   Custody: the L10 root. Missing output, output-exists refusal, dirty-tree
-   acceptance, or a pin/input mismatch is FAIL.
+   A missing output, output-exists refusal, dirty-tree acceptance, or pin/input
+   mismatch is **FAIL** ([artifact flow:15](v5-artifact-flow.md#L15)).
 
-5. **Finalization — ED-FIRST.** Input: the production prospective manifest and
-   plan tree, production-pack-bound runs, authenticated verdict, bracket,
-   ledger, and the rehearsal aggregate floor. Set `CALIBRATION_LEDGER` to the
-   authenticated ledger selected by the transaction, then run:
+#### L10-C — full edge on the complete campaign corpus
+
+L10-C runs steps 5, 6, and 7 after the last consuming arm and before a claim is
+published. Copy the campaign corpus to scratch custody before finalization
+([ruling 89 R-1](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L53)).
+
+```sh
+export CAMPAIGN_RUNS_ROOT='/absolute/path/to/the-complete-campaign-runs-root'
+export L10_C_RUNS_SCRATCH="$L10_CUSTODY_ROOT/l10-c-scratch/campaign-runs"
+export L10_C_ANALYSIS_SCRATCH="$L10_CUSTODY_ROOT/l10-c-scratch/analysis"
+/usr/bin/ditto "$CAMPAIGN_RUNS_ROOT" "$L10_C_RUNS_SCRATCH"
+/bin/mkdir -p "$L10_C_ANALYSIS_SCRATCH"
+```
+
+5. **Finalization positive form — L10-C / BENCH / BOUNDARY-PROVEN.** Run:
 
    ```sh
-   "$PY" scripts/finalize_analysis_manifest.py --prospective-manifest "$PACK_ROOT/analysis_manifest_v3.json" --plan-tree "$PACK_ROOT/plan_tree.json" --custody-root "$ANALYSIS_CUSTODY_ROOT" --runs-root "$RUNS_ROOT" --whole-window-verdict "$RUNS_ROOT/whole-window-verdict.json" --bracket-binding "$RUNS_ROOT/bracket-binding.json" --calibration-ledger "$CALIBRATION_LEDGER" --aggregate-floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" --output-dir "$ANALYSIS_CUSTODY_ROOT"
+   "$PY" scripts/finalize_analysis_manifest.py \
+     --prospective-manifest "$PACK_ROOT/analysis_manifest_v3.json" \
+     --plan-tree "$PACK_ROOT/plan_tree.json" \
+     --custody-root "$L10_C_ANALYSIS_SCRATCH" --runs-root "$L10_C_RUNS_SCRATCH" \
+     --whole-window-verdict "$L10_C_RUNS_SCRATCH/whole-window-verdict.json" \
+     --bracket-binding "$L10_C_RUNS_SCRATCH/bracket-binding.json" \
+     --calibration-ledger "$CALIBRATION_LEDGER" \
+     --aggregate-floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" \
+     --output-dir "$L10_C_ANALYSIS_SCRATCH"
    ```
 
-   Emitted artifact:
-   `$ANALYSIS_CUSTODY_ROOT/<prospective_manifest_id>.finalized.json`, schema
-   `joulewise.analysis_manifest.v3.finalized`; replace the placeholder in
-   `FINALIZED_MANIFEST` with that emitted filename. Custody: the rehearsal
-   analysis directory only. No finalized artifact is FAIL.
+   Set `FINALIZED_MANIFEST` to the emitted finalized-manifest path. A missing
+   finalized manifest is **FAIL** ([artifact flow:16](v5-artifact-flow.md#L16)).
 
-6. **Claim gate — ED-FIRST.** Input: the finalized manifest, production corpus,
-   aggregate floor, and every evidence root declared by that manifest. Set
-   `EVIDENCE_ROOT_ID` to the declared ID and repeat `--evidence-root ID=PATH`
-   for every declared root, then run:
+6. **Claim gate — L10-C / BENCH / BOUNDARY-PROVEN.** Run the governed command
+   against the scratch corpus:
 
    ```sh
-   "$PY" -m joulewise analyze-claims --analysis-manifest "$FINALIZED_MANIFEST" --runs-root "$RUNS_ROOT" --evidence-root "$EVIDENCE_ROOT_ID=$PRODUCER_RUNS_ROOT" --floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" --output "$CLAIM_VERDICTS"
+   export CLAIM_VERDICTS="$L10_CUSTODY_ROOT/l10-c-claim-verdicts.json"
+   "$PY" -m joulewise analyze-claims --analysis-manifest "$FINALIZED_MANIFEST" \
+     --runs-root "$L10_C_RUNS_SCRATCH" \
+     --evidence-root "$EVIDENCE_ROOT_ID=$PRODUCER_RUNS_ROOT" \
+     --floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" --output "$CLAIM_VERDICTS"
    ```
 
-   Emitted artifact: `$CLAIM_VERDICTS`, schema
-   `joulewise.claim_verdicts.v1`. Custody: the L10 root, never `CLAIMS_ROOT`.
-   Any registered scientific verdict is acceptable, including a structured
-   refusal or `not_estimable` outcome, provided the command emits the governed
-   verdict artifact. A crash, unregistered refusal spelling, or absent artifact
-   is FAIL.
+   A crash, an unregistered refusal, or an absent verdict artifact is **FAIL**
+   ([artifact flow:17](v5-artifact-flow.md#L17)).
 
-7. **Results fills — ED-FIRST.** Input: the governed FIRST CHECK 4 adapter's
-   `$RESULTS_FILL_INPUT`, which must name this run's issued verdict, floor, and
-   extraction artifacts. Run:
+7. **Results fills — L10-C / BENCH / BOUNDARY-PROVEN.** The successor adapter
+   supplies `$RESULTS_FILL_INPUT`; then run:
 
    ```sh
-   "$PY" scripts/render_results_fills.py "$RESULTS_FILL_INPUT" > "$RESULTS_FILLS_MD"; "$PY" scripts/render_results_fills.py --validate-rendered "$RESULTS_FILLS_MD"
+   export RESULTS_FILLS_MD="$L10_CUSTODY_ROOT/l10-c-results-fills.md"
+   "$PY" scripts/render_results_fills.py "$RESULTS_FILL_INPUT" > "$RESULTS_FILLS_MD"
+   "$PY" scripts/render_results_fills.py --validate-rendered "$RESULTS_FILLS_MD"
    ```
 
-   If `RENDERER-V5-SUCCESSOR-01` installs a differently named successor command,
-   the owner must first update the authoritative artifact-flow row; do not guess
-   a replacement here. Emitted artifact: validated Markdown at
-   `$RESULTS_FILLS_MD`. Custody: the L10 root, marked
-   `QUALIFICATION_ONLY_NOT_CLAIM_EVIDENCE`; it is never copied into the paper.
    Missing output, `STOP_FILL`, a leftover fill token, or validation failure is
-   FAIL.
+   **FAIL** ([artifact flow:18](v5-artifact-flow.md#L18)).
 
-### C3. PASS, FAIL, and the proposed record
+### C3. Ratified record and part results
 
-The rehearsal is **PASS** only when every named step emits its required
-artifact (or the Strict-validation success transcript), every emitted artifact
-is hashed and inventoried, and the Claim gate emits a governed verdict artifact.
-The verdict's scientific direction does not decide rehearsal PASS: a supported,
-unsupported, `not_estimable`, or registered refusal result can all prove that
-the edge executed. A crash, an unregistered refusal spelling, a missing
-artifact, a head change, a pack-hash change, or a write outside rehearsal
-custody is **FAIL**. Preserve the evidence and route the defect to its owning
-kernel row; if no row owns it, request one. L10 does not fix the defect.
+The magistrate must ratify this record contract before execution; that
+authorization licenses the part-level **PASS** and **FAIL** rules below
+([ruling 89 R-5](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80)).
 
-Proposed immutable filename:
-`l10-sacrificial-rehearsal-record.json`, stored at `$REHEARSAL_RECORD` and
-labelled `QUALIFICATION_ONLY_NOT_CLAIM_EVIDENCE`. The magistrate must ratify the
-record contract before execution. Its minimum fields are:
+Use `l10-sacrificial-rehearsal-record.json` at `$REHEARSAL_RECORD`. Each part
+record carries the following fields; `proof_scope` identifies the physical
+corpus and ladder portion represented by that record. Its permitted values are
+`L10_A_G2B_CONTRACT_PREFIX`, `L10_B_FLOOR_PRODUCER`, and `L10_C_FULL_EDGE`
+([ruling 89 R-1](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
 
 ```json
 {
   "record_type": "L10-SACRIFICIAL-REHEARSAL",
   "evidence_use": "QUALIFICATION_ONLY_NOT_CLAIM_EVIDENCE",
+  "proof_scope": "L10_A_G2B_CONTRACT_PREFIX",
   "transaction_head_git_sha": "40-hex Git commit",
   "production_pack_path": "repository-relative pack path",
   "production_pack_sha256": "64-hex authenticated pack digest",
-  "operator": "human operator identity",
+  "operator": "magistrate identity",
   "started_at_utc": "RFC 3339 timestamp",
   "completed_at_utc": "RFC 3339 timestamp",
-  "overall_result": "PASS or FAIL",
+  "part_result": "PASS or FAIL",
+  "overall_result": "PASS or FAIL after all three part records",
   "steps": [
     {
-      "step": "Strict validation",
+      "step": "number and name",
       "result": "PASS or FAIL",
       "command": "exact executed command",
       "input_artifact_sha256": ["64-hex digests"],
-      "emitted_artifact_path": ["custody-relative paths"],
+      "emitted_artifact_path": ["L10-custody-relative paths"],
       "emitted_artifact_sha256": ["64-hex digests"],
       "exit_code": 0,
-      "refusal_or_verdict": null
+      "refusal_or_verdict": "string or null"
     }
   ]
 }
 ```
 
-The `steps` array has one record for each of the seven steps and therefore
-supplies the required per-step artifact digests and PASS/FAIL result. The
-operator and both timestamps make the human execution and its ordering
-auditable.
+The L10-A record is **PASS** when steps 1 and 2 succeed, step 5 observes
+exactly `analysis_finalization_member_cover_mismatch`, and the two G2-b tree
+hashes match ([ruling 89 R-1](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
+Any other finalization reason or a successful finalization is
+**FAIL** ([ruling 89 R-1 and R-2](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39),
+`joulewise/analysis_manifest_v3.py:2590,2598`,
+[current finalizer member-cover branch:2986,3048](../joulewise/analysis_manifest_v3.py#L2986)).
+
+The L10-B record is **PASS** when the scratch-corpus extraction and rehearsal
+mint each emit their governed artifacts ([ruling 89 R-1](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L50)).
+The L10-C record is **PASS** when
+positive finalization, Claim gate, and Results fills each emit their governed
+artifacts before publication ([ruling 89 R-1](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L53)).
+
+The ladder reaches overall **PASS** after the three part records pass
+([ruling 89 R-1](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
+A head
+change, pack-digest change, missing record field, artifact outside L10 custody,
+or an unregistered refusal is **FAIL** ([ruling 89 R-1 and R-5](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
 
 ## D. Sequencing
 
-`V5-TRANSACTION-01` is the kernel's exact spelling: **no `_v5` window is
-launched before the custodied `l10-sacrificial-rehearsal-record.json` exists at
-the transaction head with `overall_result: PASS`.**
+`V5-TRANSACTION-01` carries no L10 clause in the kernel today. Ruling 89 R-1
+installs L10-A as a bench kernel edit before the claim-bearing transaction,
+places L10-B after the floor arms and before the real mint, and places L10-C
+after the last consuming arm and before publication
+([V5 transaction acceptance](state_kernel.json#L5022), [ruling 89 R-1](
+../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L39)).
 
-## E. What this doc does not do
+For this sequence, “spent window” means the claim-bearing window under D-167(1),
+not an earlier diagnostic collection ([D-167(1)](../decision_log.md#L10407)).
 
-This document schedules and records the ruled phase; it does not change the
-claim edge, add or weaken a refusal, or discharge the missing extraction spec,
-final pinset/input manifest, dominance adapter, or results adapter. Any defect
-found by the rehearsal is preserved and routed to its owning kernel row, never
-fixed in this lane.
+## E. Limits and refusals
+
+This phase adds its own refusals: the per-step transaction-head re-check and
+the FIRST-CHECK block. It schedules and records those checks; it does not alter
+the governed claim edge or repair a missing producer, adapter, or artifact
+([ruling 89 R-5](../process_traces/2026-09-01-fresh-model-review/89-RULING-l10-corpus-precondition.md#L80),
+[kernel L10 fence](state_kernel.json#L1936)).
+
+Preserve a detected defect and route it to its owning kernel row; a defect with
+no owner is a request for an owner row, not an L10 repair
+([kernel L10 fence](state_kernel.json#L1936)).
