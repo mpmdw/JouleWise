@@ -255,3 +255,31 @@ refuter carry-overs (luna 209 F3/F4; Opus 210 F3/F5/F5b/F6/F7/F8); kernel
 edits (dep object, S9 rows, two new rows) at the bench. Magistrate overrules
 of a single seat above are each marked "dissent recorded"; no cold verdict on
 which the seats agreed was overruled.
+
+## Addendum 2026-09-02 07:25 — site correction for A1 item 3/4 (bench-verified)
+
+Preparing the fix-round-2b brief against the checker at 781c8d78 showed that
+A1 mis-cites the `check_figure` site. `scripts/check_paper_round7_artifacts.py:565-571`
+are the SVG attribute reads (`float(shape.attrib[x_key])` … `float("nan")`):
+they parse SVG attribute STRINGS, which are not artifact scalars and are not
+this defect class. The artifact-scalar read the ruling means (P3, per-pulse
+`"16.0"`) is `:597` `expected_value = float(pulse[value_key])`. The ruled cure
+(`_typed(..., "number", ...)` in `try/except (KeyError, ValueError)` → REFUSED
+comparison) applies at `:597`; the SVG reads stay as they are. A1 item 4's
+acceptance grep is amended accordingly: `grep -n 'Decimal(str('` must be
+empty; `grep -n 'float('` may hit ONLY the `shape.attrib` lines,
+`float("nan")`, and one named `_geometry(Decimal) -> float` helper used for the
+tolerance arithmetic (the rendered literal is the Decimal). Nothing else in A1
+changes; this corrects a fact, not a verdict.
+
+```text
+$ grep -n 'Decimal(str(\|float(' /Users/edr/code/JouleWise-wt-dx/scripts/check_paper_round7_artifacts.py
+389:    return Decimal(str(value))
+565:                    x = float(shape.attrib[x_key])
+566:                    y = float(shape.attrib[y_key])
+568:                    x = float(shape.attrib[x_key]) + float(shape.attrib["width"]) / 2.0
+569:                    y = float(shape.attrib[y_key]) + float(shape.attrib["height"]) / 2.0
+571:                positioned.append((float("nan"), float("nan")))
+597:            expected_value = float(pulse[value_key])
+exit 0
+```
