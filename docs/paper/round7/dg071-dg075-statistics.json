@@ -1,0 +1,53 @@
+{
+  "distinct_timestamp_count": 406,
+  "duplicate_timestamp_count": 812,
+  "input_bundle": {
+    "path": "/Users/edr/code/JouleWise/runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv",
+    "record_schema": [
+      "timestamp_s",
+      "power_w",
+      "source",
+      "rail",
+      "interval_start_s",
+      "interval_end_s"
+    ],
+    "sha256": "6945160964bc8667f4bfcc1ba7b500f81045fce8301ef7aadce45a188d3e06e9"
+  },
+  "producer": {
+    "git_commit": "3fca7d6ba7c377b9b2c8e87b160552330fb1ddae",
+    "script_path": "scripts/issue_dg071_dg075_statistics.py",
+    "script_sha256": "048d8bb20fcdea9ecd61d4c1bce8c76882c540dc5c7e80391a4f075f5e231ce2"
+  },
+  "record_count": 1218,
+  "registry_row_ids": [
+    "DG-071",
+    "DG-075"
+  ],
+  "schema_version": "joulewise.paper.dg071-dg075-statistics.v1",
+  "statistics": {
+    "DG-071": {
+      "iqr_ms": 5.975008,
+      "iqr_s": 0.005975008010864258,
+      "median_ms": 120.918512,
+      "median_s": 0.12091851234436035,
+      "q1_ms": 116.951942,
+      "q1_s": 0.11695194244384766,
+      "q3_ms": 122.92695,
+      "q3_s": 0.12292695045471191,
+      "sample_count": 1218,
+      "statistic": "interval_end_s - interval_start_s"
+    },
+    "DG-075": {
+      "iqr_ms": 5.894899,
+      "iqr_s": 0.005894899368286133,
+      "median_ms": 120.922327,
+      "median_s": 0.12092232704162598,
+      "q1_ms": 117.032051,
+      "q1_s": 0.11703205108642578,
+      "q3_ms": 122.92695,
+      "q3_s": 0.12292695045471191,
+      "sample_count": 405,
+      "statistic": "consecutive unique timestamp_s difference"
+    }
+  }
+}
