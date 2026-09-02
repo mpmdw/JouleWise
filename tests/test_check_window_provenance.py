@@ -36,7 +36,10 @@ from scripts.gen_g2_phase_d import (
     render_generated_region,
     validate_pinned_anchors,
 )
-from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+from tests.test_analysis_finalizer import (
+    _make_sliced_one_block_verdict,
+    install_synthetic_finalization_fixture,
+)
 
 # The finalizer authenticates custody containment lexically and rejects symlinked
 # components below the root as spelled (analysis_manifest_v3.py:1479);
@@ -304,39 +307,6 @@ def _produce_whole_window_verdict(fixture: dict, *, require_pass: bool = True) -
             )
     fixture["verdict_path"] = verdict_path
     return result
-
-
-def _make_sliced_one_block_verdict(fixture: dict) -> None:
-    verdict = json.loads(fixture["verdict_path"].read_text())
-    keep = {
-        bundle_id
-        for bundle_id in verdict["bundle_ids"]
-        if "-decode-contrast-b01-" in bundle_id
-    }
-    verdict["bundle_ids"] = sorted(keep)
-    basis = verdict["evaluation_basis"]
-    basis["member_occurrences"] = [
-        row for row in basis["member_occurrences"] if row["bundle_id"] in keep
-    ]
-    basis["sha256"] = canonical_sha256(
-        {key: value for key, value in basis.items() if key != "sha256"}
-    )
-    core = verdict["idle_admission_core"]
-    if isinstance(core.get("members"), list):
-        core["members"] = [
-            row for row in core["members"] if row.get("bundle_id") in keep
-        ]
-    verdict["member_failures"] = [
-        row for row in verdict.get("member_failures", []) if row.get("bundle_id") in keep
-    ]
-    verdict["row_provenance"] = build_row_provenance(
-        policy_sha256=verdict["campaign_policy"]["sha256"],
-        bundle_ids=verdict["bundle_ids"],
-        source_manifests=verdict["source_campaign_manifests"],
-    )
-    raw = (json.dumps(verdict, sort_keys=True) + "\n").encode()
-    fixture["verdict_path"].write_bytes(raw)
-    (fixture["runs_root"] / "campaign_log.jsonl").write_bytes(raw)
 
 
 def _mutate_real_membership(fixture: dict, *, operation: str) -> str:
@@ -955,6 +925,11 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["F5-4"], output)
 
     def test_sliced_verdict_one_block_default_refusal_and_mismatches(self) -> None:
+        """Pin `_authenticate_finalization_inputs` (analysis_manifest_v3.py:3339).
+
+        If its floor read moved above `_verify_basis_members`, absent floor
+        inputs below would stop producing the member-cover singleton.
+        """
         self.assertEqual(
             DEFAULT_EXPECTED_REFUSALS,
             frozenset({"analysis_finalization_member_cover_mismatch"}),
@@ -971,6 +946,22 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertIn(
                 "observed={analysis_finalization_member_cover_mismatch}", output
             )
+
+            fixture["floor_path"].unlink()
+            code, output = _run(_finalizer_argv(fixture, scratch))
+            self.assertEqual(code, 0, output)
+            self.assertIn(
+                "observed={analysis_finalization_member_cover_mismatch}", output
+            )
+
+            floors = fixture["floor_path"].parent
+            if floors.name == "floors":
+                shutil.rmtree(floors)
+                code, output = _run(_finalizer_argv(fixture, scratch))
+                self.assertEqual(code, 0, output)
+                self.assertIn(
+                    "observed={analysis_finalization_member_cover_mismatch}", output
+                )
 
             code, output = _run(
                 _finalizer_argv(fixture, scratch)

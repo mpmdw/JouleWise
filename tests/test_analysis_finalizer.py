@@ -42,7 +42,11 @@ from joulewise.detection_floor import (
     validate_floor_artifact,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA
-from joulewise.whole_window import build_neg8_drift_bound_artifact, canonical_sha256
+from joulewise.whole_window import (
+    build_neg8_drift_bound_artifact,
+    build_row_provenance,
+    canonical_sha256,
+)
 from tests.test_detection_floor import make_artifact, make_cell, make_regime
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
 from scripts.finalize_analysis_manifest import main as finalize_main
@@ -520,7 +524,7 @@ def install_synthetic_finalization_fixture(
     floor_errors = validate_floor_artifact(floor)
     if floor_errors:
         raise AssertionError(floor_errors)
-    floor_path = root / "aggregate_floor.json"
+    floor_path = root / "floors" / "aggregate_floor.json"
     _write_json(floor_path, floor)
     return {
         "root": root,
@@ -535,7 +539,75 @@ def install_synthetic_finalization_fixture(
     }
 
 
+def _make_sliced_one_block_verdict(fixture: dict) -> None:
+    """Retain one real block while preserving the verdict's authenticated shape."""
+
+    verdict = json.loads(fixture["verdict_path"].read_text())
+    keep = {
+        bundle_id
+        for bundle_id in verdict["bundle_ids"]
+        if "-decode-contrast-b01-" in bundle_id
+    }
+    verdict["bundle_ids"] = sorted(keep)
+    basis = verdict["evaluation_basis"]
+    basis["member_occurrences"] = [
+        row for row in basis["member_occurrences"] if row["bundle_id"] in keep
+    ]
+    basis["sha256"] = canonical_sha256(
+        {key: value for key, value in basis.items() if key != "sha256"}
+    )
+    core = verdict["idle_admission_core"]
+    if isinstance(core.get("members"), list):
+        core["members"] = [
+            row for row in core["members"] if row.get("bundle_id") in keep
+        ]
+    verdict["member_failures"] = [
+        row for row in verdict.get("member_failures", []) if row.get("bundle_id") in keep
+    ]
+    verdict["row_provenance"] = build_row_provenance(
+        policy_sha256=verdict["campaign_policy"]["sha256"],
+        bundle_ids=verdict["bundle_ids"],
+        source_manifests=verdict["source_campaign_manifests"],
+    )
+    raw = (json.dumps(verdict, sort_keys=True) + "\n").encode()
+    fixture["verdict_path"].write_bytes(raw)
+    (fixture["runs_root"] / "campaign_log.jsonl").write_bytes(raw)
+
+
 class AnalysisFinalizerTests(unittest.TestCase):
+    def test_sliced_verdict_missing_floor_refuses_member_cover_before_output(self) -> None:
+        """Pin `_authenticate_finalization_inputs` (analysis_manifest_v3.py:3339).
+
+        Counterfactual: a refactor that moves the aggregate-floor read
+        (`_path_under_root` + `_read_strict_object`) above `_verify_basis_members`
+        would observe `analysis_finalization_attachment_missing` here instead of
+        the member-cover refusal (ruling 97 R-6e).
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp), shared_family=True)
+            _make_sliced_one_block_verdict(fixture)
+            fixture["floor_path"].unlink()
+            output = fixture["root"] / (
+                fixture["prospective"]["manifest_id"] + FINALIZED_BASENAME_SUFFIX
+            )
+            with self.assertRaises(AnalysisManifestFinalizationError) as raised:
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
+            self.assertEqual(
+                raised.exception.reason_code,
+                "analysis_finalization_member_cover_mismatch",
+            )
+            self.assertFalse(output.exists())
+
     def test_cli_maps_fuzz_shaped_prospective_value_to_closed_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
