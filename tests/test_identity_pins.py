@@ -1403,6 +1403,8 @@ class PromptRealizationProjectionTests(unittest.TestCase):
             [check["check_id"].split(":")[1] for check in prompt_checks],
             ["configs/member-1.json", "configs/member-2.json"],
         )
+        # Ruling 141a P-5: "one PASS check" per realized config (Opus 159 M-159).
+        self.assertEqual([check["status"] for check in prompt_checks], ["PASS", "PASS"])
         self.assertTrue(
             all(
                 "shared_mint_projection" in check["check_id"]
