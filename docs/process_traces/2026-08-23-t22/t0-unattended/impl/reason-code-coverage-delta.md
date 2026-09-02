@@ -474,11 +474,11 @@ The ruled refusal-bearing behaviors are:
 | RF-01 | Author | R0 does not prove the fixed versioned `time.apple.com`, `pool.ntp.org`, `time.nist.gov` roster under `sample_policy_id`; does not record exactly one governed `/usr/bin/sntp -t 2` invocation per hostname; substitutes, falls back, or adds an attempt; omits a successful parseable leg from the intersection; performs best-result selection; or omits that leg's resolved peer address or raw line. |
 | RF-02 | Author | Fewer than two R0 legs exit zero with a parseable line; spawn failure, nonzero exit, timeout, or malformed output counts that leg as unsuccessful and no extra attempt is launched. |
 | RF-03 | Author | The agreement intervals of all successful parseable R0 legs have an empty common intersection. |
-| RF-04 | Author | R0's `abs(intersection midpoint) + intersection halfwidth` exceeds the 0.5-second ceiling. |
+| RF-04 | Author | R0's `abs(intersection midpoint) + intersection halfwidth` exceeds 0.5 seconds. |
 | RF-05 | Author | R0's RAW→REALTIME→RAW anchor read skew exceeds 1,000,000 ns. |
 | RF-06 | Author | Fewer than two fixed-roster R1 legs exit zero with a parseable line; one failed leg is tolerated but never retried or replaced. |
 | RF-07 | Author | The agreement intervals of all successful parseable R1 legs have an empty common intersection. |
-| RF-08 | Author | R1's `abs(intersection midpoint) + intersection halfwidth` exceeds the 0.5-second ceiling. |
+| RF-08 | Author | R1's `abs(intersection midpoint) + intersection halfwidth` exceeds 0.5 seconds. |
 | RF-36 | Author | R1 does not prove the same fixed versioned `sample_policy_id` roster as R0; does not record exactly one governed `/usr/bin/sntp -t 2` invocation per hostname; substitutes, falls back, or adds an attempt; omits a successful parseable leg from the intersection; performs best-result selection; or omits that leg's resolved peer address or raw line. |
 | RF-09 | Author and arm-side predicate | `author_anchor_raw_ns - R0_anchor_raw_ns` is below 600,000,000,000 ns, so the falsifier lacks the ruled minimum observation span. |
 | RF-10 | Author and arm-side predicate | That same RAW-anchor span exceeds 3,600,000,000,000 ns. |
