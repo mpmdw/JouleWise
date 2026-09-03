@@ -11,7 +11,7 @@ either draft remain lint vocabulary.
 |---|---|---|
 | Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
 | MLX | §1 | Apple's on-device inference framework used to run the models. |
-| resolution bound / detection floor / cell floor | §1 | One largest allowed false phase-energy difference: “detection floor” is the advisor's term and “cell floor” is the artifact term for the final resolution bound. |
+| resolution bound / detection floor / cell floor | §1 | One largest allowed false phase-energy difference: “detection floor” is another name for it, and “cell floor” is the artifact term for its final value after the Section 4 safeguards. |
 | \(U_{\rm point}\) / \(U_{\rm corner}\) | §1 | Bound at recorded edges versus the counterpart after all allowed lower-or-upper choices are evaluated jointly. |
 | member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
 | timing-error sign / shared sign / local sign | §1 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |

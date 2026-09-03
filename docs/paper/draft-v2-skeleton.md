@@ -115,9 +115,10 @@ calibration and mapping bound how far an edge may move before phase energy is
 recomputed.
 
 A cell is the set of runs with one phase, workload, model, hardware, software,
-and power-counter boundary. Its resolution bound—the quantity the advisor
-calls the **detection floor** and the artifacts call the **cell floor**—is the
-largest false phase-energy difference allowed by the fixed calculation for that cell. The
+and power-counter boundary. Its resolution bound—also called the
+**detection floor**; its final value, after the safeguards of Section 4, is
+what the artifacts call the **cell floor**—is the largest false phase-energy
+difference allowed by the fixed calculation for that cell. The
 research question is whether permitted edge movement at least doubles each
 source of false difference. Let \(U_{\rm point}\) be a bound calculated at the
 recorded edges and \(U_{\rm corner}\) its counterpart after every allowed
@@ -832,7 +833,7 @@ Do not soften, combine, or mechanically retensor these sentences.
 
 **A — every required ratio passes:**
 
-> Every required independent-edge ratio \(R\) was at least 2 and every required comparative shared-error ratio \(R_{cm}\) was at least 2, so allowed boundary movement at least doubled every component's point-only bound on the machine, inference runtime, and *powermetrics* configuration named in Section 1. This result supports the headline that boundary placement dominates point-only variation only if the post-campaign **inserted-gap check**—a test that inserts an approximately 500-ms no-work gap and compares its independently known edges with the power record—supports applying the pulse-derived timing bound to inference.
+> Every required independent-edge ratio \(R\) was at least 2 and every required comparative shared-error ratio \(R_{cm}\) was at least 2, so allowed boundary movement at least doubled every component's point-only bound on the Apple M3 Max hardware, MLX, and *powermetrics* power-recording configuration named in Section 1. This result supports the headline that boundary placement dominates point-only variation only if the post-campaign **inserted-gap check**—a test that inserts an approximately 500-ms no-work gap and compares its independently known edges with the power record—supports applying the pulse-derived timing bound to inference.
 
 **B — an authenticated, evaluable ratio is below 2:**
 
@@ -1604,7 +1605,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | powermetrics | 1. Introduction | glossed-at-first-use | The macOS power sampler and its start-to-end interval-average record are stated at first use. |
 | sampling record | 1. Introduction | glossed-at-first-use | One sampler output averaging processor power from its recorded start through its recorded end. |
 | integrated energy | 1. Introduction | glossed-at-first-use | The time integral of power over a sampling record. |
-| detection floor | 1. Introduction | glossed-at-first-use | The advisor's name for the resolution bound; artifacts call its final value the cell floor. |
+| detection floor | 1. Introduction | glossed-at-first-use | Another name for the resolution bound; the artifacts call its final value, after the Section 4 safeguards, the cell floor. |
 | \(U_{\rm point}\) / \(U_{\rm corner}\) | 1. Introduction | glossed-at-first-use | Bound at recorded edges versus the counterpart after all allowed lower-or-upper choices are evaluated jointly. |
 | A/B/B/A block | 1. Introduction | glossed-at-first-use | Four runs in the order A, B, B, A. |
 | timing-error sign | 1. Introduction | glossed-at-first-use | Says which direction an allowed timing error moves energy. |
@@ -1705,7 +1706,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | not_applicable / absolute \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A uniform shared shift cancels when the absolute formula subtracts its cell mean. |
 | two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
 | resolution bound | 1. Introduction | glossed-at-first-use | Largest false phase-energy difference allowed by the fixed cell calculation. |
-| cell floor | 1. Introduction | glossed-at-first-use | Artifact name for the final resolution bound, bridged to the advisor's detection-floor term. |
+| cell floor | 1. Introduction | glossed-at-first-use | Artifact name for the final resolution bound, bridged in Section 1 to the detection-floor name. |
 | same-cell floor | Adding publication safeguards after the ratio | glossed-at-first-use | That floor for exactly the phase, workload, model, hardware, software, and counter cell being tested. |
 | small-sample multiplier / \(g(n)\) | Adding publication safeguards after the ratio | glossed-at-first-use | The adjacent displayed formula widens five-to-nine-unit results and returns no publishable component below five. |
 | directional comparison / directional comparisons | Adding publication safeguards after the ratio | glossed-at-first-use | The expected direction is fixed before collection. |
