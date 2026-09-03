@@ -16,7 +16,12 @@ record disagree, the result record is right and the courier says so.
 ## Purpose of this night
 
 Plan `rehearsal-20260903`, class `REHEARSAL_STUB`, armed by the magistrate
-(Fable, standing loop, the morning of 2026-09-02) for 02:56 local on
+(Fable, standing loop, the morning of 2026-09-02; RE-ARMED the evening of
+2026-09-02 — a fresh audit caught that the magistrate's own daytime pulls
+had moved the canonical checkout HEAD past the plan's pinned `repo_head`,
+so the gate would have refused `night_plan_stale`; the plan was re-pinned
+to the re-arm commit and both plists re-rendered, which also refreshed the
+courier binary pin past a same-day claude self-update) for 02:56 local on
 2026-09-03 with a 900 s window. The chain is the driver's built-in stub
 (`sleep 2; echo REHEARSAL`); no pack, no model, no measurement, no sudo.
 This is the "installed the morning before" stand-down rehearsal ruled by
@@ -54,10 +59,15 @@ Resume the standing loop (`/loop` mandate; memory `unattended-loop-first`):
 the magistrate harvests the custody root AND the stand-down log line,
 records both under `NIGHT-REHEARSAL-01`, then runs
 `scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260903/night_plan.json --hour 2 --minute 56 --uninstall`
-at the SAME commit the plan was armed on (the installer checks `repo_head`
-before the uninstall branch; `claude` must be on PATH — prepend
-`~/.local/bin` in a courier shell), so the dead-man job stops firing at
-07:00. Then the last stage-1 item: the stage-1 plan email to Ed (first
+at the SAME commit the plan was RE-armed on (the re-arm commit that
+rewrote this file; the installer checks `repo_head` before the uninstall
+branch — after PR #268 the uninstall path no longer needs `claude` on
+PATH), so the dead-man job stops firing at 07:00. The canonical checkout
+must not be pulled or moved between the re-arm and the night's
+completion — the gate compares the plan's `repo_head` to the CANONICAL
+checkout HEAD, and the original arming of this plan was invalidated by
+exactly such a daytime pull (stage-2 finding: morning-before arming plus
+an active canonical checkout guarantees `night_plan_stale`). Then the last stage-1 item: the stage-1 plan email to Ed (first
 armed date; launches unless he replies NO) before any `DIAGNOSTIC_NO_PACK`
 plan is armed. Ed was emailed the arming notice for THIS night before it
 was armed (cold gate coldgate-e10 (b)); if Ed replied NO on that thread,
