@@ -10,6 +10,27 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T30 (2026-09-02) — DURABLE PAUSE (Ed: usage window exhausted).** A new
+session resumes from ONE file:
+`docs/process_traces/2026-09-02-decode-identity-set/39-pause-state-2026-09-02.md`
+on branch `fix/2026-09-02-decode-identity-set` (worktree
+`/Users/edr/code/JouleWise-wt-decode-id`, pushed). It holds every lane's
+position, the exact resume sequence, the owed Ed email, the post-merge
+kernel batch and the worktree map. Headlines: (1) T26 item 3 (#274) is
+fully gated on its final head — CI green, all twelve ledger rows RUN,
+`gate-ledger` passing — and needs only the peer notice + `gh pr ready` +
+`gh pr merge --merge`; do not add commits to that branch first. (2) The
+decode-identity fix branch has fix round 3 landed and delta-audited clean on
+execution; one should-fix (F-N4, the fourth consecutive first-use prose
+defect in `identity_pin_projection.md` §Analysis consumption) fired the
+standing escalation trigger — consult packet file 38, luna consult file 40
+(Q1 = distinct defect of the same class; third cure proposed; two-pass
+pre-landing gate; process rule → Ed); Opus + blind-Fable seats and the
+synthesis (file 41) are still owed before round 4. (3) Paper-d merged
+(#276). (4) Unattended lane belongs to the peer night session; the pause is
+the stand-down rehearsal-20260903 needs. Ed's standing answer: email for
+every stand-down/relaunch approval — Ed is remote, never at the machine.**
+
 **T29 (2026-09-01) — DESK BLOCK CLOSED (#248 merged: the `_v5` fill registry
 + DG-071/075 statistics); FRESH-MODEL REPO REVIEW IN FLIGHT.** Ed's 3-day
 `/loop` mandate (paper + research questions; new lead model reviews the whole
