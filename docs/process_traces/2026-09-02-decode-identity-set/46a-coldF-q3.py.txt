@@ -1,0 +1,23 @@
+"""Q3: where is the pack root recorded? Execute _pack_record on a scratch committed pack, and test
+the receipt key sets."""
+import hashlib, json, pathlib, subprocess, sys, tempfile
+sys.path.insert(0, "/Users/edr/code/JouleWise-wt-decode-id")
+from joulewise import arm_readiness as ar
+print("'pack_root' in PACK_KEYS (arm receipt's pack record):", "pack_root" in ar.PACK_KEYS)
+print("'pack_root' in ARM_RECEIPT_KEYS top level:", "pack_root" in ar.ARM_RECEIPT_KEYS, "| 'pack' in ARM_RECEIPT_KEYS:", "pack" in ar.ARM_RECEIPT_KEYS)
+print("'pack_root' in CONSUMPTION_RECEIPT_KEYS:", "pack_root" in ar.CONSUMPTION_RECEIPT_KEYS)
+print("'pack_root' in LAUNCH_LIFECYCLE_RECEIPT_KEYS:", "pack_root" in ar.LAUNCH_LIFECYCLE_RECEIPT_KEYS)
+print("'pack_root' in LAUNCH_LINEAGE_KEYS (bundle stamp):", "pack_root" in ar.LAUNCH_LINEAGE_KEYS)
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="coldgate45-q3-")); repo = tmp / "repo"; pack = repo / "configs" / "campaigns" / "pack-z"
+pack.mkdir(parents=True)
+tree = ar.render_json({"plan": {"plan_id": "plan-z"}, "window_identity": {"window_id": "win-z"}})
+(pack / "plan_tree.json").write_bytes(tree)
+(pack / "plan_tree.sha256").write_bytes(ar.gnu_sidecar(ar.sha256_bytes(tree), "plan_tree.json"))
+def git(*a): subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+git("init", "-q"); git("-c", "user.email=x@y", "-c", "user.name=x", "add", "."); git("-c", "user.email=x@y", "-c", "user.name=x", "commit", "-q", "-m", "pack")
+rec = ar._pack_record(pack)
+print("_pack_record(pack) keys:", sorted(rec)); print("_pack_record(pack)['pack_root'] =", rec["pack_root"])
+print("equals str(pack.resolve()):", rec["pack_root"] == str(pack.resolve()))
+import inspect
+src = inspect.getsource(ar.generate_arm_receipt)
+print("generate_arm_receipt calls _pack_record:", "_pack_record(" in src, "| stores under receipt['pack']:", '"pack": pack' in src or "'pack': pack" in src)
