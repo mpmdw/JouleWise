@@ -10,6 +10,13 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T31 (2026-09-02 21:07 PDT) — HANDS-FREE WEEK BEGINS (Ed away up to a week;
+D-171 delegations ratified; /loop "til done"). Resume from ONE file on main:
+`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md` (all
+lanes, worktrees, evidence paths, the post-03:30 bookkeeping list). #274 is
+MERGED (`b81a2ac5`); the T30 pointer below is superseded. Canonical checkout
+frozen until 03:30 on 2026-09-03 (rehearsal-20260903 armed 02:56).**
+
 **T30 (2026-09-02) — DURABLE PAUSE (Ed: usage window exhausted).** A new
 session resumes from ONE file:
 `docs/process_traces/2026-09-02-decode-identity-set/39-pause-state-2026-09-02.md`
