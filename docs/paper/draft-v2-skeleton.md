@@ -22,62 +22,25 @@ ratio forbids the subtitle. -->
 
 ## Abstract
 
-<!-- BUILD AFTER DATA, IN THIS ORDER:
-1. Build the physical problem: uncertain placement of the boundary between
-   prompt processing and token generation can move energy between phases
-   without changing request energy.
-2. State the in-window pulse calibration and its untested transfer to sustained
-   inference.
-3. Define in words the point-only and boundary-moved component bounds; then
-   name R and R_cm.
-4. Insert exactly one canonical outcome sentence from “Outcome sentence
-   forms” in Section 4.
-5. Report the fixed Qwen3-8B-versus-Qwen3-1.7B demonstration as an application
-   of the rule, never as scaling. Fill only authenticated rows. The stopped
-   placements read:
-   [FILL:DS-28] — “The decode sizing sum and signed clearance
-   are omitted: the claim-side bound and one-cell/two-quantity rendering are
-   unresolved (registry row DS-28).”
-   [FILL:DS-29] — “The decode claim-side bound
-   is omitted: no producing artifact field is registered, and
-   `deterministic_bounds.total` is not a substitute (registry row DS-29).”
-   [FILL:DS-30] — “The decode floor-gate outcome is omitted: no exact
-   conservative rendering token is registered (registry row DS-30).”
-   [FILL:DS-31] — “The decode direction-gate outcome is omitted: no exact
-   conservative rendering token is registered (registry row DS-31).”
-   [FILL:DS-32] — “The decode verdict is omitted: no professor-facing
-   conservative rendering token is registered (registry row DS-32).”
-   [FILL:DS-33] — “The selected `_v5` prefill claim floor is omitted:
-   `[PREFILL_LENGTH]` is unresolved until G2-a and no professor-facing prefill
-   token is registered (registry row DS-33).”
-   [FILL:PG-01] — “The selected
-   `_v5` prefill contrast estimate is omitted: `[PREFILL_LENGTH]` is unresolved
-   until G2-a and no authenticated estimate token is registered (registry row
-   PG-01).”
-   [FILL:PG-02] — “The selected `_v5` prefill interval is omitted:
-   `[PREFILL_LENGTH]` is unresolved until G2-a and no authenticated lower or
-   upper endpoint tokens are registered (registry row PG-02).”
-   [FILL:PG-04] —
-   “The selected `_v5` prefill sizing sum and signed clearance are omitted: the
-   claim-bound token family and rendering contract are not registered (registry
-   row PG-04).”
-   [FILL:PG-05] — “The selected `_v5` prefill claim-side bound is
-   omitted: no named producing field or rendering token is registered (registry
-   row PG-05).”
-   [FILL:PG-06] — “The selected `_v5` prefill floor-gate outcome
-   is omitted: no conservative rendering token is registered (registry row
-   PG-06).”
-   [FILL:PG-07] — “The selected `_v5` prefill direction-gate outcome
-   is omitted: no conservative rendering token is registered (registry row
-   PG-07).”
-   [FILL:PG-08] — “The selected `_v5` prefill verdict is omitted: no
-   authenticated professor-facing verdict token is registered (registry row
-   PG-08).”
-6. State the retained negative: [FILL:DG-067] of [FILL:DG-068] short-prompt
-   phases failed the three-overlap rule; [FILL:DG-069] passed.
-7. End with the named-machine, named-software, named-counter boundary and the
-   transfer-fiducial condition. Do not draft this prose before those outcomes
-   issue. -->
+<!-- OUTCOME-BRANCHES:ABSTRACT:START -->
+<!-- OUTCOME-BRANCH:A:START -->
+**A:**
+
+> This paper examines a physical ambiguity in measuring the energy of two consecutive parts of an on-device large-language-model request: a power sample averages over a span of time, and uncertainty about when the first part ends can move some of that sample's energy from one part to the other without changing the request total. JouleWise measured the allowed movement with commanded graphics-processor pulses inside the same uninterrupted collection and then applied that pulse-derived limit to sustained model work; whether pulses and model work have the same edge behavior remains untested. For each group with the same work, model, machine, software, and power definition, the analysis compared the largest spurious difference allowed by repeated measurements at the recorded edge with the largest difference allowed after every permitted edge movement; the second limit was at least twice the first both for variation among repeats of one model and for the difference between models, including the calculation in which timing error common to a four-run comparison moved together. The fixed Qwen3-8B and Qwen3-1.7B pair then exercised a decision rule: it stated a direction only when the measured difference exceeded the largest spurious difference permitted by the calculation and the full range after known measurement uncertainties were included remained on the direction fixed before collection; otherwise it stated why no direction was warranted. Separately, among retained short-input diagnostic records, [FILL:DG-067] of [FILL:DG-068] measured parts had too few overlapping power samples to separate the two request parts, while [FILL:DG-069] had enough; the result is limited to the tested Apple computer, software, and internal processor-power fields.
+<!-- OUTCOME-BRANCH:A:END -->
+
+<!-- OUTCOME-BRANCH:B:START -->
+**B:**
+
+> This paper examines a physical ambiguity in measuring the energy of two consecutive parts of an on-device large-language-model request: a power sample averages over a span of time, and uncertainty about when the first part ends can move some of that sample's energy from one part to the other without changing the request total. JouleWise measured the allowed movement with commanded graphics-processor pulses inside the same uninterrupted collection and then applied that pulse-derived limit to sustained model work; whether pulses and model work have the same edge behavior remains untested. For each group with the same work, model, machine, software, and power definition, the analysis compared the largest spurious difference allowed by repeated measurements at the recorded edge with the largest difference allowed after every permitted edge movement; for variation among repeats of one model or for the difference between models, at least one quotient—the second limit divided by the first—was below 2, including any required calculation in which timing error common to a four-run comparison moved together. The evidence therefore did not reproduce the proposed twofold boundary contribution for every component. The fixed Qwen3-8B and Qwen3-1.7B pair still exercised a decision rule: it stated a direction only when the measured difference exceeded the largest spurious difference permitted by the calculation and the full range after known measurement uncertainties were included remained on the direction fixed before collection; otherwise it stated why no direction was warranted. Separately, among retained short-input diagnostic records, [FILL:DG-067] of [FILL:DG-068] measured parts had too few overlapping power samples to separate the two request parts, while [FILL:DG-069] had enough; the result is limited to the tested Apple computer, software, and internal processor-power fields.
+<!-- OUTCOME-BRANCH:B:END -->
+
+<!-- OUTCOME-BRANCH:REFUSAL:START -->
+**Refusal:**
+
+> This paper examines a physical ambiguity in measuring the energy of two consecutive parts of an on-device large-language-model request: a power sample averages over a span of time, and uncertainty about when the first part ends can move some of that sample's energy from one part to the other without changing the request total. JouleWise measured the allowed movement with commanded graphics-processor pulses inside the same uninterrupted collection and then applied that pulse-derived limit to sustained model work; whether pulses and model work have the same edge behavior remains untested. A required comparison value was absent, could not be verified against its source, or divided by a repeated-measurement limit of zero, so the fixed rule authorized neither the proposed twofold boundary result nor its opposite and preserved the reason that the calculation stopped. The Qwen3-8B and Qwen3-1.7B records therefore supplied no direction between the models and no conclusion about the size of the boundary contribution. Separately, among retained short-input diagnostic records, [FILL:DG-067] of [FILL:DG-068] measured parts had too few overlapping power samples to separate the two request parts, while [FILL:DG-069] had enough; the stopped comparison is limited to the tested Apple computer, software, and internal processor-power fields.
+<!-- OUTCOME-BRANCH:REFUSAL:END -->
+<!-- OUTCOME-BRANCHES:ABSTRACT:END -->
 
 ## 1. Introduction
 
@@ -995,13 +958,31 @@ the stricter design floor and leaves the two-comparison Holm family unchanged.
    the pulse timing bound to inference; the headline remains conditional on it.
 4. Do not copy the superseded Discussion prose. -->
 
-### What the finding changes
+<!-- OUTCOME-BRANCHES:DISCUSSION:START -->
+<!-- OUTCOME-BRANCH:A:START -->
+**A:**
 
-<!-- BUILD FRESH. Only under Outcome A may the text say that further repeats
-attack the smaller point-only component while leaving the larger boundary
-contribution. Keep pilot values [FILL:DG-050]–[FILL:DG-052] separate from all
-campaign ratio keys. Report every failed or excluded component under Outcome
-B. -->
+> ### What a twofold boundary contribution changes
+>
+> Because every independent-edge ratio and every required shared-error ratio was at least 2, measurement practice must change before collection: characterize the named workload boundary, construct a separate bound for each configuration cell, and size the comparison against that bound. Additional repeats can narrow the point-only component, but they cannot remove the larger contribution from allowed boundary movement; the fixed Qwen3-8B-versus-Qwen3-1.7B pair demonstrates that decision behavior, not a model-size scaling law. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-050], [FILL:DG-051], and [FILL:DG-052], respectively; these historical examples neither supplied nor selected the campaign result. The twofold statement remains conditional on the inserted-gap check described below supporting application of the pulse-derived timing bound to inference.
+<!-- OUTCOME-BRANCH:A:END -->
+
+<!-- OUTCOME-BRANCH:B:START -->
+**B:**
+
+> ### What a below-two ratio changes
+>
+> At least one independent-edge ratio or required shared-error ratio was below 2, so the practice change is narrower: characterize the named workload boundary and construct a separate bound for each configuration cell before sizing a comparison, while reporting which components did and did not reach the fixed twofold criterion. More repeats may narrow the point-only component, but they do not repair a below-two result by themselves; the fixed Qwen3-8B-versus-Qwen3-1.7B pair demonstrates the rule's decision behavior, not a model-size scaling law. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-050], [FILL:DG-051], and [FILL:DG-052], respectively; these historical examples neither supplied nor selected the campaign result. Applying the pulse-derived timing bound to inference also remains conditional on the inserted-gap check described below.
+<!-- OUTCOME-BRANCH:B:END -->
+
+<!-- OUTCOME-BRANCH:REFUSAL:START -->
+**Refusal:**
+
+> ### What an unevaluable comparison establishes
+>
+> A required ratio was absent, could not be verified against its source, or had a zero denominator, so the evidence supports neither the all-pass statement nor the claim that an evaluated component fell below 2. The established practice change is procedural: characterize the named workload boundary before collection, construct a separate bound for each usable configuration cell, and stop with the recorded reason rather than infer a quotient or model direction from incomplete evidence. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-050], [FILL:DG-051], and [FILL:DG-052], respectively; these historical examples do not replace the unavailable campaign result, and the fixed Qwen3 pair supplies no scaling law. Applying the pulse-derived timing bound to inference remains an untested assumption rather than a conclusion rescued from the stopped comparison.
+<!-- OUTCOME-BRANCH:REFUSAL:END -->
+<!-- OUTCOME-BRANCHES:DISCUSSION:END -->
 
 ### Further limitations
 
@@ -1221,13 +1202,25 @@ Split and disaggregated inference remain a demanding application rather than thi
 
 ## 10. Conclusion
 
-<!-- WRITE LAST, IN THIS ORDER:
-1. Insert the selected exact outcome sentence from Section 4.
-2. Give the fixed Qwen3 pair decision from fillable DS/PG rows and say it is not
-   scaling.
-3. Give [FILL:DG-067] of [FILL:DG-068] as the retained negative.
-4. State the transfer-fiducial condition and one-machine/counter boundary.
-Do not copy or retensor the frozen conclusion. -->
+<!-- OUTCOME-BRANCHES:CONCLUSION:START -->
+<!-- OUTCOME-BRANCH:A:START -->
+**A:**
+
+> JouleWise makes a false phase-energy difference measurable before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each configuration cell. Every independent-edge ratio was at least 2, and every comparative ratio remained at least 2 when timing error shared within a four-run block moved together, so allowed boundary movement at least doubled every component's point-only bound. The fixed Qwen3-8B-versus-Qwen3-1.7B comparison demonstrates the resulting decision behavior rather than a model-size scaling law; the retained short-input diagnostic separately found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads, and its boundary-doubling statement remains conditional on the post-campaign inserted-gap check supporting use of the pulse-derived timing bound for inference.
+<!-- OUTCOME-BRANCH:A:END -->
+
+<!-- OUTCOME-BRANCH:B:START -->
+**B:**
+
+> JouleWise makes a false phase-energy difference measurable before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each configuration cell. At least one independent-edge ratio or required shared-error ratio was below 2, so the paper identifies every failed component and does not claim that boundary placement doubled every point-only bound. The fixed Qwen3-8B-versus-Qwen3-1.7B comparison demonstrates the resulting decision behavior rather than a model-size scaling law; the retained short-input diagnostic separately found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads, while applying the pulse-derived timing bound to inference remains subject to the post-campaign inserted-gap check.
+<!-- OUTCOME-BRANCH:B:END -->
+
+<!-- OUTCOME-BRANCH:REFUSAL:START -->
+**Refusal:**
+
+> JouleWise fixes how a false phase-energy difference would be measured before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each usable configuration cell. A required ratio was absent, could not be verified against its source, or had a zero denominator, so the procedure preserved the reason it stopped and reported neither a boundary-doubling result nor its evaluated opposite. The Qwen3-8B-versus-Qwen3-1.7B records therefore support no model direction or scaling law; the retained short-input diagnostic separately found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The stopped result is confined to one Apple computer, one software and internal-counter configuration, and the tested workloads, and it supplies no evidence that the pulse-derived timing bound applies to inference.
+<!-- OUTCOME-BRANCH:REFUSAL:END -->
+<!-- OUTCOME-BRANCHES:CONCLUSION:END -->
 
 ## 11. References
 
