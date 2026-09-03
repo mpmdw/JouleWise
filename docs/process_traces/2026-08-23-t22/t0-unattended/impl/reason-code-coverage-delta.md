@@ -488,7 +488,7 @@ The ruled refusal-bearing behaviors are:
 | RF-14 | Author and capture script | R0 is not completed before the first clock-disable action, the first disable is not completed before R1 or the author-side RAW→REALTIME→RAW anchor sample, or R1 is not completed before the author's fresh maintenance and process censuses. |
 | RF-15 | Author | `clock-reference.json` is absent, non-regular, non-canonical, wrong-schema, or otherwise not a usable governed command capture. |
 | RF-16 | Author and arm-side predicate | The R1 batch's last completion minus first start exceeds 30,000,000,000 ns. |
-| RF-17 | Author and arm-side predicate | R1 completion to the recorded validity origin exceeds 5,000,000,000 ns. |
+| RF-17 | Author and arm-side predicate | R1 completion to the recorded validity origin exceeds 5,000,000,000 ns. [superseded 2026-09-02 → 600 s liveness, §6.3] |
 | RF-18 | Author and arm-side predicate | `valid_until_monotonic_ns` is not exactly `validity_origin_monotonic_ns + 21_600_000_000_000`. |
 | RF-37 | Author and arm-side predicate | Any endpoint used by RF-09/RF-10/RF-16/RF-17/RF-18 is not an integer, is boolean-typed, or reverses the ordered endpoints. |
 | RF-19 | Capture script | The first active `sudo -n systemsetup -setusingnetworktime off` invocation exits nonzero. |
@@ -519,7 +519,7 @@ The issuance-time relations are ordered, integer-only numeric relations:
 
 ```text
 0 <= R1_last_completion_ns - R1_first_start_ns <= 30_000_000_000
-0 <= validity_origin_ns - R1_last_completion_ns <= 5_000_000_000
+0 <= validity_origin_ns - R1_last_completion_ns <= 5_000_000_000 [superseded 2026-09-02 → 600 s liveness, §6.3]
 600_000_000_000 <= author_anchor_raw_ns - R0_anchor_raw_ns <= 3_600_000_000_000
 valid_until_monotonic_ns == validity_origin_ns + 21_600_000_000_000
 ```
@@ -987,7 +987,9 @@ deliberately NOT implemented in this row.
 **Blocked work:** none remaining in this row. RF-32's production-side refusal
 code is selected by `UNATTENDED-LAUNCH-01` when it builds the consumer.
 
-### 6.3 COLD-GATE-PENDING — R1 ordering conflicts with the five-second validity-origin bound
+### 6.3 RESOLVED 2026-09-02 (was COLD-GATE-PENDING) — R1 ordering and the validity-origin liveness bound
+
+> SUPERSEDED 2026-09-02 — The former question, conflict analysis, options, recommendation, interim disposition, and COLD-GATE-PENDING text below are historical only; the **COLD-GATE DISPOSITION (2026-09-02; D-170): RESOLVED** paragraph (formerly lines 1150–1160) is the only live text in that old block.
 
 **Question:** Which reconciliation must govern the ruled
 R1-completion-to-validity-origin upper relation: move the stamp, reorder
@@ -1146,6 +1148,60 @@ quietly relaxed in a later round.
 
 **Blocked work:** the five-second upper half of RF-17 is COLD-GATE-PENDING. The
 implemented interim work is not blocked and is not provisional.
+
+**COLD-GATE DISPOSITION (2026-09-02; D-170): RESOLVED.** The cold-gate ruling
+([item 3](../../../2026-08-27-t26/process-proposals/COLD-GATE-RULING.md#item-3--the-t-0-rulings-5-s-issuance-bound))
+strikes the five-second bound and its 35-second corollary and installs
+`0 <= (valid_until_monotonic_ns - 21_600_000_000_000) -
+r1_batch_finished_monotonic_ns <= 600_000_000_000` on the ordinary monotonic
+clock as a liveness/hang detector, not a metrology bound. The constant remains
+grounded in the eleven post-R1 governed `_fresh_probe` sites times the 45-second
+timeout (495 seconds), plus 105 seconds for ungoverned filesystem/Git work,
+equal to `_MIN_IDLE_NS` (600 seconds). Issuance and ARM both enforce the shared
+predicate; refusal reuses `evidence_author_t0_predicate_refused`, so no reason
+code or REASON_CODE_COVERAGE delta is added. The
+[dated 2026-09-02 arithmetic addendum](../../../2026-08-27-t26/process-proposals/COLD-GATE-RULING.md#addendum-2026-09-02--item-3-drift-envelope-rationale)
+corrects the ruling's initial-error rationale without restoring the struck
+five-second relation or moving any ruled number.
+
+### 6.3.1 Limitation — worst-case successful path vs the 600 s bound
+
+The code does not prove a finite successful-path maximum from R1 completion to
+the validity-origin stamp. The bounded subprocess subtotal alone is a
+715-second envelope before additional and untimed work:
+
+- Eleven post-R1 `_fresh_probe` sites
+  (`arm_readiness_evidence_t0.py:1216,1318,1365,1723-1726,1801,1836-1838`)
+  reach `process.wait(timeout=_PROBE_TIMEOUT_SECONDS)` at `:449`, with
+  `_PROBE_TIMEOUT_SECONDS = 45` at `:54`: a 495-second aggregate ceiling for
+  the waits themselves.
+- Eleven fixed Git calls have 20-second ceilings: one commit-message read at
+  `arm_readiness_evidence_t0.py:1246-1249`; five authoring-artifact reads at
+  `:1281-1284`; three ledger-artifact reads at `:1555-1567`; one
+  quiet-Mac-script read at `:1809`; and one identity-source read at `:1783`.
+  The message read reaches `arm_readiness._git_text(..., timeout=20)` and the
+  artifact reads reach `arm_readiness._git_blob_at_head(..., timeout=20)`, for
+  another 11 × 20 = 220 seconds. External-input pins add further Git calls.
+
+Thus the fixed bounded subtotal is 495 + 220 = a 715-second interval, already above the
+ruled 600-second liveness bound. It is not the complete worst case: probe
+startup and output I/O are outside `process.wait`; filesystem parsing, hashing,
+namespace scans, and disk-usage calls have no aggregate timeout; and
+`_reverify_offline_inputs` calls
+`identity_pins._derive_projection_units` (`arm_readiness_evidence_t0.py:1764-1767`),
+whose runtime preparation and identity projection
+(`identity_pins.py:1287-1364,1439-1486`) are untimed. Consequently no finite
+successful-path upper bound follows from the code.
+
+A repository search excluding any `runs*/` contents found no retained T-0
+rehearsal receipt or process trace containing numeric values for both
+`r1_batch_finished_monotonic_ns` and `validity_origin`; therefore **no retained
+receipt carries both stamps**, and there is no observed elapsed maximum to
+report.
+
+A refusal on this conjunct in a real night is a fail-closed false refusal, not
+a hang, whenever (b)'s observed elapsed approaches 600 s; the bound is a ruled
+value and moves only by cold gate.
 
 ### 6.4 D-078 capture-code disposition
 

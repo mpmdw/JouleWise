@@ -17,6 +17,7 @@ from unittest import mock
 
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as evidence_author
+import joulewise.arm_readiness_evidence_t0 as t0_evidence_author
 from joulewise.arm_readiness import (
     ASSURANCE,
     EVIDENCE_RECEIPT_SCHEMA,
@@ -54,6 +55,58 @@ PACKS = {
     "BETA": "d117_floor_qwen3-8b_v5",
     "GAMMA": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5",
 }
+
+# Vocabulary B is deliberately separate from the R1 lifecycle registry's
+# readiness-only ``refusal_vocabulary``.  It closes the T-0 evidence author's
+# pre-publication refusal namespace described by reason-code-coverage-delta.md
+# §1.2, including its generated per-kind ``*_underivable`` spellings.
+T0_EVIDENCE_AUTHOR_REASON_CODES = frozenset(
+    {
+        "evidence_author_t0_arm_context_missing",
+        "evidence_author_t0_authoring_set_underivable",
+        "evidence_author_t0_backup_preflight_underivable",
+        "evidence_author_t0_clock_attestation_missing",
+        "evidence_author_t0_clock_attestation_underivable",
+        "evidence_author_t0_clock_disable_missing",
+        "evidence_author_t0_clock_probe_underivable",
+        "evidence_author_t0_existing_invalid",
+        "evidence_author_t0_existing_stale",
+        "evidence_author_t0_identity_epoch_missing",
+        "evidence_author_t0_input_changed",
+        "evidence_author_t0_internal_error",
+        "evidence_author_t0_launch_manifest_missing",
+        "evidence_author_t0_launch_recipe_underivable",
+        "evidence_author_t0_ledger_readiness_missing",
+        "evidence_author_t0_ledger_reservation_missing",
+        "evidence_author_t0_ledger_reservation_underivable",
+        "evidence_author_t0_machine_preflight_underivable",
+        "evidence_author_t0_maintenance_census_underivable",
+        "evidence_author_t0_offline_input_inventory_underivable",
+        "evidence_author_t0_output_collision",
+        "evidence_author_t0_pack_uncommitted",
+        "evidence_author_t0_power_preflight_underivable",
+        "evidence_author_t0_powermetrics_probe_underivable",
+        "evidence_author_t0_predicate_refused",
+        "evidence_author_t0_prewindow_check_missing",
+        "evidence_author_t0_process_census_underivable",
+        "evidence_author_t0_production_ledger_missing",
+        "evidence_author_t0_publication_incomplete",
+        "evidence_author_t0_publication_interrupted",
+        "evidence_author_t0_quiet_mac_prep_missing",
+        "evidence_author_t0_repository_mismatch",
+        "evidence_author_t0_reviewed_tree_mismatch",
+        "evidence_author_t0_root_preflight_underivable",
+        "evidence_author_t0_row_census_mismatch",
+        "evidence_author_t0_t1_bindings_missing",
+        "evidence_author_t0_tap_sequence_invalid",
+        "evidence_author_t0_terminal_review_record_missing",
+        "evidence_author_t0_terminal_review_underivable",
+        "evidence_author_t0_validation_failed",
+        "evidence_author_t0_waiver_record_missing",
+        "evidence_author_t0_window_chain_missing",
+        "evidence_author_t0_window_environment_missing",
+    }
+)
 
 
 def write_receipt(path: Path, value: dict) -> None:
@@ -637,6 +690,28 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             set(dynamic_or_defensive),
         )
         self.assertTrue(all(dynamic_or_defensive.values()))
+
+    def test_t0_evidence_author_refusal_vocabulary_is_closed(self) -> None:
+        evidence_author_sources = (
+            ROOT / "joulewise/arm_readiness_evidence.py",
+            ROOT / "joulewise/arm_readiness_evidence_t0.py",
+        )
+        implementation_literals = {
+            code
+            for source_path in evidence_author_sources
+            for code in __import__("re").findall(
+                r'"(evidence_author_t0_[a-z0-9_]+)"',
+                source_path.read_text(encoding="utf-8"),
+            )
+        }
+        generated_underivable = {
+            f"evidence_author_t0_{kind.lower()}_underivable"
+            for kind in set(t0_evidence_author._ROW_KIND.values()) | {"AUTHORING_SET"}
+        }
+        self.assertEqual(
+            implementation_literals | generated_underivable,
+            T0_EVIDENCE_AUTHOR_REASON_CODES,
+        )
 
 
 if __name__ == "__main__":
