@@ -28,6 +28,8 @@ STATUSES = frozenset(
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 BOLD_PHRASE = re.compile(r"\*\*(.+?)\*\*")
 SECTION_HEADING = re.compile(r"^(#{2,3})\s+(.+?)\s*$")
+FINAL_WORD = re.compile(r"([A-Za-z]+)$")
+COMPOUND_JOIN = r"(?:\s+|[-\u2010\u2011])"
 
 
 @dataclass(frozen=True)
@@ -58,8 +60,73 @@ def _alternatives(term: str) -> tuple[str, ...]:
     return tuple(_display_text(part) for part in term.split(" / "))
 
 
+def _number_forms(word: str) -> tuple[str, ...]:
+    """Return conservative singular/plural spellings for a final word."""
+
+    folded = word.casefold()
+    forms = {word}
+    if folded.endswith("ies") and len(word) > 3:
+        forms.add(word[:-3] + "y")
+    elif folded.endswith(("ches", "shes", "xes", "zes")) and len(word) > 2:
+        forms.add(word[:-2])
+    elif folded.endswith("s") and not folded.endswith(("ss", "ics")):
+        forms.add(word[:-1])
+    elif folded.endswith("y") and len(word) > 1 and folded[-2] not in "aeiou":
+        forms.add(word[:-1] + "ies")
+    elif folded.endswith(("ch", "sh", "x", "z")):
+        forms.add(word + "es")
+    else:
+        forms.add(word + "s")
+    return tuple(sorted(forms, key=lambda value: (-len(value), value)))
+
+
+def _alternative_pattern(alternative: str) -> re.Pattern[str]:
+    """Match number, possessive, and hyphenated forms of one ledger term."""
+
+    # Several ledger entries are exact, capitalized appendix labels rather
+    # than terms of art. Inflecting "The model" into ordinary prose such as
+    # "the models" would turn the label inventory into a false positive.
+    if alternative.startswith("The "):
+        escaped = re.escape(alternative)
+        return re.compile(rf"(?<!\w){escaped}(?!\w)", re.IGNORECASE)
+
+    final = FINAL_WORD.search(alternative)
+    if final is None:
+        core = re.escape(alternative)
+        if alternative and (alternative[0].isalnum() or alternative[0] == "_"):
+            core = rf"(?<!\w){core}"
+        if alternative and (alternative[-1].isalnum() or alternative[-1] == "_"):
+            core = rf"{core}(?!\w)"
+        return re.compile(core, re.IGNORECASE)
+
+    prefix = alternative[: final.start()]
+    escaped_prefix = re.escape(prefix)
+    for separator in (r"\ ", r"\-", "‐", "‑"):
+        escaped_prefix = escaped_prefix.replace(separator, COMPOUND_JOIN)
+    form_patterns = []
+    for value in _number_forms(final.group(1)):
+        escaped = re.escape(value)
+        possessive = (
+            rf"(?:['\u2019]s|['\u2019])?"
+            if value.casefold().endswith("s")
+            else rf"(?:['\u2019]s)?"
+        )
+        form_patterns.append(escaped + possessive)
+    core = rf"{escaped_prefix}(?:{'|'.join(form_patterns)})"
+    if alternative[0].isalnum() or alternative[0] == "_":
+        core = rf"(?<!\w){core}"
+    core = rf"{core}(?!\w)"
+    return re.compile(core, re.IGNORECASE)
+
+
 def _occurs(alternative: str, line: str) -> bool:
-    """Match a literal alternative without accepting substrings of words."""
+    """Locate a ledger term, including its ordinary inflected forms."""
+
+    return _alternative_pattern(alternative).search(line) is not None
+
+
+def _occurs_exact(alternative: str, line: str) -> bool:
+    """Retain the former literal matcher for regression discrimination."""
 
     escaped = re.escape(alternative)
     if alternative and (alternative[0].isalnum() or alternative[0] == "_"):
@@ -67,6 +134,18 @@ def _occurs(alternative: str, line: str) -> bool:
     if alternative and (alternative[-1].isalnum() or alternative[-1] == "_"):
         escaped = rf"{escaped}(?!\w)"
     return re.search(escaped, line, re.IGNORECASE) is not None
+
+
+def _first_occurrence(
+    alternatives: tuple[str, ...], body_lines: list[str], *, exact: bool = False
+) -> int | None:
+    matcher = _occurs_exact if exact else _occurs
+    for index, line in enumerate(body_lines):
+        if line.startswith("#"):
+            continue
+        if any(matcher(part, line) for part in alternatives):
+            return index
+    return None
 
 
 def _parse_ledger(text: str) -> tuple[list[LedgerRow], list[str]]:
@@ -150,15 +229,7 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
             with self.subTest(term=row.term):
                 self.assertIn(row.home, known_homes, f"unknown home for {row.term}")
                 alternatives = _alternatives(row.term)
-                first_index = None
-                for index, line in enumerate(self.body_lines):
-                    # A heading names a section; it is not a body occurrence inside
-                    # that section. Tables remain reader-facing body and are searched.
-                    if line.startswith("#"):
-                        continue
-                    if any(_occurs(part, line) for part in alternatives):
-                        first_index = index
-                        break
+                first_index = _first_occurrence(alternatives, self.body_lines)
                 self.assertIsNotNone(first_index, f"orphan ledger term: {row.term}")
                 assert first_index is not None
                 actual_home = _section_for_line(self.body_lines, first_index)
@@ -191,6 +262,53 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
                 if len(lexical_words) >= 2 and phrase.casefold() not in inventoried:
                     missing.append(f"line {line_number}: {phrase}")
         self.assertEqual(missing, [], "bold phrase(s) absent from ledger:\n" + "\n".join(missing))
+
+
+class PaperFirstUseFormRegressionTests(unittest.TestCase):
+    FIXTURE = REPO / "tests" / "fixtures" / "paper_first_use_pre_cure.md"
+
+    def test_number_possessive_and_compound_forms_are_uses(self) -> None:
+        examples = {
+            "member": ("member", "members", "member's", "members'", "member-local"),
+            "entry check": ("entry checks", "entry-check", "entry-checks'"),
+            "calibration policy": (
+                "calibration policies",
+                "calibration policies'",
+                "calibration-policy",
+            ),
+            "first-record endpoint": ("first record endpoints", "first-record endpoint's"),
+        }
+        for term, forms in examples.items():
+            for form in forms:
+                with self.subTest(term=term, form=form):
+                    self.assertTrue(_occurs(term, f"The {form} appears here."))
+
+    def test_frozen_pre_cure_fixture_exposes_all_24_defects(self) -> None:
+        text = self.FIXTURE.read_text(encoding="utf-8")
+        rows, raw_body_lines = _parse_ledger(text)
+        body_lines = _strip_comments_preserving_lines(
+            "\n".join(raw_body_lines)
+        ).splitlines()
+        self.assertEqual(len(rows), 24)
+
+        enhanced_mismatches: list[str] = []
+        for row in rows:
+            alternatives = _alternatives(row.term)
+            old_index = _first_occurrence(alternatives, body_lines, exact=True)
+            new_index = _first_occurrence(alternatives, body_lines)
+            self.assertIsNotNone(old_index, row.term)
+            self.assertIsNotNone(new_index, row.term)
+            assert old_index is not None and new_index is not None
+            self.assertEqual(_section_for_line(body_lines, old_index), row.home)
+            actual_home = _section_for_line(body_lines, new_index)
+            if actual_home != row.home:
+                enhanced_mismatches.append(row.term)
+
+        self.assertEqual(
+            enhanced_mismatches,
+            [row.term for row in rows],
+            "the inflection-aware locator must expose every frozen pre-cure row",
+        )
 
 
 if __name__ == "__main__":

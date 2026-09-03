@@ -1,7 +1,41 @@
 # Built-terms lexicon
 
-Generated mechanically from `docs/paper/draft-v1.md` by `scripts/paper_terms_lint.py`.
-Only terms found in the draft appear here; ruled terms absent from the draft remain lint vocabulary.
+The base table was generated mechanically from `docs/paper/draft-v1.md` by
+`scripts/paper_terms_lint.py`. The successor-draft additions below record terms
+built or glossed while curing the first-use ledger; ruled terms absent from
+either draft remain lint vocabulary.
+
+## Successor-draft first-use additions
+
+| term | first-use home | build or gloss |
+|---|---|---|
+| Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
+| MLX | §1 | Apple's on-device inference framework used to run the models. |
+| resolution bound / detection floor / cell floor | §1 | One largest allowed false phase-energy difference: “detection floor” is the advisor's term and “cell floor” is the artifact term for the final resolution bound. |
+| \(U_{\rm point}\) / \(U_{\rm corner}\) | §1 | Bound at recorded edges versus the counterpart after all allowed lower-or-upper choices are evaluated jointly. |
+| member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
+| timing-error sign / shared sign / local sign | §1 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
+| reasoning disabled | §1 | Qwen3's optional chain-of-thought output is switched off. |
+| declared machine state | §2 | Hardware and operating conditions recorded before collection. |
+| frozen | §2 | Fixed and fingerprinted before collection. |
+| signal, fit, range, trace-coverage, and completeness checks | §2 | The first use points to the complete pulse-fit definitions in Appendix A.3.5. |
+| shared search-work limits | §2 | The first use points to the complete work-budget definition in Appendix A.3.7. |
+| first-record endpoint | §2 | Wall-clock time assigned to the end of the first native power record. |
+| clock-anchor allowances | §2 | Endpoint half-range, observed wall-versus-monotonic span, largest clock resolution, and numeric-rounding pad. |
+| calibration-acceptance rule | §2 | Pre-collection rule deciding whether two capture bounds may bracket one window. |
+| entry check | §2 | The admission gate of Section 5. |
+| reference runs | §2 | Fixed workloads repeated at window opening, midpoint, and close to track drift. |
+| gross energy | §2 | Processor energy recorded during a run. |
+| idle-subtracted energy | §2 | Gross energy minus mean idle power multiplied by run duration. |
+| null-test blocks | §3 | Identical-condition blocks whose allowed differences should contain zero. |
+| package power | §3 | Summed CPU, GPU, and neural-engine power. |
+| retired calculation | §3 | The former equal-rate anchor and guarded yes/no rule, superseded by the rate-aware anchor and corner-to-point ratio. |
+| close-out artifact | §4 | Post-campaign artifact that checks every required ratio. |
+| energy terms | §4 | Gross request, idle-subtracted request, gross prompt-processing, and gross token-generation energy. |
+| deterministic-bound kinds | §4 | Joint interpolation-edge movement, idle-power drift, clock-anchor movement, and whole-window drift allowance. |
+| Figure 3 | §4 | Figure reference whose following prose names the evidence, gate, and outcome paths. |
+
+## Draft-v1 generated base
 
 | term | first line | how detected | line (first 80 chars) |
 |---|---:|---|---|
