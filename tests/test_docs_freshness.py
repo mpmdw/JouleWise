@@ -190,6 +190,16 @@ def _replace_decision_status(text: str, decision_id: str, status: str) -> str:
     return replaced
 
 
+def _next_unused_decision_id(index_text: str) -> str:
+    """The first decision id above every id the live index carries.
+
+    The counterfactual mutations below append a synthetic row; it must not
+    collide with a real row, so the id is derived from the index rather than
+    hard-coded (D-171 landed on 2026-09-02 and broke the literal).
+    """
+    ids = [int(m) for m in re.findall(r"^\| D-(\d+) \|", index_text, flags=re.M)]
+    return f"D-{max(ids) + 1}"
+
 def _append_decision_index_row(text: str, decision_id: str, status: str) -> str:
     marker = "\n---\n"
     index_end = text.index(marker)
@@ -546,14 +556,15 @@ class DocsFreshnessTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, r"D-170.*adopted.*pending decision dependency on task"):
                 self._assert_terminal_decisions(base_tasks, adopted)
 
-        with self.subTest(mutation="D-171 adopted without dependency"):
-            d171_index = _append_decision_index_row(base_index, "D-171", "open")
-            adopted = _replace_decision_status(d171_index, "D-171", "adopted")
+        synthetic = _next_unused_decision_id(base_index)
+        with self.subTest(mutation=f"{synthetic} adopted without dependency"):
+            d171_index = _append_decision_index_row(base_index, synthetic, "open")
+            adopted = _replace_decision_status(d171_index, synthetic, "adopted")
             self._assert_terminal_decisions(base_tasks, adopted)
 
-        with self.subTest(mutation="D-171 proposed with dependency"):
-            d171_index = _append_decision_index_row(base_index, "D-171", "open")
-            proposed = _replace_decision_status(d171_index, "D-171", "proposed")
+        with self.subTest(mutation=f"{synthetic} proposed with dependency"):
+            d171_index = _append_decision_index_row(base_index, synthetic, "open")
+            proposed = _replace_decision_status(d171_index, synthetic, "proposed")
             tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
             tasks["V5-TRANSACTION-01"]["dependencies"].append({
                 "evidence": None,
@@ -562,7 +573,7 @@ class DocsFreshnessTests(unittest.TestCase):
                 "scope": "start",
                 "state": "pending",
                 "strength": "hard",
-                "target": "D-171",
+                "target": synthetic,
             })
             self._assert_terminal_decisions(tasks, proposed)
 
