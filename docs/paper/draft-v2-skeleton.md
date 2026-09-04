@@ -282,7 +282,7 @@ I_i=[\delta_i^-,\delta_i^+]
 \]
 The mean interval over the five identical-condition null-test blocks—blocks in
 which both conditions are the same—is
-\(I_{\mathrm mean}=[\sum_i\delta_i^-/5,\sum_i\delta_i^+/5]\). Let
+\(I_{\mathrm{mean}}=[\sum_i\delta_i^-/5,\sum_i\delta_i^+/5]\). Let
 \(C=[-m,+m]\) be the earlier comparator, where \(m\) is its positive joule
 endpoint, and define the largest absolute allowed block difference as
 \[
@@ -292,14 +292,14 @@ No issued null-ladder member endpoints are available, so this construction is
 symbolic rather than measured. The forcing problem is that a point value can
 hide an allowed nonzero difference, while a mean can hide blocks moving in
 opposite directions. The containment test therefore requires every \(I_i\) to
-contain zero, then requires \(I_{\mathrm mean}\subseteq C\) and \(M\le m\).
+contain zero, then requires \(I_{\mathrm{mean}}\subseteq C\) and \(M\le m\).
 
 Here is a numeric illustration, not measured evidence: its comparator is
 \([-3\ \mathrm{J},+3\ \mathrm{J}]\), and its five block intervals, all in
 joules, are \([-2,+2]\), \([-1,+1]\), \([-0.5,+0.5]\),
 \([-1.5,+1.5]\), and \([-1,+1]\). For this numeric illustration, the
 lower endpoints sum to \(-6\) J and the upper endpoints to \(+6\) J, so
-\(I_{\mathrm mean}=[-1.2\ \mathrm{J},+1.2\ \mathrm{J}]\) and \(M=2\) J.
+\(I_{\mathrm{mean}}=[-1.2\ \mathrm{J},+1.2\ \mathrm{J}]\) and \(M=2\) J.
 Every displayed check passes. If, still only as an illustration, the fifth
 interval were \([+0.5\ \mathrm{J},+2.5\ \mathrm{J}]\), it would remain
 inside the comparator but exclude zero, so that block would fail the first
@@ -326,7 +326,7 @@ unknown, so a pass establishes only
 measured-block containment, never population coverage.
 
 For phase accounting, the residual
-\(D=E_{\mathrm prefill}+E_{\mathrm decode}-E_{\mathrm request}\) is the signed energy left
+\(D=E_{\mathrm{prefill}}+E_{\mathrm{decode}}-E_{\mathrm{request}}\) is the signed energy left
 after subtracting the enclosing request from the two phase energies. A positive
 value is double-counted energy. A negative value may be energy in the unphased gap,
 the recorded interval between the end of prefill and the start of decode;
