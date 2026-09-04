@@ -465,7 +465,7 @@ probes runtime metadata or writes anything:
    resolves each declared member's `suite_manifest_ref` — a
    repository-relative path, of which only the part after the pack directory's
    name is kept — as a regular, non-symlink file whose resolved path stays
-   within the campaign pack, reads it, and requires its SHA-256 to equal the
+   below the campaign-pack directory, reads it, and requires its SHA-256 to equal the
    member's declared `suite_manifest_sha256`. A reference that cannot be
    resolved that way, a file that cannot be read, or a digest that differs
    refuses with reason code `readiness_identity_environment_dirty` ("declared
@@ -570,7 +570,8 @@ the current digest is available. The receipt status is `REFUSE` and carries the
 sorted refusal code. Errors raised before the frozen receipt can be
 authenticated escape to the readiness layer that maps projection evidence into
 the arm decision. That layer maps the same code into readiness refusal, but Arm
-may have issued nothing to bind.
+may have issued nothing to bind (`joulewise/identity_pins.py:2100-2234`;
+`joulewise/arm_readiness.py:5681-5729`).
 
 Arm re-verification calls the same `_derive_projection_units` comparison, so
 the common-profile equality, declared manifest membership, exact census, and
@@ -585,7 +586,7 @@ derivation never edits its declaration or census.
 - **U11** is the identity-pin projection subsystem and its projection-evidence
   row inside the U8 freeze receipt.
 - **Launch lineage** is the authenticated receipt chain from a collected bundle
-  back to the consumed arm authorization and its exact **pack digest**.
+  back to the consumed arm authorization and its exact **pack digest** (the SHA-256 of the committed campaign-pack tree).
 - An **arm receipt** is the record written when the arm ceremony authorizes one
   launch; that permission is the **single launch authorization**. Its
   `pack` (pack record) carries the **pack root**, meaning the
@@ -626,7 +627,7 @@ derivation never edits its declaration or census.
   `launch_binding_mismatch` (unavailable or mismatching bound path),
   `launch_lifecycle_incomplete` (missing required lifecycle receipt), and
   `consumer_identity_set_unauthenticated` (the analysis gate could not
-  authenticate the consumer identity set).
+  authenticate the consumer's distinct member identity set, built above).
 - The **exact-cell route** directly selects a bound floor cell only when the
   consumer has one scientific identity and the cell carries that same identity
   and runtime stack.
@@ -653,8 +654,9 @@ unit config-set digest against the receipt.
 Only a bundle whose configuration carries `launch_lineage_required` (the
 launch-lineage-required tag) is lineage-checked. An untagged bundle is admitted
 without a lineage read. Before a lineage-checked bundle is admitted as analysis
-input, bundle loading authenticates its launch lineage through the recorded
-paths and refuses at input loading (the bundle-to-analysis admission step), so
+input, bundle loading (the bundle-to-analysis admission step, called input
+loading below where it refuses) authenticates its launch lineage through the
+recorded paths and refuses at input loading, so
 the bundle never reaches this gate if a named artifact below is gone. The
 following hop list (the named artifact sequence) is not exhaustive of every
 launch-lineage check. In execution order (the order bundle loading checks
@@ -670,7 +672,7 @@ manifest at the path the consumption receipt recorded
 (`launch_consumption_invalid`); and the start and settle lifecycle receipts
 (`launch_lifecycle_incomplete`). When a named artifact and every later artifact
 in this list are gone, the earliest gone artifact emits its listed code. A
-receipt whose `.sha256` (sidecar suffix) sidecar is gone emits the same code as
+receipt whose `.sha256` sidecar (the digest file written beside it) is gone emits the same code as
 the missing receipt itself.
 
 Bundle loading uses `require_completion=False` (the **completion policy**):
@@ -729,7 +731,7 @@ them.
 
 ### What happens after arm
 
-The **ordinary launch step** authenticates and replays the arm receipt, pack
+The ordinary launch step authenticates and replays the arm receipt, pack
 digest, launch manifest, and one-use consumption record, as defined in
 §Analysis-gate definitions. It does not call
 `verify_frozen_projection`, `_derive_projection_units`, runtime `prepare`, or
