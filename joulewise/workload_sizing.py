@@ -1,11 +1,12 @@
-"""Decision-neutral arithmetic for measured workload-sizing evidence.
+"""Decision-neutral arithmetic for reporting issued measurement evidence.
 
 The D-078 attribution-limited floor and the D-083 disclosure rule name two
 different comparisons.  A measured effect can be divided by the operative
 floor, while the reader must also be shown the comparison against the
 operative floor plus the claim-side measurement bound.  This module computes
 both quantities but deliberately makes no pass/fail or workload-selection
-decision.
+decision.  It is a general D-078/D-083 reporting utility, not an authority or
+continuation for the retired FLOOR-WORKLOAD-SIZING-01 mission.
 """
 
 from __future__ import annotations
@@ -74,11 +75,18 @@ def measured_margin_ratios(
     effective_clearable = floor + bound
     if not math.isfinite(effective_clearable):
         raise ValueError("floor plus claim-side bound must be finite")
+    effect_to_floor = magnitude / floor
+    effect_to_effective_clearable = magnitude / effective_clearable
+    if not math.isfinite(effect_to_floor) or not math.isfinite(
+        effect_to_effective_clearable
+    ):
+        raise ValueError("computed ratios must be finite")
+
     return WorkloadSizingRatios(
         effect_magnitude_j=magnitude,
         operative_floor_j=floor,
         claim_side_bound_j=bound,
         effective_clearable_effect_j=effective_clearable,
-        effect_to_floor_ratio=magnitude / floor,
-        effect_to_effective_clearable_ratio=magnitude / effective_clearable,
+        effect_to_floor_ratio=effect_to_floor,
+        effect_to_effective_clearable_ratio=effect_to_effective_clearable,
     )

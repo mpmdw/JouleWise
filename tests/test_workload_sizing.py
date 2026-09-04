@@ -1,12 +1,29 @@
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 import unittest
 
 from joulewise.workload_sizing import measured_margin_ratios
 
 
 class WorkloadSizingRatiosTests(unittest.TestCase):
+    def test_retirement_record_does_not_reopen_superseded_mission(self) -> None:
+        record = (
+            Path(__file__).parents[1]
+            / "docs"
+            / "phase_2"
+            / "floor_workload_sizing.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("RETIRED on 2026-09-04 as superseded by D-166", record)
+        self.assertIn("D-166 is the sole workload-sizing authority", record)
+        self.assertIn("No pilot, separate margin study", record)
+        self.assertNotIn("NEEDS_RULING", record)
+        self.assertNotIn("live evidence remains pending", record)
+        self.assertNotIn("Options for the older effect-to-floor acceptance", record)
+
     def test_reports_floor_and_disclosed_clearable_ratios_separately(self) -> None:
         result = measured_margin_ratios(
             effect_j=-12.0,
@@ -87,6 +104,21 @@ class WorkloadSizingRatiosTests(unittest.TestCase):
                 ValueError, f"{field} must be a finite real number"
             ):
                 measured_margin_ratios(**arguments)
+
+    def test_extreme_finite_inputs_cannot_emit_nonfinite_json_ratios(self) -> None:
+        with self.assertRaisesRegex(ValueError, "computed ratios must be finite"):
+            measured_margin_ratios(
+                effect_j=1e308,
+                operative_floor_j=1e-308,
+                claim_side_bound_j=0.0,
+            )
+
+        ordinary = measured_margin_ratios(
+            effect_j=12.0,
+            operative_floor_j=3.0,
+            claim_side_bound_j=1.0,
+        )
+        json.dumps(ordinary.to_dict(), allow_nan=False)
 
 
 if __name__ == "__main__":
