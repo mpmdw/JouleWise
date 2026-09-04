@@ -687,13 +687,60 @@ def git_source_stamp(source: str) -> SourceStamp:
 
 
 def parse_pipe_row(line: str) -> list[str]:
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+    row = line.strip().strip("|")
+    cells: list[str] = []
+    cell: list[str] = []
+    code_ticks = 0
+    index = 0
+    while index < len(row):
+        char = row[index]
+        if char == "`":
+            run_end = index
+            while run_end < len(row) and row[run_end] == "`":
+                run_end += 1
+            tick_count = run_end - index
+            if code_ticks == 0:
+                code_ticks = tick_count
+            elif tick_count == code_ticks:
+                code_ticks = 0
+            cell.append(row[index:run_end])
+            index = run_end
+            continue
+        if (
+            char == "|"
+            and code_ticks == 0
+            and index > 0
+            and index + 1 < len(row)
+            and row[index - 1].isspace()
+            and row[index + 1].isspace()
+            and row[index - 1] != "\\"
+        ):
+            cells.append("".join(cell).strip())
+            cell = []
+        else:
+            cell.append(char)
+        index += 1
+    cells.append("".join(cell).strip())
+    return cells
 
 
-def parse_table_after_heading(md: str, source: str, heading: str, headers: list[str]) -> list[dict[str, str]]:
-    heading_match = re.search(rf"^##\s+{re.escape(heading)}\s*$", md, re.MULTILINE)
+def parse_table_after_heading(
+    md: str,
+    source: str,
+    heading: str,
+    headers: list[str],
+    *,
+    allow_subheading: bool = False,
+) -> list[dict[str, str]]:
+    heading_prefix = r"##{1,2}" if allow_subheading else r"##"
+    heading_match = re.search(
+        rf"^{heading_prefix}\s+{re.escape(heading)}\s*$", md, re.MULTILINE
+    )
     if not heading_match:
-        fail(heading, source, f"heading '## {heading}'")
+        expected = f"heading '## {heading}'"
+        if allow_subheading:
+            expected += f" or '### {heading}'"
+        fail(heading, source, expected)
     tail = md[heading_match.end():]
     lines = tail.splitlines()
     table_start = None
@@ -724,7 +771,13 @@ def parse_table_after_heading(md: str, source: str, heading: str, headers: list[
 
 
 def parse_status_at_glance(md: str, source: str = "PROJECT_STATUS.md") -> list[StatusPhase]:
-    rows = parse_table_after_heading(md, source, "Status At A Glance", ["Phase", "Scope", "Status"])
+    rows = parse_table_after_heading(
+        md,
+        source,
+        "Status At A Glance",
+        ["Phase", "Scope", "Status"],
+        allow_subheading=True,
+    )
     phases = []
     for row in rows:
         status = row["Status"]

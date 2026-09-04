@@ -6,6 +6,11 @@ updates and retired process prose are preserved in
 regions of `RUN_STATE.md` and `TASK_QUEUE.md`, sourced from
 `docs/process/state_kernel.json`.
 
+- Project phase: Phases 1, 2, and 4 remain in progress: the instrument and
+  prospective Qwen3 campaign path are implemented, while claim-bearing
+  collection and analysis remain gated and presentation and release are
+  planned in the sequence below.
+
 ## Current Claim And Scope
 
 JouleWise is an auditable instrument for measuring energy and latency during
@@ -86,6 +91,16 @@ shared-shift replay withdraws the sentence; it does not invite a revised
 threshold (D-165 and D-168).
 
 ## Artifact State
+
+### Status At A Glance
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1. Approval, feasibility, and measurement design | contracts, methodology, hardware feasibility, advisor and calendar inputs | **in progress** — core contracts are settled; final-report and colloquium dates and remote-hardware inputs remain external |
+| 2. Instrument and Apple-Silicon campaign | runnable harness, repaired Mac measurement path, Qwen3 `_v5` campaign | **in progress** — the instrument and plan preparation exist; unattended infrastructure and the G2-a prompt probe precede claim-bearing collection |
+| 3. Split-inference demonstration | cache transfer, offline replay, optional live split | **planned** — feasibility-first and not required for capstone completion |
+| 4. Analysis and paper | authenticated floors, claim close-out, figures, results, limitations | **in progress** — the fill contract is landed; numerical fills wait on prospective authenticated data |
+| 5. Presentation and release | reproducible archive, final report, colloquium | **planned** — follows the claims audit and figure freeze |
 
 | Artifact | Current state | Remaining evidence |
 |---|---|---|

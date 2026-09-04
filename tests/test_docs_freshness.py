@@ -20,6 +20,15 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 
 DOC_PATHS = ("README.md", "PROJECT_STATUS.md", "docs/orchestration.md")
+PROJECT_STATUS_CURRENT_HEADINGS = (
+    "Current Claim And Scope",
+    "Measured Evidence",
+    "Gate Matrix",
+    "Artifact State",
+    "Advisor Decisions And Risks",
+    "Next Milestone",
+    "Evidence Links",
+)
 CAPSULE_DOC_PATHS = (
     "site_capsule/AGENTS.md",
     "site_capsule/CLAUDE.md",
@@ -312,25 +321,20 @@ def _current_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
     project = docs["PROJECT_STATUS.md"]
     orchestration = docs["docs/orchestration.md"]
 
+    project_headings = tuple(re.findall(r"^## (.+)$", project, flags=re.MULTILINE))
+    if project_headings != PROJECT_STATUS_CURRENT_HEADINGS:
+        raise AssertionError(
+            "PROJECT_STATUS.md must contain exactly the ruled seven current sections: "
+            f"{project_headings!r}"
+        )
+
     return {
         # README has no dated-history section; every part is current.
         "README": readme,
-        # The Previous Update block and Update Ledger are dated history.
-        "PROJECT_STATUS front": _between(
-            project,
-            "# JouleWise: Project Status, Plan, And Architecture\n",
-            "## Previous Update",
-        ),
-        "PROJECT_STATUS status/architecture": _between(
-            project, "## Summary\n", "## Process Note\n"
-        ),
-        # The 2026-09-01 reconcile (PR #253) dropped the two dated "What one
-        # day" anecdotes; the process contract now runs up to the owner
-        # pointers, which remain checked separately.
-        "PROJECT_STATUS process contract": _between(
-            project, "## Process Note\n", "**Where to look.**"
-        ),
-        "PROJECT_STATUS owner pointers": _after(project, "**Where to look.**"),
+        # DOC-008 compacted the advisor page to seven current H2 sections.
+        # Dated updates and retired process prose now live only in the
+        # separately named docs/project_status_history.md archive.
+        "PROJECT_STATUS current": project,
         # WO-022's verbatim spend policy and the dated topology/session examples
         # are deliberately excluded. Current reconstruction pointers are not.
         "orchestration process": _between(
@@ -945,11 +949,7 @@ class DocsFreshnessTests(unittest.TestCase):
 
     def test_current_sections_point_to_freshness_owners(self) -> None:
         readme = _between(_read("README.md"), "# JouleWise\n", "## Release\n")
-        project = _between(
-            _read("PROJECT_STATUS.md"),
-            "# JouleWise: Project Status, Plan, And Architecture\n",
-            "## Previous Update",
-        )
+        project = _read("PROJECT_STATUS.md")
         orchestration = _between(
             _read("docs/orchestration.md"),
             "## The loop, end to end\n",
@@ -966,13 +966,37 @@ class DocsFreshnessTests(unittest.TestCase):
         self.assertIn("docs/site/DRIFT.md", orchestration)
         self.assertIn("Ed deploys", orchestration)
 
-        project_status = _current_sections()["PROJECT_STATUS status/architecture"]
+        project_status = _current_sections()["PROJECT_STATUS current"]
         # Freshness ownership: the status document defers live sequencing to
         # RUN_STATE.md and promises no dates of its own (Window A literals
         # retired with the 2026-09-01 reconcile; that campaign is voided).
-        self.assertIn("This document promises sequence, not dates.", project_status)
+        self.assertRegex(
+            project_status, r"This document promises that\s+sequence, not dates\."
+        )
         self.assertIn("Live status is in `RUN_STATE.md`.", project_status)
         self.assertIn("RUN_STATE.md", project_status)
+
+    def test_compact_project_status_is_current_and_history_is_separate(self) -> None:
+        docs = _documents()
+        compact = docs["PROJECT_STATUS.md"]
+        sections = _current_sections(docs)
+
+        self.assertEqual(
+            PROJECT_STATUS_CURRENT_HEADINGS,
+            tuple(re.findall(r"^## (.+)$", compact, flags=re.MULTILINE)),
+        )
+        self.assertEqual(compact, sections["PROJECT_STATUS current"])
+        self.assertNotIn("## Previous Update", sections["PROJECT_STATUS current"])
+        self.assertNotIn("## Update Ledger", sections["PROJECT_STATUS current"])
+        self.assertNotIn("docs/project_status_history.md", sections)
+
+        # The historical archive may retain retired publication language
+        # without becoming an active instruction surface.
+        docs["docs/project_status_history.md"] = (
+            _read("docs/project_status_history.md")
+            + "\nAgents regenerate the site and deploy it.\n"
+        )
+        self.assertEqual([], _site_publish_instructions(_current_sections(docs)))
 
     def test_site_closeout_is_drift_report_then_ed_deploy(self) -> None:
         docs = _documents()
@@ -1011,7 +1035,7 @@ class DocsFreshnessTests(unittest.TestCase):
         probe = "9,999 tests; PR #999; Claude-99."
         mutated = dict(docs)
         mutated["PROJECT_STATUS.md"] = mutated["PROJECT_STATUS.md"].replace(
-            "## Architecture\n", probe + "\n\n## Architecture\n", 1
+            "## Artifact State\n", probe + "\n\n## Artifact State\n", 1
         )
         violations = _volatile_violations(_current_sections(mutated))
         self.assertEqual(
@@ -1029,11 +1053,9 @@ class DocsFreshnessTests(unittest.TestCase):
             self.assertTrue(_site_publish_instructions(_current_sections(mutated)))
 
         mutated = dict(docs)
-        history_heading = "## Previous Update"
-        mutated["PROJECT_STATUS.md"] = mutated["PROJECT_STATUS.md"].replace(
-            history_heading,
-            history_heading + "\n\nAgents regenerate the site and deploy it.\n",
-            1,
+        mutated["docs/project_status_history.md"] = (
+            _read("docs/project_status_history.md")
+            + "\nAgents regenerate the site and deploy it.\n"
         )
         self.assertEqual([], _site_publish_instructions(_current_sections(mutated)))
 
