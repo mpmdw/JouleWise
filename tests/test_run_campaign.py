@@ -6,8 +6,10 @@ import hashlib
 import io
 import json
 import os
+import random
 import shutil
 import shlex
+import struct
 import subprocess
 import sys
 import tempfile
@@ -613,37 +615,87 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                             ([], "torn_prefix"),
                         )
 
-    def test_r7_non_bmp_key_prefix_known_f1_exact_set(self) -> None:
-        """C3-RECOGNIZER-EXACT-01: the high-surrogate key tear (registered
-        blocker F1) is pinned as an EXACT misclassification set — every
-        misclassified boundary must fall inside the known surrogate-pair
-        escape span, and every boundary outside it must classify
-        correctly, so ANY second regression is a hard failure while the
-        registered blocker stays documented. When the row closes and F1
-        is fixed, the non-empty assertion below fails deliberately:
-        update this pin to full correctness at closure."""
-
-        wire = json.dumps({"\ue000": 1, "😀": 2}, sort_keys=True).encode("ascii")
-        # The EXACT boundary set misclassified by registered blocker F1,
-        # frozen literally (boundaries torn inside the high-surrogate
-        # escape's hex digits and the following low-surrogate prefix).
-        # ANY deviation is a hard failure: an addition anywhere is a new
-        # recognizer regression; a removal means F1 was (partly) fixed —
-        # close C3-RECOGNIZER-EXACT-01 and update this pin to the full
-        # correctness property.
-        known_f1_misclassified = {21, 22, 23, 24, 25, 26}
-        misclassified = {
-            boundary
-            for boundary in range(1, len(wire))
-            if self._parse(wire[:boundary]) != ([], "torn_prefix")
-        }
-        self.assertEqual(
-            misclassified,
-            known_f1_misclassified,
-            "recognizer misclassification set changed: additions are NEW "
-            "regressions; removals mean registered blocker F1 was fixed — "
-            "close C3-RECOGNIZER-EXACT-01 and update this pin",
+    def test_c3_f1_registered_surrogate_prefixes_are_tolerable(self) -> None:
+        registered_counterexamples = (
+            b'{"\\ue000": 1, "\\ud83d',
+            b'{"\\ue000": 1, "\\ud83d\\ud',
         )
+        for prefix in registered_counterexamples:
+            with self.subTest(prefix=prefix):
+                self.assertEqual(self._parse(prefix), ([], "torn_prefix"))
+
+    def test_c3_f1_every_bmp_non_bmp_key_boundary_is_tolerable(self) -> None:
+        rows_and_wire = (
+            (
+                {"\ue000": 1, "😀": 2},
+                b'{"\\ue000": 1, "\\ud83d\\ude00": 2}',
+            ),
+            (
+                {"\uffff": 1, "𐀀": 2},
+                b'{"\\uffff": 1, "\\ud800\\udc00": 2}',
+            ),
+            (
+                {"😀": 1, "😁": 2},
+                b'{"\\ud83d\\ude00": 1, "\\ud83d\\ude01": 2}',
+            ),
+        )
+        for row, pinned_wire in rows_and_wire:
+            wire = json.dumps(row, sort_keys=True).encode("ascii")
+            self.assertEqual(wire, pinned_wire)
+            for boundary in range(1, len(wire)):
+                with self.subTest(wire=wire, boundary=boundary):
+                    self.assertEqual(
+                        self._parse(wire[:boundary]),
+                        ([], "torn_prefix"),
+                    )
+
+    def test_c3_f2_registered_number_overacceptance_refuses(self) -> None:
+        registered_counterexamples = (
+            b'{"a": 0.0000',
+            b'{"a": 1e+1000',
+        )
+        for prefix in registered_counterexamples:
+            with self.subTest(prefix=prefix):
+                self.assertEqual(self._parse(prefix), (None, "invalid"))
+
+    def test_c3_f2_number_superset_boundaries(self) -> None:
+        outside = (
+            b'{"a": 12345678901234567.',
+            b'{"a": 10e+20',
+            b'{"a": 1.0e+20',
+            b'{"a": 1e+04',
+            b'{"a": 1e-04',
+            b'{"a": 1e+000',
+        )
+        for prefix in outside:
+            with self.subTest(outside=prefix):
+                self.assertEqual(self._parse(prefix), (None, "invalid"))
+
+        documented_superset = (
+            b'{"a": 0.000',
+            b'{"a": 1.230',
+            b'{"a": 1e+10',
+            b'{"a": 1e+999',
+            b'{"a": 1e-05',
+        )
+        for prefix in documented_superset:
+            with self.subTest(documented_superset=prefix):
+                self.assertEqual(self._parse(prefix), ([], "torn_prefix"))
+
+    def test_c3_f2_randomized_float_writer_prefix_completeness(self) -> None:
+        generator = random.Random(0xC3E105)
+        values = [
+            struct.unpack(">d", generator.getrandbits(64).to_bytes(8, "big"))[0]
+            for _ in range(4096)
+        ]
+        for value in values:
+            wire = json.dumps({"a": value}, sort_keys=True).encode("ascii")
+            for boundary in range(1, len(wire)):
+                with self.subTest(value=value, boundary=boundary):
+                    self.assertEqual(
+                        self._parse(wire[:boundary]),
+                        ([], "torn_prefix"),
+                    )
 
     def test_r7_named_prefix_pins(self) -> None:
         for name, prefix in (
