@@ -799,6 +799,70 @@ class TypedArtifactCliTests(unittest.TestCase):
         self.assertIn("MISMATCH placement standing sentence", output)
         self.assertIn("observed '1 [FILL:DX- markers'", output)
 
+    def _complete_dx_region(self, *extra_lines: str) -> str:
+        lines = [FENCE.DX_STANDING_SENTENCE_HEAD]
+        lines.extend(
+            f"[FILL:{row_id}] {self.spec.rows[row_id].marker}"
+            for row_id in FENCE._placement_row_ids(self.spec)
+        )
+        lines.extend(extra_lines)
+        return "\n".join(lines) + "\n"
+
+    def test_unmarked_rendered_literal_inside_dx_prose_region_is_refused(self) -> None:
+        skeleton = self._complete_dx_region(
+            "The retained calibration refused 49 of 59 pulses."
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-prose-unmarked-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                skeleton, encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("MISMATCH prose DX-013", output)
+
+    def test_unmarked_rendered_literal_outside_dx_prose_region_passes(self) -> None:
+        skeleton = self._complete_dx_region(
+            "# Next section",
+            "The retained calibration refused 49 of 59 pulses.",
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-prose-outside-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                skeleton, encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertNotIn("MISMATCH prose DX-013", output)
+
+    def test_rendered_literal_with_own_marker_inside_dx_prose_region_passes(self) -> None:
+        skeleton = self._complete_dx_region(
+            "The retained calibration refused [FILL:DX-013] 49 of 59 pulses."
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-prose-marked-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                skeleton, encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertNotIn("MISMATCH prose DX-013", output)
+
 
 class InvocationTests(unittest.TestCase):
     def test_literals_only_cli_passes(self) -> None:
