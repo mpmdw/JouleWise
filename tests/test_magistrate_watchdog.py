@@ -99,13 +99,15 @@ class WatchdogTestCase(unittest.TestCase):
     def make_plan(self, *, t0: float | None = None, name: str = "night-a") -> wd.NightPlan:
         custody = self.temp / name
         value = {
-            "schema": "joulewise.night_plan.v1",
+            "schema": "joulewise.night_plan.v2",
             "plan_id": name,
             "receipt_class": "REHEARSAL_STUB",
             "t0_epoch_s": self.base.timestamp() + 3600 if t0 is None else t0,
             "window_max_s": 600,
             "authored_epoch_s": self.base.timestamp() - 60,
             "repo_head": "a" * 40,
+            "measurement_root": str(self.temp / "measurement"),
+            "measurement_head": "b" * 40,
             "chain_path": str(custody / "chain.sh"),
             "chain_sha256_path": str(custody / "chain.sh.sha256"),
             "custody_root": str(custody),
@@ -146,6 +148,64 @@ class WatchdogTestCase(unittest.TestCase):
 
 
 class FenceTests(WatchdogTestCase):
+    def test_retired_v1_is_ignored_once_and_only_v2_plan_sets_span(self) -> None:
+        valid = self.make_plan(t0=self.base.timestamp() + 10 * 60, name="valid-v2")
+        retired_root = self.temp / "retired-v1"
+        retired_root.mkdir()
+        retired = {
+            "schema": "joulewise.night_plan.v1",
+            "plan_id": "retired-v1",
+            "receipt_class": "REHEARSAL_STUB",
+            "t0_epoch_s": self.base.timestamp() + 5 * 60,
+            "window_max_s": 600,
+            "authored_epoch_s": self.base.timestamp() - 60,
+            "repo_head": "a" * 40,
+            "chain_path": str(retired_root / "chain.sh"),
+            "chain_sha256_path": str(retired_root / "chain.sh.sha256"),
+            "custody_root": str(retired_root),
+            "registration_path": str(retired_root / "registration.json"),
+        }
+        (retired_root / "night_plan.json").write_text(json.dumps(retired), encoding="utf-8")
+
+        plans, errors = wd.load_plans(self.harness.storage)
+        self.assertEqual([plan.plan_id for plan in plans], [valid.plan_id])
+        self.assertTrue(wd.plan_span_active(plans[0], self.base.timestamp(), self.harness.storage))
+        self.assertEqual(
+            wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state,
+            "FENCED",
+        )
+        self.assertEqual(errors, [])
+        wd.load_plans(wd.Storage(self.harness.storage.root))
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        ignored = [event for event in events if event["kind"] == "plan_retired_v1"]
+        self.assertEqual(len(ignored), 1)
+        self.assertEqual(ignored[0]["custody_root"], str(retired_root.resolve()))
+
+    def test_other_unparsable_plan_is_ignored_once_without_holding(self) -> None:
+        broken_root = self.temp / "broken-plan"
+        broken_root.mkdir()
+        (broken_root / "night_plan.json").write_text("{not-json", encoding="utf-8")
+
+        self.assertEqual(
+            wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state,
+            "LAUNCHING",
+        )
+        wd.load_plans(wd.Storage(self.harness.storage.root))
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        ignored = [event for event in events if event["kind"] == "plan_unparsable"]
+        self.assertEqual(len(ignored), 1)
+        self.assertEqual(ignored[0]["custody_root"], str(broken_root.resolve()))
+
     def test_plan_fence_boundaries_request_term_kill_and_completion(self) -> None:
         plan = self.make_plan()
         t0 = plan.t0_epoch_s
@@ -599,6 +659,35 @@ class BackoffAndEventTests(WatchdogTestCase):
 
 
 class ContractTests(WatchdogTestCase):
+    def test_handoff_inventory_includes_twin_tree_and_named_pid1_orphans(self) -> None:
+        table = FakeProcessTable(
+            [
+                wd.ProcessInfo(900, 800, "caller", "python magistrate_watchdog.py handoff-inventory"),
+                wd.ProcessInfo(800, 100, "shell", "/bin/zsh -c inventory"),
+                wd.ProcessInfo(100, 50, "twin", "/Users/edr/.local/bin/claude --resume magistrate"),
+                wd.ProcessInfo(110, 100, "daemon", "/Users/edr/.local/bin/claude daemon run"),
+                wd.ProcessInfo(111, 110, "host", "claude bg-pty-host /tmp/spare.pty.sock"),
+                wd.ProcessInfo(112, 111, "spare", "claude bg-spare /tmp/spare.claim.sock"),
+                wd.ProcessInfo(200, 1, "orphan-host", "/Applications/ClaudeCode.app/Contents/MacOS/claude --bg-pty-host /tmp/orphan.sock"),
+                wd.ProcessInfo(201, 200, "orphan-child", "claude bg-spare /tmp/orphan.claim.sock"),
+                wd.ProcessInfo(300, 1, "snapshot", "/bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh.sh"),
+                wd.ProcessInfo(301, 300, "snapshot-child", "/usr/bin/tail -f monitor.log"),
+                wd.ProcessInfo(400, 1, "unowned", "codex exec unrelated"),
+                wd.ProcessInfo(500, 1, "other-claude", "/Users/edr/.local/bin/claude --resume unrelated"),
+            ]
+        )
+
+        inventory = wd.handoff_inventory(table.snapshot(), 900)
+
+        self.assertEqual(inventory["interactive_pid"], 100)
+        self.assertEqual(
+            set(inventory["pids"]),
+            {100, 110, 111, 112, 200, 201, 300, 301},
+        )
+        self.assertNotIn(400, inventory["pids"])
+        self.assertNotIn(500, inventory["pids"])
+        self.assertEqual(table.signals, [], "inventory is read-only")
+
     def test_dry_run_injects_filesystem_and_spawn_but_suppresses_both(self) -> None:
         dry = wd.Storage(self.temp / "dry" / "magistrate", dry_run=True)
         decision = wd.tick(dry, self.harness.deps, dry_run=True)
@@ -674,6 +763,42 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("Do not ratify or amend any process rule", prompt)
         self.assertIn("cold gate or Ed", prompt)
         self.assertIn("Arming a night obligates this session to end its loop", prompt)
+        self.assertIn("under a v2 plan", prompt)
+        self.assertIn("installed from that plan's `measurement_root`", prompt)
+
+    def test_documented_example_plans_are_v2(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        text = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('"schema": "joulewise.night_plan.v1"', text)
+        self.assertEqual(text.count('"schema": "joulewise.night_plan.v2"'), 2)
+        self.assertEqual(text.count('"measurement_root"'), 2)
+        self.assertEqual(text.count('"measurement_head"'), 2)
+
+    def test_install_handoff_is_ordered_and_measurement_checkout_owned(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        watchdog = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
+            encoding="utf-8"
+        )
+        ordered = (
+            "stop every background task",
+            'mv "$HOME/night-custody/$name" "$HOME/night-custody/retired-v1/$name"',
+            "magistrate_watchdog.py handoff-inventory",
+            "install_magistrate_watchdog.sh --install",
+            "signals only to that recorded list",
+            "next five-minute tick",
+        )
+        positions = [watchdog.index(item) for item in ordered]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("The watchdog never signals an unowned census PID", watchdog)
+
+        handback = (repo / "docs" / "process" / "NIGHT_HANDBACK.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("For every v2 plan", handback)
+        self.assertIn("FROM", handback)
+        self.assertIn("plan's `measurement_root`", handback)
 
 
 if __name__ == "__main__":

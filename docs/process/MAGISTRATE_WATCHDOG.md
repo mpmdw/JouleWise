@@ -4,7 +4,7 @@
 
 ## Safety model and state machine
 
-The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping`, the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, local civil time, monotonic time, and the process table. Inside a plan span it invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.
+The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping`, the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, local civil time, monotonic time, and the process table. A retired-v1 plan is recorded once per sibling custody root as `plan_retired_v1`; any other plan that `NightPlan.from_mapping` cannot parse is recorded once as `plan_unparsable`. Both are ignored and contribute no span or hold. Inside a valid-v2 plan span the watchdog invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.
 
 The durable states are:
 
@@ -13,13 +13,13 @@ The durable states are:
 - `ACTIVE`: the recorded child PID and start time are live. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
 - `FENCED`: a plan span, the 02:45–03:30 belt, or the 07:00 minute forbids launch.
-- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, malformed plan, unavailable process table, surviving owned process, or other fail-closed condition forbids launch. Census matches are reported and never used as kill targets.
+- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, surviving owned process, or other fail-closed condition forbids launch. Retired or unparsable plans are ignored as described above, never converted to either hold. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
 - `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility.
 - `STOP_REQUESTED`/`STOPPED`: the local file or remote branch has stopped launches; an already-owned child receives a nine-minute cooperative request before TERM and, 60 seconds later, KILL.
 
-Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census and signal observations are separate typed events.
+Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, and ignored-plan observations are separate typed events; each ignored custody root is recorded only on its first observation.
 
 ## Fence and deadlines
 
@@ -68,7 +68,7 @@ The program guards every write path against the configured custody root. The mec
 
 - `watchdog.lock`: stable advisory service-lock inode.
 - `state.json`: atomic durable state, clocks, backoff, activation, transition sequence, and `notice_pending`.
-- `events.jsonl`: fsynced transition, census, signal, and supervisor-adoption events.
+- `events.jsonl`: fsynced transition, census, signal, ignored-plan, and supervisor-adoption events.
 - `magistrate.lock`: exclusive launch claim, then the child PID, exact start token, activation, symlink path, and version; removed only after the child exit is proved.
 - `standdown.request`: atomic request and exact plan deadlines.
 - `attempts/<activation>/prompt.md`, `attempt-<n>.stream.jsonl`, and `attempt-<n>.stderr.log`.
@@ -81,11 +81,102 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 ## Install handoff
 
-Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then installs without waiting for a reply. The installer must be run from that magistrate session: it walks its own ancestry, records the highest owning session process with PID+start time in `magistrate.lock`, and refuses installation when it cannot identify that tree.
+Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-That seeded lock is the one-time file-15 row-10 exception. The first resident supervisor adopts the current Terminal-hosted magistrate tree, including its descendants, instead of launching a second magistrate. At the first stand-down, the cooperative path is preferred; if necessary the same PPID-tree TERM/KILL enforcement reaches the interactive twin and the daemon/spares within its ruled owned tree. After it exits, every later owned magistrate begins as the watchdog's one-turn `-p` child.
+1. In the magistrate session, stop every background task and wait for each stop to complete. Repeat the session's background-task listing until it is empty; do not proceed while any Codex child, task, monitor, or background shell remains active.
 
-The first real window must not be armed until plans pin the measurement checkout and the night agents are installed from it. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
+2. Preserve the two retired-v1 custody trees below a directory the watchdog's one-level plan glob cannot reach:
+
+   ```zsh
+   mkdir -p "$HOME/night-custody/retired-v1"
+   for name in rehearsal-20260902 rehearsal-20260903; do
+     test -d "$HOME/night-custody/$name"
+     test ! -e "$HOME/night-custody/retired-v1/$name"
+     mv "$HOME/night-custody/$name" "$HOME/night-custody/retired-v1/$name"
+   done
+   ```
+
+3. From the Terminal-hosted interactive magistrate, record the exact handoff inventory. The read-only helper selects that interactive twin, its `claude daemon`, all `bg-pty-host`/`bg-spare` descendants, every `claude --bg-pty-host` orphan at PPID 1, and every shell-snapshot orphan at PPID 1 (plus descendants of those orphan roots). It excludes the helper's transient call chain and unrelated processes. Keep the PID, start-time, and command rows together so PID reuse can be rejected:
+
+   ```zsh
+   handoff_epoch="$(date +%s)"
+   handoff_file="$HOME/night-custody/magistrate/handoff-$handoff_epoch.json"
+   mkdir -p "$HOME/night-custody/magistrate"
+   scripts/magistrate_watchdog.py handoff-inventory > "$handoff_file"
+   python3 -m json.tool "$handoff_file"
+   ```
+
+4. Install from that same magistrate session. The installer seeds `magistrate.lock` with the interactive twin's PID and start token so the first resident observes it instead of launching a second session:
+
+   ```zsh
+   scripts/install_magistrate_watchdog.sh --install
+   python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
+   ```
+
+5. Have the magistrate start this detached, non-agent reaper. It revalidates every recorded PID+start-time pair, sends signals only to that recorded list with the interactive root last, escalates only recorded survivors, and then runs the production census. The watchdog never signals an unowned census PID. The verification log must end with `CensusObservation(empty=True, ...)`; any mismatch or survivor aborts the handoff:
+
+   ```zsh
+   /usr/bin/nohup /usr/bin/python3 - "$handoff_file" > "$handoff_file.verify.log" 2>&1 <<'PY' &
+   import json
+   import os
+   import signal
+   import subprocess
+   import sys
+   import time
+   from pathlib import Path
+
+   from scripts.magistrate_watchdog import production_census
+
+   inventory = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+   expected = {row["pid"]: row["start_time"] for row in inventory["processes"]}
+
+   def snapshot():
+       result = subprocess.run(
+           ("/bin/ps", "-axo", "pid=,ppid=,lstart=,command="),
+           check=True, capture_output=True, text=True,
+       )
+       rows = {}
+       for line in result.stdout.splitlines():
+           parts = line.strip().split(None, 7)
+           if len(parts) == 8:
+               rows[int(parts[0])] = " ".join(parts[2:7])
+       return rows
+
+   observed = snapshot()
+   changed = {pid: (start, observed.get(pid)) for pid, start in expected.items()
+              if observed.get(pid) != start}
+   if changed:
+       raise SystemExit(f"handoff PID/start mismatch before TERM: {changed}")
+   root = inventory["interactive_pid"]
+   ordered = [pid for pid in inventory["pids"] if pid != root] + [root]
+   for pid in ordered:
+       try:
+           os.kill(pid, signal.SIGTERM)
+       except ProcessLookupError:
+           pass
+   time.sleep(15)
+   observed = snapshot()
+   for pid in ordered:
+       if observed.get(pid) == expected[pid]:
+           try:
+               os.kill(pid, signal.SIGKILL)
+           except ProcessLookupError:
+               pass
+   deadline = time.monotonic() + 30
+   while True:
+       census = production_census()
+       if census.empty or time.monotonic() >= deadline:
+           break
+       time.sleep(1)
+   print(census, flush=True)
+   raise SystemExit(0 if census.empty else 4)
+   PY
+   disown
+   ```
+
+6. Read the verification log from an observer after the magistrate exits. The already-proved launchd path (`docs/process_traces/2026-09-02-hands-free-week/17n-bench-launchd-spawn.md` on main) means the next five-minute tick must create the first watchdog-owned one-turn `-p` magistrate. Verify a new `attempts/<activation>/` and a `magistrate.lock` without `first_install_adoption`; a nonempty census before that tick or absence of the new attempt after it is a failed handoff.
+
+The first real window must not be armed until a reviewed v2 plan pins its measurement checkout and both night agents have been installed FROM that plan's `measurement_root` at `measurement_head`. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
 
 ## Bench rehearsal (no real night)
 
@@ -108,13 +199,15 @@ plan_root.mkdir(parents=True)
 now = time.time()
 t0 = now + 10 * 60
 plan = {
-    "schema": "joulewise.night_plan.v1",
+    "schema": "joulewise.night_plan.v2",
     "plan_id": "watchdog-bench-now-plus-10m",
     "receipt_class": "REHEARSAL_STUB",
     "t0_epoch_s": t0,
     "window_max_s": 600,
     "authored_epoch_s": now,
     "repo_head": "0" * 40,
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260813",
+    "measurement_head": "0" * 40,
     "chain_path": str(plan_root / "chain.sh"),
     "chain_sha256_path": str(plan_root / "chain.sh.sha256"),
     "custody_root": str(plan_root),
@@ -194,13 +287,15 @@ root = Path(os.environ["ADOPTION_PLAN_ROOT"])
 root.mkdir(parents=True, exist_ok=False)
 now = time.time()
 plan = {
-    "schema": "joulewise.night_plan.v1",
+    "schema": "joulewise.night_plan.v2",
     "plan_id": "first-tree-adoption-rehearsal",
     "receipt_class": "REHEARSAL_STUB",
     "t0_epoch_s": now + 26 * 60,
     "window_max_s": 60,
     "authored_epoch_s": now,
     "repo_head": "0" * 40,
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260813",
+    "measurement_head": "0" * 40,
     "chain_path": str(root / "chain.sh"),
     "chain_sha256_path": str(root / "chain.sh.sha256"),
     "custody_root": str(root),

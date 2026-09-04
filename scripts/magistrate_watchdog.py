@@ -205,6 +205,7 @@ class Storage:
         self.root = root.expanduser().resolve(strict=False)
         self.dry_run = dry_run
         self.would_write: list[str] = []
+        self.ignored_plan_roots_seen: set[str] = set()
 
     def _write_path(self, path: Path) -> Path:
         resolved = path.expanduser().resolve(strict=False)
@@ -476,15 +477,78 @@ def load_state(storage: Storage) -> dict[str, Any]:
     return value
 
 
+def recorded_ignored_plan_roots(storage: Storage) -> set[str]:
+    roots = set(storage.ignored_plan_roots_seen)
+    path = storage.root / "events.jsonl"
+    if not storage.exists(path):
+        return roots
+    try:
+        lines = storage.read_text(path).splitlines()
+    except OSError:
+        return roots
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(event, Mapping) or event.get("kind") not in {
+            "plan_retired_v1",
+            "plan_unparsable",
+        }:
+            continue
+        custody_root = event.get("custody_root")
+        if isinstance(custody_root, str):
+            roots.add(custody_root)
+    return roots
+
+
+def record_ignored_plan(
+    storage: Storage,
+    path: Path,
+    kind: str,
+    detail: str,
+    ignored_roots: set[str],
+) -> None:
+    custody_root = str(path.parent.resolve(strict=False))
+    if custody_root in ignored_roots:
+        return
+    storage.append_jsonl(
+        storage.root / "events.jsonl",
+        {
+            "schema": EVENT_SCHEMA,
+            "kind": kind,
+            "custody_root": custody_root,
+            "plan_path": str(path.resolve(strict=False)),
+            "detail": detail[:4000],
+            "epoch_s": time.time(),
+        },
+    )
+    ignored_roots.add(custody_root)
+    storage.ignored_plan_roots_seen.add(custody_root)
+
+
 def load_plans(storage: Storage) -> tuple[list[NightPlan], list[str]]:
     plans: list[NightPlan] = []
     errors: list[str] = []
+    ignored_roots = recorded_ignored_plan_roots(storage)
     for path in storage.glob_plans():
+        raw: object = None
         try:
             raw = json.loads(storage.read_text(path))
             plans.append(NightPlan.from_mapping(raw))
         except Exception as exc:
-            errors.append(f"{path}: {type(exc).__name__}: {exc}")
+            kind = (
+                "plan_retired_v1"
+                if isinstance(raw, Mapping) and raw.get("schema") == "joulewise.night_plan.v1"
+                else "plan_unparsable"
+            )
+            record_ignored_plan(
+                storage,
+                path,
+                kind,
+                f"{type(exc).__name__}: {exc}",
+                ignored_roots,
+            )
     return plans, errors
 
 
@@ -580,6 +644,89 @@ def owned_process(lock: Mapping[str, Any] | None, processes: Sequence[ProcessInf
     if process is None or process.start_time != start_time:
         return None
     return process
+
+
+def _claude_command_suffix(command: str) -> str | None:
+    match = re.search(r"(?:^|[/\s])claude(?:\s|$)", command, re.IGNORECASE)
+    return command[match.end() :].lstrip().casefold() if match is not None else None
+
+
+def _is_interactive_claude(command: str) -> bool:
+    suffix = _claude_command_suffix(command)
+    if suffix is None:
+        return False
+    role = suffix.split(None, 1)[0] if suffix else ""
+    return role not in {"daemon", "bg-pty-host", "--bg-pty-host", "bg-spare", "--bg-spare"}
+
+
+def _is_bg_pty_host(command: str) -> bool:
+    suffix = _claude_command_suffix(command)
+    role = suffix.split(None, 1)[0] if suffix else ""
+    return role in {"bg-pty-host", "--bg-pty-host"}
+
+
+def _snapshot_descendants(rows: Sequence[ProcessInfo], roots: Iterable[int]) -> set[int]:
+    selected = set(roots)
+    changed = True
+    while changed:
+        changed = False
+        for process in rows:
+            if process.ppid in selected and process.pid not in selected:
+                selected.add(process.pid)
+                changed = True
+    return selected
+
+
+def handoff_inventory(
+    processes: Sequence[ProcessInfo], caller_pid: int
+) -> dict[str, Any]:
+    """Return the explicit one-time handoff kill list without signalling it."""
+
+    rows = [
+        process
+        for process in processes
+        if "<defunct>" not in process.command.casefold()
+    ]
+    by_pid = {process.pid: process for process in rows}
+    ancestry: list[ProcessInfo] = []
+    seen: set[int] = set()
+    cursor = caller_pid
+    while cursor > 1 and cursor not in seen:
+        seen.add(cursor)
+        process = by_pid.get(cursor)
+        if process is None:
+            break
+        ancestry.append(process)
+        cursor = process.ppid
+    candidates = [process for process in ancestry if _is_interactive_claude(process.command)]
+    if not candidates:
+        raise RuntimeError(
+            "handoff-inventory must be run by the Terminal-hosted interactive magistrate"
+        )
+    interactive = candidates[-1]
+    tree_pids = _snapshot_descendants(rows, (interactive.pid,))
+    inventory_call_chain = {
+        process.pid for process in ancestry if process.pid != interactive.pid
+    }
+    orphan_roots = {
+        process.pid
+        for process in rows
+        if process.ppid == 1
+        and (
+            _is_bg_pty_host(process.command)
+            or "/.claude/shell-snapshots/" in process.command.casefold()
+        )
+    }
+    selected = _snapshot_descendants(rows, tree_pids | orphan_roots)
+    selected.difference_update(inventory_call_chain)
+    inventory_rows = [process for process in rows if process.pid in selected]
+    inventory_rows.sort(key=lambda process: process.pid)
+    return {
+        "schema": "joulewise.magistrate_handoff_inventory.v1",
+        "interactive_pid": interactive.pid,
+        "pids": [process.pid for process in inventory_rows],
+        "processes": [dataclasses.asdict(process) for process in inventory_rows],
+    }
 
 
 def clock_uncertain(state: dict[str, Any], wall: dt.datetime, monotonic: float) -> bool:
@@ -1421,6 +1568,13 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("tick", "handoff-inventory"),
+        default="tick",
+        help="run one watchdog tick or print the read-only install-handoff PID inventory",
+    )
     parser.add_argument("--dry-run", action="store_true", help="print decisions and suppress writes/spawn")
     parser.add_argument(
         "--custody-root",
@@ -1432,6 +1586,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "handoff-inventory":
+        try:
+            inventory = handoff_inventory(RealProcessTable().snapshot(), os.getpid())
+        except Exception as exc:
+            print(f"handoff-inventory failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 3
+        print(json.dumps(inventory, sort_keys=True, indent=2))
+        return 0
     storage = Storage(args.custody_root, dry_run=args.dry_run)
     deps = real_dependencies()
     if args.dry_run:

@@ -10,7 +10,7 @@ While any night plan is armed, perform no git operation of any kind in `/Users/e
 While any night plan is armed, never fast-forward, pull, checkout, or otherwise move `/Users/edr/JouleWise-measurement-20260813`; any post-arm fast-forward requires a re-arm with a re-pinned plan.
 Never arm or re-arm a night except through the documented `NIGHT_HANDBACK` email-then-arm procedure; Ed's NO always overrides.
 Arming a night obligates this session to end its loop and exit by the request deadline; the LaunchAgent is then the wake source.
-The first real window may be armed only after its plan and night agents are pinned to the measurement checkout as ruled.
+The first real window may be armed only under a v2 plan after both night agents are installed from that plan's `measurement_root` at its `measurement_head`.
 Never start or continue `[QUIET-MAC]` work while an agent session is alive.
 Poll `@@CUSTODY_ROOT@@/standdown.request` during work and before every new work slice.
 On a request: stop new work, make current work durable by committing and pushing in worktrees, and update the durable resume pointer there.

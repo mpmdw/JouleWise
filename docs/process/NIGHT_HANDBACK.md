@@ -70,7 +70,10 @@ compares the plan's `measurement_head` to that checkout's HEAD. Ordinary
 daytime work in the dev checkout no longer invalidates an armed night; only
 moving the pinned measurement checkout does. Then the last stage-1 item: the stage-1 plan email to Ed (first
 armed date; launches unless he replies NO) before any `DIAGNOSTIC_NO_PACK`
-plan is armed. Ed was emailed the arming notice for THIS night before it
+plan is armed. For every v2 plan, run `scripts/install_night_agent.sh` FROM
+the checkout named by the plan's `measurement_root`, with that checkout at
+the plan's `measurement_head`; never install those two night agents from the
+development checkout. Ed was emailed the arming notice for THIS night before it
 was armed (cold gate coldgate-e10 (b)); if Ed replied NO on that thread,
 stand the night down instead of harvesting. A refusal other than
 `night_refused_agent_present` on this night is a finding: cure the cause
