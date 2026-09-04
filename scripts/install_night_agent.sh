@@ -37,16 +37,62 @@ template="$repo/configs/launchd/com.joulewise.night.plist.template"
   exit 3
 }
 plan="${plan:A}"
-plan_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repo_head"])' "$plan")"
-actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"
-[[ "$plan_head" == "$actual_head" ]] || {
-  print "plan repo_head does not match checkout HEAD" >&2
-  exit 3
-}
 custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
 courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
+  plan_fields=("${(@f)$(/usr/bin/python3 -B - "$plan" "$repo" <<'PY'
+import base64
+import json
+import sys
+import time
+
+sys.path.insert(0, sys.argv[2])
+from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S, PlanError
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    data = json.load(stream)
+try:
+    parsed = NightPlan.from_mapping(data)
+    if parsed.measurement_root != parsed.measurement_root.strip():
+        raise PlanError(
+            "night_plan_malformed",
+            "measurement_root must be an absolute path with no surrounding whitespace",
+        )
+    now_epoch_s = time.time()
+    if parsed.authored_epoch_s > now_epoch_s:
+        raise PlanError(
+            "night_plan_malformed",
+            "plan authored_epoch_s is in the future",
+        )
+    if now_epoch_s - parsed.authored_epoch_s > PLAN_MAX_AGE_S:
+        raise PlanError("night_plan_stale", "plan is older than 36 hours")
+except PlanError as exc:
+    print(f"{exc.reason}: {exc.detail}", file=sys.stderr)
+    raise SystemExit(3)
+for value in (parsed.repo_head, parsed.measurement_root, parsed.measurement_head):
+    print(base64.b64encode(value.encode("utf-8")).decode("ascii"))
+PY
+  )}") || exit $?
+  plan_head="$(print -rn -- "$plan_fields[1]" | /usr/bin/base64 --decode)"
+  measurement_root="$(print -rn -- "$plan_fields[2]" | /usr/bin/base64 --decode)"
+  plan_measurement_head="$(print -rn -- "$plan_fields[3]" | /usr/bin/base64 --decode)"
+  if ! actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"; then
+    print "unable to read repo_head from driver checkout" >&2
+    exit 3
+  fi
+  [[ "$plan_head" == "$actual_head" ]] || {
+    print "plan repo_head does not match driver checkout HEAD" >&2
+    exit 3
+  }
+  if ! actual_measurement_head="$(/usr/bin/git -C "$measurement_root" rev-parse HEAD)"; then
+    print "unable to read measurement_head from measurement checkout" >&2
+    exit 3
+  fi
+  [[ "$plan_measurement_head" == "$actual_measurement_head" ]] || {
+    print "plan measurement_head does not match measurement checkout HEAD" >&2
+    exit 3
+  }
   courier_bin="$(command -v claude || true)"
   [[ -n "$courier_bin" && -x "$courier_bin" ]] || {
     print "courier unavailable: command -v claude found no executable" >&2
@@ -69,7 +115,11 @@ if [[ -n "$render_only" ]]; then
 else
   launch_dir="$HOME/Library/LaunchAgents"
 fi
-mkdir -p "$launch_dir" "$custody_root/night"
+mkdir -p "$launch_dir"
+if [[ "${uninstall:-0}" != "1" ]]; then
+  # Only an install may create custody; uninstall must never touch the plan's custody root.
+  mkdir -p "$custody_root/night"
+fi
 uid="$(id -u)"
 
 render() {
@@ -137,6 +187,7 @@ fi
 render "$night_label" run "$night_plist" "$hour" "$minute" "launchd.night"
 render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute" "launchd.deadman"
 if [[ -n "$render_only" ]]; then
+  print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"
   exit 0
 fi
 
@@ -158,3 +209,4 @@ if ! "$launchctl_bin" print "gui/$uid/$night_label" || \
   print "launch agent verification failed; rolled back both agents" >&2
   exit 3
 fi
+print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"
