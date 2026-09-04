@@ -22,13 +22,14 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path, PurePosixPath
 from types import ModuleType
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from joulewise.provenance import model_artifact_identity
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
 
 STACK_IDENTITY_DOMAIN = "joulewise.stack_identity.v1"
+IDENTITY_UNIT_CONFIG_SET_DOMAIN = "joulewise.identity_unit_config_set.v1"
 IDENTITY_PIN_DERIVATION_CONTRACT = "joulewise.identity_pin_derivation.v1"
 IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA = (
     "joulewise.identity_pin_projection_receipt.v1"
@@ -241,6 +242,31 @@ def scientific_config_identity_sha256(value: Mapping[str, Any]) -> str:
     if identity is None:
         raise ValueError("config cannot be normalized into scientific identity")
     return canonical_json_sha256(identity)
+
+
+def identity_unit_config_set_sha256(scientific_hashes: Iterable[str]) -> str:
+    """Fold one identity unit's distinct scientific identities deterministically."""
+
+    distinct = sorted(set(scientific_hashes))
+    if not distinct:
+        raise ValueError("identity unit config set must be nonempty")
+    if any(_LOWER_SHA256_RE.fullmatch(value) is None for value in distinct):
+        raise ValueError("identity unit config set values must be lowercase SHA-256")
+    if len(distinct) == 1:
+        return distinct[0]
+    payload = IDENTITY_UNIT_CONFIG_SET_DOMAIN + "\n" + "\n".join(distinct)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def project_identity_unit_common_profile(
+    workload_profile: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Remove the per-member suite-manifest binding from a typed workload."""
+
+    result = copy.deepcopy(dict(workload_profile))
+    result.pop("suite_manifest_ref", None)
+    result.pop("suite_manifest_sha256", None)
+    return result
 
 
 def _path_independent_identifier(value: object) -> str | None:
@@ -1436,6 +1462,125 @@ def _read_unit_configs(
     return configs, inventory
 
 
+_DECLARED_SUITE_MANIFEST_MEMBER_FIELDS = {
+    "suite_manifest_ref",
+    "suite_manifest_sha256",
+    "declared_member_count",
+}
+
+
+def _declared_suite_manifest_members(
+    workload_profile: object, *, unit_id: str
+) -> tuple[list[Mapping[str, Any]], dict[str, Any]] | None:
+    if not isinstance(workload_profile, Mapping):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"identity unit {unit_id!r} workload declaration is not an object",
+        )
+    if "suite_manifest_set" not in workload_profile:
+        return None
+    if any(
+        field in workload_profile
+        for field in ("suite_manifest_ref", "suite_manifest_sha256")
+    ):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"identity unit {unit_id!r} suite declaration is not a common profile",
+        )
+    raw_members = workload_profile["suite_manifest_set"]
+    if not isinstance(raw_members, list) or not raw_members:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"identity unit {unit_id!r} suite_manifest_set must be nonempty",
+        )
+    members: list[Mapping[str, Any]] = []
+    refs: list[str] = []
+    hashes: list[str] = []
+    for index, raw_member in enumerate(raw_members):
+        member = _require_exact_keys(
+            raw_member,
+            _DECLARED_SUITE_MANIFEST_MEMBER_FIELDS,
+            f"identity unit {unit_id!r} suite_manifest_set[{index}]",
+        )
+        ref = member["suite_manifest_ref"]
+        if (
+            not isinstance(ref, str)
+            or not ref
+            or "\\" in ref
+            or PurePosixPath(ref).is_absolute()
+            or ".." in PurePosixPath(ref).parts
+            or PurePosixPath(ref).as_posix() != ref
+        ):
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                f"identity unit {unit_id!r} suite manifest reference is invalid",
+            )
+        digest = _require_lower_sha256(
+            member["suite_manifest_sha256"],
+            f"identity unit {unit_id!r} suite_manifest_set[{index}].suite_manifest_sha256",
+        )
+        count = member["declared_member_count"]
+        if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+            raise IdentityPinProjectionError(
+                "readiness_identity_artifact_unreadable",
+                f"identity unit {unit_id!r} declared member count is invalid",
+            )
+        refs.append(ref)
+        hashes.append(digest)
+        members.append(member)
+    if len(refs) != len(set(refs)) or len(hashes) != len(set(hashes)):
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"identity unit {unit_id!r} suite_manifest_set contains duplicates",
+        )
+    common_profile = copy.deepcopy(dict(workload_profile))
+    common_profile.pop("suite_manifest_set")
+    return members, common_profile
+
+
+def _declared_manifest_path(pack_root: Path, manifest_ref: str) -> Path:
+    """Resolve one declared suite manifest as a regular file below its pack."""
+
+    posix = PurePosixPath(manifest_ref)
+    parts = posix.parts
+    pack_indexes = [index for index, part in enumerate(parts) if part == pack_root.name]
+    if len(pack_indexes) > 1:
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            f"declared suite manifest path is ambiguous: {manifest_ref}",
+        )
+    relative_parts = (
+        parts[pack_indexes[0] + 1 :] if pack_indexes else parts
+    )
+    if not relative_parts:
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            f"declared suite manifest path is empty below pack: {manifest_ref}",
+        )
+    relative = PurePosixPath(*relative_parts).as_posix()
+    try:
+        return _resolve_config_path(pack_root, relative)
+    except IdentityPinProjectionError as exc:
+        raise IdentityPinProjectionError(
+            "readiness_identity_environment_dirty",
+            f"declared suite manifest is unauthenticated: {manifest_ref}",
+            observed={"suite_manifest_ref": manifest_ref},
+        ) from exc
+
+
+def _distinct_manifest_identity_refusal_reason(
+    declared_distinct_count: int,
+    observed_distinct_identities: Iterable[str],
+) -> str | None:
+    """Return the existing refusal when manifest/identity cardinality differs."""
+
+    return (
+        "readiness_identity_environment_dirty"
+        if len(set(observed_distinct_identities)) != declared_distinct_count
+        else None
+    )
+
+
 def _derive_projection_units(
     pack_root: Path, projection: Mapping[str, Any]
 ) -> tuple[list[dict[str, Any]], str, list[dict[str, Any]]]:
@@ -1446,19 +1591,126 @@ def _derive_projection_units(
         unit_id = unit["identity_unit_id"]
         configs, config_inventory = _read_unit_configs(pack_root, unit)
         declared = unit["declared_identity"]
+        suite_declaration = _declared_suite_manifest_members(
+            declared["workload_profile"], unit_id=unit_id
+        )
+        declared_common_workload = (
+            suite_declaration[1]
+            if suite_declaration is not None
+            else declared["workload_profile"]
+        )
+        declared_by_manifest = (
+            {
+                member["suite_manifest_sha256"]: member
+                for member in suite_declaration[0]
+            }
+            if suite_declaration is not None
+            else {}
+        )
+        for manifest_sha, member in declared_by_manifest.items():
+            manifest_ref = member["suite_manifest_ref"]
+            manifest_path = _declared_manifest_path(pack_root, manifest_ref)
+            try:
+                observed_manifest_sha = _sha256_bytes(manifest_path.read_bytes())
+            except OSError as exc:
+                raise IdentityPinProjectionError(
+                    "readiness_identity_environment_dirty",
+                    f"declared suite manifest is unauthenticated: {manifest_ref}",
+                    observed={"suite_manifest_ref": manifest_ref},
+                ) from exc
+            if observed_manifest_sha != manifest_sha:
+                raise IdentityPinProjectionError(
+                    "readiness_identity_environment_dirty",
+                    f"declared suite manifest is unauthenticated: {manifest_ref}",
+                    observed={
+                        "suite_manifest_ref": manifest_ref,
+                        "declared_sha256": manifest_sha,
+                        "observed_sha256": observed_manifest_sha,
+                    },
+                )
         scientific_hashes: set[str] = set()
+        manifest_counts: dict[str, int] = {}
+        manifest_scientific_hashes: dict[str, set[str]] = {}
         typed_configs: list[BenchmarkConfig] = []
         for config in configs:
             observed_declared = _declared_identity_from_config(config)
-            if observed_declared != declared:
+            if suite_declaration is None:
+                declarations_match = observed_declared == declared
+            else:
+                observed_common = copy.deepcopy(observed_declared)
+                observed_common["workload_profile"] = (
+                    project_identity_unit_common_profile(
+                        observed_declared["workload_profile"]
+                    )
+                )
+                expected_common = copy.deepcopy(dict(declared))
+                expected_common["workload_profile"] = declared_common_workload
+                declarations_match = observed_common == expected_common
+            if not declarations_match:
                 raise IdentityPinProjectionError(
                     "readiness_identity_environment_dirty",
                     f"identity unit {unit_id!r} config declaration differs from pack",
                     observed=observed_declared,
                 )
-            scientific_hashes.add(scientific_config_identity_sha256(config))
+            scientific_hash = scientific_config_identity_sha256(config)
+            scientific_hashes.add(scientific_hash)
+            if suite_declaration is not None:
+                workload = observed_declared["workload_profile"]
+                manifest_sha = workload.get("suite_manifest_sha256")
+                manifest_ref = workload.get("suite_manifest_ref")
+                member = declared_by_manifest.get(manifest_sha)
+                if member is None or manifest_ref != member["suite_manifest_ref"]:
+                    raise IdentityPinProjectionError(
+                        "readiness_identity_environment_dirty",
+                        f"identity unit {unit_id!r} emitted an undeclared suite manifest",
+                        observed={
+                            "suite_manifest_ref": manifest_ref,
+                            "suite_manifest_sha256": manifest_sha,
+                        },
+                    )
+                manifest_counts[manifest_sha] = manifest_counts.get(manifest_sha, 0) + 1
+                manifest_scientific_hashes.setdefault(manifest_sha, set()).add(
+                    scientific_hash
+                )
             typed_configs.append(BenchmarkConfig.from_mapping(dict(config)))
-        if len(scientific_hashes) != 1:
+        if suite_declaration is not None:
+            declared_counts = {
+                digest: member["declared_member_count"]
+                for digest, member in declared_by_manifest.items()
+            }
+            if manifest_counts != declared_counts:
+                raise IdentityPinProjectionError(
+                    "readiness_identity_environment_dirty",
+                    f"identity unit {unit_id!r} suite manifest census differs from pack",
+                    observed={
+                        "declared_member_counts": declared_counts,
+                        "emitted_member_counts": manifest_counts,
+                    },
+                )
+            divergent_manifests = sorted(
+                digest
+                for digest, hashes in manifest_scientific_hashes.items()
+                if len(hashes) != 1
+            )
+            if divergent_manifests:
+                raise IdentityPinProjectionError(
+                    "readiness_identity_environment_dirty",
+                    f"identity unit {unit_id!r} manifest class has multiple scientific identities",
+                    observed={"suite_manifest_sha256": divergent_manifests},
+                )
+            cardinality_refusal = _distinct_manifest_identity_refusal_reason(
+                len(declared_by_manifest), scientific_hashes
+            )
+            if cardinality_refusal is not None:
+                raise IdentityPinProjectionError(
+                    cardinality_refusal,
+                    f"identity unit {unit_id!r} scientific identity count differs from declared manifests",
+                    observed={
+                        "declared_manifest_count": len(declared_by_manifest),
+                        "scientific_config_identities": sorted(scientific_hashes),
+                    },
+                )
+        elif len(scientific_hashes) != 1:
             raise IdentityPinProjectionError(
                 "readiness_identity_environment_dirty",
                 f"identity unit {unit_id!r} has multiple scientific config identities",
@@ -1577,9 +1829,30 @@ def _derive_projection_units(
                 f"identity unit {unit_id!r} runtime/shared model enumeration diverged",
                 observed={"runtime": observed_digest, "shared": shared_digest},
             )
-        stack, runtime_config = derive_model_runtime_config_from_metadata(
-            representative, metadata
-        )
+        member_stacks: list[Mapping[str, Any]] = []
+        member_runtime_pins: set[tuple[str, str]] = set()
+        for config in configs:
+            member_stack, member_runtime_config = (
+                derive_model_runtime_config_from_metadata(config, metadata)
+            )
+            member_stacks.append(member_stack)
+            member_runtime_pins.add(
+                (
+                    member_runtime_config["model_artifact_sha256"],
+                    member_runtime_config["runtime_identity_sha256"],
+                )
+            )
+        if len(member_runtime_pins) != 1 or any(
+            member_stack != member_stacks[0] for member_stack in member_stacks[1:]
+        ):
+            raise IdentityPinProjectionError(
+                "readiness_identity_projection_mint_divergence",
+                f"identity unit {unit_id!r} members do not share runtime pins",
+                observed={"runtime_pins": sorted(member_runtime_pins)},
+            )
+        stack = member_stacks[0]
+        config_set_sha = identity_unit_config_set_sha256(scientific_hashes)
+        runtime_config = derive_model_runtime_config(stack, config_set_sha)
         adapters = metadata.get("adapters")
         runtime_observation = (
             adapters.get("runtime") if isinstance(adapters, Mapping) else None
@@ -1611,7 +1884,13 @@ def _derive_projection_units(
                 else None
             ),
             "quantization": stack["quantization"],
-            "workload_profile": _typed_config(representative)["workload_profile"],
+            "workload_profile": (
+                project_identity_unit_common_profile(
+                    _typed_config(representative)["workload_profile"]
+                )
+                if suite_declaration is not None
+                else _typed_config(representative)["workload_profile"]
+            ),
         }
         expected_checks = {
             "hardware_target.config": declared["hardware_target"],
@@ -1622,7 +1901,7 @@ def _derive_projection_units(
             "model_source": declared["model_source"],
             "model_revision": declared["model_revision"],
             "quantization": declared["quantization"],
-            "workload_profile": declared["workload_profile"],
+            "workload_profile": declared_common_workload,
         }
         tokenizer_revision = stack["tokenizer_identity"].get("revision")
         tokenizer_backend = stack["tokenizer_identity"].get("backend")
@@ -1656,7 +1935,7 @@ def _derive_projection_units(
                     "prepare_quantization": prepare_quantization,
                 },
             )
-        expected_config_sha = next(iter(scientific_hashes))
+        expected_config_sha = identity_unit_config_set_sha256(scientific_hashes)
         if runtime_config["config_set_sha256"] != expected_config_sha:
             raise IdentityPinProjectionError(
                 "readiness_identity_projection_mint_divergence",

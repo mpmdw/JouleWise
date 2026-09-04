@@ -19,7 +19,11 @@ from unittest import mock
 
 from joulewise import floor_mint_estimator
 import joulewise.controller as controller_module
-from joulewise.analysis_engine import AnalysisInputError, analyze_claims
+from joulewise.analysis_engine import (
+    AnalysisInputError,
+    _floor_engine_reasons,
+    analyze_claims,
+)
 from joulewise.analysis_engine.artifact import render_claim_verdicts
 from joulewise.analysis_engine.artifact import (
     calculate_claim_verdicts_id,
@@ -647,6 +651,34 @@ def _v3_supersession_finding_artifact() -> dict:
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
+    def test_identity_gate_refusals_map_to_transport_inapplicable(self) -> None:
+        for reason_code in (
+            "consumer_identity_set_unauthenticated",
+            "consumer_identity_undeclared",
+        ):
+            with self.subTest(reason_code=reason_code):
+                resolution = FloorResolution(
+                    status="refused",
+                    artifact_id="identity-gate-refusal",
+                    artifact_sha256="a" * 64,
+                    source_cell_ids=(),
+                    transport_group_id=None,
+                    transport_rule_id=None,
+                    floor_abs_j=None,
+                    floor_cmp_j=None,
+                    floor_gate_j=None,
+                    reason_codes=(reason_code,),
+                )
+
+                self.assertEqual(
+                    _floor_engine_reasons([resolution]),
+                    [
+                        "floor_abs_missing",
+                        "floor_cmp_missing",
+                        "floor_transport_inapplicable",
+                    ],
+                )
+
     def setUp(self):
         source_patch = mock.patch(
             "joulewise.bundle._capture_source_state",
