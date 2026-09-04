@@ -2785,7 +2785,7 @@ def _read_bundle(
     expected_config_sha256 = (
         None if allow_replacement_tags else _expected_bundle_config_sha256(source_config)
     )
-    reasons: list[str] = []
+    reasons: list[str] = list(_transfer_classification_reason_codes(reader))
     if strict_problems:
         reasons.append("bundle_strict_invalid")
     expected = replacement_config_identity(source_config) if allow_replacement_tags else _typed_config(source_config)
@@ -2830,6 +2830,19 @@ def _read_bundle(
         inclusion_status=inclusion,
         launch_lineage=launch_lineage,
     )
+
+
+def _transfer_classification_reason_codes(
+    reader: BundleReader,
+) -> tuple[str, ...]:
+    """Return diagnostic claim refusals without replacing strict damage gates."""
+
+    from joulewise.transfer_fiducial import classification_reason_codes
+
+    try:
+        return classification_reason_codes(reader.transfer_fiducial_class())
+    except Exception:
+        return ()
 
 
 def _enforce_registered_realized_identity(

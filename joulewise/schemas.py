@@ -185,6 +185,7 @@ _CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
             "prompt_token_expectation",
             "repetitions",
             "warmup_runs",
+            "transfer_fiducial_gap_s",
         }
     ),
     "interconnect": frozenset({"name", "link_speed_mbps", "notes"}),
@@ -908,6 +909,7 @@ class WorkloadProfile:
     prompt_token_expectation: PromptTokenExpectation | None = None
     repetitions: int = 1
     warmup_runs: int = 1
+    transfer_fiducial_gap_s: float | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "WorkloadProfile":
@@ -952,10 +954,29 @@ class WorkloadProfile:
             ),
             repetitions=_positive_int(repetitions, "workload_profile.repetitions"),
             warmup_runs=_positive_int(warmup_runs, "workload_profile.warmup_runs"),
+            transfer_fiducial_gap_s=_optional_float(
+                data.get("transfer_fiducial_gap_s"),
+                "workload_profile.transfer_fiducial_gap_s",
+                minimum=0,
+            ),
         )
 
     def validate(self) -> None:
         _validate_workload_semantics(asdict(self))
+        if self.transfer_fiducial_gap_s is not None:
+            from joulewise.transfer_fiducial import TRANSFER_FIDUCIAL_GAP_S_V1
+
+            if self.transfer_fiducial_gap_s != TRANSFER_FIDUCIAL_GAP_S_V1:
+                raise SchemaError(
+                    "workload_profile.transfer_fiducial_gap_s must be exactly "
+                    f"{TRANSFER_FIDUCIAL_GAP_S_V1} in v1"
+                )
+            if self.suite_manifest_ref is not None:
+                raise SchemaError("transfer fiducial requires a single-prompt workload")
+            if self.repetitions != 1:
+                raise SchemaError("transfer fiducial requires repetitions == 1")
+            if self.output_tokens is None or self.output_tokens < 1:
+                raise SchemaError("transfer fiducial requires output_tokens >= 1")
 
 
 @dataclass(frozen=True)
@@ -1110,6 +1131,15 @@ class BenchmarkConfig:
 
     def validate(self) -> None:
         self.workload_profile.validate()
+        if self.workload_profile.transfer_fiducial_gap_s is not None and (
+            self.hardware_target.runtime_backend != RuntimeBackend.MLX
+            or self.hardware_target.telemetry_backend
+            != TelemetryBackend.POWERMETRICS
+        ):
+            raise SchemaError(
+                "unsupported_workload: transfer fiducial requires mlx runtime "
+                "and powermetrics telemetry"
+            )
         if self.hardware_target.transport == TransportKind.SSH and not self.hardware_target.host:
             raise SchemaError("hardware_target.host is required when transport is ssh")
         if (self.schema_extensions is None) != (
@@ -1136,6 +1166,8 @@ class BenchmarkConfig:
             del workload["prompt_token_evidence_policy"]
         if workload.get("prompt_token_expectation") is None:
             del workload["prompt_token_expectation"]
+        if workload.get("transfer_fiducial_gap_s") is None:
+            del workload["transfer_fiducial_gap_s"]
         model = data["model"]
         if model.get("tokenizer_json_sha256") is None:
             del model["tokenizer_json_sha256"]
@@ -1328,6 +1360,10 @@ class BenchmarkConfig:
                         },
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
+                        "transfer_fiducial_gap_s": {
+                            "type": ["number", "null"],
+                            "enum": [0.5, None],
+                        },
                     },
                     "allOf": [
                         _exactly_one_non_null_schema(_PROMPT_SOURCE_FIELDS),

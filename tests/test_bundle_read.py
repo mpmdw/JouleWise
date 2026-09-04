@@ -1662,5 +1662,23 @@ class SuiteReaderTests(ReaderTestCase):
         self.assertTrue(all(file_hash in problem for problem in digest_problems), digest_problems)
 
 
+class TransferFiducialBundleReaderTests(unittest.TestCase):
+    def test_transfer_classifier_uses_config_or_events_and_rejects_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "config.json").write_text(
+                json.dumps(
+                    {"workload_profile": {"transfer_fiducial_gap_s": 0.5}}
+                )
+                + "\n"
+            )
+            (bundle / "events.jsonl").write_text("")
+            classified = BundleReader(bundle).transfer_fiducial_class()
+        self.assertTrue(classified.is_diagnostic)
+        self.assertTrue(classified.by_config)
+        self.assertFalse(classified.by_events)
+        self.assertTrue(classified.inconsistent)
+
+
 if __name__ == "__main__":
     unittest.main()

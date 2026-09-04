@@ -628,6 +628,20 @@ class AuthenticatedConsumptionSession:
         self._prepared = True
         self._preparation_identity = identity
         reasons: set[str] = set()
+        from joulewise.transfer_fiducial import classification_reason_codes
+
+        for path in bundle_paths.values():
+            try:
+                reasons.update(
+                    classification_reason_codes(
+                        BundleReader(path).transfer_fiducial_class()
+                    )
+                )
+            except BundleReadError:
+                reasons.add("whole_window_verdict_provenance_invalid")
+        if reasons:
+            self._fail_global(reasons)
+            return
         if self.calibration_ledger_snapshot is None:
             self._fail_global({"calibration_ledger_snapshot_required"})
             return

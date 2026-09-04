@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
@@ -43,6 +43,10 @@ from joulewise.provenance import (
     suite_prompt_rollup,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
+from joulewise.transfer_fiducial import (
+    TRANSFER_FIDUCIAL_BOUNDARY_SEMANTICS,
+    TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND,
+)
 from joulewise.suite import (
     ITEM_END,
     ITEM_START,
@@ -270,6 +274,21 @@ class MlxRuntimeAdapter:
                 ),
             )
 
+        if config.workload_profile.transfer_fiducial_gap_s is not None:
+            try:
+                synchronize = getattr(_resolve_mlx_core(), "synchronize")
+                if not callable(synchronize):
+                    raise TypeError("mlx.core.synchronize is not callable")
+            except (ImportError, TypeError) as exc:
+                return AdapterResult(
+                    ok=False,
+                    failure_reason=FailureReason.UNSUPPORTED_WORKLOAD,
+                    message=(
+                        "transfer fiducial requires mlx.core.synchronize; "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
+                )
+
         start_s = self._clock.now()
         try:
             loaded = mlx_lm.load(
@@ -384,14 +403,26 @@ class MlxRuntimeAdapter:
         # The encode runs INSIDE the tokenize phase window (prepare_prompt is
         # called between the tokenize markers) so per-phase attribution covers
         # the real tokenization work on a live clock.
-        record = self._generate(
-            None,
-            [],
-            None,
-            max_tokens,
-            suppress_eos=True,
-            prepare_prompt=lambda: self._prompt_for_workload(config),
-        )
+        transfer_gap_s = config.workload_profile.transfer_fiducial_gap_s
+        if transfer_gap_s is None:
+            record = self._generate(
+                None,
+                [],
+                None,
+                max_tokens,
+                suppress_eos=True,
+                prepare_prompt=lambda: self._prompt_for_workload(config),
+            )
+        else:
+            record = self._generate(
+                None,
+                [],
+                None,
+                max_tokens,
+                suppress_eos=True,
+                prepare_prompt=lambda: self._prompt_for_workload(config),
+                transfer_fiducial_gap_s=transfer_gap_s,
+            )
         prompt_token_ids = record.prompt_token_ids
         prompt_text = record.prompt_text
         tokens_jsonl = "".join(
@@ -699,6 +730,7 @@ class MlxRuntimeAdapter:
         position: int | None = None,
         token_message_prefix: str = "mlx token",
         prepare_prompt: Any | None = None,
+        transfer_fiducial_gap_s: float | None = None,
     ) -> _GenerationRecord:
         events: list[RuntimeEvent] = [
             self._event("phase_start", "tokenize", "mlx tokenization started")
@@ -747,14 +779,28 @@ class MlxRuntimeAdapter:
             prefill_metadata.update(
                 {"item_id": item_id, "item_index": item_index, "position": position}
             )
-        events.append(
-            self._event(
-                "phase_start",
-                "prefill",
-                "mlx prefill started",
-                prefill_metadata,
+        if transfer_fiducial_gap_s is None:
+            events.append(
+                self._event(
+                    "phase_start",
+                    "prefill",
+                    "mlx prefill started",
+                    prefill_metadata,
+                )
             )
-        )
+        else:
+            prefill_start_stamp = self._clock.stamp()
+            prefill_metadata["clock_stamp"] = asdict(prefill_start_stamp)
+            prefill_metadata["diagnostic_kind"] = TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND
+            events.append(
+                RuntimeEvent(
+                    timestamp_s=prefill_start_stamp.epoch_s,
+                    event_type="phase_start",
+                    phase="prefill",
+                    message="mlx prefill started",
+                    metadata=prefill_metadata,
+                )
+            )
         token_records: list[dict[str, float | int]] = []
         output_token_ids: list[int] = []
         text_parts: list[str] = []
@@ -801,22 +847,78 @@ class MlxRuntimeAdapter:
                                 "position": position,
                             }
                         )
-                    events.append(
-                        self._event(
-                            "phase_end",
-                            "prefill",
-                            "mlx prefill completed",
-                            prefill_end_metadata,
+                    if transfer_fiducial_gap_s is None:
+                        events.append(
+                            self._event(
+                                "phase_end",
+                                "prefill",
+                                "mlx prefill completed",
+                                prefill_end_metadata,
+                            )
                         )
-                    )
-                    events.append(
-                        self._event(
-                            "phase_start",
-                            "decode",
-                            "mlx decode started",
-                            decode_start_metadata,
+                        events.append(
+                            self._event(
+                                "phase_start",
+                                "decode",
+                                "mlx decode started",
+                                decode_start_metadata,
+                            )
                         )
-                    )
+                    else:
+                        shared_metadata = {
+                            "boundary_semantics": TRANSFER_FIDUCIAL_BOUNDARY_SEMANTICS,
+                            "diagnostic_kind": TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND,
+                            "commanded_gap_s": transfer_fiducial_gap_s,
+                            "synchronization": "mlx.core.synchronize_after_gap_start_stamp",
+                        }
+                        gap_start_stamp = self._clock.stamp()
+                        prefill_end_metadata.update(shared_metadata)
+                        prefill_end_metadata["clock_stamp"] = asdict(gap_start_stamp)
+                        gap_start_metadata = dict(shared_metadata)
+                        gap_start_metadata["clock_stamp"] = asdict(gap_start_stamp)
+                        events.append(
+                            RuntimeEvent(
+                                timestamp_s=gap_start_stamp.epoch_s,
+                                event_type="phase_end",
+                                phase="prefill",
+                                message="mlx prefill completed",
+                                metadata=prefill_end_metadata,
+                            )
+                        )
+                        events.append(
+                            RuntimeEvent(
+                                timestamp_s=gap_start_stamp.epoch_s,
+                                event_type="fiducial_gap_start",
+                                phase="fiducial_gap",
+                                message="transfer fiducial gap started",
+                                metadata=gap_start_metadata,
+                            )
+                        )
+                        _resolve_mlx_core().synchronize()
+                        self._clock.sleep(transfer_fiducial_gap_s)
+                        gap_end_stamp = self._clock.stamp()
+                        gap_end_metadata = dict(shared_metadata)
+                        gap_end_metadata["clock_stamp"] = asdict(gap_end_stamp)
+                        decode_start_metadata.update(shared_metadata)
+                        decode_start_metadata["clock_stamp"] = asdict(gap_end_stamp)
+                        events.append(
+                            RuntimeEvent(
+                                timestamp_s=gap_end_stamp.epoch_s,
+                                event_type="fiducial_gap_end",
+                                phase="fiducial_gap",
+                                message="transfer fiducial gap ended",
+                                metadata=gap_end_metadata,
+                            )
+                        )
+                        events.append(
+                            RuntimeEvent(
+                                timestamp_s=gap_end_stamp.epoch_s,
+                                event_type="phase_start",
+                                phase="decode",
+                                message="mlx decode started",
+                                metadata=decode_start_metadata,
+                            )
+                        )
                 timestamp_s = self._clock.now()
                 text_parts.append(str(getattr(response, "text", "")))
                 finish_reason = getattr(response, "finish_reason", None)
@@ -882,14 +984,28 @@ class MlxRuntimeAdapter:
         }
         if item_id is not None:
             decode_end_metadata.update({"item_id": item_id, "item_index": item_index})
-        events.append(
-            self._event(
-                "phase_end",
-                "decode",
-                "mlx decode completed",
-                decode_end_metadata,
+        if transfer_fiducial_gap_s is None:
+            events.append(
+                self._event(
+                    "phase_end",
+                    "decode",
+                    "mlx decode completed",
+                    decode_end_metadata,
+                )
             )
-        )
+        else:
+            decode_end_stamp = self._clock.stamp()
+            decode_end_metadata["clock_stamp"] = asdict(decode_end_stamp)
+            decode_end_metadata["diagnostic_kind"] = TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND
+            events.append(
+                RuntimeEvent(
+                    timestamp_s=decode_end_stamp.epoch_s,
+                    event_type="phase_end",
+                    phase="decode",
+                    message="mlx decode completed",
+                    metadata=decode_end_metadata,
+                )
+            )
 
         response_text = "".join(text_parts)
         output_tokens = len(token_records)

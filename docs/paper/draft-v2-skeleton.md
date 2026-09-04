@@ -1136,36 +1136,71 @@ fingerprints alone.
 
 <!-- Source: docs/paper/round7/survival-map.md; reviewer items C1 and M1; ranked item 16 / TRANSFER-FIDUCIAL-01. -->
 
-The inserted-gap study is a registered diagnostic protocol that this paper has
-not run. Its gap, run count, estimator, and residual comparison are fixed before
-collection. It is a proposed design, not yet a runnable protocol: its sleep
-actuation, command-stamp method, and fitted-edge selection remain to be fixed.
-Hold model identity, prompt, tokenizer, and
-generation rules fixed at the values registered for the campaign. In each of
-about ten otherwise identical real-workload runs, insert an approximately
-500-ms commanded sleep during which the inference workload submits no GPU work.
-Place it after the runtime stamps prefill completion and before it stamps decode
-start. Retain both command stamps, the surrounding power records, the before-
-and-after calibration bracket, and every refusal record. <!-- TRANSFER-FIDUCIAL-01 at
-docs/process/state_kernel.json:/tasks/TRANSFER-FIDUCIAL-01; runtime events:
-joulewise/adapters/mlx_runtime.py:795-809 emits phase_end/prefill, "mlx prefill
-completed", and phase_start/decode, "mlx decode started". -->
+<!-- BEGIN TRANSFER-FIDUCIAL-RUNNABLE -->
+The inserted-gap study is a registered and runnable diagnostic protocol—a
+study that tests the timing method but supplies no scientific result, detection
+threshold, or claim—that this paper has not run. Its
+generator imports the small-model identity—the exact model name, revision,
+tokenizer fingerprint, and formatting-template fingerprint—from the campaign generator, binds
+the exact prompt selected for that campaign, and emits the registered set of
+ten otherwise identical configurations with a 0.5-s commanded sleep. <!-- Run
+count and gap: T26 paper-goal ruling item 16 and
+docs/process/state_kernel.json:/tasks/TRANSFER-FIDUCIAL-01; campaign binding:
+configs/campaigns/d117_transfer_fiducial_v5/generate_configs.py. -->
 
-Apply the detector that Section 2 defines for commanded pulse edges, without
-modification, to the falling edge when the sleep begins and the rising edge
-when decode resumes. For each edge
-\(e\), define
-\(r_e=t_{\mathrm{fit},e}-t_{\mathrm{command},e}\), where
-\(t_{\mathrm{fit},e}\) is the detector's fitted edge time and
-\(t_{\mathrm{command},e}\) is that edge's independently stamped command time.
-Report every signed \(r_e\) and record its comparison with
-\(B_{\mathrm{fiducial}}\), where
-\(B_{\mathrm{fiducial}}=0.030067931757111657\) s is the retained diagnostic
-capture's pulse-derived bound. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA /
-REPLAY_FENCED. --> The registered row does not prescribe an acceptance
-threshold for that comparison, so this paper does not label a result a pass or
-transfer failure. A reader can recompute both residuals from the retained
-command stamps and power trace.
+The sleep-actuation problem is that the runtime's first output yield—the moment
+the generator returns its first output item—can arrive while a decode step is
+already queued on the graphics processor. The executable
+choice is to take the gap-start command stamp—a paired wall-clock and
+monotonic-clock reading from the runtime's injected clock, the clock object
+also used for event times—first, stop submitting work, call the
+runtime's synchronization function, which waits for queued work to finish,
+sleep through that clock, and then take the gap-end command stamp before
+generation continues.
+For example, if queued work remains at the first yield, the start stamp stays
+before the drain, so drain and redispatch delay remain visible in the measured
+time difference instead of being removed. The result is a transport-edge test—covering
+drain, sleep, and restart—not a computation-exact natural phase boundary.
+<!-- Runtime order and boundary semantics:
+joulewise/adapters/mlx_runtime.py; held PR #239 branch commit cb9371aa. -->
+
+The command-stamp problem is that separate clock calls for two labels on the
+same edge could create an artificial interval.
+The executable choice therefore reuses the gap-start stamp for both prefill end
+and gap start, and reuses the gap-end stamp for both gap end and decode start.
+For example, the retained event record has one recorded time for the prefill-end
+and gap-start pair and another recorded time for the gap-end and decode-start pair, so each
+commanded edge is one measurement rather than two nearly coincident ones.
+<!-- Stamp pairing: joulewise/adapters/mlx_runtime.py; authenticated parsing:
+joulewise/transfer_fiducial.py. -->
+
+The fitted-edge problem is that the existing detector fits positive power
+pulses, whereas the inserted sleep appears as a negative valley between active
+periods. The executable choice constructs one positive pulse from prefill start
+to gap start and a second positive pulse from gap end to decode end, then keeps
+the first pulse's fitted falling edge, called its offset, and the second pulse's
+fitted rising edge, called its onset. For each selected edge \(e\), the detector
+returns an allowed signed residual interval \([l_e,u_e]\); the protocol defines
+its edge radius as
+\(R_e=\max(|l_e|,|u_e|)+h\), where \(h\) is that run's clock-anchor bound.
+The pre-registered transfer residual is the largest \(R_e\) across every edge
+from every planned run. It is labelled *supported* only when that residual is
+no larger than the pulse-derived bound \(B_{\mathrm{fiducial}}\), labelled
+*exceeds bound* when it is larger, and labelled *inconclusive* when any planned
+run, stamp, trace-coverage check, fit, or binding is missing or invalid. Failed
+runs are retained; neither dropping a run nor widening the pulse-derived bound
+after seeing the result is allowed.
+
+A worked arithmetic example uses falling-edge interval
+\([-0.010,0.020]\) s, rising-edge interval \([-0.015,0.012]\) s, and
+\(h=0.002\) s. Their radii are 0.022 s and 0.017 s, so the transfer residual is
+0.022 s; because it is no larger than the retained pulse-derived bound
+\(B_{\mathrm{fiducial}}=0.030067931757111657\) s, the example is labelled
+*supported*. These values illustrate the registered arithmetic and are not
+measurement results. <!-- Numeric source:
+docs/process_traces/2026-09-04-fanout/transfer-fiducial/worked-example.json;
+bound registry row DG-027. Executable rule: joulewise/transfer_fiducial.py. -->
+<!-- END TRANSFER-FIDUCIAL-RUNNABLE -->
 
 The external-meter study is a proposed design, not yet a runnable protocol: its
 workload levels, meter synchronization, and allowable range for \(g\) remain to

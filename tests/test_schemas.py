@@ -64,6 +64,7 @@ OMITTED_OPTIONAL_KEYS = {
         "generator_sidecar_ref",
         "prompt_token_evidence_policy",
         "prompt_token_expectation",
+        "transfer_fiducial_gap_s",
     },
 }
 OMITTED_TOP_LEVEL_KEYS = {"schema_extensions", "batch_policy", "speculation"}
@@ -272,6 +273,40 @@ class BenchmarkConfigTests(unittest.TestCase):
         data["workload_profile"].pop("dataset_ref", None)
         with self.assertRaisesRegex(SchemaError, "prompt_text, prompt_tokens, or dataset_ref"):
             BenchmarkConfig.from_mapping(data)
+
+    def test_transfer_flag_rejected_for_suite_or_non_mlx_workload(self) -> None:
+        data = json.loads(
+            (ROOT / "configs" / "examples" / "mac_mlx_local.json").read_text()
+        )
+        data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        data["workload_profile"].update(
+            transfer_fiducial_gap_s=0.5,
+            repetitions=1,
+            output_tokens=1,
+        )
+        config = BenchmarkConfig.from_mapping(data)
+        self.assertEqual(config.workload_profile.transfer_fiducial_gap_s, 0.5)
+        self.assertEqual(
+            config.to_dict()["workload_profile"]["transfer_fiducial_gap_s"],
+            0.5,
+        )
+        bad_gap = copy.deepcopy(data)
+        bad_gap["workload_profile"]["transfer_fiducial_gap_s"] = 0.4
+        with self.assertRaisesRegex(SchemaError, "exactly 0.5"):
+            BenchmarkConfig.from_mapping(bad_gap)
+        suite = json.loads(
+            (ROOT / "configs" / "examples" / "mock_suite_local.json").read_text()
+        )
+        suite["hardware_target"].update(
+            runtime_backend="mlx", telemetry_backend="powermetrics"
+        )
+        suite["workload_profile"]["transfer_fiducial_gap_s"] = 0.5
+        with self.assertRaisesRegex(SchemaError, "single-prompt"):
+            BenchmarkConfig.from_mapping(suite)
+        non_mlx = copy.deepcopy(data)
+        non_mlx["hardware_target"]["runtime_backend"] = "mock"
+        with self.assertRaisesRegex(SchemaError, "unsupported_workload"):
+            BenchmarkConfig.from_mapping(non_mlx)
 
     def test_suite_manifest_ref_and_sha256_are_required_together(self) -> None:
         data = json.loads((ROOT / "configs" / "examples" / "mock_local.json").read_text())
@@ -1067,6 +1102,7 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                     "generator_sidecar_ref",
                     "prompt_token_evidence_policy",
                     "prompt_token_expectation",
+                    "transfer_fiducial_gap_s",
                 }
             },
         )
@@ -1084,6 +1120,7 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                         "generator_sidecar_ref",
                         "prompt_token_evidence_policy",
                         "prompt_token_expectation",
+                        "transfer_fiducial_gap_s",
                     }
                     if suite_ref is None and suite_sha is None:
                         expected.update({"suite_manifest_ref", "suite_manifest_sha256"})

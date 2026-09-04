@@ -224,6 +224,8 @@ CELL_REFUSAL_CODES = (
     "common_mode_precondition_failed",
     "common_mode_zero_point_divergence_out_of_domain",
     MOCK_TELEMETRY_CLAIM_REFUSAL,
+    "transfer_fiducial_claim_ineligible",
+    "transfer_fiducial_class_inconsistent",
     *sorted(LAUNCH_LINEAGE_REASON_CODES),
 )
 CELL_LABELLED_CONDITION_CODES = (
@@ -1876,6 +1878,20 @@ def _cpu_admission_bundle_reasons(
     return tuple(sorted(reasons))
 
 
+def _transfer_bundle_reason_codes(path: Path) -> tuple[str, ...]:
+    """Return central diagnostic refusals; strict gates own unreadable input."""
+
+    from joulewise.bundle_read import BundleReader
+    from joulewise.transfer_fiducial import classification_reason_codes
+
+    try:
+        return classification_reason_codes(
+            BundleReader(path).transfer_fiducial_class()
+        )
+    except Exception:
+        return ()
+
+
 def _evaluate_member(
     *,
     slot: str,
@@ -1932,6 +1948,7 @@ def _evaluate_member(
             )
         except FloorExtractionError:
             raw_config = None
+        reasons.extend(_transfer_bundle_reason_codes(path))
         try:
             authenticated_launch = authenticate_bundle_launch_lineage(
                 path,

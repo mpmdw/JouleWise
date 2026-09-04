@@ -1,0 +1,22 @@
+{
+  "schema_version": "joulewise.transfer_fiducial_worked_example.v1",
+  "status": "issued_protocol_arithmetic_only_non_measurement",
+  "bound_source": {
+    "field": "b_fiducial_v3_s",
+    "registry_row": "DG-027",
+    "value_s": 0.030067931757111657
+  },
+  "example_inputs": {
+    "falling_edge_residual_interval_s": [-0.010, 0.020],
+    "rising_edge_residual_interval_s": [-0.015, 0.012],
+    "effective_clock_anchor_bound_s": 0.002
+  },
+  "rule": "edge_radius_s = max(abs(residual_interval_endpoints_s)) + effective_clock_anchor_bound_s; residual_transfer_s = max(edge_radius_s); supported iff residual_transfer_s <= b_fiducial_v3_s",
+  "example_outputs": {
+    "falling_edge_radius_s": 0.022,
+    "rising_edge_radius_s": 0.017,
+    "residual_transfer_s": 0.022,
+    "verdict": "supported"
+  },
+  "claim_bearing": false
+}

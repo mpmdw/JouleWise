@@ -1762,5 +1762,29 @@ class BinderTests(unittest.TestCase):
                 )
 
 
+class TransferFiducialMintTests(unittest.TestCase):
+    def test_transfer_bundle_refused_by_floor_mint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "transfer"
+            bundle.mkdir()
+            (bundle / "config.json").write_text(
+                json.dumps(
+                    {"workload_profile": {"transfer_fiducial_gap_s": 0.5}}
+                )
+                + "\n"
+            )
+            (bundle / "events.jsonl").write_text("")
+            with self.assertRaisesRegex(
+                mint.MintError, "transfer_fiducial_claim_ineligible"
+            ):
+                mint._strict_bundle(
+                    root,
+                    "transfer",
+                    {},
+                    lambda _path, _strict: (),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
