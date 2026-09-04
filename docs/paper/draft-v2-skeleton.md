@@ -980,19 +980,19 @@ phase. Two is less than the required three, so the phase was not resolvable.
 The population consists of short prompt-processing phases from the earlier
 1.5-billion-parameter diagnostic configuration during the July
 2026 diagnostic window. Here **diagnostic-era** means
-collected during that earlier diagnostic period, before the fixed before collection
-demonstration. Across this retained diagnostic-era population, 37 of 50 phases
+collected during that earlier diagnostic period, before the demonstration whose
+comparison was fixed before collection. Across this retained diagnostic-era population, 37 of 50 phases
 overlapped two sampling records and the remaining 13 of 50 overlapped three.
 Accordingly, 37 failed the three-record minimum and 13 passed it. The result
 supports one conclusion: most phases in this retained diagnostic population
 were too brief, relative to the sampling-record intervals and their alignment,
 for the fixed phase-energy calculation. The **prospective demonstration** is the
-fixed before collection comparison to be collected later; this result does not show zero
+comparison fixed before collection and collected later; this result does not show zero
 prompt-processing energy, make a model comparison, or establish a limitation
 of that demonstration. These data are **non-claim-bearing**, meaning no paper
-claim rests on them. The demonstration responds by using the
-prefill length selected by G2-a before collection rather than reusing this
-short diagnostic phase.
+claim rests on them. The demonstration responds by using a
+prompt length chosen, before collection, by a dedicated selection run, rather
+than reusing this short diagnostic phase.
 
 ### Demonstration fixed before collection
 
