@@ -948,10 +948,7 @@ class InvocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(
             prefix="r7f-unavailable-", dir=SCRATCH_PARENT
         ) as directory:
-            # The fence prints the RESOLVED corpus root; resolve here too so a
-            # symlinked TMPDIR (macOS /var -> /private/var) cannot fail the exact
-            # last-line comparison.
-            scratch = Path(directory).resolve()
+            scratch = Path(directory)
             missing_root = scratch / "no-such-corpus"
             registry = _registry_with_current_source_pins(scratch)
             completed = subprocess.run(
@@ -969,10 +966,20 @@ class InvocationTests(unittest.TestCase):
                 check=False,
             )
         self.assertEqual(completed.returncode, 3, completed.stdout + completed.stderr)
-        self.assertIn(str(missing_root), completed.stdout)
+        prefix = "R7F CORPUS UNAVAILABLE: "
+        last_line = completed.stdout.splitlines()[-1]
+        self.assertTrue(last_line.startswith(prefix), last_line)
+        reported_missing = Path(last_line.removeprefix(prefix)).resolve()
+        expected_missing = (
+            missing_root
+            / "runs_window_a_20260722"
+            / "instrument_validation"
+            / "20260722T145535-e941c821"
+            / "instrument_evidence.json"
+        ).resolve()
         self.assertEqual(
-            completed.stdout.splitlines()[-1],
-            f"R7F CORPUS UNAVAILABLE: {missing_root / 'runs_window_a_20260722' / 'instrument_validation' / '20260722T145535-e941c821' / 'instrument_evidence.json'}",
+            reported_missing,
+            expected_missing,
         )
         self.assertFalse(
             any("COMPARED" in line for line in completed.stdout.splitlines())
