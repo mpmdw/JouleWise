@@ -35,7 +35,7 @@ The counterfactual regression is physical rather than structural: the fixture tr
 | F-2 | A joint curve removes impossible combinations for total phase-attributed energy. | V2: the retained r01 curve stays at 51.62730338107395 J, while the marginal rectangle spans 50.27478179508489--52.97982496706301 J. Source bytes are sealed in V2. | Real geometric improvement, but for total/closure, not for scalar phase share. |
 | F-3 | The proposed scalar gain is zero. Define prefill share as `prefill / (prefill + decode)` and normalized phase asymmetry as `(decode - prefill) / (decode + prefill)`. Their joint and independent-box endpoints are identical. | V2 gives identical intervals and width ratios of 1.0; V3 repeats both ratios across every retained member in the absolute decode cell. | The kernel row's inflation premise is refuted for these scalar estimands. |
 | D-1 | Do not alter marginal phase envelopes or the analysis claim path. | The scalar claim does not tighten, while the joint total is a different estimand. | Implemented: diagnostic only. |
-| R-1 | **NEEDS_RULING:** classify the scalar proposal as a diagnostic sensitivity result, or authorize a new joint phase-allocation/closure estimand. | No cited authority defines that new estimand, its floor, or its claim ceiling. | Recommend retaining the result for diagnostics rather than treating it as an empirical null finding. |
+| R-1 | **NEEDS_RULING:** close the scalar proposal as a measured null, or authorize a new joint phase-allocation/closure estimand. | No cited authority defines that new estimand, its floor, or its claim ceiling. | Recommend closing the scalar proposal as null and retaining this tool for diagnostics. |
 
 ### Scoped design
 
