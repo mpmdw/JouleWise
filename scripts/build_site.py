@@ -1388,7 +1388,6 @@ def render_project_page(stamps: dict[str, SourceStamp]) -> str:
         {
             "README_STAMP": source_chip(stamps["README.md"]),
             "DECISION_STAMP": source_chip(stamps["docs/decision_log.md"]),
-            "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
             "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/index.html"]),
         },
     )
@@ -1396,17 +1395,14 @@ def render_project_page(stamps: dict[str, SourceStamp]) -> str:
         stamps["docs/site_src/index.html"],
         stamps["README.md"],
         stamps["docs/decision_log.md"],
-        stamps[FLOOR_EXTRACTION_SOURCE],
     ]
     return page_shell("Project README", "Project", body, page_footer(footer_stamps))
 
 
-def render_learning_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -> str:
+def render_learning_page(stamps: dict[str, SourceStamp]) -> str:
     replacements = {
-        **floor_replacements(floors),
         "METHODOLOGY_STAMP": source_chip(stamps["docs/contracts/measurement_methodology.md"]),
         "FLOOR_SPEC_STAMP": source_chip(stamps["docs/phase_2/detection_floor.md"]),
-        "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
         "CLAIMS_STAMP": source_chip(stamps["docs/contracts/claims_ladder.md"]),
         "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/research.html"]),
     }
@@ -1415,18 +1411,15 @@ def render_learning_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -
         stamps["docs/site_src/research.html"],
         stamps["docs/contracts/measurement_methodology.md"],
         stamps["docs/phase_2/detection_floor.md"],
-        stamps[FLOOR_EXTRACTION_SOURCE],
         stamps["docs/contracts/claims_ladder.md"],
     ]
     return page_shell("Learn measurement science", "Learn", body, page_footer(footer_stamps))
 
 
-def render_measurements_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -> str:
+def render_measurements_page(stamps: dict[str, SourceStamp]) -> str:
     replacements = {
-        **floor_replacements(floors),
         "README_STAMP": source_chip(stamps["README.md"]),
         "DECISION_STAMP": source_chip(stamps["docs/decision_log.md"]),
-        "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
         "CLAIMS_STAMP": source_chip(stamps["docs/contracts/claims_ladder.md"]),
         "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/results.html"]),
     }
@@ -1435,7 +1428,6 @@ def render_measurements_page(floors: FloorSummary, stamps: dict[str, SourceStamp
         stamps["docs/site_src/results.html"],
         stamps["README.md"],
         stamps["docs/decision_log.md"],
-        stamps[FLOOR_EXTRACTION_SOURCE],
         stamps["docs/contracts/claims_ladder.md"],
     ]
     return page_shell("Measurements", "Measurements", body, page_footer(footer_stamps))
@@ -2193,7 +2185,6 @@ def build(no_marked: bool = False) -> None:
     sessions = parse_session_history(run_md)
     report_source = latest_report_source_from_sessions(sessions)
     report_md = read_source(report_source)
-    floor_summary = parse_verified_floor_summary(read_json_source(FLOOR_EXTRACTION_SOURCE))
     decision_parts = split_decision_log_markdown(decision_md)
     docs = doc_pages(report_source, len(decision_parts))
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
@@ -2222,8 +2213,8 @@ def build(no_marked: bool = False) -> None:
 
     update_site_styles()
     write(OUT / "index.html", render_project_page(stamps))
-    write(OUT / "research.html", render_learning_page(floor_summary, stamps))
-    write(OUT / "results.html", render_measurements_page(floor_summary, stamps))
+    write(OUT / "research.html", render_learning_page(stamps))
+    write(OUT / "results.html", render_measurements_page(stamps))
     write(OUT / "status.html", render_status_page(phases, verification, bundle_count, now, sessions, queue, risks, stamps, report_source))
     write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))

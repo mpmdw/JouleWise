@@ -40,6 +40,48 @@ class BuildSiteParserTests(unittest.TestCase):
         with self.assertRaises(build_site.SiteBuildError):
             func(*args)
 
+    def test_claim_surfaces_do_not_render_d078_voided_values(self):
+        sources = {
+            name: build_site.read_source(f"docs/site_src/{name}")
+            for name in ("index.html", "research.html", "results.html")
+        }
+        for name, source in sources.items():
+            with self.subTest(name=name):
+                self.assertIn("D-078", source)
+                self.assertNotRegex(
+                    source, r"@@FLOOR_(?:REQUEST|PHASE|SUITE)_[A-Z0-9_]+@@"
+                )
+
+        stamp_sources = {
+            "README.md",
+            "docs/decision_log.md",
+            "docs/contracts/measurement_methodology.md",
+            "docs/contracts/claims_ladder.md",
+            "docs/phase_2/detection_floor.md",
+            "docs/site_src/index.html",
+            "docs/site_src/research.html",
+            "docs/site_src/results.html",
+        }
+        stamps = {
+            source: build_site.SourceStamp(source, "fixture")
+            for source in stamp_sources
+        }
+        rendered = {
+            "index.html": build_site.render_project_page(stamps),
+            "research.html": build_site.render_learning_page(stamps),
+            "results.html": build_site.render_measurements_page(stamps),
+        }
+        for name, page in rendered.items():
+            with self.subTest(rendered=name):
+                self.assertIn("D-078", page)
+                self.assertNotRegex(page, r"@@[A-Z0-9_]+@@")
+
+        combined = "\n".join(rendered.values())
+        self.assertNotIn("Verified Window-A floor extraction", combined)
+        self.assertNotIn("≈47.2", combined)
+        self.assertNotIn("≈44.4", combined)
+        self.assertNotIn("86.8", combined)
+
     def test_parse_status_at_glance(self):
         md = """# X
 
