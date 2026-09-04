@@ -146,3 +146,17 @@ beside its prompt; harvest from disk, never relaunch blind.
 - FAN-OUT: `int/2026-09-04-fan-wave-2` → **PR #285** (32 landings; five Sol contract rounds, two Opus counter-reviews, five seam-fix rounds; bench restorations of the frozen v1 validator and draft-v1; MODULARITY generalisation re-homed in `joulewise/analysis_manifest_v2.py`). Final replay running (`int-fan-wave2-replay-3.log`); CI running; rows 9/11/12 then merge. After merge: kernel rows (Opus F-2 from wave 1: p2-rows retirements, QUIET-GUARD wording, PREWINDOW-REGEX row, P2-027/035/047A/050), README blurb, RUN_STATE T33.
 - SUPPLIERS: all four supplier lanes are blocked on the custody-read seam (`feat/2026-09-04-paper-custody-seam`, PAPER-CUSTODY-SEAM-01): landing → two refuters NOT LANDABLE → fix 1 → delta NOT LANDABLE (inputs.py bypass, shim, D-173 text) → fix 2 RUNNING (bounded; a repeat routes to a consult). D-173 (proposed/provisional) text synced to addendum 16 (role + runs root; git-tracked supply map). Rulings 06 + addenda 07–10, 15, 16 on `feat/2026-09-04-paper-i-scout`. Supplier branches at their last heads: d123 (fix 2, delta NOT LANDABLE third occurrence → seam), d165 (fix 3, delta NOT LANDABLE third → seam), gamma (fix 2, delta NOT LANDABLE third → seam), transfer (fix 3 committed; B1 → seam). Each re-lands on the seam after it passes; then one paper-supply cold gate (D-173) before any merges.
 - WATCHDOG: merged; install waits for the quiet point (custody seam + wave 2 settle), then handoff → first launchd activation → REHEARSAL_STUB night. Window tonight ~02:56 PT.
+
+## 2026-09-04 ~19:30 PT — astra peer audits landed; consult convened; scope-freeze pending
+
+- Three gpt-6-astra peer audits archived at docs/process_traces/2026-09-04-peer-audit/ (01 full base, 02 claim spine,
+  03 paper vs code); 04 = magistrate bench verification (all four executable witnesses reproduce on f4c812b4);
+  05 = three-seat consult questions Q1–Q7. Ed emailed (thread "astra peer audits are in").
+- Running: Sol xhigh physics consult → 10-consult-sol-physics.md (wt-consult-sol); Opus contract consult →
+  11-consult-opus-contract.md (wt-consult-opus, Agent); blind Fable → 12-consult-blind-fable.md (wt-consult-fable);
+  legacy-L1 cure seat → 20-legacy-l1-cure-report.md on feat/2026-09-04-legacy-l1 (wt-legacy-l1).
+- Next after consult: magistrate synthesis (13), estimand + D-165 relabel rulings → cold Fable gate (claim-bearing),
+  paper-K seat (03-F4 methods-vs-code corrections, null-vs-model wording, F+B metadata) after paper-J merges,
+  Q4 floor-prompt regeneration decision, Q6 scope freeze ruling (skill-distill second convening PARKED until Q6).
+- Kernel rows merged to main (branch head 064b0dbc; merge landed with the next push). AUTH round 3 running with the registry file in scope (report 15).
+- Still running: custody fix 4, paper-J fix 1, wave-2 replay-3 (PR #285 rows 9/11/12 pending).

@@ -10912,8 +10912,9 @@ A three-seat design consult (Sol, Opus, blind Fable; traces
 adjudication packet (`14-*.md`) converged; the magistrate ruled (`15-*.md`).
 
 Rule: a paper supplier or renderer obtains every claim-bearing input ONLY
-through `joulewise/paper_custody.py`'s `open_paper_input(role, runs_root)` over a
-closed set of input families. In: a role name and a runs root — nothing else; a
+through `joulewise/paper_custody.py`'s `open_paper_input(ref)`, where `ref` is one of
+five closed typed refs each carrying only a role name and a runs root. In: that
+ref — nothing else; a
 git-tracked supply map (read through the repository's authentication session
 and anchored on a clean tree, addendum 16) names every path and expected
 digest, so no caller ever names a digest. Out: frozen verified objects carrying the digests actually verified, after a
