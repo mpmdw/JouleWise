@@ -20,12 +20,12 @@ EXPECTED_MAINTENANCE_CONTROLS = (
     ("gc.autoDetach", "false"),
 )
 ESTABLISHED_LOCAL_HELPERS = {
-    "git_fixture.py": {"init_git_fixture"},
-    "test_calibration_exits.py": {
+    "tests/git_fixture.py": {"init_git_fixture"},
+    "tests/test_calibration_exits.py": {
         "CalibrationExitReliabilityTests._configure_fixture_repo",
         "PublicGovernedExitWitnessTests.setUp",
     },
-    "test_identity_pins.py": {"init_git"},
+    "tests/test_identity_pins.py": {"init_git"},
 }
 
 
@@ -58,7 +58,9 @@ def _uses_local_hygiene(function: ast.AST) -> bool:
     )
 
 
-def _direct_git_init_lines(path: Path) -> tuple[int, ...]:
+def _direct_git_init_lines(
+    path: Path, repo_relative_path: str
+) -> tuple[int, ...]:
     """Return direct Git initialization sites that bypass the shared helper."""
 
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -96,7 +98,7 @@ def _direct_git_init_lines(path: Path) -> tuple[int, ...]:
             None,
         )
         if (
-            scope in ESTABLISHED_LOCAL_HELPERS.get(path.name, set())
+            scope in ESTABLISHED_LOCAL_HELPERS.get(repo_relative_path, set())
             and call_counts[scope] == 1
             and function is not None
             and _uses_local_hygiene(function)
@@ -136,11 +138,13 @@ def _maintenance_controls(path: Path) -> tuple[tuple[str, str], ...] | None:
 
 
 def _git_init_violations(tests_root: Path) -> dict[str, tuple[int, ...]]:
-    return {
-        path.relative_to(tests_root).as_posix(): lines
-        for path in sorted(tests_root.rglob("*.py"))
-        if (lines := _direct_git_init_lines(path))
-    }
+    violations: dict[str, tuple[int, ...]] = {}
+    for path in sorted(tests_root.rglob("*.py")):
+        tests_relative_path = path.relative_to(tests_root).as_posix()
+        repo_relative_path = f"tests/{tests_relative_path}"
+        if lines := _direct_git_init_lines(path, repo_relative_path):
+            violations[tests_relative_path] = lines
+    return violations
 
 
 class GitFixtureMaintenanceTests(unittest.TestCase):
@@ -181,9 +185,27 @@ class GitFixtureMaintenanceTests(unittest.TestCase):
 
         self.assertEqual(violations, {"support/fixture_factory.py": (2,)})
 
+    def test_nested_git_fixture_does_not_inherit_top_level_exemption(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tests_root = Path(temporary) / "tests"
+            support_module = tests_root / "support" / "git_fixture.py"
+            support_module.parent.mkdir(parents=True)
+            support_module.write_text(
+                "import subprocess\n"
+                "GIT_MAINTENANCE_CONTROLS = ()\n"
+                "def init_git_fixture(repository):\n"
+                "    subprocess.run(('git', 'init'), check=True)\n"
+                "    for key, value in GIT_MAINTENANCE_CONTROLS:\n"
+                "        subprocess.run(('git', 'config', '--local', key, value), check=True)\n",
+                encoding="utf-8",
+            )
+            violations = _git_init_violations(tests_root)
+
+        self.assertEqual(violations, {"support/git_fixture.py": (4,)})
+
     def test_established_local_helpers_retain_the_exact_tuple(self) -> None:
         observed = {
-            name: _maintenance_controls(TESTS_ROOT / name)
+            name: _maintenance_controls(TESTS_ROOT.parent / name)
             for name in ESTABLISHED_LOCAL_HELPERS
         }
         self.assertEqual(
