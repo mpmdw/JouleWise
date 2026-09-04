@@ -350,3 +350,85 @@ Pointer map only; mechanics stay in their owning files.
   design council; C-009 topology consensus; C-010 validation).
 - The binding rules themselves: `docs/decision_log.md`.
 - Per-decision, in-stream reasoning: `docs/stream_logs/`.
+
+## Addendum 2026-09-04 — direct seats, replay custody, and cold-gate isolation
+
+This addendum records execution details exposed by the 2026-09-02/03
+hands-free work. It does not change the standing rule that a stream director is
+used when a stream needs continuing judgment.
+
+### Direct model seats
+
+A *direct seat* is a bounded model invocation started by the lead through the
+runner, without a second model session whose only job is to start and watch it.
+After the lead has fixed the role, prompt, authority, and review lens, use the
+direct seat; retain a stream director only when that director will make real
+mid-stream judgments. This avoids paying for an otherwise passive wrapper while
+preserving lead review of every merge-bound result
+(`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
+“2026-09-03 21:05 update”).
+
+Before a direct runner invocation, record its checkout, starting revision,
+comparison base, write scope, output path, report genre, and expected
+verification. Put a read-only seat in a clean disposable checkout or archive,
+because lead-created untracked files can make the runner report a scope failure
+even when the seat changed nothing. Keep the machine-readable report envelope
+within its declared byte limit and put detailed audits in the prose body. A
+runner failure caused only by pre-existing, explicitly attributed dirt is not a
+semantic verdict; the lead records and adjudicates the mismatch before using
+the result
+(`docs/process_traces/2026-09-02-dx-registry/MAGISTRATE-NOTES.md`;
+`docs/process_traces/2026-09-02-dx-registry/22a-terra-243-protocol-failure.md`;
+`docs/process_traces/2026-09-02-hands-free-week/17i-watchdog-04-refuter-execution.md`).
+
+After an interrupted wrapper or usage cutoff, inspect the named worktree,
+branch, report, status file, and log before launching a replacement. A finished
+model run may outlive the wrapper that started it; harvesting that evidence is
+the first recovery action, and blind relaunch is prohibited
+(`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
+“Resume sequence after a usage stall”).
+
+### Replay custody
+
+A *replay* is a repeated check used to show that a reviewed result still holds
+at a named candidate revision or integration tree. Run a merge-bearing replay
+in a clean disposable tree, record the exact revision and merge parents, the
+working directory, full command, unpiped log, exit status, and stable tail. Run
+each mutation from a fresh baseline or verify the restored file digest before
+the next mutation. When reproducibility of a generated artifact is claimed,
+reissue it at the candidate revision and compare bytes with the issued artifact
+(`docs/process_traces/2026-09-02-hands-free-week/17c-planpin-06-fix-round-1.md`;
+`docs/process_traces/2026-09-02-hands-free-week/17h-watchdog-03-fix-round-1.md`;
+`docs/process_traces/2026-09-02-paper-d-dg071/43-integration-replay-and-terminal-review-e7425eef.md`).
+
+### Cold-gate packets and seats
+
+A *cold gate* is an independent review performed before an irreversible process
+mechanism is accepted or installed. Its packet must use neutral, separable
+questions; distinguish executed observations from proposals; time- or
+revision-pin volatile facts; and list every load-bearing source or bounded
+excerpt with its path, digest, and relevant span. Commands in the packet must
+be checked for side effects: a mode-changing option followed by `--help` is not
+assumed to be read-only. Contrary evidence and competing positions receive the
+same level of detail
+(`docs/process_traces/2026-09-02-hands-free-week/12-coldgate-opus-refutation-packet-11.md`,
+“Q8 — Packet hygiene”; `docs/process_traces/2026-09-02-hands-free-week/14-coldgate-fable-ruling-packet-11.md`,
+“Q8 — Packet hygiene”).
+
+Every cold-gate seat receives a distinct scratch directory and sealed output.
+It must not read another seat's scratch material or answer before its prescribed
+independent read order is complete; the lead opens and compares the outputs
+only after both are sealed. The first watchdog convening shared scratch space,
+and the relaunch cured that defect by separating the seats
+(`docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`).
+
+### First-use evidence
+
+A *first-use review* checks that a defined term or code literal is built or
+glossed before a reader must rely on it. For contract edits that add, move, or
+rename such terms, the pre-landing first-use table is mandatory. A behavioral
+clause also needs an executed probe of its first real use; a vocabulary pass or
+an implemented mechanism cannot substitute for that probe
+(`docs/process_traces/2026-09-03-kernel-batch/01-lieutenant-report.md`,
+“Item 1 — the D-171 addendum”; `docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`,
+finding F4).

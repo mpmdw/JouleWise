@@ -475,3 +475,24 @@ The M0 step-6 handoff list, plus: if you changed an adapter or bundle
 contract, `docs/contracts/` must already reflect it (same run); if you
 made a choice between real alternatives, the decision log must already
 hold it. A mission whose bookkeeping is missing is not done.
+
+## Addendum 2026-09-04 — verification instructions at preflight
+
+Mission M0's default suite command applies only when the task does not issue a
+narrower verification rule. If the task says to edit first, names focused test
+modules, prohibits repository-wide discovery, or makes the seat read-only,
+obey that rule: perform the intake and workspace checks, make the authorized
+edit when applicable, and run only the named checks afterward. Record the
+broader suite as deliberately not run and leave any required merge-wide replay
+to the lead; do not spend the seat on a default discovery run that the task
+cannot use. The watchdog contract review demonstrated the trap: broad discovery
+ended in an interrupted calibration test while the focused module completed
+cleanly (`docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`).
+
+Verification must not manufacture workspace dirt that the runner later
+misclassifies as the seat's change. Set `PYTHONDONTWRITEBYTECODE=1` for Python
+tests and direct compilation caches and other generated output to a disposable
+directory unless the task explicitly owns those artifacts. The watchdog build
+and fix reports provide the executed pattern
+(`docs/process_traces/2026-09-02-hands-free-week/17f-watchdog-01-landing.md`;
+`docs/process_traces/2026-09-02-hands-free-week/17h-watchdog-03-fix-round-1.md`).
