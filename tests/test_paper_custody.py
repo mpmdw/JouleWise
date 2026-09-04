@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import inspect
 import json
+import re
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import paper_custody as custody
+from joulewise import identity_pins
 from joulewise.authentication_io import V2AuthenticationReadSession
 from joulewise.identity_pins import IdentityPinProjectionError
 
@@ -210,7 +212,7 @@ class _FamilyFixture:
         self._anchor_patch = mock.patch.object(
             custody,
             "_mint_git_anchor",
-            return_value=(self.anchor_root, self.head),
+            side_effect=lambda **_kwargs: (self.anchor_root, self.head),
         )
         self._anchor_patch.start()
         self.ref = ref_type(role=self.role, runs_root=self.runs_root)
@@ -224,34 +226,59 @@ class _FamilyFixture:
         return self.runs_root / record.relative_path
 
     def full_reseal(self, record: custody.VerifiedDigest) -> None:
-        path = self.path_for(record)
+        target_role = record.role
+        target_path = self.path_for(record)
+        if record.role is custody.InputRole.CUSTODY_INVENTORY:
+            first = self.entry["inputs"][0]
+            target_role = custody.InputRole(first["role"])
+            target_path = self.runs_root / first["path"]
+        path = target_path
         value = json.loads(path.read_text(encoding="utf-8"))
         value["caller_resealed"] = True
         path.write_bytes(_json_bytes(value))
-        if record.role in {
-            custody.InputRole.CUSTODY_INVENTORY,
-            custody.InputRole.VALIDATOR_RECEIPT,
-        }:
-            return
 
         actual = _sha(path.read_bytes())
         receipt_path = self.runs_root / self.entry["receipt"]["path"]
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-        next(row for row in receipt["inputs"] if row["role"] == record.role.value)[
-            "sha256"
-        ] = actual
+        if target_role is not custody.InputRole.VALIDATOR_RECEIPT:
+            next(
+                row for row in receipt["inputs"] if row["role"] == target_role.value
+            )["sha256"] = actual
+        else:
+            receipt["caller_resealed"] = True
         receipt_path.write_bytes(_json_bytes(receipt))
         inventory_path = self.runs_root / self.entry["inventory"]["path"]
         inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-        next(row for row in inventory["files"] if row["role"] == record.role.value)[
-            "sha256"
-        ] = actual
+        if target_role is not custody.InputRole.VALIDATOR_RECEIPT:
+            next(
+                row for row in inventory["files"] if row["role"] == target_role.value
+            )["sha256"] = actual
         next(
             row
             for row in inventory["files"]
             if row["role"] == custody.InputRole.VALIDATOR_RECEIPT.value
         )["sha256"] = _sha(receipt_path.read_bytes())
         inventory_path.write_bytes(_json_bytes(inventory))
+
+        anchor_map = self.anchor_root / custody._SUPPLY_MAP_PATH
+        supply_map = json.loads(anchor_map.read_text(encoding="utf-8"))
+        supply_map["roles"][self.role]["inventory"]["expected_sha256"] = _sha(
+            inventory_path.read_bytes()
+        )
+        anchor_map.write_bytes(_json_bytes(supply_map))
+        subprocess.run(["git", "add", "."], cwd=self.anchor_root, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "reseal fixture inventory envelope"],
+            cwd=self.anchor_root,
+            check=True,
+        )
+        self.head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.anchor_root,
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        ).stdout.strip()
 
     def close(self) -> None:
         self._anchor_patch.stop()
@@ -334,7 +361,7 @@ class PaperCustodyCensusTests(unittest.TestCase):
                     with self.assertRaises(custody.PaperCustodyRefusal) as resealed:
                         custody.open_paper_input(sealed_fixture.ref)
                     self.assertEqual(
-                        resealed.exception.code, "paper_custody_digest_mismatch"
+                        resealed.exception.code, "paper_custody_anchor_mismatch"
                     )
                     self.assertEqual(resealed.exception.rendered_output, ())
 
@@ -406,6 +433,96 @@ class PaperCustodyApiTests(unittest.TestCase):
                 self.assertEqual(
                     raised.exception.code, "paper_custody_request_invalid"
                 )
+
+    def test_evidence_and_verified_outputs_require_the_private_seam_token(
+        self,
+    ) -> None:
+        with self.assertRaises(custody.PaperCustodyRefusal) as direct:
+            custody.CustodyEvidence(
+                family="d165_closeout",
+                inputs=(),
+                receipt_sha256="0" * 64,
+                validator_source_sha256="1" * 64,
+                mode="production",
+                issuance_authorized=True,
+            )
+        self.assertEqual(direct.exception.code, "paper_custody_request_invalid")
+        with self.assertRaises(custody.PaperCustodyRefusal):
+            custody._construct_custody_evidence(
+                object(),
+                family="d165_closeout",
+                inputs=(),
+                receipt_sha256="0" * 64,
+                validator_source_sha256="1" * 64,
+                anchor_head="2" * 40,
+                supply_map_sha256="3" * 64,
+                mode="production",
+                issuance_authorized=True,
+            )
+
+        forged_evidence = object.__new__(custody.CustodyEvidence)
+        object.__setattr__(forged_evidence, "issuance_authorized", True)
+        with self.assertRaises(custody.PaperCustodyRefusal):
+            _ = forged_evidence.issuance_authorized
+
+        for output_type in (
+            custody.VerifiedReportedEnergyParents,
+            custody.VerifiedD165Closeout,
+            custody.VerifiedWholeWindowVerdict,
+            custody.VerifiedClaimEvidence,
+            custody.VerifiedTransferProjection,
+        ):
+            with self.subTest(output_type=output_type.__name__):
+                forged = object.__new__(output_type)
+                object.__setattr__(forged, "evidence", forged_evidence)
+                object.__setattr__(forged, "_payload", object())
+                with self.assertRaises(custody.PaperCustodyRefusal):
+                    _ = forged.evidence
+
+    def test_verified_evidence_carries_anchor_commit_and_supply_map_digest(self) -> None:
+        fixture = self._fixture("reported_energy_parents")
+        opened = custody.open_paper_input(fixture.ref)
+        self.assertEqual(opened.evidence.anchor_head, fixture.head)
+        self.assertEqual(
+            opened.evidence.supply_map_sha256,
+            _sha((fixture.anchor_root / custody._SUPPLY_MAP_PATH).read_bytes()),
+        )
+
+    def test_no_post_pin_inventory_digest_comparison_remains_unreachable(self) -> None:
+        source = inspect.getsource(custody._open_paper_input_impl)
+        self.assertNotIn('row["sha256"] != _sha256(raw)', source)
+
+    def test_anchor_refuses_head_not_contained_in_origin_main(self) -> None:
+        mint_module = identity_pins._load_mint_module()
+        with mock.patch.object(
+            mint_module,
+            "_actual_v2_git_state",
+            return_value=("a" * 40, False),
+        ):
+            with self.assertRaises(IdentityPinProjectionError) as raised:
+                identity_pins._mint_git_anchor(require_origin_main=True)
+        self.assertEqual(
+            raised.exception.reason_code,
+            "readiness_identity_artifact_unreadable",
+        )
+
+    def test_real_anchor_refuses_untracked_nongoverned_file_without_mocking(self) -> None:
+        probe = (
+            ROOT
+            / "docs/process_traces/2026-09-04-paper-custody"
+            / ".untracked-nongoverned-anchor-probe"
+        )
+        self.assertFalse(probe.exists())
+        probe.write_text("anchor probe\n", encoding="utf-8")
+        try:
+            with self.assertRaises(IdentityPinProjectionError) as raised:
+                identity_pins._mint_git_anchor(require_origin_main=True)
+        finally:
+            probe.unlink()
+        self.assertEqual(
+            raised.exception.reason_code,
+            "readiness_identity_environment_dirty",
+        )
 
     def test_validator_source_digest_census_includes_every_governed_member(
         self,
@@ -495,9 +612,31 @@ class PaperCustodyApiTests(unittest.TestCase):
         self.assertNotIn("ReceiptRef", custody.__all__)
 
     def test_refusal_namespace_is_closed_and_nonrendering(self) -> None:
-        self.assertIn(
+        expected = {
+            "paper_custody_request_invalid",
+            "paper_custody_anchor_unavailable",
+            "paper_custody_anchor_mismatch",
+            "paper_custody_supply_map_invalid",
+            "paper_custody_role_unregistered",
+            "paper_custody_path_refused",
+            "paper_custody_input_unreadable",
+            "paper_custody_digest_mismatch",
+            "paper_custody_parse_invalid",
+            "paper_custody_receipt_unissued",
             "paper_custody_blocked_pending_receipt",
-            custody.PAPER_CUSTODY_REFUSAL_CODES,
+            "paper_custody_receipt_invalid",
+            "paper_custody_receipt_binding_mismatch",
+            "paper_custody_validator_refused",
+            "paper_custody_evidence_ambiguous",
+            "paper_custody_input_changed",
+        }
+        self.assertEqual(custody.PAPER_CUSTODY_REFUSAL_CODES, expected)
+        contract = (
+            ROOT / "docs/contracts/paper_supply_custody.md"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(
+            set(re.findall(r"`(paper_custody_[a-z0-9_]+)`", contract)),
+            expected,
         )
         self.assertTrue(
             all(
@@ -512,6 +651,11 @@ class PaperCustodyApiTests(unittest.TestCase):
         )
         self.assertNotIn("private_validator_detail", str(refusal))
         self.assertEqual(refusal.rendered_output, ())
+
+        source = inspect.getsource(custody)
+        for code in expected:
+            with self.subTest(reachable=code):
+                self.assertGreater(source.count(f'"{code}"'), 1)
 
 
 if __name__ == "__main__":

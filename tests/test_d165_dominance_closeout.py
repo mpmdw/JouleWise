@@ -521,6 +521,67 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         )
         self.assert_valid_closeout(closeout, manifest, floor, sidecar)
 
+    def test_real_closeout_refusal_paths_stay_closed_when_message_is_reworded(
+        self,
+    ) -> None:
+        refusal_cases = (
+            ("zero denominator", 0.0, 1.0, core.DOMINANCE_ZERO_DENOMINATOR_REASON),
+            ("negative denominator", -1.0, 1.0, core._DOMINANCE_DENOMINATOR_INVALID),
+            ("nan denominator", float("nan"), 1.0, core._DOMINANCE_DENOMINATOR_INVALID),
+            ("negative numerator", 1.0, -1.0, core._DOMINANCE_NUMERATOR_INVALID),
+            ("nan numerator", 1.0, float("nan"), core._DOMINANCE_NUMERATOR_INVALID),
+            ("infinite numerator", 1.0, float("inf"), core._DOMINANCE_NUMERATOR_INVALID),
+            ("nonfinite result", 5e-324, 1e308, core._DOMINANCE_RESULT_INVALID),
+        )
+        for label, point, corner, expected in refusal_cases:
+            with self.subTest(path=label):
+                record = core._build_independent_record(
+                    point_unguarded_floor_j=point,
+                    corner_widened_unguarded_floor_j=corner,
+                )
+                self.assertEqual(record["status"], "refused")
+                self.assertEqual(record["refusal_reason"], expected)
+                self.assertIn(
+                    record["refusal_reason"], core.D165_CLOSEOUT_REFUSAL_CODES
+                )
+
+        floor = floor_artifact()
+        floor["cells"][0]["absolute"]["max_abs_residual_j"] = 0.0
+        floor["cells"][0]["absolute"]["prediction_component_j"] = 0.0
+        original_ratio = core.dominance_ratio
+
+        def reworded_ratio(*, corner_widened_unguarded_floor_j, point_unguarded_floor_j):
+            if point_unguarded_floor_j == 0.0:
+                raise ValueError("the denominator wording changed")
+            return original_ratio(
+                corner_widened_unguarded_floor_j=corner_widened_unguarded_floor_j,
+                point_unguarded_floor_j=point_unguarded_floor_j,
+            )
+
+        with mock.patch.object(core, "dominance_ratio", side_effect=reworded_ratio):
+            closeout, manifest, floor, sidecar = self.build(floor)
+            refused = [
+                record
+                for record in closeout["independent_ratios"]
+                if record["status"] == "refused"
+            ]
+            self.assertEqual(len(refused), 1)
+            self.assertEqual(
+                refused[0]["refusal_reason"],
+                core.DOMINANCE_ZERO_DENOMINATOR_REASON,
+            )
+            self.assertEqual(
+                closeout["refusal_reason"],
+                core.DOMINANCE_ZERO_DENOMINATOR_REASON,
+            )
+            self.assertTrue(
+                all(
+                    record["refusal_reason"] in core.D165_CLOSEOUT_REFUSAL_CODES
+                    for record in (*refused, closeout)
+                )
+            )
+            self.assert_valid_closeout(closeout, manifest, floor, sidecar)
+
     def test_missing_sidecar_cell_stops_with_neither_branch(self) -> None:
         floor = floor_artifact()
         manifest = finalized_manifest()

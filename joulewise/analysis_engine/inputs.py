@@ -25,6 +25,10 @@ from joulewise.analysis_manifest import (
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,
     validate_analysis_manifest,
 )
+from joulewise.authentication_io import (
+    read_authentication_input,
+    sha256_authentication_input,
+)
 from joulewise.analysis_manifest_v3 import (
     FINALIZED_SCHEMA_VERSION as ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA,
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA,
@@ -106,6 +110,14 @@ GOVERNED_IDLE_VARIANCE_METHOD_V1 = "newey_west_bartlett_10s_iid_floor_v1"
 GOVERNED_IDLE_VARIANCE_METHOD_V2 = (
     "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
 )
+
+
+def _read_analysis_input(path: Path, *, label: str) -> bytes:
+    suffix = Path(path).suffix.lower()
+    grammar = (
+        "jsonl" if suffix == ".jsonl" else "json" if suffix == ".json" else "raw"
+    )
+    return read_authentication_input(path, grammar=grammar, label=label)
 
 # T0.3 (2026-07-19 measurement-soundness audit P0.3): the EXACT allowed
 # reducer-version x idle-variance-method matrix.  Every crossed or unknown
@@ -551,7 +563,7 @@ class LoadedAnalysisInputs:
 
 def _sha256_file(path: Path) -> str | None:
     try:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        return sha256_authentication_input(path, label="analysis input digest")
     except OSError:
         return None
 
@@ -585,7 +597,7 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
             raise AnalysisInputError(
                 f"{label} path_resolution_refused: symlink or non-regular file"
             )
-        raw = path.read_bytes()
+        raw = _read_analysis_input(path, label=label)
     except AnalysisInputError:
         raise
     except OSError as exc:
@@ -946,7 +958,7 @@ def load_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:
     """Load and authenticate a floor without erasing its capability type."""
 
     try:
-        raw = Path(path).read_bytes()
+        raw = _read_analysis_input(Path(path), label="floor artifact")
     except OSError as exc:
         raise AnalysisInputError(f"cannot read floor artifact {path}: {exc}") from exc
     return authenticate_floor_artifact_bytes(raw)
@@ -1433,7 +1445,9 @@ def _campaign_order_binding_problems(
             problems.append(f"calibration_plan_path_invalid: {exc}")
         else:
             try:
-                plan_raw = plan_path.read_bytes()
+                plan_raw = _read_analysis_input(
+                    plan_path, label="floor calibration plan"
+                )
             except OSError as exc:
                 problems.append(f"calibration_plan_bytes_unreadable: {exc}")
             else:
@@ -1511,7 +1525,7 @@ def _campaign_order_binding_problems(
                     )
                     continue
                 try:
-                    raw = path.read_bytes()
+                    raw = _read_analysis_input(path, label=f"{where}.{label}")
                 except OSError as exc:
                     problems.append(
                         f"component_evidence_root_disagreement: {where}.{label} "
@@ -2039,7 +2053,9 @@ def _verified_cooldown_raw_artifact(
         root = manifest_dir.resolve()
         raw_path = (manifest_dir / path_text).resolve()
         raw_path.relative_to(root)
-        payload = raw_path.read_bytes()
+        payload = _read_analysis_input(
+            raw_path, label="campaign cooldown raw evidence"
+        )
     except (OSError, RuntimeError, ValueError):
         return None
     if hashlib.sha256(payload).hexdigest() != expected_sha:
@@ -2945,7 +2961,9 @@ def _scan_replacements_and_topups(
         if resolved_path in registered_paths or not (path / "config.json").is_file():
             continue
         try:
-            config_raw = (path / "config.json").read_bytes()
+            config_raw = _read_analysis_input(
+                path / "config.json", label=f"replacement bundle {path.name} config"
+            )
             raw = _strict_json_admission_bytes(
                 config_raw, f"replacement bundle {path.name} config"
             )
@@ -3922,14 +3940,19 @@ def _frozen_consumer_identity_set(
             label="U8 freeze receipt",
             require_directory=False,
         )
-        freeze_raw = freeze_path.read_bytes()
+        freeze_raw = _read_analysis_input(
+            freeze_path, label="U8 freeze receipt"
+        )
         freeze_sha = hashlib.sha256(freeze_raw).hexdigest()
         freeze_sidecar = _lexical_child_path(
             pack_root,
             f"{freeze_reference['path']}.sha256",
             label="U8 freeze receipt sidecar",
             require_directory=False,
-        ).read_bytes()
+        )
+        freeze_sidecar = _read_analysis_input(
+            freeze_sidecar, label="U8 freeze receipt sidecar"
+        )
         if (
             freeze_sha != freeze_reference["sha256"]
             or freeze_sidecar != gnu_sidecar(freeze_sha, freeze_path.name)
@@ -3967,7 +3990,9 @@ def _frozen_consumer_identity_set(
             label="frozen identity receipt",
             require_directory=False,
         )
-        receipt_raw = receipt_path.read_bytes()
+        receipt_raw = _read_analysis_input(
+            receipt_path, label="frozen identity receipt"
+        )
         receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
         receipt_sidecar_relative = PurePosixPath(
             identity_item["path"]
@@ -3977,7 +4002,10 @@ def _frozen_consumer_identity_set(
             receipt_sidecar_relative,
             label="frozen identity receipt sidecar",
             require_directory=False,
-        ).read_bytes()
+        )
+        receipt_sidecar = _read_analysis_input(
+            receipt_sidecar, label="frozen identity receipt sidecar"
+        )
         if (
             receipt_sha != identity_item["sha256"]
             or receipt_sidecar != gnu_sidecar(receipt_sha, receipt_path.name)
@@ -4019,7 +4047,9 @@ def _frozen_consumer_identity_set(
                 label="frozen identity config",
                 require_directory=False,
             )
-            raw = config_path.read_bytes()
+            raw = _read_analysis_input(
+                config_path, label="frozen identity config"
+            )
             if hashlib.sha256(raw).hexdigest() != row["sha256"]:
                 return frozenset()
             config = parse_json_bytes(raw, require_canonical=False)

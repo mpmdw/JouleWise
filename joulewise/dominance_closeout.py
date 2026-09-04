@@ -358,9 +358,29 @@ def _closed_refusal_code(
 ) -> str:
     """Return one registered professor-facing code for any producer stop."""
 
-    if isinstance(reason, str) and reason in D165_CLOSEOUT_REFUSAL_CODES:
-        return reason
+    if isinstance(reason, str):
+        if reason in D165_CLOSEOUT_REFUSAL_CODES:
+            return reason
+        prefixed = tuple(
+            code
+            for code in D165_CLOSEOUT_REFUSAL_CODES
+            if reason.startswith(f"{code}:")
+        )
+        if prefixed:
+            return max(prefixed, key=len)
     return fallback
+
+
+def _independent_refusal_code(*, point: float, corner: float) -> str:
+    """Classify the operands, independently of exception-message wording."""
+
+    if not math.isfinite(corner) or corner < 0.0:
+        return _DOMINANCE_NUMERATOR_INVALID
+    if not math.isfinite(point) or point < 0.0:
+        return _DOMINANCE_DENOMINATOR_INVALID
+    if point == 0.0:
+        return DOMINANCE_ZERO_DENOMINATOR_REASON
+    return _DOMINANCE_RESULT_INVALID
 
 __all__ = [
     "REPLAY_SCHEMA_VERSION",
@@ -994,7 +1014,7 @@ def _build_independent_record(
             corner_widened_unguarded_floor_j=corner,
             point_unguarded_floor_j=point,
         )
-    except ValueError as exc:
+    except ValueError:
         return {
             "status": "refused",
             "ratio_id": DOMINANCE_RATIO_ID,
@@ -1004,7 +1024,9 @@ def _build_independent_record(
             "threshold": DOMINANCE_THRESHOLD,
             "comparison": DOMINANCE_COMPARISON,
             "passes": None,
-            "refusal_reason": str(exc),
+            "refusal_reason": _closed_refusal_code(
+                _independent_refusal_code(point=point, corner=corner)
+            ),
         }
     return {
         "status": "complete",
@@ -1059,6 +1081,10 @@ def _validate_independent_record(
         point_unguarded_floor_j=point,
         corner_widened_unguarded_floor_j=corner,
     )
+    if value["status"] == "refused" and value["refusal_reason"] not in (
+        D165_CLOSEOUT_REFUSAL_CODES
+    ):
+        errors.append(f"{where}.refusal_reason: not in closed refusal enumeration")
     if dict(value) != expected:
         errors.append(f"{where}: does not match dominance_ratio")
 
@@ -1463,10 +1489,10 @@ def _validate_closeout_common_record(
             )
         ):
             errors.append(f"{where}: refused records must use null result fields")
-        if not isinstance(value["refusal_reason"], str) or not value[
-            "refusal_reason"
-        ]:
-            errors.append(f"{where}.refusal_reason: must name the refusal")
+        if value["refusal_reason"] not in D165_CLOSEOUT_REFUSAL_CODES:
+            errors.append(
+                f"{where}.refusal_reason: not in closed refusal enumeration"
+            )
     else:
         errors.append(f"{where}.status: invalid")
     if value["ratio_id"] != COMMON_MODE_RATIO_ID:
@@ -1932,7 +1958,12 @@ def _expected_global_fields(
     ]
     if source_errors or refused:
         reason = _closed_refusal_code(
-            source_errors[0] if source_errors else refused[0]
+            source_errors[0] if source_errors else refused[0],
+            fallback=(
+                CLOSEOUT_INPUT_MALFORMED_SOURCE
+                if source_errors
+                else CLOSEOUT_INPUT_MALFORMED
+            ),
         )
         return {
             "all_independent_pass": None,
