@@ -10628,3 +10628,65 @@ machine for up to a week from 2026-09-02; hands-free operation is required.
 Machine state Ed leaves: lid open, AC attached, caffeinate running,
 screen may lock, no logout, no reboot; FileVault is on, so an unplanned
 reboot halts everything until someone types the disk password (accepted).
+
+**Dated addendum (magistrate via lieutenant, 2026-09-03) — item 6's
+ratification was overstated, and item 7's margin is superseded by the
+watchdog gate's timing ruling. The original text above is unedited.**
+
+**(a) Item 6 — "PAIRED with executed probes" overstates what Ed ratified.**
+Item 6 records the contract-prose gate as a first-use table "PAIRED with
+executed probes for behavioural clauses", and routed the exact text through
+the cold gate on packet 45 of the decode-identity trace. That gate has now
+ruled, and it found the pairing unratified. Cold Fable
+(`docs/process_traces/2026-09-02-decode-identity-set/46-coldgate-fable-ruling-packet-45.md`
+Q6(e)) REFUSED the sub-proposition "as ratified by Ed's sentence" for the
+paired-probe half: the checklist item Ed answered reads only "pre-landing
+first-use table as a mandatory gate for defined-term contract edits, yes",
+and his sentence is "5 and 6 sounds good i trust you" — neither mentions the
+probe pairing, which entered from exhibit 41 §5 by way of exhibit 44 §3. The
+Opus refuter (`47-coldgate-opus-refutation-packet-45.md` Q6-4, severity
+MATERIAL) reached the same conclusion independently and named the three
+clauses Ed never saw: the paired executed probe, the "before a verifier sees
+the text" ordering, and the verifier re-running both; it further noted that
+Ed assented to item 6 as a block of six sub-decisions and amended one of them
+("30 min before a window seems too much") in the same breath, and that "i
+trust you" is a delegation, not a specification.
+
+**Status of the two halves.** The first-use-table half is RATIFIED by Ed and
+installs on the strength of exhibit 45c. The executed-probe half is a
+PROPOSAL PENDING ED — a single yes/no on the amended text (46 Q6) suffices.
+Meanwhile the magistrate applies the probe half under its own authority over
+delegated briefs (it may require evidence of any brief it writes), NOT as an
+Ed-ratified rule; no seat may cite it as such, and it does not bind work the
+magistrate did not commission. Both halves are dropped and counted
+separately under the drop test recorded at 46 Q6.
+
+**(b) Item 7 — the 5-minute stand-down margin is superseded for the forced
+path.** Item 7 set "stand-down margin = 5 minutes before a window's t0",
+honouring Ed's "30 min seems too much". The watchdog cold gate
+(`docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`
+row 4, adopting the Opus Q4 minimum over the Fable resolution requirement)
+ruled the operative timings instead: the cooperative REQUEST file is written
+at **t0 − 25 min**, **SIGTERM at t0 − 16 min**, **SIGKILL at t0 − 15 min**,
+followed by a census verification, enforced by a resident supervisor with
+≤ 10 s resolution. The forcing reason is physical, not procedural:
+`docs/phase_2/window_runbook.md:425-432` requires the machine to be left
+untouched and idle for **at least 10 minutes** before the window's
+calibration-ledger pair, so that macOS's idle-triggered background work
+(XProtect's scheduled scan is the documented instance) runs before the window
+rather than inside it — and that 10 minutes sits on top of the chain's own
+180-second stage settle. A 5-minute margin cannot buy 10 minutes of quiet.
+Ed's "too much" is therefore honoured where it was aimed — at how early the
+session is ASKED to stop — and not at the physics margin the measurement
+needs.
+
+**Executed evidence.** Run 2026-09-03 by the lieutenant at
+`origin/main` = `46eaf18c`:
+`gh pr view 273/274/275/277 --json state,mergedAt` → all four `MERGED`;
+`sed -n '425,432p' docs/phase_2/window_runbook.md` → the ≥ 10-minute idle
+clause quoted above; `awk '/^#+.*Q6/,/^#+.*Q7/'` over file 46 and
+`awk '/Q6-4/,0'` over file 47 → the two Q6 passages quoted above, read in
+worktree `/Users/edr/code/JouleWise-wt-decode-id` (read-only, branch
+`fix/2026-09-02-decode-identity-set`);
+`grep -n -i 'six\|SILENT' docs/process_traces/2026-09-02-hands-free-week/13-audit-code-tests-opus.md`
+→ the §2.2/§5 count discrepancy recorded under `SILENT-REFUSAL-TESTS-01`.
