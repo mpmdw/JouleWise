@@ -93,10 +93,10 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 
    ```zsh
    cd /Users/edr/code/JouleWise
-   test "$(/usr/bin/git branch --show-current)" = main
+   test "$(/usr/bin/git branch --show-current)" = main || { echo "STEP0_FAIL not on main" >&2; exit 3; }
    merge_sha="$(/usr/bin/git rev-parse HEAD)"
-   test "$(/usr/bin/git rev-parse refs/heads/main)" = "$merge_sha"
-   test "$(/usr/bin/git show -s --format=%P "$merge_sha" | /usr/bin/awk '{print NF}')" -eq 2
+   test "$(/usr/bin/git rev-parse refs/heads/main)" = "$merge_sha" || { echo "STEP0_FAIL HEAD is not refs/heads/main" >&2; exit 3; }
+   test "$(/usr/bin/git show -s --format=%P "$merge_sha" | /usr/bin/awk '{print NF}')" -eq 2 || { echo "STEP0_FAIL HEAD is not a merge commit" >&2; exit 3; }
    pinned_files=(
      scripts/magistrate_watchdog.py
      scripts/install_magistrate_watchdog.sh
@@ -109,8 +109,9 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
      checkout_sha256="$(/usr/bin/shasum -a 256 "$path" | /usr/bin/awk '{print $1}')"
      /usr/bin/printf '%s  %s:%s\n' "$main_sha256" "$merge_sha" "$path"
      /usr/bin/printf '%s  %s\n' "$checkout_sha256" "$path"
-     test "$checkout_sha256" = "$main_sha256"
+     test "$checkout_sha256" = "$main_sha256" || { echo "STEP0_DIGEST_MISMATCH $path" >&2; exit 3; }
    done
+   echo STEP0_OK
    ```
 
 1. In the magistrate session, stop every background task and wait for each stop to complete. Repeat the session's background-task listing until it is empty; do not proceed while any Codex child, task, monitor, or background shell remains active.
