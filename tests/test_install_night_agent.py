@@ -75,10 +75,18 @@ class InstallNightAgentTests(unittest.TestCase):
     def _write_plan(self, **changes: str) -> Path:
         plan = {
             "schema": "joulewise.night_plan.v2",
+            "plan_id": "install-night-agent-test",
+            "receipt_class": "TRANSACTION_PACK",
+            "t0_epoch_s": 1.0,
+            "window_max_s": 1,
+            "authored_epoch_s": 1.0,
             "repo_head": self.repo_head,
             "measurement_root": str(self.measurement_root),
             "measurement_head": self.measurement_head,
+            "chain_path": "/bin/true",
+            "chain_sha256_path": "/tmp/install-night-agent-test.sha256",
             "custody_root": str(self.root / "custody"),
+            "registration_path": None,
         }
         plan.update(changes)
         path = self.root / f"plan-{len(list(self.root.glob('plan-*.json')))}.json"
@@ -134,6 +142,14 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn("measurement_root", completed.stderr)
         self.assertIn("absolute", completed.stderr)
 
+    def test_install_refuses_measurement_root_with_trailing_space(self) -> None:
+        completed = self._run(
+            self._write_plan(measurement_root=f"{self.measurement_root} ")
+        )
+        self.assertEqual(3, completed.returncode)
+        self.assertIn("measurement_root", completed.stderr)
+        self.assertFalse((self.rendered / "com.joulewise.night.plist").exists())
+
     def test_install_refuses_measurement_head_that_is_not_40_lowercase_hex(self) -> None:
         for invalid_head in ("A" * 40, "a" * 39):
             with self.subTest(invalid_head=invalid_head):
@@ -143,6 +159,14 @@ class InstallNightAgentTests(unittest.TestCase):
                 self.assertEqual(3, completed.returncode)
                 self.assertIn("measurement_head", completed.stderr)
                 self.assertIn("40 lowercase hex", completed.stderr)
+
+    def test_install_refuses_measurement_head_with_trailing_lf(self) -> None:
+        completed = self._run(
+            self._write_plan(measurement_head=f"{self.measurement_head}\n")
+        )
+        self.assertEqual(3, completed.returncode)
+        self.assertIn("measurement_head", completed.stderr)
+        self.assertFalse((self.rendered / "com.joulewise.night.plist").exists())
 
     def test_v1_install_is_retired_without_traceback_but_uninstall_still_works(self) -> None:
         plan = self._write_plan(schema="joulewise.night_plan.v1")

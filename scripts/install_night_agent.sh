@@ -41,43 +41,33 @@ custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.a
 courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
-  plan_fields=("${(@f)$(/usr/bin/python3 - "$plan" <<'PY'
+  plan_fields=("${(@f)$(/usr/bin/python3 -B - "$plan" "$repo" <<'PY'
+import base64
 import json
 import sys
 
+sys.path.insert(0, sys.argv[2])
+from joulewise.night_gate import NightPlan, PlanError
+
 with open(sys.argv[1], encoding="utf-8") as stream:
     data = json.load(stream)
-schema = data.get("schema")
-required = ("repo_head", "measurement_root", "measurement_head")
-missing = [key for key in required if key not in data]
-if schema != "joulewise.night_plan.v2" or missing:
-    schema_name = schema if isinstance(schema, str) else "<missing>"
-    suffix = f" (missing {'/'.join(missing)})" if missing else ""
-    print(
-        f"plan schema {schema_name} is retired; re-author under "
-        f"joulewise.night_plan.v2{suffix}",
-        file=sys.stderr,
-    )
+try:
+    parsed = NightPlan.from_mapping(data)
+    if parsed.measurement_root != parsed.measurement_root.strip():
+        raise PlanError(
+            "night_plan_malformed",
+            "measurement_root must be an absolute path with no surrounding whitespace",
+        )
+except PlanError as exc:
+    print(exc.detail, file=sys.stderr)
     raise SystemExit(3)
-for key in required:
-    print(data[key])
+for value in (parsed.repo_head, parsed.measurement_root, parsed.measurement_head):
+    print(base64.b64encode(value.encode("utf-8")).decode("ascii"))
 PY
   )}") || exit $?
-  plan_head="$plan_fields[1]"
-  measurement_root="$plan_fields[2]"
-  plan_measurement_head="$plan_fields[3]"
-  [[ "$plan_head" =~ '^[0-9a-f]{40}$' ]] || {
-    print "plan repo_head is not 40 lowercase hex: $plan_head" >&2
-    exit 3
-  }
-  [[ "$measurement_root" == /* ]] || {
-    print "plan measurement_root must be an absolute path: $measurement_root" >&2
-    exit 3
-  }
-  [[ "$plan_measurement_head" =~ '^[0-9a-f]{40}$' ]] || {
-    print "plan measurement_head is not 40 lowercase hex: $plan_measurement_head" >&2
-    exit 3
-  }
+  plan_head="$(print -rn -- "$plan_fields[1]" | /usr/bin/base64 -D)"
+  measurement_root="$(print -rn -- "$plan_fields[2]" | /usr/bin/base64 -D)"
+  plan_measurement_head="$(print -rn -- "$plan_fields[3]" | /usr/bin/base64 -D)"
   if ! actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"; then
     print "unable to read repo_head from driver checkout" >&2
     exit 3
