@@ -82,7 +82,10 @@ while cursor > 1:
         )
         return result.stdout.strip()
     command = field("command")
-    if re.search(r"(?:^|[/\s])claude(?:\s|$)", command, re.IGNORECASE):
+    claude = re.search(r"(?:^|[/\s])claude(?:\s|$)", command, re.IGNORECASE)
+    suffix = command[claude.end():] if claude is not None else ""
+    headless = re.search(r"(?:^|\s)(?:-p|--print(?:\s|=|$))", suffix)
+    if claude is not None and headless is None:
         candidates.append((cursor, " ".join(field("lstart").split())))
     parent = field("ppid")
     try:

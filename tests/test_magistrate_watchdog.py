@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import fnmatch
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import tempfile
+import textwrap
 import threading
 import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
 from scripts import magistrate_watchdog as wd
+
+
+RETIRED_V1 = (
+    Path(__file__).resolve().parent / "fixtures" / "night_plan_v1_retired.json"
+)
 
 
 class MutableClock:
@@ -96,26 +106,33 @@ class WatchdogTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def make_plan(self, *, t0: float | None = None, name: str = "night-a") -> wd.NightPlan:
+    def make_plan(
+        self,
+        *,
+        t0: float | None = None,
+        name: str = "night-a",
+        **changes: object,
+    ) -> wd.NightPlan:
         custody = self.temp / name
-        value = {
-            "schema": "joulewise.night_plan.v2",
-            "plan_id": name,
-            "receipt_class": "REHEARSAL_STUB",
-            "t0_epoch_s": self.base.timestamp() + 3600 if t0 is None else t0,
-            "window_max_s": 600,
-            "authored_epoch_s": self.base.timestamp() - 60,
-            "repo_head": "a" * 40,
-            "measurement_root": str(self.temp / "measurement"),
-            "measurement_head": "b" * 40,
-            "chain_path": str(custody / "chain.sh"),
-            "chain_sha256_path": str(custody / "chain.sh.sha256"),
-            "custody_root": str(custody),
-            "registration_path": str(custody / "registration.json"),
-        }
+        plan = wd.NightPlan(
+            plan_id=name,
+            receipt_class="REHEARSAL_STUB",
+            t0_epoch_s=self.base.timestamp() + 3600 if t0 is None else t0,
+            window_max_s=600,
+            authored_epoch_s=self.base.timestamp() - 60,
+            repo_head="a" * 40,
+            measurement_root=str(self.temp / "measurement"),
+            measurement_head="b" * 40,
+            chain_path=str(custody / "chain.sh"),
+            chain_sha256_path=str(custody / "chain.sh.sha256"),
+            custody_root=str(custody),
+            registration_path=str(custody / "registration.json"),
+        )
+        if changes:
+            plan = dataclasses.replace(plan, **changes)
         custody.mkdir(parents=True, exist_ok=True)
-        (custody / "night_plan.json").write_text(json.dumps(value), encoding="utf-8")
-        return wd.NightPlan.from_mapping(value)
+        write_night_plan(custody / "night_plan.json", plan)
+        return plan
 
     def write_live_lock(self, pid: int = 100, start: str = "token-a") -> dict[str, object]:
         record: dict[str, object] = {
@@ -152,30 +169,32 @@ class FenceTests(WatchdogTestCase):
         valid = self.make_plan(t0=self.base.timestamp() + 10 * 60, name="valid-v2")
         retired_root = self.temp / "retired-v1"
         retired_root.mkdir()
-        retired = {
-            "schema": "joulewise.night_plan.v1",
-            "plan_id": "retired-v1",
-            "receipt_class": "REHEARSAL_STUB",
-            "t0_epoch_s": self.base.timestamp() + 5 * 60,
-            "window_max_s": 600,
-            "authored_epoch_s": self.base.timestamp() - 60,
-            "repo_head": "a" * 40,
-            "chain_path": str(retired_root / "chain.sh"),
-            "chain_sha256_path": str(retired_root / "chain.sh.sha256"),
-            "custody_root": str(retired_root),
-            "registration_path": str(retired_root / "registration.json"),
-        }
-        (retired_root / "night_plan.json").write_text(json.dumps(retired), encoding="utf-8")
+        shutil.copyfile(RETIRED_V1, retired_root / "night_plan.json")
 
-        plans, errors = wd.load_plans(self.harness.storage)
-        self.assertEqual([plan.plan_id for plan in plans], [valid.plan_id])
-        self.assertTrue(wd.plan_span_active(plans[0], self.base.timestamp(), self.harness.storage))
+        snapshot = wd.load_plans(
+            self.harness.storage, now_epoch_s=self.base.timestamp()
+        )
+        self.assertEqual([plan.plan_id for plan in snapshot.plans], [valid.plan_id])
+        self.assertTrue(
+            wd.plan_span_active(
+                snapshot.plans[0], self.base.timestamp(), self.harness.storage
+            )
+        )
         self.assertEqual(
             wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state,
             "FENCED",
         )
-        self.assertEqual(errors, [])
-        wd.load_plans(wd.Storage(self.harness.storage.root))
+        self.assertEqual(snapshot.errors, ())
+        wd.record_plan_diagnostics(
+            self.harness.storage,
+            snapshot.diagnostics,
+            activation_id="activation-a",
+        )
+        wd.record_plan_diagnostics(
+            wd.Storage(self.harness.storage.root),
+            snapshot.diagnostics,
+            activation_id="activation-a",
+        )
         events = [
             json.loads(line)
             for line in (self.harness.storage.root / "events.jsonl")
@@ -184,27 +203,152 @@ class FenceTests(WatchdogTestCase):
         ]
         ignored = [event for event in events if event["kind"] == "plan_retired_v1"]
         self.assertEqual(len(ignored), 1)
-        self.assertEqual(ignored[0]["custody_root"], str(retired_root.resolve()))
+        self.assertEqual(ignored[0]["plan_dir"], str(retired_root.resolve()))
 
-    def test_other_unparsable_plan_is_ignored_once_without_holding(self) -> None:
+    def test_unreadable_plan_is_recorded_once_and_holds(self) -> None:
         broken_root = self.temp / "broken-plan"
         broken_root.mkdir()
         (broken_root / "night_plan.json").write_text("{not-json", encoding="utf-8")
 
-        self.assertEqual(
-            wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state,
-            "LAUNCHING",
+        decision = wd.decide(
+            self.harness.storage, self.harness.deps, wd.initial_state()
         )
-        wd.load_plans(wd.Storage(self.harness.storage.root))
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertIn("night_plan_unreadable", decision.reason)
+        snapshot = wd.load_plans(self.harness.storage)
+        self.assertEqual(len(snapshot.errors), 1)
+        for _ in range(2):
+            wd.record_plan_diagnostics(
+                wd.Storage(self.harness.storage.root),
+                snapshot.diagnostics,
+                activation_id="activation-a",
+            )
         events = [
             json.loads(line)
             for line in (self.harness.storage.root / "events.jsonl")
             .read_text(encoding="utf-8")
             .splitlines()
         ]
-        ignored = [event for event in events if event["kind"] == "plan_unparsable"]
-        self.assertEqual(len(ignored), 1)
-        self.assertEqual(ignored[0]["custody_root"], str(broken_root.resolve()))
+        unreadable = [event for event in events if event["kind"] == "plan_unreadable"]
+        self.assertEqual(len(unreadable), 1)
+        self.assertEqual(unreadable[0]["plan_dir"], str(broken_root.resolve()))
+
+    def test_plan_event_key_distinguishes_changed_kind_and_dry_run_has_no_memory(self) -> None:
+        plan_root = self.temp / "changing-plan"
+        plan_root.mkdir()
+        plan_path = plan_root / "night_plan.json"
+        shutil.copyfile(RETIRED_V1, plan_path)
+        first = wd.load_plans(
+            self.harness.storage, now_epoch_s=self.base.timestamp()
+        )
+        dry_storage = wd.Storage(self.harness.storage.root, dry_run=True)
+        wd.record_plan_diagnostics(
+            dry_storage, first.diagnostics, activation_id="activation-a"
+        )
+        self.assertFalse((self.harness.storage.root / "events.jsonl").exists())
+        dry_storage.dry_run = False
+        wd.record_plan_diagnostics(
+            dry_storage, first.diagnostics, activation_id="activation-a"
+        )
+
+        source = self.make_plan(name="writer-source")
+        mapping = night_plan_mapping(source)
+        del mapping["measurement_head"]
+        plan_path.write_text(
+            json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        second = wd.load_plans(
+            self.harness.storage, now_epoch_s=self.base.timestamp()
+        )
+        wd.record_plan_diagnostics(
+            dry_storage, second.diagnostics, activation_id="activation-a"
+        )
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        changing_events = [
+            event for event in events if event.get("plan_dir") == str(plan_root.resolve())
+        ]
+        self.assertEqual(
+            ["plan_retired_v1", "plan_malformed"],
+            [event["kind"] for event in changing_events],
+        )
+
+    def test_future_authorship_is_malformed_and_holds(self) -> None:
+        self.make_plan(authored_epoch_s=self.base.timestamp() + 1)
+        decision = wd.decide(
+            self.harness.storage, self.harness.deps, wd.initial_state()
+        )
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertIn("night_plan_malformed", decision.reason)
+        self.assertIn("authored_epoch_s is in the future", decision.reason)
+
+    def test_armed_plan_conflicts_hold_but_nonoverlapping_roots_compose(self) -> None:
+        self.make_plan(
+            name="left",
+            t0=self.base.timestamp() + 60 * 60,
+            measurement_root=str(self.temp / "measurement-left"),
+        )
+        self.make_plan(
+            name="right",
+            t0=self.base.timestamp() + 61 * 60,
+            measurement_root=str(self.temp / "measurement-right"),
+        )
+        state = wd.initial_state()
+        decision = wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertIn("plan_conflict", decision.reason)
+        self.assertIn("overlapping spans", decision.reason)
+
+        (self.temp / "right" / "night_plan.json").unlink()
+        self.make_plan(
+            name="right-later",
+            t0=self.base.timestamp() + 30 * 60 * 60,
+            measurement_root=str(self.temp / "measurement-right"),
+        )
+        state = wd.initial_state()
+        decision = wd.decide(self.harness.storage, self.harness.deps, state)
+        self.assertEqual("LAUNCHING", decision.state)
+        self.assertEqual(3, len(state["fenced_checkouts"]))
+        prompt = wd.render_prompt(self.harness.storage, state, self.base)
+        self.assertIn(str(self.temp / "measurement-left"), prompt)
+        self.assertIn(str(self.temp / "measurement-right"), prompt)
+        fence_line = next(
+            line for line in prompt.splitlines() if line.startswith("Frozen checkout triples")
+        )
+        rendered_rows = json.loads(fence_line.split(": ", 1)[1].removesuffix("."))
+        self.assertEqual(state["fenced_checkouts"], rendered_rows)
+        self.assertEqual(
+            ["__canonical_repo__", str(wd.CANONICAL_REPO), None], rendered_rows[0]
+        )
+
+    def test_one_measurement_root_at_two_heads_holds_for_any_spans(self) -> None:
+        root = str(self.temp / "same-measurement")
+        self.make_plan(name="head-a", measurement_root=root, measurement_head="a" * 40)
+        self.make_plan(
+            name="head-b",
+            t0=self.base.timestamp() + 5 * 60 * 60,
+            measurement_root=root,
+            measurement_head="b" * 40,
+        )
+        decision = wd.decide(
+            self.harness.storage, self.harness.deps, wd.initial_state()
+        )
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertIn("multiple heads", decision.reason)
+
+    def test_stale_gate_plan_remains_a_conservative_watchdog_fence(self) -> None:
+        self.make_plan(
+            t0=self.base.timestamp() + 10 * 60,
+            authored_epoch_s=self.base.timestamp() - wd.PLAN_MAX_AGE_S - 1,
+        )
+        decision = wd.decide(
+            self.harness.storage, self.harness.deps, wd.initial_state()
+        )
+        self.assertEqual("FENCED", decision.state)
 
     def test_plan_fence_boundaries_request_term_kill_and_completion(self) -> None:
         plan = self.make_plan()
@@ -659,7 +803,7 @@ class BackoffAndEventTests(WatchdogTestCase):
 
 
 class ContractTests(WatchdogTestCase):
-    def test_handoff_inventory_includes_twin_tree_and_named_pid1_orphans(self) -> None:
+    def test_handoff_inventory_separates_owned_tree_and_unclassified_orphans(self) -> None:
         table = FakeProcessTable(
             [
                 wd.ProcessInfo(900, 800, "caller", "python magistrate_watchdog.py handoff-inventory"),
@@ -681,12 +825,49 @@ class ContractTests(WatchdogTestCase):
 
         self.assertEqual(inventory["interactive_pid"], 100)
         self.assertEqual(
-            set(inventory["pids"]),
-            {100, 110, 111, 112, 200, 201, 300, 301},
+            {row["pid"] for row in inventory["owned"]},
+            {100, 110, 111, 112},
         )
-        self.assertNotIn(400, inventory["pids"])
-        self.assertNotIn(500, inventory["pids"])
+        self.assertEqual(
+            {row["pid"] for row in inventory["unclassified_candidates"]},
+            {200, 201, 300, 301},
+        )
+        listed = {
+            row["pid"]
+            for key in ("owned", "unclassified_candidates")
+            for row in inventory[key]
+        }
+        self.assertNotIn(400, listed)
+        self.assertNotIn(500, listed)
         self.assertEqual(table.signals, [], "inventory is read-only")
+
+        adopted = wd.handoff_inventory(
+            table.snapshot(), 900, adoptions=((200, "orphan-host"),)
+        )
+        self.assertEqual(
+            {row["pid"] for row in adopted["owned"]},
+            {100, 110, 111, 112, 200, 201},
+        )
+        self.assertEqual(
+            {row["pid"] for row in adopted["unclassified_candidates"]},
+            {300, 301},
+        )
+        self.assertEqual(
+            "explicit_adoption",
+            next(row for row in adopted["owned"] if row["pid"] == 200)["provenance"],
+        )
+        self.assertEqual(
+            [{"pid": 200, "start_time": "orphan-host"}],
+            adopted["explicit_adoptions"],
+        )
+
+    def test_handoff_inventory_rejects_headless_print_session_as_interactive(self) -> None:
+        rows = [
+            wd.ProcessInfo(900, 100, "caller", "python magistrate_watchdog.py handoff-inventory"),
+            wd.ProcessInfo(100, 1, "headless", "claude -p prompt --output-format stream-json"),
+        ]
+        with self.assertRaisesRegex(RuntimeError, "Terminal-hosted interactive"):
+            wd.handoff_inventory(rows, 900)
 
     def test_dry_run_injects_filesystem_and_spawn_but_suppresses_both(self) -> None:
         dry = wd.Storage(self.temp / "dry" / "magistrate", dry_run=True)
@@ -757,7 +938,8 @@ class ContractTests(WatchdogTestCase):
         self.assertLess(prompt.index("First act"), prompt.index("Email Ed"))
         self.assertIn("notice_pending", prompt)
         self.assertIn("exit within nine minutes", prompt)
-        self.assertIn("/Users/edr/JouleWise-measurement-20260813", prompt)
+        self.assertIn("@@FENCED_CHECKOUTS@@", prompt)
+        self.assertIn("(plan_id, root, head)", prompt)
         self.assertIn("never fast-forward, pull, checkout, or otherwise move", prompt)
         self.assertIn("requires a re-arm with a re-pinned plan", prompt)
         self.assertIn("Do not ratify or amend any process rule", prompt)
@@ -766,15 +948,20 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("under a v2 plan", prompt)
         self.assertIn("installed from that plan's `measurement_root`", prompt)
 
-    def test_documented_example_plans_are_v2(self) -> None:
+    def test_documented_example_plans_use_the_production_writer(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         text = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
             encoding="utf-8"
         )
-        self.assertNotIn('"schema": "joulewise.night_plan.v1"', text)
-        self.assertEqual(text.count('"schema": "joulewise.night_plan.v2"'), 2)
-        self.assertEqual(text.count('"measurement_root"'), 2)
-        self.assertEqual(text.count('"measurement_head"'), 2)
+        self.assertIn("from joulewise.night_plan_writer import write_night_plan", text)
+        self.assertNotIn(".write_text(json.dumps(plan)", text)
+        python_blocks = re.findall(r"<<'PY'.*?\n(.*?)\n\s*PY$", text, re.DOTALL | re.MULTILINE)
+        self.assertGreaterEqual(len(python_blocks), 4)
+        for index, block in enumerate(python_blocks):
+            with self.subTest(block=index):
+                compile(textwrap.dedent(block), f"MAGISTRATE_WATCHDOG.md:{index}", "exec")
+        plan = self.make_plan(name="writer-contract")
+        self.assertEqual(plan, wd.NightPlan.from_mapping(night_plan_mapping(plan)))
 
     def test_install_handoff_is_ordered_and_measurement_checkout_owned(self) -> None:
         repo = Path(__file__).resolve().parents[1]
@@ -786,12 +973,12 @@ class ContractTests(WatchdogTestCase):
             'mv "$HOME/night-custody/$name" "$HOME/night-custody/retired-v1/$name"',
             "magistrate_watchdog.py handoff-inventory",
             "install_magistrate_watchdog.sh --install",
-            "signals only to that recorded list",
+            "signals only `owned`",
             "next five-minute tick",
         )
         positions = [watchdog.index(item) for item in ordered]
         self.assertEqual(positions, sorted(positions))
-        self.assertIn("The watchdog never signals an unowned census PID", watchdog)
+        self.assertIn("never signals an unclassified or census PID", watchdog)
 
         handback = (repo / "docs" / "process" / "NIGHT_HANDBACK.md").read_text(
             encoding="utf-8"

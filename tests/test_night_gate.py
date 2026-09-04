@@ -5,15 +5,18 @@ import hashlib
 import inspect
 import json
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from joulewise import night_gate
+from joulewise.night_plan_writer import night_plan_mapping
 
 
 HEAD = "a" * 40
 BOOT_UUID = "12345678-1234-5678-9234-567812345678"
 CHAIN_TEXT = "#!/bin/zsh\necho night\n"
 REGISTRATION_TEXT = '{"registered":true}\n'
+RETIRED_V1 = Path(__file__).resolve().parent / "fixtures" / "night_plan_v1_retired.json"
 
 
 def result(
@@ -150,22 +153,7 @@ def make_plan(receipt_class: str = "DIAGNOSTIC_NO_PACK", **changes: object) -> n
 
 
 def plan_mapping(receipt_class: str = "DIAGNOSTIC_NO_PACK") -> dict[str, object]:
-    plan = make_plan(receipt_class)
-    return {
-        "schema": night_gate.PLAN_SCHEMA,
-        "plan_id": plan.plan_id,
-        "receipt_class": plan.receipt_class,
-        "t0_epoch_s": plan.t0_epoch_s,
-        "window_max_s": plan.window_max_s,
-        "authored_epoch_s": plan.authored_epoch_s,
-        "repo_head": plan.repo_head,
-        "measurement_root": plan.measurement_root,
-        "measurement_head": plan.measurement_head,
-        "chain_path": plan.chain_path,
-        "chain_sha256_path": plan.chain_sha256_path,
-        "custody_root": plan.custody_root,
-        "registration_path": plan.registration_path,
-    }
+    return night_plan_mapping(make_plan(receipt_class))
 
 
 class NightGateTests(unittest.TestCase):
@@ -312,27 +300,36 @@ class NightGateTests(unittest.TestCase):
             night_gate.NightPlan.from_mapping(extra)
         self.assertEqual("night_plan_malformed", raised.exception.reason)
 
-        retired_cases: list[tuple[str, dict[str, object]]] = []
-        v1 = dict(good)
-        v1["schema"] = "joulewise.night_plan.v1"
-        retired_cases.append(("v1", v1))
+        retired = json.loads(RETIRED_V1.read_text(encoding="utf-8"))
+        with self.assertRaises(night_gate.PlanError) as retired_error:
+            night_gate.NightPlan.from_mapping(retired)
+        self.assertEqual("night_plan_malformed", retired_error.exception.reason)
+        self.assertIn("joulewise.night_plan.v1 is retired", retired_error.exception.detail)
+        self.assertIn(
+            "re-authored under joulewise.night_plan.v2", retired_error.exception.detail
+        )
+
+        malformed_v2_cases: list[tuple[str, dict[str, object]]] = []
         for missing_field in ("measurement_head", "measurement_root"):
             missing = dict(good)
             del missing[missing_field]
-            retired_cases.append((f"missing_{missing_field}", missing))
+            malformed_v2_cases.append((f"missing_{missing_field}", missing))
         relative_root = dict(good)
         relative_root["measurement_root"] = "relative/checkout"
-        retired_cases.append(("relative_measurement_root", relative_root))
+        malformed_v2_cases.append(("relative_measurement_root", relative_root))
         bad_measurement_head = dict(good)
         bad_measurement_head["measurement_head"] = "A" * 40
-        retired_cases.append(("bad_measurement_head", bad_measurement_head))
-        for name, malformed in retired_cases:
-            with self.subTest(retired_case=name):
-                with self.assertRaises(night_gate.PlanError) as retired:
+        malformed_v2_cases.append(("bad_measurement_head", bad_measurement_head))
+        for name, malformed in malformed_v2_cases:
+            with self.subTest(malformed_v2_case=name):
+                with self.assertRaises(night_gate.PlanError) as malformed_error:
                     night_gate.NightPlan.from_mapping(malformed)
-                self.assertEqual("night_plan_malformed", retired.exception.reason)
-                self.assertIn("joulewise.night_plan.v1 is retired", retired.exception.detail)
-                self.assertIn("re-authored under joulewise.night_plan.v2", retired.exception.detail)
+                self.assertEqual(
+                    "night_plan_malformed", malformed_error.exception.reason
+                )
+                self.assertNotIn(
+                    "joulewise.night_plan.v1", malformed_error.exception.detail
+                )
 
     def test_a_direct_plan_with_missing_registration_is_refused_as_malformed(self) -> None:
         source = FakeProbeSource()

@@ -37,13 +37,15 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise.night_gate import (  # noqa: E402
     NightPlan,
     ProbeResult,
-    Probes,
+    PLAN_MAX_AGE_S,
+    PlanError,
     agent_census,
 )
 from scripts.run_night import (  # noqa: E402
     COURIER_DEADLINE_S,
     COURIER_LOCK_FRESH_S,
     _next_deadman_epoch,
+    make_probes,
 )
 
 
@@ -205,7 +207,6 @@ class Storage:
         self.root = root.expanduser().resolve(strict=False)
         self.dry_run = dry_run
         self.would_write: list[str] = []
-        self.ignored_plan_roots_seen: set[str] = set()
 
     def _write_path(self, path: Path) -> Path:
         resolved = path.expanduser().resolve(strict=False)
@@ -332,14 +333,7 @@ def _probe_runner(argv: tuple[str, ...]) -> ProbeResult:
 
 
 def production_census() -> CensusObservation:
-    probes = Probes(
-        run=_probe_runner,
-        now_epoch_s=time.time,
-        monotonic_ns=time.monotonic_ns,
-        read_text=lambda path: Path(path).read_text(encoding="utf-8"),
-        checkout_head=lambda: "unused-by-agent-census",
-    )
-    result, refusal = agent_census(probes)
+    result, refusal = agent_census(make_probes())
     return CensusObservation(
         empty=refusal is None,
         exit_code=result.exit_code,
@@ -477,79 +471,135 @@ def load_state(storage: Storage) -> dict[str, Any]:
     return value
 
 
-def recorded_ignored_plan_roots(storage: Storage) -> set[str]:
-    roots = set(storage.ignored_plan_roots_seen)
+@dataclasses.dataclass(frozen=True)
+class PlanDiagnostic:
+    kind: str
+    reason: str | None
+    path: Path
+    detail: str
+
+
+@dataclasses.dataclass(frozen=True)
+class PlanSnapshot:
+    plans: tuple[NightPlan, ...]
+    errors: tuple[str, ...]
+    diagnostics: tuple[PlanDiagnostic, ...]
+
+
+def _plan_event_key(
+    activation_id: str, plan_dir: str, kind: str, detail: str
+) -> tuple[str, str, str, str]:
+    digest = hashlib.sha256(detail.encode("utf-8")).hexdigest()
+    return activation_id, plan_dir, kind, digest
+
+
+def recorded_plan_event_keys(
+    storage: Storage, activation_id: str
+) -> set[tuple[str, str, str, str]]:
+    keys: set[tuple[str, str, str, str]] = set()
     path = storage.root / "events.jsonl"
     if not storage.exists(path):
-        return roots
+        return keys
     try:
         lines = storage.read_text(path).splitlines()
     except OSError:
-        return roots
+        return keys
     for line in lines:
         try:
             event = json.loads(line)
         except (TypeError, ValueError):
             continue
-        if not isinstance(event, Mapping) or event.get("kind") not in {
-            "plan_retired_v1",
-            "plan_unparsable",
-        }:
+        if not isinstance(event, Mapping) or event.get("activation_id") != activation_id:
             continue
-        custody_root = event.get("custody_root")
-        if isinstance(custody_root, str):
-            roots.add(custody_root)
-    return roots
+        plan_dir = event.get("plan_dir")
+        kind = event.get("kind")
+        digest = event.get("detail_sha256")
+        if all(isinstance(item, str) for item in (plan_dir, kind, digest)):
+            keys.add((activation_id, plan_dir, kind, digest))
+    return keys
 
 
-def record_ignored_plan(
+def record_plan_diagnostics(
     storage: Storage,
-    path: Path,
-    kind: str,
-    detail: str,
-    ignored_roots: set[str],
+    diagnostics: Iterable[PlanDiagnostic],
+    *,
+    activation_id: str,
 ) -> None:
-    custody_root = str(path.parent.resolve(strict=False))
-    if custody_root in ignored_roots:
-        return
-    storage.append_jsonl(
-        storage.root / "events.jsonl",
-        {
-            "schema": EVENT_SCHEMA,
-            "kind": kind,
-            "custody_root": custody_root,
-            "plan_path": str(path.resolve(strict=False)),
-            "detail": detail[:4000],
-            "epoch_s": time.time(),
-        },
-    )
-    ignored_roots.add(custody_root)
-    storage.ignored_plan_roots_seen.add(custody_root)
+    seen = recorded_plan_event_keys(storage, activation_id)
+    for diagnostic in diagnostics:
+        plan_dir = str(diagnostic.path.parent.resolve(strict=False))
+        detail = diagnostic.detail[:4000]
+        key = _plan_event_key(activation_id, plan_dir, diagnostic.kind, detail)
+        if key in seen:
+            continue
+        storage.append_jsonl(
+            storage.root / "events.jsonl",
+            {
+                "schema": EVENT_SCHEMA,
+                "kind": diagnostic.kind,
+                "reason": diagnostic.reason,
+                "activation_id": activation_id,
+                "plan_dir": plan_dir,
+                "plan_path": str(diagnostic.path.resolve(strict=False)),
+                "detail": detail,
+                "detail_sha256": key[-1],
+                "epoch_s": time.time(),
+            },
+        )
+        seen.add(key)
 
 
-def load_plans(storage: Storage) -> tuple[list[NightPlan], list[str]]:
+def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSnapshot:
+    """Read and classify plans without mutating watchdog custody."""
+
     plans: list[NightPlan] = []
     errors: list[str] = []
-    ignored_roots = recorded_ignored_plan_roots(storage)
+    diagnostics: list[PlanDiagnostic] = []
+    observed_now = time.time() if now_epoch_s is None else now_epoch_s
     for path in storage.glob_plans():
-        raw: object = None
         try:
-            raw = json.loads(storage.read_text(path))
-            plans.append(NightPlan.from_mapping(raw))
+            text = storage.read_text(path)
+        except OSError as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            diagnostics.append(
+                PlanDiagnostic("plan_unreadable", "night_plan_unreadable", path, detail)
+            )
+            errors.append(f"night_plan_unreadable {path}: {detail}")
+            continue
+        try:
+            raw: object = json.loads(text)
         except Exception as exc:
-            kind = (
-                "plan_retired_v1"
-                if isinstance(raw, Mapping) and raw.get("schema") == "joulewise.night_plan.v1"
-                else "plan_unparsable"
+            detail = f"{type(exc).__name__}: {exc}"
+            diagnostics.append(
+                PlanDiagnostic("plan_unreadable", "night_plan_unreadable", path, detail)
             )
-            record_ignored_plan(
-                storage,
-                path,
-                kind,
-                f"{type(exc).__name__}: {exc}",
-                ignored_roots,
+            errors.append(f"night_plan_unreadable {path}: {detail}")
+            continue
+        if isinstance(raw, Mapping) and raw.get("schema") == "joulewise.night_plan.v1":
+            diagnostics.append(
+                PlanDiagnostic(
+                    "plan_retired_v1",
+                    None,
+                    path,
+                    "positively identified retired schema joulewise.night_plan.v1",
+                )
             )
-    return plans, errors
+            continue
+        try:
+            plan = NightPlan.from_mapping(raw)  # type: ignore[arg-type]
+            if plan.authored_epoch_s > observed_now:
+                raise PlanError(
+                    "night_plan_malformed", "plan authored_epoch_s is in the future"
+                )
+        except PlanError as exc:
+            detail = f"{type(exc).__name__}: {exc.detail}"
+            diagnostics.append(
+                PlanDiagnostic("plan_malformed", "night_plan_malformed", path, detail)
+            )
+            errors.append(f"night_plan_malformed {path}: {exc.detail}")
+            continue
+        plans.append(plan)
+    return PlanSnapshot(tuple(plans), tuple(errors), tuple(diagnostics))
 
 
 def local_fixed_fence(now: dt.datetime) -> str | None:
@@ -587,6 +637,77 @@ def plan_span_active(plan: NightPlan, now_epoch_s: float, storage: Storage) -> b
     if storage.exists(night / "courier.sent"):
         return False
     return now_epoch_s <= _next_deadman_epoch(plan.t0_epoch_s) + COURIER_LOCK_FRESH_S
+
+
+def plan_is_armed(plan: NightPlan, now_epoch_s: float, storage: Storage) -> bool:
+    """An authored plan remains armed until its durable completion or final bound."""
+
+    if plan.authored_epoch_s > now_epoch_s:
+        return False
+    night = Path(plan.custody_root) / "night"
+    if storage.exists(night / "chain.started") and not storage.exists(night / "chain.exited"):
+        return True
+    if storage.exists(night / "courier.sent"):
+        return False
+    return now_epoch_s <= _next_deadman_epoch(plan.t0_epoch_s) + COURIER_LOCK_FRESH_S
+
+
+def armed_plans(
+    plans: Iterable[NightPlan], now_epoch_s: float, storage: Storage
+) -> list[NightPlan]:
+    return sorted(
+        (plan for plan in plans if plan_is_armed(plan, now_epoch_s, storage)),
+        key=lambda plan: (plan.plan_id, plan.measurement_root, plan.measurement_head),
+    )
+
+
+def _canonical_measurement_root(plan: NightPlan) -> str:
+    return str(Path(plan.measurement_root).expanduser().resolve(strict=False))
+
+
+def plan_conflicts(plans: Sequence[NightPlan]) -> list[str]:
+    """Return deterministic armed-plan conflicts that make relaunch unsafe."""
+
+    conflicts: set[str] = set()
+    heads_by_root: dict[str, set[str]] = {}
+    for plan in plans:
+        heads_by_root.setdefault(_canonical_measurement_root(plan), set()).add(
+            plan.measurement_head
+        )
+    for root, heads in heads_by_root.items():
+        if len(heads) > 1:
+            conflicts.add(
+                f"one measurement_root has multiple heads: root={root!r} heads={sorted(heads)!r}"
+            )
+
+    for index, left in enumerate(plans):
+        left_start = left.t0_epoch_s - PLAN_LEAD_S
+        left_end = _next_deadman_epoch(left.t0_epoch_s) + COURIER_LOCK_FRESH_S
+        for right in plans[index + 1 :]:
+            if _canonical_measurement_root(left) == _canonical_measurement_root(right):
+                continue
+            right_start = right.t0_epoch_s - PLAN_LEAD_S
+            right_end = _next_deadman_epoch(right.t0_epoch_s) + COURIER_LOCK_FRESH_S
+            if max(left_start, right_start) <= min(left_end, right_end):
+                conflicts.add(
+                    "overlapping spans use different measurement roots: "
+                    f"{left.plan_id}={_canonical_measurement_root(left)!r}, "
+                    f"{right.plan_id}={_canonical_measurement_root(right)!r}"
+                )
+    return sorted(conflicts)
+
+
+def fenced_checkout_rows(plans: Sequence[NightPlan]) -> list[list[str | None]]:
+    """Return the deterministic prompt payload for all frozen checkouts."""
+
+    rows: list[list[str | None]] = [
+        ["__canonical_repo__", str(CANONICAL_REPO), None]
+    ]
+    rows.extend(
+        [plan.plan_id, _canonical_measurement_root(plan), plan.measurement_head]
+        for plan in plans
+    )
+    return rows
 
 
 def relevant_standdown_plan(
@@ -655,8 +776,11 @@ def _is_interactive_claude(command: str) -> bool:
     suffix = _claude_command_suffix(command)
     if suffix is None:
         return False
-    role = suffix.split(None, 1)[0] if suffix else ""
-    return role not in {"daemon", "bg-pty-host", "--bg-pty-host", "bg-spare", "--bg-spare"}
+    tokens = suffix.split()
+    role = tokens[0] if tokens else ""
+    if role in {"daemon", "bg-pty-host", "--bg-pty-host", "bg-spare", "--bg-spare"}:
+        return False
+    return not any(token == "-p" or token.startswith("--print") for token in tokens)
 
 
 def _is_bg_pty_host(command: str) -> bool:
@@ -678,9 +802,12 @@ def _snapshot_descendants(rows: Sequence[ProcessInfo], roots: Iterable[int]) -> 
 
 
 def handoff_inventory(
-    processes: Sequence[ProcessInfo], caller_pid: int
+    processes: Sequence[ProcessInfo],
+    caller_pid: int,
+    *,
+    adoptions: Sequence[tuple[int, str]] = (),
 ) -> dict[str, Any]:
-    """Return the explicit one-time handoff kill list without signalling it."""
+    """Classify owned and unowned handoff rows without signalling anything."""
 
     rows = [
         process
@@ -704,10 +831,11 @@ def handoff_inventory(
             "handoff-inventory must be run by the Terminal-hosted interactive magistrate"
         )
     interactive = candidates[-1]
-    tree_pids = _snapshot_descendants(rows, (interactive.pid,))
     inventory_call_chain = {
         process.pid for process in ancestry if process.pid != interactive.pid
     }
+    tree_pids = _snapshot_descendants(rows, (interactive.pid,))
+    tree_pids.difference_update(inventory_call_chain)
     orphan_roots = {
         process.pid
         for process in rows
@@ -717,15 +845,56 @@ def handoff_inventory(
             or "/.claude/shell-snapshots/" in process.command.casefold()
         )
     }
-    selected = _snapshot_descendants(rows, tree_pids | orphan_roots)
-    selected.difference_update(inventory_call_chain)
-    inventory_rows = [process for process in rows if process.pid in selected]
-    inventory_rows.sort(key=lambda process: process.pid)
+    candidate_pids = _snapshot_descendants(rows, orphan_roots)
+    candidate_pids.difference_update(tree_pids | inventory_call_chain)
+
+    adopted_roots: set[int] = set()
+    for pid, start_time in adoptions:
+        process = by_pid.get(pid)
+        if process is None:
+            raise RuntimeError(f"adopted pid is absent: {pid}")
+        if pid not in candidate_pids:
+            raise RuntimeError(f"adopted pid is not an unclassified candidate: {pid}")
+        if process.start_time != start_time:
+            raise RuntimeError(
+                f"adopted pid/start mismatch: pid={pid} expected={start_time!r} "
+                f"observed={process.start_time!r}"
+            )
+        adopted_roots.add(pid)
+
+    adopted_pids = _snapshot_descendants(rows, adopted_roots)
+    adopted_pids.intersection_update(candidate_pids)
+    owned_pids = tree_pids | adopted_pids
+    remaining_candidates = candidate_pids - adopted_pids
+
+    def record(process: ProcessInfo, provenance: str) -> dict[str, Any]:
+        return {**dataclasses.asdict(process), "provenance": provenance}
+
+    owned_rows = [process for process in rows if process.pid in owned_pids]
+    owned_rows.sort(key=lambda process: process.pid)
+    candidate_rows = [process for process in rows if process.pid in remaining_candidates]
+    candidate_rows.sort(key=lambda process: process.pid)
     return {
-        "schema": "joulewise.magistrate_handoff_inventory.v1",
+        "schema": "joulewise.magistrate_handoff_inventory.v2",
         "interactive_pid": interactive.pid,
-        "pids": [process.pid for process in inventory_rows],
-        "processes": [dataclasses.asdict(process) for process in inventory_rows],
+        "owned": [
+            record(
+                process,
+                "explicit_adoption"
+                if process.pid in adopted_roots
+                else "adopted_descendant"
+                if process.pid in adopted_pids
+                else "interactive_ancestry",
+            )
+            for process in owned_rows
+        ],
+        "unclassified_candidates": [
+            record(process, "command_shape_only") for process in candidate_rows
+        ],
+        "explicit_adoptions": [
+            {"pid": pid, "start_time": start_time}
+            for pid, start_time in sorted(adoptions)
+        ],
     }
 
 
@@ -884,15 +1053,27 @@ def apply_backoff(
     )
 
 
-def decide(storage: Storage, deps: Dependencies, state: dict[str, Any]) -> Decision:
+def decide(
+    storage: Storage,
+    deps: Dependencies,
+    state: dict[str, Any],
+    *,
+    plan_snapshot: PlanSnapshot | None = None,
+) -> Decision:
     wall = deps.wall_now().astimezone()
     monotonic = deps.monotonic()
     if clock_uncertain(state, wall, monotonic):
         return Decision("CLOCK_UNCERTAIN", "wall and monotonic deltas disagree")
 
-    plans, plan_errors = load_plans(storage)
-    if plan_errors:
-        return Decision("HOLD_UNSAFE", "; ".join(plan_errors))
+    snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
+    plans = list(snapshot.plans)
+    armed = armed_plans(plans, wall.timestamp(), storage)
+    state["fenced_checkouts"] = fenced_checkout_rows(armed)
+    if snapshot.errors:
+        return Decision("HOLD_UNSAFE", "; ".join(snapshot.errors))
+    conflicts = plan_conflicts(armed)
+    if conflicts:
+        return Decision("HOLD_UNSAFE", "plan_conflict: " + "; ".join(conflicts))
 
     lock = read_lock(storage)
     owner: ProcessInfo | None = None
@@ -976,6 +1157,11 @@ def render_prompt(storage: Storage, state: Mapping[str, Any], now: dt.datetime) 
         "@@CUSTODY_ROOT@@": str(storage.root),
         "@@LAUNCH_ISO@@": now.isoformat(),
         "@@NOTICE_PENDING@@": json.dumps(state.get("notice_pending", []), sort_keys=True),
+        "@@FENCED_CHECKOUTS@@": json.dumps(
+            state.get("fenced_checkouts", fenced_checkout_rows(())),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
@@ -1323,10 +1509,31 @@ class ResidentSupervisor:
                 notice="clock_uncertain",
             )
 
-        plans, errors = load_plans(self.storage)
-        if errors:
+        snapshot = load_plans(self.storage, now_epoch_s=now.timestamp())
+        record_plan_diagnostics(
+            self.storage,
+            snapshot.diagnostics,
+            activation_id=str(self.state.get("activation_id") or "pre-activation"),
+        )
+        plans = list(snapshot.plans)
+        armed = armed_plans(plans, now.timestamp(), self.storage)
+        self.state["fenced_checkouts"] = fenced_checkout_rows(armed)
+        conflicts = plan_conflicts(armed)
+        if snapshot.errors or conflicts:
             self._write_request(None, now, reason="malformed plan")
-            transition(self.storage, self.state, "HOLD_UNSAFE", "; ".join(errors), now)
+            reason = (
+                "; ".join(snapshot.errors)
+                if snapshot.errors
+                else "plan_conflict: " + "; ".join(conflicts)
+            )
+            transition(
+                self.storage,
+                self.state,
+                "HOLD_UNSAFE",
+                reason,
+                now,
+                notice="plan_conflict" if conflicts else None,
+            )
             self.storage.atomic_json(self.storage.root / "state.json", self.state)
             return True
 
@@ -1527,11 +1734,20 @@ def service_lock(storage: Storage) -> Iterable[int | None]:
 
 def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Decision:
     state = load_state(storage)
-    decision = decide(storage, deps, state)
+    observed_wall = deps.wall_now().astimezone()
+    snapshot = load_plans(storage, now_epoch_s=observed_wall.timestamp())
+    record_plan_diagnostics(
+        storage,
+        snapshot.diagnostics,
+        activation_id=str(state.get("activation_id") or "pre-activation"),
+    )
+    decision = decide(storage, deps, state, plan_snapshot=snapshot)
     now = deps.wall_now().astimezone()
     notice = None
     if decision.state in {"CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN", "HOLD_CENSUS"}:
         notice = decision.state.lower()
+    elif decision.reason.startswith("plan_conflict:"):
+        notice = "plan_conflict"
     transition(storage, state, decision.state, decision.reason, now, notice=notice)
     storage.atomic_json(storage.root / "state.json", state)
     if dry_run:
@@ -1581,19 +1797,45 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(os.environ.get(CUSTODY_ROOT_ENV, str(DEFAULT_CUSTODY_ROOT))),
     )
+    parser.add_argument(
+        "--adopt-pid",
+        action="append",
+        type=int,
+        default=[],
+        help="handoff-inventory only: explicitly adopt one candidate PID",
+    )
+    parser.add_argument(
+        "--start",
+        action="append",
+        default=[],
+        help="handoff-inventory only: exact start token paired with --adopt-pid",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "handoff-inventory":
+        if len(args.adopt_pid) != len(args.start):
+            print(
+                "handoff-inventory failed: each --adopt-pid requires one --start",
+                file=sys.stderr,
+            )
+            return 3
         try:
-            inventory = handoff_inventory(RealProcessTable().snapshot(), os.getpid())
+            inventory = handoff_inventory(
+                RealProcessTable().snapshot(),
+                os.getpid(),
+                adoptions=tuple(zip(args.adopt_pid, args.start)),
+            )
         except Exception as exc:
             print(f"handoff-inventory failed: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 3
         print(json.dumps(inventory, sort_keys=True, indent=2))
         return 0
+    if args.adopt_pid or args.start:
+        print("--adopt-pid/--start require handoff-inventory", file=sys.stderr)
+        return 3
     storage = Storage(args.custody_root, dry_run=args.dry_run)
     deps = real_dependencies()
     if args.dry_run:

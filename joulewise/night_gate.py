@@ -14,7 +14,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Protocol
 
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"
@@ -169,6 +169,13 @@ class Probes:
     measurement_head: Callable[[str], str]
 
 
+class CensusProbes(Protocol):
+    """Narrow census dependency, isolated from unrelated plan-pin probes."""
+
+    run: Callable[[tuple[str, ...]], ProbeResult]
+    monotonic_ns: Callable[[], int]
+
+
 @dataclass(frozen=True)
 class NightPlan:
     plan_id: str
@@ -192,11 +199,15 @@ class NightPlan:
         if keys != _PLAN_KEYS:
             missing = sorted(repr(item) for item in _PLAN_KEYS - keys)
             extra = sorted(repr(item) for item in keys - _PLAN_KEYS)
+            retired = (
+                "; joulewise.night_plan.v1 is retired and the plan must be "
+                "re-authored under joulewise.night_plan.v2"
+                if value.get("schema") != PLAN_SCHEMA
+                else ""
+            )
             raise PlanError(
                 "night_plan_malformed",
-                f"plan keys are not exact (missing={missing}, extra={extra}); "
-                "joulewise.night_plan.v1 is retired and the plan must be "
-                "re-authored under joulewise.night_plan.v2",
+                f"plan keys are not exact (missing={missing}, extra={extra}){retired}",
             )
         if value.get("schema") != PLAN_SCHEMA:
             raise PlanError(
@@ -239,17 +250,13 @@ class NightPlan:
         if not os.path.isabs(measurement_root):
             raise PlanError(
                 "night_plan_malformed",
-                "measurement_root must be an absolute path; "
-                "joulewise.night_plan.v1 is retired and the plan must be "
-                "re-authored under joulewise.night_plan.v2",
+                "measurement_root must be an absolute path",
             )
         measurement_head = require_text("measurement_head")
         if _HEAD_RE.fullmatch(measurement_head) is None:
             raise PlanError(
                 "night_plan_malformed",
-                "measurement_head must be exactly 40 lowercase hexadecimal characters; "
-                "joulewise.night_plan.v1 is retired and the plan must be "
-                "re-authored under joulewise.night_plan.v2",
+                "measurement_head must be exactly 40 lowercase hexadecimal characters",
             )
         chain_path = require_text("chain_path")
         chain_sha256_path = require_text("chain_sha256_path")
@@ -389,7 +396,7 @@ def _safe_monotonic_ns(probes: Probes) -> int:
     return value
 
 
-def _run(probes: Probes, argv: tuple[str, ...]) -> ProbeResult:
+def _run(probes: CensusProbes, argv: tuple[str, ...]) -> ProbeResult:
     try:
         result = probes.run(argv)
     except Exception as exc:
@@ -415,7 +422,7 @@ def _run(probes: Probes, argv: tuple[str, ...]) -> ProbeResult:
     return result
 
 
-def agent_census(probes: Probes) -> tuple[ProbeResult, Refusal | None]:
+def agent_census(probes: CensusProbes) -> tuple[ProbeResult, Refusal | None]:
     try:
         result = _run(probes, AGENT_CENSUS_ARGV)
     except ProbeError as exc:

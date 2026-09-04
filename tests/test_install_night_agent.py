@@ -10,9 +10,13 @@ import time
 import unittest
 from pathlib import Path
 
+from joulewise.night_gate import NightPlan
+from joulewise.night_plan_writer import write_night_plan
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "install_night_agent.sh"
+RETIRED_V1 = REPO_ROOT / "tests" / "fixtures" / "night_plan_v1_retired.json"
 
 
 def _git_head(root: Path) -> str:
@@ -74,24 +78,26 @@ class InstallNightAgentTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _write_plan(self, **changes: object) -> Path:
-        plan = {
-            "schema": "joulewise.night_plan.v2",
-            "plan_id": "install-night-agent-test",
-            "receipt_class": "TRANSACTION_PACK",
-            "t0_epoch_s": 1.0,
-            "window_max_s": 1,
-            "authored_epoch_s": time.time(),
-            "repo_head": self.repo_head,
-            "measurement_root": str(self.measurement_root),
-            "measurement_head": self.measurement_head,
-            "chain_path": "/bin/true",
-            "chain_sha256_path": "/tmp/install-night-agent-test.sha256",
-            "custody_root": str(self.root / "custody"),
-            "registration_path": None,
-        }
-        plan.update(changes)
+        plan = NightPlan(
+            plan_id="install-night-agent-test",
+            receipt_class="TRANSACTION_PACK",
+            t0_epoch_s=1.0,
+            window_max_s=1,
+            authored_epoch_s=time.time(),
+            repo_head=self.repo_head,
+            measurement_root=str(self.measurement_root),
+            measurement_head=self.measurement_head,
+            chain_path="/bin/true",
+            chain_sha256_path="/tmp/install-night-agent-test.sha256",
+            custody_root=str(self.root / "custody"),
+            registration_path=None,
+        )
         path = self.root / f"plan-{len(list(self.root.glob('plan-*.json')))}.json"
-        path.write_text(json.dumps(plan), encoding="utf-8")
+        write_night_plan(path, plan)
+        if changes:
+            mapping = json.loads(path.read_text(encoding="utf-8"))
+            mapping.update(changes)
+            path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
         return path
 
     def _run(self, plan: Path, *, uninstall: bool = False) -> subprocess.CompletedProcess[str]:
@@ -189,11 +195,8 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertFalse((self.rendered / "com.joulewise.night.plist").exists())
 
     def test_v1_install_is_retired_without_traceback_but_uninstall_still_works(self) -> None:
-        plan = self._write_plan(schema="joulewise.night_plan.v1")
-        mapping = json.loads(plan.read_text(encoding="utf-8"))
-        del mapping["measurement_root"]
-        del mapping["measurement_head"]
-        plan.write_text(json.dumps(mapping), encoding="utf-8")
+        plan = self.root / "retired-v1.json"
+        plan.write_bytes(RETIRED_V1.read_bytes())
 
         installed = self._run(plan)
         self.assertEqual(3, installed.returncode)

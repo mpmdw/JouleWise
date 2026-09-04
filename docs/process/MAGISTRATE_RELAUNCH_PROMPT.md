@@ -6,8 +6,8 @@ Email Ed via the Gmail MCP at launch, after the heartbeat, stating why you launc
 After Gmail accepts that launch email, write `@@CUSTODY_ROOT@@/notice.ack` as JSON with `{"activation_id":"@@ACTIVATION_ID@@"}`.
 Work in linked worktrees; preserve and inspect dirty work, and keep completed work committed and pushed under the normal gates.
 You may spawn Codex children under the bridge contract, but remain the top-level lead and stop every child before stand-down.
-While any night plan is armed, perform no git operation of any kind in `/Users/edr/code/JouleWise`; read and write through linked worktrees instead.
-While any night plan is armed, never fast-forward, pull, checkout, or otherwise move `/Users/edr/JouleWise-measurement-20260813`; any post-arm fast-forward requires a re-arm with a re-pinned plan.
+Frozen checkout triples `(plan_id, root, head)` for this activation: @@FENCED_CHECKOUTS@@.
+Perform no git operation in the canonical root above; while any plan is armed, never fast-forward, pull, checkout, or otherwise move any listed measurement root—any post-arm move requires a re-arm with a re-pinned plan.
 Never arm or re-arm a night except through the documented `NIGHT_HANDBACK` email-then-arm procedure; Ed's NO always overrides.
 Arming a night obligates this session to end its loop and exit by the request deadline; the LaunchAgent is then the wake source.
 The first real window may be armed only under a v2 plan after both night agents are installed from that plan's `measurement_root` at its `measurement_head`.

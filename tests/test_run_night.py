@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import night_gate
+from joulewise.night_plan_writer import write_night_plan
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -222,25 +223,22 @@ class NightDriverTests(unittest.TestCase):
         receipt_class: str = "DIAGNOSTIC_NO_PACK",
     ) -> None:
         t0 = self.t0_epoch_s if t0_epoch_s is None else t0_epoch_s
-        self.plan_path.write_text(
-            json.dumps(
-                {
-                    "schema": night_gate.PLAN_SCHEMA,
-                    "plan_id": "night-plan",
-                    "receipt_class": receipt_class,
-                    "t0_epoch_s": t0,
-                    "window_max_s": window_max_s,
-                    "authored_epoch_s": t0 - 1,
-                    "repo_head": HEAD,
-                    "measurement_root": str(self.root),
-                    "measurement_head": HEAD,
-                    "chain_path": str(self.chain),
-                    "chain_sha256_path": str(self.sidecar),
-                    "custody_root": str(self.custody),
-                    "registration_path": str(self.registration),
-                }
+        write_night_plan(
+            self.plan_path,
+            night_gate.NightPlan(
+                plan_id="night-plan",
+                receipt_class=receipt_class,
+                t0_epoch_s=t0,
+                window_max_s=window_max_s,
+                authored_epoch_s=t0 - 1,
+                repo_head=HEAD,
+                measurement_root=str(self.root),
+                measurement_head=HEAD,
+                chain_path=str(self.chain),
+                chain_sha256_path=str(self.sidecar),
+                custody_root=str(self.custody),
+                registration_path=str(self.registration),
             ),
-            encoding="utf-8",
         )
 
     def _popen_recorder(self, return_code: int = 0, running_once: bool = False):

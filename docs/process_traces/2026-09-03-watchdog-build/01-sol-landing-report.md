@@ -187,3 +187,19 @@ This addendum maps only the round-4 cures on the integrated plan-pin base. Untou
 | M-2/M-3 — the read-only handoff inventory includes the invoking interactive twin tree and named PID-1 bg-host/shell-snapshot orphan trees, while excluding unrelated processes and its transient caller chain | `scripts/magistrate_watchdog.py:654-733`, `:1569-1597` | `tests/test_magistrate_watchdog.py:662` | Delete the PID-1 orphan-root union; the expected orphan host, spare, snapshot, and snapshot-child PIDs disappear from the inventory. |
 | M-2/M-3 + Q4 — install handoff order is stop tasks → preserve retired custody → inventory → install → kill only recorded list and prove empty census → next launchd tick creates `-p` | `docs/process/MAGISTRATE_WATCHDOG.md:82-179` | `tests/test_magistrate_watchdog.py:779` | Move install before the retired-root move or inventory, or delete the recorded-only signaling rule; the ordered-position or ownership assertion fails. |
 | Q4 — every v2 night installs both night agents FROM its pinned measurement checkout | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:13`; `docs/process/NIGHT_HANDBACK.md:72-76`; `docs/process/MAGISTRATE_WATCHDOG.md:179` | `tests/test_magistrate_watchdog.py:763-767`, `:779-801` | Replace “installed from that plan's `measurement_root`” with the old generic “pinned” wording; the prompt and handback contract assertions fail. |
+
+---
+
+## Fix round 5 clause-map addendum (2026-09-04 PDT)
+
+This addendum supersedes the round-4 assertions that non-v1 parse failures are ignored, that PID-1 command lookalikes are signal targets, and that documented plan examples may hand-author schema mappings. The authoritative detailed R-2…R-7 and AD-1…AD-13 map, RED/GREEN transcript, and mutation proof are in `14-sol-fix-round-5-report.md`.
+
+| Round-5 proposition | Production site | Biting assertion / counterfactual |
+|---|---|---|
+| Production composition is gated end-to-end | `joulewise/night_plan_writer.py:15-63`; `scripts/magistrate_watchdog.py:335`; `scripts/run_night.py:267-290` | `tests/test_magistrate_watchdog_cli.py:142` fails when the writer is absent and, after landing, fails again if the sole constructor loses `measurement_head`. |
+| Only positive retired-v1 identification is ignored | `scripts/magistrate_watchdog.py:552-603,1068-1076` | `tests/test_magistrate_watchdog.py:167-287`; truncation, missing current fields, and future authorship hold with named reasons while the frozen v1 fixture emits one event. |
+| Handoff signal authority is explicit | `scripts/magistrate_watchdog.py:775-899,1801-1837`; `docs/process/MAGISTRATE_WATCHDOG.md:99-203` | `tests/test_magistrate_watchdog.py:806-871`; moving command-shape candidates into `owned` without exact PID/start adoption fails the set/provenance assertions. |
+| Every armed checkout is rendered and conflicts hold | `scripts/magistrate_watchdog.py:642-707,1068-1076,1160`; `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:9-10` | `tests/test_magistrate_watchdog.py:289-351`; omit either root or accept overlapping roots/two heads and the prompt/conflict assertions fail. |
+| Fixture and documentation drift are structurally blocked | `joulewise/night_plan_writer.py:15-63`; `docs/process/MAGISTRATE_WATCHDOG.md:218-251,312-341` | All v2 tests consume writer output; `tests/test_magistrate_watchdog.py:951-964` compiles documented heredocs and round-trips the writer mapping through `NightPlan`. |
+
+Final authorized modules: watchdog 49 OK, CLI 1 OK, night gate 47 OK, run-night 55 OK, installer 11 OK. No install, agent launch, handoff signal, default-custody write, or quiet-machine run occurred.

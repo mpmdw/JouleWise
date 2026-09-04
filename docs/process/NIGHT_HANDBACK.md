@@ -78,3 +78,8 @@ was armed (cold gate coldgate-e10 (b)); if Ed replied NO on that thread,
 stand the night down instead of harvesting. A refusal other than
 `night_refused_agent_present` on this night is a finding: cure the cause
 before re-arming; never re-arm the same plan on the same signature twice.
+Author every new v2 plan with
+`joulewise.night_plan_writer.write_night_plan`; invalid-plan tests begin with
+that writer's bytes and apply a named mutation. Once authored, every armed
+plan's canonical `(plan_id, measurement_root, measurement_head)` is included
+in the magistrate relaunch prompt's frozen-checkout list until completion.
