@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import copy
-import dataclasses
 import hashlib
 import inspect
 import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from joulewise import dominance_closeout as core
 from joulewise import results_fill_outcome as renderer
-from joulewise.analysis_manifest_v3 import calculate_manifest_id
+from joulewise import whole_window
+from joulewise.analysis_manifest_v3 import (
+    analysis_semantics_sha256_v1,
+    calculate_manifest_id,
+    render_manifest,
+    validate_prospective_analysis_manifest_v3,
+)
 from joulewise.identity_pins import stack_identity_sha256
 from tests import test_d165_dominance_closeout as d165_fixtures
+from tests.test_analysis_manifest_v3 import install_synthetic_prospective_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -150,70 +158,252 @@ def _built_sources(
     return closeout, manifest_bytes, floor_bytes, sidecar_bytes
 
 
-def _validation_result(
-    validator: str,
-    source_bytes: bytes,
-    manifest_bytes: bytes,
-    *,
-    result: tuple | None = None,
-):
-    if result is None:
-        source = json.loads(source_bytes)
-        result = (
-            (source["reason"],)
-            if validator == "whole_window_refusal_reasons"
-            else ()
-        )
-    result_type = getattr(renderer, "BeforeComparisonValidationResult", None)
-    if result_type is None:
-        return {
-            "validator": validator,
-            "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
-            "finalized_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-            "result": result,
-        }
-    return result_type(
-        validator=validator,
-        source_sha256=hashlib.sha256(source_bytes).hexdigest(),
-        finalized_manifest_sha256=hashlib.sha256(manifest_bytes).hexdigest(),
-        result=result,
-    )
-
-
-def _before_inputs(
-    fixture: dict, manifest_bytes: bytes
-) -> tuple[list[bytes], list[object]]:
-    sources: list[bytes] = []
-    results: list[object] = []
-    for item in fixture["before_comparison_sources"]:
-        source_bytes = _file_json_bytes(item["source"])
-        sources.append(source_bytes)
-        results.append(
-            _validation_result(item["validator"], source_bytes, manifest_bytes)
-        )
-    return sources, results
-
-
 def _render(fixture: dict, *, v5_identity: bool = True) -> dict[str, str]:
     closeout, manifest, floor, sidecar = _built_sources(
         fixture["builder"], v5_identity=v5_identity
-    )
-    sources, results = _before_inputs(fixture, manifest)
-    before_kwargs = (
-        {
-            "before_comparison_source_bytes": sources,
-            "before_comparison_validator_results": results,
-        }
-        if sources
-        else {}
     )
     return renderer.render_outcome_fills(
         closeout,
         finalized_manifest_bytes=manifest,
         floor_artifact_bytes=floor,
         replay_sidecar_bytes=sidecar,
-        **before_kwargs,
     )
+
+
+def _install_v5_prospective(
+    root: Path, *, wrong_revision: bool = False
+) -> tuple[Path, Path, dict]:
+    manifest_path, plan_tree_path, prospective = (
+        install_synthetic_prospective_fixture(root)
+    )
+    pack_root = manifest_path.parent
+    config_sha256_by_path: dict[str, str] = {}
+    for contrast in prospective["contrasts"]:
+        for member in contrast["members"]:
+            relative = member["config"]
+            config_path = pack_root / relative
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            identity = QWEN3[member["arm"]]
+            config["model"].update(
+                {
+                    "context_window": 40960,
+                    "family": identity["family"],
+                    "name": identity["name"],
+                    "revision": (
+                        "0" * 40
+                        if wrong_revision and member["arm"] == "A"
+                        else identity["revision"]
+                    ),
+                    "source": (
+                        f"/Users/edr/jw_models/mlx-community/{identity['name']}"
+                    ),
+                }
+            )
+            raw = _file_json_bytes(config)
+            config_path.write_bytes(raw)
+            digest = hashlib.sha256(raw).hexdigest()
+            member["config_sha256"] = digest
+            config_sha256_by_path[relative] = digest
+
+    stage_sha256_by_path: dict[str, str] = {}
+    for stage in prospective["stage_manifests"]:
+        stage_relative = stage["manifest_path"]
+        stage_path = pack_root / stage_relative
+        stage_manifest = json.loads(stage_path.read_text(encoding="utf-8"))
+        stage_root = Path(stage_relative).parent
+        for row in stage_manifest["executed_order"]:
+            config_relative = (stage_root / row["config"]).as_posix()
+            row["config_sha256"] = config_sha256_by_path[config_relative]
+        stage_raw = _file_json_bytes(stage_manifest)
+        stage_path.write_bytes(stage_raw)
+        stage_digest = hashlib.sha256(stage_raw).hexdigest()
+        stage["manifest_sha256"] = stage_digest
+        stage_sha256_by_path[stage_relative] = stage_digest
+
+    order_path = pack_root / prospective["root_order_manifest"]["path"]
+    order = json.loads(order_path.read_text(encoding="utf-8"))
+    for row in order["executed_order"]:
+        row["config_sha256"] = config_sha256_by_path[row["config"]]
+    for row in order["subcampaign_order"]:
+        row["manifest_sha256"] = stage_sha256_by_path[row["manifest_path"]]
+    order_raw = _file_json_bytes(order)
+    order_path.write_bytes(order_raw)
+    prospective["root_order_manifest"]["sha256"] = hashlib.sha256(
+        order_raw
+    ).hexdigest()
+
+    prospective["frozen_semantics_sha256"] = analysis_semantics_sha256_v1(
+        prospective
+    )
+    prospective["manifest_id"] = calculate_manifest_id(prospective)
+    manifest_path.write_bytes(render_manifest(prospective))
+    plan_tree = json.loads(plan_tree_path.read_text(encoding="utf-8"))
+    plan_tree["downstream_contract"]["analysis_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    plan_tree_path.write_bytes(_file_json_bytes(plan_tree))
+    refusals = validate_prospective_analysis_manifest_v3(
+        prospective,
+        manifest_dir=pack_root,
+        plan_tree_path=plan_tree_path,
+    )
+    if refusals:
+        raise AssertionError(
+            "; ".join(
+                f"{refusal.reason_code}: {refusal.detail}"
+                for refusal in refusals
+            )
+        )
+    return manifest_path, plan_tree_path, prospective
+
+
+def _install_before_chain(root: Path, *, wrong_revision: bool = False) -> dict:
+    manifest_path, plan_tree_path, prospective = _install_v5_prospective(
+        root, wrong_revision=wrong_revision
+    )
+    runs_root = root / "runs"
+    manifest_dir = runs_root / "campaign_manifests"
+    manifest_dir.mkdir(parents=True)
+    expected_ids = [
+        member["run_id"]
+        for contrast in prospective["contrasts"]
+        for member in contrast["members"]
+    ]
+    source_manifest = {
+        "schema_version": "joulewise.campaign_provenance.v1",
+        "session_id": "fixture-session",
+        "created_at": "2026-09-04T00:00:00Z",
+        "config_dir": str(manifest_path.parent),
+        "analysis_manifest_id": prospective["manifest_id"],
+        "analysis_manifest_sha256": hashlib.sha256(
+            manifest_path.read_bytes()
+        ).hexdigest(),
+        "campaign_policy": {"sha256": "a" * 64},
+        "environment_preflight": None,
+        "cooldown_anchor": None,
+        "first_physical_run_id": None,
+        "members": [
+            {
+                "run_id": member_id,
+                "execution": "existing",
+                "config": f"{member_id}.json",
+                "bundle_ids": [member_id],
+            }
+            for member_id in expected_ids
+        ],
+        "cooldown_gates": [],
+    }
+    source_manifest_path = manifest_dir / "fixture-session.json"
+    source_manifest_raw = _file_json_bytes(source_manifest)
+    source_manifest_path.write_bytes(source_manifest_raw)
+    descriptor = {
+        "path": source_manifest_path.relative_to(runs_root).as_posix(),
+        "sha256": hashlib.sha256(source_manifest_raw).hexdigest(),
+    }
+    basis_payload = {
+        "schema_version": "joulewise.idle_admission_evaluation_basis.v1",
+        "policy_sha256": "a" * 64,
+        "member_occurrences": [
+            {
+                "bundle_id": member_id,
+                "bundle_path": member_id,
+                "config_sha256": "b" * 64,
+                "metadata_sha256": "c" * 64,
+                "summary_sha256": "d" * 64,
+            }
+            for member_id in expected_ids
+        ],
+        "calibration_bracket_set": {},
+        "consumption_semantics_id": whole_window.MINTED_CONSUMPTION_SEMANTICS_ID,
+    }
+    basis = {**basis_payload, "sha256": whole_window.canonical_sha256(basis_payload)}
+    row = {
+        "schema_version": whole_window.WHOLE_WINDOW_SCHEMA,
+        "timestamp": "2026-09-04T00:00:01Z",
+        "record_type": "idle_admission_whole_window_verdict",
+        "status": "failed",
+        "claim_licensing": True,
+        "runs_dir": str(runs_root.resolve()),
+        "evaluation_scope": {
+            "runs_root": str(runs_root.resolve()),
+            "started_at": "2026-09-04T00:00:00Z",
+            "completed_at": "2026-09-04T00:00:01Z",
+        },
+        "evaluation_basis": basis,
+        "campaign_policy": {"sha256": "a" * 64},
+        "bundle_ids": expected_ids,
+        "waived_bundles": [],
+        "occurrence_supersessions": [],
+        "excluded_bundles": [],
+        "member_failures": [],
+        "idle_admission_core": {
+            "schema_version": whole_window.IDLE_ADMISSION_CORE_SCHEMA,
+            "policy_sha256": "a" * 64,
+            "conditions": ["synthetic_window_excluded"],
+            "members": [],
+        },
+        "source_campaign_manifests": [descriptor],
+        "row_provenance": {
+            "schema_version": whole_window.WHOLE_WINDOW_PROVENANCE_SCHEMA,
+            "policy_sha256": "a" * 64,
+            "membership_sha256": whole_window.canonical_sha256(
+                sorted(expected_ids)
+            ),
+            "source_campaign_manifests": [descriptor],
+        },
+    }
+    verdict_path = runs_root / "whole_window_verdict.json"
+    verdict_raw = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    verdict_path.write_bytes(verdict_raw)
+    campaign_log_path = runs_root / "campaign_log.jsonl"
+    campaign_log_path.write_bytes(b'{"record_type": "fixture"}\n' + verdict_raw)
+    return {
+        "runs_root_path": runs_root,
+        "campaign_log_path": campaign_log_path,
+        "campaign_log_sha256": hashlib.sha256(
+            campaign_log_path.read_bytes()
+        ).hexdigest(),
+        "whole_window_verdict_path": verdict_path,
+        "whole_window_verdict_sha256": hashlib.sha256(verdict_raw).hexdigest(),
+        "prospective_manifest_path": manifest_path,
+        "prospective_manifest_sha256": hashlib.sha256(
+            manifest_path.read_bytes()
+        ).hexdigest(),
+        "plan_tree_path": plan_tree_path,
+        "plan_tree_sha256": hashlib.sha256(plan_tree_path.read_bytes()).hexdigest(),
+        "expected_ids": expected_ids,
+    }
+
+
+def _before_kwargs(chain: dict) -> dict:
+    return {
+        key: chain[key]
+        for key in (
+            "runs_root_path",
+            "campaign_log_path",
+            "campaign_log_sha256",
+            "whole_window_verdict_path",
+            "whole_window_verdict_sha256",
+            "prospective_manifest_path",
+            "prospective_manifest_sha256",
+            "plan_tree_path",
+            "plan_tree_sha256",
+        )
+    }
+
+
+def _rewrite_verdict(chain: dict, mutate, *, occurrences: int = 1) -> None:
+    row = json.loads(chain["whole_window_verdict_path"].read_text(encoding="utf-8"))
+    mutate(row)
+    raw = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    chain["whole_window_verdict_path"].write_bytes(raw)
+    chain["whole_window_verdict_sha256"] = hashlib.sha256(raw).hexdigest()
+    chain["campaign_log_path"].write_bytes(
+        b'{"record_type": "fixture"}\n' + raw * occurrences
+    )
+    chain["campaign_log_sha256"] = hashlib.sha256(
+        chain["campaign_log_path"].read_bytes()
+    ).hexdigest()
 
 
 def _registry_oracle(name: str) -> str:
@@ -249,7 +439,9 @@ class ResultsFillOutcomeTests(unittest.TestCase):
             fixture = json.loads(path.read_text(encoding="utf-8"))
             with self.subTest(fixture=path.stem):
                 for fill_key, oracle_name in fixture["registry_oracles"].items():
-                    self.assertEqual(fixture["expected"][fill_key], _registry_oracle(oracle_name))
+                    self.assertEqual(
+                        fixture["expected"][fill_key], _registry_oracle(oracle_name)
+                    )
                 rendered = _render(fixture)
                 self.assertEqual(
                     {key: rendered[key] for key in FILL_KEYS}, fixture["expected"]
@@ -262,92 +454,153 @@ class ResultsFillOutcomeTests(unittest.TestCase):
                     )
                 )
 
-    def test_f1_before_comparison_requires_digest_bound_source_bytes_and_result(
+    def test_f1_path_chain_replays_owning_validators_but_ambiguous_result_stops(
         self,
     ) -> None:
-        fixture = _fixture("before_comparison_refusal")
-        closeout, manifest, floor, sidecar = _built_sources("none")
-        sources, results = _before_inputs(fixture, manifest)
-        self.assertEqual(_render(fixture)["OR-01"], fixture["expected"]["OR-01"])
+        with tempfile.TemporaryDirectory() as tmp:
+            chain = _install_before_chain(Path(tmp))
+            expected = {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL}
+            with (
+                mock.patch(
+                    "joulewise.analysis_manifest_v3."
+                    "validate_prospective_analysis_manifest_v3",
+                    wraps=validate_prospective_analysis_manifest_v3,
+                ) as prospective_validator,
+                mock.patch(
+                    "joulewise.whole_window.whole_window_refusal_reasons",
+                    wraps=whole_window.whole_window_refusal_reasons,
+                ) as whole_window_validator,
+            ):
+                rendered = renderer.render_outcome_fills(
+                    None, **_before_kwargs(chain)
+                )
+            self.assertEqual(rendered, expected)
+            prospective_validator.assert_called_once()
+            self.assertEqual(
+                prospective_validator.call_args.kwargs,
+                {
+                    "manifest_dir": chain["prospective_manifest_path"].parent,
+                    "plan_tree_path": chain["plan_tree_path"],
+                },
+            )
+            whole_window_validator.assert_called_once_with(
+                chain["runs_root_path"],
+                set(chain["expected_ids"]),
+                evaluation_basis_sha256=json.loads(
+                    chain["whole_window_verdict_path"].read_text(encoding="utf-8")
+                )["evaluation_basis"]["sha256"],
+                consumption_semantics_id=(
+                    whole_window.MINTED_CONSUMPTION_SEMANTICS_ID
+                ),
+            )
 
-        changed_model = json.loads(sources[0])
-        changed_model["model"] = "Qwen3-8B"
-        changed_model_bytes = _file_json_bytes(changed_model)
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                closeout,
-                finalized_manifest_bytes=manifest,
-                floor_artifact_bytes=floor,
-                replay_sidecar_bytes=sidecar,
-                before_comparison_source_bytes=[changed_model_bytes],
-                before_comparison_validator_results=results,
-            ),
-            {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL},
-            "changed source bytes must fail against the owning result's digest",
+    def test_f1_path_chain_rebindings_fail_before_whole_window_replay(self) -> None:
+        cases = (
+            "verdict_digest",
+            "plan_tree_digest",
+            "plan_tree_binding",
+            "duplicate_log_row",
+            "missing_log_row",
+            "bundle_census",
+            "malformed_bundle_id",
+            "manifest_binding",
+            "symlink_source",
+            "wrong_v5_revision",
         )
-        changed_reason = json.loads(sources[0])
-        changed_reason["reason"] = "fabricated"
-        changed_reason_bytes = _file_json_bytes(changed_reason)
-        rebound_digest_only = dataclasses.replace(
-            results[0],
-            source_sha256=hashlib.sha256(changed_reason_bytes).hexdigest(),
-        )
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                closeout,
-                finalized_manifest_bytes=manifest,
-                floor_artifact_bytes=floor,
-                replay_sidecar_bytes=sidecar,
-                before_comparison_source_bytes=[changed_reason_bytes],
-                before_comparison_validator_results=[rebound_digest_only],
-            ),
-            {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL},
-            "a caller-rehashed reason must still match the owning validator result",
-        )
-        invalid_result = _validation_result(
-            "whole_window_refusal_reasons",
-            sources[0],
-            manifest,
-            result=("whole_window_verdict_provenance_invalid",),
-        )
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                None,
-                finalized_manifest_bytes=manifest,
-                before_comparison_source_bytes=sources,
-                before_comparison_validator_results=[invalid_result],
-            ),
-            {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL},
-        )
-        wrong_validator = _validation_result(
-            "validate_claim_verdicts", sources[0], manifest
-        )
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                None,
-                finalized_manifest_bytes=manifest,
-                before_comparison_source_bytes=sources,
-                before_comparison_validator_results=[wrong_validator],
-            ),
-            {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL},
-        )
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                None,
-                finalized_manifest_bytes=manifest,
-                before_comparison_source_bytes=sources,
-                before_comparison_validator_results=[
-                    {
-                        "validator": "whole_window_refusal_reasons",
-                        "source_sha256": hashlib.sha256(sources[0]).hexdigest(),
-                        "finalized_manifest_sha256": hashlib.sha256(manifest).hexdigest(),
-                        "result": ("synthetic_window_excluded",),
-                    }
-                ],
-            ),
-            {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL},
-            "a caller-authored validation dictionary is not an authority result",
-        )
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                chain = _install_before_chain(
+                    Path(tmp), wrong_revision=case == "wrong_v5_revision"
+                )
+                if case == "verdict_digest":
+                    chain["whole_window_verdict_sha256"] = "0" * 64
+                elif case == "plan_tree_digest":
+                    chain["plan_tree_sha256"] = "0" * 64
+                elif case == "plan_tree_binding":
+                    tree = json.loads(
+                        chain["plan_tree_path"].read_text(encoding="utf-8")
+                    )
+                    tree["downstream_contract"]["analysis_manifest_sha256"] = (
+                        "0" * 64
+                    )
+                    tree_raw = _file_json_bytes(tree)
+                    chain["plan_tree_path"].write_bytes(tree_raw)
+                    chain["plan_tree_sha256"] = hashlib.sha256(
+                        tree_raw
+                    ).hexdigest()
+                elif case == "duplicate_log_row":
+                    _rewrite_verdict(chain, lambda _row: None, occurrences=2)
+                elif case == "missing_log_row":
+                    _rewrite_verdict(chain, lambda _row: None, occurrences=0)
+                elif case == "bundle_census":
+                    def remove_member(row):
+                        removed = row["bundle_ids"].pop()
+                        basis = row["evaluation_basis"]
+                        basis["member_occurrences"] = [
+                            occurrence
+                            for occurrence in basis["member_occurrences"]
+                            if occurrence["bundle_id"] != removed
+                        ]
+                        basis["sha256"] = whole_window.canonical_sha256(
+                            {key: value for key, value in basis.items() if key != "sha256"}
+                        )
+                        row["row_provenance"]["membership_sha256"] = (
+                            whole_window.canonical_sha256(sorted(row["bundle_ids"]))
+                        )
+
+                    _rewrite_verdict(chain, remove_member)
+                elif case == "malformed_bundle_id":
+                    _rewrite_verdict(
+                        chain,
+                        lambda row: row["bundle_ids"].__setitem__(0, []),
+                    )
+                elif case == "manifest_binding":
+                    row = json.loads(
+                        chain["whole_window_verdict_path"].read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    descriptor = row["source_campaign_manifests"][0]
+                    source_path = chain["runs_root_path"] / descriptor["path"]
+                    source = json.loads(source_path.read_text(encoding="utf-8"))
+                    source["analysis_manifest_id"] = "am-" + "0" * 64
+                    source_raw = _file_json_bytes(source)
+                    source_path.write_bytes(source_raw)
+                    source_sha = hashlib.sha256(source_raw).hexdigest()
+
+                    def rebind_descriptor(value):
+                        value["source_campaign_manifests"][0]["sha256"] = source_sha
+                        value["row_provenance"]["source_campaign_manifests"][0][
+                            "sha256"
+                        ] = source_sha
+
+                    _rewrite_verdict(chain, rebind_descriptor)
+                elif case == "symlink_source":
+                    link = chain["runs_root_path"] / "verdict-link.json"
+                    link.symlink_to(chain["whole_window_verdict_path"])
+                    chain["whole_window_verdict_path"] = link
+
+                with mock.patch(
+                    "joulewise.whole_window.whole_window_refusal_reasons",
+                    return_value=("whole_window_neg8_verdict_failed",),
+                ) as validator:
+                    rendered = renderer.render_outcome_fills(
+                        None, **_before_kwargs(chain)
+                    )
+                expected = {
+                    "OB-01": renderer.STOP_FILL,
+                    "OR-01": renderer.STOP_FILL,
+                }
+                if case == "wrong_v5_revision":
+                    expected["_stop_reason"] = renderer.IDENTITY_NOT_V5
+                self.assertEqual(rendered, expected)
+                validator.assert_not_called()
+
+    def test_f1_caller_result_and_normalized_byte_channels_are_removed(self) -> None:
+        parameters = inspect.signature(renderer.render_outcome_fills).parameters
+        self.assertNotIn("before_comparison_source_bytes", parameters)
+        self.assertNotIn("before_comparison_validator_results", parameters)
+        self.assertFalse(hasattr(renderer, "BeforeComparisonValidationResult"))
 
     def test_f2_registered_stage_order_has_no_precedence_channel(self) -> None:
         parameters = inspect.signature(renderer.render_outcome_fills).parameters
@@ -355,24 +608,29 @@ class ResultsFillOutcomeTests(unittest.TestCase):
         self.assertNotIn("before_comparison_stops", parameters)
 
         close_fixture = _fixture("closeout_refusal")
-        self.assertEqual(_render(close_fixture)["OR-01"], close_fixture["expected"]["OR-01"])
-
-        before_fixture = _fixture("before_comparison_refusal")
-        closeout, manifest, floor, sidecar = _built_sources("closeout_refusal")
-        sources, results = _before_inputs(before_fixture, manifest)
-        rendered = renderer.render_outcome_fills(
-            closeout,
-            finalized_manifest_bytes=manifest,
-            floor_artifact_bytes=floor,
-            replay_sidecar_bytes=sidecar,
-            before_comparison_source_bytes=sources,
-            before_comparison_validator_results=results,
-        )
-        self.assertEqual(rendered["OR-01"], before_fixture["expected"]["OR-01"])
         self.assertEqual(
-            rendered["_secondary_closeout_reason"],
-            "dominance_ratio_zero_denominator",
+            _render(close_fixture)["OR-01"], close_fixture["expected"]["OR-01"]
         )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            chain = _install_before_chain(Path(tmp))
+            closeout, manifest, floor, sidecar = _built_sources("closeout_refusal")
+            with mock.patch(
+                "joulewise.whole_window.whole_window_refusal_reasons",
+                return_value=("whole_window_neg8_verdict_failed",),
+            ):
+                rendered = renderer.render_outcome_fills(
+                    closeout,
+                    finalized_manifest_bytes=manifest,
+                    floor_artifact_bytes=floor,
+                    replay_sidecar_bytes=sidecar,
+                    **_before_kwargs(chain),
+                )
+            self.assertEqual(rendered["OR-01"], renderer.STOP_FILL)
+            self.assertEqual(
+                rendered["_secondary_closeout_reason"],
+                "dominance_ratio_zero_denominator",
+            )
 
     def test_f3_top_level_closeout_reason_renders_without_matching_ratio(self) -> None:
         cases = {
@@ -484,6 +742,17 @@ class ResultsFillOutcomeTests(unittest.TestCase):
             ),
             stopped,
             "a close-out whose source bytes do not authenticate must stop",
+        )
+        self.assertEqual(
+            renderer.render_outcome_fills(
+                closeout,
+                finalized_manifest_bytes=manifest,
+                floor_artifact_bytes=floor,
+                replay_sidecar_bytes=sidecar,
+                runs_root_path=Path("/unbound-partial-before-input"),
+            ),
+            stopped,
+            "a partial path-and-digest chain must not fall through to close-out",
         )
 
 

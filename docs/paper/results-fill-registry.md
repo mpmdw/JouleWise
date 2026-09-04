@@ -914,6 +914,22 @@ These rows govern nonnumeric semantic placements added to
 Each repeated marker shares one result across the Abstract, Section 7, and
 Section 10. No row authorizes prose to be inferred at the desk.
 
+**Before-comparison authority (R4-F1 replacement, 2026-09-04).** The exact
+OR-01 before-comparison templates below remain registered, but neither is
+currently issuable. The existing `whole_window_refusal_reasons` result is one
+undifferentiated refusal-code tuple: it cannot distinguish an authentic
+non-admitted `joulewise.idle_admission_whole_window_verdict.v1` row from a
+provenance/structure failure. Therefore even an exact-once row replayed from
+the digest-bound `campaign_log.jsonl` through the prospective `_v5` manifest
+and plan tree remains stopped, pending the queued
+`WHOLE-WINDOW-STOP-RECEIPT-01`.
+Acceptance oracle `whole_window_current`: `STOP_FILL`. A missing
+`joulewise.claim_verdicts.v1` file is non-issuance, not evidence that issues an
+absence reason. Acceptance oracle `verdict_absent_current`: `STOP_FILL`.
+DS-32/PG-08's registered `not evaluated — required ... verdict
+absent` text can issue only from a future governed non-issuance artifact and
+validator, queued as `CLAIM-NONISSUANCE-RECEIPT-01`.
+
 | Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
 |---|---|---|---|---|---|---|
 | OB-01 — Outcome-B failed-component list in the Abstract, Section 7, and Section 10 | `[FILL:OB-01]` | Authenticated `joulewise.d165_dominance_closeout.v1`: in registered stage order, render every `independent_ratios[]` record with `passes` false as exact template `<cell_id> <component>`, followed by every `comparative_common_mode_ratios[]` record with `passes` false as exact template `<cell_id> comparative common-mode`; retain source order within each stage. Join one item verbatim, two as `<item> and <item>`, and three or more as `<item>, <item>, and <item>` with every earlier item comma-separated. Acceptance oracle `branch_b`: `synthetic-floor-0-0 absolute, synthetic-floor-0-0 comparative common-mode, synthetic-floor-0-1 comparative common-mode, synthetic-floor-1-0 comparative common-mode, and synthetic-floor-1-1 comparative common-mode` | alpha and beta / all required absolute, comparative, and comparative shared-error components | STOP_FILL until an authenticated live close-out issues; the renderer's professor-facing bytes are registered | KEY_FROZEN / RENDERER_ISSUED / VALUE_UNISSUED; never render from an unauthenticated, wrong-identity, or incomplete close-out | DRAFT, D165, AUTH |
