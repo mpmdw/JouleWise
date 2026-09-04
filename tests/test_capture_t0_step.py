@@ -881,19 +881,20 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertIn('clean_since=-1', source)
         self.assertNotIn("SETTLE_CHECKS", source)
 
-    def test_prewindow_runs_prefixes_name_the_successor_family(self) -> None:
-        """D-138: the operator gate must name the governed generation.
+    def test_prewindow_runs_prefixes_accept_live_family_and_refuse_stale_family(
+        self,
+    ) -> None:
+        """The operator gate must name the exact family installed as live.
 
-        The runs-root prefix is ``runs_<pack_id>``.  It cannot be derived from
-        ``_PROFILE_BY_PACK`` — that map is immutable HISTORY (generation 1) —
-        so the prefixes are pinned against the three D-139-approved successor
-        name shapes instead: each window must name a later-generation pack ID
-        of its own profile, which is exactly what a registry install can admit.
+        A successor-shaped name is insufficient: the retired ``_v2`` names
+        still match the general successor patterns.  The row registry is the
+        live-family authority, so a rollback of the script alone must fail.
         """
 
-        source = (
-            Path(__file__).resolve().parents[1] / "scripts/prewindow_check.sh"
-        ).read_text(encoding="utf-8")
+        repository = Path(__file__).resolve().parents[1]
+        source = (repository / "scripts/prewindow_check.sh").read_text(
+            encoding="utf-8"
+        )
         observed = dict(
             re.findall(
                 r"^\s*(alpha|beta|gamma)\) WINDOW_RUNS_PREFIX=(\S+) ;;$",
@@ -901,14 +902,29 @@ class CaptureT0StepTests(unittest.TestCase):
                 re.MULTILINE,
             )
         )
-        self.assertEqual(set(observed), {"alpha", "beta", "gamma"})
-        for window, prefix in sorted(observed.items()):
+        registry = json.loads(
+            (
+                repository
+                / "configs/arm_readiness/d117_row_registry_v2.json"
+            ).read_text(encoding="utf-8")
+        )
+        installed = registry["freeze_evidence_lifecycle"]["successor_policy"][
+            "successor_pack_ids"
+        ]
+        expected = {
+            profile.lower(): f"runs_{pack_id}"
+            for profile, pack_id in installed.items()
+        }
+        retired = {
+            "alpha": "runs_d117_floor_qwen25_1p5b_v2",
+            "beta": "runs_d117_floor_qwen25_7b_v2",
+            "gamma": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2",
+        }
+
+        self.assertEqual(observed, expected)
+        for window, stale_prefix in sorted(retired.items()):
             with self.subTest(window=window):
-                self.assertTrue(prefix.startswith("runs_"))
-                pack_id = prefix.removeprefix("runs_")
-                pattern = readiness._SUCCESSOR_PROFILE_PATTERNS[window.upper()]
-                self.assertIsNotNone(pattern.fullmatch(pack_id))
-                self.assertNotIn(pack_id, readiness._PROFILE_BY_PACK)
+                self.assertNotEqual(observed[window], stale_prefix)
 
     def test_cli_usage_error_is_a_registered_json_refusal(self) -> None:
         completed = subprocess.run(

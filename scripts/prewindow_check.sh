@@ -48,12 +48,12 @@ done
 
 case "$WINDOW" in
   "") WINDOW_RUNS_PREFIX="" ;;
-  # D-138: the governed family is the _v2 campaign packs; the runs-root prefix
+  # D-138: the governed family is the Qwen3 _v5 campaign packs; the runs-root prefix
   # is runs_<pack_id>, so these track the live pack IDs generation for
   # generation.  tests/test_capture_t0_step.py pins them against the live map.
-  alpha) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_1p5b_v2 ;;
-  beta) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_7b_v2 ;;
-  gamma) WINDOW_RUNS_PREFIX=runs_d117_contrast_qwen25_1p5b_vs_7b_v2 ;;
+  alpha) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen3-1p7b_v5 ;;
+  beta) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen3-8b_v5 ;;
+  gamma) WINDOW_RUNS_PREFIX=runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5 ;;
   *) echo "--window must be alpha, beta, or gamma" >&2; exit 2 ;;
 esac
 
