@@ -133,11 +133,11 @@ ordinary variation already present in the repeated measurements.
 
 Before either ratio is compared with 2, **authentication** matches every input
 to its named source-file contents. **Evaluation** then requires a nonzero
-recorded-edge limit, making the ratio evaluable. Any of the twelve required
-ratios below 2 falsifies the claim; equality passes. The twelve are one
-independent-edge ratio for each of the eight components (two models, two phases,
-within-model repeat and four-run comparison) and one shared-error ratio for each
-of the four four-run comparison components. A ratio of at least 2 means that moving
+recorded-edge limit, making the ratio evaluable. The twelve required ratios are one independent-edge ratio for each of the
+eight components (two models, two phases, and for each of those the
+repeated measurements of one model and the four-run comparison of two
+models) and one shared-error ratio for each of the four four-run-comparison
+components. Any of the twelve below 2 falsifies the claim; equality passes. A ratio of at least 2 means that moving
 the edge adds at least one entire recorded-edge limit to the bound—the
 **twofold boundary contribution** tested here.
 
@@ -1753,7 +1753,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | 1. Introduction | glossed-at-first-use | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement uses the separately defined \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
 | A/B/B/A block | 1. Introduction | glossed-at-first-use | Four runs in the order A, B, B, A. |
 | timing-error sign | 1. Introduction | glossed-at-first-use | Says which direction an allowed timing error moves energy. |
-| twelve required ratios | 1. Introduction | glossed-at-first-use | Eight independent-edge ratios (two models, two phases, absolute and comparative) and four comparative shared-error ratios. |
+| twelve required ratios | 1. Introduction | glossed-at-first-use | Eight independent-edge ratios (two models, two phases, repeated measurements of one model and the four-run comparison of two models) and four shared-error ratios, one per four-run-comparison component. |
 | reasoning disabled | 1. Introduction | glossed-at-first-use | Qwen3's optional chain-of-thought output is switched off. |
 | bracketed readings | 1. Introduction | glossed-at-first-use | One wall-clock reading placed between the monotonic-clock readings taken immediately before and after it. |
 | repeatability / repetition / random scatter | 2. In-window calibration method | audience-vocabulary | Ordinary metrology words for between-repeat spread and repeated observation. |
