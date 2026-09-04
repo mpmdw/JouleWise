@@ -79,6 +79,16 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             "exec_argv": argv,
         }
 
+    def test_live_launcher_refuses_post_hoc_relocation_carrier_option(self) -> None:
+        args = self._args(Path("/tmp"))
+        args.launch_lineage_relocation_carrier = Path("/tmp/relocation.json")
+        with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+            launch_window.launch(args)
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertEqual(
+            str(caught.exception), "launch-lineage relocation is post-hoc only"
+        )
+
     def test_eight_launchers_make_one_claim_and_one_execve(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             args = self._args(Path(temporary))

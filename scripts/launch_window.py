@@ -57,6 +57,11 @@ def _parser() -> argparse.ArgumentParser:
         "--expected-confirmation-digest",
         help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
     )
+    parser.add_argument(
+        "--launch-lineage-relocation-carrier",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     return parser
 
 
@@ -237,6 +242,11 @@ def _read_one_use_handoff() -> bytes:
 
 
 def launch(args: argparse.Namespace) -> int:
+    if getattr(args, "launch_lineage_relocation_carrier", None) is not None:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-lineage relocation is post-hoc only",
+        )
     launch_inputs = _assemble_launch_inputs(args)
     argv = list(launch_inputs["exec_argv"])
     token = secrets.token_bytes(HANDOFF_TOKEN_BYTES)
@@ -268,6 +278,11 @@ def launch(args: argparse.Namespace) -> int:
 
 
 def lifecycle(args: argparse.Namespace) -> int:
+    if getattr(args, "launch_lineage_relocation_carrier", None) is not None:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-lineage relocation is post-hoc only",
+        )
     consumption = _consumption_path(args)
     if args.lifecycle_event == "start":
         # Full volatile replay occurs before the first settle or bundle byte.

@@ -23,6 +23,7 @@ import tempfile
 import time
 import uuid
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
@@ -91,6 +92,7 @@ LAUNCH_MANIFEST_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
 LAUNCH_LINEAGE_SCHEMA = "joulewise.launch_lineage.v1"
 LAUNCH_LINEAGE_LOCATOR_SCHEMA = "joulewise.launch_lineage_locator.v1"
 LAUNCH_LINEAGE_LOCATOR_BASENAME = ".joulewise-launch-lineage.json"
+LAUNCH_LINEAGE_RELOCATION_SCHEMA = "joulewise.launch_lineage_relocation.v1"
 LAUNCH_START_RECEIPT_SCHEMA = "joulewise.launch_start_receipt.v1"
 LAUNCH_SETTLE_RECEIPT_SCHEMA = "joulewise.launch_settle_receipt.v1"
 LAUNCH_COMPLETION_RECEIPT_SCHEMA = "joulewise.launch_completion_receipt.v1"
@@ -724,9 +726,28 @@ LAUNCH_LINEAGE_LOCATOR_KEYS = {
     "root_path",
     "launch_lineage",
 }
+LAUNCH_LINEAGE_RELOCATION_KEYS = {
+    "schema_version",
+    "source_locator_sha256",
+    "repository_root",
+    "campaign_pack_root",
+    "custody_pack_root",
+    "window_plan_root",
+}
 LAUNCH_LINEAGE_ROOT_ROLES = frozenset(
     {"claim_runs_root", "bound_runs_root"}
 )
+
+
+@dataclass(frozen=True)
+class _LaunchLineageRelocation:
+    """Non-authoritative, explicit targets for post-hoc lineage reads."""
+
+    source_locator_sha256: str
+    repository_root: Path
+    campaign_pack_root: Path
+    custody_pack_root: Path
+    window_plan_root: Path
 LAUNCH_LIFECYCLE_RECEIPT_KEYS = {
     "schema_version",
     "receipt_kind",
@@ -8994,9 +9015,11 @@ def _read_exact_launch_reference(
     max_bytes: int,
     label: str,
     expected_path: Path | None = None,
+    read_path: Path | None = None,
     launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[Path, bytes]:
-    path = Path(str(reference["path"]))
+    recorded_path = Path(str(reference["path"]))
+    path = read_path if read_path is not None else recorded_path
     try:
         if path.is_symlink():
             raise OSError("symlink refused")
@@ -9014,11 +9037,12 @@ def _read_exact_launch_reference(
     except OSError as exc:
         raise LaunchLineageError(
             "launch_consumption_invalid",
-            f"bound launch artifact is unreadable: {path}: {exc}",
+            f"bound launch artifact is unreadable: {recorded_path}: {exc}",
         ) from exc
     if not resolved.is_file():
         raise LaunchLineageError(
-            "launch_consumption_invalid", f"bound launch artifact is not regular: {path}"
+            "launch_consumption_invalid",
+            f"bound launch artifact is not regular: {recorded_path}",
         )
     if expected_path is not None and resolved != expected_path.resolve(strict=True):
         raise LaunchLineageError(
@@ -9026,7 +9050,8 @@ def _read_exact_launch_reference(
         )
     if sha256_bytes(raw) != reference["sha256"]:
         raise LaunchLineageError(
-            "launch_binding_mismatch", f"bound launch artifact bytes changed: {path}"
+            "launch_binding_mismatch",
+            f"bound launch artifact bytes changed: {recorded_path}",
         )
     return resolved, raw
 
@@ -9092,6 +9117,159 @@ def _read_launch_binding_artifact(
         )
     cache[path] = raw
     return raw
+
+
+def _relocation_binding_error(detail: str) -> LaunchLineageError:
+    return LaunchLineageError(
+        "launch_binding_mismatch", f"launch-lineage relocation is invalid: {detail}"
+    )
+
+
+def _relocation_target(
+    root: Path, *parts: str, require_directory: bool = False
+) -> Path:
+    """Join fixed path components while refusing every reachable symlink."""
+
+    current = root
+    missing_prefix = False
+    for part in parts:
+        if PurePosixPath(part).name != part or part in {".", ".."} or "\\" in part:
+            raise _relocation_binding_error(
+                f"target component is not one safe basename: {part!r}"
+            )
+        current = current / part
+        if missing_prefix:
+            continue
+        try:
+            status = current.lstat()
+        except FileNotFoundError:
+            missing_prefix = True
+            continue
+        except OSError as exc:
+            raise _relocation_binding_error(
+                f"target cannot be inspected: {current}: {exc}"
+            ) from exc
+        if stat.S_ISLNK(status.st_mode):
+            raise _relocation_binding_error(
+                f"symbolic-link target is forbidden: {current}"
+            )
+    if require_directory:
+        try:
+            resolved = current.resolve(strict=True)
+        except OSError as exc:
+            raise _relocation_binding_error(
+                f"target directory is unavailable: {current}: {exc}"
+            ) from exc
+        if not resolved.is_dir():
+            raise _relocation_binding_error(
+                f"target is not a directory: {current}"
+            )
+        return resolved
+    return current
+
+
+def _load_launch_lineage_relocation(
+    carrier: Path | str,
+) -> _LaunchLineageRelocation:
+    """Load one canonical carrier without granting its bytes evidence authority."""
+
+    supplied = Path(carrier)
+    try:
+        if supplied.is_symlink():
+            raise _relocation_binding_error(
+                f"carrier must not be a symbolic link: {supplied}"
+            )
+        carrier_path = supplied.resolve(strict=True)
+        if not carrier_path.is_file():
+            raise _relocation_binding_error(
+                f"carrier is not a regular file: {supplied}"
+            )
+        raw = _read_launch_binding_artifact(
+            carrier_path,
+            max_bytes=_LAUNCH_BINDING_MANIFEST_MAX_BYTES,
+            label="launch-lineage relocation carrier",
+            cache={},
+        )
+        value = parse_json_bytes(raw, require_canonical=True)
+    except LaunchLineageError:
+        raise
+    except (ArmReadinessError, OSError) as exc:
+        raise _relocation_binding_error(f"carrier cannot be loaded: {exc}") from exc
+    if not isinstance(value, Mapping) or set(value) != LAUNCH_LINEAGE_RELOCATION_KEYS:
+        raise _relocation_binding_error("carrier schema/keys are invalid")
+    if value.get("schema_version") != LAUNCH_LINEAGE_RELOCATION_SCHEMA:
+        raise _relocation_binding_error("carrier schema/keys are invalid")
+    source_locator_sha256 = value.get("source_locator_sha256")
+    if (
+        not isinstance(source_locator_sha256, str)
+        or _LOWER_SHA256_RE.fullmatch(source_locator_sha256) is None
+    ):
+        raise _relocation_binding_error("source locator digest is invalid")
+
+    base = carrier_path.parent
+    resolved: dict[str, Path] = {}
+    for name in (
+        "repository_root",
+        "campaign_pack_root",
+        "custody_pack_root",
+        "window_plan_root",
+    ):
+        relative = value.get(name)
+        try:
+            _require_relative_path(relative, f"relocation carrier.{name}")
+        except ArmReadinessError as exc:
+            raise _relocation_binding_error(str(exc)) from exc
+        assert isinstance(relative, str)
+        parts = PurePosixPath(relative).parts
+        candidate = _relocation_target(base, *parts, require_directory=True)
+        try:
+            candidate.relative_to(base)
+        except ValueError as exc:
+            raise _relocation_binding_error(
+                f"{name} escapes the carrier directory"
+            ) from exc
+        resolved[name] = candidate
+
+    try:
+        repository, _pack_prefix, _pack_relative = _repository_and_pack_relative(
+            resolved["campaign_pack_root"]
+        )
+    except (ArmReadinessError, OSError) as exc:
+        raise _relocation_binding_error(
+            f"campaign pack is not inside an authenticated Git checkout: {exc}"
+        ) from exc
+    if repository != resolved["repository_root"]:
+        raise _relocation_binding_error(
+            "campaign pack is not inside the selected repository root"
+        )
+    if resolved["custody_pack_root"].name != resolved["campaign_pack_root"].name:
+        raise _relocation_binding_error(
+            "custody-pack and campaign-pack basenames differ"
+        )
+    return _LaunchLineageRelocation(
+        source_locator_sha256=source_locator_sha256,
+        repository_root=resolved["repository_root"],
+        campaign_pack_root=resolved["campaign_pack_root"],
+        custody_pack_root=resolved["custody_pack_root"],
+        window_plan_root=resolved["window_plan_root"],
+    )
+
+
+def _recorded_launch_argv_matches(
+    argv: Sequence[str], *, chain_reference: Mapping[str, Any], window_root: str
+) -> bool:
+    """Compare immutable source spellings without reopening the source paths."""
+
+    return bool(
+        len(argv) == 5
+        and Path(argv[0]).name == "caffeinate"
+        and argv[1] == "-is"
+        and argv[2] == "/bin/zsh"
+        and Path(argv[3]).resolve(strict=False)
+        == Path(str(chain_reference["path"])).resolve(strict=False)
+        and Path(argv[4]).resolve(strict=False)
+        == Path(window_root).resolve(strict=False)
+    )
 
 
 def _attested_launch_artifact_references(
@@ -9315,9 +9493,14 @@ def _replay_consumed_arm(
     launch_binding_cache: dict[Path, bytes] | None = None,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
+    relocation: _LaunchLineageRelocation | None = None,
 ) -> tuple[Mapping[str, Any], Path, Path, Mapping[str, Any]]:
     arm_reference = consumption["arm_receipt"]
-    arm_path = consumption_path.parent.parent / str(arm_reference["path"])
+    if relocation is None:
+        arm_path = consumption_path.parent.parent / str(arm_reference["path"])
+    else:
+        arm_parts = PurePosixPath(str(arm_reference["path"])).parts
+        arm_path = _relocation_target(relocation.custody_pack_root, *arm_parts)
     try:
         arm, _arm_raw, arm_digest = _read_arm_with_sidecar(arm_path)
     except (ArmReadinessError, OSError) as exc:
@@ -9333,8 +9516,10 @@ def _replay_consumed_arm(
             "launch_consumption_invalid", "consumption predecessor reference disagrees"
         )
     try:
-        recorded_pack_root = Path(str(arm["pack"]["pack_root"])).resolve(
-            strict=True
+        recorded_pack_root = (
+            Path(str(arm["pack"]["pack_root"])).resolve(strict=True)
+            if relocation is None
+            else relocation.campaign_pack_root
         )
         if (
             expected_pack_root is not None
@@ -10098,13 +10283,27 @@ def authenticate_launch_lineage(
     expected_pack_root: Path | str | None = None,
     require_current_boot: bool = False,
     require_completion_absent: bool = False,
+    relocation_carrier: Path | str | None = None,
+    _relocation: _LaunchLineageRelocation | None = None,
 ) -> dict[str, Any]:
     """Authenticate one immutable consumption→start→settle→completion chain."""
 
     launch_binding_cache: dict[Path, bytes] = {}
+    if relocation_carrier is not None and _relocation is not None:
+        raise ValueError("relocation carrier was supplied twice")
+    relocation = (
+        _load_launch_lineage_relocation(relocation_carrier)
+        if relocation_carrier is not None
+        else _relocation
+    )
     if require_completion and require_completion_absent:
         raise ValueError(
             "completion cannot be simultaneously required and required absent"
+        )
+    if relocation is not None and (require_current_boot or require_completion_absent):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-lineage relocation is post-hoc only",
         )
 
     if not isinstance(value, Mapping):
@@ -10130,8 +10329,22 @@ def authenticate_launch_lineage(
     consumption_ref = _validate_lineage_reference(
         value["consumption"], "consumption", missing_code="launch_consumption_missing"
     )
+    source_consumption_path = Path(str(consumption_ref["path"]))
+    if relocation is None:
+        selected_consumption_path = source_consumption_path
+    else:
+        if source_consumption_path.parent.name != "arm_readiness.consumptions":
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                "consumption receipt is outside its recorded namespace",
+            )
+        selected_consumption_path = _relocation_target(
+            relocation.custody_pack_root,
+            "arm_readiness.consumptions",
+            source_consumption_path.name,
+        )
     consumption, _raw, consumption_digest, consumption_path = _read_v2_consumption(
-        str(consumption_ref["path"])
+        selected_consumption_path
     )
     if consumption_digest != consumption_ref["sha256"]:
         raise LaunchLineageError(
@@ -10144,6 +10357,7 @@ def authenticate_launch_lineage(
         require_current_boot=require_current_boot,
         require_unexpired=False,
         replay_arm_semantics=False,
+        relocation=relocation,
     )
     expected_identity = {
         "collection_boot_session_id": consumption["boot_session_id"],
@@ -10187,10 +10401,30 @@ def authenticate_launch_lineage(
                 "launch_binding_mismatch",
                 "current checkout HEAD differs from the reviewed launch HEAD",
             )
+    selected_manifest_path: Path | None = None
+    if relocation is not None:
+        recorded_custody_pack_root = source_consumption_path.parent.parent
+        recorded_manifest_path = (
+            recorded_custody_pack_root
+            / _T0_INPUT_DIRECTORY
+            / "launch-manifest.json"
+        )
+        if consumption["launch_manifest"]["path"] != str(recorded_manifest_path):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "launch manifest differs from its recorded fixed custody location",
+            )
+        selected_manifest_path = _relocation_target(
+            relocation.custody_pack_root,
+            _T0_INPUT_DIRECTORY,
+            "launch-manifest.json",
+        )
     manifest_path, manifest_raw = _read_exact_launch_reference(
         consumption["launch_manifest"],
         max_bytes=_LAUNCH_BINDING_MANIFEST_MAX_BYTES,
         label="launch manifest",
+        expected_path=selected_manifest_path,
+        read_path=selected_manifest_path,
         launch_binding_cache=launch_binding_cache,
     )
     try:
@@ -10199,34 +10433,76 @@ def authenticate_launch_lineage(
         )
     except ArmReadinessError as exc:
         raise LaunchLineageError("launch_consumption_invalid", str(exc)) from exc
-    try:
-        window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise LaunchLineageError(
-            "launch_binding_mismatch",
-            f"launch manifest window root is unavailable: {exc}",
-        ) from exc
+    if relocation is None:
+        try:
+            window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"launch manifest window root is unavailable: {exc}",
+            ) from exc
+    else:
+        window_root = relocation.window_plan_root
+        recorded_window_root = Path(str(manifest["window_plan_root"]))
+        if (
+            Path(str(consumption["window_environment"]["path"])).resolve(
+                strict=False
+            )
+            != (recorded_window_root / "window.env").resolve(strict=False)
+            or Path(str(consumption["window_chain"]["path"])).resolve(
+                strict=False
+            )
+            != (recorded_window_root / "window-chain.zsh").resolve(strict=False)
+        ):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "window artifacts differ from the recorded fixed window-plan locations",
+            )
+    selected_environment_path = (
+        _relocation_target(window_root, "window.env")
+        if relocation is not None
+        else None
+    )
     _read_exact_launch_reference(
         consumption["window_environment"],
         max_bytes=_LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES,
         label="window environment",
         expected_path=window_root / "window.env",
+        read_path=selected_environment_path,
         launch_binding_cache=launch_binding_cache,
+    )
+    selected_chain_path = (
+        _relocation_target(window_root, "window-chain.zsh")
+        if relocation is not None
+        else None
     )
     chain_path, _chain_raw = _read_exact_launch_reference(
         consumption["window_chain"],
         max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
         label="window chain",
         expected_path=window_root / "window-chain.zsh",
+        read_path=selected_chain_path,
         launch_binding_cache=launch_binding_cache,
     )
     manifest_argv = list(manifest["launch_command"])
     if (
-        manifest_path != Path(str(consumption["launch_manifest"]["path"])).resolve(strict=True)
+        (
+            relocation is None
+            and manifest_path
+            != Path(str(consumption["launch_manifest"]["path"])).resolve(strict=True)
+        )
         or manifest["boot_session_id"] != consumption["boot_session_id"]
         or manifest_argv != consumption["exec_argv"]
-        or not _launch_argv_matches(
-            manifest_argv, chain_path=chain_path, window_root=window_root
+        or not (
+            _launch_argv_matches(
+                manifest_argv, chain_path=chain_path, window_root=window_root
+            )
+            if relocation is None
+            else _recorded_launch_argv_matches(
+                manifest_argv,
+                chain_reference=consumption["window_chain"],
+                window_root=str(manifest["window_plan_root"]),
+            )
         )
     ):
         raise LaunchLineageError(
@@ -10236,8 +10512,28 @@ def authenticate_launch_lineage(
     start_ref = _validate_lineage_reference(
         value["start"], "start", missing_code="launch_lifecycle_incomplete"
     )
+    source_lifecycle_root = (
+        source_consumption_path.parent.parent / "arm_readiness.launch_lifecycle"
+    )
+    expected_source_start = source_lifecycle_root / (
+        f"{consumption['consumption_id']}.start.json"
+    )
+    if relocation is not None and start_ref["path"] != str(expected_source_start):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "start receipt differs from its recorded fixed lifecycle location",
+        )
+    selected_start_path = (
+        _relocation_target(
+            relocation.custody_pack_root,
+            "arm_readiness.launch_lifecycle",
+            expected_source_start.name,
+        )
+        if relocation is not None
+        else Path(str(start_ref["path"]))
+    )
     start, start_digest, start_path = _read_lifecycle_receipt(
-        Path(str(start_ref["path"])), expected_kind="launch_start"
+        selected_start_path, expected_kind="launch_start"
     )
     if start_digest != start_ref["sha256"]:
         raise LaunchLineageError(
@@ -10246,8 +10542,25 @@ def authenticate_launch_lineage(
     settle_ref = _validate_lineage_reference(
         value["settle"], "settle", missing_code="launch_lifecycle_incomplete"
     )
+    expected_source_settle = source_lifecycle_root / (
+        f"{consumption['consumption_id']}.settle.json"
+    )
+    if relocation is not None and settle_ref["path"] != str(expected_source_settle):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "settle receipt differs from its recorded fixed lifecycle location",
+        )
+    selected_settle_path = (
+        _relocation_target(
+            relocation.custody_pack_root,
+            "arm_readiness.launch_lifecycle",
+            expected_source_settle.name,
+        )
+        if relocation is not None
+        else Path(str(settle_ref["path"]))
+    )
     settle, settle_digest, settle_path = _read_lifecycle_receipt(
-        Path(str(settle_ref["path"])), expected_kind="launch_settle"
+        selected_settle_path, expected_kind="launch_settle"
     )
     if settle_digest != settle_ref["sha256"]:
         raise LaunchLineageError(
@@ -10296,7 +10609,15 @@ def authenticate_launch_lineage(
 
     completion: Mapping[str, Any] | None = None
     completion_ref = value["completion"]
-    completion_path = _lifecycle_receipt_path(consumption_path, "completion")
+    completion_path = (
+        _relocation_target(
+            relocation.custody_pack_root,
+            "arm_readiness.launch_lifecycle",
+            f"{consumption['consumption_id']}.completion.json",
+        )
+        if relocation is not None
+        else _lifecycle_receipt_path(consumption_path, "completion")
+    )
     completion_sidecar = completion_path.with_name(
         f"{completion_path.name}.sha256"
     )
@@ -10324,8 +10645,23 @@ def authenticate_launch_lineage(
             "completion",
             missing_code="launch_lifecycle_incomplete",
         )
+        expected_source_completion = source_lifecycle_root / (
+            f"{consumption['consumption_id']}.completion.json"
+        )
+        if (
+            relocation is not None
+            and validated_completion_ref["path"] != str(expected_source_completion)
+        ):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "completion receipt differs from its recorded fixed lifecycle location",
+            )
         completion, completion_digest, _completion_path = _read_lifecycle_receipt(
-            Path(str(validated_completion_ref["path"])),
+            (
+                completion_path
+                if relocation is not None
+                else Path(str(validated_completion_ref["path"]))
+            ),
             expected_kind="launch_completion",
         )
         if completion_digest != validated_completion_ref["sha256"]:
@@ -10391,6 +10727,7 @@ def _read_launch_lineage_locator(
     *,
     expected_root: Path,
     expected_role: str | None = None,
+    relocation: _LaunchLineageRelocation | None = None,
 ) -> tuple[Mapping[str, Any], str]:
     if path.name != LAUNCH_LINEAGE_LOCATOR_BASENAME:
         raise LaunchLineageError(
@@ -10422,19 +10759,22 @@ def _read_launch_lineage_locator(
         )
     try:
         resolved_expected = expected_root.resolve(strict=True)
-        resolved_recorded = Path(root_path).resolve(strict=True)
         resolved_locator_parent = path.parent.resolve(strict=True)
+        resolved_recorded = (
+            Path(root_path).resolve(strict=True) if relocation is None else None
+        )
     except OSError as exc:
         raise LaunchLineageError(
             "launch_binding_mismatch",
             f"launch-lineage locator root is unavailable: {exc}",
         ) from exc
-    if (
-        root_path != str(resolved_expected)
-        or resolved_recorded != resolved_expected
-        or resolved_locator_parent != resolved_expected
-        or (expected_role is not None and role != expected_role)
-    ):
+    selected_root_mismatch = resolved_locator_parent != resolved_expected or (
+        expected_role is not None and role != expected_role
+    )
+    recorded_root_mismatch = relocation is None and (
+        root_path != str(resolved_expected) or resolved_recorded != resolved_expected
+    )
+    if selected_root_mismatch or recorded_root_mismatch:
         raise LaunchLineageError(
             "launch_binding_mismatch",
             "launch-lineage locator root role/path differs from the selected root",
@@ -10504,9 +10844,15 @@ def authenticate_campaign_launch_lineage(
     runs_root: Path | str,
     *,
     config_paths: Sequence[Path | str] = (),
+    relocation_carrier: Path | str | None = None,
 ) -> dict[str, Any]:
     """Derive and authenticate the campaign writer's fixed root-local locator."""
 
+    if relocation_carrier is not None:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-lineage relocation is post-hoc only",
+        )
     try:
         selected_root = Path(runs_root).resolve(strict=True)
     except OSError as exc:
@@ -10614,8 +10960,9 @@ def authenticate_bundle_launch_lineage(
     config: Mapping[str, Any] | None = None,
     metadata: Mapping[str, Any] | None = None,
     require_completion: bool,
+    relocation_carrier: Path | str | None = None,
 ) -> dict[str, Any] | None:
-    """Gate marker-bearing bundle metadata with direct receipt authentication."""
+    """Gate bundle metadata, optionally from an explicit post-hoc relocation."""
 
     path = Path(bundle_path)
     if config is None:
@@ -10628,6 +10975,11 @@ def authenticate_bundle_launch_lineage(
             config = None
     if not launch_lineage_required(config):
         return None
+    relocation = (
+        _load_launch_lineage_relocation(relocation_carrier)
+        if relocation_carrier is not None
+        else None
+    )
     if metadata is None:
         try:
             parsed = parse_json_bytes(
@@ -10659,18 +11011,40 @@ def authenticate_bundle_launch_lineage(
     locator, authenticated_locator_digest = _read_launch_lineage_locator(
         locator_path,
         expected_root=path.parent,
+        relocation=relocation,
     )
     if (
         authenticated_locator_digest != locator_digest
+        or (
+            relocation is not None
+            and authenticated_locator_digest
+            != relocation.source_locator_sha256
+        )
         or locator.get("launch_lineage") != lineage
     ):
         raise LaunchLineageError(
             "launch_binding_mismatch",
             "bundle launch lineage differs from its authenticated root locator",
         )
-    return authenticate_launch_lineage(
-        lineage, require_completion=require_completion
+    authenticated = authenticate_launch_lineage(
+        lineage,
+        require_completion=require_completion,
+        _relocation=relocation,
     )
+    if relocation is not None:
+        role = locator["root_role"]
+        arm_context = authenticated["arm_context"]
+        recorded_context_root = arm_context.get(role)
+        if (
+            not isinstance(recorded_context_root, str)
+            or Path(recorded_context_root).resolve(strict=False)
+            != Path(str(locator["root_path"])).resolve(strict=False)
+        ):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "relocated locator root role/path differs from the authenticated arm context",
+            )
+    return authenticated
 
 
 class FamilyPublicationError(ValueError):
@@ -11993,6 +12367,7 @@ __all__ = [
     "LAUNCH_COMPLETION_RECEIPT_SCHEMA",
     "LAUNCH_LINEAGE_LOCATOR_BASENAME",
     "LAUNCH_LINEAGE_LOCATOR_SCHEMA",
+    "LAUNCH_LINEAGE_RELOCATION_SCHEMA",
     "LAUNCH_LINEAGE_REASON_CODES",
     "LAUNCH_LINEAGE_SCHEMA",
     "LAUNCH_MANIFEST_SCHEMA",

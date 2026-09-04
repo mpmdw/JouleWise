@@ -1496,6 +1496,423 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         )
 
 
+class LaunchLineageRelocationTests(unittest.TestCase):
+    """Exercise a real issued lineage after every recorded source is gone."""
+
+    def setUp(self) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        (
+            self.temporary,
+            self.repository,
+            self.pack,
+            self.custody,
+            self.arm_path,
+        ) = make_go_fixture()
+        self.addCleanup(self.temporary.cleanup)
+        self.arm = json.loads(self.arm_path.read_text())
+        self.context_root = Path(self.arm["arm_context"]["claim_runs_root"]).parent
+        self.window_root = self.custody / "window-plan"
+        self.window_root.mkdir()
+        (self.window_root / "window.env").write_text(
+            f"PACK_ROOT={self.pack}\n"
+        )
+        self.chain_path = self.window_root / "window-chain.zsh"
+        self.chain_path.write_text(
+            f"#!/bin/zsh\n# PACK_ROOT={self.pack}\nexit 0\n"
+        )
+        self.exec_argv = [
+            "/usr/bin/caffeinate",
+            "-is",
+            "/bin/zsh",
+            str(self.chain_path),
+            str(self.window_root),
+        ]
+        self.manifest_path = (
+            self.custody
+            / self.pack.name
+            / "arm_readiness.t0.inputs"
+            / "launch-manifest.json"
+        )
+        self.manifest_path.parent.mkdir(parents=True)
+        self.manifest_path.write_bytes(
+            readiness.render_json(
+                {
+                    "schema_version": readiness.LAUNCH_MANIFEST_SCHEMA,
+                    "boot_session_id": TEST_BOOT_SESSION_ID,
+                    "window_plan_root": str(self.window_root),
+                    "prewindow_command": ["/bin/true"],
+                    "launch_command": self.exec_argv,
+                }
+            )
+        )
+        self._install_attested_launch_recipe()
+        self.lineage = self._issue_lineage()
+        claim_root = Path(self.arm["arm_context"]["claim_runs_root"])
+        locator_path = claim_root / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        locator_digest = hashlib.sha256(locator_path.read_bytes()).hexdigest()
+        self.bundle = claim_root / "relocatable-bundle"
+        self.bundle.mkdir()
+        self.config = {
+            "run_id": self.bundle.name,
+            "run_metadata": {"tags": ["launch_lineage_required"]},
+        }
+        self.metadata = {
+            "extra": {
+                "launch_lineage": copy.deepcopy(self.lineage),
+                "launch_lineage_locator_sha256": locator_digest,
+            }
+        }
+        (self.bundle / "config.json").write_bytes(
+            readiness.render_json(self.config)
+        )
+        (self.bundle / "metadata.json").write_bytes(
+            readiness.render_json(self.metadata)
+        )
+        self._relocate(locator_digest)
+
+    @staticmethod
+    def _artifact(path: Path) -> dict[str, str]:
+        return {
+            "path": str(path.resolve()),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+
+    def _rewrite_arm(self) -> None:
+        raw = readiness.render_json(self.arm)
+        self.arm_path.write_bytes(raw)
+        self.arm_path.with_name(f"{self.arm_path.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(raw).hexdigest(), self.arm_path.name)
+        )
+
+    def _install_attested_launch_recipe(self) -> None:
+        custody_pack_root = self.custody / self.pack.name
+        source_relative = (
+            "arm_readiness.t0.sources/t0-single-launch-capability.json"
+        )
+        source_path = custody_pack_root / source_relative
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source = {
+            "schema_version": "joulewise.arm_readiness_t0_evidence_source.v1",
+            "row_id": "t0.single_launch_capability",
+            "kind": "LAUNCH_RECIPE",
+            "head_commit": self.arm["reviewed_main"]["head_commit"],
+            "head_tree_oid": self.arm["reviewed_main"]["head_tree_oid"],
+            "pack_sha256": self.arm["pack"]["pack_sha256"],
+            "boot_session_id": self.arm["boot_session_id"],
+            "primary_artifacts": [],
+            "input_artifacts": sorted(
+                (
+                    self._artifact(self.manifest_path),
+                    self._artifact(self.window_root / "window.env"),
+                    self._artifact(self.chain_path),
+                ),
+                key=lambda item: item["path"],
+            ),
+            "probes": [],
+            "facts": [
+                {
+                    "fact_id": "t0.single_launch_capability.v1",
+                    "value": {
+                        "atomic_single_use_capability_available": True,
+                        "attempt_ids_unused": True,
+                        "exact_launch_command_frozen": True,
+                        "session_id_unused": True,
+                    },
+                }
+            ],
+            "derivation": {"launch_command": self.exec_argv},
+        }
+        source_raw = readiness.render_json(source)
+        source_path.write_bytes(source_raw)
+        evidence_id = "evidence-t0-t0-single-launch-capability"
+        evidence_name = f"{evidence_id}.json"
+        evidence_path = custody_pack_root / "arm_readiness.evidence" / evidence_name
+        evidence_path.parent.mkdir(exist_ok=True)
+        evidence = {
+            "schema_version": readiness.EVIDENCE_RECEIPT_SCHEMA,
+            "evidence_id": evidence_id,
+            "kind": "LAUNCH_RECIPE",
+            "status": "PASS",
+            "issued_at_utc": "2026-08-11T00:00:00Z",
+            "boot_session_id": self.arm["boot_session_id"],
+            "valid_until_monotonic_ns": 10**30,
+            "pack_sha256": self.arm["pack"]["pack_sha256"],
+            "head_commit": self.arm["reviewed_main"]["head_commit"],
+            "facts": [
+                {
+                    "fact_id": "t0.single_launch_capability.v1",
+                    "value_type": "OBJECT",
+                    "value": copy.deepcopy(source["facts"][0]["value"]),
+                    "source_kind": "PROBE",
+                    "source_path": source_relative,
+                    "source_sha256": hashlib.sha256(source_raw).hexdigest(),
+                }
+            ],
+            "checks": [{"check_id": "derive-t0-launch", "status": "PASS"}],
+            "reason_codes": [],
+            "assurance": copy.deepcopy(readiness.ASSURANCE),
+        }
+        evidence_raw = readiness.render_json(evidence)
+        evidence_path.write_bytes(evidence_raw)
+        evidence_digest = hashlib.sha256(evidence_raw).hexdigest()
+        evidence_path.with_name(f"{evidence_name}.sha256").write_bytes(
+            readiness.gnu_sidecar(evidence_digest, evidence_name)
+        )
+        self.arm["evidence"] = [
+            {
+                "evidence_id": evidence_id,
+                "receipt_kind": "LAUNCH_RECIPE",
+                "namespace": "WINDOW_CUSTODY",
+                "path": f"arm_readiness.evidence/{evidence_name}",
+                "sha256": evidence_digest,
+                "schema_version": readiness.EVIDENCE_RECEIPT_SCHEMA,
+                "status": "PASS",
+            }
+        ]
+        self._rewrite_arm()
+
+    def _issue_lineage(self) -> dict[str, object]:
+        token = b"relocation-lineage-handoff-token"
+        arm_raw = self.arm_path.read_bytes()
+        manifest_raw = self.manifest_path.read_bytes()
+        inputs = {
+            "pack_root": self.pack,
+            "arm_receipt": self.arm_path,
+            "authenticated_arm_receipt": copy.deepcopy(self.arm),
+            "arm_receipt_sha256": hashlib.sha256(arm_raw).hexdigest(),
+            "window_custody_root": self.custody,
+            "launch_manifest": self.manifest_path,
+            "authenticated_launch_manifest": readiness.parse_json_bytes(
+                manifest_raw, require_canonical=True
+            ),
+            "launch_manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+            "window_plan_root": self.window_root,
+            "window_environment_sha256": hashlib.sha256(
+                (self.window_root / "window.env").read_bytes()
+            ).hexdigest(),
+            "window_chain_sha256": hashlib.sha256(
+                self.chain_path.read_bytes()
+            ).hexdigest(),
+            "exec_argv": self.exec_argv,
+            "handoff_token_sha256": hashlib.sha256(token).hexdigest(),
+        }
+        with mock.patch.object(
+            readiness,
+            "_verify_arm_receipt",
+            return_value={
+                "status": "PASS",
+                "arm_disposition": "GO",
+                "receipt_path": str(self.arm_path.resolve()),
+                "receipt_sha256": inputs["arm_receipt_sha256"],
+                "pack_sha256": self.arm["pack"]["pack_sha256"],
+            },
+        ), mock.patch.object(
+            readiness, "reviewed_main", return_value=self.arm["reviewed_main"]
+        ), mock.patch.object(
+            readiness, "_root_policy_refusals", return_value=([], set())
+        ):
+            consumed = readiness._consume_launch_capability(**inputs)
+        consumption_path = Path(str(consumed["consumption_path"]))
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "start", handoff_token=token
+            )
+            settled = readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "settle"
+            )
+        return dict(settled["launch_lineage"])
+
+    def _relocate(self, locator_digest: str) -> None:
+        from tests.test_arm_readiness_lifecycle import git
+
+        root = Path(self.temporary.name)
+        self.relocation_root = root / "review-copy"
+        self.relocation_root.mkdir()
+        self.relocated_repository = self.relocation_root / "repository"
+        git(
+            root,
+            "clone",
+            "-q",
+            "--no-local",
+            str(self.repository),
+            str(self.relocated_repository),
+        )
+        for key, value in (
+            ("user.email", "tests@joulewise.invalid"),
+            ("user.name", "JouleWise tests"),
+            ("gc.auto", "0"),
+            ("maintenance.auto", "false"),
+        ):
+            git(self.relocated_repository, "config", key, value)
+        self.relocated_pack = self.relocated_repository / self.pack.relative_to(
+            self.repository
+        )
+        self.relocated_custody_pack = (
+            self.relocation_root / "custody" / self.pack.name
+        )
+        self.relocated_custody_pack.parent.mkdir()
+        shutil.copytree(
+            self.custody / self.pack.name, self.relocated_custody_pack
+        )
+        self.relocated_window_root = self.relocation_root / "window-plan"
+        shutil.copytree(self.window_root, self.relocated_window_root)
+        self.relocated_runs_root = self.relocation_root / "runs"
+        shutil.copytree(
+            Path(self.arm["arm_context"]["claim_runs_root"]),
+            self.relocated_runs_root,
+        )
+        self.relocated_bundle = self.relocated_runs_root / self.bundle.name
+        self.carrier_path = self.relocation_root / "relocation.json"
+        self.carrier = {
+            "schema_version": readiness.LAUNCH_LINEAGE_RELOCATION_SCHEMA,
+            "source_locator_sha256": locator_digest,
+            "repository_root": "repository",
+            "campaign_pack_root": self.relocated_pack.relative_to(
+                self.relocation_root
+            ).as_posix(),
+            "custody_pack_root": self.relocated_custody_pack.relative_to(
+                self.relocation_root
+            ).as_posix(),
+            "window_plan_root": "window-plan",
+        }
+        self._rewrite_carrier()
+        shutil.rmtree(self.repository)
+        shutil.rmtree(self.custody)
+        shutil.rmtree(self.context_root)
+
+    def _rewrite_carrier(self) -> None:
+        self.carrier_path.write_bytes(readiness.render_json(self.carrier))
+
+    def _authenticate(self) -> dict[str, object]:
+        result = readiness.authenticate_bundle_launch_lineage(
+            self.relocated_bundle,
+            require_completion=False,
+            relocation_carrier=self.carrier_path,
+        )
+        assert result is not None
+        return result
+
+    def _assert_refuses(self, expected_code: str = "launch_binding_mismatch") -> str:
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            self._authenticate()
+        self.assertEqual(caught.exception.reason_code, expected_code)
+        return str(caught.exception)
+
+    def test_moved_source_authenticates_only_with_explicit_carrier(self) -> None:
+        self.assertFalse(self.repository.exists())
+        self.assertFalse(self.custody.exists())
+        self.assertFalse(self.context_root.exists())
+        with self.assertRaises(readiness.LaunchLineageError) as absent:
+            readiness.authenticate_bundle_launch_lineage(
+                self.relocated_bundle, require_completion=False
+            )
+        self.assertEqual(absent.exception.reason_code, "launch_binding_mismatch")
+        authenticated = self._authenticate()
+        self.assertEqual(authenticated["launch_lineage"], self.lineage)
+        self.assertEqual(
+            authenticated["pack_root"], str(self.relocated_pack.resolve())
+        )
+        self.assertEqual(
+            authenticated["consumption_sha256"],
+            self.lineage["consumption"]["sha256"],
+        )
+        self.assertEqual(
+            authenticated["pack_sha256"],
+            readiness.committed_pack_tree_sha256(self.relocated_pack),
+        )
+
+    def test_live_campaign_replay_refuses_relocation_carrier(self) -> None:
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            readiness.authenticate_campaign_launch_lineage(
+                self.relocated_runs_root,
+                relocation_carrier=self.carrier_path,
+            )
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertEqual(
+            str(caught.exception), "launch-lineage relocation is post-hoc only"
+        )
+
+    def test_relocated_tamper_keeps_launch_binding_mismatch(self) -> None:
+        with (self.relocated_window_root / "window.env").open("ab") as handle:
+            handle.write(b"tamper\n")
+        self._assert_refuses()
+
+    def test_relocated_committed_pack_change_keeps_launch_binding_mismatch(self) -> None:
+        from tests.test_arm_readiness_lifecycle import git
+
+        path = self.relocated_pack / "calibration_plan.json"
+        path.write_bytes(b'{"plan_id":"different-committed-plan"}\n')
+        git(
+            self.relocated_repository,
+            "add",
+            path.relative_to(self.relocated_repository).as_posix(),
+        )
+        git(self.relocated_repository, "commit", "-qm", "different committed pack")
+        self.assertIn(
+            "pack record differs from authenticated pack bytes",
+            self._assert_refuses(),
+        )
+
+    def test_relocated_repository_relative_move_keeps_launch_binding_mismatch(self) -> None:
+        from tests.test_arm_readiness_lifecycle import git
+
+        destination = self.relocated_repository / "relocated" / self.pack.name
+        destination.parent.mkdir()
+        git(
+            self.relocated_repository,
+            "mv",
+            self.relocated_pack.relative_to(self.relocated_repository).as_posix(),
+            destination.relative_to(self.relocated_repository).as_posix(),
+        )
+        git(self.relocated_repository, "commit", "-qm", "move pack in repository")
+        self.carrier["campaign_pack_root"] = destination.relative_to(
+            self.relocation_root
+        ).as_posix()
+        self._rewrite_carrier()
+        self.assertIn(
+            "repository-relative location differs", self._assert_refuses()
+        )
+
+    def test_relocated_swapped_chain_keeps_launch_consumption_invalid(self) -> None:
+        lifecycle = self.relocated_custody_pack / "arm_readiness.launch_lifecycle"
+        start = next(lifecycle.glob("*.start.json"))
+        settle = next(lifecycle.glob("*.settle.json"))
+        start_raw = start.read_bytes()
+        settle_raw = settle.read_bytes()
+        start.write_bytes(settle_raw)
+        settle.write_bytes(start_raw)
+        start.with_name(f"{start.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(settle_raw).hexdigest(), start.name)
+        )
+        settle.with_name(f"{settle.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(start_raw).hexdigest(), settle.name)
+        )
+        self._assert_refuses("launch_consumption_invalid")
+
+    def test_relocation_carrier_traversal_keeps_launch_binding_mismatch(self) -> None:
+        self.carrier["custody_pack_root"] = "../custody"
+        self._rewrite_carrier()
+        self.assertIn("escapes its namespace", self._assert_refuses())
+
+    def test_relocation_source_locator_digest_is_mandatory(self) -> None:
+        self.carrier["source_locator_sha256"] = "0" * 64
+        self._rewrite_carrier()
+        self.assertIn(
+            "bundle launch lineage differs", self._assert_refuses()
+        )
+
+    def test_relocation_target_symbolic_link_keeps_launch_binding_mismatch(self) -> None:
+        target = self.relocation_root / "window-plan-real"
+        self.relocated_window_root.rename(target)
+        self.relocated_window_root.symlink_to(target, target_is_directory=True)
+        self.assertIn("symbolic-link target", self._assert_refuses())
+
+
 class ArmPackReplayComparisonTests(unittest.TestCase):
     def _assert_verify_side_pack_refusal(
         self,
