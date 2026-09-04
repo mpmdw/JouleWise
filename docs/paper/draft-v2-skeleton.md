@@ -282,7 +282,7 @@ I_i=[\delta_i^-,\delta_i^+]
 \]
 The mean interval over the five identical-condition null-test blocks—blocks in
 which both conditions are the same—is
-\(I_{\rm mean}=[\sum_i\delta_i^-/5,\sum_i\delta_i^+/5]\). Let
+\(I_{\mathrm mean}=[\sum_i\delta_i^-/5,\sum_i\delta_i^+/5]\). Let
 \(C=[-m,+m]\) be the earlier comparator, where \(m\) is its positive joule
 endpoint, and define the largest absolute allowed block difference as
 \[
@@ -292,14 +292,14 @@ No issued null-ladder member endpoints are available, so this construction is
 symbolic rather than measured. The forcing problem is that a point value can
 hide an allowed nonzero difference, while a mean can hide blocks moving in
 opposite directions. The containment test therefore requires every \(I_i\) to
-contain zero, then requires \(I_{\rm mean}\subseteq C\) and \(M\le m\).
+contain zero, then requires \(I_{\mathrm mean}\subseteq C\) and \(M\le m\).
 
 Here is a numeric illustration, not measured evidence: its comparator is
 \([-3\ \mathrm{J},+3\ \mathrm{J}]\), and its five block intervals, all in
 joules, are \([-2,+2]\), \([-1,+1]\), \([-0.5,+0.5]\),
 \([-1.5,+1.5]\), and \([-1,+1]\). For this numeric illustration, the
 lower endpoints sum to \(-6\) J and the upper endpoints to \(+6\) J, so
-\(I_{\rm mean}=[-1.2\ \mathrm{J},+1.2\ \mathrm{J}]\) and \(M=2\) J.
+\(I_{\mathrm mean}=[-1.2\ \mathrm{J},+1.2\ \mathrm{J}]\) and \(M=2\) J.
 Every displayed check passes. If, still only as an illustration, the fifth
 interval were \([+0.5\ \mathrm{J},+2.5\ \mathrm{J}]\), it would remain
 inside the comparator but exclude zero, so that block would fail the first
@@ -326,7 +326,7 @@ unknown, so a pass establishes only
 measured-block containment, never population coverage.
 
 For phase accounting, the residual
-\(D=E_{\rm prefill}+E_{\rm decode}-E_{\rm request}\) is the signed energy left
+\(D=E_{\mathrm prefill}+E_{\mathrm decode}-E_{\mathrm request}\) is the signed energy left
 after subtracting the enclosing request from the two phase energies. A positive
 value is double-counted energy. A negative value may be energy in the unphased gap,
 the recorded interval between the end of prefill and the start of decode;
@@ -884,7 +884,7 @@ directional claim.
 
 ![Figure 3. Evidence refusal and two sequential claim gates.](figures/fig3_decision_gates.svg)
 
-*Figure 3. Decision-gate schematic; no measured data or numeric threshold is encoded by its layout. On the white background, the title and subtitle identify two gates and four outcomes. In the upper lane, a dashed box lists an admission or custody failure and the six evidence defects that can cause it; a right-pointing arrow labelled as a side entry that reaches no gate leads to the bordered “refused” box, which says that the evidence produces no result. A pale horizontal rule separates that refusal lane from the lower decision lane. The lower lane starts with a gray measured-contrast box containing the point estimate and composed uncertainty interval. A right-pointing arrow leads to the first white rounded box, Gate 1, which asks whether the estimate's magnitude exceeds the cell's detection floor. Its “yes” arrow leads to the second white rounded box, Gate 2, which asks whether the whole uncertainty interval points one way; the next “yes” arrow leads to the blue directional-claim box, which states that both gates passed in the direction registered before collection. Gate 1's downward “no” arrow leads to the “not resolvable” box, which says the effect is smaller than this instrument can resolve and does not mean zero, equality, or no difference. Gate 2's downward “no” arrow leads to the “direction unresolved” box, which says the floor cleared but the interval did not settle direction, so no claim is made. The three bottom notes define the detection floor as the largest apparent effect produced when nothing changed, state that the floor and interval are separate gates, and state that their sum is a planning disclosure rather than an acceptance threshold.*
+*Figure 3. Decision-gate schematic; no measured data or numeric threshold is encoded by its layout. On the white background, the title and subtitle identify two gates and four outcomes. In the upper lane, a dashed box lists an admission or custody failure and the six evidence defects that can cause it; a right-pointing arrow labelled as a side entry that reaches no gate leads to the bordered “refused” box, which says that the evidence produces no result. A pale horizontal rule separates that refusal lane from the lower decision lane. The lower lane starts with a gray measured-contrast box containing the point estimate and composed uncertainty interval. A right-pointing arrow leads to the first white rounded box, Gate 1, which asks whether the estimate's magnitude exceeds the cell floor. Its “yes” arrow leads to the second white rounded box, Gate 2, which asks whether the whole uncertainty interval points one way; the next “yes” arrow leads to the blue directional-claim box, which states that both gates passed in the direction registered before collection. Gate 1's downward “no” arrow leads to the “not resolvable” box, which says the effect is smaller than this instrument can resolve and does not mean zero, equality, or no difference. Gate 2's downward “no” arrow leads to the “direction unresolved” box, which says the floor cleared but the interval did not settle direction, so no claim is made. The three bottom notes define the cell floor as the largest apparent effect produced when nothing changed, after the safeguards of Section 4, state that the floor and interval are separate gates, and state that their sum is a planning disclosure rather than an acceptance threshold.*
 
 <!-- CAMPAIGN FILL LEDGER:
 1. Report all eight independent-edge ratios:
