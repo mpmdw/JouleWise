@@ -86,3 +86,8 @@ of ALPHA's source, adds the refuter's same-signature differently named local
 validator, redirects the production call to it, and proves that the behavioral
 contract rejects the mutation. Imported-object identity remains a secondary
 check for the other extracted mechanics; it is not the write-path proof.
+
+These regressions guard against accidental divergence by a maintainer; they are
+not an adversarial guard. Under D-161 a generator author routing around the core
+is an operator-only adversary, and evidence integrity rests on the frozen config
+bytes and pre-registration digests, not on this test (magistrate ruling, trace 07).
