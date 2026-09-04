@@ -172,3 +172,18 @@ The fixed-fence operational consequence for row 3 is now explicit in `docs/proce
 File 15 row 6 is amended by the magistrate's ruling on execution-refuter N2: the authoritative emergency-stop glob is the wider `refs/heads/ops/stop*`, not `refs/heads/ops/stop-magistrate*`. The wider glob makes shortened as well as suffixed emergency names fail-safe. This addendum supersedes only the row-6 glob literal; the positive-control, anonymous probe, and local-STOP clauses remain unchanged.
 
 The resident row-4 enforcement path now resolves plans before consulting the cached remote-stop observation. Remote refresh runs on a single daemon thread at no more than five-minute cadence, so an unreachable GitHub probe cannot consume any part of the resident's 10-second deadline-resolution budget. Row 8 now consumes a matching `notice.ack` before the child-exit return, and the resident applies the same clock-uncertainty detector as the launchd tick, irreversibly draining an owned child on monotonic time once uncertainty is observed.
+
+---
+
+## Fix round 4 clause-map addendum (2026-09-04 PDT)
+
+This addendum maps only the round-4 cures on the integrated plan-pin base. Untouched rows retain the earlier map and addenda.
+
+| Cure / proposition delta | Production site | Biting assertion | One-site counterfactual |
+|---|---|---|---|
+| B-1 — a retired-v1 plan is recorded once per custody root and ignored; a valid v2 sibling alone supplies the span | `scripts/magistrate_watchdog.py:480-555` | `tests/test_magistrate_watchdog.py:151` | Append the retired-v1 parse failure to `errors` at `scripts/magistrate_watchdog.py:540`; `decide` returns `HOLD_UNSAFE` instead of `FENCED`. The executed mutation failed on that exact state difference. |
+| B-1 — any other unparsable plan is recorded once as `plan_unparsable` and never holds | `scripts/magistrate_watchdog.py:480-555` | `tests/test_magistrate_watchdog.py:189` | Append every parse failure to `errors`; the test observes `HOLD_UNSAFE` instead of `LAUNCHING`. |
+| B-1 — watchdog fixtures and both runnable example plans use the exact v2 shape with `measurement_root` and `measurement_head` | `tests/test_magistrate_watchdog.py:99-118`; `docs/process/MAGISTRATE_WATCHDOG.md:202-215`, `:290-303` | `tests/test_magistrate_watchdog.py:769` | Change either example schema back to v1 or remove either measurement key; the exact count/schema assertions fail. |
+| M-2/M-3 — the read-only handoff inventory includes the invoking interactive twin tree and named PID-1 bg-host/shell-snapshot orphan trees, while excluding unrelated processes and its transient caller chain | `scripts/magistrate_watchdog.py:654-733`, `:1569-1597` | `tests/test_magistrate_watchdog.py:662` | Delete the PID-1 orphan-root union; the expected orphan host, spare, snapshot, and snapshot-child PIDs disappear from the inventory. |
+| M-2/M-3 + Q4 — install handoff order is stop tasks → preserve retired custody → inventory → install → kill only recorded list and prove empty census → next launchd tick creates `-p` | `docs/process/MAGISTRATE_WATCHDOG.md:82-179` | `tests/test_magistrate_watchdog.py:779` | Move install before the retired-root move or inventory, or delete the recorded-only signaling rule; the ordered-position or ownership assertion fails. |
+| Q4 — every v2 night installs both night agents FROM its pinned measurement checkout | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:13`; `docs/process/NIGHT_HANDBACK.md:72-76`; `docs/process/MAGISTRATE_WATCHDOG.md:179` | `tests/test_magistrate_watchdog.py:763-767`, `:779-801` | Replace “installed from that plan's `measurement_root`” with the old generic “pinned” wording; the prompt and handback contract assertions fail. |
