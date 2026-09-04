@@ -45,9 +45,10 @@ if (( ! uninstall )); then
 import base64
 import json
 import sys
+import time
 
 sys.path.insert(0, sys.argv[2])
-from joulewise.night_gate import NightPlan, PlanError
+from joulewise.night_gate import NightPlan, PLAN_MAX_AGE_S, PlanError
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     data = json.load(stream)
@@ -58,8 +59,16 @@ try:
             "night_plan_malformed",
             "measurement_root must be an absolute path with no surrounding whitespace",
         )
+    now_epoch_s = time.time()
+    if parsed.authored_epoch_s > now_epoch_s:
+        raise PlanError(
+            "night_plan_malformed",
+            "plan authored_epoch_s is in the future",
+        )
+    if now_epoch_s - parsed.authored_epoch_s > PLAN_MAX_AGE_S:
+        raise PlanError("night_plan_stale", "plan is older than 36 hours")
 except PlanError as exc:
-    print(exc.detail, file=sys.stderr)
+    print(f"{exc.reason}: {exc.detail}", file=sys.stderr)
     raise SystemExit(3)
 for value in (parsed.repo_head, parsed.measurement_root, parsed.measurement_head):
     print(base64.b64encode(value.encode("utf-8")).decode("ascii"))
@@ -174,6 +183,7 @@ fi
 render "$night_label" run "$night_plist" "$hour" "$minute" "launchd.night"
 render "$deadman_label" dead-man "$deadman_plist" "$deadman_hour" "$deadman_minute" "launchd.deadman"
 if [[ -n "$render_only" ]]; then
+  print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"
   exit 0
 fi
 
@@ -195,3 +205,4 @@ if ! "$launchctl_bin" print "gui/$uid/$night_label" || \
   print "launch agent verification failed; rolled back both agents" >&2
   exit 3
 fi
+print "validated pins: repo_head=$plan_head measurement_root=$measurement_root measurement_head=$plan_measurement_head"

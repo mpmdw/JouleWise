@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -72,14 +73,14 @@ class InstallNightAgentTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def _write_plan(self, **changes: str) -> Path:
+    def _write_plan(self, **changes: object) -> Path:
         plan = {
             "schema": "joulewise.night_plan.v2",
             "plan_id": "install-night-agent-test",
             "receipt_class": "TRANSACTION_PACK",
             "t0_epoch_s": 1.0,
             "window_max_s": 1,
-            "authored_epoch_s": 1.0,
+            "authored_epoch_s": time.time(),
             "repo_head": self.repo_head,
             "measurement_root": str(self.measurement_root),
             "measurement_head": self.measurement_head,
@@ -121,8 +122,27 @@ class InstallNightAgentTests(unittest.TestCase):
     def test_install_with_both_pins_matching_renders_both_plists(self) -> None:
         completed = self._run(self._write_plan())
         self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn(f"repo_head={self.repo_head}", completed.stdout)
+        self.assertIn(f"measurement_root={self.measurement_root}", completed.stdout)
+        self.assertIn(f"measurement_head={self.measurement_head}", completed.stdout)
         self.assertTrue((self.rendered / "com.joulewise.night.plist").is_file())
         self.assertTrue((self.rendered / "com.joulewise.night.deadman.plist").is_file())
+
+    def test_install_refuses_plan_authored_40_hours_ago_as_stale(self) -> None:
+        completed = self._run(
+            self._write_plan(authored_epoch_s=time.time() - 40 * 60 * 60)
+        )
+        self.assertEqual(3, completed.returncode)
+        self.assertIn("night_plan_stale", completed.stderr)
+        self.assertFalse((self.rendered / "com.joulewise.night.plist").exists())
+
+    def test_install_refuses_plan_authored_2_hours_in_future_as_malformed(self) -> None:
+        completed = self._run(
+            self._write_plan(authored_epoch_s=time.time() + 2 * 60 * 60)
+        )
+        self.assertEqual(3, completed.returncode)
+        self.assertIn("night_plan_malformed", completed.stderr)
+        self.assertFalse((self.rendered / "com.joulewise.night.plist").exists())
 
     def test_install_refuses_measurement_head_mismatch_and_names_the_pin(self) -> None:
         completed = self._run(self._write_plan(measurement_head="b" * 40))
