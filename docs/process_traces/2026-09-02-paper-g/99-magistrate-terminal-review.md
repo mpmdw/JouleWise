@@ -20,3 +20,13 @@ Nothing to prune: the selector and its test are the minimum that makes selection
 ## Integration replay (row 9)
 
 Full unpiped suite on the integration tree c8ba4f5d (paper-G + main with #279/#280/#281), log `~/.claude/jobs/3c46c831/tmp/int-paper-g-replay-final.log`. Exact tail appended below when it completes.
+
+```text
+496:FAIL: test_real_client_worker_artifact_contract_over_localhost (test_node_worker_subprocess.NodeWorkerSubprocessTests.test_real_client_worker_artifact_contract_over_localhost)
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+PASS built G2-a prompt ladder, configs, and manifests
+PASS bound G2-a inputs to the calibration window
+rc=1
+```
+
+Exact tail of the unpiped full suite on integration tree c8ba4f5d (paper-G + main e8e1fd9e): 4900 tests, 1 failure, 125 skipped. The single failure is `test_node_worker_subprocess.NodeWorkerSubprocessTests.test_real_client_worker_artifact_contract_over_localhost`, which fails on main in isolation (pre-existing, recorded in the paper-E terminal review and the T26 replay at 2cbe0183: 4847 OK / skipped=125 with the same exclusion); it does not touch any file this PR changes (paper docs and the fill-rehearsal selector). No other failure. Row 9 satisfied with that one explained exclusion.
