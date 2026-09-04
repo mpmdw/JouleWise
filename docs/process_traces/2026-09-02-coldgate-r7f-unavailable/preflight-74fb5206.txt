@@ -1,0 +1,7 @@
+def replay_half(
+    repository_root: Path, corpus_root: Path, spec: RegistrySpec
+) -> list[Comparison]:
+    for path in _required_corpus_paths(corpus_root, repository_root, spec):
+        if not path.exists():
+            raise ArtifactsUnavailable(str(path))
+

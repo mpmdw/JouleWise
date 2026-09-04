@@ -6346,6 +6346,7 @@ def _content_matches(value: object, required: object) -> bool:
 
 
 _PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE = object()
+_T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS = 600_000_000_000
 _CLOCK_PROBE_VALUE_KEYS = frozenset(
     {
         "independent_clock_attestation",
@@ -6474,11 +6475,13 @@ def _clock_probe_predicate_passes(
         and 0 <= value["r1_batch_duration_ns"] <= 30_000_000_000
         and value["r1_batch_duration_ns"] == r1_duration
         and value["reference_server_count"] >= 2
-        # The R1-completion-to-validity-origin <=5 s upper bound is an open
-        # magistrate item at HEAD's derivation order.  The ruled six-hour
-        # lower horizon remains enforceable and is not weakened here.
-        and valid_until - value["r1_batch_finished_monotonic_ns"]
-        >= 21_600_000_000_000
+        # D-170 / COLD-GATE-RULING item 3: a liveness/hang detector, NOT a
+        # metrology bound. 600 s = 11 post-R1 _fresh_probe sites * 45 s + 105 s;
+        # see reason-code-coverage-delta.md §6.3 and its §6.3.1 limitation.
+        and 0
+        <= (valid_until - 21_600_000_000_000)
+        - value["r1_batch_finished_monotonic_ns"]
+        <= _T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS
     ):
         return False
     if live_clock_anchor is _PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE:

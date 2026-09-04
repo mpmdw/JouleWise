@@ -1,0 +1,20 @@
+pulse index (0.005 * 58 / 844, rounded upward).
+
+The default invocation additionally re-runs both producers into a directory
+under TMPDIR and requires byte identity for XD, AQ, and the XS-produced F4.
+An absent retained corpus exits 3 and names the missing resolved path; a
+producer that itself exits 3 (its own corpus preflight) also exits 3 and
+reports the producer's output.  Neither is ever a pass.  ``--literals-only``
+runs only the always-on digest/field/literal half.
+
+Exit codes: 0 for agreement, 2 for any mismatch, 3 for an absent corpus.
+Successful full replay ends with ``R7F COMPARED n / MISMATCHES m``;
+``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.
+An unavailable corpus instead ends with ``R7F CORPUS UNAVAILABLE: <detail>``
+and prints no ``COMPARED`` line.  ``<detail>`` is the missing resolved path
+when this script's own preflight finds a required corpus file absent, or the
+producer's stdout+stderr flattened to one line (lines joined by `` | ``) when a
+producer exits 3.  The path is printed after ``Path.resolve()``, so a consumer
+must compare against the resolved form of what it passed, never the as-given
+argument.
+"""

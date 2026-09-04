@@ -12,9 +12,61 @@ from unittest import mock
 import joulewise.arm_readiness as readiness
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
+    probe_clock_value,
     sample_arm,
     sample_evidence,
 )
+
+
+class ClockProbePredicateLivenessTests(unittest.TestCase):
+    @staticmethod
+    def _predicate_passes(age_ns: int) -> bool:
+        value = probe_clock_value()
+        receipt = sample_evidence()
+        receipt.update(
+            {
+                "evidence_id": "test-clock-attestation",
+                "kind": "CLOCK_ATTESTATION",
+                "valid_until_monotonic_ns": (
+                    value["r1_batch_finished_monotonic_ns"]
+                    + 21_600_000_000_000
+                    + age_ns
+                ),
+            }
+        )
+        receipt["facts"] = [
+            {
+                "fact_id": "clock.correct_and_prior_state.v1",
+                "value_type": "OBJECT",
+                "value": value,
+                "source_kind": "PROBE",
+                "source_path": "source.json",
+                "source_sha256": "0" * 64,
+            }
+        ]
+        live_clock_anchor = {
+            "boot_session_id": receipt["boot_session_id"],
+            "realtime_ns": value["anchor_realtime_ns"],
+            "monotonic_raw_ns": value["anchor_monotonic_raw_ns"],
+            "read_skew_ns": value["anchor_read_skew_ns"],
+        }
+        return readiness._predicate_passes(
+            receipt,
+            "clock.correct_and_prior_state.v1",
+            live_clock_anchor=live_clock_anchor,
+        )
+
+    def test_t0_liveness_bound_refuses_at_600s_plus_1ns(self) -> None:
+        self.assertFalse(self._predicate_passes(600_000_000_001))
+
+    def test_t0_liveness_bound_passes_at_600s_minus_1ns(self) -> None:
+        self.assertTrue(self._predicate_passes(599_999_999_999))
+
+    def test_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+        self.assertTrue(self._predicate_passes(600_000_000_000))
+
+    def test_t0_liveness_bound_refuses_negative(self) -> None:
+        self.assertFalse(self._predicate_passes(-1))
 
 
 class LaunchConsumptionV2Tests(unittest.TestCase):

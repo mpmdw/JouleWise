@@ -51,6 +51,35 @@ Required fields:
   `NEEDS_RULING`.
 - `OUTPUT_PROTOCOL`: Required return protocol; `bridge-report/v1`.
 
+**Clause map (ruling installs)**
+
+> A delegated implementation brief whose `AUTHORITY` includes a ruling with
+> implementation clauses carries, as an `ACCEPTANCE` item, the CLAUSE MAP. The
+> brief-writer decomposes the ruling into rows, one per proposition that a
+> single production-site edit can falsify while every other row stays true (a
+> value, a key set, a refusal code, a status literal, a hash binding, a call
+> count), each row quoting the phrase with ruling `file:line`. The seat's
+> final report returns the map under a `## Clause map` heading with at least
+> these three cells per row (a quote column is permitted): production site
+> (`file:line` where the bytes are produced —
+> one row per site when a clause is realized at several), biting assertion
+> (test method `file:line`), i.e. the assertion that FAILS under the row's
+> counterfactual, and counterfactual (the one-site edit that assertion fails
+> on) — or `NOT PINNED: <reason>` in the production-site cell, in which case
+> the whole row is skipped by the shape test and handed to the refuters as a
+> finding. Every fix round returns the delta for the rows it touched. The
+> refuter fan-out launches only after the magistrate has read the map; every
+> row lacking a counterfactual is handed to the refuters as a finding; the
+> execution-lens refuter executes the named counterfactuals before choosing
+> its own; the contract-lens refuter enumerates the ruling's clauses independently
+> and opens the map only after recording its own list (S2;
+> `docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
+> Custodied `*-impl.md` reports dated ≥ 2026-09-03 (the date is the
+> `YYYY-MM-DD` prefix of a dated directory component of the report's path under
+> `docs/process_traces/`, on or after the rule's ratification day — earlier
+> reports are not re-graded) carry the heading (S1, shape test;
+> `docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
+
 `AUTHORITY` SHOULD point to durable repository sources instead of reproducing
 large files. Inline context SHOULD contain only the current ruling, unstable
 facts, and small controlling excerpts.
@@ -799,6 +828,7 @@ not become alternate wire contracts.
 | Effort selection | `.claude/skills/codex/SKILL.md` §Effort selection | `CLAUDE.md`, the Claude agent, and the `/codex` command point to the skill; they do not repeat triggers. |
 | Claude-to-Sol operating sequence and config override shape | `.claude/skills/codex/SKILL.md` §Primary MCP path | The agent and command invoke the skill; `CLAUDE.md` supplies clean-clone discovery only. |
 | Full and discussion prompt headers | Contract §1 | Pointer only outside the contract; exhaustive scope remains an explicit enforcement boundary. |
+| Clause map for ruling installs | `docs/contracts/bridge_protocol.md` §1 | `agent_playbook.md` M0 points; `docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md` is the T26 process-rules ruling record. |
 | MCP and audited-CLI return envelopes | Contract §2 | Pointer only outside the contract; failure-is-not-success remains an explicit enforcement boundary. |
 | Scope and ruling early returns | Contract §3 | Pointer only outside the contract; `AGENTS.md` retains receiver stop/ask rules. |
 | MCP-versus-CLI routing | Contract §4 | The operating skill performs the selection by reference to §4. |

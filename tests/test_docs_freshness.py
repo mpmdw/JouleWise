@@ -8,9 +8,13 @@ literals. Decision-index completeness is a separate structural invariant.
 from __future__ import annotations
 
 import html
+import json
+import os
 import re
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +28,24 @@ CAPSULE_DOC_PATHS = (
 GENERATED_SITE_PATHS = tuple(
     str(path.relative_to(ROOT)) for path in sorted((ROOT / "docs/site").glob("*.html"))
 )
+
+DECISION_RULE_FLOOR = 170
+TERMINAL = {
+    "accepted",
+    "adopted",
+    "ratified",
+    "superseded",
+    "recorded",
+    "executed",
+    "adjudicated",
+}
+DECISION_STATUS_TOKENS = {"open", "proposed"} | TERMINAL
+
+MAGISTRATE_RULING_EXEMPTIONS = {
+    # This pre-install stage-1 ruling is explicitly closed by the B1 ruling.
+    "2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md",
+}
+DATED_DIRECTORY = re.compile(r"\d{4}-\d{2}-\d{2}(?:-.+)?")
 
 FORBIDDEN_VOLATILE_FACTS = {
     "suite result count": re.compile(
@@ -72,6 +94,211 @@ def _without_code(text: str) -> str:
     text = re.sub(r"`[^`\n]*`", "", text)
     text = re.sub(r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>", "", text, flags=re.DOTALL | re.IGNORECASE)
     return html.unescape(re.sub(r"<[^>]+>", " ", text))
+
+
+def _decision_index_rows(text: str | None = None) -> list[tuple[str, str]]:
+    """Return decision ids and final-column status cells from the Markdown index."""
+    text = _read("docs/decision_log.md") if text is None else text
+    index = _between(text, "## Index\n", "\n---\n")
+    return re.findall(
+        r"^\| (D-\d{3}[a-z]?) \|.*\| ([^|]+) \|$", index, flags=re.MULTILINE
+    )
+
+
+def _dated_process_trace_files(pattern: str, minimum_date: str) -> list[Path]:
+    trace_root = ROOT / "docs/process_traces"
+    paths = []
+    for path in trace_root.glob(pattern):
+        relative_parts = path.relative_to(trace_root).parts
+        dated_directories = (
+            part for part in relative_parts[:-1] if DATED_DIRECTORY.fullmatch(part)
+        )
+        if any(dated_directory[:10] >= minimum_date for dated_directory in dated_directories):
+            paths.append(path)
+    return sorted(paths)
+
+
+def _dated_magistrate_rulings() -> list[Path]:
+    magistrate = {
+        path
+        for path in _dated_process_trace_files("**/*MAGISTRATE-RULING*.md", "2026-08-29")
+        if path.relative_to(ROOT / "docs/process_traces").as_posix()
+        not in MAGISTRATE_RULING_EXEMPTIONS
+    }
+    rulings = {
+        path
+        for path in _dated_process_trace_files("**/*RULING*.md", "2026-09-03")
+        if not path.name.startswith("NEEDS-RULING-")
+    }
+    selected = sorted(magistrate | rulings)
+    assert selected, "dated ruling selector unexpectedly selected no files"
+    return selected
+
+
+def _has_executed_evidence(text: str, root: Path = ROOT) -> bool:
+    section = re.search(
+        r"^## Executed evidence\s*$\n(.*?)(?=^## |\Z)",
+        text,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    if section is None:
+        return False
+    body = section.group(1)
+    citation_paths = re.findall(
+        r"([A-Za-z0-9_./-]+\.(?:py|sh|json|toml|ya?ml)):\d+", body
+    )
+    # A citation names a file at repository HEAD: repo-relative only, so an
+    # absolute path or a `..` component cannot point outside `root`.
+    citation = any(
+        not path.startswith("/")
+        and ".." not in path.split("/")
+        and (root / path).is_file()
+        for path in citation_paths
+    )
+    fenced_blocks = re.findall(
+        r"^```[^\n]*\n(.*?)^```\s*$", body, flags=re.MULTILINE | re.DOTALL
+    )
+    command_line = re.compile(r"^\$ .+$", flags=re.MULTILINE)
+    status_line = re.compile(
+        r"^\s*(?:exit|EXIT|rc|exit code|exit status)[\s=:]+\d+\s*$",
+        flags=re.MULTILINE,
+    )
+    execution_record = False
+    for block in fenced_blocks:
+        command_matches = list(command_line.finditer(block))
+        status_matches = list(status_line.finditer(block))
+        if any(command.start() != status.start()
+               for command in command_matches for status in status_matches):
+            execution_record = True
+            break
+    return citation or execution_record
+
+
+def _decision_index_row_count(text: str) -> int:
+    index = _between(text, "## Index\n", "\n---\n")
+    return len(re.findall(r"^\| D-\d{3}[a-z]? \|", index, flags=re.MULTILINE))
+
+
+def _replace_decision_status(text: str, decision_id: str, status: str) -> str:
+    pattern = re.compile(
+        rf"(^\| {re.escape(decision_id)} \|.*\| )[^|\n]+?(\s*\|$)",
+        flags=re.MULTILINE,
+    )
+    replaced, count = pattern.subn(rf"\g<1>{status}\g<2>", text)
+    if count != 1:
+        raise AssertionError(f"expected one index status row for {decision_id}, got {count}")
+    return replaced
+
+
+def _next_unused_decision_id(index_text: str) -> str:
+    """The first decision id above every id the live index carries.
+
+    The counterfactual mutations below append a synthetic row; it must not
+    collide with a real row, so the id is derived from the index rather than
+    hard-coded (D-171 landed on 2026-09-02 and broke the literal).
+    """
+    ids = [int(m) for m in re.findall(r"^\| D-(\d+) \|", index_text, flags=re.M)]
+    return f"D-{max(ids) + 1}"
+
+def _append_decision_index_row(text: str, decision_id: str, status: str) -> str:
+    marker = "\n---\n"
+    index_end = text.index(marker)
+    return (
+        text[:index_end]
+        + f"| {decision_id} | fixture decision row | {status} |\n"
+        + text[index_end:]
+    )
+
+
+def _synthetic_open_decision(
+    index_text: str,
+    tasks: dict,
+    installer_id: str = "FIXTURE-INSTALLER-01",
+    carrier_id: str = "FIXTURE-CARRIER-01",
+) -> tuple[str, str, dict]:
+    """A live-shaped `open (installs via ...)` decision built from scratch.
+
+    The installation-limb guards need three things to exist together: an index
+    row whose status names an installing task, that task carrying a
+    `kind: decision` dependency on the row, and some task carrying the pending
+    hard/start one. Borrowing them from whichever real decision happens to be
+    open ties the guards to that decision's lifecycle: D-170 was the borrowed
+    fixture, and closing it on 2026-09-03 silently disarmed four assertions that
+    had been passing for weeks. Synthesizing the fixture instead keeps every
+    guard armed no matter what the live index says, in the same spirit as
+    `_next_unused_decision_id` above.
+
+    Returns the synthetic decision id, the index text carrying its row, and a
+    copy of `tasks` carrying the installer and the carrier.
+    """
+    decision_id = _next_unused_decision_id(index_text)
+    index_text = _append_decision_index_row(
+        index_text, decision_id, f"open (installs via {installer_id})"
+    )
+    tasks = dict(tasks)
+    tasks[installer_id] = {"dependencies": [{
+        "evidence": None,
+        "kind": "decision",
+        "required": "fixture installer close dependency",
+        "scope": "close",
+        "state": "pending",
+        "strength": "hard",
+        "target": decision_id,
+    }]}
+    tasks[carrier_id] = {"dependencies": [{
+        "evidence": None,
+        "kind": "decision",
+        "required": "fixture carrier start dependency",
+        "scope": "start",
+        "state": "pending",
+        "strength": "hard",
+        "target": decision_id,
+    }]}
+    return decision_id, index_text, tasks
+
+
+def _decision_body_ids(text: str) -> set[str]:
+    return set(re.findall(r"^## (D-\d{3}[a-z]?):", text, flags=re.MULTILINE))
+
+
+def _decision_reference_documents(root: Path) -> dict[str, str]:
+    paths: set[Path] = set()
+    paths.update(
+        path for path in root.glob("docs/**/*.md")
+        if path.is_file()
+        and path.relative_to(root).as_posix() != "docs/decision_log.md"
+        and not path.relative_to(root).as_posix().startswith("docs/process_traces/")
+    )
+    paths.update(path for path in (root / ".github").rglob("*") if path.is_file())
+    paths.update(
+        root / relative
+        for relative in (
+            "README.md",
+            "TASK_QUEUE.md",
+            "RUN_STATE.md",
+            "docs/process/state_kernel.json",
+        )
+        if (root / relative).is_file()
+    )
+    return {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(paths)
+    }
+
+
+def _dangling_decision_references(
+    documents: dict[str, str], body_ids: set[str]
+) -> list[tuple[str, int, str]]:
+    # Boundaries on both sides: a hex UUID such as "B09C8BDD-187C-..." pasted
+    # into a proposal is not a decision reference (bench, luna 226 F2).
+    token = re.compile(r"(?<![0-9A-Za-z])D-\d{3}[a-z]?(?![0-9A-Za-z])")
+    dangling = []
+    for relative_path, text in sorted(documents.items()):
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            for decision_id in token.findall(line):
+                if decision_id not in body_ids:
+                    dangling.append((relative_path, line_number, decision_id))
+    return dangling
 
 
 def _documents() -> dict[str, str]:
@@ -174,15 +401,544 @@ def _site_publish_instructions(
 
 
 class DocsFreshnessTests(unittest.TestCase):
+    def _assert_index_rows_complete(self, text: str) -> None:
+        self.assertEqual(
+            len(_decision_index_rows(text)),
+            _decision_index_row_count(text),
+            "decision index parser skipped a D-numbered row (malformed status cell)",
+        )
+
+    def _assert_open_decisions(self, tasks: dict, index_text: str) -> None:
+        self._assert_index_rows_complete(index_text)
+        for decision_id, status in _decision_index_rows(index_text):
+            leading_token = re.match(r"[a-z]+", status)
+            decision_number = int(re.match(r"D-(\d{3})", decision_id).group(1))
+            if decision_number < DECISION_RULE_FLOOR:
+                continue
+            if leading_token is None or leading_token.group(0) != "open":
+                continue
+            installing = re.fullmatch(
+                r"open \(installs via ([A-Z0-9-]+)\)", status
+            )
+            self.assertIsNotNone(
+                installing,
+                f"{decision_id}: open status must name its installing task "
+                f"(limb 1): {status!r}",
+            )
+            task_id = installing.group(1)
+            self.assertIn(
+                task_id,
+                tasks,
+                f"{decision_id}: installing kernel task does not exist "
+                f"(limb 1): {task_id}",
+            )
+            installer_dependencies = tasks[task_id].get("dependencies", [])
+            self.assertTrue(
+                any(
+                    dependency.get("kind") == "decision"
+                    and dependency.get("target") == decision_id
+                    for dependency in installer_dependencies
+                ),
+                f"{decision_id}: named installing task {task_id} has no "
+                "kind: decision dependency targeting this row (limb 2)",
+            )
+            self.assertTrue(
+                any(
+                    dependency.get("kind") == "decision"
+                    and dependency.get("target") == decision_id
+                    and dependency.get("strength") == "hard"
+                    and dependency.get("scope") == "start"
+                    and dependency.get("state") == "pending"
+                    for task in tasks.values()
+                    for dependency in task.get("dependencies", [])
+                ),
+                f"{decision_id}: no task carries a pending hard/start "
+                "kind: decision dependency (limb 3)",
+            )
+
+    def _assert_terminal_decisions(self, tasks: dict, index_text: str) -> None:
+        for decision_id, status in _decision_index_rows(index_text):
+            decision_number = int(re.match(r"D-(\d{3})", decision_id).group(1))
+            if decision_number < DECISION_RULE_FLOOR:
+                continue
+            leading_token = re.match(r"[a-z]+", status)
+            self.assertIsNotNone(
+                leading_token,
+                f"{decision_id}: status has no leading token: {status!r}",
+            )
+            if leading_token is None:
+                continue
+            token = leading_token.group(0)
+            self.assertIn(
+                token,
+                DECISION_STATUS_TOKENS,
+                f"{decision_id}: status token is outside the closed vocabulary: "
+                f"{token!r}",
+            )
+            if token not in TERMINAL:
+                continue
+            for task_id, task in tasks.items():
+                if any(
+                    dependency.get("kind") == "decision"
+                    and dependency.get("target") == decision_id
+                    and dependency.get("state") == "pending"
+                    for dependency in task.get("dependencies", [])
+                ):
+                    self.fail(
+                        f"{decision_id}: terminal status {token!r} has a pending "
+                        f"decision dependency on task {task_id}"
+                    )
+
+    def _assert_clause_map(self, text: str, relative_path: str) -> None:
+        clause_map = re.search(
+            r"^## Clause map\s*$\n(.*?)(?=^## |\Z)",
+            text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        self.assertIsNotNone(
+            clause_map,
+            f"{relative_path}: missing ## Clause map heading",
+        )
+        if clause_map is None:
+            return
+        required_cells = {"production site", "biting assertion", "counterfactual"}
+        lines = clause_map.group(1).splitlines()
+        table_lines = [line for line in lines if line.strip().startswith("|")]
+        self.assertGreaterEqual(
+            len(table_lines), 2,
+            f"{relative_path}: Clause map must contain a header and divider",
+        )
+        if len(table_lines) < 2:
+            return
+        header = table_lines[0]
+        divider = table_lines[1]
+        header_cells = [
+            cell.strip().lower() for cell in header.strip().strip("|").split("|")
+        ]
+        required_columns = {
+            name: header_cells.index(name)
+            for name in required_cells
+            if name in header_cells
+        }
+        self.assertTrue(
+            len(required_columns) == len(required_cells)
+            and re.fullmatch(r"\|(?:\s*:?-{3,}:?\s*\|)+", divider) is not None,
+            f"{relative_path}: Clause map table header must name production site, "
+            "biting assertion, and counterfactual",
+        )
+        if len(required_columns) != len(required_cells):
+            return
+        body_rows = table_lines[2:]
+        self.assertTrue(
+            body_rows,
+            f"{relative_path}: Clause map table must contain a body row",
+        )
+        for row in body_rows:
+            cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
+            self.assertEqual(
+                len(cells),
+                len(header_cells),
+                f"{relative_path}: Clause map body row cell count must match the header: "
+                f"{row!r}",
+            )
+            if cells[required_columns["production site"]].startswith("NOT PINNED:"):
+                continue
+            self.assertTrue(
+                all(cells[index] for index in required_columns.values()),
+                f"{relative_path}: Clause map body row has an empty cell in a required column: "
+                f"{row!r}",
+            )
+
     def test_decision_index_matches_decision_bodies(self) -> None:
         text = _read("docs/decision_log.md")
         index = _between(text, "## Index\n", "\n---\n")
-        index_ids = re.findall(r"^\| (D-\d{3}) \|", index, flags=re.MULTILINE)
-        body_ids = re.findall(r"^## (D-\d{3}):", text, flags=re.MULTILINE)
+        index_ids = re.findall(r"^\| (D-\d{3}[a-z]?) \|", index, flags=re.MULTILINE)
+        body_ids = re.findall(r"^## (D-\d{3}[a-z]?):", text, flags=re.MULTILINE)
 
         self.assertEqual(len(index_ids), len(set(index_ids)), "duplicate decision index row")
         self.assertEqual(len(body_ids), len(set(body_ids)), "duplicate decision body")
         self.assertEqual(body_ids, index_ids)
+
+    def test_decision_index_status_vocabulary_is_closed(self) -> None:
+        for decision_id, status in _decision_index_rows():
+            with self.subTest(decision_id=decision_id):
+                leading_token = re.match(r"[a-z]+", status)
+                self.assertIsNotNone(
+                    leading_token, f"{decision_id}: status has no leading token: {status!r}"
+                )
+                self.assertIn(
+                    leading_token.group(0),
+                    DECISION_STATUS_TOKENS,
+                    f"{decision_id}: status token is outside the closed vocabulary: {status!r}",
+                )
+
+    def test_open_decisions_name_an_installing_kernel_task(self) -> None:
+        tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+        self._assert_open_decisions(tasks, _read("docs/decision_log.md"))
+
+    def test_decision_status_tokens_match_terminal_policy(self) -> None:
+        self.assertEqual(
+            DECISION_STATUS_TOKENS,
+            {"open", "proposed"} | TERMINAL,
+        )
+
+    def test_terminal_decisions_carry_no_pending_dependency(self) -> None:
+        tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+        index_text = _read("docs/decision_log.md")
+        self._assert_terminal_decisions(tasks, index_text)
+        # D110-MINT-DEP-RECONCILE-01 is accepted with a pending dependency on
+        # MINT-GENERALIZE-01 in the live kernel, but D-110 is below this rule's
+        # floor and must not fire until the bench registers the correction.
+        self.assertLess(110, DECISION_RULE_FLOOR)
+
+    def test_terminal_decision_counterfactuals(self) -> None:
+        base_tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+        base_index = _read("docs/decision_log.md")
+
+        with self.subTest(mutation="M6c terminal status over a pending dependency"):
+            # Synthesized rather than pinned to D-170. This assertion used to
+            # read the live D-170 row, so closing D-170 on 2026-09-03 would have
+            # made it stop firing while still reporting green - the guard would
+            # have been gone and nothing would have said so.
+            fixture_id, fixture_index, fixture_tasks = _synthetic_open_decision(
+                base_index, base_tasks
+            )
+            self._assert_terminal_decisions(fixture_tasks, fixture_index)
+            adopted = _replace_decision_status(fixture_index, fixture_id, "adopted")
+            with self.assertRaisesRegex(
+                AssertionError,
+                rf"{fixture_id}.*adopted.*pending decision dependency on task",
+            ):
+                self._assert_terminal_decisions(fixture_tasks, adopted)
+
+        synthetic = _next_unused_decision_id(base_index)
+        with self.subTest(mutation=f"{synthetic} adopted without dependency"):
+            d171_index = _append_decision_index_row(base_index, synthetic, "open")
+            adopted = _replace_decision_status(d171_index, synthetic, "adopted")
+            self._assert_terminal_decisions(base_tasks, adopted)
+
+        with self.subTest(mutation=f"{synthetic} proposed with dependency"):
+            d171_index = _append_decision_index_row(base_index, synthetic, "open")
+            proposed = _replace_decision_status(d171_index, synthetic, "proposed")
+            tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+            tasks["V5-TRANSACTION-01"]["dependencies"].append({
+                "evidence": None,
+                "kind": "decision",
+                "required": "fixture pending dependency",
+                "scope": "start",
+                "state": "pending",
+                "strength": "hard",
+                "target": synthetic,
+            })
+            self._assert_terminal_decisions(tasks, proposed)
+
+        with self.subTest(mutation="unknown status token"):
+            unknown_id = _decision_index_rows(base_index)[-1][0]
+            decided = _replace_decision_status(base_index, unknown_id, "decided")
+            with self.assertRaisesRegex(AssertionError, rf"{unknown_id}.*decided"):
+                self._assert_terminal_decisions(base_tasks, decided)
+
+    def test_open_decision_counterfactuals_bind_all_installation_limbs(self) -> None:
+        base_index = _read("docs/decision_log.md")
+        base_tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
+
+        # The fixture is synthesized, not borrowed from whichever decision
+        # happens to be open: D-170 used to play this part, and closing it on
+        # 2026-09-03 disarmed every assertion below at once. See
+        # _synthetic_open_decision.
+        fixture_id, fixture_index, fixture_tasks = _synthetic_open_decision(
+            base_index, base_tasks
+        )
+
+        with self.subTest(mutation="baseline fixture is well formed"):
+            # If this ever fails, the mutants below prove nothing: they would be
+            # firing on a broken baseline rather than on the mutation.
+            self._assert_open_decisions(fixture_tasks, fixture_index)
+
+        with self.subTest(mutation="limb 1 named installing task does not exist"):
+            missing_named_task = dict(fixture_tasks)
+            missing_named_task.pop("FIXTURE-INSTALLER-01")
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 1"):
+                self._assert_open_decisions(missing_named_task, fixture_index)
+
+        with self.subTest(mutation="limb 1 open status names no installing task"):
+            no_installer = _replace_decision_status(fixture_index, fixture_id, "open")
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 1"):
+                self._assert_open_decisions(fixture_tasks, no_installer)
+
+        with self.subTest(mutation="limb 2 named task carries no dependency"):
+            no_dependency = dict(fixture_tasks)
+            no_dependency["FIXTURE-INSTALLER-01"] = {"dependencies": []}
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 2"):
+                self._assert_open_decisions(no_dependency, fixture_index)
+
+        with self.subTest(mutation="limb 3 installer close dependency but no start dependency"):
+            # Limb 3 is satisfiable by more than one task (ruling B4: the S9
+            # rows carried the start dependency alongside the transaction row),
+            # so the mutant must remove the start dependency from EVERY task,
+            # not just from one of them.
+            no_start = {
+                task_id: {"dependencies": [
+                    dependency for dependency in task.get("dependencies", [])
+                    if not (dependency.get("target") == fixture_id
+                            and dependency.get("scope") == "start")
+                ]}
+                for task_id, task in fixture_tasks.items()
+            }
+            self.assertTrue(any(
+                dependency.get("target") == fixture_id
+                and dependency.get("scope") == "close"
+                for dependency in no_start["FIXTURE-INSTALLER-01"]["dependencies"]
+            ))
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 3"):
+                self._assert_open_decisions(no_start, fixture_index)
+
+    def test_malformed_decision_index_status_is_not_skipped(self) -> None:
+        # The malformed row is derived from the live index rather than quoted
+        # from one decision's text, so editing any single row cannot silently
+        # turn this guard into a no-op (the replace would stop matching and the
+        # assertion would never fire). The missing space before the closing pipe
+        # is what makes _decision_index_rows skip the row while
+        # _decision_index_row_count still counts it.
+        text = _read("docs/decision_log.md")
+        rows = _decision_index_rows(text)
+        self.assertTrue(rows, "the decision index carries no rows to malform")
+        decision_id, status = rows[-1]
+        malformed = _replace_decision_status(text, decision_id, status.strip())
+        malformed = malformed.replace(
+            f"| {status.strip()} |", f"| {status.strip()}|", 1
+        )
+        self.assertEqual(
+            _decision_index_row_count(malformed), _decision_index_row_count(text)
+        )
+        self.assertLess(len(_decision_index_rows(malformed)), len(rows))
+        with self.assertRaisesRegex(AssertionError, r"parser skipped"):
+            self._assert_index_rows_complete(malformed)
+
+    def test_dated_magistrate_rulings_carry_executed_evidence(self) -> None:
+        # The filename is the trigger. The census includes the two known
+        # 2026-09-02 magistrate rulings (coldgate-dx-t26a, process-rules).
+        selected = _dated_magistrate_rulings()
+        self.assertTrue(selected)
+        selected_relative = [path.relative_to(ROOT).as_posix() for path in selected]
+        self.assertIn(
+            "docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md",
+            selected_relative,
+        )
+        self.assertIn(
+            "docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md",
+            selected_relative,
+        )
+        for path in selected:
+            relative_path = path.relative_to(ROOT)
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=str(relative_path)):
+                self.assertTrue(
+                    _has_executed_evidence(text, ROOT),
+                    f"{relative_path}: dispositive ruling lacks a valid ## Executed evidence section",
+                )
+
+    def test_custodied_impl_reports_carry_clause_map(self) -> None:
+        # Today's 2026-09-02-process-rules directory has no `*-impl.md` files;
+        # the prospective selector begins at 2026-09-03.
+        for path in _dated_process_trace_files("*/**/*-impl.md", "2026-09-03"):
+            relative_path = path.relative_to(ROOT)
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=str(relative_path)):
+                self._assert_clause_map(text, str(relative_path))
+
+    def test_clause_map_mutations_and_per_row_escape(self) -> None:
+        header = (
+            "## Clause map\n"
+            "| production site | biting assertion | counterfactual |\n"
+            "| --- | --- | --- |\n"
+        )
+        self._assert_clause_map(
+            header + "| NOT PINNED: reason | | |\n| site | assertion | input |\n",
+            "literal-complete-and-not-pinned",
+        )
+        four_column_header = (
+            "## Clause map\n"
+            "| Ruling quote | production site | biting assertion | counterfactual |\n"
+            "| --- | --- | --- | --- |\n"
+        )
+        self._assert_clause_map(
+            four_column_header
+            + "| quoted clause | NOT PINNED: doc-only | | |\n"
+            + "| quoted clause | site | assertion | input |\n",
+            "literal-four-column-and-not-pinned",
+        )
+        with self.assertRaisesRegex(AssertionError, r"empty cell"):
+            self._assert_clause_map(header + "| a | b | |\n", "literal-empty-counterfactual")
+        with self.assertRaisesRegex(AssertionError, r"cell count"):
+            self._assert_clause_map(
+                four_column_header + "| quote | site | assertion |\n",
+                "literal-mismatched-cell-count",
+            )
+        with self.assertRaisesRegex(AssertionError, r"body row"):
+            self._assert_clause_map(header, "literal-header-only")
+
+    def test_bridge_protocol_clause_map_pins_s1_and_s2(self) -> None:
+        contract = _read("docs/contracts/bridge_protocol.md")
+        self.assertIn("Clause map (ruling installs)", contract)
+        self._assert_bridge_protocol_s2_pin(contract)
+
+    def _assert_bridge_protocol_s2_pin(self, contract: str) -> None:
+        sentence = "the contract-lens refuter enumerates the ruling's clauses independently"
+        self.assertIn(
+            re.sub(r"\s+", " ", sentence),
+            re.sub(r"\s+", " ", contract),
+        )
+
+    def test_bridge_protocol_clause_map_s2_deletion_bites(self) -> None:
+        contract = _read("docs/contracts/bridge_protocol.md")
+        sentence = "the contract-lens refuter enumerates the ruling's clauses independently"
+        deleted = contract.replace(sentence, "", 1)
+        with self.assertRaises(AssertionError):
+            self._assert_bridge_protocol_s2_pin(deleted)
+
+    def test_bridge_protocol_clause_map_s2_rewrap_passes(self) -> None:
+        contract = _read("docs/contracts/bridge_protocol.md")
+        sentence = "the contract-lens refuter enumerates the ruling's clauses independently"
+        wrapped = contract.replace(
+            sentence,
+            "the contract-lens refuter enumerates the ruling's clauses\n"
+            "independently",
+            1,
+        )
+        with self.assertRaises(AssertionError):
+            self.assertIn(sentence, wrapped)
+        self._assert_bridge_protocol_s2_pin(wrapped)
+
+    def test_executed_evidence_mutations_are_rejected(self) -> None:
+        ruling = _read(
+            "docs/process_traces/2026-09-02-process-rules/"
+            "MAGISTRATE-RULING-process-rules.md"
+        )
+        self.assertFalse(
+            _has_executed_evidence(
+                ruling.replace("\n## Executed evidence\n", "\n", 1), ROOT
+            )
+        )
+        evidence = (
+            "## Executed evidence\n\n"
+            "```text\n"
+            "$ python3 scripts/gen_state.py --check\n"
+            "exit 0\n"
+            "```\n\n"
+            "Code path: docs/contracts/bridge_protocol.md:48.\n"
+        )
+        self.assertFalse(_has_executed_evidence(evidence.replace("exit 0\n", ""), ROOT))
+        self.assertFalse(
+            _has_executed_evidence(
+                evidence.replace("exit 0\n", "").replace(
+                    "docs/contracts/bridge_protocol.md:48", ""
+                ),
+                ROOT,
+            )
+        )
+        self.assertFalse(
+            _has_executed_evidence(
+                "## Executed evidence\n\n```text\n$ echo exit\n```\n",
+                ROOT,
+            )
+        )
+        self.assertFalse(
+            _has_executed_evidence(
+                "## Executed evidence\n\nSee docs/contracts/bridge_protocol.md:48.\n",
+                ROOT,
+            )
+        )
+        self.assertTrue(
+            _has_executed_evidence(
+                "## Executed evidence\n\nSee scripts/gen_state.py:63.\n",
+                ROOT,
+            )
+        )
+        self.assertFalse(
+            _has_executed_evidence(
+                "## Executed evidence\n\nSee scripts/does_not_exist.py:1.\n",
+                ROOT,
+            )
+        )
+        with tempfile.TemporaryDirectory(prefix="docs_freshness_outside.") as outside:
+            outside_file = Path(outside) / "outside.py"
+            outside_file.write_text("# outside\n", encoding="utf-8")
+            # Sol 230 F1: an absolute path or a `..` escape is not a file at HEAD.
+            self.assertFalse(
+                _has_executed_evidence(
+                    f"## Executed evidence\n\nSee {outside_file}:1.\n",
+                    ROOT,
+                )
+            )
+            relative_escape = Path(os.path.relpath(outside_file, ROOT)).as_posix()
+            self.assertTrue(relative_escape.startswith("../"))
+            self.assertFalse(
+                _has_executed_evidence(
+                    f"## Executed evidence\n\nSee {relative_escape}:1.\n",
+                    ROOT,
+                )
+            )
+
+    def test_dated_ruling_selector_scans_all_depths_and_excludes_needs_ruling(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="docs_freshness_rulings.") as root_name:
+            root = Path(root_name)
+            for relative in (
+                "docs/process_traces/2026-09-09-probe/X-RULING-probe.md",
+                "docs/process_traces/archive/2026-09-09-probe/X-RULING-archive.md",
+                "docs/process_traces/2026-09-09-probe/NEEDS-RULING-x.md",
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# probe\n", encoding="utf-8")
+            with mock.patch(__name__ + ".ROOT", root):
+                selected = _dated_magistrate_rulings()
+                selected_relative = {
+                    path.relative_to(root).as_posix() for path in selected
+                }
+                self.assertIn(
+                    "docs/process_traces/2026-09-09-probe/X-RULING-probe.md",
+                    selected_relative,
+                )
+                self.assertIn(
+                    "docs/process_traces/archive/2026-09-09-probe/X-RULING-archive.md",
+                    selected_relative,
+                )
+                self.assertNotIn(
+                    "docs/process_traces/2026-09-09-probe/NEEDS-RULING-x.md",
+                    selected_relative,
+                )
+                for path in selected:
+                    self.assertFalse(
+                        _has_executed_evidence(
+                            path.read_text(encoding="utf-8"), root
+                        )
+                    )
+                with self.assertRaises(AssertionError):
+                    for path in selected:
+                        self.assertTrue(
+                            _has_executed_evidence(
+                                path.read_text(encoding="utf-8"), root
+                            )
+                        )
+
+    def test_decision_references_resolve(self) -> None:
+        decision_log = _read("docs/decision_log.md")
+        dangling = _dangling_decision_references(
+            _decision_reference_documents(ROOT),
+            _decision_body_ids(decision_log),
+        )
+        self.assertEqual([], dangling, "dangling decision references: " + repr(dangling))
+
+    def test_dangling_decision_reference_mutation_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="docs_freshness_refs.") as root_name:
+            root = Path(root_name)
+            path = root / ".github/x.md"
+            path.parent.mkdir(parents=True)
+            path.write_text("D-999\n", encoding="utf-8")
+            documents = {".github/x.md": path.read_text(encoding="utf-8")}
+            dangling = _dangling_decision_references(documents, {"D-170"})
+            self.assertEqual([(".github/x.md", 1, "D-999")], dangling)
 
     def test_current_sections_do_not_copy_volatile_literals(self) -> None:
         self.assertEqual([], _volatile_violations(_current_sections()))

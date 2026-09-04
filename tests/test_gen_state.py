@@ -21,6 +21,30 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # 2026-09-03 post-merge kernel batch. Thirteen rows, from four sources:
+    # the decode-identity S3 ruling (d) and the packet-45 cold gate's two
+    # residual nits; the 2026-09-02 code-and-tests audit's ranked five; the two
+    # in-flight unattended-lane rows; and the four rows the 2026-09-02
+    # fresh-Fable docs-vs-truth audit found RULED BUT NEVER REGISTERED (its A7
+    # -- LINEAGE-RELOCATABLE-01, R7F-EXIT3-SEMANTICS-01, PREWINDOW-V5-PIN-01 and
+    # CHARTER-V3-PACKET-INPUTS-01, which it counted as the 3rd-6th
+    # "ruled != installed" instances since T26-RULING-INSTALL-01 was created to
+    # cure exactly that pattern).
+    "LINEAGE-RELOCATABLE-01",
+    "LINEAGE-RESOLVE-RACE-01",
+    "ONE-USE-CONSUMPTION-TEST-01",
+    "RAW-CAPTURE-DIGEST-01",
+    "SILENT-REFUSAL-TESTS-01",
+    "CANONICAL-JSON-ONE-HOME-01",
+    "INSTRUMENT-PATH-PIN-01",
+    "GENERATOR-CORE-01",
+    "WATCHDOG-INSTALL-01",
+    "NIGHT-PLAN-PIN-01",
+    "R7F-EXIT3-SEMANTICS-01",
+    "PREWINDOW-V5-PIN-01",
+    "CHARTER-V3-PACKET-INPUTS-01",
+    # 2026-09-02 paper-d fixture-shape cold gate (files 38-42).
+    "DG071-PROVENANCE-TEST-01",
     # 2026-08-27 T26 end-of-sprint kernel wave (WAVE-ROWS.md ledger: S5 sweep,
     # paper ruling item 16, D-156 Q1-B/Q4-B, S2 producers, S11 F4, D-160 R-3
     # in flight, D-158 A-5, D-160 R-4, D-158 R-3, S3 delta2 D4/D3, S9-04/09/10/11/12/13)
@@ -85,6 +109,22 @@ EXPECTED_IDS = {
     # replace the retired projection-02 row.
     "V5-LAUNCH-REALIZATION-RECHECK-01",
     "V5-DECODE-IDENTITY-SET-01",
+    # 2026-09-02 bench sweep: the T26 cold-gate verdicts (items 1-4,
+    # docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md)
+    # were found uninstalled; one installing row plus the two Ed items the
+    # ruling routed (E1 branch protection, E2 the D-118 N/A tier).
+    "T26-RULING-INSTALL-01",
+    # 2026-09-02 T26 fix round 1 (dx/t26-a cold gate B3): D-110 reconcile row.
+    "D110-MINT-DEP-RECONCILE-01",
+    # 2026-09-02 dx/t26-a cold gate: ruling A2 (prose scan row) + B4 (S9 rows)
+    "R7F-DX-PROSE-SCAN-01",
+    "S9-01B-REFUSAL-PRODUCER-CHECK-01",
+    "S9-02-W10-SCOPE-P256-M1-01",
+    "S9-03-GAMMA-PREFILL-PROMPT-OWNER-01",
+    "S9-05-CAL-SCREEN-FLOOR-RULING-01",
+    "S9-06-WINDOW-T0-GO-RECEIPT-GATE-01",
+    "ED-BRANCH-PROTECTION-E1-01",
+    "ED-D118-NA-TIER-E2-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
@@ -156,6 +196,8 @@ EXPECTED_IDS = {
     # marker-ruling consequences)
     "T0-CLOCK-ROW-RENAME-01",
     "T0-UNATTENDED-01",
+    "T0-LIVENESS-BOUND-EMPIRICAL-01",
+    "T0-PROBE-CENSUS-RESOURCE-01",
     "UNATTENDED-LAUNCH-01",
     # 2026-09-01 D-169 stage-1 split (MAGISTRATE-RULING-UNATTENDED-STAGE1,
     # cold gate coldgate-e10): night gate, night driver, launchd rehearsal
@@ -291,6 +333,52 @@ class TestKernelValidity(unittest.TestCase):
         with open(KERNEL_PATH, "rb") as fh:
             raw = fh.read()
         self.assertEqual(raw, gen_state.canonical_bytes(json.loads(raw.decode("utf-8"))))
+
+    def test_satisfied_decision_dependency_requires_named_test_regression(self):
+        kernel = load_kernel()
+
+        def dependency(path, label):
+            return {
+                "evidence": {"path": path, "label": label},
+                "kind": "decision",
+                "required": "fixture decision dependency",
+                "scope": "close",
+                "state": "satisfied",
+                "strength": "hard",
+                "target": "D-170",
+            }
+
+        with self.subTest(mutation="M6b README placeholder pointer"):
+            with self.assertRaisesRegex(
+                gen_state.KernelError,
+                r"D-170.*test file under tests",
+            ):
+                gen_state._check_dependency(
+                    dependency("README.md", "placeholder pointer"),
+                    "tasks[T26-RULING-INSTALL-01].dependencies[0]",
+                    kernel,
+                )
+
+        with self.subTest(mutation="named producer regression is accepted"):
+            gen_state._check_dependency(
+                dependency(
+                    "tests/test_docs_freshness.py",
+                    "test_open_decisions_name_an_installing_kernel_task",
+                ),
+                "tasks[T26-RULING-INSTALL-01].dependencies[0]",
+                kernel,
+            )
+
+        with self.subTest(mutation="nonexistent test label"):
+            with self.assertRaisesRegex(
+                gen_state.KernelError,
+                r"D-170.*name a test defined in",
+            ):
+                gen_state._check_dependency(
+                    dependency("tests/test_docs_freshness.py", "test_does_not_exist"),
+                    "tasks[T26-RULING-INSTALL-01].dependencies[0]",
+                    kernel,
+                )
 
     def test_invalid_kernels_rejected(self):
         base = load_kernel()
@@ -545,13 +633,30 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # (2026-09-01) splits L10-A-G2B-CONTRACT-PREFIX-01 out of the L10
         # row: 114 + 1 = 115. The D-169 stage-1 ruling (2026-09-01) splits
         # three night rows out of UNATTENDED-LAUNCH-01: 115 + 3 = 118; #258
-        # registers its two realized-prefill rows: 118 + 2 = 120; the
+        # registers its two realized-prefill rows: 118 + 2 = 120; IDS-CHECK
+        # retired at the #258 merge (4a41d791): 120 - 1 = 119; the
         # NIGHT-GATE-01, NIGHT-DRIVER-01, D165-CLOSEOUT-CORE-01 retired at their
         # 2026-09-02 merges (PRs 264, 265, 261): 119 - 3 = 116;
         # D165-SIDECAR-EMIT-01 retired at its 2026-09-02 merge (PR 267):
-        # 116 - 1 = 115.
+        # 116 - 1 = 115; PROJECTION-02 retired (#269) while
+        # LAUNCH-REALIZATION-RECHECK-01 and DECODE-IDENTITY-SET-01 registered
+        # (6075389a): 115 - 1 + 2 = 116; 2026-09-02 T26 install wave registers
+        # T26-RULING-INSTALL-01, ED-BRANCH-PROTECTION-E1-01,
+        # ED-D118-NA-TIER-E2-01, and D110-MINT-DEP-RECONCILE-01: 116 + 4 = 120;
+        # the dx/t26-a cold gate (2026-09-02, sections A2 and B4) registers
+        # R7F-DX-PROSE-SCAN-01 and the five S9 rows not already in the kernel
+        # (01b, 02, 03, 05, 06): 120 + 6 = 126; the T26 item-3 lane
+        # (2026-09-02, PHYS-1 limitation) registers
+        # T0-LIVENESS-BOUND-EMPIRICAL-01: 126 + 1 = 127; the census-guard
+        # cold gate (2026-09-02, files 22-25) registers
+        # T0-PROBE-CENSUS-RESOURCE-01: 127 + 1 = 128; the paper-d
+        # fixture-shape cold gate (2026-09-02, files 38-42) registers
+        # DG071-PROVENANCE-TEST-01: 128 + 1 = 129. The 2026-09-03 post-merge
+        # kernel batch registers thirteen rows and retires none (retirements in
+        # that batch are recorded as `shelved`, which keeps the row live in the
+        # kernel and therefore in this set): 129 + 13 = 142.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 116)
+        self.assertEqual(len(self.tasks), 142)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -703,9 +808,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # D-167 retired the D-117 sequence and installed G2-a, G2-b, and the
         # transaction at ranks 2/3/4. G2-a is the dependency-ready lane head.
         # The later scored _v6 leg adds one net quiet-Mac row, so 13 becomes
-        # 14 after the D-167 replacement.
+        # 14 after the D-167 replacement; T0-LIVENESS-BOUND-EMPIRICAL-01
+        # (T26 item 3, PHYS-1 limitation, 2026-09-02) makes it 15.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 14)
+        self.assertEqual(len(quiet), 15)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)

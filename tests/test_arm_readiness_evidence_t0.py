@@ -795,6 +795,157 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
 
+    def _author_with_r1_age(self, age_ns: int) -> dict[str, object]:
+        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        clock_state = {"now": SYNTHETIC_MONOTONIC_NS}
+        original_batch = t0._fresh_clock_reference_batch
+
+        def finish_r1_then_advance(context, *, kind):
+            result = original_batch(context, kind=kind)
+            clock_state["now"] += age_ns
+            return result
+
+        clock = t0._DerivationClock(
+            monotonic_ns=lambda: clock_state["now"],
+            utc_now=lambda: SYNTHETIC_UTC_NOW,
+            sample_anchor=lambda: t0._clock_reference.ClockAnchor(
+                realtime_ns=(
+                    SYNTHETIC_REALTIME_OFFSET_NS + SYNTHETIC_MONOTONIC_NS
+                ),
+                monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
+                read_skew_ns=1_000,
+            ),
+        )
+        with (
+            author_environment(repository),
+            mock.patch.object(t0, "_production_clock", return_value=clock),
+            mock.patch.object(
+                t0,
+                "_fresh_clock_reference_batch",
+                side_effect=finish_r1_then_advance,
+            ),
+        ):
+            return author_arm_readiness_evidence_t0(pack, custody)
+
+    def test_issuance_refuses_t0_when_r1_batch_is_stale_by_600s_plus_1ns(
+        self,
+    ) -> None:
+        with self.assertRaises(T0EvidenceAuthoringError) as caught:
+            self._author_with_r1_age(600_000_000_001)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_predicate_refused",
+        )
+
+    def test_issuance_passes_t0_when_r1_batch_is_600s_minus_1ns_old(
+        self,
+    ) -> None:
+        self.assertEqual(
+            self._author_with_r1_age(599_999_999_999)["status"],
+            "PASS",
+        )
+
+    def test_issuance_t0_liveness_bound_passes_at_exactly_600s(self) -> None:
+        self.assertEqual(
+            self._author_with_r1_age(600_000_000_000)["status"],
+            "PASS",
+        )
+
+    def test_t0_liveness_constant_is_derived_from_the_post_r1_probe_census(self) -> None:
+        """The ruled 600 s = (post-R1 ``_fresh_probe`` sites) × 45 s + 105 s.
+
+        What this test pins: the PROVENANCE ARITHMETIC of cold gate T26
+        item 3, which states the constant as eleven governed post-R1 probe
+        sites times ``_PROBE_TIMEOUT_SECONDS`` plus 105 s of ungoverned
+        work. Each factor is read from the code (the sites by an AST
+        census of direct ``_fresh_probe`` calls, the timeout from the
+        module constant), so an edit to either factor fails here while
+        the constant stays 600 s. The one site inside
+        ``_fresh_clock_reference_batch`` IS R1 and is excluded.
+
+        What this test does NOT protect: the runtime R1→stamp envelope.
+        A static census counts sites, not seconds — a loop around a site,
+        a deriver registered for a second row, a direct ``_execute_probe``
+        caller such as ``_boot_probe`` moved above the ``validity_origin``
+        stamp, a retry inside ``_fresh_probe``, or a wait in another
+        module all change the envelope while this test stays green. The
+        ruling's 2026-09-02 correction already records the fixed subtotal
+        as 715 s (495 s probes + 220 s git ceilings) against the ruled
+        600 s; the runtime interval is unmeasured and is carried by kernel
+        row ``T0-LIVENESS-BOUND-EMPIRICAL-01`` (the census-the-resource
+        hardening is ``T0-PROBE-CENSUS-RESOURCE-01``).
+
+        Completeness of the census: direct calls must be the ONLY way the
+        module reaches ``_fresh_probe``. Rather than enumerating reference
+        forms (two rounds showed the enumeration is never complete — Sol
+        256 F1, terra 257 F1; cold gate files 22–25), every string-valued
+        field of every AST node is censused: the identifier may appear
+        only as the single ``FunctionDef.name`` and as the ``Name.id`` of a
+        counted direct call. Aliases, stored callbacks, attribute lookups,
+        string constants (including escaped or implicitly concatenated
+        spellings and NFKC-normalised homoglyphs, which the parser folds),
+        import shadows, ``as``-bindings, class/async redefinitions,
+        parameter, keyword, ``except … as`` and ``match`` captures all
+        fail. Comments and docstrings are not AST fields and may name the
+        helper freely. Deliberately constructed names
+        (``"_fresh_" + "probe"``, ``importlib`` lookups, star-import
+        rebinding) are invisible to any static check and are not guarded
+        (D-161: deliberate-only, no mistake reaches them). Sites are
+        counted as DISTINCT call nodes, attributed to the innermost
+        enclosing function, so a call inside a nested closure is counted
+        once. The equality with ``_MIN_IDLE_NS`` that the ruling noted is
+        a coincidence of two unrelated quantities (anchor span floor, idle
+        capture floor) and is deliberately not pinned.
+        """
+
+        import ast
+        from collections import Counter
+
+        tree = ast.parse(Path(t0.__file__).read_text(encoding="utf-8"))
+        definitions = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "_fresh_probe"
+        ]
+        self.assertEqual(len(definitions), 1)
+        direct_call_names = [
+            call.func
+            for call in ast.walk(tree)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "_fresh_probe"
+        ]
+        permitted = {id(name) for name in direct_call_names} | {id(definitions[0])}
+        stray = [
+            (type(node).__name__, field, getattr(node, "lineno", None))
+            for node in ast.walk(tree)
+            if id(node) not in permitted
+            for field, value in ast.iter_fields(node)
+            for item in (value if isinstance(value, list) else [value])
+            if item == "_fresh_probe"
+        ]
+        self.assertEqual(stray, [], "non-call mentions of _fresh_probe")
+        # ast.walk is breadth-first, so a nested function's assignment
+        # overwrites its enclosing function's: the innermost def wins.
+        innermost: dict[int, str] = {}
+        for function in ast.walk(tree):
+            if isinstance(function, ast.FunctionDef):
+                for child in ast.walk(function):
+                    innermost[id(child)] = function.name
+        sites_by_function = Counter(
+            innermost.get(id(name), "<module>") for name in direct_call_names
+        )
+        self.assertEqual(sites_by_function.pop("_fresh_clock_reference_batch"), 1)
+        post_r1_sites = len(direct_call_names) - 1
+        self.assertEqual(sum(sites_by_function.values()), post_r1_sites)
+        self.assertEqual(post_r1_sites, 11, sites_by_function)
+        self.assertEqual(t0._PROBE_TIMEOUT_SECONDS, 45)
+        self.assertEqual(
+            readiness._T0_R1_TO_VALIDITY_ORIGIN_LIVENESS_NS,
+            (post_r1_sites * t0._PROBE_TIMEOUT_SECONDS + 105) * 1_000_000_000,
+        )
+
     def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
         fake_mlx = ModuleType("mlx")
         fake_mlx.__path__ = []
