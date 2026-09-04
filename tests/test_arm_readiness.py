@@ -1906,6 +1906,23 @@ class LaunchLineageRelocationTests(unittest.TestCase):
             "bundle launch lineage differs", self._assert_refuses()
         )
 
+    def test_direct_relocation_refuses_carrier_without_locator_authentication(
+        self,
+    ) -> None:
+        self.carrier["source_locator_sha256"] = "0" * 64
+        self._rewrite_carrier()
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            readiness.authenticate_launch_lineage(
+                self.lineage,
+                require_completion=False,
+                relocation_carrier=self.carrier_path,
+            )
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertEqual(
+            str(caught.exception),
+            "direct lineage relocation requires an authenticated root locator",
+        )
+
     def test_relocation_target_symbolic_link_keeps_launch_binding_mismatch(self) -> None:
         target = self.relocation_root / "window-plan-real"
         self.relocated_window_root.rename(target)

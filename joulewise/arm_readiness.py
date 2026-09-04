@@ -10291,11 +10291,12 @@ def authenticate_launch_lineage(
     launch_binding_cache: dict[Path, bytes] = {}
     if relocation_carrier is not None and _relocation is not None:
         raise ValueError("relocation carrier was supplied twice")
-    relocation = (
-        _load_launch_lineage_relocation(relocation_carrier)
-        if relocation_carrier is not None
-        else _relocation
-    )
+    if relocation_carrier is not None:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "direct lineage relocation requires an authenticated root locator",
+        )
+    relocation = _relocation
     if require_completion and require_completion_absent:
         raise ValueError(
             "completion cannot be simultaneously required and required absent"
