@@ -19,6 +19,20 @@ if (process.argv.length > 2) {
 const contractRelative = "docs/contracts/bridge_protocol.md";
 const beginMarker = "<!-- BEGIN BRIDGE CONSUMER DRIFT MANIFEST -->";
 const endMarker = "<!-- END BRIDGE CONSUMER DRIFT MANIFEST -->";
+const requiredSnippetIds = [
+  "scope_authority",
+  "quiet_mac",
+  "no_bypass",
+  "one_hop",
+  "envelope_failure",
+];
+const requiredConsumers = [
+  "CLAUDE.md",
+  "AGENTS.md",
+  ".claude/agents/codex.md",
+  ".claude/commands/codex.md",
+  ".claude/skills/codex/SKILL.md",
+];
 const errors = [];
 
 function read(relative) {
@@ -40,6 +54,12 @@ function occurrenceCount(text, needle) {
     count += 1;
     offset = found + needle.length;
   }
+}
+
+function sameMembers(actual, expected) {
+  return actual.length === expected.length
+    && new Set(actual).size === actual.length
+    && actual.every((item) => expected.includes(item));
 }
 
 const contract = read(contractRelative);
@@ -75,6 +95,26 @@ if (manifest !== null) {
   }
   if (manifest.consumers === null || typeof manifest.consumers !== "object" || Array.isArray(manifest.consumers)) {
     errors.push(`${contractRelative}: consumers must be an object`);
+  }
+
+  if (errors.length === 0) {
+    const snippetIds = Object.keys(manifest.snippets);
+    if (!sameMembers(snippetIds, requiredSnippetIds)) {
+      errors.push(`${contractRelative}: snippet IDs must be exactly ${requiredSnippetIds.join(", ")}`);
+    }
+    const consumers = Object.keys(manifest.consumers);
+    if (!sameMembers(consumers, requiredConsumers)) {
+      errors.push(`${contractRelative}: consumers must be exactly ${requiredConsumers.join(", ")}`);
+    }
+    for (const relative of requiredConsumers) {
+      const snippetIdsForConsumer = manifest.consumers[relative];
+      if (!Array.isArray(snippetIdsForConsumer)
+          || !sameMembers(snippetIdsForConsumer, requiredSnippetIds)) {
+        errors.push(
+          `${relative}: manifest snippet IDs must be exactly ${requiredSnippetIds.join(", ")}`,
+        );
+      }
+    }
   }
 
   if (errors.length === 0) {
