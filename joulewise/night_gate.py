@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import uuid
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from typing import Callable, Mapping
 
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"
-PLAN_SCHEMA = "joulewise.night_plan.v1"
+PLAN_SCHEMA = "joulewise.night_plan.v2"
 RECEIPT_CLASSES = (
     "DIAGNOSTIC_NO_PACK",
     "REHEARSAL_STUB",
@@ -107,6 +108,8 @@ _PLAN_KEYS = {
     "window_max_s",
     "authored_epoch_s",
     "repo_head",
+    "measurement_root",
+    "measurement_head",
     "chain_path",
     "chain_sha256_path",
     "custody_root",
@@ -163,6 +166,7 @@ class Probes:
     monotonic_ns: Callable[[], int]
     read_text: Callable[[str], str]
     checkout_head: Callable[[], str]
+    measurement_head: Callable[[str], str]
 
 
 @dataclass(frozen=True)
@@ -173,6 +177,8 @@ class NightPlan:
     window_max_s: int
     authored_epoch_s: float
     repo_head: str
+    measurement_root: str
+    measurement_head: str
     chain_path: str
     chain_sha256_path: str
     custody_root: str
@@ -188,10 +194,16 @@ class NightPlan:
             extra = sorted(repr(item) for item in keys - _PLAN_KEYS)
             raise PlanError(
                 "night_plan_malformed",
-                f"plan keys are not exact (missing={missing}, extra={extra})",
+                f"plan keys are not exact (missing={missing}, extra={extra}); "
+                "joulewise.night_plan.v1 is retired and the plan must be "
+                "re-authored under joulewise.night_plan.v2",
             )
         if value.get("schema") != PLAN_SCHEMA:
-            raise PlanError("night_plan_malformed", "schema must be joulewise.night_plan.v1")
+            raise PlanError(
+                "night_plan_malformed",
+                "schema joulewise.night_plan.v1 is retired and the plan must be "
+                "re-authored under joulewise.night_plan.v2",
+            )
 
         def require_text(name: str) -> str:
             item = value.get(name)
@@ -223,6 +235,22 @@ class NightPlan:
                 "night_plan_malformed",
                 "repo_head must be exactly 40 lowercase hexadecimal characters",
             )
+        measurement_root = require_text("measurement_root")
+        if not os.path.isabs(measurement_root):
+            raise PlanError(
+                "night_plan_malformed",
+                "measurement_root must be an absolute path; "
+                "joulewise.night_plan.v1 is retired and the plan must be "
+                "re-authored under joulewise.night_plan.v2",
+            )
+        measurement_head = require_text("measurement_head")
+        if _HEAD_RE.fullmatch(measurement_head) is None:
+            raise PlanError(
+                "night_plan_malformed",
+                "measurement_head must be exactly 40 lowercase hexadecimal characters; "
+                "joulewise.night_plan.v1 is retired and the plan must be "
+                "re-authored under joulewise.night_plan.v2",
+            )
         chain_path = require_text("chain_path")
         chain_sha256_path = require_text("chain_sha256_path")
         custody_root = require_text("custody_root")
@@ -243,6 +271,8 @@ class NightPlan:
             window_max_s=window_max_s,
             authored_epoch_s=authored_epoch_s,
             repo_head=repo_head,
+            measurement_root=measurement_root,
+            measurement_head=measurement_head,
             chain_path=chain_path,
             chain_sha256_path=chain_sha256_path,
             custody_root=custody_root,
@@ -570,8 +600,9 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
             ),
         )
 
-    # R-6: freshness and exact checkout identity.
+    # R-6 (reinterpreted): freshness and exact measurement-checkout identity.
     try:
+        measurement_checkout_head = probes.measurement_head(plan.measurement_root)
         checkout_head = probes.checkout_head()
     except Exception as exc:
         return _probe_refusal(plan, probes, rows, evidence, exc)
@@ -579,7 +610,10 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
         {
             "authored_epoch_s": plan.authored_epoch_s,
             "plan_repo_head": plan.repo_head,
-            "checkout_head": checkout_head,
+            "driver_checkout_head": checkout_head,
+            "measurement_root": plan.measurement_root,
+            "plan_measurement_head": plan.measurement_head,
+            "measurement_checkout_head": measurement_checkout_head,
         }
     )
     if plan.authored_epoch_s > now_epoch_s:
@@ -596,14 +630,16 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
             rows,
             Refusal("night_plan_stale", "plan is older than 36 hours", ()),
         )
-    if checkout_head != plan.repo_head:
+    if measurement_checkout_head != plan.measurement_head:
         return _finish(
             plan,
             probes,
             rows,
             Refusal(
                 "night_plan_stale",
-                f"plan repo_head {plan.repo_head} does not match checkout HEAD {checkout_head}",
+                f"plan measurement_head {plan.measurement_head} does not match "
+                f"measurement checkout HEAD {measurement_checkout_head} at "
+                f"{plan.measurement_root}",
                 (),
             ),
         )
@@ -674,7 +710,9 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
             ),
         )
     rows["C5"].status = "PASS"
-    rows["C5"].measured["detail"] = "window, plan freshness, HEAD, and chain identity passed"
+    rows["C5"].measured["detail"] = (
+        "window, plan freshness, measurement HEAD, and chain identity passed"
+    )
 
     if plan.receipt_class == "TRANSACTION_PACK":
         return _finish(

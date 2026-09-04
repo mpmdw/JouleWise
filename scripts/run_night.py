@@ -273,12 +273,21 @@ def make_probes() -> Probes:
             raise RuntimeError(f"checkout head probe failed: {result.stderr.strip()}")
         return result.stdout.strip()
 
+    def measurement_head(root: str) -> str:
+        result = _probe_runner(("git", "-C", root, "rev-parse", "HEAD"))
+        if result.exit_code != 0:
+            raise RuntimeError(
+                f"measurement head probe failed for {root}: {result.stderr.strip()}"
+            )
+        return result.stdout.strip()
+
     return Probes(
         run=_probe_runner,
         now_epoch_s=time.time,
         monotonic_ns=time.monotonic_ns,
         read_text=lambda path: Path(path).read_text(encoding="utf-8"),
         checkout_head=checkout_head,
+        measurement_head=measurement_head,
     )
 
 
@@ -877,6 +886,8 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
         window_max_s=1,
         authored_epoch_s=now,
         repo_head="0" * 40,
+        measurement_root="/",
+        measurement_head="0" * 40,
         chain_path="",
         chain_sha256_path="",
         custody_root=custody,

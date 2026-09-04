@@ -37,16 +37,29 @@ template="$repo/configs/launchd/com.joulewise.night.plist.template"
   exit 3
 }
 plan="${plan:A}"
-plan_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repo_head"])' "$plan")"
-actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"
-[[ "$plan_head" == "$actual_head" ]] || {
-  print "plan repo_head does not match checkout HEAD" >&2
-  exit 3
-}
 custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
 courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
+  plan_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repo_head"])' "$plan")"
+  if ! actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"; then
+    print "unable to read repo_head from driver checkout" >&2
+    exit 3
+  fi
+  [[ "$plan_head" == "$actual_head" ]] || {
+    print "plan repo_head does not match driver checkout HEAD" >&2
+    exit 3
+  }
+  measurement_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["measurement_root"])' "$plan")"
+  plan_measurement_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["measurement_head"])' "$plan")"
+  if ! actual_measurement_head="$(/usr/bin/git -C "$measurement_root" rev-parse HEAD)"; then
+    print "unable to read measurement_head from measurement checkout" >&2
+    exit 3
+  fi
+  [[ "$plan_measurement_head" == "$actual_measurement_head" ]] || {
+    print "plan measurement_head does not match measurement checkout HEAD" >&2
+    exit 3
+  }
   courier_bin="$(command -v claude || true)"
   [[ -n "$courier_bin" && -x "$courier_bin" ]] || {
     print "courier unavailable: command -v claude found no executable" >&2

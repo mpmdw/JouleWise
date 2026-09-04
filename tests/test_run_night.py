@@ -60,6 +60,32 @@ def _green_results() -> dict[tuple[str, ...], night_gate.ProbeResult]:
     }
 
 
+def _init_git_repo(root: Path) -> str:
+    root.mkdir(parents=True)
+    subprocess.run(["/usr/bin/git", "init", "-q", str(root)], check=True)
+    marker = root / "measurement.txt"
+    marker.write_text("initial\n", encoding="utf-8")
+    subprocess.run(["/usr/bin/git", "-C", str(root), "add", marker.name], check=True)
+    subprocess.run(
+        [
+            "/usr/bin/git",
+            "-C",
+            str(root),
+            "-c",
+            "user.name=JouleWise Test",
+            "-c",
+            "user.email=joulewise-test@example.invalid",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        check=True,
+    )
+    return subprocess.check_output(
+        ["/usr/bin/git", "-C", str(root), "rev-parse", "HEAD"], text=True
+    ).strip()
+
+
 class ProbeSource:
     def __init__(self, now_epoch_s: float) -> None:
         self.now_epoch_s = now_epoch_s
@@ -85,6 +111,7 @@ class ProbeSource:
             monotonic_ns=self.monotonic_ns,
             read_text=lambda path: Path(path).read_text(encoding="utf-8"),
             checkout_head=lambda: HEAD,
+            measurement_head=lambda _root: HEAD,
         )
 
 
@@ -157,6 +184,7 @@ class NightDriverTests(unittest.TestCase):
             hashlib.sha256(self.registration.read_bytes()).hexdigest(),
         )
         self.registration_hash_patch.start()
+        self.real_make_probes = self.driver.make_probes
         self.probes_patch = mock.patch.object(
             self.driver, "make_probes", return_value=self.source.probes()
         )
@@ -204,6 +232,8 @@ class NightDriverTests(unittest.TestCase):
                     "window_max_s": window_max_s,
                     "authored_epoch_s": t0 - 1,
                     "repo_head": HEAD,
+                    "measurement_root": str(self.root),
+                    "measurement_head": HEAD,
                     "chain_path": str(self.chain),
                     "chain_sha256_path": str(self.sidecar),
                     "custody_root": str(self.custody),
@@ -1092,12 +1122,64 @@ class NightDriverTests(unittest.TestCase):
         self.assertTrue(was_sent)
         self.assertGreaterEqual(fsync.call_count, 4)
 
+    def test_moved_real_measurement_checkout_refuses_as_stale(self) -> None:
+        measurement = self.root / "measurement-probe"
+        pinned_head = _init_git_repo(measurement)
+        plan_mapping = json.loads(self.plan_path.read_text(encoding="utf-8"))
+        plan_mapping["measurement_root"] = str(measurement)
+        plan_mapping["measurement_head"] = pinned_head
+        self.plan_path.write_text(json.dumps(plan_mapping), encoding="utf-8")
+
+        marker = measurement / "measurement.txt"
+        marker.write_text("moved\n", encoding="utf-8")
+        subprocess.run(
+            ["/usr/bin/git", "-C", str(measurement), "add", marker.name], check=True
+        )
+        subprocess.run(
+            [
+                "/usr/bin/git",
+                "-C",
+                str(measurement),
+                "-c",
+                "user.name=JouleWise Test",
+                "-c",
+                "user.email=joulewise-test@example.invalid",
+                "commit",
+                "-qm",
+                "moved",
+            ],
+            check=True,
+        )
+        moved_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", str(measurement), "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        self.assertNotEqual(pinned_head, moved_head)
+
+        production_measurement_probe = self.real_make_probes().measurement_head
+        fake = self.source.probes()
+        probes = night_gate.Probes(
+            run=fake.run,
+            now_epoch_s=fake.now_epoch_s,
+            monotonic_ns=fake.monotonic_ns,
+            read_text=fake.read_text,
+            checkout_head=fake.checkout_head,
+            measurement_head=production_measurement_probe,
+        )
+        plan = self.driver._load_plan(self.plan_path)
+        receipt = night_gate.evaluate_night(plan, probes)
+        self.assertEqual("night_plan_stale", receipt.refusal.reason)
+        self.assertIn("measurement_head", receipt.refusal.detail)
+
     def _installer_plan(self, root: Path) -> Path:
         plan = json.loads(self.plan_path.read_text())
         plan["repo_head"] = subprocess.check_output(
             ["/usr/bin/git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
             text=True,
         ).strip()
+        measurement_root = root / "measurement"
+        plan["measurement_root"] = str(measurement_root)
+        plan["measurement_head"] = _init_git_repo(measurement_root)
         plan["custody_root"] = str(root / "custody")
         path = root / "install-plan.json"
         path.write_text(json.dumps(plan), encoding="utf-8")
