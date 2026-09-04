@@ -17,3 +17,13 @@ The ratchet of eleven rounds left no dead mechanism: the retired opt-in dedupe, 
 
 ## Integration replay (row 9)
 Full unpiped suite on `int/2026-09-04-watchdog` = main d7d74225 + the final head; log `~/.claude/jobs/3c46c831/tmp/int-watchdog-replay-final.log`; exact tail appended below when it completes.
+
+```text
+FAIL: test_decision_index_matches_decision_bodies (test_docs_freshness.DocsFreshnessTests.test_decision_index_matches_decision_bodies)
+FAIL: test_real_client_worker_artifact_contract_over_localhost (test_node_worker_subprocess.NodeWorkerSubprocessTests.test_real_client_worker_artifact_contract_over_localhost)
+Ran 4992 tests in 6634.918s
+FAILED (failures=2, skipped=125)
+rc=1
+```
+
+Exact tail of the unpiped full suite on integration tree 6975485d (main d7d74225 + branch head 73ac9065): 4992 tests, 2 failures, 125 skipped. (1) `test_docs_freshness…decision_index_matches_decision_bodies`: the D-172 body landed on main before its index row; the row was added on main at 144494bb (now merged into this branch), and the module is green here after the merge. (2) `test_node_worker_subprocess…over_localhost`: pre-existing on main in isolation. After that replay the branch received four commits that touch only the two shell installers and one test assertion (portable `base64 --decode`, `plutil` fallback to plistlib, uninstall never creating custody, interpreter pin compared by resolved path); each was bench-run through the installer/night test modules on macOS and the full CI suite is green on the final head (row 11). Row 9 satisfied with those exclusions recorded.
