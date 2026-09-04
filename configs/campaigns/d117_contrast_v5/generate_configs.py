@@ -9,7 +9,7 @@ import json
 import math
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
@@ -173,6 +173,7 @@ N_BLOCKS = 10
 MEMBERS_PER_BLOCK = 4
 MEMBERS_PER_ARM = N_BLOCKS * MEMBERS_PER_BLOCK
 TOTAL_SCIENCE_MEMBERS = MEMBERS_PER_ARM * 2
+ABBA_POSITIONS = (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2"))
 
 
 def freeze_aware_status(freeze_reference: object) -> str:
@@ -1114,6 +1115,13 @@ def render_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def render_suite_manifest_bytes(value: dict[str, Any]) -> bytes:
+    """Render exactly the effective bytes named by suite_manifest_sha256."""
+
+    effective = SuiteManifest.from_mapping(value).to_dict()
+    return (json.dumps(effective, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -1310,7 +1318,6 @@ def workload_for(
             "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
             "repetitions": 1,
             "warmup_runs": 1,
-            "prompt_tokens": DECODE_PROMPT_TOKENS["A"],
             "output_tokens": 512,
         }
     if arm not in {"A", "B"}:
@@ -1466,6 +1473,53 @@ def decode_suite_manifest(arm: str, prompt_index: int) -> dict[str, Any]:
     }
     SuiteManifest.from_mapping(manifest)
     return manifest
+
+
+def decode_declared_suite_manifest_set(arm: str) -> list[dict[str, Any]]:
+    """Declare the closed manifest census from the registered block rotation."""
+
+    counts = [0] * len(DECODE_PROFILE["prompts"])
+    members_per_block = sum(label == arm for label, _position in ABBA_POSITIONS)
+    for stage in STAGE_SPECS:
+        if stage["measurement_arm"] != "decode":
+            continue
+        for block in range(stage["first_block"], stage["last_block"] + 1):
+            counts[decode_prompt_index(block)] += members_per_block
+    return [
+        {
+            "suite_manifest_ref": (
+                active_generation().pack_rel / decode_suite_relpath(arm, prompt_index)
+            ).as_posix(),
+            "suite_manifest_sha256": suite_manifest_sha256(
+                decode_suite_manifest(arm, prompt_index)
+            ),
+            "declared_member_count": counts[prompt_index],
+        }
+        for prompt_index in range(len(DECODE_PROFILE["prompts"]))
+    ]
+
+
+def declared_identity_workload_profile(
+    measurement_arm: str, arm: str
+) -> dict[str, Any]:
+    if measurement_arm == "decode":
+        return {
+            "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "prompt_tokens": None,
+            "output_tokens": 512,
+            "prompt_text": None,
+            "dataset_ref": None,
+            "suite_manifest_set": decode_declared_suite_manifest_set(arm),
+        }
+    workload = workload_for(measurement_arm, arm)
+    return {
+        **workload,
+        "prompt_tokens": workload.get("prompt_tokens"),
+        "prompt_text": workload.get("prompt_text"),
+        "dataset_ref": None,
+    }
 
 
 def decode_workload_candidate() -> dict[str, Any]:
@@ -1632,13 +1686,12 @@ def arm_plan(
 def build_runs() -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     all_runs: list[dict[str, Any]] = []
     by_stage: dict[str, list[dict[str, Any]]] = {}
-    positions = (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2"))
     for stage in STAGE_SPECS:
         stage_runs: list[dict[str, Any]] = []
         measurement_arm = stage["measurement_arm"]
         for block in range(stage["first_block"], stage["last_block"] + 1):
             prompt_index = decode_prompt_index(block) if measurement_arm == "decode" else None
-            for sequence_index, (arm, position) in enumerate(positions, start=1):
+            for sequence_index, (arm, position) in enumerate(ABBA_POSITIONS, start=1):
                 member_id = run_id(measurement_arm, block, position.lower())
                 row = {
                     "run_id": member_id,
@@ -2577,16 +2630,9 @@ def build_tree(
                     "model_source": MODELS[arm]["source"],
                     "model_revision": MODELS[arm]["revision"],
                     "quantization": dict(QUANTIZATION),
-                    "workload_profile": {
-                        **workload_for(measurement_arm, arm),
-                        "prompt_tokens": (
-                            workload_for(measurement_arm, arm).get("prompt_tokens")
-                        ),
-                        "prompt_text": (
-                            workload_for(measurement_arm, arm).get("prompt_text")
-                        ),
-                        "dataset_ref": None,
-                    },
+                    "workload_profile": declared_identity_workload_profile(
+                        measurement_arm, arm
+                    ),
                 },
                 "config_inventory": [
                     {
@@ -2774,6 +2820,43 @@ def build_tree(
             "member_replacement_authority": False,
         },
     }
+
+
+def validate_gamma_identity_unit_roster(tree: Mapping[str, Any]) -> None:
+    """Enforce R-7's exact ordered GAMMA roster and producer-plan mapping."""
+
+    expected = [
+        (
+            f"{arm}/{measurement_arm}",
+            {
+                "plan_id": (
+                    f"plan-d117-floor-{MODEL_ID_TOKENS[arm]}-"
+                    f"decode-prefill-p{PREFILL_LENGTH}-v5"
+                ),
+                "path": f"../{FLOOR_PACKS[arm].name}/calibration_plan.json",
+            },
+        )
+        for arm, measurement_arm in (
+            ("A", "decode"),
+            ("A", PREFILL_ARM),
+            ("B", "decode"),
+            ("B", PREFILL_ARM),
+        )
+    ]
+    try:
+        units = tree["arm_attachments"]["identity_pin_projection"]["identity_units"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("gamma_identity_unit_roster_invalid: roster is absent") from exc
+    observed = [
+        (unit.get("identity_unit_id"), unit.get("producer_plan_reference"))
+        for unit in units
+        if isinstance(unit, Mapping)
+    ]
+    if observed != expected:
+        raise ValueError(
+            "gamma_identity_unit_roster_invalid: expected ordered "
+            + ", ".join(unit_id for unit_id, _producer in expected)
+        )
 
 
 def readme_bytes() -> bytes:
@@ -2978,7 +3061,9 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     write_bytes(out / "decode_workload_candidate.json", decode_workload_bytes)
     for arm in ("A", "B"):
         for prompt_index in range(len(DECODE_PROFILE["prompts"])):
-            suite_bytes = render_json(decode_suite_manifest(arm, prompt_index))
+            suite_bytes = render_suite_manifest_bytes(
+                decode_suite_manifest(arm, prompt_index)
+            )
             write_bytes(out / decode_suite_relpath(arm, prompt_index), suite_bytes)
 
     declaration_bytes = render_json(consumer_declaration())
@@ -3144,6 +3229,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
         declaration_sha,
         decode_workload_sha,
     )
+    validate_gamma_identity_unit_roster(tree)
     tree_bytes = (
         (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
         if active_generation().preserve_current_frozen_bytes

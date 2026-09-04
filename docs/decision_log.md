@@ -213,7 +213,8 @@ be re-derived by a future agent gets an entry here.
 | D-167 | KERNEL RECONCILED TO LIVE `_v5` STATE; WINDOW-COUNCIL-GATE RETIRED BY SUPERSESSION (magistrate, 2026-09-01, on Ed's direction the same day: "live state of code is ground truth… docs are context"). The kernel's [QUIET-MAC] lane still carried the retired Qwen2.5 `_v3` packs (Q2–Q4) under WINDOW-COUNCIL-GATE (08-15 NOT-READY; 08-20 sitting 13/13 NOT-READY; sitting-3 rows A67–A69 never started) while the live campaign is the `_v5` Qwen3 pair (D-164/165/166) with D-162's modular proof gate (G1 desk / G2 shakedown / G3 nightly) and the `_v5` prep gauntlet (#241, #229, #246, #248) as its readiness evidence. RULING: (1) WINDOW-COUNCIL-GATE is retired by supersession — the readiness evidence for a `_v5` window is D-162's G1/G2/G3 plus Ed's authorization (08-28: diagnostic windows at lead discretion; the transaction on Ed's go); the charter and the 08-15/08-20 sittings remain as record, and their still-open work orders survive only where re-homed to a `_v5` row with a stated reason. (2) Q2–Q4 are RETIRED; `_v5` rows are installed: G2-a probe evening, the desk day (rung pin + pack generation + throwaway-clone re-proof), G2-b/transaction, nightly G3, TRANSFER-FIDUCIAL-01 post-campaign, the `_v6` scored leg post-fiducial. (3) A67–A69 are retired by supersession. Soundness fences unchanged: pre-registration, evidence immutability, D-078 no-retry, D-149 T-0 mechanical conditions (2)–(5). | adopted (magistrate on Ed's 09-01 direction) |
 | D-168 | D-165 CLOSE-OUT ARTIFACT OWNERSHIP: SIDECAR + CLOSE-OUT, ONE PREDICATE HOME (magistrate, 2026-09-01). Scout `06-ratio-closeout-scout.md` established that the ordinary ratio operands exist in every minted `joulewise.detection_floor_artifact.v2` cell, that no issued artifact preserves the per-block shared/local width split R_cm needs (extraction sums them; the mint discards the private records), and that the frozen 109-key renderer cannot carry the 126-key `_v5` registry. RULING: (1) the floor artifact is unchanged; the mint emits a separately hash-bound `joulewise.d165_dominance_replay.v1` sidecar (per comparative cell: authenticated shared-edge bound, every block's raw replay inputs, derived shared/local widths, replayed point floor, common-mode corner floor, ratio, pass flag; per cell and component: the independent ratio record). (2) Close-out artifact `joulewise.d165_dominance_closeout.v1`: exactly eight ordinary ratios and four comparative R_cm values; globals `all_independent_pass`, `all_required_common_mode_pass`, `branch` (A/B), `dominance_sentence_licensed`, `subtitle_licensed`, `refusal_reason`; any missing, unauthenticated, or zero-denominator result selects NEITHER branch and stops filling. (3) `dominance_ratio`, `split_common_mode_block_width`, `replay_common_mode_dominance` have ONE home, `joulewise/dominance_closeout.py`, imported by the `_v5` generator so registration and production cannot drift. (4) Order: core + builder → mint sidecar emission → successor renderer (after the G2-a selection record) → end-to-end fixture replay; each stream under exhaustive WRITE_SCOPE with a distinct-lens refuter and delta re-audit. (5) RENDERER-V5-SUCCESSOR-01 and the close-out rows are kernel-registered by the D-167 follow-up. Authority: `docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md`; core lane refuted by terra (17) + luna (18), fix round in flight. | adopted (magistrate) |
 | D-169 | UNATTENDED LOOP FIRST (Ed directive, in-thread 2026-09-01; supersedes D-127 §5's "built OFF the night-critical path" ordering): the D-127 autonomous window loop is the TOP lane and is built BEFORE the remaining `_v5` transaction ladder, so the magistrate drives measurement windows entirely without Ed present. Ed's words: "why are quiet windows still gated by me? why can't you do this? i'm tired of having to be at the machine" and, on D-127 §5: "bad. that should be done first. so you can drive the experiments entirely." Owning rows: `UNATTENDED-LAUNCH-01` (GO-receipt consumer in `scripts/launch_window.py`, launch-then-verify relaunch harness, independent launchd fallback) and the `T0-UNATTENDED-01` remainder (rehearsal evaluator blockers). UNCHANGED: the zero-agent capture fence (D-127 §2); D-115 install conditions and Ed personally running the single privileged install command (D-127 §3); the D-118/D-121 gauntlet on every merge. Ed-hands residue is limited to what rulings literally require — never per-window presence; before any further window date is requested from Ed, the unattended plan with that one command is delivered to him. | adopted (Ed, in-thread; transcribed by the magistrate) |
-| D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | open (installs via T26-RULING-INSTALL-01) |
+| D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | adopted (magistrate, 2026-09-03; installed by PRs #273, #274, #275) |
+| D-171 | HANDS-FREE WEEK — Ed's delegations for unattended windows: E-10 amended (driver invokes the launcher), hC + transaction GO delegated to the magistrate's gate, watchdog install authorized, 5-min stand-down | ratified (Ed, 2026-09-02) |
 
 ---
 
@@ -8457,6 +8458,37 @@ at the #131 merge (2026-08-12).
    Every U11 reason makes readiness REFUSE. No D-117 pack may arm before that
    U8 consumer lands and passes.
 
+**Amendment (2026-09-02, ruling 171a R-7):**
+
+> GAMMA retains exactly four ordered units: `A/decode`, `A/prefill_p<N>`,
+> `B/decode`, `B/prefill_p<N>`, where N is the prefill token length fixed by
+> the G2-a `joulewise.prefill_prompt_pin.v2` record (512 for `_v5`; the
+> `prefill_p256` literals in this clause, in U8, and in the D-165 census example
+> were `_v3`-era values and are superseded by `<N>`). A references the smaller
+> model's producer plan and B the larger's, each using the same model/runtime
+> pins as the shared floor mint. Each unit binds an independently declared,
+> closed set of exact scientific-config identities, digested into
+> `config_set_sha256` as the unit's config-set digest (one member identity: the
+> scientific hash; several: the domain-separated set digest). Within a unit the
+> declared per-manifest member census — computed from the pre-registered
+> rotation rule, never folded from emitted configs — must equal the emitted
+> census at freeze, and members binding one manifest share one identity; a
+> missing, extra, duplicate, drifted, or unauthenticated member refuses. Which
+> manifest a member binds is a realization fact recorded per config. Floor
+> producer and consumer units bind through condition-family transport; their
+> config-set digests are not required to be equal.
+
+For clause 3, raw config bytes and inventory bindings remain authoritative for
+member identity; the declaration compares the projected common profile plus
+the declared set, never a re-typed workload. The digest field is
+`config_set_sha256`: a single member uses its scientific hash, while several
+members use the R-1 domain-separated set digest.
+
+*Addendum 2026-09-02 (Opus counter-review nit 2, trace
+`2026-09-02-decode-identity-set/28`): the set digest above is ruling 171a
+R-5 (unit config-set digest), not R-1; R-1 is "exact identities stay
+exact". The original line stands as written.*
+
 ### D-078 registry amendment — 2026-08-11: identity-pin readiness refusals
 
 The closed readiness-refusal vocabulary gains
@@ -10581,3 +10613,263 @@ L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 for S9-12; dated addendum on the
 ruling).
 
 **Cold gate 2026-09-02 (process rules Q1/Q2, custodied at docs/process_traces/2026-09-02-process-rules/):** Q1 requires delegated implementation briefs authorized by implementation-clause rulings to carry an `ACCEPTANCE` clause map and final reports to return its production-site, biting-assertion, and counterfactual rows; its home is `docs/contracts/bridge_protocol.md` §1. Q2 makes unexhibited cross-artifact equality or identity premises inadmissible as MUSTs, requiring a named-revision artifact pair, full JSON pointer, and both observed values; its home is D-160 R-5 as amended (`docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
+
+## D-171: hands-free week — Ed's delegations for unattended windows (Ed, 2026-09-02)
+
+Ed, in-session at ~20:50 PDT on 2026-09-02, replying to the magistrate's
+leave-checklist (verbatim: "1. yes handle yourself. 2. i dont want to have to
+emial you anything back. im sure its fine, go ahead. 3. yes if i reply by
+email you can consider it a permission but the goal here is to not need me at
+all to run the expirement window - 4. yes, authorized. 5 and 6 sounds good i
+trust you. 30 min before a window seems too much"). Ed is away from the
+machine for up to a week from 2026-09-02; hands-free operation is required.
+
+1. **E-10 amendment RATIFIED.** `docs/phase_2/window_runbook.md` E-10 ("Ed
+   personally invokes the sole reviewed launcher exactly once") is amended:
+   the unattended night driver invokes the reviewed launcher
+   (`scripts/launch_window.py`) once per frozen pack. Kernel fence
+   `UNATTENDED-LAUNCH-01` is released on this ground; the runbook clause is
+   rewritten in the lane that installs the driver-side call.
+2. **`hC` custody DELEGATED to the automation.** The step-6 confirmation
+   digest is no longer operator-pasted per use; the cold gate on the
+   watchdog/launch lane rules the concrete route (mode-0600 custody file or
+   driver-derived), and the runbook's "never store hC in an env file"
+   sentence is amended by that ruling.
+3. **Transaction GO DELEGATED.** `V5-TRANSACTION-GO-01` (`ed_external`)
+   is satisfied by the magistrate's own gate (cold-gate-adjudicated
+   readiness) — Ed must not be needed to run a window. An email reply from
+   Ed still counts as permission whenever one arrives. The step-6 YES on the
+   family marker (D-150b) is delegated on the same sentence unless Ed
+   objects before leaving.
+4. **Relaunch watchdog install AUTHORIZED** (user-level launchd, no sudo)
+   once it passes the gauntlet and a cold gate; it emails Ed at each launch
+   and stand-down and honours a stop file.
+5. Measurement checkout of record = `/Users/edr/JouleWise-measurement-20260813`;
+   the magistrate fast-forwards it and relocks its venv (no sudo).
+6. Batch-2 defaults adopted: pre-landing first-use table as a mandatory gate
+   for contract edits that add/move/rename defined terms or code literals,
+   PAIRED with executed probes for behavioural clauses (exact text goes
+   through the cold gate on packet 45 of the decode-identity trace before
+   installation); trace-path placeholders NO; D-161 governs tests NO;
+   named-survivor rule YES as the definition of recurrence; the party
+   proposing to continue does not classify the defect YES.
+7. **Stand-down margin = 5 minutes before a window's t0** (30 was "too
+   much"); email at stand-down and at relaunch; Ed reads, does not reply.
+
+Machine state Ed leaves: lid open, AC attached, caffeinate running,
+screen may lock, no logout, no reboot; FileVault is on, so an unplanned
+reboot halts everything until someone types the disk password (accepted).
+
+**Dated addendum (magistrate via lieutenant, 2026-09-03) — item 6's
+ratification was overstated, and item 7's margin is superseded by the
+watchdog gate's timing ruling. The original text above is unedited.**
+
+**(a) Item 6 — "PAIRED with executed probes" overstates what Ed ratified.**
+Item 6 records the contract-prose gate as a first-use table "PAIRED with
+executed probes for behavioural clauses", and routed the exact text through
+the cold gate on packet 45 of the decode-identity trace. That gate has now
+ruled, and it found the pairing unratified. Cold Fable
+(`docs/process_traces/2026-09-02-decode-identity-set/46-coldgate-fable-ruling-packet-45.md`
+Q6(e)) REFUSED the sub-proposition "as ratified by Ed's sentence" for the
+paired-probe half: the checklist item Ed answered reads only "pre-landing
+first-use table as a mandatory gate for defined-term contract edits, yes",
+and his sentence is "5 and 6 sounds good i trust you" — neither mentions the
+probe pairing, which entered from exhibit 41 §5 by way of exhibit 44 §3. The
+Opus refuter (`47-coldgate-opus-refutation-packet-45.md` Q6-4, severity
+MATERIAL) reached the same conclusion independently and named the three
+clauses Ed never saw: the paired executed probe, the "before a verifier sees
+the text" ordering, and the verifier re-running both; it further noted that
+Ed assented to item 6 as a block of six sub-decisions and amended one of them
+("30 min before a window seems too much") in the same breath, and that "i
+trust you" is a delegation, not a specification.
+
+**Status of the two halves.** The first-use-table half is RATIFIED by Ed and
+installs on the strength of exhibit 45c. The executed-probe half is a
+PROPOSAL PENDING ED — a single yes/no on the amended text (46 Q6) suffices.
+Meanwhile the magistrate applies the probe half under its own authority over
+delegated briefs (it may require evidence of any brief it writes), NOT as an
+Ed-ratified rule; no seat may cite it as such, and it does not bind work the
+magistrate did not commission. Both halves are dropped and counted
+separately under the drop test recorded at 46 Q6.
+
+**(b) Item 7 — the 5-minute stand-down margin is superseded for the forced
+path.** Item 7 set "stand-down margin = 5 minutes before a window's t0",
+honouring Ed's "30 min seems too much". The watchdog cold gate
+(`docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`
+row 4, adopting the Opus Q4 minimum over the Fable resolution requirement)
+ruled the operative timings instead: the cooperative REQUEST file is written
+at **t0 − 25 min**, **SIGTERM at t0 − 16 min**, **SIGKILL at t0 − 15 min**,
+followed by a census verification, enforced by a resident supervisor with
+≤ 10 s resolution. The forcing reason is physical, not procedural:
+`docs/phase_2/window_runbook.md:425-432` requires the machine to be left
+untouched and idle for **at least 10 minutes** before the window's
+calibration-ledger pair, so that macOS's idle-triggered background work
+(XProtect's scheduled scan is the documented instance) runs before the window
+rather than inside it — and that 10 minutes sits on top of the chain's own
+180-second stage settle. A 5-minute margin cannot buy 10 minutes of quiet.
+Ed's "too much" is therefore honoured where it was aimed — at how early the
+session is ASKED to stop — and not at the physics margin the measurement
+needs.
+
+**Executed evidence.** Run 2026-09-03 by the lieutenant at
+`origin/main` = `46eaf18c`:
+`gh pr view 273/274/275/277 --json state,mergedAt` → all four `MERGED`;
+`sed -n '425,432p' docs/phase_2/window_runbook.md` → the ≥ 10-minute idle
+clause quoted above; `awk '/^#+.*Q6/,/^#+.*Q7/'` over file 46 and
+`awk '/Q6-4/,0'` over file 47 → the two Q6 passages quoted above, read in
+worktree `/Users/edr/code/JouleWise-wt-decode-id` (read-only, branch
+`fix/2026-09-02-decode-identity-set`);
+`grep -n -i 'six\|SILENT' docs/process_traces/2026-09-02-hands-free-week/13-audit-code-tests-opus.md`
+→ the §2.2/§5 count discrepancy recorded under `SILENT-REFUSAL-TESTS-01`.
+
+## D-167 dated addendum (magistrate via lieutenant, 2026-09-03): V4-TRANSACTION-01 is retired by supersession
+
+D-167 retired the Qwen2.5 `_v3` window rows and installed the `_v5` rows in
+their place. It did not reach the row that carried the `_v4` family
+transaction, which stayed in the kernel as `partial` in the agent lane — the
+shape the generated queue renders as READY. The 2026-09-02 fresh-Fable
+docs-vs-truth audit (item A4) found it there and named the consequence
+plainly: a session picking a READY agent row would resume a transaction that
+will never run.
+
+**Ruling.** `V4-TRANSACTION-01` is RETIRED BY SUPERSESSION, on the same
+ground and by the same mechanism D-167 used for the window-council gate.
+The ground is D-164, which states that "`_v4` is never collected" because
+the production campaign runs the `_v5` Qwen3 pair; the successor is
+`V5-TRANSACTION-01`, which D-167 already installed as the live transaction
+row. The kernel has no `retired` status word, so the retirement is recorded
+as `shelved` with the reason in the row's status note.
+
+**What is kept.** The row's S-0 clone-proof record is retained verbatim in
+the status note and in
+`docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md`. That proof —
+estate 10 end to end with zero failures, the full probe battery, the
+magistrate's acceptance read — is executability evidence for the instrument
+and is untouched by this retirement. Retiring the row retires the scheduled
+work, not the evidence the work produced.
+
+**Consequential note, not ruled here.** `ARM-PACKET-01` carries a pending
+hard-start dependency on `V4-TRANSACTION-01` and therefore now depends on a
+shelved row. That is visible rather than hidden — the queue shows it blocked
+— but it wants its own disposition (retarget to `V5-TRANSACTION-01`, or
+retire alongside). Left for the magistrate; the lieutenant does not retarget
+a claim-path packet row on its own reading. Likewise the `_v4` wording that
+survives inside `PIPELINE-SMOKE-LIVE-01`'s acceptance evidence: the
+dependency and goal are corrected in this batch, the acceptance text is not,
+because editing a claim-path gate's acceptance is a magistrate call.
+
+**Executed evidence.** Run 2026-09-03 at `origin/main` = `46eaf18c`:
+`grep -n "_v4\` is never collected" docs/decision_log.md` → D-164 at the
+index row; `grep -n "Removed the retired Qwen2.5" docs/decision_log.md` →
+D-167's removal list at `:10444`; a kernel dump confirming
+`V5-TRANSACTION-01` is live (status `blocked`) and that
+`V5-QWEN3-PACK-GENERATED-S15`, the target of `PIPELINE-SMOKE-LIVE-01`'s
+former dependency, is absent from `tasks`; `python3 scripts/gen_state.py
+--check` → rc 0 after the edits; `python3 -m unittest tests.test_gen_state
+tests.test_docs_freshness` → 65 tests OK.
+
+## D-170 dated addendum (magistrate via lieutenant, 2026-09-03): ADOPTED, and the three installing pull requests named
+
+D-170's own body set the closing condition: the entry "moves … to `adopted`
+only after all three installing pull requests land and names those pull
+requests here." All three have landed. They are named here, with the producer
+regression each carries, because D-170 item 1 is precisely the rule that
+documentation alone does not close a ruling.
+
+| Branch | PR | Merged | Ruling items | Producer evidence on `main` |
+|---|---|---|---|---|
+| `feat/2026-09-02-t26-install` | **#273** | 2026-09-02 20:16:17Z | 1 and 4 | `scripts/gen_state.py` now refuses a satisfied `kind: decision` dependency unless its evidence points at a `tests/*.py` file whose label names a test defined in that file; guarded by `tests/test_gen_state.py::test_satisfied_decision_dependency_requires_named_test_regression`, with the status-vocabulary and Executed-evidence shape tests in `tests/test_docs_freshness.py` |
+| `feat/2026-09-02-t26-gateledger` | **#275** | 2026-09-02 20:17:10Z | 2 | `.github/pull_request_template.md`, `.github/workflows/gate-ledger.yml`, `scripts/check_gate_ledger.py`, `tests/test_check_gate_ledger.py` |
+| `feat/2026-09-02-t26-liveness` | **#274** | 2026-09-03 03:01:29Z | 3 | the 600 s liveness conjunct in `joulewise/arm_readiness.py`, with boundary regressions in `tests/test_arm_readiness.py` and `tests/test_arm_readiness_evidence_t0.py` |
+
+**Status: `adopted`.** The index row is flipped accordingly.
+
+**The nine dependencies are satisfied, each with the evidence pointer item 1
+requires** — a regression that fails when the ruled value is absent. Eight
+rows (`GAMMA-UNIT-ROSTER-GUARD-01`, `L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01`,
+`S9-01B-REFUSAL-PRODUCER-CHECK-01`, `S9-02-W10-SCOPE-P256-M1-01`,
+`S9-03-GAMMA-PREFILL-PROMPT-OWNER-01`, `S9-05-CAL-SCREEN-FLOOR-RULING-01`,
+`S9-06-WINDOW-T0-GO-RECEIPT-GATE-01`, `T26-RULING-INSTALL-01`) point at
+`tests/test_gen_state.py::test_satisfied_decision_dependency_requires_named_test_regression`,
+which is item 1's own mechanism; `V5-TRANSACTION-01`, whose dependency was
+always the item-3 liveness clause, points at
+`tests/test_arm_readiness.py::test_t0_liveness_bound_refuses_at_600s_plus_1ns`.
+
+**Consequences in the kernel.** Six rows had D-170 as their only pending
+dependency and are now `queued`: the five S9 sweep rows registered on
+2026-09-02 and `GAMMA-UNIT-ROSTER-GUARD-01`.
+`L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01` and `V5-TRANSACTION-01` keep other
+pending dependencies and stay blocked — D-170 was never their only gate.
+`T26-RULING-INSTALL-01`, the installing row, is retired (recorded `shelved`;
+the kernel has no `retired` status word), and
+`ED-BRANCH-PROTECTION-E1-01` is unblocked with it: what remains there is Ed's
+hand on branch protection, not any code. Until Ed makes it required,
+`gate-ledger` stays ADVISORY, exactly as D-170 item 2 specifies.
+
+**Item 4 is closed only in part, and the remainder now has an owner.** The
+executed-evidence duty itself is installed and tested. What D-170 deferred —
+the packet-input-list amendment, which needs a charter digest and Ed's
+re-ratification — is deferred still, and is now carried by kernel row
+`CHARTER-V3-PACKET-INPUTS-01` rather than by a sentence in this entry. That
+deferral having no owner row was one of the four findings in the 2026-09-02
+fresh-Fable docs-vs-truth audit (its A7); registering it is how this batch
+avoids repeating the very failure D-170 was written to cure.
+
+**A note on the test fixtures, recorded because it is the same failure class.**
+Four assertions in `tests/test_docs_freshness.py` used the live D-170 row as
+their fixture. Closing D-170 would have made all four stop firing while still
+reporting green — the guards would have been silently disarmed by a
+bookkeeping edit. They were rebuilt on a synthesized fixture before this close
+landed, and each was mutation-probed at the bench to confirm it still kills a
+deleted check. The precedent is in that file's own history: D-171 broke a
+hard-coded decision literal on 2026-09-02.
+
+**Executed evidence.** Run 2026-09-03 by the lieutenant on branch
+`bookkeeping/2026-09-03-kernel-batch`:
+`gh pr view 273 274 275 --json state,mergedAt,title` → all `MERGED` at the
+times tabled above; `gh pr view <n> --json files` → the producer files tabled
+above; `python3 scripts/gen_state.py --check` → rc 0 after the nine
+dependencies were satisfied; `python3 -m unittest tests.test_gen_state
+tests.test_docs_freshness` → 65 tests OK; five bench mutation probes against
+the rebuilt guards (limbs 1, 2 and 3, the terminal-status-over-pending check,
+and the index-row completeness check), each observed to turn the suite red
+when the check it protects was deleted or neutered.
+
+## D-167 dated addendum (magistrate via lieutenant, 2026-09-03): ARM-PACKET-01 follows the transaction it was retired behind
+
+The 2026-09-03 addendum above retired `V4-TRANSACTION-01` by supersession and
+recorded, without deciding it, that `ARM-PACKET-01` carried a pending
+hard-start dependency on the row being retired. The magistrate has now ruled
+it.
+
+**Ruling.** `ARM-PACKET-01`'s hard-start dependency is RETARGETED from
+`V4-TRANSACTION-01` to `V5-TRANSACTION-01`. The ground is the same pair of
+decisions that retired the predecessor: D-164 rules that the `_v4` family is
+never collected, because the production campaign runs the `_v5` Qwen3 pair,
+and D-167 installs `V5-TRANSACTION-01` as the live successor to the retired
+windows.
+
+**Why retarget rather than retire alongside.** The dependency was never about
+`_v4` as such. It encodes a sequencing rule — the arm packet is authored only
+after a reviewed head and its executed end-to-end T-0 pass exist, the B-7
+ordering from the sitting B-21 authority — and that rule is as necessary for
+`_v5` as it was for `_v4`. Retiring the row would discard a live obligation;
+leaving it pointed at a shelved predecessor would have blocked it forever
+while quietly aiming its output at a family that will never be measured. The
+`required` text is rewritten to name the `_v5` head so the reason travels with
+the edge rather than living only in this entry.
+
+**Not done here.** `ARM-PACKET-01`'s acceptance evidence still describes the
+`_v4` family in its own words. That is acceptance text on a claim-path packet
+row, so it is flagged rather than rewritten; it wants the same treatment as
+the `_v4` wording still inside `PIPELINE-SMOKE-LIVE-01`'s acceptance, and the
+two are best done together with the ruling that re-cuts the packet contents.
+
+**Executed evidence.** Run 2026-09-03 on branch
+`bookkeeping/2026-09-03-kernel-batch`: a kernel read confirming
+`ARM-PACKET-01`'s single dependency was `pending`/`hard`/`start` on
+`V4-TRANSACTION-01`, that `V4-TRANSACTION-01` is `shelved`, and that
+`V5-TRANSACTION-01` is live (`blocked`); `python3 scripts/gen_state.py
+--check` → rc 0 after the retarget, which also confirms the pending hard task
+edges remain acyclic; `python3 -m unittest tests.test_gen_state
+tests.test_docs_freshness` → 65 tests OK.
