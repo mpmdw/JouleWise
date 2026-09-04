@@ -42,12 +42,13 @@ supplied anchors and manifest at validation time.  It is not launch
 authorization and does not bind a later judge handoff to those bytes.
 
 The programmatic ``run_gate_handoff`` operation is the separate runner
-boundary.  It builds canonical JSON with base64 source bytes from the accepted
-snapshot, makes exactly one transport call, verifies the transport-observed
-request digest, and returns a judge-identity-bound runner receipt.  The
-``stdin_json_transport`` adapter performs that call through one subprocess
-standard-input delivery.  The validation-only command-line interface does not
-select or launch a real judge.
+boundary.  It uses deterministic JSON for reproducibility and diffability,
+with base64 source bytes from the accepted snapshot.  Its safety contract is
+independent of equivalent JSON spellings: it makes exactly one transport call,
+verifies the transport-observed digest of the exact emitted bytes, and returns
+a judge-identity-bound runner receipt.  The ``stdin_json_transport`` adapter
+performs that call through one subprocess standard-input delivery.  The
+validation-only command-line interface does not select or launch a real judge.
 """
 
 from __future__ import annotations
@@ -598,6 +599,7 @@ def validate(
 
 
 def _canonical_json(receipt: dict[str, Any]) -> bytes:
+    """Apply the deterministic JSON maintainability convention."""
     return (
         json.dumps(receipt, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         + "\n"
@@ -615,7 +617,7 @@ def _encoded_source(name: str, data: bytes) -> dict[str, str]:
 def _judge_request(
     validator_receipt: dict[str, Any], snapshot: ValidatedGateSnapshot
 ) -> bytes:
-    """Build the one canonical request solely from the validated snapshot."""
+    """Build one deterministically encoded request from the validated snapshot."""
     request = {
         "schema": JUDGE_REQUEST_SCHEMA,
         "sources": {
@@ -704,7 +706,7 @@ def run_gate_handoff(
     expected_charter_sha256: str | None,
     transport: JudgeTransport,
 ) -> GateHandoffResult:
-    """Validate, deliver one canonical snapshot request, and bind its acknowledgement."""
+    """Validate, deliver one snapshot request, and bind its exact-byte acknowledgement."""
     validator_receipt, snapshot = capture_and_validate(
         packet_arg=packet_arg,
         charter_arg=charter_arg,
