@@ -139,16 +139,16 @@ registry rows, so they do not change the row count above.
 | obligation | next evidence | capstone status |
 |---|---|---|
 | Pulse-to-inference transfer assumption | `TRANSFER-FIDUCIAL-01`: a known gap inserted into real inference work, with both edges fitted by the existing estimator and the residual compared with the pulse-derived bound. | Diagnostic only; post-campaign; cannot support a claim. |
-| Workload response characterization | A separate characterization collection using the registered `metrology_v1` shape. | Not in `_v5`; the paper-design choice remains unresolved. |
-| Identical-condition null characterization | A separate characterization collection, or a ruled fold-in to the floor windows. | Not in `_v5`; the paper-design choice remains unresolved. |
-| Phase-accounting characterization | A separate characterization collection using the registered `metrology_v1` shape. | Not in `_v5`; the paper-design choice remains unresolved. |
-| Drift-and-recovery characterization | A separate characterization collection using the registered `metrology_v1` shape. | Not in `_v5`; the paper-design choice remains unresolved. |
+| Workload response characterization | A separate characterization collection using the registered `metrology_v1` shape. | Retained in paper §3; outside `_v5`; uncollected. |
+| Identical-condition null characterization | A bounded null folded into the floor windows or a separate characterization collection. | Retained in paper §3; outside `_v5`; uncollected. |
+| Phase-accounting characterization | A separate characterization collection using the registered `metrology_v1` shape. | Retained in paper §3; outside `_v5`; uncollected. |
+| Drift-and-recovery characterization | A separate characterization collection using the registered `metrology_v1` shape. | Retained in paper §3; outside `_v5`; uncollected. |
 
-The fresh audit estimates that the characterization set requires a separate
-night or more and identifies a lead-owned choice: either fold a bounded
-identical-condition null into the floor windows or narrow the paper section
-to what the campaign actually collects. This map records that open choice; it
-does not make it.
+The magistrate ruling keeps all four characterizations in paper §3. Their
+status is therefore explicit rather than optional: none is part of `_v5`, and
+none has been collected. The bounded identical-condition null may share a
+floor window or use a separate characterization collection without changing
+that paper obligation.
 
 ## Totals and reading rule
 
