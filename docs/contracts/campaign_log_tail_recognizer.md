@@ -20,6 +20,13 @@ the decoded character is known. In particular, the completed escape
 character. Comparing that half as though it were a finished character can
 falsely reject a real writer prefix.
 
+A completed `\ud800\udc00` spelling is ambiguous too: it can come from one
+non-Basic-Multilingual-Plane scalar or from two literal Python surrogate code
+units. Those originals sort differently even though `json.dumps` emits the
+same bytes. The recognizer therefore carries every feasible decoded original
+through the key-order comparison instead of collapsing the spelling through
+`json.loads`.
+
 The number problem is different. Python chooses a shortest round-trip decimal
 for each finite floating-point value. Deciding the exact image of that
 algorithm inside a small incremental parser is the failed requirement struck
@@ -61,7 +68,9 @@ Key ordering then uses the first position that is not already fixed:
 
 This is an existential rule: it asks whether *some* canonical completion can
 sort after the previous key. Later characters cannot repair an earlier
-strictly smaller character.
+strictly smaller character. When a completed surrogate-pair spelling has more
+than one feasible Python original, every still-orderable alternative is
+retained for the next key rather than choosing one greedily.
 
 ## Finite-float superset
 

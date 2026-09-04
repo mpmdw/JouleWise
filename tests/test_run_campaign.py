@@ -638,6 +638,10 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                 {"😀": 1, "😁": 2},
                 b'{"\\ud83d\\ude00": 1, "\\ud83d\\ude01": 2}',
             ),
+            (
+                {"\ud83d": 1, "\ud800\udc00": 2},
+                b'{"\\ud800\\udc00": 2, "\\ud83d": 1}',
+            ),
         )
         for row, pinned_wire in rows_and_wire:
             wire = json.dumps(row, sort_keys=True).encode("ascii")
