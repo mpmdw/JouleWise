@@ -215,6 +215,7 @@ be re-derived by a future agent gets an entry here.
 | D-169 | UNATTENDED LOOP FIRST (Ed directive, in-thread 2026-09-01; supersedes D-127 §5's "built OFF the night-critical path" ordering): the D-127 autonomous window loop is the TOP lane and is built BEFORE the remaining `_v5` transaction ladder, so the magistrate drives measurement windows entirely without Ed present. Ed's words: "why are quiet windows still gated by me? why can't you do this? i'm tired of having to be at the machine" and, on D-127 §5: "bad. that should be done first. so you can drive the experiments entirely." Owning rows: `UNATTENDED-LAUNCH-01` (GO-receipt consumer in `scripts/launch_window.py`, launch-then-verify relaunch harness, independent launchd fallback) and the `T0-UNATTENDED-01` remainder (rehearsal evaluator blockers). UNCHANGED: the zero-agent capture fence (D-127 §2); D-115 install conditions and Ed personally running the single privileged install command (D-127 §3); the D-118/D-121 gauntlet on every merge. Ed-hands residue is limited to what rulings literally require — never per-window presence; before any further window date is requested from Ed, the unattended plan with that one command is delivered to him. | adopted (Ed, in-thread; transcribed by the magistrate) |
 | D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | adopted (magistrate, 2026-09-03; installed by PRs #273, #274, #275) |
 | D-171 | HANDS-FREE WEEK — Ed's delegations for unattended windows: E-10 amended (driver invokes the launcher), hC + transaction GO delegated to the magistrate's gate, watchdog install authorized, 5-min stand-down | ratified (Ed, 2026-09-02) |
+| D-172 | REAL-ENTRY-POINT SUBPROCESS TEST — any change to the magistrate watchdog, its installer, its launchd templates, or its session argv ships with a green subprocess test of the real entry point plus one named RED mutation | adopted (magistrate on the cold gate's amended text, packet 21 Q-PROC, 2026-09-04; Ed notified, may veto) |
 
 ---
 
@@ -10873,3 +10874,26 @@ two are best done together with the ruling that re-cuts the packet contents.
 --check` → rc 0 after the retarget, which also confirms the pending hard task
 edges remain acyclic; `python3 -m unittest tests.test_gen_state
 tests.test_docs_freshness` → 65 tests OK.
+
+## D-172: real-entry-point subprocess test for watchdog/installer changes (cold gate on packet 21, 2026-09-04; magistrate-adopted, Ed may veto)
+
+Origin: the magistrate relaunch watchdog failed three fix rounds with one
+signature — unit suite green while the production path was broken — because
+its tests injected every dependency and never ran the real entry point. The
+cold Fable gate on packet 21 (trace
+`docs/process_traces/2026-09-02-hands-free-week/22-coldgate-fable-ruling-packet-21.md`,
+Q-PROC) amended the magistrate's proposal to this text, adopted verbatim:
+
+> Any change to `scripts/magistrate_watchdog.py`,
+> `scripts/install_magistrate_watchdog.sh`, `configs/launchd/*.template`, or
+> `SESSION_ARGV_AFTER_PROMPT` must ship with a green test that runs the real
+> entry point as a subprocess (real argv parsing, service lock, dependency
+> construction; at most the process-table and network seams injected) and
+> with at least one named mutation of the changed lines shown RED under that
+> test.
+
+Scope: prospective, those files only; not a charter amendment. Status:
+adopted by the magistrate on the cold gate's amended text (rule 11: a
+proposed process rule goes before a cold instance — it did); Ed notified by
+email the same day and may veto. Enforcement: the PR ledger row 2 for any such
+change cites the subprocess test and the RED mutation transcript.
