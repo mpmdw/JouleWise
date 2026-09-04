@@ -1,0 +1,121 @@
+"""Cold-gate F-B probe: build a SELF-CONSISTENT forged pack whose committed tree
+differs from the lineage pack_sha256 while every other gate check authenticates.
+
+Usage: python3 forgery_probe.py [--disable-pack-check]
+
+--disable-pack-check re-executes `_frozen_consumer_identity_set` from source with
+line 3898's comparison replaced by `if False:` INTO the live module namespace
+(no file under the checkout is touched).
+"""
+import copy
+import hashlib
+import inspect
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+CHECKOUT = "/Users/edr/code/JouleWise-wt-decode-id2"
+sys.path.insert(0, CHECKOUT)
+
+from joulewise import arm_readiness, identity_pins  # noqa: E402
+from joulewise.arm_readiness import committed_pack_tree_sha256  # noqa: E402
+from joulewise.analysis_engine import inputs as inputs_mod  # noqa: E402
+from joulewise.identity_pins import (  # noqa: E402
+    identity_unit_config_set_sha256,
+    scientific_config_identity_sha256,
+)
+from tests.test_analysis_inputs import FrozenConsumerIdentitySetTests  # noqa: E402
+from joulewise.analysis_engine.inputs import floor_request_for_evidence  # noqa: E402
+
+DISABLE = "--disable-pack-check" in sys.argv
+if DISABLE:
+    src = inspect.getsource(inputs_mod._frozen_consumer_identity_set)
+    old = "        if committed_pack_tree_sha256(pack_root) != next(iter(pack_hashes)):\n"
+    assert src.count(old) == 1, src.count(old)
+    src = src.replace(old, "        if False:\n")
+    exec(compile(src, inputs_mod.__file__, "exec"), inputs_mod.__dict__)
+    print("PACK-TREE CHECK: DISABLED (if False:) via exec into module namespace")
+else:
+    print("PACK-TREE CHECK: PRESENT (production source)")
+
+t = FrozenConsumerIdentitySetTests()
+with tempfile.TemporaryDirectory(prefix="coldF-forgery-") as tmp:
+    root = Path(tmp)
+    fixture, pack = t._generated_frozen_gate_pack(root)
+    # transport case: two distinct A/decode consumer configs, lineage = HONEST committed tree
+    case = t._generated_transport_case(pack)
+    honest_sha = case[4][0].launch_lineage["pack_sha256"]
+
+    def probe(label):
+        # same seam as test_generated_pack_gate_and_caller_refuse_stale_receipt_bytes
+        req = floor_request_for_evidence(*case)
+        res = t._production_floor_resolution(case)
+        print(f"{label:<44} floor_request_for_evidence={'REQUEST' if req is not None else 'None':<7} "
+              f"production status={res.status!r} reasons={res.reason_codes!r}")
+    probe("[control] honest pack, honest consumers")
+
+    # consumer bundle 0 drifts its scientific identity (same perturbation as
+    # test_production_refuses_identity_outside_authenticated_set_with_named_reason)
+    raw_config = case[4][0].raw_config
+    raw_config["run_metadata"]["tags"].append("identity-drift")
+    probe("[drift]   honest pack, DRIFTED consumer0")
+
+    # ---- FORGE the committed pack so A/decode declares the drifted identity ----
+    tree = json.loads((pack / "plan_tree.json").read_text(encoding="utf-8"))
+    proj = tree["arm_attachments"]["identity_pin_projection"]
+    receipt_path = pack / proj["projection_receipt"]["path"]
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    unit = next(u for u in receipt["identity_units"] if u["identity_unit_id"] == "A/decode")
+    inv = unit["config_inventory"][0]
+    cfg_raw = (json.dumps(raw_config, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    (pack / inv["path"]).write_bytes(cfg_raw)              # (1) config bytes
+    inv["sha256"] = hashlib.sha256(cfg_raw).hexdigest()    # (2) receipt inventory sha
+    identities = {
+        scientific_config_identity_sha256(json.loads((pack / row["path"]).read_text(encoding="utf-8")))
+        for row in unit["config_inventory"]
+    }
+    new_set = identity_unit_config_set_sha256(identities)
+    unit["model_runtime_config"]["config_set_sha256"] = new_set  # (3) receipt config_set
+    punit = next(u for u in proj["identity_units"] if u["identity_unit_id"] == "A/decode")
+    punit["model_runtime_config"]["config_set_sha256"] = new_set  # (4) plan_tree projection config_set
+    for prow in punit["config_inventory"]:
+        if prow["path"] == inv["path"]:
+            prow["sha256"] = inv["sha256"]                          # (5) plan_tree inventory sha
+    receipt_raw = identity_pins._render_json(receipt)
+    rsha = hashlib.sha256(receipt_raw).hexdigest()
+    receipt_path.write_bytes(receipt_raw)                           # (6) re-rendered U11 receipt
+    receipt_path.with_suffix(".sha256").write_bytes(arm_readiness.gnu_sidecar(rsha, receipt_path.name))  # (7) sidecar
+    proj["projection_receipt"]["sha256"] = rsha                     # (8) plan_tree receipt ref
+    fref = tree["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+    freeze_path = pack / fref["path"]
+    freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
+    for item in freeze["evidence"]:
+        if item["evidence_id"] == "u11-freeze-projection":
+            item["sha256"] = rsha                                   # (9) U8 freeze receipt evidence ref
+    freeze_raw = arm_readiness.render_json(freeze)
+    fsha = hashlib.sha256(freeze_raw).hexdigest()
+    freeze_path.write_bytes(freeze_raw)                             # (10) re-rendered U8 receipt
+    freeze_path.with_name(freeze_path.name + ".sha256").write_bytes(arm_readiness.gnu_sidecar(fsha, freeze_path.name))  # (11)
+    fref["sha256"] = fsha                                           # (12) plan_tree freeze ref
+    fixture.write_identity_tree(pack, tree)                         # (13) plan_tree + plan_tree.sha256
+    fixture.commit_fixture(root, "forge: A/decode declares the drifted identity")  # (14) committed
+    forged_sha = committed_pack_tree_sha256(pack)
+    print(f"lineage pack_sha256 (honest) = {honest_sha}")
+    print(f"committed tree after forgery = {forged_sha}")
+    print(f"tree differs from lineage    = {forged_sha != honest_sha}")
+    print(f"drifted identity in forged declared set = "
+          f"{scientific_config_identity_sha256(raw_config) in identities}")
+
+    probe("[FORGERY] forged pack, DRIFTED consumer0")
+
+    # Second seam: exact-cell resolution where the floor cell was calibrated at the
+    # drifted identity (the forger's own bundle) and the lineage is still the honest tree.
+    exact = t._generated_exact_case(pack)   # NOTE: lineage now = FORGED tree; overwrite with honest
+    for row in exact[4]:
+        row.launch_lineage["pack_sha256"] = honest_sha
+    # exact[4][0].raw_config was read from the FORGED inventory[0] -> already the drifted config
+    assert "identity-drift" in exact[4][0].raw_config["run_metadata"]["tags"]
+    exact[1].cell_scientific_identity_sha256["exact-cell"] = scientific_config_identity_sha256(exact[4][0].raw_config)
+    res = t._production_floor_resolution(exact)
+    print(f"[FORGERY/exact-cell] forged pack, honest lineage, drifted consumer+cell -> status={res.status!r} reasons={res.reason_codes!r}")
