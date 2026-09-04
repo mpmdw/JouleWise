@@ -411,14 +411,20 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   re-derivation reason. Horizon expiry, OS build change, power-supply change,
   calibration identity change, or unresolved current binding makes both
   family bounds stale and refuses with the registered
-  `neg8_drift_bound_stale`. A v1 artifact with an authentic pre-addendum seal
-  but no freshness block is replay-readable only to produce that stale
-  refusal; it is never grandfathered. Malformed or unsealed artifacts remain
+  `neg8_drift_bound_stale`. The dual-family shape and freshness block were
+  introduced together and no pre-freshness dual-family artifact was issued;
+  an artifact without the freshness block is therefore malformed and remains
   underived under the two family-specific spellings. The superseded
   pre-SCREEN+BUDGET gross-only v1 shape (no `claim_family_bounds`) is not
-  replayable and refuses as malformed/underived; "pre-addendum replay" applies
-  only to the dual-family shape with `claim_family_bounds` present and
-  freshness absent.
+  replayable and likewise refuses as malformed/underived.
+
+  Structural seal verification alone does not authenticate the corpus: an
+  internally consistent artifact can name a digest it minted itself. At file
+  ingress, the corpus ID, condition ID, member order, and manifest digest must
+  resolve against the exact bytes of either the tracked settled-corpus
+  manifest or a manifest held by the calling custody boundary. The governed
+  repository path is
+  `configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json`.
 
   The bracket is a WHOLE-WINDOW check: the evaluated basis must contain both
   endpoints. Legacy pair-only windows (a5-a8) remain evaluable as 1+0+1:

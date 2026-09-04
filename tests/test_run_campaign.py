@@ -7346,26 +7346,34 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         derived_at_s: float | None = None,
         launch_lineage: dict | None = None,
     ) -> dict:
-        values = (
-            points
-            if points is not None
-            else [8.0 + 0.01 * index for index in range(10)]
+        corpus_path = (
+            ROOT
+            / "configs"
+            / "campaigns"
+            / "neg8_reference_corpus"
+            / "derivation"
+            / "settled_corpus.json"
         )
+        corpus_raw = corpus_path.read_bytes()
+        corpus = json.loads(corpus_raw)
+        values = points if points is not None else [
+            8.0 + 0.01 * index for index in range(len(corpus["members"]))
+        ]
         return run_campaign_module.build_neg8_drift_bound_artifact(
-            corpus_id="settled-neg8-test-corpus",
-            condition_id="df-rq-mid",
-            manifest_sha256="a" * 64,
+            corpus_id=corpus["corpus_id"],
+            condition_id=corpus["condition_id"],
+            manifest_sha256=hashlib.sha256(corpus_raw).hexdigest(),
             scientific_config_sha256="b" * 64,
             members=[
                 {
-                    "bundle_id": f"reference-{index:02d}",
+                    "bundle_id": corpus_member["bundle_id"],
                     "point_gross_j": point,
                     "point_idle_subtracted_j": point - 0.2,
                     "bundle_evidence_sha256": hashlib.sha256(
-                        f"reference-{index:02d}".encode()
+                        corpus_member["bundle_id"].encode()
                     ).hexdigest(),
                 }
-                for index, point in enumerate(values)
+                for corpus_member, point in zip(corpus["members"], values)
             ],
             derivation_timestamp_s=(
                 time.time() if derived_at_s is None else derived_at_s
@@ -7809,6 +7817,100 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "n >= 10"):
             self._drift_bound([8.0 + index * 0.01 for index in range(9)])
 
+    def test_drift_bound_corpus_identity_requires_external_bytes(self) -> None:
+        artifact = self._drift_bound()
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                artifact, require_corpus_identity=True
+            )
+        )
+
+        forged = run_campaign_module.build_neg8_drift_bound_artifact(
+            corpus_id="self-asserted-corpus",
+            condition_id="df-rq-mid",
+            manifest_sha256="a" * 64,
+            scientific_config_sha256="b" * 64,
+            members=[
+                {
+                    "bundle_id": f"forged-{index:02d}",
+                    "point_gross_j": 8.0 + index / 100.0,
+                    "point_idle_subtracted_j": 7.0 + index / 100.0,
+                    "bundle_evidence_sha256": hashlib.sha256(
+                        f"forged-{index:02d}".encode()
+                    ).hexdigest(),
+                }
+                for index in range(10)
+            ],
+            derivation_timestamp_s=time.time(),
+            freshness_bindings={
+                "os_build": "25F84",
+                "power_supply_identity_sha256": "c" * 64,
+                "calibration_identity_sha256": "d" * 64,
+            },
+        )
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(forged)
+        )
+        self.assertFalse(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                forged, require_corpus_identity=True
+            )
+        )
+        forged_path = self.root / "self-asserted-bound.json"
+        forged_path.write_text(json.dumps(forged) + "\n", encoding="utf-8")
+        self.assertIsNone(
+            run_campaign_module.load_neg8_drift_bound_artifact(forged_path)
+        )
+
+    def test_drift_bound_accepts_exact_custodied_manifest_bytes(self) -> None:
+        members = [
+            {"bundle_id": f"custody-{index:02d}", "bundle_path": f"run-{index:02d}"}
+            for index in range(10)
+        ]
+        manifest_raw = (
+            json.dumps(
+                {
+                    "schema_version": "joulewise.neg8_reference_corpus.v1",
+                    "corpus_id": "custodied-corpus",
+                    "freeze_status": "settled_reference",
+                    "condition_id": "df-rq-mid",
+                    "members": members,
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+        artifact = run_campaign_module.build_neg8_drift_bound_artifact(
+            corpus_id="custodied-corpus",
+            condition_id="df-rq-mid",
+            manifest_sha256=hashlib.sha256(manifest_raw).hexdigest(),
+            scientific_config_sha256="b" * 64,
+            members=[
+                {
+                    "bundle_id": member["bundle_id"],
+                    "point_gross_j": 8.0 + index / 100.0,
+                    "point_idle_subtracted_j": 7.0 + index / 100.0,
+                    "bundle_evidence_sha256": hashlib.sha256(
+                        member["bundle_id"].encode()
+                    ).hexdigest(),
+                }
+                for index, member in enumerate(members)
+            ],
+            derivation_timestamp_s=time.time(),
+            freshness_bindings={
+                "os_build": "25F84",
+                "power_supply_identity_sha256": "c" * 64,
+                "calibration_identity_sha256": "d" * 64,
+            },
+        )
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                artifact,
+                reference_corpus_bytes=manifest_raw,
+                require_corpus_identity=True,
+            )
+        )
+
     def test_superseded_gross_only_bound_shape_is_intentionally_not_replayable(
         self,
     ) -> None:
@@ -8191,7 +8293,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 )
                 self.assertEqual(section["neg8_bracket"]["decision"], "failed")
 
-    def test_prefreshness_bound_wire_is_parseable_but_always_stale(self) -> None:
+    def test_unissued_prefreshness_bound_wire_is_malformed_and_underived(self) -> None:
         binding = self._binding()
         artifact = self._drift_bound()
         artifact.pop("freshness")
@@ -8202,7 +8304,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 if key != "derivation_sha256"
             }
         )
-        self.assertTrue(
+        self.assertFalse(
             run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
         )
         section = run_campaign_module.idle_admission_core_verdict(
@@ -8224,13 +8326,14 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             whole_window=True,
             neg8_drift_bound=artifact,
         )
-        freshness = section["neg8_bracket"]["bound_freshness"]
-        self.assertEqual(freshness["decision"], "stale")
-        self.assertIn(
-            "freshness_fields_missing",
-            freshness["triggered_rederivation_reasons"],
+        self.assertEqual(
+            section["neg8_bracket"]["bound_freshness"]["decision"],
+            "underived",
         )
-        self.assertIn("neg8_drift_bound_stale", section["conditions"])
+        self.assertIn("neg8_drift_bound_underived", section["conditions"])
+        self.assertIn(
+            "neg8_idle_sub_drift_bound_underived", section["conditions"]
+        )
 
     def test_family_point_drift_gates_while_gross_corners_are_diagnostic(self) -> None:
         binding = self._binding()
@@ -8275,7 +8378,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertEqual(
             bracket["drift_bound_artifact"]["reference_corpus"]["member_ids"],
-            [f"reference-{index:02d}" for index in range(10)],
+            [f"neg8-refcorpus-r{index:02d}" for index in range(1, 13)],
         )
         self.assertEqual(
             bracket["drift_bound_artifact"]["estimator"]["id"],
