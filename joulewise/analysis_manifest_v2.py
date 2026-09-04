@@ -175,13 +175,16 @@ def validate_analysis_registry(
     if any(error.startswith("registry: ") for error in v1_errors):
         return v1_errors
 
+    metrics = value["metrics"]
+    has_frozen_metric_row_count = isinstance(metrics, list) and len(metrics) == 4
     errors = [
         error
         for error in v1_errors
-        if not error.startswith("registry.metrics")
+        if (has_frozen_metric_row_count or not error.startswith("registry.metrics"))
         and not error.startswith("registry.condition_pairs")
     ]
-    _validate_registered_metrics(value["metrics"], errors)
+    if not has_frozen_metric_row_count:
+        _validate_registered_metrics(metrics, errors)
     _validate_condition_pairs(value["condition_pairs"], ap_row, errors)
     return errors
 

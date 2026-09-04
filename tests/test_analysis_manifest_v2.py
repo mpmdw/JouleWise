@@ -47,6 +47,27 @@ class AnalysisManifestV2Tests(unittest.TestCase):
             v1.validate_analysis_registry(self.registry),
         )
 
+    def test_each_mutated_frozen_metric_row_retains_v1_refusal(self) -> None:
+        replacements = (
+            ("idle_subtracted_request", "idle_subtracted_energy_j", "request"),
+            ("idle_subtracted_request", "idle_subtracted_energy_j", "request"),
+            ("phase_tokenize", "phase_energy_j.tokenize", "phase"),
+            ("phase_serialize", "phase_energy_j.serialize", "phase"),
+        )
+        for index, (metric_tag, name, window_class) in enumerate(replacements):
+            with self.subTest(index=index):
+                registry = copy.deepcopy(self.registry)
+                registry["metrics"][index] = {
+                    "metric_tag": metric_tag,
+                    "name": name,
+                    "window_class": window_class,
+                    "unit": "J",
+                    "ratio_estimand": None,
+                }
+                v1_errors = v1.validate_analysis_registry(registry)
+                self.assertTrue(v1_errors)
+                self.assertEqual(v2.validate_analysis_registry(registry), v1_errors)
+
     def test_authenticated_detection_floor_metric_rows_are_accepted(self) -> None:
         registry = copy.deepcopy(self.registry)
         registry["metrics"] = self._registry_metric_rows()
