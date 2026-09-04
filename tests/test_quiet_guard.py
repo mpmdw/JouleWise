@@ -736,6 +736,22 @@ class StaleRecoveryTests(EngineTestCase):
         self.assertEqual(evidence["result"], "pid_reused")
         self.assertEqual(evidence["observed"], reused.to_mapping())
 
+    def test_same_start_registry_identity_churn_is_observation_failure(self) -> None:
+        self.pending(entries=(self.owner,))
+        changed = identity(
+            self.owner.pid,
+            start=self.owner.start_time,
+            executable="/Applications/Replaced.app/Contents/MacOS/replaced",
+        )
+        state = self.engine.audit_registry(SnapshotProcessSource((changed,)))
+        self.assertEqual(
+            state["events"][-1]["cause"],
+            "process_observation_unavailable",
+        )
+        evidence = state["events"][-1]["evidence"]["revalidation"][0]
+        self.assertEqual(evidence["result"], "unobservable")
+        self.assertEqual(evidence["observed"], changed.to_mapping())
+
     def test_unobservable_registry_enters_recovery_and_retains_lease(self) -> None:
         self.pending(entries=(self.owner,))
         state = self.engine.audit_registry(

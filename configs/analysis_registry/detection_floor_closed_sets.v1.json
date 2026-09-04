@@ -1,0 +1,70 @@
+{
+  "schema_version": "joulewise.detection_floor_closed_sets.v1",
+  "registry_id": "detection_floor_closed_sets_v1",
+  "freeze_status": "frozen",
+  "calibration_scopes": [
+    {
+      "scope_id": "window_a",
+      "authority": "D-078 historical Window-A replay scope"
+    },
+    {
+      "scope_id": "window_b_revalidation",
+      "authority": "D-079 calibration revalidation scope"
+    },
+    {
+      "scope_id": "production_window",
+      "authority": "D-079 clause 4 general production scope"
+    },
+    {
+      "scope_id": "smoke",
+      "authority": "P2-039 non-claim smoke scope"
+    }
+  ],
+  "floor_metrics": [
+    {
+      "name": "gross_energy_j",
+      "window_class": "request",
+      "authority": "P2-039 request gross-energy floor"
+    },
+    {
+      "name": "energy_request_j",
+      "window_class": "request",
+      "authority": "P2-039 request idle-subtracted floor"
+    },
+    {
+      "name": "idle_subtracted_energy_j",
+      "window_class": "request",
+      "authority": "P2-039 request idle-subtracted compatibility spelling"
+    },
+    {
+      "name": "phase_energy_j.tokenize",
+      "window_class": "phase",
+      "authority": "runtime phase event registry"
+    },
+    {
+      "name": "phase_energy_j.prefill",
+      "window_class": "phase",
+      "authority": "P2-039 prefill-phase floor"
+    },
+    {
+      "name": "phase_energy_j.decode",
+      "window_class": "phase",
+      "authority": "P2-039 decode-phase floor"
+    },
+    {
+      "name": "phase_energy_j.serialize",
+      "window_class": "phase",
+      "authority": "split-runtime phase event registry"
+    },
+    {
+      "name": "phase_energy_j.transfer",
+      "window_class": "phase",
+      "authority": "split-runtime phase event registry"
+    },
+    {
+      "name": "phase_energy_j.deserialize",
+      "window_class": "phase",
+      "authority": "split-runtime phase event registry"
+    }
+  ]
+}

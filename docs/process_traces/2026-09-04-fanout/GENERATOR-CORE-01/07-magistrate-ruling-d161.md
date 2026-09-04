@@ -1,0 +1,9 @@
+# Magistrate ruling on the bypass-guard escalation (GENERATOR-CORE-01)
+
+Date: 2026-09-04. Two consecutive rounds failed with one signature: "the anti-bypass guard is evadable by a differently shaped bypass" (refuter 04: name-based guard evaded by a local validator; delta 06: root-scoped behavioural guard evaded by a correct core call followed by an out-of-root write). The standing escalation trigger fired; per rule 11 the next spend is a ruling/consult, not round 3.
+
+**Ruling (D-161 applied).** The adversary in both evasions is a generator AUTHOR deliberately routing around the shared core inside this repository — an operator-only adversary. D-161 (2026-08-27) holds that refusals and guards against operator-only adversaries are over-engineering; fail-closed machinery is reserved for physics, evidence, and pre-registration. The shared-core invariant is a maintainability property, not an evidence fence: campaign configs are pre-registered by their frozen bytes and digests, so a bypassing generator cannot forge evidence — it can only produce configs that the byte-parity checker and the pre-registration digests would expose. Therefore:
+
+- F1 (delta 06) is NOT a defect under the threat model; no round 3.
+- The landing's value is the extraction itself: one core, three thin callers, byte parity against origin/main (`PARITY_OK generators=3 files=352`, bench-verified by the magistrate at ddfdbc91 and c855dac7), and a plain structural regression that each generator's production path invokes the core (the round-1 seam test), kept as a maintainability test — not as a security guard. The docs/specs/generator_core.md text must not describe the seam test as tamper-proof; the seat's next touch (if any) softens that sentence; otherwise the magistrate does it at the bench before the wave-2 integration.
+- Disposition: LANDABLE for wave 2 with this ruling attached; the two refuter reports stay in custody as the record of the escalation.

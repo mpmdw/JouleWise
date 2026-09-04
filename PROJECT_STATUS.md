@@ -1,178 +1,129 @@
 # JouleWise: Project Status, Plan, And Architecture
 
 Audience: capstone advisor. This is the compact current view. Historical
-updates and retired process prose are preserved in
-`docs/project_status_history.md`; live work selection remains in the generated
-regions of `RUN_STATE.md` and `TASK_QUEUE.md`, sourced from
-`docs/process/state_kernel.json`.
-
-- Project phase: Phases 1, 2, and 4 remain in progress: the instrument and
-  prospective Qwen3 campaign path are implemented, while claim-bearing
-  collection and analysis remain gated and presentation and release are
-  planned in the sequence below.
+updates are preserved in `docs/project_status_history.md`; live work selection
+and gates are generated from `docs/process/state_kernel.json` into
+`RUN_STATE.md` and `TASK_QUEUE.md`. This document promises sequence, not dates.
+Live status is in `RUN_STATE.md`.
 
 ## Current Claim And Scope
 
-JouleWise is an auditable instrument for measuring energy and latency during
-local large-language-model inference on named hardware, runtime, model,
-workload, and telemetry stacks. Its capstone contribution is the governed
-measurement path: immutable run bundles, explicit physical boundaries,
-read-only re-reduction, uncertainty and detection-floor rules, and mechanical
-refusal when evidence cannot support a claim. The binding headline and minimum
-viable stop line are in `docs/contracts/capstone_scope.md`.
+JouleWise is a reusable instrument for measuring the energy and latency of
+local large-language-model inference. Its capstone contribution is a governed
+path that can say what it resolves, refuse what it cannot, and trace every
+quantitative sentence to immutable raw evidence. The current prospective
+campaign compares Qwen3-1.7B-4bit and Qwen3-8B-4bit on an Apple M3 Max. It asks
+whether timing-attribution uncertainty dominates repeatability and whether the
+registered model comparison clears the instrument's detection floor.
 
-The current prospective campaign compares
-`mlx-community/Qwen3-1.7B-4bit` and `mlx-community/Qwen3-8B-4bit` with MLX on
-one Apple M3 Max. It uses the internal label `_v5` and was fixed by D-164
-through D-167. No claim-bearing `_v5` data exist yet, so this page makes no
-energy or model-ranking claim from that campaign. The final paper may report a
-positive, negative, unresolved, or refused result without weakening the
-instrument contribution.
+No claim-bearing data from this Qwen3 campaign exist yet. The campaign design,
+thresholds, refusal conditions, and two permitted paper outcomes were fixed
+before collection. Split inference and remote NVIDIA or Jetson targets remain
+optional demonstrations; they cannot redefine capstone completion or upgrade a
+provisional hardware claim.
 
-The paper is metrology-centered. It asks whether measurement boundaries are
-placed correctly in time, repeat runs agree, and drift, linearity, additivity,
-and detection limits are controlled well enough for a same-boundary model
-comparison. Split inference and remote-device work remain optional,
-feasibility-first extensions; they are not required for a defensible capstone.
-Claims remain stack-specific unless independent replication and calibrated
-boundary evidence justify broader language.
+The headline basis is gross measured energy inside a named boundary. Idle-
+subtracted energy is a secondary within-device view, not a cross-device ranking
+basis. A claim must clear its registered floor and uncertainty interval; a
+below-floor difference is unresolved, not evidence of equality.
 
 ## Measured Evidence
 
-The typed-config-to-run-bundle path has executed on deterministic mock adapters
-and on the Apple M3 Max with MLX and `powermetrics`. Strict validation rebuilds
-recorded power traces and summaries from raw bytes and refuses inconsistent
-bundles. That proves artifact consistency; it is not, by itself, proof that a
-physical measurement is correctly attributed.
-
-Every energy value collected before the time-anchor repair is permanently
-void for claim use. Those preserved corpora document a real defect: power
-readings and workload events used different clocks, so the old join could
-integrate the wrong part of a trace. The repair, its prospective controls, and
-the no-revival fence are owned by D-078 and
-`docs/reviews/2026-07-19-measurement-soundness-audit.md`.
-
-Post-repair windows demonstrated that the screened, bracketed instrument path
-can complete on real hardware, but predecessor results do not substitute for
-the Qwen3 campaign. The repaired instrument is attribution-limited at roughly
-1 joule: boundary-placement uncertainty of about 0.7–1.0 J per run exceeds
-repeatability noise of about 0.29–0.49 J on roughly 50 J observations. The
-floor and the claim-side interval each retain that attribution term, making the
-effective clearable phase contrast roughly 5 J rather than the floor alone.
-These quantities are instrument-characterization evidence under D-078 clause
-11, not `_v5` model results.
-
-Retained bundles and corpora are immutable. Failed or refused attempts remain
-in custody; retries and supersession follow recorded rules rather than silently
-replacing inconvenient evidence.
-
-<!-- ADVISOR-PAGE-END -->
+- Deterministic mock adapters proved the typed-config-to-auditable-bundle path.
+  The MLX plus `powermetrics` path subsequently produced strict-valid bundles
+  on real Apple hardware.
+- Every pre-repair energy value is permanently **VOIDED for claim use** because
+  power and workload events were joined through a defective time anchor. Raw
+  bundles remain immutable evidence of the defect; validation does not repair
+  physical attribution (`docs/reviews/2026-07-19-measurement-soundness-audit.md`).
+- The repaired instrument is attribution-limited at approximately 1 J:
+  boundary placement contributes about 0.7–1.0 J per run versus roughly
+  0.29–0.49 J repeatability on approximately 50 J points. Both the floor and
+  the claim-side interval retain their attribution terms, making the practical
+  clearable phase contrast about 5 J (D-078 clause 11).
+- Five post-repair windows passed the screening and uncertainty-budget path,
+  establishing that the mechanism can pass. They are diagnostic or
+  rule-establishing evidence, not substitutes for prospective Qwen3 data.
 
 ## Gate Matrix
 
-This matrix states the scientific sequence, not an agent-ranked work list.
-`RUN_STATE.md` and the state kernel decide whether a step is currently open.
+| gate | pass condition | consequence of failure |
+|---|---|---|
+| Four-rung prompt probe | At least five small-model runs at a rung, each with at least five overlapping prefill power records; choose the shortest qualifying 512/1024/2048/4096-token rung | Preserve the probe and register the 4096-token prefill refusal; never lower the rule after seeing data |
+| Desk freeze | Hash the selected rung, generate all Qwen3 packs, and reproduce their admission in a throwaway clone | No shakedown or transaction |
+| Real-pack shakedown | One A/B/B/A block passes calibration, whole-window, desk, and expected-incomplete-finalization checks | Stop; no claim-bearing collection |
+| Transaction GO | The magistrate's cold-gate-adjudicated readiness record supplies GO under D-171; an Ed email reply also counts but is not required | Transaction stays closed |
+| Nightly custody | Strict validation and the registered desk check pass before the next arm | Preserve/refuse the night; do not silently retry |
+| Claim close-out | Authenticated floors, finalization, comparison, dominance ratios, and results-fill contract agree | Emit the registered non-dominance wording or no claim; never hand-fill prose |
 
-| Gate | Required evidence | Effect of failure | Owner |
-|---|---|---|---|
-| Unattended infrastructure | A resident supervisor enforces stand-down and each night plan is pinned to the dedicated measurement checkout. | No real window is armed. | D-169, D-171; `docs/milestones.md` |
-| G2-a diagnostic probe | A calibrated bracket; at least five small-model members at each of 512, 1,024, 2,048, and 4,096 prompt tokens; preserved selector input. | The probe is preserved and the registered prefill refusal applies; it never becomes claim evidence. | D-166; state-kernel `V5-G2A-PREFILL-PROBE-01` |
-| Desk freeze | Checked rung selection, its evidence hash, three generated `_v5` packs, byte-stable regeneration, and fresh-checkout proof. | Packs do not advance to the machine. | D-162, D-167; `V5-DESK-DAY-01` |
-| G2-b shakedown | One real-pack small/large/large/small block, complete bracket and verdict, desk check, and exactly the registered incomplete-campaign refusal. | Preserve the attempt and stop; do not retry into success. | D-162, D-167; `V5-G2B-SHAKEDOWN-01` |
-| Transaction opening | Cold-gate-adjudicated readiness at the G2-b-proved head. D-171 delegates GO to the magistrate's gate, so Ed is not a per-window operator. | Claim-bearing collection remains closed. | D-171; `V5-TRANSACTION-01` |
-| Nightly G3 | Each immutable campaign night passes the same read-only checker before another arm runs. | The next arm stays blocked pending governed disposition. | D-162, D-167; `V5-NIGHTLY-G3-01` |
-| Issue and close out | Strict validation, authenticated per-cell floor inputs, mint, finalized manifest, eight ordinary dominance ratios, four comparative shared-shift ratios, and exact claim verdicts. | Missing, unauthenticated, or zero-denominator inputs license no paper branch. | D-165, D-168; `docs/contracts/d165_dominance_closeout.md` |
-| Results fill | Only authenticated values and pre-written branch sentences requested by the 126-key successor registry. | No hand-filled numerical or dominance claim. | `docs/paper/results-fill-registry.md` |
-
-The dominance sentence has a pre-registered falsifier: the timing-aware floor
-divided by the naive floor must be at least two in all eight ordinary cases,
-and all four comparative shared-shift replays must also clear two. A failed
-shared-shift replay withdraws the sentence; it does not invite a revised
-threshold (D-165 and D-168).
+The dominance claim requires timing-aware floor / naive floor >= 2 for all
+eight ordinary components and all four registered shared-shift replay ratios.
+The authenticated close-out artifact, not prose judgment, selects the permitted
+paper wording (D-165/D-168).
 
 ## Artifact State
 
-### Status At A Glance
-
-| Phase | Scope | Status |
+| artifact | current posture | owner |
 |---|---|---|
-| 1. Approval, feasibility, and measurement design | contracts, methodology, hardware feasibility, advisor and calendar inputs | **in progress** — core contracts are settled; final-report and colloquium dates and remote-hardware inputs remain external |
-| 2. Instrument and Apple-Silicon campaign | runnable harness, repaired Mac measurement path, Qwen3 `_v5` campaign | **in progress** — the instrument and plan preparation exist; unattended infrastructure and the G2-a prompt probe precede claim-bearing collection |
-| 3. Split-inference demonstration | cache transfer, offline replay, optional live split | **planned** — feasibility-first and not required for capstone completion |
-| 4. Analysis and paper | authenticated floors, claim close-out, figures, results, limitations | **in progress** — the fill contract is landed; numerical fills wait on prospective authenticated data |
-| 5. Presentation and release | reproducible archive, final report, colloquium | **planned** — follows the claims audit and figure freeze |
+| Instrument and immutable run bundle | implemented; mock and Mac paths exercised | `joulewise/`, `docs/contracts/run_bundle_layout.md` |
+| Qwen3 campaign design | prospective design and identity rules fixed; final packs await the measured prefill selector and open implementation gates | `configs/campaigns/d117_contrast_v5/`, `docs/process/v5-artifact-flow.md` |
+| Live gates and next work | machine-generated; never copied here | `docs/process/state_kernel.json`, `RUN_STATE.md` |
+| Paper claims and fill slots | pre-written contract; numerical fills await authenticated campaign artifacts | `docs/paper/results-fill-registry.md`, `docs/contracts/claims_ladder.md` |
+| Remote targets and split inference | provisional or planned pending live access and feasibility gates | `docs/phase_2/`, `docs/phase_3/` |
+| Public status site | repository is authoritative; drift is recorded and Ed deploys manually | `docs/site/DRIFT.md` |
 
-| Artifact | Current state | Remaining evidence |
-|---|---|---|
-| Instrument and run-bundle contract | Runnable on mock and Mac; strict validation, reduction, and structured refusal exist. | Remote NVIDIA and Jetson promotion requires live device evidence. |
-| Measurement method | Repaired time anchor, bracketed screening, uncertainty propagation, immutable evidence, and gross-energy headline basis are specified. | Observe the registered rules on the complete `_v5` campaign. |
-| Qwen3 `_v5` plan | Model identities, tokenizer relationship, thinking-off decode policy, forced 512-token output, four-rung prefill selector, and dominance criterion are fixed. | Measured rung selection, final packs, and fresh-checkout proof. |
-| Machine-to-paper chain | Probe, desk, shakedown, transaction, nightly checking, floor, close-out, and fill interfaces are mapped in `docs/process/v5-artifact-flow.md`. | Complete the open implementation gates before their first production use. |
-| Paper | The first draft is a frozen historical baseline; the successor fill registry defines permitted values and branch sentences. | Prospective campaign artifacts, final prose, figures, limitations, and claims audit. |
-| Optional extensions | Synthetic transfer and offline cache replay have a feasibility-first route. | Live split or remote-hardware evidence only if schedule and gates permit. |
-
-The architecture remains one typed controller composed with transport, runtime,
-and telemetry adapters. Each run writes a self-contained bundle of normalized
-configuration, environment and stack identity, lifecycle events, raw telemetry,
-model output, and derived summaries. Detailed design belongs in
-`docs/contracts/`, the phase plans, and the implementation—not in this status
-page.
+The controller composes transport, runtime, and telemetry adapters, then writes
+self-contained bundles containing normalized configuration, environment and
+device identity, workload events, raw power readings, outputs, and derived
+summaries. Reducers and reporting are downstream and read-only with respect to
+raw evidence.
 
 ## Advisor Decisions And Risks
 
-The repository does not record the final-report deadline or colloquium date.
-Those are the only calendar inputs this page asks the advisor or program to
-supply; internal cut dates must be derived after they are known. The
-metrology-centered scope and minimum viable artifact are already governed by
-D-091 and `docs/contracts/capstone_scope.md`. The current calendar record is
-`docs/milestones.md`.
+Required external inputs are the authoritative final-report and colloquium
+dates, remaining capstone-scope confirmation, and access decisions for any
+optional wall-meter, network, or borrowed-device work. No advisor transaction
+permission is requested: D-171 delegates unattended transaction GO to the
+magistrate's readiness gate while retaining Ed's stop authority and ownership
+of physical or credential-bound actions.
 
-| Risk | Current posture |
-|---|---|
-| No claim-bearing Qwen3 data yet | Preserve the fixed sequence and write no result before authenticated artifacts exist. |
-| Probe overlap is insufficient | Keep every probe and issue the registered refusal instead of lowering the count floor. |
-| A night is contaminated or a gate fails | Fail closed, preserve evidence, and require a governed disposition; no silent retry. |
-| Timing attribution does not dominate repeatability by two | Use the pre-written non-dominance branch; the instrument result remains reportable. |
-| Dependence changes the ten-block direction inference | Complete the registered sensitivity analysis and narrow wording if required. |
-| Remote access or cache replay fails | Use synthetic-transfer evidence or omit split inference; neither blocks the core capstone. |
-| Calendar input arrives late | Protect the Mac instrument, authenticated campaign chain, claim audit, report, and presentation before optional breadth. |
+Principal risks and responses:
 
-The minimum viable outcome is a trustworthy, reproducible measurement
-instrument plus a governed Apple-Silicon characterization with honest positive,
-negative, unresolved, or refused results. A single physical unit supports only
-claims about its named stack.
+- If no prompt rung qualifies, preserve the data and issue the registered
+  refusal rather than weakening the sampling rule.
+- If contamination, identity, calibration, custody, or nightly checks fail,
+  stop and preserve the evidence; replacements require a governed disposition.
+- If timing attribution does not dominate repeatability by two, use the
+  pre-written non-dominance wording. A negative result remains a valid capstone
+  instrument result.
+- If close-out or rendering is incomplete when data arrive, the claim waits;
+  no manual prose bypass is allowed.
+- If remote access or cache replay fails, use the synthetic-transfer result or
+  omit the optional split demonstration.
 
 ## Next Milestone
 
-The next scientific milestone is the G2-a prompt-length record, but it is not
-simply “one instrumented evening waiting on Ed.” The unattended supervisor and
-measurement-checkout plan pin precede it. Once those live gates open, the
-driver may run the bracketed diagnostic without Ed at the keyboard, while all
-agent processes stand down for the quiet interval. The result selects the
-shortest qualifying prefill length; it cannot support a model-energy claim.
-
-After G2-a, the desk day freezes the selection into the three campaign packs,
-then G2-b proves the real-pack path. The magistrate's cold-gate readiness
-decision opens the transaction under D-171. Collection proceeds through
-nightly G3 checks, followed by floor issuance, finalization, dominance and
-claim close-out, and controlled results filling. This document promises that
-sequence, not dates. Live status is in `RUN_STATE.md`.
+The next scientific milestone is the bracketed four-rung prompt-length probe,
+after the generated agent-lane prerequisites and unattended-night re-arming
+gates are satisfied. It is a quiet-machine measurement and must not run while
+an agent session is active. The fixed sequence after it is: checked rung
+selection and pack freeze; throwaway-clone proof; real-pack shakedown;
+magistrate-gated transaction opening; claim-bearing nights with a desk check
+after each; floor mint, finalization, comparison and dominance close-out; then
+the governed results fill. Calendar dates belong in `docs/milestones.md` once
+the authoritative academic dates are supplied.
 
 ## Evidence Links
 
-| Question | Owning evidence |
-|---|---|
-| What claim is permitted? | `docs/contracts/capstone_scope.md`; `docs/contracts/claims_ladder.md` |
-| Which work may run now? | `RUN_STATE.md`; `docs/process/state_kernel.json`; generated Current Queue in `TASK_QUEUE.md` |
-| Why are old energy values void? | D-078 in `docs/decision_log.md`; `docs/reviews/2026-07-19-measurement-soundness-audit.md` |
-| What exactly will the Qwen3 campaign do? | D-164 through D-168; `docs/process/v5-artifact-flow.md`; `configs/campaigns/d117_contrast_v5/` |
-| How are measurements and claims governed? | `docs/contracts/measurement_methodology.md`; `docs/contracts/analysis_plans.md`; `docs/paper/results-fill-registry.md` |
-| What remains risky or externally constrained? | `docs/risk_register.md`; `docs/milestones.md` |
-| Where is historical status prose? | `docs/project_status_history.md`; dated files under `docs/run_reports/` |
-
-Update this page only when an advisor-visible gate, verdict, campaign step, or
-claim boundary changes. Keep volatile ranks, dates, and test state in their
-owners. Under D-136 the site lane is retired from routine sessions: agents do
-not refresh, regenerate, or deploy it. `docs/site/DRIFT.md` is retained only as
-a reference for an Ed-chosen manual workflow dispatch; Ed deploys any resulting
-snapshot.
+- Current restart, dependencies, and work-selection lanes: `RUN_STATE.md`,
+  `TASK_QUEUE.md`, and `docs/process/state_kernel.json`.
+- Binding choices and measurement rules: `docs/decision_log.md` (especially
+  D-078, D-164–D-171) and `docs/contracts/measurement_methodology.md`.
+- Probe-to-paper mechanism: `docs/process/v5-artifact-flow.md` and
+  `docs/paper/results-fill-registry.md`.
+- Phase evidence and optional-scope boundaries: `docs/phase_1/` through
+  `docs/phase_5/` and `docs/contracts/capstone_scope.md`.
+- Historical advisor updates and retired process prose:
+  `docs/project_status_history.md`; current process: `docs/orchestration.md`.
+- Front-facing drift: `docs/site/DRIFT.md`. Ed alone regenerates or deploys
+  the public status site.
