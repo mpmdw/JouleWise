@@ -2009,7 +2009,9 @@ def _load_pack_projection(
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable", "plan tree arm_attachments are unavailable"
         )
-    projection = validate_identity_pin_projection(attachments.get("identity_pin_projection"))
+    projection = validate_identity_pin_projection(
+        attachments.get("identity_pin_projection")
+    )
     sidecar_path = pack_root / "plan_tree.sha256"
     try:
         if sidecar_path.is_symlink():
