@@ -160,3 +160,22 @@ beside its prompt; harvest from disk, never relaunch blind.
   Q4 floor-prompt regeneration decision, Q6 scope freeze ruling (skill-distill second convening PARKED until Q6).
 - Kernel rows merged to main (branch head 064b0dbc; merge landed with the next push). AUTH round 3 running with the registry file in scope (report 15).
 - Still running: custody fix 4, paper-J fix 1, wave-2 replay-3 (PR #285 rows 9/11/12 pending).
+
+## 2026-09-04 ~22:30 PT — consult complete; astra mirrors the magistrate; cures in flight
+
+- Consult seats archived: 10 Sol physics, 11 Opus contract, 12 blind Fable. Draft ruling 13 on main (cfdb24ac).
+  Ed (in chat): "when astra gets back … assess its work … have it mirror your tasks and you two discuss final
+  moves" → assessment given in chat; astra peer-magistrate seat running → 14 (wt-astra-peer). Then 15 (magistrate
+  reply), 16 (astra final), 17 (final ruling) → cold Fable gate. PARKED lanes launch no new rounds until 17.
+- Custody seam: fix 4 f2d35b4f, delta 4 LANDABLE (10). F1 = token recoverable by private introspection →
+  outside D-161 ordinary-operator threat; cure = narrow contract lines 53-56/75-81, no code round. F2 = census
+  regression is a string count → test debt, recorded. Peer-audit 02-F4 width recomputation: factor the mint's
+  reconstruction (1–2 days) — packet question, not a round. Seal the paper-supply packet AFTER 17 (D-173 amendments).
+- FB-PLANNING-METADATA-01 (wt-fb-metadata): seat landed keys, but detection_floor.py:3353 compares the artifact's
+  object to the canonical emitter by exact equality (also :3845, :4115, analysis_engine/artifact.py:494) → every
+  previously issued floor object would fail validation. HELD, not merged; needs SINGLE_COUNT_DISCIPLINE_ID .v2
+  with a version-aware validator + adapter_contracts.md amendment = cold-gate item in 17.
+- ESTIMAND-ENCLOSURE-01 (wt-estimand-enclosure) still running; its blast-radius report decides field vs script.
+- Legacy L1: rounds 1+2 on feat/2026-09-04-legacy-l1 (a379b5af), execution refuter running → PR.
+- Paper-J: PR #286 open (rows 9/11/12 pending). Wave-2 PR #285 replay-3 still running. AUTH round 3 running
+  (last round; PARK after).
