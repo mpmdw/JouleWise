@@ -12,6 +12,7 @@ from tests.git_fixture import GIT_MAINTENANCE_CONTROLS, init_git_fixture
 
 
 TESTS_ROOT = Path(__file__).resolve().parent
+GIT_INIT_SUBCOMMAND = "init"
 EXPECTED_MAINTENANCE_CONTROLS = (
     ("maintenance.auto", "false"),
     ("gc.auto", "0"),
@@ -19,6 +20,7 @@ EXPECTED_MAINTENANCE_CONTROLS = (
     ("gc.autoDetach", "false"),
 )
 ESTABLISHED_LOCAL_HELPERS = {
+    "git_fixture.py": {"init_git_fixture"},
     "test_calibration_exits.py": {
         "CalibrationExitReliabilityTests._configure_fixture_repo",
         "PublicGovernedExitWitnessTests.setUp",
@@ -104,7 +106,7 @@ def _direct_git_init_lines(path: Path) -> tuple[int, ...]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.List, ast.Tuple)):
             literals = _string_literals(node)
-            if literals[:1] == ("init",):
+            if literals[:1] == (GIT_INIT_SUBCOMMAND,):
                 lines.add(node.lineno)
     return tuple(sorted(lines))
 
@@ -133,6 +135,14 @@ def _maintenance_controls(path: Path) -> tuple[tuple[str, str], ...] | None:
     return None
 
 
+def _git_init_violations(tests_root: Path) -> dict[str, tuple[int, ...]]:
+    return {
+        path.relative_to(tests_root).as_posix(): lines
+        for path in sorted(tests_root.rglob("*.py"))
+        if (lines := _direct_git_init_lines(path))
+    }
+
+
 class GitFixtureMaintenanceTests(unittest.TestCase):
     def test_shared_helper_installs_the_exact_four_key_tuple(self) -> None:
         self.assertEqual(GIT_MAINTENANCE_CONTROLS, EXPECTED_MAINTENANCE_CONTROLS)
@@ -155,13 +165,21 @@ class GitFixtureMaintenanceTests(unittest.TestCase):
         self.assertEqual(observed, EXPECTED_MAINTENANCE_CONTROLS)
 
     def test_every_test_module_routes_git_initialization_through_shared_helper(self) -> None:
-        violations = {
-            path.name: lines
-            for path in sorted(TESTS_ROOT.glob("test_*.py"))
-            if path != Path(__file__).resolve()
-            if (lines := _direct_git_init_lines(path))
-        }
-        self.assertEqual(violations, {})
+        self.assertEqual(_git_init_violations(TESTS_ROOT), {})
+
+    def test_guard_flags_direct_init_in_nested_support_module(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tests_root = Path(temporary) / "tests"
+            support_module = tests_root / "support" / "fixture_factory.py"
+            support_module.parent.mkdir(parents=True)
+            support_module.write_text(
+                "import subprocess\n"
+                "subprocess.run(('git', 'init'), check=True)\n",
+                encoding="utf-8",
+            )
+            violations = _git_init_violations(tests_root)
+
+        self.assertEqual(violations, {"support/fixture_factory.py": (2,)})
 
     def test_established_local_helpers_retain_the_exact_tuple(self) -> None:
         observed = {
