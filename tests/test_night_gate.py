@@ -477,6 +477,22 @@ class NightGateTests(unittest.TestCase):
         self.assertIn("measurement path is not a git repo", receipt.refusal.detail)
         self.assertEqual([], source.run_calls)
 
+    def test_plan_age_refusals_precede_head_probes(self) -> None:
+        cases = (
+            (-200_000.0, "night_plan_stale"),
+            (1_006.0, "night_plan_malformed"),
+        )
+        for authored_epoch_s, expected_reason in cases:
+            with self.subTest(expected_reason=expected_reason):
+                source = FakeProbeSource()
+                source.measurement_error = RuntimeError("head probe must not run")
+                receipt = self.evaluate(
+                    make_plan(authored_epoch_s=authored_epoch_s), source
+                )
+                self.assertEqual(expected_reason, receipt.refusal.reason)
+                self.assertEqual([], source.measurement_calls)
+                self.assertEqual(0, source.checkout_calls)
+
     def test_a_future_dated_plan_is_malformed(self) -> None:
         source = FakeProbeSource()
         receipt = self.evaluate(make_plan(authored_epoch_s=source.now_value + 1.0), source)

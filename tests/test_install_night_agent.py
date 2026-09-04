@@ -128,6 +128,39 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn("repo_head", completed.stderr)
         self.assertFalse((self.rendered / "com.joulewise.night.plist").exists())
 
+    def test_install_refuses_relative_measurement_root(self) -> None:
+        completed = self._run(self._write_plan(measurement_root="."))
+        self.assertEqual(3, completed.returncode)
+        self.assertIn("measurement_root", completed.stderr)
+        self.assertIn("absolute", completed.stderr)
+
+    def test_install_refuses_measurement_head_that_is_not_40_lowercase_hex(self) -> None:
+        for invalid_head in ("A" * 40, "a" * 39):
+            with self.subTest(invalid_head=invalid_head):
+                completed = self._run(
+                    self._write_plan(measurement_head=invalid_head)
+                )
+                self.assertEqual(3, completed.returncode)
+                self.assertIn("measurement_head", completed.stderr)
+                self.assertIn("40 lowercase hex", completed.stderr)
+
+    def test_v1_install_is_retired_without_traceback_but_uninstall_still_works(self) -> None:
+        plan = self._write_plan(schema="joulewise.night_plan.v1")
+        mapping = json.loads(plan.read_text(encoding="utf-8"))
+        del mapping["measurement_root"]
+        del mapping["measurement_head"]
+        plan.write_text(json.dumps(mapping), encoding="utf-8")
+
+        installed = self._run(plan)
+        self.assertEqual(3, installed.returncode)
+        self.assertIn("retired", installed.stderr)
+        self.assertIn("joulewise.night_plan.v2", installed.stderr)
+        self.assertNotIn("Traceback", installed.stderr)
+        self.assertNotIn("KeyError", installed.stderr)
+
+        uninstalled = self._run(plan, uninstall=True)
+        self.assertEqual(0, uninstalled.returncode, uninstalled.stderr)
+
     def test_uninstall_ignores_both_pin_mismatches_and_invokes_launchctl(self) -> None:
         completed = self._run(
             self._write_plan(

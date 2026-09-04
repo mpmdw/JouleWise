@@ -1171,6 +1171,44 @@ class NightDriverTests(unittest.TestCase):
         self.assertEqual("night_plan_stale", receipt.refusal.reason)
         self.assertIn("measurement_head", receipt.refusal.detail)
 
+    def test_matching_real_measurement_checkout_uses_requested_root_and_strips_head(self) -> None:
+        measurement = self.root / "matching-measurement-probe"
+        pinned_head = _init_git_repo(measurement)
+        driver_head = subprocess.check_output(
+            ["/usr/bin/git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            text=True,
+        ).strip()
+        self.assertNotEqual(driver_head, pinned_head)
+
+        plan_mapping = json.loads(self.plan_path.read_text(encoding="utf-8"))
+        plan_mapping["measurement_root"] = str(measurement)
+        plan_mapping["measurement_head"] = pinned_head
+        self.plan_path.write_text(json.dumps(plan_mapping), encoding="utf-8")
+
+        production_measurement_probe = self.real_make_probes().measurement_head
+        observed_head = production_measurement_probe(str(measurement))
+        self.assertEqual(pinned_head, observed_head)
+        self.assertFalse(observed_head.endswith("\n"))
+
+        fake = self.source.probes()
+        probes = night_gate.Probes(
+            run=fake.run,
+            now_epoch_s=fake.now_epoch_s,
+            monotonic_ns=fake.monotonic_ns,
+            read_text=fake.read_text,
+            checkout_head=lambda: driver_head,
+            measurement_head=production_measurement_probe,
+        )
+        plan = self.driver._load_plan(self.plan_path)
+        receipt = night_gate.evaluate_night(plan, probes)
+        self.assertNotIn(
+            None if receipt.refusal is None else receipt.refusal.reason,
+            {"night_plan_stale", "night_plan_malformed"},
+        )
+        self.assertEqual("GO", receipt.verdict)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual(pinned_head, c5.measured["measurement_checkout_head"])
+
     def _installer_plan(self, root: Path) -> Path:
         plan = json.loads(self.plan_path.read_text())
         plan["repo_head"] = subprocess.check_output(

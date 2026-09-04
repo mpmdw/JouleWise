@@ -601,21 +601,7 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
         )
 
     # R-6 (reinterpreted): freshness and exact measurement-checkout identity.
-    try:
-        measurement_checkout_head = probes.measurement_head(plan.measurement_root)
-        checkout_head = probes.checkout_head()
-    except Exception as exc:
-        return _probe_refusal(plan, probes, rows, evidence, exc)
-    rows["C5"].measured.update(
-        {
-            "authored_epoch_s": plan.authored_epoch_s,
-            "plan_repo_head": plan.repo_head,
-            "driver_checkout_head": checkout_head,
-            "measurement_root": plan.measurement_root,
-            "plan_measurement_head": plan.measurement_head,
-            "measurement_checkout_head": measurement_checkout_head,
-        }
-    )
+    rows["C5"].measured["authored_epoch_s"] = plan.authored_epoch_s
     if plan.authored_epoch_s > now_epoch_s:
         return _finish(
             plan,
@@ -630,6 +616,20 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
             rows,
             Refusal("night_plan_stale", "plan is older than 36 hours", ()),
         )
+    try:
+        measurement_checkout_head = probes.measurement_head(plan.measurement_root)
+        checkout_head = probes.checkout_head()
+    except Exception as exc:
+        return _probe_refusal(plan, probes, rows, evidence, exc)
+    rows["C5"].measured.update(
+        {
+            "plan_repo_head": plan.repo_head,
+            "driver_checkout_head": checkout_head,
+            "measurement_root": plan.measurement_root,
+            "plan_measurement_head": plan.measurement_head,
+            "measurement_checkout_head": measurement_checkout_head,
+        }
+    )
     if measurement_checkout_head != plan.measurement_head:
         return _finish(
             plan,

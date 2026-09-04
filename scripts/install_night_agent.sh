@@ -41,7 +41,43 @@ custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.a
 courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
-  plan_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repo_head"])' "$plan")"
+  plan_fields=("${(@f)$(/usr/bin/python3 - "$plan" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    data = json.load(stream)
+schema = data.get("schema")
+required = ("repo_head", "measurement_root", "measurement_head")
+missing = [key for key in required if key not in data]
+if schema != "joulewise.night_plan.v2" or missing:
+    schema_name = schema if isinstance(schema, str) else "<missing>"
+    suffix = f" (missing {'/'.join(missing)})" if missing else ""
+    print(
+        f"plan schema {schema_name} is retired; re-author under "
+        f"joulewise.night_plan.v2{suffix}",
+        file=sys.stderr,
+    )
+    raise SystemExit(3)
+for key in required:
+    print(data[key])
+PY
+  )}") || exit $?
+  plan_head="$plan_fields[1]"
+  measurement_root="$plan_fields[2]"
+  plan_measurement_head="$plan_fields[3]"
+  [[ "$plan_head" =~ '^[0-9a-f]{40}$' ]] || {
+    print "plan repo_head is not 40 lowercase hex: $plan_head" >&2
+    exit 3
+  }
+  [[ "$measurement_root" == /* ]] || {
+    print "plan measurement_root must be an absolute path: $measurement_root" >&2
+    exit 3
+  }
+  [[ "$plan_measurement_head" =~ '^[0-9a-f]{40}$' ]] || {
+    print "plan measurement_head is not 40 lowercase hex: $plan_measurement_head" >&2
+    exit 3
+  }
   if ! actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"; then
     print "unable to read repo_head from driver checkout" >&2
     exit 3
@@ -50,8 +86,6 @@ if (( ! uninstall )); then
     print "plan repo_head does not match driver checkout HEAD" >&2
     exit 3
   }
-  measurement_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["measurement_root"])' "$plan")"
-  plan_measurement_head="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["measurement_head"])' "$plan")"
   if ! actual_measurement_head="$(/usr/bin/git -C "$measurement_root" rev-parse HEAD)"; then
     print "unable to read measurement_head from measurement checkout" >&2
     exit 3
