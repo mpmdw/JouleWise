@@ -1219,6 +1219,7 @@ class NightDriverTests(unittest.TestCase):
         plan["measurement_root"] = str(measurement_root)
         plan["measurement_head"] = _init_git_repo(measurement_root)
         plan["custody_root"] = str(root / "custody")
+        plan["authored_epoch_s"] = time.time()  # bench fix: fixture authored "now" so the installer age check passes
         path = root / "install-plan.json"
         path.write_text(json.dumps(plan), encoding="utf-8")
         return path
