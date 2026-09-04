@@ -6,30 +6,29 @@ invocation. A *direct seat* is a bounded invocation started through
 `codex-run-v3` without a model wrapper. A *preflight* is the intake and checking
 done before an edit. A *replay* repeats a check at a named revision. A *packet*
 is the bounded evidence set given to an independent reviewer. A *first-use
-gate* checks both whether a reader can understand a term at its first use and,
-for behavior, whether the first real execution has been observed. A *cold gate*
-is an independent review before an irreversible process mechanism is accepted
-or installed.
+gate* checks whether a reader can understand a term at its first use. An
+executed first-real-use probe is a separate proposed behavioral gate, not part
+of the generally ratified rule. A *cold gate* is an independent review before
+an irreversible process mechanism is accepted or installed.
 
 ## 1. Wrapper cost
 
 The usage cutoff stopped the wrapper fleet while completed Sol work remained on
-disk. On resumption, Ed's recorded budget regime moved bounded Sol work to
-direct runner seats, reserved Fable for merge-bound reading and the mandatory
-cold gate, and required disk harvest before relaunch. This is evidence that a
-wrapper which contributes no judgment consumes scarce lead-model capacity and
-adds another failure boundary without improving the bounded seat's work.
+disk. On resumption, Ed's recorded 2026-09-03 budget regime moved
+bounded Sol work to direct runner seats, reserved Fable for merge-bound reading
+and the mandatory cold gate, and required disk harvest before relaunch. This is
+evidence about that dated regime; it does not replace D-129's standing
+Opus-directed Sol default.
 
 - Evidence: `docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
   “2026-09-03 19:45 update,” “2026-09-03 21:05 update,” and “Resume sequence
   after a usage stall.”
-- Proposed doctrine sentence: “After the lead fixes a bounded seat's role,
-  prompt, authority, and review lens, launch it directly; use a model wrapper
-  only when that wrapper will make substantive mid-stream judgments.”
+- Doctrine boundary: “Use direct bounded seats only when a separately recorded
+  authority, such as Ed's 2026-09-03 budget regime, permits the
+  exception; otherwise D-129's Opus-directed Sol default governs.”
 - Installed in-repository: `docs/orchestration.md`, dated addendum.
-- Proposed global-skill edit: add the sentence to `operation-loop` beside
-  delegation selection, with an explicit note that lieutenant-directed streams
-  remain appropriate when continuing judgment is required.
+- Proposed global-skill edit: record the direct-run safeguards as conditional
+  on a separately authorized exception and preserve D-129's default.
 
 ## 2. Direct `codex-run-v3` pitfalls
 
@@ -129,22 +128,25 @@ The first-use rule had two different outcomes, and both matter. The contract
 review successfully exposed defined vocabulary that appeared before its plain-
 language explanation. For the watchdog, however, the implementation existed
 while the first install/stand-down rehearsal was not replicable; the contract
-review therefore kept the artifact not landable. The D-171 evidence resolves
-the distinction: a first-use vocabulary table is mandatory for changed terms
-and literals, and behavioral clauses are paired with executed probes.
+review therefore kept that artifact not landable. D-171's dated addendum
+resolves the authority boundary: a first-use vocabulary table is mandatory for
+changed terms and literals, while the general executed-probe rule remains
+PROPOSAL PENDING ED. The magistrate may require a probe only for a brief it
+commissions under its own authority.
 
 - Evidence: `docs/process_traces/2026-09-02-projection-02/163-terra-proj02-pedagogy.md`;
   `docs/process_traces/2026-09-02-projection-02/181-luna-proj02-delta.md`;
   `docs/process_traces/2026-09-03-kernel-batch/01-lieutenant-report.md`,
   “Item 1 — the D-171 addendum”; `docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`,
   finding F4.
-- Proposed doctrine sentence: “A contract edit that changes defined terms or
-  literals carries a pre-landing first-use table, and every behavioral clause
-  also carries an executed first-real-use probe.”
+- Doctrine sentence: “A contract edit that changes defined terms or literals
+  carries a pre-landing first-use table.” A behavioral-probe requirement must
+  identify separate authority: pending Ed's decision, it applies only to a
+  magistrate-commissioned brief when the magistrate requires it.
 - Installed in-repository: `docs/orchestration.md`, dated addendum.
-- Proposed global-skill edit: teach `consistency-sweep` to produce the term
-  table and teach `operation-loop` to reject behavioral rows that have prose
-  review but no executed first-use evidence.
+- Proposed global-skill edit: teach `consistency-sweep` to produce the ratified
+  term table; do not install a universal behavioral-probe rejection rule unless
+  Ed ratifies the pending proposal.
 
 ## 7. Cold-gate seat separation
 
@@ -170,6 +172,6 @@ directory; the final synthesis records the cure.
 The in-repository doctrine changes are additive and evidence-linked. No global
 skill was edited because those files are outside this session's write scope.
 No state-kernel, queue, run-state, decision-log, or paper-skeleton change is
-needed for this distillation; if the global skills are revised later, their
-version record should point back to this file rather than copy the incident
-narrative.
+needed for this distillation: D-129 and D-171 already supply the controlling
+boundaries. If the global skills are revised later, their version record should
+point back to this file rather than copy the incident narrative.
