@@ -78,6 +78,8 @@
     "decode": 10.0,
     "prefill": 5.0
   },
+  "phase_partial_record_enclosure_j": null,
+  "phase_partial_record_enclosure_reason_code": "interval_support_unavailable",
   "request_decode_metrics": [
     {
       "burst_size_max_tokens": 2,

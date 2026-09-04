@@ -169,6 +169,37 @@
     "prefill": 2.9164673801465035,
     "tokenize": 0.0010422991161346436
   },
+  "phase_partial_record_enclosure_j": {
+    "decode": {
+      "basis": "nonnegative_partial_record_enclosure.v1",
+      "lower_j": 4.694997007188797,
+      "straddling_energy_j": 2.9979997394945626,
+      "straddling_record_count": 2,
+      "upper_j": 7.6929967466833595
+    },
+    "generation_setup": {
+      "basis": "nonnegative_partial_record_enclosure.v1",
+      "lower_j": 0.0,
+      "straddling_energy_j": 0.30000001998138426,
+      "straddling_record_count": 1,
+      "upper_j": 0.30000001998138426
+    },
+    "prefill": {
+      "basis": "nonnegative_partial_record_enclosure.v1",
+      "lower_j": 0.0,
+      "straddling_energy_j": 3.20399966191721,
+      "straddling_record_count": 2,
+      "upper_j": 3.20399966191721
+    },
+    "tokenize": {
+      "basis": "nonnegative_partial_record_enclosure.v1",
+      "lower_j": 0.0,
+      "straddling_energy_j": 0.30000001998138426,
+      "straddling_record_count": 1,
+      "upper_j": 0.30000001998138426
+    }
+  },
+  "phase_partial_record_enclosure_reason_code": null,
   "status": "succeeded",
   "suite_metrics": null,
   "summary_provenance": {

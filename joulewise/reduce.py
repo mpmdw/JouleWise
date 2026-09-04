@@ -143,6 +143,26 @@ class ReducerVersionError(ValueError):
     """Governed reducer dispatch refusal, distinct from unrelated ValueError."""
 
 
+@dataclass(frozen=True)
+class _SummaryMetricsWithPartialRecordEnclosure(SummaryMetrics):
+    """Current-wire summary with the additive interval-allocation diagnostic."""
+
+    phase_partial_record_enclosure_j: (
+        dict[str, dict[str, float | int | str]] | None
+    ) = None
+    phase_partial_record_enclosure_reason_code: str | None = None
+
+
+@dataclass(frozen=True)
+class _SummaryMetricsV060WithPartialRecordEnclosure(SummaryMetricsV060):
+    """Current AXI-wire summary with the additive allocation diagnostic."""
+
+    phase_partial_record_enclosure_j: (
+        dict[str, dict[str, float | int | str]] | None
+    ) = None
+    phase_partial_record_enclosure_reason_code: str | None = None
+
+
 # ----------------------------------------------------------------------------
 # Point interpolation plus interval-support integration
 
@@ -2891,6 +2911,84 @@ def _windows_overlap(left: list[Window], right: list[Window]) -> bool:
     )
 
 
+def _phase_partial_record_enclosure(
+    contributions: list[tuple[str, list[TracePoint], list[Window]]],
+) -> tuple[
+    dict[str, dict[str, float | int | str]] | None,
+    str | None,
+]:
+    """Enclose allocation of nonnegative interval-record energy to phases.
+
+    Each tuple is ``(phase, interval-average curve, event windows)``. A record
+    wholly inside the union of a phase's windows contributes its full reported
+    energy to both endpoints. A record that properly straddles one or more
+    union edges contributes ``[0, Q]`` once, where ``Q`` is reported average
+    power times the record's full support. This is an allocation diagnostic
+    conditional on the held-average reconstruction, not a bound on physical
+    phase energy.
+    """
+
+    if not contributions:
+        return None, "phase_windows_unrecorded"
+
+    for _phase, curve, _windows in contributions:
+        if not curve or any(
+            point.support_start_s is None or point.support_end_s is None
+            for point in curve
+        ):
+            return None, "interval_support_unavailable"
+        if any(
+            point.support_end_s < point.support_start_s  # type: ignore[operator]
+            for point in curve
+        ):
+            return None, "interval_support_invalid"
+        if any(not math.isfinite(point.power_w) for point in curve):
+            return None, "nonfinite_reported_power"
+        if any(point.power_w < 0.0 for point in curve):
+            return None, "negative_reported_power"
+
+    inside_terms: dict[str, list[float]] = {}
+    straddling_terms: dict[str, list[float]] = {}
+    straddling_counts: dict[str, int] = {}
+    for phase, curve, windows in contributions:
+        inside_terms.setdefault(phase, [])
+        straddling_terms.setdefault(phase, [])
+        straddling_counts.setdefault(phase, 0)
+        union = _union_windows(windows)
+        edges = [
+            edge
+            for window in union
+            for edge in (window.start_s, window.end_s)
+        ]
+        for point in curve:
+            support_start_s = float(point.support_start_s)  # validated above
+            support_end_s = float(point.support_end_s)  # validated above
+            record_energy_j = point.power_w * (support_end_s - support_start_s)
+            fully_inside = any(
+                window.start_s <= support_start_s
+                and support_end_s <= window.end_s
+                for window in union
+            )
+            if fully_inside:
+                inside_terms[phase].append(record_energy_j)
+            elif any(support_start_s < edge < support_end_s for edge in edges):
+                straddling_terms[phase].append(record_energy_j)
+                straddling_counts[phase] += 1
+
+    result: dict[str, dict[str, float | int | str]] = {}
+    for phase in sorted(inside_terms):
+        lower_j = math.fsum(inside_terms[phase])
+        straddling_energy_j = math.fsum(straddling_terms[phase])
+        result[phase] = {
+            "lower_j": lower_j,
+            "upper_j": math.fsum((lower_j, straddling_energy_j)),
+            "straddling_record_count": straddling_counts[phase],
+            "straddling_energy_j": straddling_energy_j,
+            "basis": "nonnegative_partial_record_enclosure.v1",
+        }
+    return result, None
+
+
 def _reduce_v060(
     reader: BundleReader,
     config: BenchmarkConfig,
@@ -2977,6 +3075,16 @@ def _reduce_v060(
             _integrate(source_curve, item.start_s, item.end_s)
             for item in windows
         )
+
+    (
+        phase_partial_record_enclosure_j,
+        phase_partial_record_enclosure_reason_code,
+    ) = _phase_partial_record_enclosure(
+        [
+            (phase, _source_curve(source), windows)
+            for (source, phase), windows in sorted(group_unions.items())
+        ]
+    )
 
     overlap = False
     sources = {source for source, _phase in group_unions}
@@ -3323,7 +3431,20 @@ def _reduce_v060(
     )
     total_tokens, _total_source = _total_tokens(metadata)
     energy_request = idle_subtracted_energy_j if single_request else None
-    return SummaryMetricsV060(
+    summary_type = (
+        _SummaryMetricsV060WithPartialRecordEnclosure
+        if reducer_version == AXI_REDUCER_VERSION
+        else SummaryMetricsV060
+    )
+    current_fields: dict[str, Any] = {}
+    if reducer_version == AXI_REDUCER_VERSION:
+        current_fields = {
+            "phase_partial_record_enclosure_j": phase_partial_record_enclosure_j,
+            "phase_partial_record_enclosure_reason_code": (
+                phase_partial_record_enclosure_reason_code
+            ),
+        }
+    return summary_type(
         status=RunStatus.SUCCEEDED,
         energy_request_j=energy_request,
         energy_token_j=(
@@ -3374,6 +3495,7 @@ def _reduce_v060(
         decode_emission_burst_size_max_tokens=bundle_bursts[3],
         request_decode_metrics=request_metrics,
         summary_provenance=_summary_provenance(reducer_version),
+        **current_fields,
     )
 
 
@@ -3558,6 +3680,15 @@ def _reduce(
     )
 
     phase_energy_j = _phase_energy(phase_windows, curve)
+    (
+        phase_partial_record_enclosure_j,
+        phase_partial_record_enclosure_reason_code,
+    ) = _phase_partial_record_enclosure(
+        [
+            (phase, curve, intervals)
+            for phase, intervals in sorted(phase_windows.items())
+        ]
+    )
     phase_identifiability = _phase_identifiability(phase_windows, curve)
     suite_metrics = _suite_metrics(reader, curve)
     idle_mean_uncertainty = derive_idle_mean_uncertainty(
@@ -3691,7 +3822,20 @@ def _reduce(
         runtime_cleanup_ok=reader.runtime_cleanup_ok(),
     )
 
-    return SummaryMetrics(
+    summary_type = (
+        _SummaryMetricsWithPartialRecordEnclosure
+        if reducer_version == REDUCER_VERSION
+        else SummaryMetrics
+    )
+    current_fields: dict[str, Any] = {}
+    if reducer_version == REDUCER_VERSION:
+        current_fields = {
+            "phase_partial_record_enclosure_j": phase_partial_record_enclosure_j,
+            "phase_partial_record_enclosure_reason_code": (
+                phase_partial_record_enclosure_reason_code
+            ),
+        }
+    return summary_type(
         status=RunStatus.SUCCEEDED,
         energy_request_j=energy_request_j,
         energy_token_j=energy_token_j,
@@ -3713,6 +3857,7 @@ def _reduce(
         energy_anchor_shift_envelopes=energy_anchor_shift_envelopes,
         window_evidence_precheck=window_evidence_precheck,
         summary_provenance=_summary_provenance(reducer_version),
+        **current_fields,
     )
 
 
