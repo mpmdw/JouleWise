@@ -216,7 +216,7 @@ be re-derived by a future agent gets an entry here.
 | D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | adopted (magistrate, 2026-09-03; installed by PRs #273, #274, #275) |
 | D-171 | HANDS-FREE WEEK — Ed's delegations for unattended windows: E-10 amended (driver invokes the launcher), hC + transaction GO delegated to the magistrate's gate, watchdog install authorized, 5-min stand-down | ratified (Ed, 2026-09-02) |
 | D-172 | REAL-ENTRY-POINT SUBPROCESS TEST — any change to the magistrate watchdog, its installer, its launchd templates, or its session argv ships with a green subprocess test of the real entry point plus one named RED mutation | adopted (magistrate on the cold gate's amended text, packet 21 Q-PROC, 2026-09-04; Ed notified, may veto) |
-| D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): paths + pins in, validator-replayed frozen verified objects out; no caller-supplied dicts/bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | proposed (magistrate, provisional, 2026-09-04, after a three-seat consult; pending the paper-supply cold gate before any supplier merges; Ed may veto) |
+| D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | proposed (magistrate, provisional, 2026-09-04, after a three-seat consult; pending the paper-supply cold gate before any supplier merges; Ed may veto) |
 
 ---
 
@@ -10912,9 +10912,11 @@ A three-seat design consult (Sol, Opus, blind Fable; traces
 adjudication packet (`14-*.md`) converged; the magistrate ruled (`15-*.md`).
 
 Rule: a paper supplier or renderer obtains every claim-bearing input ONLY
-through `joulewise/paper_custody.py`'s `open_paper_input(ref)` over a closed
-set of input families. In: paths plus expected-digest PINS and receipts.
-Out: frozen verified objects carrying the digests actually verified, after a
+through `joulewise/paper_custody.py`'s `open_paper_input(role, runs_root)` over a
+closed set of input families. In: a role name and a runs root — nothing else; a
+git-tracked supply map (read through the repository's authentication session
+and anchored on a clean tree, addendum 16) names every path and expected
+digest, so no caller ever names a digest. Out: frozen verified objects carrying the digests actually verified, after a
 fresh validator replay from disk; governed files are authorized through
 clean Git blobs, generated files through receipts reached from a registered
 custody inventory. No supplier accepts a dict, bytes, sequence, or
