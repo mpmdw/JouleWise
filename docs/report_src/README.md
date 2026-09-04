@@ -31,9 +31,11 @@ committed generated page, validates full-report assembly in memory, and exits
 document as a reference.
 
 Full evidence re-derivation is **controlled/internal**, not a clean-clone or
-external reproducibility claim. The following command re-derives the dataset,
-aggregates, figure F1, tables T1/S1, claims-index row, generated results page,
-and assembled report only when the internal corpus is available:
+external reproducibility claim. The following command re-derives the retained
+historical dataset, aggregates, figure, tables, and claims-index artifact, then
+regenerates the VOIDED demonstration page and assembled report only when the
+internal corpus is available. The generated report does not render the
+historical figure, tables, or energy values:
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline \
@@ -58,11 +60,11 @@ python3 scripts/make_figures.py --runs-root runs \
 
 ## Evidence boundary
 
-All current results content is **legacy L1 (manual review; pre-2M)**:
-stack-specific instrument observations from six legacy bundles, n=3 per
-exact stack. No cross-stack comparison, efficiency ranking, or scaling claim
-is made anywhere in this source tree, and the assembler fails the build on a
-small forbidden-phrase list.
+The legacy corpus is **VOIDED permanently for claim use**, as stated in the
+[root README](../../README.md#current-state). The generated results page is a
+historical pipeline demonstration only: it emits no energy-result table,
+energy values, or rendered figure. The historical derived artifacts remain in
+`analysis/rpt001-v2/` and `figures/rpt001-v2/` for provenance only.
 
 ## Bibliography verification boundary
 
