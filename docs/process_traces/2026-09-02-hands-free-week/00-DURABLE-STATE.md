@@ -158,5 +158,5 @@ beside its prompt; harvest from disk, never relaunch blind.
 - Next after consult: magistrate synthesis (13), estimand + D-165 relabel rulings → cold Fable gate (claim-bearing),
   paper-K seat (03-F4 methods-vs-code corrections, null-vs-model wording, F+B metadata) after paper-J merges,
   Q4 floor-prompt regeneration decision, Q6 scope freeze ruling (skill-distill second convening PARKED until Q6).
-- Kernel rows merged to main (064b0dbc). AUTH round 3 running with the registry file in scope (report 15).
+- Kernel rows merged to main (branch head 064b0dbc; merge landed with the next push). AUTH round 3 running with the registry file in scope (report 15).
 - Still running: custody fix 4, paper-J fix 1, wave-2 replay-3 (PR #285 rows 9/11/12 pending).
