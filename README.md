@@ -262,6 +262,6 @@ considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
 constraints live in `docs/milestones.md`; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`. Agents never regenerate or deploy the status site:
-sessions that change front-facing state refresh `docs/site/DRIFT.md`, and Ed
-deploys manually (D-068).
+`docs/council_log.md`. Under D-136, agents do not refresh, regenerate, or
+deploy the status site. `docs/site/DRIFT.md` is a retained reference only; if
+Ed chooses the manual workflow dispatch, Ed deploys the resulting snapshot.

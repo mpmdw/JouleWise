@@ -46,6 +46,33 @@ lands in this repo.) Binding role and process changes live in
   recorded two lead designs overturned by an invited peer before
   implementation.
 
+### Current rule-11 topology
+
+Three role names recur in the project record:
+
+- The **magistrate** is the designated lead. It decomposes work, rules on
+  design questions, adjudicates review findings, performs the final contextual
+  review of the exact merge candidate, and retains merge authority. That last
+  review is non-delegable under D-121.
+- A **lieutenant** coordinates bounded implementation or review lanes and
+  assembles their evidence. It does not decide process-policy changes,
+  measurement or funding scope, calendar commitments, irreversible actions,
+  or whether to add or remove a review mechanism. D-080 records the process-
+  policy subset; D-119 records the measurement, scope, and calendar boundary.
+  Those questions return to the magistrate or Ed, according to the owning
+  decision.
+- A **cold gate** is an independent adjudication from a fresh session that has
+  not inherited the working lane's assumptions. The gate receives a
+  mechanically assembled evidence packet and is paired with a distinct
+  contract-focused reviewer. A repeated defect signature after a fix round
+  sends the next spend to a consult and returns the merge question to this
+  gate (D-087/D-088). Proposed process rules and other triggers named by an
+  owning decision use the same route; the magistrate records the disposition
+  and any dissent rather than serving as a reviewing seat.
+
+These roles distribute reading and coordination; they do not transfer final
+verification, hardware operation, scientific scope, or publication authority.
+
 ## The loop, end to end
 
 Every substantial session runs one conductor procedure:
@@ -155,10 +182,11 @@ This procedure does not expand commit, push, merge, or deployment authority.
    primary-deliverable check and §8 shipped-check before the session is
    considered done.
 9. **Post-landing verification and close-out** — landed work gets the
-   matching verification workflow with severity-tiered refuters. Sessions
-   that change front-facing state refresh `docs/site/DRIFT.md`; no agent
-   regenerates or deploys the site. Automation informs and Ed deploys
-   manually, per D-068 and `RUN_STATE.md` end-of-work step 8.
+   matching verification workflow with severity-tiered refuters. D-136 retires
+   the site lane from routine sessions: agents do not refresh, regenerate, or
+   deploy it. The retained `docs/site/DRIFT.md` file is only a reference if Ed
+   chooses the manual workflow dispatch; Ed deploys the site after that manual
+   regeneration.
 10. **Meta-review (the final step)** — event-driven, not calendar-driven:
     when a review layer stops earning its keep, when an intervention
     repeats despite a folded fix, or when the user asks, the loop is
@@ -321,7 +349,7 @@ it (docs/reviews/2026-07-13-comprehensive-audit/receipts/
 WO-022-audit-close-spend.json); only a receipted anchor may be used for
 recalibration.
 
-## Topology: how it evolved (an example of the loop improving itself)
+## Historical topology (retained context, not the current role contract)
 
 - **v1 (2026-07-07 AM):** per-stream Fable orchestrator subagents, each
   driving its own Codex thread. Worked, but expensive at the apex tier.

@@ -20,6 +20,15 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 
 DOC_PATHS = ("README.md", "PROJECT_STATUS.md", "docs/orchestration.md")
+PROJECT_STATUS_CURRENT_HEADINGS = (
+    "Current Claim And Scope",
+    "Measured Evidence",
+    "Gate Matrix",
+    "Artifact State",
+    "Advisor Decisions And Risks",
+    "Next Milestone",
+    "Evidence Links",
+)
 DOC008_PATHS = (
     "AGENT_PLAN.md",
     "README.md",
@@ -436,6 +445,13 @@ def _current_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
     readme = docs["README.md"]
     project = docs["PROJECT_STATUS.md"]
     orchestration = docs["docs/orchestration.md"]
+
+    project_headings = tuple(re.findall(r"^## (.+)$", project, flags=re.MULTILINE))
+    if project_headings != PROJECT_STATUS_CURRENT_HEADINGS:
+        raise AssertionError(
+            "PROJECT_STATUS.md must contain exactly the ruled seven current sections: "
+            f"{project_headings!r}"
+        )
 
     return {
         # README has no dated-history section; every part is current.
@@ -1151,6 +1167,28 @@ class DocsFreshnessTests(unittest.TestCase):
         self.assertIn("Live status is in `RUN_STATE.md`.", project_status)
         self.assertIn("RUN_STATE.md", project_status)
 
+    def test_compact_project_status_is_current_and_history_is_separate(self) -> None:
+        docs = _documents()
+        compact = docs["PROJECT_STATUS.md"]
+        sections = _current_sections(docs)
+
+        self.assertEqual(
+            PROJECT_STATUS_CURRENT_HEADINGS,
+            tuple(re.findall(r"^## (.+)$", compact, flags=re.MULTILINE)),
+        )
+        self.assertEqual(compact, sections["PROJECT_STATUS"])
+        self.assertNotIn("## Previous Update", sections["PROJECT_STATUS"])
+        self.assertNotIn("## Update Ledger", sections["PROJECT_STATUS"])
+        self.assertNotIn("docs/project_status_history.md", sections)
+
+        # The historical archive may retain retired publication language
+        # without becoming an active instruction surface.
+        docs["docs/project_status_history.md"] = (
+            _read("docs/project_status_history.md")
+            + "\nAgents regenerate the site and deploy it.\n"
+        )
+        self.assertEqual([], _site_publish_instructions(_current_sections(docs)))
+
     def test_site_closeout_is_drift_report_then_ed_deploy(self) -> None:
         docs = _documents()
         ed_deploy = re.compile(r"Ed.{0,80}deploy", flags=re.DOTALL)
@@ -1204,6 +1242,18 @@ class DocsFreshnessTests(unittest.TestCase):
             mutated = dict(docs)
             mutated["README.md"] += "\n" + probe + "\n"
             self.assertTrue(_site_publish_instructions(_current_sections(mutated)))
+
+    def test_checker_mutation_probes_are_rejected_and_history_is_ignored(self) -> None:
+        # Preserve the mission test identity while wave 2's renamed test above
+        # owns the active-surface mutation matrix.
+        self.test_checker_mutation_probes_are_rejected_on_current_sources()
+        mutated = _documents()
+        mutated["docs/project_status_history.md"] = (
+            _read("docs/project_status_history.md")
+            + "\nAgents regenerate the site and deploy it.\n"
+        )
+        self.assertEqual([], _site_publish_instructions(_current_sections(mutated)))
+
 
 if __name__ == "__main__":
     unittest.main()

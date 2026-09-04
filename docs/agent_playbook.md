@@ -1,16 +1,16 @@
 # Agent Playbook: Ordered Missions
 
 Audience: an agent (or human) told "go do the next step" with no other
-context. This file turns the project's plans into self-contained,
-executable missions. Each mission says what to read, what to do, how to
-verify, and what to update afterward.
+context. This file retains the preflight that every session runs and the
+historical mission wrappers that explain how the early implementation was
+built. Live work is selected only from `RUN_STATE.md` and the state kernel;
+the historical missions below are not a menu of available work.
 
 Division of labor (D-023 discipline — do not duplicate):
 
-- **This file owns:** the operational wrapper per mission (read-first
-  lists, execution order, verification commands, handoff checklists) and
-  the code-level pointers from the 2026-07-05 external code review that
-  exist nowhere else.
+- **This file owns:** Mission M0 preflight and the archived operational
+  wrappers for early missions, including code-level pointers from the
+  2026-07-05 external code review that exist nowhere else.
 - **It points to:** `docs/phase_N/phase_N_plan.md` for objectives, gates,
   acceptance criteria, and fallbacks; `docs/phase_2/
   hardware_slice_implementation_guide.md` for hardware-slice pinned APIs;
@@ -21,7 +21,7 @@ Division of labor (D-023 discipline — do not duplicate):
   `docs/process/state_kernel.json`; phase exit checklists own per-item
   completion. Named decisions and task fences remain binding if prose drifts.
 
-## How To Pick A Mission
+## How To Select Live Work
 
 1. Run Mission M0 (preflight) — always.
 2. Execute the task selected by the generated restart and queue views, then
@@ -68,6 +68,14 @@ Environment cautions:
 - Schema changes are additive-only until v0.2 (R-015/D-008).
 
 ---
+
+## Historical Missions M1–M10 — Do Not Select
+
+The wrappers below are retained as implementation history. Their queue labels,
+gates, branch names, and “next” language describe the project before the live
+`_v5` campaign. Completed or superseded work stays readable here, but no
+session may start one of these wrappers merely because its old prose says it
+is ungated. Use the state kernel as described above.
 
 ## Mission M1: Slice 2N — Pre-Hardware Hardening (queue P2-007)
 
@@ -303,6 +311,9 @@ argue).
 
 ## Mission M4: Close D-016 Model Selection (queue P2-004)
 
+**Historical only.** D-164 selected the live Qwen3 pair and D-167 installed
+the `_v5` campaign. Do not execute this predecessor selection wrapper.
+
 **Gate:** P1-001 supervisor scope OR an explicit user go-ahead recorded
 in the run report. Never close it silently (Do-Not-Do-Yet list).
 **Criteria + candidate set:** D-016 in `docs/decision_log.md`.
@@ -425,9 +436,10 @@ Wrapper notes:
   matrix with `validate-config` before any hardware time.
 - Interleave conditions per D-014 where model-reload cost permits;
   record executed order in the experiment manifests.
-- Handoff: manifests + bundles; `docs/phase_2/baseline_results.md` with
-  variance and the prefill/decode comparison; back up the corpus; run
-  report.
+- Historical handoff: manifests and bundles, the owning Phase 2 exit-checklist
+  evidence, corpus backup, and a run report. The former
+  `docs/phase_2/baseline_results.md` pointer never resolved to a repository
+  file and is not a current destination.
 
 ## Mission M10: Phase 3 Stage 3.0 — KV Feasibility Spikes
 

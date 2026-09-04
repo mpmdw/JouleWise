@@ -54,7 +54,7 @@ report.
 | `docs/contracts/adapter_contracts.md` | adapter behavior contracts |
 | `docs/contracts/node_worker_protocol.md` | remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3) |
 
-Superseded (2026-07-15, WO-021; D-043): `docs/process/state_kernel.json` is the sole editable authority for live work selection, while generated `TASK_QUEUE.md` and `RUN_STATE.md` regions are projections; see `docs/specs/c027/doc-008_state_kernel.md` §§3.1, 3.6, and 4.
+Superseded (2026-07-15, WO-021; D-043): `docs/process/state_kernel.json` is the sole editable authority for live work selection, while generated `TASK_QUEUE.md` and `RUN_STATE.md` regions are projections; see `docs/specs/c027/doc-008_state_kernel.md` §§3.1, 3.6, and 4. The retired planning-reflection document remains only a compatibility pointer, not a separate intake or close-out procedure.
 
 ## Canonical Architecture
 
@@ -130,8 +130,9 @@ merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
 `docs/phase_2/phase_2_exit_checklist.md`. Gated-slice specs:
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
-Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
-gated on Phase 1 evidence); code-level specs for the gated slices live in
+Historical mock-first ordering is retained below as phase context; live
+selection comes only from the state kernel and its generated views. Code-level
+specs for the gated slices live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 - [x] 2A Run-bundle writer.
@@ -265,8 +266,8 @@ Every big run must leave a human-readable handoff note. The report should cover:
 - What the next agent should do first.
 - New or updated decision-log entries and risk-register statuses.
 
-The root `RUN_STATE.md` is the current handoff. Dated reports live in
-`docs/run_reports/`.
+The generated `RUN_STATE.md` intake/restart region is the current handoff.
+Dated reports live in `docs/run_reports/`.
 
 Every new phase also needs an exit checklist or equivalent section that states
 the evidence required to close that phase. Mission M0 and the selected kernel
@@ -285,4 +286,4 @@ Random or newly discovered work is added and ranked in
 - Safety risk and implementation dependency order.
 
 If a task is executed immediately, the run report should state why it outranked
-the current top queued task.
+the generated lane head and which permitted override applied.
