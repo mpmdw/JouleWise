@@ -61,9 +61,17 @@ verdict slot in its three selected paragraphs; it carries three
 comparison or at close-out and print the issued reason. The governed Section-4
 Refusal form contributes one additional `[FILL:OR-01]` until final filling
 selects one Section-4 form, so the whole selected draft contains four such
-markers for REFUSAL and one for A or B. `OR-01` prints a Qwen-pair verdict only
-when the absence of that verdict is the issued stop reason. Do not delete,
-guess, or replace any of these slots while filling unrelated numeric markers.
+markers for REFUSAL and one for A or B. A REFUSAL copy also retains one verdict
+slot in each Table 3 row: `[FILL:DS-32]` in the token-generation row's `Verdict`
+cell and `[FILL:PG-08]` in the prompt-processing row's `Verdict` cell. If the
+verdict exists, render its authenticated outcome. If its absence is the issued
+stop reason, render the row-specific refusal text registered by DS-32 or PG-08;
+if an earlier stop prevented the verdict from being evaluated, render
+`not evaluated — stopped before comparison: <issued reason>` from the same
+governing evidence. Thus neither retained Table 3 marker may remain after a
+REFUSAL fill. `OR-01` prints a Qwen-pair verdict only when the absence of that
+verdict is the issued stop reason. Do not delete, guess, or replace any of these
+slots while filling unrelated numeric markers.
 
 Outcome D is not a fourth value for `--outcome`. The retensing plan places its
 prefix only where the identical-workload characterization row is discussed,
@@ -76,4 +84,15 @@ them is an error.
 Finally, replace numeric `[FILL:...]` markers from the named registry rows and
 replace semantic slots only after their registry stops clear. Run the paper
 first-use and replay checks, and retain the selected working copy and check
-outputs together in fill custody.
+outputs together in fill custody. The selector prints the selected Abstract's
+word count and rejects a selection above 250 words. Because later slot
+renderings can add words, run the same guard again after every marker has been
+filled:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  docs/paper/fill-rehearsal/select_outcome_branches.py \
+  --check-rendered /ABSOLUTE/FILL-CUSTODY/draft-v2-filled.md
+```
+
+The filled paper is not releasable unless this prints at most 250 words.
