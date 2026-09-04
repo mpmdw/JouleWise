@@ -109,7 +109,13 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.calibration_ledger import CalibrationLedgerSnapshot
-from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+from joulewise.bundle_read import (
+    BundleReader,
+    BundleReadError,
+    TracePoint,
+    Window,
+    read_bundle_artifact_bytes,
+)
 from joulewise.reduce import (
     _corner_composed_anchor_shift_envelope,
     _integrate,
@@ -144,6 +150,7 @@ __all__ = [
     "extract_absolute_cell",
     "extract_comparative_cell",
     "extract_cells",
+    "load_reported_phase_energy_member",
 ]
 
 EXTRACTION_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
@@ -1729,10 +1736,9 @@ def _read_summary(
 ) -> tuple[Mapping[str, Any] | None, str | None, str | None]:
     if not path.is_dir():
         return None, None, "bundle_missing"
-    summary_path = path / "summary_metrics.json"
     try:
-        raw = summary_path.read_bytes()
-    except OSError:
+        raw = read_bundle_artifact_bytes(path, "summary_metrics.json")
+    except (BundleReadError, OSError):
         return None, None, "summary_unreadable"
     digest = hashlib.sha256(raw).hexdigest()
     try:
@@ -1822,8 +1828,8 @@ def _strict_admission_json_value(raw: bytes, label: str) -> Any:
 
 def _strict_admission_json_file(path: Path, label: str) -> Any:
     try:
-        raw = path.read_bytes()
-    except OSError as exc:
+        raw = read_bundle_artifact_bytes(path.parent, path.name)
+    except (BundleReadError, OSError) as exc:
         raise FloorExtractionError(f"{label} cannot be read: {exc}") from exc
     return _strict_admission_json_value(raw, label)
 
@@ -1835,6 +1841,159 @@ def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | Non
     else:
         raw = summary.get(metric)
     return _finite(raw)
+
+
+def load_reported_phase_energy_member(
+    runs_root: Path,
+    *,
+    bundle_id: str,
+    bundle_path: str,
+    metric: str,
+) -> dict[str, Any]:
+    """Load one D-123 member from the exact bundle-byte surfaces extraction uses.
+
+    The returned row contains only values derived from authenticated config,
+    metadata, summary, event, and complete-bundle bytes.  Registration and
+    whole-window-basis joins remain the reported-energy producer's job; this
+    function is the shared byte-loading boundary and has no effect on floor
+    extraction behavior.
+    """
+
+    root = Path(runs_root).resolve()
+    relative = Path(bundle_path)
+    if (
+        not bundle_id
+        or not bundle_path
+        or relative.is_absolute()
+        or ".." in relative.parts
+    ):
+        raise FloorExtractionError("reported_energy_bundle_path_invalid")
+    path = (root / relative).resolve()
+    if path == root or root not in path.parents or not path.is_dir():
+        raise FloorExtractionError("reported_energy_bundle_path_invalid")
+
+    reader = BundleReader(path)
+    try:
+        config_bytes = reader.artifact_bytes("config.json")
+        metadata_bytes = reader.artifact_bytes("metadata.json")
+        raw_config = _strict_admission_json_value(config_bytes, "config.json")
+        metadata = _strict_admission_json_value(metadata_bytes, "metadata.json")
+        reader.config()
+        events = reader.events()
+    except (BundleReadError, FloorExtractionError, OSError, TypeError, ValueError) as exc:
+        raise FloorExtractionError("reported_energy_bundle_bytes_invalid") from exc
+    summary, summary_sha256, summary_problem = _read_summary(path)
+    if summary_problem is not None or not isinstance(summary, Mapping):
+        raise FloorExtractionError("reported_energy_summary_invalid")
+    if not isinstance(raw_config, Mapping) or not isinstance(metadata, Mapping):
+        raise FloorExtractionError("reported_energy_bundle_bytes_invalid")
+
+    config_sha256 = hashlib.sha256(config_bytes).hexdigest()
+    metadata_sha256 = hashlib.sha256(metadata_bytes).hexdigest()
+    if (
+        raw_config.get("run_id") != bundle_id
+        or metadata.get("run_id") != bundle_id
+        or metadata.get("config_sha256") != config_sha256
+    ):
+        raise FloorExtractionError("reported_energy_bundle_identity_invalid")
+    point = _member_metric_value(summary, metric)
+    envelope, envelope_problem = anchor_shift_envelope(summary, metric)
+    phase_reason = None
+    if summary.get("status") != "succeeded":
+        phase_reason = "bundle_status_not_succeeded"
+    elif point is None or envelope_problem is not None or envelope is None:
+        phase_reason = "reported_energy_phase_value_invalid"
+
+    observed = metadata.get("workload_observed")
+    provenance = metadata.get("workload_provenance")
+    prompt = provenance.get("prompt") if isinstance(provenance, Mapping) else None
+    quality = summary.get("measurement_quality")
+    total = observed.get("token_count") if isinstance(observed, Mapping) else None
+    output = (
+        observed.get("output_token_count")
+        if isinstance(observed, Mapping)
+        else None
+    )
+    metadata_source = (
+        observed.get("token_count_source")
+        if isinstance(observed, Mapping)
+        else None
+    )
+    summary_source = (
+        quality.get("token_counts_source")
+        if isinstance(quality, Mapping)
+        else None
+    )
+    if metadata_source is not None and summary_source is not None and (
+        metadata_source != summary_source
+    ):
+        raise FloorExtractionError("reported_energy_token_source_inconsistent")
+    token_source = metadata_source or summary_source or "runtime_observed"
+    realized = (
+        prompt.get("realized_token_count") if isinstance(prompt, Mapping) else None
+    )
+
+    def phase_prompt_count(event_type: str, phase: str) -> object:
+        values = [
+            row.get("metadata", {}).get("prompt_tokens")
+            for row in events
+            if row.get("event_type") == event_type
+            and row.get("phase") == phase
+            and isinstance(row.get("metadata"), Mapping)
+        ]
+        return values[0] if values and len(set(values)) == 1 else None
+
+    tokenize = phase_prompt_count("phase_end", "tokenize")
+    prefill = phase_prompt_count("phase_start", "prefill")
+    prompt_count = (
+        total - output
+        if isinstance(total, int)
+        and not isinstance(total, bool)
+        and isinstance(output, int)
+        and not isinstance(output, bool)
+        else None
+    )
+    denominator = {
+        "kind": (
+            "runtime_observed_prompt_tokens"
+            if metric == "phase_energy_j.prefill"
+            else "runtime_observed_output_tokens"
+        ),
+        "count": prompt_count if metric == "phase_energy_j.prefill" else output,
+        "token_count_source": token_source,
+        "observed_total_token_count": total,
+        "observed_output_token_count": output,
+        "prompt_realized_token_count": realized,
+        "tokenize_prompt_token_count": tokenize,
+        "prefill_prompt_token_count": prefill,
+    }
+    try:
+        bundle_sha256 = complete_bundle_sha256(path)
+    except ValueError as exc:
+        raise FloorExtractionError("reported_energy_bundle_hash_invalid") from exc
+    assert summary_sha256 is not None
+    return {
+        # Emit the authenticated identity itself, rather than echoing the
+        # registration lookup key that was checked against it above.
+        "bundle_id": raw_config["run_id"],
+        "config_sha256": config_sha256,
+        "bundle_sha256": bundle_sha256,
+        "summary_sha256": summary_sha256,
+        "metadata_sha256": metadata_sha256,
+        "outcome": "admitted" if phase_reason is None else "excluded",
+        "reasons": [] if phase_reason is None else [phase_reason],
+        "point_j": point,
+        "energy_anchor_shift_envelope": (
+            {
+                "point_j": envelope["point_j"],
+                "lower_j": envelope["lower_j"],
+                "upper_j": envelope["upper_j"],
+            }
+            if envelope is not None
+            else None
+        ),
+        "observed_token_denominator": denominator,
+    }
 
 
 def _cpu_admission_bundle_reasons(

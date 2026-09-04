@@ -329,10 +329,14 @@ codes are no longer unknown.
 ### D-123 reported phase-energy cells
 
 D-123 freezes the procedure and requires reader-facing phase-energy means from
-alpha and beta. `joulewise.reported_phase_energy_source.v1` now binds the real
-closed `joulewise.detection_floor_extraction.v1` parent to the separately
-versioned reported-energy projection; `joulewise.reported_phase_energy.v1`
-issues the generator-frozen ordered 50-member cells, and
+alpha and beta. `joulewise.reported_phase_energy_projection.v1` is producer-only:
+the production projector derives its ordered members, custody digests, phase
+points, envelope endpoints, runtime denominators, aggregates, and per-token
+values from the authenticated bundle-byte surfaces named by the frozen spec and
+whole-window basis; source material never supplies that projection. The source,
+artifact, and issuance paths recompute this parent/value relation before outer
+equality checks. `joulewise.reported_phase_energy.v1` issues the generator-frozen
+ordered 50-member cells, and
 `joulewise.reported_phase_energy_issuance.v1` binds exactly one artifact ID per
 campaign role to an expected manifest digest. Current paper placements require
 `composed_member_envelope_mean.v1`. Values remain unissued; missing, duplicate,

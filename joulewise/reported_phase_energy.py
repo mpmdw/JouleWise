@@ -8,6 +8,7 @@ has a disjoint output domain.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -28,6 +29,9 @@ EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
 EXTRACTION_REPORT_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
 G2A_SCHEMA_VERSION = "joulewise.g2a_prefill_selection.v1"
 PROMPT_PIN_SCHEMA_VERSION = "joulewise.prefill_prompt_pin.v2"
+WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA_VERSION = (
+    "joulewise.idle_admission_evaluation_basis.v1"
+)
 
 DEFAULT_COMPOSITION_RULE = "composed_member_envelope_mean.v1"
 T95_WINDOW_COMPOSITION_RULE = "composed_member_envelope_mean_t95_window.v1"
@@ -63,6 +67,7 @@ _INPUT_KEYS = {
     "extraction_spec",
     "extraction_report",
     "reported_energy_projection",
+    "whole_window_evaluation_basis",
     "g2a_selection",
     "prompt_pin",
 }
@@ -79,6 +84,7 @@ _REPORT_REFERENCE_KEYS = {
     "consumption_semantics_id",
 }
 _PROJECTION_REFERENCE_KEYS = {"schema_version", "file_sha256"}
+_BASIS_REFERENCE_KEYS = {"schema_version", "file_sha256", "basis_sha256"}
 _G2A_REFERENCE_KEYS = {
     "schema_version",
     "file_sha256",
@@ -151,7 +157,7 @@ _SOURCE_MATERIAL_KEYS = {
     "source_commit",
     "extraction_spec",
     "extraction_report",
-    "reported_energy_projection",
+    "whole_window_evaluation_basis",
     "g2a_selection",
     "prompt_pin",
 }
@@ -163,6 +169,7 @@ _SOURCE_KEYS = {
     "extraction_spec",
     "extraction_report",
     "reported_energy_projection",
+    "whole_window_evaluation_basis",
     "g2a_selection",
     "prompt_pin",
 }
@@ -171,6 +178,7 @@ _PROJECTION_KEYS = {
     "schema_version",
     "campaign_role",
     "extraction_report_sha256",
+    "whole_window_evaluation_basis_sha256",
     "reported_energy_cells",
 }
 _ISSUANCE_KEYS = {
@@ -329,7 +337,7 @@ def _optional_wrapped_document(
     return _wrapped_document(source, key, expected_schema=expected_schema)
 
 
-def _validated_source_wrappers(
+def _validated_parent_wrappers(
     source: Mapping[str, Any],
 ) -> tuple[
     dict[str, Any],
@@ -345,8 +353,10 @@ def _validated_source_wrappers(
     report, _ = _wrapped_document(
         source, "extraction_report", expected_schema=EXTRACTION_REPORT_SCHEMA_VERSION
     )
-    projection, _ = _wrapped_document(
-        source, "reported_energy_projection", expected_schema=PROJECTION_SCHEMA_VERSION
+    basis, _ = _wrapped_document(
+        source,
+        "whole_window_evaluation_basis",
+        expected_schema=WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA_VERSION,
     )
     g2a, _ = _optional_wrapped_document(
         source, "g2a_selection", expected_schema=G2A_SCHEMA_VERSION
@@ -362,21 +372,305 @@ def _validated_source_wrappers(
         raise StopFill("extraction_report_contract_invalid")
     if report.get("all_cells_extractable") is not True:
         raise StopFill("extraction_report_not_issued")
-    projection_row = _exact_keys(
-        projection, _PROJECTION_KEYS, "reported_energy_projection"
+    if g2a is None or prompt_pin is None:
+        raise StopFill("g2a_prompt_pin_pair_incomplete")
+    payload = {key: value for key, value in basis.items() if key != "sha256"}
+    required_basis_keys = {
+        "schema_version",
+        "policy_sha256",
+        "member_occurrences",
+        "calibration_bracket_set",
+        "consumption_semantics_id",
+        "sha256",
+    }
+    if not required_basis_keys.issubset(basis) or not set(basis).issubset(
+        required_basis_keys
+        | {"launch_lineage", "consumption_provenance", "salvage_dangler_exclusion"}
+    ):
+        raise StopFill("whole_window_evaluation_basis_contract_invalid")
+    _sha256(
+        basis.get("policy_sha256"),
+        "whole_window_evaluation_basis.policy_sha256",
+    )
+    basis_sha256 = _sha256(
+        basis.get("sha256"), "whole_window_evaluation_basis.sha256"
+    )
+    if basis_sha256 != canonical_json_sha256(payload):
+        raise StopFill("whole_window_evaluation_basis_content_mismatch")
+    if (
+        basis.get("consumption_semantics_id")
+        != report.get("consumption_semantics_id")
+    ):
+        raise StopFill("whole_window_evaluation_basis_semantics_mismatch")
+    allowances = report.get("whole_window_drift_allowances")
+    allowance_basis = {
+        value.get("whole_window_evaluation_basis_sha256")
+        for value in allowances.values()
+        if isinstance(value, Mapping)
+    } if isinstance(allowances, Mapping) else set()
+    if allowance_basis != {basis_sha256}:
+        raise StopFill("whole_window_evaluation_basis_report_mismatch")
+    return spec, spec_path, report, basis, g2a, prompt_pin
+
+
+def _selected_prefill_tokens(
+    g2a: Mapping[str, Any] | None,
+    prompt_pin: Mapping[str, Any] | None,
+) -> int | None:
+    if g2a is None or prompt_pin is None:
+        return None
+    selected = g2a.get("collection_prefill_tokens")
+    if selected not in PREFILL_LENGTHS:
+        raise StopFill("g2a_selected_prefill_invalid")
+    if not (
+        prompt_pin.get("prefill_length") == prompt_pin.get("prompt_tokens") == selected
+        and prompt_pin.get("g2a_record_sha256") == canonical_json_sha256(g2a)
+    ):
+        raise StopFill("g2a_prompt_pin_join_mismatch")
+    return selected
+
+
+def _validated_reported_energy_registration(spec: Mapping[str, Any]) -> str:
+    registration = _exact_keys(
+        spec.get("reported_energy_registration"),
+        {
+            "authority",
+            "procedure_only",
+            "postcollection_numeric_values",
+            "floor_projection_sha256",
+            "no_semantics_change_rule",
+        },
+        "reported_energy_registration",
     )
     if (
-        projection_row["campaign_role"] != source.get("campaign_role")
-        or projection_row["extraction_report_sha256"]
-        != canonical_json_sha256(report)
+        registration["authority"] != "D-123"
+        or registration["procedure_only"] is not True
+        or registration["postcollection_numeric_values"]
+        != "structurally_absent_until_governed_reduction"
     ):
-        raise StopFill("reported_energy_projection_parent_mismatch")
-    cells = projection_row["reported_energy_cells"]
-    if not isinstance(cells, list) or len(cells) != 3:
-        raise StopFill("reported_energy_projection_cell_census_invalid")
-    if (g2a is None) != (prompt_pin is None):
-        raise StopFill("g2a_prompt_pin_pair_incomplete")
-    return spec, spec_path, report, projection, g2a, prompt_pin
+        raise StopFill("reported_energy_registration_invalid")
+    _string(
+        registration["no_semantics_change_rule"],
+        "reported_energy_registration.no_semantics_change_rule",
+    )
+    floor_projection_sha256 = _sha256(
+        registration["floor_projection_sha256"],
+        "reported_energy_registration.floor_projection_sha256",
+    )
+    if canonical_json_sha256(spec.get("cells")) != floor_projection_sha256:
+        raise StopFill("floor_projection_sha256_mismatch")
+    from joulewise.floor_extraction import validate_extraction_spec
+
+    floor_spec = {
+        "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+        "cells": spec.get("cells"),
+    }
+    if validate_extraction_spec(floor_spec):
+        raise StopFill("extraction_spec_contract_invalid")
+    return floor_projection_sha256
+
+
+def _derive_reported_energy_projection(
+    source: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Derive the complete projection from authenticated parent bytes."""
+
+    spec, _, report, basis, g2a, prompt_pin = _validated_parent_wrappers(source)
+    selected_prefill_tokens = _selected_prefill_tokens(g2a, prompt_pin)
+    _validated_reported_energy_registration(spec)
+    spec_cells = spec.get("reported_energy_cells")
+    if not isinstance(spec_cells, list) or len(spec_cells) != 3:
+        raise StopFill("registered_reported_cell_census_mismatch")
+    registered_ids: list[str] = []
+    for spec_cell in spec_cells:
+        members = spec_cell.get("members") if isinstance(spec_cell, Mapping) else None
+        if not isinstance(members, list):
+            raise StopFill("registered_member_census_mismatch")
+        for member in members:
+            bundle_id = member.get("bundle_id") if isinstance(member, Mapping) else None
+            if not isinstance(bundle_id, str) or not bundle_id:
+                raise StopFill("registered_member_malformed")
+            registered_ids.append(bundle_id)
+
+    occurrences = basis.get("member_occurrences")
+    if not isinstance(occurrences, list) or not occurrences:
+        raise StopFill("whole_window_evaluation_basis_members_invalid")
+    occurrence_by_id: dict[str, Mapping[str, Any]] = {}
+    occurrence_keys = {
+        "bundle_id",
+        "bundle_path",
+        "config_sha256",
+        "metadata_sha256",
+        "summary_sha256",
+    }
+    for occurrence in occurrences:
+        row = _exact_keys(
+            occurrence,
+            occurrence_keys,
+            "whole_window_evaluation_basis.member_occurrence",
+        )
+        bundle_id = _string(row["bundle_id"], "basis.bundle_id")
+        bundle_path = _string(row["bundle_path"], "basis.bundle_path")
+        path = Path(bundle_path)
+        if path.is_absolute() or ".." in path.parts or bundle_id in occurrence_by_id:
+            raise StopFill("whole_window_evaluation_basis_members_invalid")
+        for key in ("config_sha256", "metadata_sha256", "summary_sha256"):
+            _sha256(row[key], f"basis.{key}")
+        occurrence_by_id[bundle_id] = row
+    if set(occurrence_by_id) != set(registered_ids):
+        raise StopFill("whole_window_evaluation_basis_member_census_mismatch")
+
+    runs_root_text = _string(report.get("runs_root"), "extraction_report.runs_root")
+    runs_root = Path(runs_root_text)
+    if not runs_root.is_dir():
+        raise StopFill("extraction_report_runs_root_unavailable")
+    basis_sha256 = basis["sha256"]
+    from joulewise.floor_extraction import (
+        FloorExtractionError,
+        load_reported_phase_energy_member,
+    )
+
+    evidence_cache: dict[tuple[str, str], dict[str, Any]] = {}
+    projected_cells: list[dict[str, Any]] = []
+    for spec_cell in spec_cells:
+        assert isinstance(spec_cell, Mapping)
+        metric = _string(spec_cell.get("metric"), "registered_cell.metric")
+        registered = spec_cell.get("members")
+        assert isinstance(registered, list)
+        observed_members: list[dict[str, Any]] = []
+        for ordinal, registered_member in enumerate(registered, start=1):
+            if not isinstance(registered_member, Mapping):
+                raise StopFill("registered_member_malformed")
+            bundle_id = _string(
+                registered_member.get("bundle_id"), "registered.bundle_id"
+            )
+            occurrence = occurrence_by_id[bundle_id]
+            cache_key = (bundle_id, metric)
+            try:
+                if cache_key not in evidence_cache:
+                    evidence_cache[cache_key] = load_reported_phase_energy_member(
+                        runs_root,
+                        bundle_id=bundle_id,
+                        bundle_path=occurrence["bundle_path"],
+                        metric=metric,
+                    )
+                evidence = evidence_cache[cache_key]
+            except FloorExtractionError as exc:
+                raise StopFill(str(exc)) from exc
+            if (
+                evidence["config_sha256"] != occurrence["config_sha256"]
+                or evidence["metadata_sha256"] != occurrence["metadata_sha256"]
+                or evidence["summary_sha256"] != occurrence["summary_sha256"]
+            ):
+                raise StopFill("reported_energy_member_parent_digest_mismatch")
+            observed_members.append(
+                {
+                    "ordinal": ordinal,
+                    "bundle_id": evidence["bundle_id"],
+                    "config_sha256": evidence["config_sha256"],
+                    "bundle_sha256": evidence["bundle_sha256"],
+                    "summary_sha256": evidence["summary_sha256"],
+                    "metadata_sha256": evidence["metadata_sha256"],
+                    "whole_window_evaluation_basis_sha256": basis_sha256,
+                    "outcome": evidence["outcome"],
+                    "reasons": evidence["reasons"],
+                    "point_j": evidence["point_j"],
+                    "energy_anchor_shift_envelope": evidence[
+                        "energy_anchor_shift_envelope"
+                    ],
+                    "observed_token_denominator": evidence[
+                        "observed_token_denominator"
+                    ],
+                }
+            )
+        report_cell = {
+            "cell_id": spec_cell.get("cell_id"),
+            "metric": metric,
+            "outcome": "issued",
+            "expected_n": EXPECTED_N,
+            "observed_n": EXPECTED_N,
+            "admitted_n": EXPECTED_N,
+            "interval_policy": spec_cell.get("interval_policy"),
+            "members": observed_members,
+        }
+        projected_cells.append(
+            _build_cell(
+                spec_cell,
+                report_cell,
+                selected_prefill_tokens=selected_prefill_tokens,
+            )
+        )
+    projection = {
+        "schema_version": PROJECTION_SCHEMA_VERSION,
+        "campaign_role": source.get("campaign_role"),
+        "extraction_report_sha256": canonical_json_sha256(report),
+        "whole_window_evaluation_basis_sha256": basis_sha256,
+        "reported_energy_cells": projected_cells,
+    }
+    _exact_keys(projection, _PROJECTION_KEYS, "reported_energy_projection")
+    return projection
+
+
+def build_reported_phase_energy_projection(material_bytes: bytes) -> dict[str, Any]:
+    """Produce the sole reported-energy projection from authenticated parents."""
+
+    material = _decode_object(material_bytes, "source_material")
+    _exact_keys(material, _SOURCE_MATERIAL_KEYS, "source_material")
+    if material["schema_version"] != SOURCE_MATERIAL_SCHEMA_VERSION:
+        raise StopFill("source_material_schema_mismatch")
+    if material["campaign_role"] not in {"alpha", "beta"}:
+        raise StopFill("campaign_role_invalid")
+    source_commit = _string(material["source_commit"], "source_material.source_commit")
+    if _HEX40.fullmatch(source_commit) is None:
+        raise StopFill("source_commit_invalid")
+    return _derive_reported_energy_projection(material)
+
+
+def validate_reported_energy_projection_derivation(source: object) -> str | None:
+    """Return the named relation error when a child differs from its parents."""
+
+    if not isinstance(source, Mapping):
+        return "reported_energy_projection_derivation_mismatch"
+    try:
+        projection, _ = _wrapped_document(
+            source,
+            "reported_energy_projection",
+            expected_schema=PROJECTION_SCHEMA_VERSION,
+        )
+    except (StopFill, TypeError, ValueError, OverflowError):
+        return "reported_energy_projection_derivation_mismatch"
+    try:
+        expected = _derive_reported_energy_projection(source)
+    except (StopFill, TypeError, ValueError, OverflowError) as exc:
+        return str(exc)
+    if canonical_json_bytes(projection) != canonical_json_bytes(expected):
+        return "reported_energy_projection_derivation_mismatch"
+    return None
+
+
+def _validated_source_wrappers(
+    source: Mapping[str, Any],
+) -> tuple[
+    dict[str, Any],
+    str,
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
+    spec, spec_path, report, basis, g2a, prompt_pin = (
+        _validated_parent_wrappers(source)
+    )
+    projection, _ = _wrapped_document(
+        source,
+        "reported_energy_projection",
+        expected_schema=PROJECTION_SCHEMA_VERSION,
+    )
+    error = validate_reported_energy_projection_derivation(source)
+    if error is not None:
+        raise StopFill(error)
+    return spec, spec_path, report, basis, projection, g2a, prompt_pin
 
 
 def build_reported_phase_energy_source(material_bytes: bytes) -> dict[str, Any]:
@@ -392,7 +686,7 @@ def build_reported_phase_energy_source(material_bytes: bytes) -> dict[str, Any]:
     source_commit = _string(material["source_commit"], "source_material.source_commit")
     if _HEX40.fullmatch(source_commit) is None:
         raise StopFill("source_commit_invalid")
-    _validated_source_wrappers(material)
+    projection = _derive_reported_energy_projection(material)
 
     source: dict[str, Any] = {
         "schema_version": SOURCE_SCHEMA_VERSION,
@@ -405,7 +699,14 @@ def build_reported_phase_energy_source(material_bytes: bytes) -> dict[str, Any]:
         },
         "extraction_spec": material["extraction_spec"],
         "extraction_report": material["extraction_report"],
-        "reported_energy_projection": material["reported_energy_projection"],
+        "reported_energy_projection": {
+            "path": f"{role}/reported-energy-projection.json",
+            "file_sha256": canonical_json_sha256(projection),
+            "document": projection,
+        },
+        "whole_window_evaluation_basis": material[
+            "whole_window_evaluation_basis"
+        ],
         "g2a_selection": material["g2a_selection"],
         "prompt_pin": material["prompt_pin"],
     }
@@ -432,9 +733,9 @@ def validate_reported_phase_energy_source(source: object) -> list[str]:
             raise StopFill("source_commit_invalid")
         if producer["source_sha256"] != _source_sha256():
             raise StopFill("source_producer_sha256_mismatch")
+        _validated_source_wrappers(root)
         if root["source_id"] != _source_id(root):
             raise StopFill("source_id_content_mismatch")
-        _validated_source_wrappers(root)
     except (StopFill, TypeError, ValueError, OverflowError) as exc:
         return [str(exc)]
     return []
@@ -550,6 +851,7 @@ def _build_cell(
             "reducer",
             "expected_n",
             "members",
+            "interval_policy",
             "missing_or_invalid_member",
             "numeric_value",
         }:
@@ -805,68 +1107,22 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
         raise StopFill(source_errors[0])
     campaign_role = source["campaign_role"]
     source_commit = source["producer"]["source_commit"]
-    spec, spec_path, report, projection, g2a, prompt_pin = (
+    spec, spec_path, report, basis, projection, g2a, prompt_pin = (
         _validated_source_wrappers(source)
     )
-    selected_prefill_tokens: int | None = None
-    if g2a is not None and prompt_pin is not None:
-        selected_prefill_tokens = g2a.get("collection_prefill_tokens")
-        if selected_prefill_tokens not in PREFILL_LENGTHS:
-            raise StopFill("g2a_selected_prefill_invalid")
-        g2a_sha = canonical_json_sha256(g2a)
-        if not (
-            prompt_pin.get("prefill_length")
-            == prompt_pin.get("prompt_tokens")
-            == selected_prefill_tokens
-            and prompt_pin.get("g2a_record_sha256") == g2a_sha
-        ):
-            raise StopFill("g2a_prompt_pin_join_mismatch")
+    selected_prefill_tokens = _selected_prefill_tokens(g2a, prompt_pin)
 
-    registration = spec.get("reported_energy_registration")
-    if not isinstance(registration, Mapping):
-        raise StopFill("reported_energy_registration_missing")
-    if (
-        registration.get("authority") != "D-123"
-        or registration.get("procedure_only") is not True
-        or registration.get("postcollection_numeric_values")
-        != "structurally_absent_until_governed_reduction"
-    ):
-        raise StopFill("reported_energy_registration_invalid")
-    floor_projection_sha = _sha256(
-        registration.get("floor_projection_sha256"),
-        "reported_energy_registration.floor_projection_sha256",
-    )
-    if canonical_json_sha256(spec.get("cells")) != floor_projection_sha:
-        raise StopFill("floor_projection_sha256_mismatch")
+    floor_projection_sha = _validated_reported_energy_registration(spec)
     consumption_semantics_id = _string(
         report.get("consumption_semantics_id"),
         "extraction_report.consumption_semantics_id",
     )
-    report_cells = projection.get("reported_energy_cells")
-    if not isinstance(report_cells, list):
-        raise StopFill("extraction_report_cells_invalid")
-    report_by_id: dict[str, Mapping[str, Any]] = {}
-    for row in report_cells:
-        if not isinstance(row, Mapping) or not isinstance(row.get("cell_id"), str):
-            raise StopFill("extraction_report_cell_malformed")
-        if row["cell_id"] in report_by_id:
-            raise StopFill("extraction_report_cell_duplicate")
-        report_by_id[row["cell_id"]] = row
     spec_cells = spec.get("reported_energy_cells")
     if not isinstance(spec_cells, list) or len(spec_cells) != 3:
         raise StopFill("registered_reported_cell_census_mismatch")
-    spec_ids = [row.get("cell_id") for row in spec_cells if isinstance(row, Mapping)]
-    if len(spec_ids) != 3 or len(set(spec_ids)) != 3 or set(report_by_id) != set(spec_ids):
-        raise StopFill("reported_cell_identity_census_mismatch")
-
-    cells = [
-        _build_cell(
-            spec_cell,
-            report_by_id.get(spec_cell.get("cell_id")),
-            selected_prefill_tokens=selected_prefill_tokens,
-        )
-        for spec_cell in spec_cells
-    ]
+    cells = projection.get("reported_energy_cells")
+    if not isinstance(cells, list) or len(cells) != 3:
+        raise StopFill("reported_energy_projection_cell_census_invalid")
     artifact: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "artifact_id": "",
@@ -897,6 +1153,11 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
                 "schema_version": PROJECTION_SCHEMA_VERSION,
                 "file_sha256": canonical_json_sha256(projection),
             },
+            "whole_window_evaluation_basis": {
+                "schema_version": WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA_VERSION,
+                "file_sha256": canonical_json_sha256(basis),
+                "basis_sha256": basis["sha256"],
+            },
             "g2a_selection": None
             if g2a is None
             else {
@@ -913,7 +1174,7 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
                 "g2a_record_sha256": prompt_pin["g2a_record_sha256"],
             },
         },
-        "cells": cells,
+        "cells": copy.deepcopy(cells),
     }
     artifact["artifact_id"] = "rpe-" + canonical_json_sha256(artifact)
     errors = validate_reported_phase_energy(artifact)
@@ -1128,11 +1389,18 @@ def validate_reported_phase_energy(artifact: object) -> list[str]:
             _PROJECTION_REFERENCE_KEYS,
             "inputs.reported_energy_projection",
         )
+        basis = _exact_keys(
+            inputs["whole_window_evaluation_basis"],
+            _BASIS_REFERENCE_KEYS,
+            "inputs.whole_window_evaluation_basis",
+        )
         if (
             source["schema_version"] != SOURCE_SCHEMA_VERSION
             or spec["schema_version"] != EXTRACTION_SPEC_SCHEMA_VERSION
             or report["schema_version"] != EXTRACTION_REPORT_SCHEMA_VERSION
             or projection["schema_version"] != PROJECTION_SCHEMA_VERSION
+            or basis["schema_version"]
+            != WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA_VERSION
         ):
             raise StopFill("input_schema_reference_invalid")
         if not isinstance(source["source_id"], str) or not source["source_id"].startswith("rpes-"):
@@ -1145,6 +1413,14 @@ def validate_reported_phase_energy(artifact: object) -> list[str]:
         _sha256(
             projection["file_sha256"],
             "inputs.reported_energy_projection.file_sha256",
+        )
+        _sha256(
+            basis["file_sha256"],
+            "inputs.whole_window_evaluation_basis.file_sha256",
+        )
+        _sha256(
+            basis["basis_sha256"],
+            "inputs.whole_window_evaluation_basis.basis_sha256",
         )
         _string(
             report["consumption_semantics_id"],
@@ -1286,6 +1562,9 @@ def build_reported_phase_energy_issuance(
     for role in ("alpha", "beta"):
         raw_source = source_bytes_by_role[role]
         source = _decode_object(raw_source, f"issuance_source_{role}")
+        derivation_error = validate_reported_energy_projection_derivation(source)
+        if derivation_error == "reported_energy_projection_derivation_mismatch":
+            raise StopFill(derivation_error)
         source_errors = validate_reported_phase_energy_source(source)
         if source_errors or source.get("campaign_role") != role:
             raise StopFill("issuance_source_invalid")
@@ -1443,6 +1722,7 @@ __all__ = [
     "T95_WINDOW_COMPOSITION_RULE",
     "STOP_FILL",
     "StopFill",
+    "build_reported_phase_energy_projection",
     "build_reported_phase_energy_source",
     "build_reported_phase_energy",
     "build_reported_phase_energy_issuance",
@@ -1450,6 +1730,7 @@ __all__ = [
     "canonical_json_sha256",
     "reported_phase_energy_token_values",
     "validate_reported_phase_energy_source",
+    "validate_reported_energy_projection_derivation",
     "validate_reported_phase_energy",
     "validate_reported_phase_energy_issuance",
 ]

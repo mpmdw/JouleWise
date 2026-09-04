@@ -57,7 +57,13 @@ def _reseal_artifact(artifact: dict) -> None:
     artifact["artifact_id"] = "rpe-" + core.canonical_json_sha256(artifact)
 
 
-def _registered_cell(cell_id: str, metric: str, member_ids: list[str]) -> dict:
+def _registered_cell(
+    cell_id: str,
+    metric: str,
+    members: list[dict[str, str]],
+    *,
+    composition_rule: str = core.DEFAULT_COMPOSITION_RULE,
+) -> dict:
     return {
         "cell_id": cell_id,
         "metric": metric,
@@ -70,86 +76,161 @@ def _registered_cell(cell_id: str, metric: str, member_ids: list[str]) -> dict:
         "reducer": core.MEMBER_REDUCER,
         "expected_n": 50,
         "members": [
-            {
-                "ordinal": ordinal,
-                "bundle_id": bundle_id,
-                "config_sha256": _digest(f"config:{bundle_id}"),
-            }
-            for ordinal, bundle_id in enumerate(member_ids, start=1)
+            {"ordinal": ordinal, **member}
+            for ordinal, member in enumerate(members, start=1)
         ],
+        "interval_policy": {
+            "composition_rule": composition_rule,
+            "t95_critical_value": (
+                None if composition_rule == core.DEFAULT_COMPOSITION_RULE else 2.0
+            ),
+            "window_allowance_j": (
+                None if composition_rule == core.DEFAULT_COMPOSITION_RULE else 0.25
+            ),
+        },
         "missing_or_invalid_member": "refuse_reported_mean",
         "numeric_value": None,
     }
 
 
-def _reported_cell(
-    registered: dict,
+def _write_member_bundle(
+    runs_root: Path,
     *,
-    base_j: float,
+    bundle_id: str,
+    decode_j: float,
+    prefill_j: float,
     prompt_tokens: int,
     token_source: str,
-) -> dict:
-    decode = registered["metric"] == "phase_energy_j.decode"
-    members = []
-    for registered_member in registered["members"]:
-        ordinal = registered_member["ordinal"]
-        bundle_id = registered_member["bundle_id"]
-        point = base_j + ordinal / 10
-        output_tokens = 512
-        members.append(
-            {
-                "ordinal": ordinal,
-                "bundle_id": bundle_id,
-                "config_sha256": registered_member["config_sha256"],
-                "bundle_sha256": _digest(f"bundle:{bundle_id}"),
-                "summary_sha256": _digest(
-                    f"summary:{registered['cell_id']}:{bundle_id}"
-                ),
-                "metadata_sha256": _digest(f"metadata:{bundle_id}"),
-                "whole_window_evaluation_basis_sha256": _digest(
-                    f"basis:{bundle_id}"
-                ),
-                "outcome": "admitted",
-                "reasons": [],
-                "point_j": point,
-                "energy_anchor_shift_envelope": {
-                    "point_j": point,
-                    "lower_j": point - 1.0,
-                    "upper_j": point + 2.0,
-                },
-                "observed_token_denominator": {
-                    "kind": (
-                        core.OUTPUT_DENOMINATOR_KIND
-                        if decode
-                        else core.PROMPT_DENOMINATOR_KIND
-                    ),
-                    "count": output_tokens if decode else prompt_tokens,
-                    "token_count_source": token_source,
-                    "observed_total_token_count": prompt_tokens + output_tokens,
-                    "observed_output_token_count": output_tokens,
-                    "prompt_realized_token_count": prompt_tokens,
-                    "tokenize_prompt_token_count": prompt_tokens,
-                    "prefill_prompt_token_count": prompt_tokens,
-                },
-            }
-        )
-    return {
-        "cell_id": registered["cell_id"],
-        "metric": registered["metric"],
-        "outcome": "issued",
-        "expected_n": 50,
-        "observed_n": 50,
-        "admitted_n": 50,
-        "interval_policy": {
-            "composition_rule": core.DEFAULT_COMPOSITION_RULE,
-            "t95_critical_value": None,
-            "window_allowance_j": None,
+) -> dict[str, str]:
+    bundle = runs_root / bundle_id
+    bundle.mkdir(parents=True)
+    output_tokens = 512
+    config = {
+        "schema_version": "0.1",
+        "run_id": bundle_id,
+        "model": {
+            "name": "mock-model",
+            "family": "mock",
+            "source": None,
+            "revision": None,
+            "weight_format": "mock",
+            "context_window": 8192,
         },
-        "members": members,
+        "quantization": {
+            "name": "none",
+            "bits": None,
+            "group_size": None,
+        },
+        "hardware_target": {
+            "id": "synthetic_mac",
+            "device_kind": "test",
+            "host": None,
+            "runtime_backend": "mock",
+            "telemetry_backend": "powermetrics",
+            "transport": "local",
+            "notes": None,
+        },
+        "workload_profile": {
+            "name": "reported_energy_fixture",
+            "prompt_text": None,
+            "prompt_tokens": prompt_tokens,
+            "output_tokens": output_tokens,
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "dataset_ref": None,
+        },
+        "sampling": {
+            "power_hz": 20.0,
+            "idle_seconds": 1.0,
+            "warmup_seconds": 0.0,
+        },
+        "interconnect": {
+            "name": "local",
+            "link_speed_mbps": None,
+            "notes": None,
+        },
+        "run_metadata": {
+            "project": "capstone-joulewise",
+            "operator": "test",
+            "ambient_temp_c": None,
+            "notes": None,
+            "tags": ["synthetic_non_measurement"],
+        },
+    }
+    config_bytes = core.canonical_json_bytes(config)
+    (bundle / "config.json").write_bytes(config_bytes)
+    metadata = {
+        "run_id": bundle_id,
+        "config_sha256": hashlib.sha256(config_bytes).hexdigest(),
+        "workload_observed": {
+            "token_count": prompt_tokens + output_tokens,
+            "output_token_count": output_tokens,
+            "token_count_source": token_source,
+        },
+        "workload_provenance": {
+            "prompt": {"realized_token_count": prompt_tokens}
+        },
+    }
+    metadata_bytes = core.canonical_json_bytes(metadata)
+    (bundle / "metadata.json").write_bytes(metadata_bytes)
+
+    def envelope(point: float) -> dict:
+        return {
+            "method": "common_trace_shift_plus_independent_edge_corners_v3",
+            "anchor_bound_s": 0.01,
+            "point_j": point,
+            "lower_j": point - 1.0,
+            "upper_j": point + 2.0,
+            "max_abs_delta_j": 2.0,
+        }
+
+    summary = {
+        "status": "succeeded",
+        "phase_energy_j": {"decode": decode_j, "prefill": prefill_j},
+        "energy_anchor_shift_envelopes": {
+            "/phase_energy_j/decode": envelope(decode_j),
+            "/phase_energy_j/prefill": envelope(prefill_j),
+        },
+        "measurement_quality": {"token_counts_source": token_source},
+    }
+    summary_bytes = core.canonical_json_bytes(summary)
+    (bundle / "summary_metrics.json").write_bytes(summary_bytes)
+    events = [
+        {
+            "timestamp_s": 0.0,
+            "event_type": "phase_end",
+            "phase": "tokenize",
+            "message": "",
+            "metadata": {"prompt_tokens": prompt_tokens},
+        },
+        {
+            "timestamp_s": 0.1,
+            "event_type": "phase_start",
+            "phase": "prefill",
+            "message": "",
+            "metadata": {"prompt_tokens": prompt_tokens},
+        },
+    ]
+    (bundle / "events.jsonl").write_bytes(
+        b"".join(core.canonical_json_bytes(row) + b"\n" for row in events)
+    )
+    return {
+        "bundle_id": bundle_id,
+        "bundle_path": bundle_id,
+        "config_sha256": hashlib.sha256(config_bytes).hexdigest(),
+        "metadata_sha256": hashlib.sha256(metadata_bytes).hexdigest(),
+        "summary_sha256": hashlib.sha256(summary_bytes).hexdigest(),
     }
 
 
-def _source_material_from_blueprint(row: dict, selected_prefill_tokens: int) -> dict:
+def _source_material_from_blueprint(
+    row: dict,
+    selected_prefill_tokens: int,
+    runs_root: Path,
+    *,
+    composition_rule: str = core.DEFAULT_COMPOSITION_RULE,
+    mixed_sources: bool = False,
+) -> dict:
     role = row["campaign_role"]
     model = row["model_id"]
     base_ids = [f"fixture-{role}-base-{index:02d}" for index in range(1, 51)]
@@ -157,24 +238,78 @@ def _source_material_from_blueprint(row: dict, selected_prefill_tokens: int) -> 
         f"fixture-{role}-prefill-p{selected_prefill_tokens}-{index:02d}"
         for index in range(1, 51)
     ]
+    occurrences: list[dict[str, str]] = []
+    base_members: list[dict[str, str]] = []
+    selected_members: list[dict[str, str]] = []
+    for ordinal, bundle_id in enumerate(base_ids, start=1):
+        occurrence = _write_member_bundle(
+            runs_root,
+            bundle_id=bundle_id,
+            decode_j=row["decode_point_base_j"] + ordinal / 10,
+            prefill_j=row["p42_point_base_j"] + ordinal / 10,
+            prompt_tokens=42,
+            token_source=(
+                "server_usage" if mixed_sources and ordinal == 1
+                else row["token_count_source"]
+            ),
+        )
+        occurrences.append(occurrence)
+        base_members.append(
+            {
+                "bundle_id": bundle_id,
+                "config_sha256": occurrence["config_sha256"],
+            }
+        )
+    for ordinal, bundle_id in enumerate(selected_ids, start=1):
+        occurrence = _write_member_bundle(
+            runs_root,
+            bundle_id=bundle_id,
+            decode_j=row["decode_point_base_j"] + ordinal / 10,
+            prefill_j=row["selected_prefill_point_base_j"] + ordinal / 10,
+            prompt_tokens=selected_prefill_tokens,
+            token_source=(
+                "server_usage" if mixed_sources and ordinal == 1
+                else row["token_count_source"]
+            ),
+        )
+        occurrences.append(occurrence)
+        selected_members.append(
+            {
+                "bundle_id": bundle_id,
+                "config_sha256": occurrence["config_sha256"],
+            }
+        )
     registered = [
         _registered_cell(
             f"d117-reported-mean-ph-decode-{model}",
             "phase_energy_j.decode",
-            base_ids,
+            base_members,
+            composition_rule=composition_rule,
         ),
         _registered_cell(
             f"d117-reported-mean-ph-prefill-p42-{model}",
             "phase_energy_j.prefill",
-            base_ids,
+            base_members,
+            composition_rule=composition_rule,
         ),
         _registered_cell(
             f"d117-reported-mean-ph-prefill-p{selected_prefill_tokens}-{model}",
             "phase_energy_j.prefill",
-            selected_ids,
+            selected_members,
+            composition_rule=composition_rule,
         ),
     ]
-    floor_cells = [{"cell_id": f"synthetic-floor-{role}", "fixture_only": True}]
+    floor_cells = [
+        {
+            "cell_id": f"synthetic-floor-{role}",
+            "kind": "absolute",
+            "metric": "gross_energy_j",
+            "window_class": "request",
+            "members": [
+                {"slot": base_ids[0], "bundle_id": base_ids[0]}
+            ],
+        }
+    ]
     spec = {
         "schema_version": core.EXTRACTION_SPEC_SCHEMA_VERSION,
         "cells": floor_cells,
@@ -189,35 +324,34 @@ def _source_material_from_blueprint(row: dict, selected_prefill_tokens: int) -> 
             "no_semantics_change_rule": "fixture-only disjoint projection",
         },
     }
-    report_cells = [
-        _reported_cell(
-            registered[0],
-            base_j=row["decode_point_base_j"],
-            prompt_tokens=88,
-            token_source=row["token_count_source"],
-        ),
-        _reported_cell(
-            registered[1],
-            base_j=row["p42_point_base_j"],
-            prompt_tokens=42,
-            token_source=row["token_count_source"],
-        ),
-        _reported_cell(
-            registered[2],
-            base_j=row["selected_prefill_point_base_j"],
-            prompt_tokens=selected_prefill_tokens,
-            token_source=row["token_count_source"],
-        ),
-    ]
     extraction_report = json.loads(
         PRODUCTION_EXTRACTION_REPORT.read_text(encoding="utf-8")
     )
-    projection = {
-        "schema_version": core.PROJECTION_SCHEMA_VERSION,
-        "campaign_role": role,
-        "extraction_report_sha256": core.canonical_json_sha256(extraction_report),
-        "reported_energy_cells": report_cells,
+    extraction_report["runs_root"] = str(runs_root.resolve())
+    basis_payload = {
+        "schema_version": "joulewise.idle_admission_evaluation_basis.v1",
+        "policy_sha256": _digest(f"policy:{role}"),
+        "member_occurrences": sorted(
+            occurrences, key=lambda item: (item["bundle_id"], item["bundle_path"])
+        ),
+        "calibration_bracket_set": None,
+        "consumption_semantics_id": extraction_report["consumption_semantics_id"],
     }
+    basis = {
+        **basis_payload,
+        "sha256": core.canonical_json_sha256(basis_payload),
+    }
+    for allowance in extraction_report["whole_window_drift_allowances"].values():
+        allowance["whole_window_evaluation_basis_sha256"] = basis["sha256"]
+    for cell in extraction_report["cells"]:
+        allowance = cell.get("whole_window_drift_allowance")
+        if isinstance(allowance, dict):
+            allowance["whole_window_evaluation_basis_sha256"] = basis["sha256"]
+        floor = cell.get("floor")
+        if isinstance(floor, dict):
+            provenance = floor.get("whole_window_drift_allowance_provenance")
+            if isinstance(provenance, dict):
+                provenance["whole_window_evaluation_basis_sha256"] = basis["sha256"]
     g2a = {
         "schema_version": core.G2A_SCHEMA_VERSION,
         "collection_prefill_tokens": selected_prefill_tokens,
@@ -238,8 +372,8 @@ def _source_material_from_blueprint(row: dict, selected_prefill_tokens: int) -> 
         "extraction_report": _wrap(
             f"{role}/extraction-report.json", extraction_report
         ),
-        "reported_energy_projection": _wrap(
-            f"{role}/reported-energy-projection.json", projection
+        "whole_window_evaluation_basis": _wrap(
+            f"{role}/whole-window-evaluation-basis.json", basis
         ),
         "g2a_selection": _wrap(f"{role}/g2a-selection.json", g2a),
         "prompt_pin": _wrap(f"{role}/prompt-pin.json", prompt_pin),
@@ -285,16 +419,159 @@ def _set_path(value: object, path: tuple, replacement: object) -> None:
 class ReportedPhaseEnergyContractTests(unittest.TestCase):
     maxDiff = None
 
+    def test_fixed_authenticated_parents_determine_one_reported_energy_projection(
+        self,
+    ) -> None:
+        blueprint = json.loads(BLUEPRINT.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            materials = [
+                _source_material_from_blueprint(
+                    row,
+                    blueprint["selected_prefill_tokens"],
+                    root / row["campaign_role"],
+                )
+                for row in blueprint["packs"]
+            ]
+            self.assertTrue(
+                all("reported_energy_projection" not in row for row in materials)
+            )
+            caller_projection = copy.deepcopy(materials[0])
+            caller_projection["reported_energy_projection"] = _wrap(
+                "caller/projection.json",
+                {"schema_version": core.PROJECTION_SCHEMA_VERSION},
+            )
+            with self.assertRaisesRegex(
+                core.StopFill, "^source_material_closed_keys_mismatch$"
+            ):
+                core.build_reported_phase_energy_source(
+                    _source_bytes(caller_projection)
+                )
+            projections = [
+                core.build_reported_phase_energy_projection(_source_bytes(material))
+                for material in materials
+            ]
+            sources = [
+                core.build_reported_phase_energy_source(_source_bytes(material))
+                for material in materials
+            ]
+            artifacts = [
+                core.build_reported_phase_energy(_source_bytes(source))
+                for source in sources
+            ]
+            issuance_bytes, _ = _issued_projection(artifacts, sources)
+            self.assertEqual(
+                projections[0]["reported_energy_cells"][0]["per_token"][
+                    "value_j_per_token"
+                ],
+                102.55 / 512,
+            )
+
+            self.assertEqual(
+                core.canonical_json_bytes(
+                    core.build_reported_phase_energy_projection(
+                        _source_bytes(materials[0])
+                    )
+                ),
+                core.canonical_json_bytes(projections[0]),
+            )
+
+            attacked_source = copy.deepcopy(sources[0])
+            attacked_projection = attacked_source[
+                "reported_energy_projection"
+            ]["document"]
+            cell = attacked_projection["reported_energy_cells"][0]
+            member = cell["members"][0]
+            member["energy_j"] += 100.0
+            member["energy_interval_j"]["lower_j"] += 100.0
+            member["energy_interval_j"]["upper_j"] += 100.0
+            points = [row["energy_j"] for row in cell["members"]]
+            lowers = [
+                row["energy_interval_j"]["lower_j"] for row in cell["members"]
+            ]
+            uppers = [
+                row["energy_interval_j"]["upper_j"] for row in cell["members"]
+            ]
+            cell["mean_j_per_request"] = math.fsum(points) / 50
+            cell["interval"]["lower_j"] = math.fsum(lowers) / 50
+            cell["interval"]["upper_j"] = math.fsum(uppers) / 50
+            cell["per_token"]["numerator_energy_j"] = math.fsum(points)
+            cell["per_token"]["value_j_per_token"] = (
+                math.fsum(points) / cell["per_token"]["observed_token_count"]
+            )
+            _reseal_wrapper(attacked_source, "reported_energy_projection")
+            _reseal_source(attacked_source)
+            attacked_source_bytes = _source_bytes(attacked_source)
+
+            attacked_artifact = copy.deepcopy(artifacts[0])
+            attacked_artifact["cells"] = copy.deepcopy(
+                attacked_projection["reported_energy_cells"]
+            )
+            attacked_artifact["inputs"]["reported_energy_projection"][
+                "file_sha256"
+            ] = attacked_source["reported_energy_projection"]["file_sha256"]
+            attacked_artifact["inputs"]["source"]["source_id"] = (
+                attacked_source["source_id"]
+            )
+            attacked_artifact["inputs"]["source"]["file_sha256"] = (
+                hashlib.sha256(attacked_source_bytes).hexdigest()
+            )
+            _reseal_artifact(attacked_artifact)
+            self.assertEqual(core.validate_reported_phase_energy(attacked_artifact), [])
+
+            attacked_issuance = json.loads(issuance_bytes)
+            alpha = next(
+                row
+                for row in attacked_issuance["artifacts"]
+                if row["campaign_role"] == "alpha"
+            )
+            alpha["artifact_id"] = attacked_artifact["artifact_id"]
+            alpha["source_id"] = attacked_source["source_id"]
+            attacked_issuance_bytes = core.canonical_json_bytes(attacked_issuance)
+            self.assertEqual(
+                core.validate_reported_phase_energy_issuance(attacked_issuance), []
+            )
+            self.assertRegex(
+                hashlib.sha256(attacked_issuance_bytes).hexdigest(), r"^[0-9a-f]{64}$"
+            )
+
+            self.assertEqual(
+                core.validate_reported_energy_projection_derivation(
+                    attacked_source
+                ),
+                "reported_energy_projection_derivation_mismatch",
+            )
+            with self.assertRaisesRegex(
+                core.StopFill,
+                "^reported_energy_projection_derivation_mismatch$",
+            ):
+                core.build_reported_phase_energy_issuance(
+                    [attacked_artifact, artifacts[1]],
+                    {
+                        "alpha": attacked_source_bytes,
+                        "beta": _source_bytes(sources[1]),
+                    },
+                )
+
     def test_d123_reported_phase_energy_contract_table(self) -> None:
         blueprint = json.loads(BLUEPRINT.read_text(encoding="utf-8"))
         self.assertEqual(blueprint["fixture_kind"], "synthetic_non_measurement")
         self.assertEqual(blueprint["members_per_cell"], 50)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        parent_root = Path(temporary.name) / "parents"
         materials = [
             _source_material_from_blueprint(
-                row, blueprint["selected_prefill_tokens"]
+                row,
+                blueprint["selected_prefill_tokens"],
+                parent_root / row["campaign_role"],
+                mixed_sources=row["campaign_role"] == "alpha",
             )
             for row in blueprint["packs"]
         ]
+        self.assertTrue(
+            all("reported_energy_projection" not in material for material in materials)
+        )
         sources = [
             core.build_reported_phase_energy_source(_source_bytes(material))
             for material in materials
@@ -385,17 +662,15 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
                     )
                     self.assertEqual(cell["per_token"]["numerator_energy_j"], math.fsum(points))
 
-        t95_source = copy.deepcopy(sources[0])
-        for cell in t95_source["reported_energy_projection"]["document"][
-            "reported_energy_cells"
-        ]:
-            cell["interval_policy"] = {
-                "composition_rule": core.T95_WINDOW_COMPOSITION_RULE,
-                "t95_critical_value": 2.0,
-                "window_allowance_j": 0.25,
-            }
-        _reseal_wrapper(t95_source, "reported_energy_projection")
-        _reseal_source(t95_source)
+        t95_material = _source_material_from_blueprint(
+            blueprint["packs"][0],
+            blueprint["selected_prefill_tokens"],
+            parent_root / "t95-alpha",
+            composition_rule=core.T95_WINDOW_COMPOSITION_RULE,
+        )
+        t95_source = core.build_reported_phase_energy_source(
+            _source_bytes(t95_material)
+        )
         t95_artifact = core.build_reported_phase_energy(_source_bytes(t95_source))
         for cell in t95_artifact["cells"]:
             with self.subTest(cell=cell["cell_id"], check="t95-window-rule"):
@@ -482,25 +757,31 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
                 "config_sha256", "0" * 64
             ),
             "member_outcome": lambda source, member: member.__setitem__(
-                "outcome", "excluded"
+                "admitted", False
             ),
             "cell_outcome": lambda source, member: source[
                 "reported_energy_projection"
             ][
                 "document"
-            ]["reported_energy_cells"][0].__setitem__("outcome", "refused"),
+            ]["reported_energy_cells"][0].__setitem__("status", "refused"),
             "cell_expected_census": lambda source, member: source[
                 "reported_energy_projection"
-            ]["document"]["reported_energy_cells"][0].__setitem__("expected_n", 49),
+            ]["document"]["reported_energy_cells"][0].__setitem__(
+                "registered_member_count", 49
+            ),
             "cell_observed_census": lambda source, member: source[
                 "reported_energy_projection"
-            ]["document"]["reported_energy_cells"][0].__setitem__("observed_n", 49),
+            ]["document"]["reported_energy_cells"][0].__setitem__(
+                "admitted_independent_bundle_count", 49
+            ),
             "cell_admitted_census": lambda source, member: source[
                 "reported_energy_projection"
-            ]["document"]["reported_energy_cells"][0].__setitem__("admitted_n", 49),
+            ]["document"]["reported_energy_cells"][0].__setitem__(
+                "registered_member_count", 48
+            ),
             "energy_endpoint": lambda source, member: member[
-                "energy_anchor_shift_envelope"
-            ].__setitem__("lower_j", member["point_j"] + 1),
+                "energy_interval_j"
+            ].__setitem__("lower_j", member["energy_j"] + 1),
         }
         for label, mutate in cell_cases.items():
             attacked = copy.deepcopy(sources[0])
@@ -510,91 +791,50 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
             mutate(attacked, member)
             _reseal_wrapper(attacked, "reported_energy_projection")
             _reseal_source(attacked)
-            artifact = core.build_reported_phase_energy(_source_bytes(attacked))
-            attacked_issuance, attacked_issuance_sha = _issued_projection(
-                [artifact, artifacts[1]], [attacked, sources[1]]
-            )
-            values = core.reported_phase_energy_token_values(
-                [artifact, artifacts[1]],
-                issuance_manifest_bytes=attacked_issuance,
-                expected_issuance_sha256=attacked_issuance_sha,
-            )
-            with self.subTest(mutation=label, refusal="cell"):
-                self.assertTrue(
-                    all(
-                        values[token] == core.STOP_FILL
-                        for token in expected
-                        if token.startswith("[E_1p7B_decode")
-                        or token == "[N_bundles_1p7B_decode]"
-                    )
-                )
+            with self.subTest(mutation=label, refusal="derivation"):
                 self.assertEqual(
-                    values[
-                        "[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_request]"
-                    ],
-                    expected[
-                        "[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_request]"
-                    ],
+                    core.validate_reported_energy_projection_derivation(attacked),
+                    "reported_energy_projection_derivation_mismatch",
                 )
+                with self.assertRaisesRegex(
+                    core.StopFill,
+                    "^reported_energy_projection_derivation_mismatch$",
+                ):
+                    core.build_reported_phase_energy(_source_bytes(attacked))
 
-        token_cases = {
-            "denominator_source": lambda denominator: denominator.__setitem__(
-                "token_count_source", "config_fallback"
-            ),
-            "prompt_four_surface": lambda denominator: denominator.__setitem__(
-                "tokenize_prompt_token_count",
-                denominator["tokenize_prompt_token_count"] + 1,
-            ),
-            "mixed_runtime_sources": lambda denominator: denominator.__setitem__(
-                "token_count_source", "server_usage"
-            ),
-        }
-        for label, mutate in token_cases.items():
-            attacked = copy.deepcopy(sources[0])
-            denominator = attacked["reported_energy_projection"]["document"][
-                "reported_energy_cells"
-            ][2]["members"][0]["observed_token_denominator"]
-            mutate(denominator)
-            _reseal_wrapper(attacked, "reported_energy_projection")
-            _reseal_source(attacked)
-            artifact = core.build_reported_phase_energy(_source_bytes(attacked))
-            attacked_issuance, attacked_issuance_sha = _issued_projection(
-                [artifact, artifacts[1]], [attacked, sources[1]]
-            )
-            values = core.reported_phase_energy_token_values(
-                [artifact, artifacts[1]],
-                issuance_manifest_bytes=attacked_issuance,
-                expected_issuance_sha256=attacked_issuance_sha,
-            )
-            with self.subTest(mutation=label, refusal="per-token"):
-                token = "[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_token]"
-                if label == "mixed_runtime_sources":
-                    self.assertEqual(values[token], expected[token])
-                    selected_cell = next(
-                        cell
-                        for cell in artifact["cells"]
-                        if (
-                            f"prefill-p{blueprint['selected_prefill_tokens']}"
-                            in cell["cell_id"]
-                        )
-                    )
-                    self.assertEqual(
-                        selected_cell["per_token"]["token_count_sources"],
-                        ["runtime_observed", "server_usage"],
-                    )
-                else:
-                    self.assertEqual(values[token], core.STOP_FILL)
-                self.assertEqual(
-                    values[
-                        "[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_request]"
-                    ],
-                    expected[
-                        "[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_request]"
-                    ],
-                )
-                self.assertEqual(
-                    values["[N_bundles_1p7B_prefill_p[PREFILL_LENGTH]]"], "50"
-                )
+        selected_cell = next(
+            cell
+            for cell in artifacts[0]["cells"]
+            if f"prefill-p{blueprint['selected_prefill_tokens']}" in cell["cell_id"]
+        )
+        self.assertEqual(
+            selected_cell["per_token"]["token_count_sources"],
+            ["runtime_observed", "server_usage"],
+        )
+        invalid_denominator_row = copy.deepcopy(blueprint["packs"][0])
+        invalid_denominator_row["token_count_source"] = "config_fallback"
+        invalid_denominator_material = _source_material_from_blueprint(
+            invalid_denominator_row,
+            blueprint["selected_prefill_tokens"],
+            parent_root / "invalid-denominator-alpha",
+        )
+        invalid_denominator_source = core.build_reported_phase_energy_source(
+            _source_bytes(invalid_denominator_material)
+        )
+        invalid_denominator_artifact = core.build_reported_phase_energy(
+            _source_bytes(invalid_denominator_source)
+        )
+        refused_token_cell = next(
+            cell
+            for cell in invalid_denominator_artifact["cells"]
+            if f"prefill-p{blueprint['selected_prefill_tokens']}" in cell["cell_id"]
+        )
+        self.assertEqual(refused_token_cell["status"], "issued")
+        self.assertIsNone(refused_token_cell["per_token"])
+        self.assertEqual(
+            refused_token_cell["refusal_reasons"],
+            ["runtime_token_denominator_invalid"],
+        )
 
         join_failure = copy.deepcopy(sources[0])
         join_failure["prompt_pin"]["document"]["prefill_length"] = 1024
@@ -612,9 +852,6 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
                 "campaign_role": "alpha",
                 "outcome": "issued",
                 "consumption_semantics_id": "invented_fixture_wire.v1",
-                "reported_energy_cells": incompatible_report[
-                    "reported_energy_projection"
-                ]["document"]["reported_energy_cells"],
             },
         )
         with self.assertRaisesRegex(
@@ -625,9 +862,9 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
             )
 
         missing_custody_source = copy.deepcopy(sources[0])
-        missing_member = missing_custody_source[
-            "reported_energy_projection"
-        ]["document"]["reported_energy_cells"][0]["members"][0]
+        missing_member = missing_custody_source["reported_energy_projection"][
+            "document"
+        ]["reported_energy_cells"][0]["members"][0]
         for key in (
             "bundle_sha256",
             "summary_sha256",
@@ -637,24 +874,23 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
             del missing_member[key]
         _reseal_wrapper(missing_custody_source, "reported_energy_projection")
         _reseal_source(missing_custody_source)
-        missing_custody_artifact = core.build_reported_phase_energy(
-            _source_bytes(missing_custody_source)
+        self.assertEqual(
+            core.validate_reported_energy_projection_derivation(
+                missing_custody_source
+            ),
+            "reported_energy_projection_derivation_mismatch",
         )
-        refused = missing_custody_artifact["cells"][0]
-        self.assertEqual(refused["status"], "refused")
-        for key in (
-            "bundle_sha256",
-            "summary_sha256",
-            "metadata_sha256",
-            "whole_window_evaluation_basis_sha256",
+        with self.assertRaisesRegex(
+            core.StopFill, "^reported_energy_projection_derivation_mismatch$"
         ):
-            self.assertIsNone(refused["members"][0][key])
-        self.assertNotIn("0" * 64, json.dumps(refused))
+            core.build_reported_phase_energy(_source_bytes(missing_custody_source))
 
         alternate_row = copy.deepcopy(blueprint["packs"][0])
         alternate_row["decode_point_base_j"] += 10.0
         alternate_material = _source_material_from_blueprint(
-            alternate_row, blueprint["selected_prefill_tokens"]
+            alternate_row,
+            blueprint["selected_prefill_tokens"],
+            parent_root / "alternate-alpha",
         )
         alternate_source = core.build_reported_phase_energy_source(
             _source_bytes(alternate_material)
@@ -785,14 +1021,6 @@ class ReportedPhaseEnergyContractTests(unittest.TestCase):
                 self.assertTrue(
                     all(projected[token] == core.STOP_FILL for token in alpha_tokens)
                 )
-                with self.assertRaises(core.StopFill):
-                    core.build_reported_phase_energy_issuance(
-                        [attacked, artifacts[1]],
-                        {
-                            "alpha": _source_bytes(sources[0]),
-                            "beta": _source_bytes(sources[1]),
-                        },
-                    )
 
         registry = REGISTRY.read_text(encoding="utf-8")
         for token in expected:

@@ -97,6 +97,7 @@ __all__ = [
     "TracePoint",
     "Window",
     "axi_v2_validation_problems",
+    "read_bundle_artifact_bytes",
 ]
 
 AXI_VALIDATOR_REASON_CODES = frozenset(
@@ -179,6 +180,31 @@ _JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
 
 class BundleReadError(Exception):
     """A structured, non-crashing bundle read/interpretation failure."""
+
+
+def read_bundle_artifact_bytes(path: Path, name: str) -> bytes:
+    """Read one top-level bundle artifact through the authentication session.
+
+    This is the exact-byte companion to :class:`BundleReader`'s parsed
+    accessors.  It deliberately accepts only a basename so a caller cannot
+    escape the authenticated bundle directory while requesting custody bytes.
+    """
+
+    if not name or Path(name).name != name:
+        raise BundleReadError("bundle artifact name must be a basename")
+    grammar = "jsonl" if name.endswith(".jsonl") else (
+        "json" if name.endswith(".json") else "raw"
+    )
+    try:
+        return read_authentication_input(
+            v2_authentication_path(Path(path)) / name,
+            grammar=grammar,
+            label=f"bundle {Path(path).name} {name}",
+        )
+    except FileNotFoundError as exc:
+        raise BundleReadError(f"missing required artifact: {name}") from exc
+    except OSError as exc:
+        raise BundleReadError(f"{name} cannot be read: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -399,6 +425,14 @@ class BundleReader:
                 )
             except OSError as exc:
                 raise BundleReadError(f"raw/{name} cannot be read: {exc}") from exc
+        return self._cache[key]
+
+    def artifact_bytes(self, name: str) -> bytes:
+        """Return exact authenticated bytes for one top-level artifact."""
+
+        key = f"artifact-bytes:{name}"
+        if key not in self._cache:
+            self._cache[key] = read_bundle_artifact_bytes(self._path, name)
         return self._cache[key]
 
     # ------------------------------------------------------------------
