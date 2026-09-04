@@ -17,6 +17,13 @@ when close until it resets."
 - Watchdog: packet 11 refuted by Opus (file 12: `--bg` base falsified; census narrowing falsified; t0-5 falsified — runbook needs ≥10 min idle, kill by t0-15; plan-pin must precede install; `codex-code-mode-host` escapes the pgid); cold Fable seat re-running with its own scratch dir → synthesis (file 14) → build.
 - Code/tests audit (Opus) report exists in the scratchpad (`audit-code-tests/audit-code-tests.md`, 1 test failure seen in its run: `tests.test_reduce.D078R01RegressionTests`) — custody + triage owed.
 
+## 2026-09-04 02:05 status (after the fan-out harvest)
+- MERGED: PR #278 (decode-identity) → main bb4930d1. OPEN with full ledgers (row 11 pending CI): #279 paper-e, #280 paper-f, #281 floor generators — merge order E → F (merge main into F first, re-run the paper tests) → generators.
+- FAN-OUT: 47 direct Codex missions (wave 1 = 12, wave 2 = 35); 46 landings committed UNREVIEWED to `feat/2026-09-04-fan-<name>` (or the named branches) and pushed; rulings owed and given: `docs/process_traces/2026-09-04-fanout/00-rulings-owed.md`, `01-magistrate-rulings.md`. 28 execution-lens refuters running (worktrees `wt-ref-<name>`, outputs `<job>/tmp/out/ref-<name>.md`); resumed seats: fan2-docs (docs-vs-truth + doc008 with root scope), fan2-instrument (successor acceptance artifact), fan2-r7f-exit3 (option A), fan2-kernel (retirements/closures in `wt-kb2`).
+- WATCHDOG: fix round 2 landed at fc21ab3b; delta running; then packet 17 exhibits refresh (17h2 = fix 2 report, 17k = contract lens, 17l = delta 2) → joint cold gate (cold Fable + Opus refuter, distinct scratch dirs) → install → first stand-down. PAPER-G: round 3 running (predicate verbatim in §4 form / Outcome C / H04-C / H27-C; plain-language carriers).
+- Owed to Ed (parked, emailed 02:00): charter v3 digest re-ratification; QUIET-GUARD-01 inactive install on his host.
+- Known environmental: `test_node_worker_subprocess…over_localhost` fails on main in isolation on this machine; calibration-exit logical-delay test is load-sensitive; `test_window_status_guard` flakes under concurrent git operations.
+
 ## PAUSE 2026-09-04 ~00:10 PDT (Ed: "pause work asap usage limit reached") — resume from HERE
 Loop stopped; no new launches. Direct Sol runs still in flight write only to their worktrees and `<job>/tmp/out/*.md|.status` (job dir `/Users/edr/.claude/jobs/3c46c831/tmp` — may die with the job; harvest from the WORKTREES: `git status --short` in each, plus the trace dirs' latest numbered reports).
 
