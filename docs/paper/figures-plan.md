@@ -245,6 +245,11 @@ These are drawings, not renderings of artifacts. They live in
 - `docs/paper/figures/fig3_decision_gates.svg` — the floor gate and the
   interval-direction gate as separate checks, with the four outcomes (belongs
   to Section 4).
+- `docs/paper/figures/fig5_phase_record_overlap.svg` — the positive-time
+  overlap test, tiled record supports, and the two-record versus three-record
+  sides of the resolvability rule (belongs to Section 6). Its count labels are
+  rule examples rather than measured frequencies; all widths and alignments
+  are illustrative and not to scale.
 
 Rules for this class:
 

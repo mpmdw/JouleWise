@@ -916,28 +916,65 @@ reader-facing column. -->
 
 ### Printed negative result: short prompt processing has too few overlapping records
 
-<!-- BUILD FRESH:
-1. A sampling-record support is its start-to-end time interval. Clip each
-   support to the prompt-processing interval and count supports with positive
-   overlap. Fewer than three refuses the phase.
-   **Diagram required:** draw the record supports and the prefill interval on
-   one time axis, then mark the two-overlap and three-overlap counts so the
-   refusal threshold is visible.
-2. State [FILL:DG-067] of [FILL:DG-068] had two overlaps and
-   [FILL:DG-069] had three. This is the fixed negative answer, not evidence of
-   zero prompt-processing energy and not a model comparison.
-3. An interquartile range (**IQR**) is the difference between the upper and
-   lower edges of the middle half of sorted values. Work the retained bundle:
-   duration [FILL:DG-070], record-width statistic
-   [FILL:DG-071] — “The sampling-record width is omitted: its median-with-IQR
-   statistic is ratified but not issued (registry row DG-071).”, overlap count
-   [FILL:DG-072], threshold [FILL:DG-073], and start-spacing statistic
-   [FILL:DG-075] — “The record spacing is omitted: its median-with-IQR statistic
-   is ratified but not issued (registry row DG-075).” State that records tile without a
-   meaningful pause; width and start spacing describe the same record-period
-   distribution apart from endpoint convention. Never resurrect the false
-   pause mechanism.
-4. Close with population counts [FILL:DG-076] and [FILL:DG-077]. -->
+Section 1 introduced a sampling record as one sampler output that averages
+processor power from its recorded start time through its recorded end time.
+We call that start-to-end interval the record's **record support**, and its
+duration is the **record width**. For a prompt-processing phase with start and end times
+\(p_s\) and \(p_e\), and a record support with start and end times \(r_s\) and
+\(r_e\), the record has **positive overlap** with the phase exactly when
+\[
+\min(p_e,r_e)>\max(p_s,r_s).
+\]
+The **overlap count** is the number of record supports that pass this test. A
+support that crosses a phase edge counts because the shared part has positive
+duration; a support that only touches an edge does not. The **resolvability
+rule** accepts a phase-energy calculation only when this count is at least
+three. With fewer than three interval averages, the calculation reports the
+phase as not resolvable instead of assigning an energy from insufficient time
+support.
+
+Figure 5, the phase–record overlap diagram, names the phase edges, tiled record
+supports, shared portions, overlap count, and three-record rule for both sides
+of the decision.
+
+![Figure 5. Phase–record overlap diagram.](figures/fig5_phase_record_overlap.svg)
+
+*Figure 5. Phase–record overlap diagram. The two rows apply the positive-time
+test to illustrative alignments: two supports fail the three-record rule, while
+three supports meet it. Every rectangle, edge, shared portion, count, decision,
+and axis is labelled in the diagram. Support widths and edge positions are not
+to scale; the count labels explain the rule and are not population frequencies,
+and the diagram contains no measured timing value.*
+
+The forcing problem appears in one retained run. Its prompt-processing phase
+lasted 0.121034145 s, rendered as 0.121 s for the comparison below. Across all
+406 sampler records in that run, record width had median 120.9186 ms. An
+interquartile range (IQR) is the upper edge minus the lower edge of the middle
+half of sorted values; the width IQR was 5.9508 ms. Across the 405 differences
+between consecutive records' recorded end times, record spacing had median
+120.9224 ms and IQR 5.8949 ms. The records have no meaningful between-record
+pause: each support begins where the preceding record ends, apart from an
+**endpoint convention** in which separately rounded time labels can differ in
+their final printed digit. Width and record spacing therefore describe the same
+**record-period distribution**—the collection of durations produced by the
+sampler—apart from that convention.
+
+The 0.121-s phase duration is close to the issued record-width and record-spacing
+medians, but dividing duration by either median cannot reproduce the decision.
+Alignment decides whether a support crosses a phase edge. In this run, exactly
+two supports shared positive time with the phase. Two is less than the required
+three, so the phase was not resolvable.
+
+Across the retained diagnostic-era population, 37 of 50 short
+prompt-processing phases overlapped two records and the remaining 13 of 50
+overlapped three. Accordingly, 37 failed the rule and 13 passed it. The result supports one
+conclusion: most phases in this retained diagnostic population were too brief,
+relative to the sampler records and their alignment, for the fixed
+phase-energy calculation. It does not show zero prompt-processing energy, make
+a model comparison, or establish a limitation of the prospective demonstration.
+These data are non-claim-bearing. The demonstration responds by using the
+prefill length selected by G2-a before collection rather than reusing this
+short diagnostic phase.
 
 ### Demonstration fixed before collection
 
@@ -1684,7 +1721,10 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | third-party provenance / provenance | Every input and every refusal remains visible | glossed-at-first-use | Evidence that would convince someone who does not trust the operator. |
 | freeze receipt / freeze receipts | Every input and every refusal remains visible | glossed-at-first-use | Records fixing plan bytes and the time those bytes were frozen. |
 | hash-bound | Results | glossed-at-first-use | A selection record carrying the digest of the fixed candidate-length selection record. |
-| overlapping record / record support / IQR / resolvability | Why the selected prompt length is not yet stated | built-before | The body builds boundary-to-sampler overlap; the other legacy alternatives occur only in excluded build notes. |
+| overlapping record / record support / positive overlap / overlap count | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | The record's start-to-end interval is named first, and the positive-time inequality defines which supports enter the count. |
+| interquartile range / IQR | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Upper edge minus lower edge of the middle half of sorted values. |
+| resolvability / resolvability rule | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | A phase-energy calculation requires an overlap count of at least three; a smaller count reports not resolvable. |
+| record width / record-period distribution / endpoint convention | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Support duration; the collection of sampler-produced durations; and the final-digit difference caused by separately rounded endpoint labels. |
 | three-record minimum | 1. Introduction | glossed-at-first-use | A phase must overlap at least three sampler records to be reduced at all. |
 | two-record safety margin / design floor | Why the selected prompt length is not yet stated | glossed-at-first-use | Five overlaps are two above the three-overlap phase minimum; the design floor is stricter than reducer calculability. |
 | count floor | Why the selected prompt length is not yet stated | glossed-at-first-use | The registered minimum record count for a full-strength result. |
@@ -1787,4 +1827,4 @@ The inventory excludes literal field names and reason names inside quoted omissi
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 224; FAILS: 0.
+a failure. Terms inventoried: 227; FAILS: 0.

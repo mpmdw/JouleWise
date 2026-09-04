@@ -1,6 +1,6 @@
 # Schematic figures
 
-Three publication-grade schematic figures for the MVP paper. They are drawings
+Four publication-grade schematic figures for the MVP paper. They are drawings
 of mechanism, not renderings of evidence: every quantity that appears in them
 is illustrative, chosen to make the geometry legible, and none of it comes from
 a measurement window, a bundle, or an issued artifact. They therefore sit
@@ -60,9 +60,22 @@ quantity or numeric threshold, and its layout implies no threshold. It belongs
 to §4, beside the
 "Publication label and the two claim gates" paragraph.
 
+## `fig5_phase_record_overlap.svg` — the phase–record overlap rule
+
+Two aligned time-axis rows show the same three tiled sampler-record supports
+against two illustrative prompt-processing intervals. In the upper row, the
+phase shares positive time with two supports and therefore falls below the
+fixed three-record minimum. In the lower row, moving the illustrative phase
+edges makes all three supports share positive time and meets that minimum.
+Every record, phase edge, positive-overlap segment, count, rule decision, and
+time axis is labelled in the SVG. The counts illustrate the decision rule, not
+measured population frequencies; support widths and phase-edge positions are
+not to scale, and the drawing contains no measured timing value. It appears in
+Section 6 beside the printed diagnostic-era negative result.
+
 ## Captions in the paper
 
-Captions written for these three figures must stay in plain language and must
+Captions written for these four figures must stay in plain language and must
 not cite internal decision-log identifiers, registry row keys, campaign
 codenames, or window labels. Each caption must identify the drawing as schematic,
 state that any shown values or widths are illustrative or not to scale, and state

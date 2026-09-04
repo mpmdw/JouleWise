@@ -251,16 +251,20 @@ one marker site and two semantic slots.
 
 ## Batch 4 — diagnostics, release locator, and NEEDS-VALUE notes
 
-DG-071 and DG-075 have ratified statistics but not issued values; see the
-2026-08-31 [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md).
+DG-071 and DG-075 have ratified statistics issued by PR #276 in
+`docs/paper/round7/dg071-dg075-statistics.md` (SHA-256
+`041a045e088379ccaf47f8b147efe6c73f17f8f579cd3c1dff3db0143f24927b`) and
+`docs/paper/round7/dg071-dg075-statistics.json` (SHA-256
+`9a4fdddeb8939ce363a93be617352781dba5bfb39bc7a3b1aa8130c9d691c3c7`); see
+the 2026-08-31 [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md).
 Their old pause mechanism is contradicted by retained bytes: records tile with
 no meaningful gap, and the former 111.8–112.5 ms band is the bottom of the
 width distribution rather than its range.
 
 | Placement row | Draft site | Supplier status and placement |
 |---|---|---|
-| DG-071 | line 256, first diagnostic `[PENDING]` | Ratified median with interquartile range (IQR: the middle value and the spread of its middle half) of `interval_end_s - interval_start_s` over the hash-pinned cited R03P; see the [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md). Until issued: “The sampling-record width is omitted: its median-with-IQR statistic is ratified but not issued (registry row DG-071).” |
-| DG-075 | line 256, second diagnostic `[PENDING]` | Ratified median with IQR of consecutive unique `timestamp_s` differences over the same hash-pinned R03P; see the [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md). The records tile, so this is the same record-period distribution apart from endpoint convention and merged intervals. Until issued: “The record spacing is omitted: its median-with-IQR statistic is ratified but not issued (registry row DG-075).” |
+| DG-071 | Section 6 diagnostic prose | Place the issued n = 406, median 120.9186 ms, and IQR 5.9508 ms exactly as rendered by the pinned artifact. Define IQR at first use; retain the diagnostic-era, non-claim-bearing qualification. |
+| DG-075 | Section 6 diagnostic prose | Place the issued n = 405, median 120.9224 ms, and IQR 5.8949 ms exactly as rendered by the pinned artifact. State that the records tile and that spacing is the DG-071 record-period distribution minus the first record, apart from the issued endpoint convention. |
 | DX-010 | successor-draft excursion prose, onset median | Place only as `[FILL:DX-010]` under the mandatory DX standing paragraph; R7F checks the rendered literal. |
 | DX-011 | successor-draft excursion prose, offset median | Place only as `[FILL:DX-011]` under the mandatory DX standing paragraph; R7F checks the rendered literal. |
 | DX-012 | successor-draft excursion prose, positive-onset count | Place only as `[FILL:DX-012]`; print the count instead of “repeatably.” |
@@ -371,8 +375,8 @@ STOP_FILL {"label": "SUPPLIER_UNKNOWN", "reason": "the registry freezes this tok
    assert len(expected) == 53
    assert set(placed) == set(expected), (set(expected) - set(placed), set(placed) - set(expected))
    assert all(placed[row] == 1 for row in expected), placed
-   assert len(re.findall(r"^\| (?:DS|PG|DG)-[0-9]+[a-z]? — .*[[](?:PENDING|RESULT PENDING ISSUED ARTIFACTS|REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST)", registry, re.M)) == 37
-   print("ROWS 53/53 PLACED ONCE; RF PENDING CENSUS 37")
+   assert len(re.findall(r"^\| (?:DS|PG|DG)-[0-9]+[a-z]? — .*[[](?:PENDING|RESULT PENDING ISSUED ARTIFACTS|REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST)", registry, re.M)) == 35
+   print("ROWS 53/53 PLACED ONCE; RF PENDING CENSUS 35")
    PY
    ```
 
@@ -394,16 +398,11 @@ STOP_FILL {"label": "SUPPLIER_UNKNOWN", "reason": "the registry freezes this tok
 4. **Claim-side bound:** `[B_decode_claim_J]` and the corresponding prefill
    claim-side bound have no supplier. `deterministic_bounds.total` remains
    forbidden as a substitute.
-5. **Diagnostic issuance:** DG-071 and DG-075 have ratified median-with-IQR
-   statistics over the cited retained bundle; see the
-   [ratification](../../process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md).
-   Each value and its path/SHA-pinned artifact must still be issued before its
-   marker can be filled.
-6. **Prefill professor-facing tokens:** the generator names the selected
+5. **Prefill professor-facing tokens:** the generator names the selected
    contrast, but Table 3 estimate, interval, floor, gate, bound, and verdict
    renderings remain unbuilt. D-166's reducer-refusal and pre-registration-
    refusal branches must stay distinct.
-7. **Release and characterization writers:** DS-34 and the frozen
+6. **Release and characterization writers:** DS-34 and the frozen
    characterization result fields remain unissued.
 
 No open gap makes a stopped row fillable. The protocol-first title is already
