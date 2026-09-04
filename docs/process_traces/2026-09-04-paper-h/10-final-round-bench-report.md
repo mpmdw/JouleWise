@@ -1,0 +1,3 @@
+# Paper-H FINAL bounded round (magistrate at the bench, under cold ruling 09)
+
+Date: 2026-09-04. Applied EXACTLY the two texts in ruling 09 §Q2: the CR-03 sentence pair in Section 1 (skeleton lines ~136–140) and the ledger row `twelve required ratios`. No other prose changed (diff: 1 file, 6 insertions, 6 deletions). Executed: `tests.test_paper_first_use_ledger` + `tests.test_paper_terms_lint` OK; selector for A, B, REFUSAL rc 0; the ledger test under `PAPER_FIRST_USE_DRAFT` for each selected draft OK (three runs). Bench-shaped per rule 9 (smaller than the contract needed to delegate). Next: fresh sentence-unit delta re-audit of selected A :78–:124 (ruling 09 Q4 condition 2), then merge without a further gate.
