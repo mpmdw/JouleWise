@@ -10803,3 +10803,42 @@ tests.test_docs_freshness` → 65 tests OK; five bench mutation probes against
 the rebuilt guards (limbs 1, 2 and 3, the terminal-status-over-pending check,
 and the index-row completeness check), each observed to turn the suite red
 when the check it protects was deleted or neutered.
+
+## D-167 dated addendum (magistrate via lieutenant, 2026-09-03): ARM-PACKET-01 follows the transaction it was retired behind
+
+The 2026-09-03 addendum above retired `V4-TRANSACTION-01` by supersession and
+recorded, without deciding it, that `ARM-PACKET-01` carried a pending
+hard-start dependency on the row being retired. The magistrate has now ruled
+it.
+
+**Ruling.** `ARM-PACKET-01`'s hard-start dependency is RETARGETED from
+`V4-TRANSACTION-01` to `V5-TRANSACTION-01`. The ground is the same pair of
+decisions that retired the predecessor: D-164 rules that the `_v4` family is
+never collected, because the production campaign runs the `_v5` Qwen3 pair,
+and D-167 installs `V5-TRANSACTION-01` as the live successor to the retired
+windows.
+
+**Why retarget rather than retire alongside.** The dependency was never about
+`_v4` as such. It encodes a sequencing rule — the arm packet is authored only
+after a reviewed head and its executed end-to-end T-0 pass exist, the B-7
+ordering from the sitting B-21 authority — and that rule is as necessary for
+`_v5` as it was for `_v4`. Retiring the row would discard a live obligation;
+leaving it pointed at a shelved predecessor would have blocked it forever
+while quietly aiming its output at a family that will never be measured. The
+`required` text is rewritten to name the `_v5` head so the reason travels with
+the edge rather than living only in this entry.
+
+**Not done here.** `ARM-PACKET-01`'s acceptance evidence still describes the
+`_v4` family in its own words. That is acceptance text on a claim-path packet
+row, so it is flagged rather than rewritten; it wants the same treatment as
+the `_v4` wording still inside `PIPELINE-SMOKE-LIVE-01`'s acceptance, and the
+two are best done together with the ruling that re-cuts the packet contents.
+
+**Executed evidence.** Run 2026-09-03 on branch
+`bookkeeping/2026-09-03-kernel-batch`: a kernel read confirming
+`ARM-PACKET-01`'s single dependency was `pending`/`hard`/`start` on
+`V4-TRANSACTION-01`, that `V4-TRANSACTION-01` is `shelved`, and that
+`V5-TRANSACTION-01` is live (`blocked`); `python3 scripts/gen_state.py
+--check` → rc 0 after the retarget, which also confirms the pending hard task
+edges remain acyclic; `python3 -m unittest tests.test_gen_state
+tests.test_docs_freshness` → 65 tests OK.

@@ -30,11 +30,11 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "the reviewed _v4 head and the executed end-to-end T-0 pass (B-7) exist first",
+          "required": "the reviewed _v5 head and its executed end-to-end T-0 pass exist first, so the packet is authored against the family that will actually be collected",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "V4-TRANSACTION-01"
+          "target": "V5-TRANSACTION-01"
         }
       ],
       "fallback": null,
@@ -46,7 +46,7 @@
       "priority": "p1_phase_gate",
       "rank": 75,
       "status": "blocked",
-      "status_note": "Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
+      "status_note": "DEPENDENCY RETARGETED 2026-09-03 to V5-TRANSACTION-01, on the magistrate's ruling. This row's hard-start dependency named V4-TRANSACTION-01, which the same batch retired by supersession: D-164 rules that the _v4 family is never collected, and D-167 installs V5-TRANSACTION-01 as the live successor. Left as it was, this row would have been blocked forever on a shelved predecessor and its packet would have been authored against a family that will never be measured. The sequencing intent is unchanged and is what carries over - the arm packet is authored only AFTER the reviewed head and its executed end-to-end T-0 pass exist - but it is now the _v5 head, not the _v4 one. The B-7 ordering from the sitting B-21 authority still binds. Prior note follows. Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
       "stop_card": null
     },
     "AUD-FOLLOWUPS": {
