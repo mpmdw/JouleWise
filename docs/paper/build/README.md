@@ -36,6 +36,25 @@ The LaTeX-free alternative is to open
 `docs/paper/build/out/draft-v1.html` in a browser and choose **Print → Save as
 PDF**.
 
+## Professor reading copy
+
+`scripts/render_reading_copy.py` prepares `draft-v2-skeleton.md` as a clean
+Markdown reading copy. It removes HTML build notes, replaces each visible fill
+marker with the registry row's plain description, applies the settled
+21-reference renumbering, and rebases local figure paths for the build output.
+The renderer also refuses output containing an internal registry identifier or
+a task name from the project state file. If Pandoc is available it additionally
+writes a PDF.
+
+```sh
+python3 scripts/render_reading_copy.py
+python3 scripts/render_reading_copy.py --check
+```
+
+The default outputs are `out/draft-v2-reading-copy.md` and, when Pandoc is
+installed, `out/draft-v2-reading-copy.pdf`. Check mode performs no writes and
+also requires the existing Markdown output to match a fresh render exactly.
+
 ## Known limitation (2026-08-28 review)
 
 Math spans are extracted before Markdown code-span parsing, so a literal
