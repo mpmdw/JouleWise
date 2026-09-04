@@ -247,6 +247,53 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         self.assertFalse(out.with_suffix(".md").exists())
         return stderr
 
+    def _authenticated_replay_fixture(
+        self, name: str
+    ) -> tuple[Path, Path, Path, Path]:
+        checkout = self.root / name
+        checkout.mkdir()
+        fixture = checkout / ISSUER.PINNED_BUNDLE_REPOSITORY_PATH
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(self.bundle.read_bytes())
+        script = checkout / ISSUER.SCRIPT_REPOSITORY_PATH
+        script.parent.mkdir(parents=True)
+        script.write_bytes(SCRIPT_PATH.read_bytes())
+        init_git_fixture(checkout, "--quiet")
+        subprocess.run(
+            ["git", "-C", str(checkout), "add", "-A"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(checkout),
+                "-c",
+                "user.name=Fixture Author",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "authenticated replay fixture",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        issued_json = self.root / f"{name}-issued.json"
+        ISSUER.issue_artifacts(
+            fixture,
+            issued_json,
+            expected_bundle_path=fixture,
+            expected_bundle_sha256=hashlib.sha256(fixture.read_bytes()).hexdigest(),
+            repository_root=checkout,
+            script_path=script,
+        )
+        return checkout, fixture, script, issued_json
+
     def test_five_records_have_hand_computable_statistics(self) -> None:
         out = self.root / "issued.json"
         payload = self._issue(out)
@@ -1071,6 +1118,43 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                 "current_last_touch": restoration_commit,
             },
         )
+
+    def test_asymmetric_replay_rejects_tampered_current_producer_blob(self) -> None:
+        checkout, fixture, script, issued_json = self._authenticated_replay_fixture(
+            "tampered-producer"
+        )
+        script.write_bytes(script.read_bytes() + b"# tampered after issue\n")
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            r"^current_script_sha256_mismatch: stored=[0-9a-f]{64} "
+            r"current=[0-9a-f]{64}$",
+        ):
+            _verify_asymmetric_replay(
+                checkout=checkout,
+                bundle=fixture,
+                issued_json=issued_json,
+                replay_json=self.root / "tampered-producer-replay.json",
+            )
+
+    def test_asymmetric_replay_rejects_mutated_issued_payload(self) -> None:
+        checkout, fixture, _, issued_json = self._authenticated_replay_fixture(
+            "mutated-payload"
+        )
+        payload = json.loads(issued_json.read_text(encoding="utf-8"))
+        payload["statistics"]["DG-071"]["median_s"] = "999"
+        issued_json.write_text(
+            json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(AssertionError, "^semantic_json_replay_mismatch$"):
+            _verify_asymmetric_replay(
+                checkout=checkout,
+                bundle=fixture,
+                issued_json=issued_json,
+                replay_json=self.root / "mutated-payload-replay.json",
+            )
 
     def test_producer_commit_when_script_was_only_added(self) -> None:
         """Counterfactual: a modification-only path query returns no commit."""

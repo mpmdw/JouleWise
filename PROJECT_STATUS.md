@@ -74,16 +74,18 @@ campaign compares Qwen3-1.7B-4bit and Qwen3-8B-4bit on an Apple M3 Max. It asks
 whether timing-attribution uncertainty dominates repeatability and whether the
 registered model comparison clears the instrument's detection floor.
 
-No claim-bearing data from this Qwen3 campaign exist yet. The campaign design,
-thresholds, refusal conditions, and two permitted paper outcomes were fixed
-before collection. Split inference and remote NVIDIA or Jetson targets remain
-optional demonstrations; they cannot redefine capstone completion or upgrade a
-provisional hardware claim.
+No claim-bearing Qwen3 data exist. Campaign design, thresholds, refusal
+conditions, and both permitted paper outcomes were fixed before collection.
+D-070 treats static batching, speculative or native-MTP decoding, mixture-of-
+experts models, quantization, and reasoning-length variation as five floor-
+gated Q4 stress tests, never separate capstone claims; split and remote targets
+remain optional.
 
-The headline basis is gross measured energy inside a named boundary. Idle-
-subtracted energy is a secondary within-device view, not a cross-device ranking
-basis. A claim must clear its registered floor and uncertainty interval; a
-below-floor difference is unresolved, not evidence of equality.
+Under advisor-reviewed D-067, gross energy inside the named boundary is the
+headline basis. Idle-subtracted energy is a secondary within-device view, never
+a cross-device ranking basis: subtraction can penalize energy-proportional
+devices and erase split cost. The fixed term comes from the gross-energy sweep,
+not measured idle. Below-floor differences are unresolved, not equal.
 
 ## Measured Evidence
 
@@ -101,8 +103,7 @@ below-floor difference is unresolved, not evidence of equality.
   floor and the uncertainty interval around the claimed difference retain their
   attribution terms, making the practical clearable phase contrast about 5 J
   (measurement-soundness decision D-078, clause 11).
-- Five post-repair measurement windows passed the contamination screening and
-  uncertainty accounting, establishing that the mechanism can pass. They are
+- Earlier post-repair windows established that the path can pass. They are
   diagnostic or rule-establishing evidence, not substitutes for prospective
   Qwen3 data.
 

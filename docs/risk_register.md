@@ -39,7 +39,7 @@ Conventions:
 | R-019 | Pack-generator check-then-write boundary admits post-validation symlink substitution | 2+ | low | high | registered residual (D-141(i), cold gate 2026-08-18) |
 | R-020 | Freeze loader accepts a hand-authored v1-schema receipt inside a `_v2` pack | 2+ | low | medium | registered residual (D-141(ii), delta-8 ratified 2026-08-18) |
 | R-021 | Unattended-night automation fails while the operator is away | campaign | medium | high | mitigated-in-progress (D-169/D-171; rehearsal evidence in `RUN_STATE.md`) |
-| R-022 | Unknown paper and evaluator dates leave no defensible schedule margin | paper | high until dates are recorded | high | open; `P1-008` owns the missing inputs |
+| R-022 | Unknown paper and evaluator dates leave no defensible schedule margin | paper | high until dates are recorded | high | open; `ED-DATES-01` owns the missing inputs |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
@@ -50,9 +50,9 @@ Conventions:
 - Status note: the Mac instrument and the real `powermetrics` evidence path
   exist. The live uncertainty is no longer whether Slice 2N may start; it is
   whether the `_v5` campaign and planned paper answer the advisor's required
-  scope. Task `P1-008` still owns that external acceptance record.
+  scope. Task `ED-DATES-01` still owns that external acceptance record.
 - Mitigation: keep campaign claims inside the registered question and results-
-  fill contracts; obtain the advisor/calendar answers through `P1-008` before
+  fill contracts; obtain the advisor/calendar answers through `ED-DATES-01` before
   making a schedule- or scope-dependent promise.
 - Fallback: if the advisor narrows scope, preserve the admitted Mac campaign
   and remove unsupported extensions. Hardware purchases, borrowing, or new
@@ -138,7 +138,7 @@ Conventions:
 - Mitigation: all split tooling reaches rehearsed-on-available-hardware state
   before the window (the Phase 3 plan keeps a borrow-window runbook so
   borrow time is execution-only, no debugging); calendar mapping task
-  (P1-008) makes the window a tracked date.
+  (`ED-DATES-01`) makes the window a tracked date.
 - Fallback: GPU->GPU pairing drops to single-GPU prefill/decode phase
   decomposition plus analytical composition; 3050<->Orin and Orin<->Orin
   remain.
@@ -220,7 +220,7 @@ Conventions:
 - Trigger: the evaluator dates become known with less runway than the live
   `_v5` sequence needs, or a prerequisite prevents the next campaign stage
   from entering its governed machine-state lane.
-- Mitigation: `P1-008` records the real dates; `docs/milestones.md` shows the
+- Mitigation: `ED-DATES-01` records the real dates; `docs/milestones.md` shows the
   live dependency sequence; the state kernel prevents later work from
   borrowing an unmet gate.
 - Descope ladder for the live paper, in decision-owned order:
@@ -435,10 +435,10 @@ Conventions:
 ## R-022: Unknown paper and evaluator dates leave no defensible schedule margin
 
 - Phase: paper. Likelihood: high until dates are recorded. Impact: high.
-- Trigger: `P1-008` remains open while campaign or paper work is prioritized by
+- Trigger: `ED-DATES-01` remains open while campaign or paper work is prioritized by
   an assumed submission, meeting, demonstration, or reproducibility date.
 - Mitigation: `docs/milestones.md` records unknown dates as unknown and keeps
-  the campaign order separate from calendar promises. `P1-008` obtains the
+  the campaign order separate from calendar promises. `ED-DATES-01` obtains the
   evaluator's required figures, demonstration expectation, reproducibility
   threshold, and final dates.
 - Fallback: protect the admitted `_v5` evidence chain and use the D-165/D-166

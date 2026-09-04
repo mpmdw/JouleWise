@@ -78,7 +78,7 @@ measured idle baseline; it is not used to rank devices or configurations. In
 Q4, the fixed term is estimated from the gross-energy workload sweep and is
 not set equal to measured idle energy. The advisor-review rationale and full
 basis/boundary rule are recorded in
-[`docs/contracts/measurement_methodology.md`](docs/contracts/measurement_methodology.md).
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
 Under D-070, static batching, speculative decoding / native MTP, MoE versus
 dense execution, quantization, and reasoning-length variance are five stress
@@ -87,7 +87,7 @@ five have strict-valid L0 smoke-bundle support plus characterization
 commitments, but every study remains floor-gated, capped at L2, and sequenced
 after the `_v5` campaign (the Window A sequencing this sentence used to name
 was retired by D-167). See the fuller
-[Q4 architectural stress-test agenda](docs/research_question_registry.md).
+[Q4 architectural stress-test agenda](PROJECT_STATUS.md).
 
 D-075 now folds a ranked extension-axis evaluation into that same agenda
 without proliferating theses: DSpark/DFlash break-even and control riders,

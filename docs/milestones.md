@@ -12,7 +12,7 @@ promise.
 |---|---|---|
 | Local Mac authorization needed for privileged `powermetrics` sampling | Closed on 2026-07-06; the privileged sample and restricted permission rule were recorded. | Phase 1 exit checklist; `RUN_STATE.md` project history |
 | Advisor meeting | On 2026-08-28, the meeting was moved one week later. No subsequent meeting outcome or replacement date is recorded in the repository. | `RUN_STATE.md`, T27c |
-| Evaluator acceptance bar, colloquium date, and final report deadline | Not yet recorded. Task `P1-008` remains the owner; no repository document may infer these dates. | `docs/process/state_kernel.json`, task `P1-008` |
+| Evaluator acceptance bar, colloquium date, and final report deadline | Not yet recorded. Task `ED-DATES-01` remains the owner; no repository document may infer these dates. | `docs/process/state_kernel.json`, task `ED-DATES-01` |
 
 ## Live `_v5` Campaign Sequence
 
@@ -38,11 +38,11 @@ sequence above and the state kernel do.
 
 | Historical phase | Original dependency | Present interpretation |
 |---|---|---|
-| 1: Approval, feasibility, measurement design | supervisor and device access | Method and access history; unresolved advisor/calendar input remains in `P1-008`. |
+| 1: Approval, feasibility, measurement design | supervisor and device access | Method and access history; unresolved advisor/calendar input remains in `ED-DATES-01`. |
 | 2: Harness, Mac slice, and baselines | Phase 1 readiness gate | The Mac instrument path exists; current measurement work is the `_v5` campaign. |
 | 3: Disaggregation and interconnect sweep | Phase 2 readiness gate | Not a current paper-schedule promise. Any extension remains behind its live gate. |
 | 4: Analysis | dataset frozen | Current desk analysis follows authenticated campaign artifacts. |
-| 5: Presentation and submission | analysis gate | Dates remain unknown until `P1-008` records the evaluator calendar. |
+| 5: Presentation and submission | analysis gate | Dates remain unknown until `ED-DATES-01` records the evaluator calendar. |
 
 ## Scheduling Rules
 

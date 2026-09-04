@@ -16,6 +16,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNSHEET = ROOT / "docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md"
@@ -100,7 +102,7 @@ class S0LineAuditGuardTests(unittest.TestCase):
     ) -> tuple[Path, str]:
         repository = root / "repo"
         repository.mkdir()
-        subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+        init_git_fixture(repository, "-q")
         subprocess.run(
             ["git", "config", "user.name", "line-audit fixture"],
             cwd=repository,

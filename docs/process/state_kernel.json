@@ -55,7 +55,6 @@
           "WO-012's owned D-062 lint queue-row obligation is implemented and covered",
           "WO-014 has a realized-token discriminating test",
           "WO-017 has a default no-handoff regression assertion",
-          "WO-020 has a recorded standalone bridge-checker decision",
           "WO-040 has authored-instruction absolute-path coverage plus a genuine pristine-clone test"
         ],
         "pointer": {
@@ -63,7 +62,7 @@
           "label": "AUD-FOLLOWUPS acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The ULTRA comparison audit's five accepted small follow-ups close with discriminating tests or an explicit recorded decision, without creating a ceremony-dispositions task."
+        "summary": "The ULTRA comparison audit's retained small follow-ups close with discriminating tests, without creating a ceremony-dispositions task or the standalone bridge gate removed by the wave-2 integration ruling."
       },
       "authority": {
         "label": "Comprehensive-audit close-out and accepted-residue list",
@@ -81,13 +80,13 @@
         }
       ],
       "flags": [],
-      "goal": "Close the ULTRA comparison audit's accepted small residue in one bounded agent task: WO-012's owned D-062 lint queue row, WO-014 realized-token discrimination, WO-017 default no-handoff regression, WO-020 standalone bridge-checker decision, and WO-040 authored-instruction absolute-path plus genuine pristine-clone coverage.",
+      "goal": "Close the ULTRA comparison audit's retained small residue in one bounded agent task: WO-012's owned D-062 lint queue row, WO-014 realized-token discrimination, WO-017 default no-handoff regression, and WO-040 authored-instruction absolute-path plus genuine pristine-clone coverage.",
       "id": "AUD-FOLLOWUPS",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
       "rank": 42,
       "status": "queued",
-      "status_note": "Accepted small residue only; audit ceremony dispositions remain in the report.",
+      "status_note": "Accepted small residue only; audit ceremony dispositions remain in the report. The 2026-09-04 wave-2 integration ruling removed WO-020's standalone bridge gate because its required D-060 decision does not exist; the other follow-ups remain.",
       "stop_card": null
     },
     "AUD-WO-033": {
@@ -998,10 +997,10 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-05 F3 consult standing operational constraint",
-            "path": "docs/process_traces/2026-08-05-cgv-f3-consult/SYNTHESIS.md"
+            "label": "2026-09-04 wave-2 integration ruling, R4-F4",
+            "path": "docs/process_traces/2026-09-04-fanout/01-magistrate-rulings.md"
           },
-          "rule": "Until this row lands, no validator PASS may be used to convene a cold judge"
+          "rule": "No validator PASS may be used to convene a cold judge until Ed ratifies the registry amendment and a lead-owned concrete-launcher check passes"
         }
       ],
       "flags": [],
