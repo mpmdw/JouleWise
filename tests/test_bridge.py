@@ -1650,6 +1650,52 @@ Delegated responses use a five-part record:
             violations,
         )
 
+    def test_standalone_checker_passes_and_rejects_consumer_drift(self) -> None:
+        checker = REPO_ROOT / "scripts" / "check-bridge-docs.mjs"
+        completed = subprocess.run(
+            ["node", str(checker)],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("bridge docs check OK", completed.stdout)
+
+        manifest = self.drift_manifest()
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_root = Path(tmp)
+            relative_paths = {"docs/contracts/bridge_protocol.md", *manifest["consumers"]}
+            for relative in relative_paths:
+                target = fixture_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((REPO_ROOT / relative).read_bytes())
+
+            consumer_relative = next(iter(manifest["consumers"]))
+            snippet_id = manifest["consumers"][consumer_relative][0]
+            snippet = manifest["snippets"][snippet_id]
+            consumer_path = fixture_root / consumer_relative
+            consumer_path.write_text(
+                consumer_path.read_text(encoding="utf-8").replace(
+                    snippet,
+                    "The exhaustive write scope is described in the contract.",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            drifted = subprocess.run(
+                ["node", str(checker), "--root", str(fixture_root)],
+                cwd=REPO_ROOT,
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(drifted.returncode, 1, drifted.stdout)
+        self.assertIn(
+            f"{consumer_relative}: canonical snippet {snippet_id} occurs 0 times",
+            drifted.stderr,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
