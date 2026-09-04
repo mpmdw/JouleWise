@@ -1,13 +1,15 @@
 """Fail-closed Paper I gamma contrast fill rendering.
 
-The renderer accepts only pinned bytes for a closed
-``joulewise.claim_verdicts.v2`` artifact, its G2-a selection record, and the
+The renderer accepts only pinned bytes for a closed production
+``joulewise.claim_verdicts.v1`` artifact, its digest-bound
+``joulewise.claim_side_bound.v1`` sidecar, its G2-a selection record, and the
 selected prompt pin.  It never substitutes a configured prompt length or a
 caller-supplied numeric value.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import math
@@ -18,10 +20,12 @@ from typing import Any, Final
 from joulewise.provenance import prompt_token_ids_sha256
 
 from .analysis_engine.artifact import (
-    SCHEMA_VERSION_V2,
+    SCHEMA_VERSION,
     calculate_claim_verdicts_id,
     validate_claim_verdicts,
 )
+from .analysis_engine.inputs import authenticate_floor_artifact_bytes
+from .claim_side_bound import ClaimSideBoundError, load_claim_side_bound
 
 
 STOP_FILL: Final = "STOP_FILL"
@@ -221,16 +225,17 @@ def _validate_selection(value: Any) -> int:
         ):
             raise ValueError("G2-a selected outcome mismatch")
     elif value["status"] == "refused":
-        selected = None
-        if qualifying or value["selected_prefill_tokens"] is not None:
-            raise ValueError("G2-a refused outcome mismatch")
-        if value["collection_prefill_tokens"] != 4096:
-            raise ValueError("G2-a fallback mismatch")
-        refusal = value["refusal"]
-        if not isinstance(refusal, Mapping) or refusal.get("code") != (
-            "no_g2a_prefill_rung_qualifies"
+        if (
+            qualifying
+            or value["selected_prefill_tokens"] is not None
+            or value["collection_prefill_tokens"] != 4096
+            or not isinstance(value["refusal"], Mapping)
+            or value["refusal"].get("code")
+            != "no_g2a_prefill_rung_qualifies"
         ):
-            raise ValueError("G2-a refusal mismatch")
+            raise ValueError("G2-a refused outcome mismatch")
+        # 4096 is a collection fallback, never an issued G2-a selection.
+        raise ValueError("G2-a selection was refused")
     else:
         raise ValueError("G2-a status mismatch")
     length = value["collection_prefill_tokens"]
@@ -388,77 +393,177 @@ def _reason_text(reasons: Any) -> str | None:
     return "; ".join(reasons)
 
 
+def _authenticated_floor_cells(artifact: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    inputs = artifact.get("inputs")
+    link = inputs.get("floor_artifact") if isinstance(inputs, Mapping) else None
+    if not isinstance(link, Mapping):
+        raise ValueError("embedded floor artifact link unavailable")
+    encoded = link.get("embedded_bytes_base64")
+    if not isinstance(encoded, str):
+        raise ValueError("embedded floor artifact bytes unavailable")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("embedded floor artifact base64 invalid") from exc
+    authenticated = authenticate_floor_artifact_bytes(
+        raw,
+        expected_sha256=link.get("file_sha256"),
+        expected_artifact_id=link.get("artifact_id"),
+    )
+    cells = authenticated.value.get("cells")
+    if not isinstance(cells, list):
+        raise ValueError("embedded floor artifact cells unavailable")
+    by_id = {
+        cell.get("cell_id"): cell
+        for cell in cells
+        if isinstance(cell, Mapping) and isinstance(cell.get("cell_id"), str)
+    }
+    if len(by_id) != len(cells):
+        raise ValueError("embedded floor artifact cell identity mismatch")
+    return by_id
+
+
+def _source_bound_floor(
+    floor: Mapping[str, Any],
+    floor_cells: Mapping[str, Mapping[str, Any]],
+) -> tuple[bool, float | None]:
+    """Return (lineage valid, exact active floor if one issued)."""
+
+    resolutions = floor.get("resolutions")
+    if not isinstance(resolutions, list) or len(resolutions) != 2:
+        return False, None
+    all_exact = True
+    exact_source_ids: list[str] = []
+    for resolution in resolutions:
+        if not isinstance(resolution, Mapping):
+            return False, None
+        status = resolution.get("status")
+        if status == "refused":
+            all_exact = False
+            continue
+        if status != "exact":
+            return False, None
+        source_ids = resolution.get("source_cell_ids")
+        if not isinstance(source_ids, list) or len(source_ids) != 1:
+            return False, None
+        source = floor_cells.get(source_ids[0])
+        if not isinstance(source, Mapping):
+            return False, None
+        eligibility = source.get("eligibility")
+        if (
+            not isinstance(eligibility, Mapping)
+            or eligibility.get("status") != "claim_ready"
+            or eligibility.get("claim_usable") is not True
+            or eligibility.get("reason_codes") != []
+        ):
+            return False, None
+        exact_source_ids.append(source_ids[0])
+        for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
+            if (
+                _finite(resolution.get(key), nonnegative=True) is None
+                or resolution.get(key) != source.get(key)
+            ):
+                return False, None
+    if not all_exact:
+        return True, None
+    if len(set(exact_source_ids)) != 2:
+        return False, None
+    active = _finite(floor.get("active_floor_j"), nonnegative=True)
+    return (active is not None), active
+
+
 def _render_contrast(
     artifact: Mapping[str, Any],
     contrast: Mapping[str, Any] | None,
     *,
     phase: str,
     token_names: tuple[str, ...],
+    sidecar_bound: Mapping[str, Any] | None,
+    floor_cells: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, str]:
     result = {token: STOP_FILL for token in token_names}
     if contrast is None:
-        result[token_names[-1]] = (
-            "not evaluated — required token-generation verdict absent"
-            if phase == "token-generation"
-            else "not evaluated — required prompt-processing verdict absent"
-        )
+        # Absence is non-issuance.  A future governed non-issuance receipt may
+        # authorize prose; contrast absence alone never does.
         return result
 
     estimator = contrast.get("estimator")
     deterministic = contrast.get("deterministic_bounds")
-    bound = contrast.get("claim_side_bound")
     floor = contrast.get("floor")
     evaluation = contrast.get("claim_evaluation")
     multiplicity = contrast.get("multiplicity")
     if not all(
         isinstance(item, Mapping)
-        for item in (estimator, deterministic, bound, floor, evaluation, multiplicity)
+        for item in (estimator, deterministic, floor, evaluation, multiplicity)
     ):
         return result
-    interval = deterministic.get("decision_interval")
-    arm_gates = floor.get("arm_gates")
-    if (
-        not isinstance(interval, Mapping)
-        or set(interval) != {"lower", "upper"}
-        or not isinstance(arm_gates, list)
-        or len(arm_gates) != 2
-        or [gate.get("arm_id") for gate in arm_gates if isinstance(gate, Mapping)]
-        != ["A", "B"]
-        or any(
-            not isinstance(gate, Mapping)
-            or gate.get("status") != "exact"
-            or _finite(gate.get("floor_gate_j"), nonnegative=True) is None
-            for gate in arm_gates
-        )
-    ):
+
+    outcome = evaluation.get("outcome")
+    direction = evaluation.get("direction")
+    ready = evaluation.get("claim_ready_for_l2_l3")
+    ceiling = evaluation.get("claim_level_ceiling")
+    rejected = multiplicity.get("rejected")
+    if outcome == "equivalent":
         return result
-    estimate = _finite(estimator.get("estimate"))
-    lower = _finite(interval.get("lower"))
-    upper = _finite(interval.get("upper"))
-    floor_value = _finite(floor.get("active_floor_j"), nonnegative=True)
-    bound_value = _finite(bound.get("value_j"), nonnegative=True)
-    if None in {estimate, lower, upper, floor_value, bound_value}:
-        return result
-    assert estimate is not None and lower is not None and upper is not None
-    assert floor_value is not None and bound_value is not None
-    arm_floor = max(float(gate["floor_gate_j"]) for gate in arm_gates)
-    if floor_value != arm_floor or lower > upper:
-        return result
-    magnitude = abs(estimate)
-    floor_pass = magnitude > floor_value
-    direction_pass = lower > 0.0 and upper > 0.0
     reasons = evaluation.get("reason_codes")
     reason_text = _reason_text(reasons)
     if reason_text is None:
         return result
-    reason_set = set(reasons)
-    if floor_pass == ("effect_not_above_floor" in reason_set):
+    verdict = STOP_FILL
+    if outcome == "not_estimable" and reasons:
+        verdict = f"not supported — not estimable (issued reasons: {reason_text})"
+    elif outcome == "not_resolvable" and reasons:
+        verdict = f"not supported — not resolvable (issued reasons: {reason_text})"
+    elif outcome == "unresolved":
+        verdict = "not supported — unresolved under the registered gates"
+        if reasons:
+            verdict += f" (issued reasons: {reason_text})"
+
+    lineage_valid, floor_value = _source_bound_floor(floor, floor_cells)
+    if not lineage_valid:
+        if verdict != STOP_FILL:
+            result[token_names[-1]] = verdict
         return result
-    if direction_pass == ("deterministic_bound_obscures_direction" in reason_set):
+    interval = deterministic.get("decision_interval")
+    estimate = _finite(estimator.get("estimate"))
+    lower = _finite(interval.get("lower")) if isinstance(interval, Mapping) else None
+    upper = _finite(interval.get("upper")) if isinstance(interval, Mapping) else None
+    if lower is not None and upper is not None and lower > upper:
+        lower = upper = None
+    bound_value = (
+        _finite(sidecar_bound.get("value_j"), nonnegative=True)
+        if isinstance(sidecar_bound, Mapping)
+        else None
+    )
+    magnitude = abs(estimate) if estimate is not None else None
+    floor_pass = (
+        magnitude > floor_value
+        if magnitude is not None and floor_value is not None
+        else None
+    )
+    direction_pass = (
+        lower > 0.0 and upper > 0.0
+        if lower is not None and upper is not None
+        else None
+    )
+    reason_set = set(reasons)
+    if floor_pass is not None and floor_pass == (
+        "effect_not_above_floor" in reason_set
+    ):
+        return result
+    if direction_pass is not None and direction_pass == (
+        "deterministic_bound_obscures_direction" in reason_set
+    ):
         return result
 
-    joint = floor_value + bound_value
-    signed_sizing = magnitude - joint
+    joint = (
+        floor_value + bound_value
+        if floor_value is not None and bound_value is not None
+        else None
+    )
+    signed_sizing = (
+        magnitude - joint if magnitude is not None and joint is not None else None
+    )
     numeric_values = (
         estimate,
         lower,
@@ -466,32 +571,36 @@ def _render_contrast(
         magnitude,
         floor_value,
         bound_value,
-        magnitude - floor_value if floor_pass else None,
-        floor_value - magnitude if not floor_pass else None,
-        magnitude / floor_value if floor_value > 0.0 else None,
+        magnitude - floor_value if floor_pass is True else None,
+        floor_value - magnitude if floor_pass is False else None,
+        (
+            magnitude / floor_value
+            if magnitude is not None and floor_value is not None and floor_value > 0.0
+            else None
+        ),
         joint,
         signed_sizing,
     )
     for token, value in zip(token_names[:11], numeric_values, strict=True):
         result[token] = STOP_FILL if value is None else _format_number(value)
-    result[token_names[11]] = (
-        "passes — |estimate| > armwise cell floor"
-        if floor_pass
-        else "does not pass — |estimate| ≤ armwise cell floor"
-    )
-    result[token_names[12]] = (
-        "passes — the fully composed interval lies wholly above zero"
-        if direction_pass
-        else "does not pass — the fully composed interval does not lie wholly above zero"
-    )
+    if floor_pass is not None:
+        result[token_names[11]] = (
+            "passes — |estimate| > armwise cell floor"
+            if floor_pass
+            else "does not pass — |estimate| ≤ armwise cell floor"
+        )
+    elif reasons:
+        result[token_names[11]] = f"not evaluated — {reason_text}"
+    if direction_pass is not None:
+        result[token_names[12]] = (
+            "passes — the fully composed interval lies wholly above zero"
+            if direction_pass
+            else "does not pass — the fully composed interval does not lie wholly above zero"
+        )
+    elif reasons:
+        result[token_names[12]] = f"not evaluated — {reason_text}"
 
-    outcome = evaluation.get("outcome")
-    direction = evaluation.get("direction")
-    ready = evaluation.get("claim_ready_for_l2_l3")
-    ceiling = evaluation.get("claim_level_ceiling")
-    rejected = multiplicity.get("rejected")
-    verdict = STOP_FILL
-    if phase == "prompt-processing":
+    if phase == "prompt-processing" and outcome != "not_estimable":
         try:
             overlap_count, count_only_refusal = _prefill_overlap_count(
                 artifact, contrast
@@ -516,8 +625,9 @@ def _render_contrast(
             and ready is True
             and ceiling in {"L2", "L3", "L4"}
             and rejected is True
-            and floor_pass
-            and direction_pass
+            and floor_pass is True
+            and direction_pass is True
+            and bound_value is not None
         )
         if supported:
             verdict = (
@@ -525,14 +635,6 @@ def _render_contrast(
                 f"{phase} energy per request than Qwen3-1.7B under the "
                 "registered comparison"
             )
-        elif outcome == "not_estimable" and reasons:
-            verdict = f"not supported — not estimable (issued reasons: {reason_text})"
-        elif outcome == "not_resolvable" and reasons:
-            verdict = f"not supported — not resolvable (issued reasons: {reason_text})"
-        elif outcome == "unresolved":
-            verdict = "not supported — unresolved under the registered gates"
-            if reasons:
-                verdict += f" (issued reasons: {reason_text})"
         elif outcome == "direction_supported" and ready is False and reasons:
             verdict = (
                 "not supported at the paper's claim level "
@@ -556,6 +658,8 @@ def render_gamma_contract(
     *,
     claim_verdicts_bytes: bytes,
     expected_claim_verdicts_id: str,
+    claim_side_bound_bytes: bytes,
+    expected_claim_side_bound_id: str,
     g2a_selection_bytes: bytes,
     expected_g2a_selection_sha256: str,
     prompt_pin_bytes: bytes,
@@ -577,12 +681,22 @@ def render_gamma_contract(
         if not isinstance(artifact, Mapping):
             raise ValueError("claim verdict is not an object")
         if (
-            artifact.get("schema_version") != SCHEMA_VERSION_V2
+            artifact.get("schema_version") != SCHEMA_VERSION
             or artifact.get("claim_verdicts_id") != expected_claim_verdicts_id
             or calculate_claim_verdicts_id(artifact) != expected_claim_verdicts_id
             or validate_claim_verdicts(artifact)
         ):
             raise ValueError("claim verdict authentication failed")
+        sidecar = load_claim_side_bound(
+            claim_side_bound_bytes,
+            expected_id=expected_claim_side_bound_id,
+            claim_verdicts_bytes=claim_verdicts_bytes,
+        )
+        sidecar_by_id = {
+            row["contrast_id"]: row["claim_side_bound"]
+            for row in sidecar["bounds"]
+        }
+        floor_cells = _authenticated_floor_cells(artifact)
         length = _validate_selection(selection)
         _validate_prompt_pin(prompt_pin, g2a_selection_bytes, length)
         contrast_by_id = {
@@ -607,7 +721,14 @@ def render_gamma_contract(
             or prefill.get("metric", {}).get("name") != "phase_energy_j.prefill"
         ):
             raise ValueError("prefill contrast contract mismatch")
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError):
+    except (
+        ClaimSideBoundError,
+        KeyError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ):
         return STOP_FILL
 
     prefill_names = tuple(
@@ -619,12 +740,16 @@ def render_gamma_contract(
         decode,
         phase="token-generation",
         token_names=DECODE_TOKEN_NAMES,
+        sidecar_bound=sidecar_by_id.get(_DECODE_CONTRAST_ID),
+        floor_cells=floor_cells,
     )
     prefill_tokens = _render_contrast(
         artifact,
         prefill,
         phase="prompt-processing",
         token_names=prefill_names,
+        sidecar_bound=sidecar_by_id.get(prefill_id),
+        floor_cells=floor_cells,
     )
     tokens = {**decode_tokens, **prefill_tokens}
     rows = {

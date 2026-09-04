@@ -1,3 +1,4 @@
+import base64
 import copy
 import hashlib
 import json
@@ -5,13 +6,16 @@ import unittest
 from pathlib import Path
 
 from joulewise.analysis_engine.artifact import (
-    SCHEMA_VERSION_V2,
     calculate_claim_verdicts_id,
-    claim_side_bound_from_terms,
     render_claim_verdicts,
     validate_claim_verdicts,
 )
 from joulewise.analysis_engine.claims import evaluate_claim
+from joulewise.claim_side_bound import (
+    calculate_claim_side_bound_id,
+    finalize_claim_side_bound,
+    render_claim_side_bound,
+)
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.results_fill_gamma import (
     DECODE_TOKEN_NAMES,
@@ -21,6 +25,8 @@ from joulewise.results_fill_gamma import (
     render_gamma_contract,
 )
 from tests.test_analysis_claims import minimal_artifact
+from tests.test_analysis_integration import _v3_fixture_artifact
+from tests.test_detection_floor import make_artifact, make_cell
 
 
 ROOT = Path(__file__).resolve().parent
@@ -61,9 +67,24 @@ def _with_content_id(artifact):
     return artifact
 
 
+def _install_two_arm_floor_artifact(artifact):
+    floor_artifact = make_artifact(
+        [
+            make_cell(cell_id="floor-a", condition="cf-1"),
+            make_cell(cell_id="floor-b", condition="cf-2"),
+        ]
+    )
+    raw = (json.dumps(floor_artifact, indent=2) + "\n").encode("utf-8")
+    artifact["inputs"]["floor_artifact"] = {
+        "artifact_id": floor_artifact["artifact_id"],
+        "file_sha256": hashlib.sha256(raw).hexdigest(),
+        "embedded_bytes_base64": base64.b64encode(raw).decode("ascii"),
+    }
+    return floor_artifact["cells"]
+
+
 def _base_gamma_artifact(parameters):
     artifact = minimal_artifact()
-    artifact["schema_version"] = SCHEMA_VERSION_V2
     contrast = artifact["contrasts"][0]
     contrast["contrast_id"] = DECODE_ID
     contrast["metric"]["metric_tag"] = "phase_decode_energy"
@@ -79,38 +100,48 @@ def _base_gamma_artifact(parameters):
         "lower": parameters["estimate_j"] - self_bound,
         "upper": parameters["estimate_j"] + self_bound,
     }
-    contrast["claim_side_bound"] = claim_side_bound_from_terms(
-        contrast["deterministic_bounds"]["terms"]
-    )
+    contrast["estimator"]["estimate"] = parameters["estimate_j"]
+    contrast["estimator"]["repeat_point_CI95"] = {
+        "lower": parameters["estimate_j"],
+        "upper": parameters["estimate_j"],
+    }
+    contrast["estimator"]["metrology_aware_CI95"] = {
+        "lower": parameters["estimate_j"],
+        "upper": parameters["estimate_j"],
+    }
+
+    source_cells = _install_two_arm_floor_artifact(artifact)
+    source_cell = source_cells[0]
 
     first_resolution = contrast["floor"]["resolutions"][0]
     first_resolution.update(
         {
             "status": "exact",
-            "source_cell_ids": ["cell-a"],
+            "source_cell_ids": [source_cell["cell_id"]],
             "transport_group_id": None,
             "transport_rule_id": None,
+            **{
+                key: source_cell[key]
+                for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j")
+            },
         }
     )
     second_resolution = copy.deepcopy(first_resolution)
     second_resolution.update(
         {
-            "source_cell_ids": ["cell-b"],
-            "floor_abs_j": parameters["arm_floor_j"][1],
-            "floor_cmp_j": parameters["arm_floor_j"][1],
-            "floor_gate_j": parameters["arm_floor_j"][1],
+            "source_cell_ids": [source_cells[1]["cell_id"]],
+            **{
+                key: source_cells[1][key]
+                for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j")
+            },
         }
     )
     contrast["floor"].update(
         {
-            "floor_row_ids": ["cell-a", "cell-b"],
-            "floor_abs_j": max(
-                first_resolution["floor_abs_j"], second_resolution["floor_abs_j"]
-            ),
-            "floor_cmp_j": max(
-                first_resolution["floor_cmp_j"], second_resolution["floor_cmp_j"]
-            ),
-            "active_floor_j": max(parameters["arm_floor_j"]),
+            "floor_row_ids": [cell["cell_id"] for cell in source_cells],
+            "floor_abs_j": max(cell["floor_abs_j"] for cell in source_cells),
+            "floor_cmp_j": max(cell["floor_cmp_j"] for cell in source_cells),
+            "active_floor_j": max(cell["floor_gate_j"] for cell in source_cells),
             "transport_verdict": "exact",
             "resolutions": [first_resolution, second_resolution],
             "claim_floor_rule": "cross_stack_armwise_max.v1",
@@ -120,13 +151,13 @@ def _base_gamma_artifact(parameters):
                     "arm_id": "A",
                     "condition_family_id": "cond-a",
                     "status": "exact",
-                    "floor_gate_j": parameters["arm_floor_j"][0],
+                    "floor_gate_j": source_cells[0]["floor_gate_j"],
                 },
                 {
                     "arm_id": "B",
                     "condition_family_id": "cond-b",
                     "status": "exact",
-                    "floor_gate_j": parameters["arm_floor_j"][1],
+                    "floor_gate_j": source_cells[1]["floor_gate_j"],
                 },
             ],
         }
@@ -178,6 +209,67 @@ def _base_gamma_artifact(parameters):
         }
     )
     _set_overlap_count(artifact, parameters["overlap_count"])
+    for row in artifact["contrasts"]:
+        _reevaluate(row)
+    _with_content_id(artifact)
+    assert validate_claim_verdicts(artifact) == []
+    return artifact
+
+
+def _not_estimable_gamma_artifact():
+    artifact = _v3_fixture_artifact(diverged=True)
+    decode = artifact["contrasts"][0]
+    decode["contrast_id"] = DECODE_ID
+    prefill = copy.deepcopy(decode)
+    prefill["contrast_id"] = PREFILL_ID
+    prefill["metric"]["metric_tag"] = "phase_prefill_energy"
+    prefill["metric"]["name"] = "phase_energy_j.prefill"
+
+    sources = _install_two_arm_floor_artifact(artifact)
+    for contrast in (decode, prefill):
+        resolutions = [
+            {
+                "status": "exact",
+                "source_cell_ids": [source["cell_id"]],
+                "transport_group_id": None,
+                "transport_rule_id": None,
+                "floor_abs_j": source["floor_abs_j"],
+                "floor_cmp_j": source["floor_cmp_j"],
+                "floor_gate_j": source["floor_gate_j"],
+                "reason_codes": [],
+            }
+            for source in sources
+        ]
+        contrast["floor"].update(
+            {
+                "floor_row_ids": [source["cell_id"] for source in sources],
+                "floor_abs_j": max(source["floor_abs_j"] for source in sources),
+                "floor_cmp_j": max(source["floor_cmp_j"] for source in sources),
+                "active_floor_j": max(
+                    source["floor_gate_j"] for source in sources
+                ),
+                "transport_verdict": "exact",
+                "resolutions": resolutions,
+            }
+        )
+        contrast["floor"]["arm_gates"][0]["floor_gate_j"] = sources[0][
+            "floor_gate_j"
+        ]
+        contrast["floor"]["arm_gates"][1]["floor_gate_j"] = sources[1][
+            "floor_gate_j"
+        ]
+    artifact["contrasts"] = [decode, prefill]
+    family = artifact["families"][0]
+    family.update(
+        {
+            "m": 2,
+            "contrast_ids": [DECODE_ID, PREFILL_ID],
+            "finite_test_count": 0,
+            "raw_ordering": [],
+            "adjusted_p_values": {DECODE_ID: None, PREFILL_ID: None},
+            "missing_test_ids": [DECODE_ID, PREFILL_ID],
+        }
+    )
     _with_content_id(artifact)
     assert validate_claim_verdicts(artifact) == []
     return artifact
@@ -220,30 +312,21 @@ def _reevaluate(contrast):
 
 def _floor_failure(artifact, parameters):
     for contrast in artifact["contrasts"]:
-        floor = contrast["floor"]
-        floor["resolutions"][0].update(
-            {
-                "floor_abs_j": parameters["arm_floor_j"][0],
-                "floor_cmp_j": parameters["arm_floor_j"][0],
-                "floor_gate_j": parameters["arm_floor_j"][0],
-            }
-        )
-        floor["resolutions"][1].update(
-            {
-                "floor_abs_j": parameters["arm_floor_j"][1],
-                "floor_cmp_j": parameters["arm_floor_j"][1],
-                "floor_gate_j": parameters["arm_floor_j"][1],
-            }
-        )
-        floor.update(
-            {
-                "floor_abs_j": max(parameters["arm_floor_j"]),
-                "floor_cmp_j": max(parameters["arm_floor_j"]),
-                "active_floor_j": max(parameters["arm_floor_j"]),
-            }
-        )
-        floor["arm_gates"][0]["floor_gate_j"] = parameters["arm_floor_j"][0]
-        floor["arm_gates"][1]["floor_gate_j"] = parameters["arm_floor_j"][1]
+        estimate = parameters["estimate_j"]
+        bound = contrast["deterministic_bounds"]["terms"][0]["bound"]
+        contrast["estimator"]["estimate"] = estimate
+        contrast["estimator"]["repeat_point_CI95"] = {
+            "lower": estimate,
+            "upper": estimate,
+        }
+        contrast["estimator"]["metrology_aware_CI95"] = {
+            "lower": estimate,
+            "upper": estimate,
+        }
+        contrast["deterministic_bounds"]["decision_interval"] = {
+            "lower": estimate - bound,
+            "upper": estimate + bound,
+        }
         _reevaluate(contrast)
     return _with_content_id(artifact)
 
@@ -259,7 +342,6 @@ def _direction_failure(artifact, parameters):
             "lower": estimate - bound,
             "upper": estimate + bound,
         }
-        contrast["claim_side_bound"]["value_j"] = bound
         _reevaluate(contrast)
     return _with_content_id(artifact)
 
@@ -281,6 +363,8 @@ def _remove_contrast(artifact, contrast_id):
 
 
 def _source_bytes(artifact):
+    claim_verdicts_bytes = render_claim_verdicts(artifact)
+    sidecar = finalize_claim_side_bound(claim_verdicts_bytes)
     selection = {
         "collection_prefill_tokens": 2048,
         "qualifying_prefill_tokens": [2048, 4096],
@@ -346,8 +430,10 @@ def _source_bytes(artifact):
     }
     prompt_pin_raw = json.dumps(prompt_pin, sort_keys=True).encode("utf-8")
     return {
-        "claim_verdicts_bytes": render_claim_verdicts(artifact),
+        "claim_verdicts_bytes": claim_verdicts_bytes,
         "expected_claim_verdicts_id": artifact["claim_verdicts_id"],
+        "claim_side_bound_bytes": render_claim_side_bound(sidecar),
+        "expected_claim_side_bound_id": sidecar["claim_side_bound_id"],
         "g2a_selection_bytes": selection_raw,
         "expected_g2a_selection_sha256": selection_sha,
         "prompt_pin_bytes": prompt_pin_raw,
@@ -419,8 +505,14 @@ class GammaResultContractTests(unittest.TestCase):
         self.assertEqual(supported["rows"]["PG-06"], expected["floor_pass"])
         self.assertEqual(supported["rows"]["PG-07"], expected["direction_pass"])
         self.assertEqual(supported["rows"]["PG-08"], expected["prefill_supported"])
-        self.assertEqual(supported["rows"]["DS-28"], "F+B = 1.25 J; signed clearance = 0.75 J")
-        self.assertEqual(supported["rows"]["PG-04"], "F+B = 1.25 J; signed clearance = 0.75 J")
+        self.assertEqual(
+            supported["rows"]["DS-28"],
+            "F+B = 20.649350577898304 J; signed clearance = 1.3506494221016965 J",
+        )
+        self.assertEqual(
+            supported["rows"]["PG-04"],
+            "F+B = 20.649350577898304 J; signed clearance = 1.3506494221016965 J",
+        )
         self.assertEqual(supported["rows"]["DS-29"], "0.25")
         self.assertEqual(supported["rows"]["PG-05"], "0.25")
         for row in ("DS-32", "PG-08"):
@@ -457,6 +549,19 @@ class GammaResultContractTests(unittest.TestCase):
         )
         self.assertEqual(prefill_absent["rows"]["PG-08"], expected["prefill_absent"])
 
+        not_estimable = _render(_not_estimable_gamma_artifact())
+        self.assertNotEqual(not_estimable, STOP_FILL)
+        for row in ("DS-30", "DS-31", "PG-06", "PG-07"):
+            self.assertTrue(not_estimable["rows"][row].startswith("not evaluated — "))
+        for row in ("DS-32", "PG-08"):
+            self.assertTrue(
+                not_estimable["rows"][row].startswith(
+                    "not supported — not estimable (issued reasons: "
+                )
+            )
+        self.assertEqual(not_estimable["rows"]["DS-29"], STOP_FILL)
+        self.assertEqual(not_estimable["rows"]["PG-05"], STOP_FILL)
+
         count_four_artifact = copy.deepcopy(supported_artifact)
         _set_overlap_count(
             count_four_artifact,
@@ -478,11 +583,74 @@ class GammaResultContractTests(unittest.TestCase):
         equivalent = copy.deepcopy(supported_artifact)
         equivalent["contrasts"][0]["claim_evaluation"]["outcome"] = "equivalent"
         _with_content_id(equivalent)
-        self.assertEqual(_render(equivalent), STOP_FILL)
+        equivalent_sources = _source_bytes(supported_artifact)
+        equivalent_sources["claim_verdicts_bytes"] = render_claim_verdicts(
+            equivalent
+        )
+        equivalent_sources["expected_claim_verdicts_id"] = equivalent[
+            "claim_verdicts_id"
+        ]
+        self.assertEqual(render_gamma_contract(**equivalent_sources), STOP_FILL)
         wrong_id = copy.deepcopy(supported_artifact)
         wrong_id["contrasts"][0]["contrast_id"] = "wrong"
         _with_content_id(wrong_id)
-        self.assertEqual(_render(wrong_id), STOP_FILL)
+        wrong_id_sources = _source_bytes(supported_artifact)
+        wrong_id_sources["claim_verdicts_bytes"] = render_claim_verdicts(wrong_id)
+        wrong_id_sources["expected_claim_verdicts_id"] = wrong_id[
+            "claim_verdicts_id"
+        ]
+        self.assertEqual(render_gamma_contract(**wrong_id_sources), STOP_FILL)
+
+        refused_selection = _source_bytes(supported_artifact)
+        selection = json.loads(refused_selection["g2a_selection_bytes"])
+        selection.update(
+            {
+                "collection_prefill_tokens": 4096,
+                "qualifying_prefill_tokens": [],
+                "refusal": {"code": "no_g2a_prefill_rung_qualifies"},
+                "selected_prefill_tokens": None,
+                "status": "refused",
+            }
+        )
+        selection_raw = json.dumps(selection, sort_keys=True).encode("utf-8")
+        refused_selection["g2a_selection_bytes"] = selection_raw
+        refused_selection["expected_g2a_selection_sha256"] = hashlib.sha256(
+            selection_raw
+        ).hexdigest()
+        self.assertEqual(render_gamma_contract(**refused_selection), STOP_FILL)
+
+        floor_forgery = copy.deepcopy(supported_artifact)
+        for contrast in floor_forgery["contrasts"]:
+            floor = contrast["floor"]
+            for resolution in floor["resolutions"]:
+                resolution.update(
+                    {"floor_abs_j": 1.7, "floor_cmp_j": 1.6, "floor_gate_j": 1.7}
+                )
+            floor.update(
+                {"floor_abs_j": 1.7, "floor_cmp_j": 1.6, "active_floor_j": 1.7}
+            )
+            for gate in floor["arm_gates"]:
+                gate["floor_gate_j"] = 1.7
+            _reevaluate(contrast)
+        _with_content_id(floor_forgery)
+        self.assertEqual(validate_claim_verdicts(floor_forgery), [])
+        forged_render = _render(floor_forgery)
+        self.assertEqual(forged_render["rows"]["DS-28"], STOP_FILL)
+        self.assertEqual(forged_render["rows"]["DS-32"], STOP_FILL)
+        self.assertEqual(forged_render["rows"]["PG-04"], STOP_FILL)
+        self.assertEqual(forged_render["rows"]["PG-08"], STOP_FILL)
+
+        changed_bound = _source_bytes(supported_artifact)
+        sidecar = json.loads(changed_bound["claim_side_bound_bytes"])
+        sidecar["bounds"][0]["claim_side_bound"]["value_j"] = 0.5
+        sidecar["claim_side_bound_id"] = calculate_claim_side_bound_id(sidecar)
+        changed_bound["claim_side_bound_bytes"] = json.dumps(
+            sidecar, sort_keys=True
+        ).encode("utf-8")
+        changed_bound["expected_claim_side_bound_id"] = sidecar[
+            "claim_side_bound_id"
+        ]
+        self.assertEqual(render_gamma_contract(**changed_bound), STOP_FILL)
 
         for mutation in fixture["pinned_source_mutations"]:
             with self.subTest(mutation=mutation["label"]):
@@ -499,10 +667,14 @@ class GammaResultContractTests(unittest.TestCase):
             or classes["digest_substring"] in key,
             "census": lambda key: key in classes["census_exact"],
             "outcome": lambda key: key in classes["outcome_exact"],
+            "boundary": lambda key: key in classes["boundary_exact"],
         }
         raw_sources = {
             "claim_verdicts_bytes": json.loads(
                 _source_bytes(supported_artifact)["claim_verdicts_bytes"]
+            ),
+            "claim_side_bound_bytes": json.loads(
+                _source_bytes(supported_artifact)["claim_side_bound_bytes"]
             ),
             "g2a_selection_bytes": json.loads(
                 _source_bytes(supported_artifact)["g2a_selection_bytes"]
@@ -524,7 +696,10 @@ class GammaResultContractTests(unittest.TestCase):
                         ).encode("utf-8")
                         self.assertEqual(render_gamma_contract(**sources), STOP_FILL)
                         observed[label] += 1
-        self.assertEqual(observed, {"digest": 46, "census": 41, "outcome": 53})
+        self.assertEqual(
+            observed,
+            {"digest": 47, "census": 41, "outcome": 53, "boundary": 40},
+        )
 
 
 if __name__ == "__main__":

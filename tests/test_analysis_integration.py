@@ -29,6 +29,10 @@ from joulewise.analysis_engine.artifact import (
     calculate_claim_verdicts_id,
     validate_claim_verdicts,
 )
+from joulewise.claim_side_bound import (
+    finalize_claim_side_bound,
+    validate_claim_side_bound,
+)
 from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
@@ -1560,6 +1564,30 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_v3_abba_engine_and_d093_refusal_precedence(self):
         clean = _v3_fixture_artifact()
         refused = _v3_fixture_artifact(diverged=True)
+
+        clean_bytes = render_claim_verdicts(clean)
+        clean_sidecar = finalize_claim_side_bound(clean_bytes)
+        refused_bytes = render_claim_verdicts(refused)
+        refused_sidecar = finalize_claim_side_bound(refused_bytes)
+        self.assertEqual(
+            validate_claim_side_bound(
+                clean_sidecar,
+                claim_verdicts_bytes=clean_bytes,
+            ),
+            [],
+        )
+        self.assertEqual(
+            clean_sidecar["bounds"][0]["claim_side_bound"]["value_j"],
+            0.2,
+        )
+        self.assertEqual(
+            validate_claim_side_bound(
+                refused_sidecar,
+                claim_verdicts_bytes=refused_bytes,
+            ),
+            [],
+        )
+        self.assertEqual(refused_sidecar["bounds"], [])
 
         self.assertEqual(validate_claim_verdicts(clean), [])
         manifest = json.loads(

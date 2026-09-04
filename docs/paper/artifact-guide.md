@@ -138,7 +138,7 @@ frozen plan and policy
 
 At claim consumption, check the registered `FLOOR-BIND-01` row in `docs/process/state_kernel.json`. While its claim-side limitation remains open, do not describe a standalone floor artifact as independently authenticating complete extraction evidence. The paper's Appendix A therefore conditions claim replay on closure of that row.
 
-The paper's Table 3 claim-side bound is supplied by the required `claim_side_bound` sibling in `joulewise.claim_verdicts.v2`: its value is exactly the one `E_clock_anchor_shift_bound_j` member of `deterministic_bounds.terms[]`, not `deterministic_bounds.total`; the column remains value-unissued until the prospective campaign (magistrate ruling Q-R2-1, `docs/process_traces/2026-09-04-paper-i/06-magistrate-contract-rulings.md`).
+The paper's Table 3 claim-side bound is supplied by the separately versioned, content-addressed `joulewise.claim_side_bound.v1` sidecar. Its `claim_verdicts_sha256` joins the exact rendered production `joulewise.claim_verdicts.v1` bytes, and each issued `claim_side_bound.value_j` is exactly the one `E_clock_anchor_shift_bound_j` member of that contrast's `deterministic_bounds.terms[]`, not `deterministic_bounds.total`; the column remains value-unissued until the prospective campaign (magistrate ruling Q-R2-1 as amended by `docs/process_traces/2026-09-04-paper-i/07-magistrate-rulings-addendum.md`).
 
 ## 7. Repository checks moved out of the paper
 
