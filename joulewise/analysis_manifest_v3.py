@@ -21,6 +21,8 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.authentication_io import canonical_json_bytes
+
 
 SCHEMA_VERSION = "joulewise.analysis_manifest.v3"
 PROSPECTIVE_SCHEMA_VERSION = "joulewise.analysis_manifest.v3.prospective"
@@ -375,16 +377,6 @@ class AnalysisManifestFinalizationError(AnalysisManifestV3Error):
         self.reason_code = reason_code
         self.detail = detail
         super().__init__(f"{reason_code}: {detail}")
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def calculate_manifest_id(value: Mapping[str, Any]) -> str:

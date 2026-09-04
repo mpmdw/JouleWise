@@ -29,6 +29,16 @@ AuthenticationGrammar = Literal["json", "jsonl", "raw"]
 V2_AUTHENTICATION_INPUT_CHANGED = "v2_authentication_input_changed"
 
 
+def canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
 class V2AuthenticationInputError(RuntimeError):
     """A v2 authentication read failed before its bytes could be consumed."""
 
@@ -725,6 +735,7 @@ __all__ = [
     "V2AuthenticationReadSession",
     "V2_AUTHENTICATION_INPUT_CHANGED",
     "active_v2_authentication_session",
+    "canonical_json_bytes",
     "direct_read_violations",
     "ingest_git_authentication_input",
     "open_authentication_input",

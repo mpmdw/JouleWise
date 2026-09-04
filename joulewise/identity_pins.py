@@ -24,6 +24,7 @@ from pathlib import Path, PurePosixPath
 from types import ModuleType
 from typing import Any, Callable, Mapping, Sequence
 
+from joulewise.authentication_io import canonical_json_bytes
 from joulewise.provenance import model_artifact_identity
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
@@ -179,16 +180,6 @@ class IdentityPinProjectionError(ValueError):
         super().__init__(message)
         self.reason_code = reason_code
         self.observed = dict(observed or {})
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
 
 
 def canonical_json_sha256(value: Any) -> str:
