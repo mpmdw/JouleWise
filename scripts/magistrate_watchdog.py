@@ -476,6 +476,7 @@ def initial_state() -> dict[str, Any]:
         "transition_seq": 0,
         "activation_id": None,
         "activation_spawn_epoch_s": None,
+        "resident_session": None,
         "attempt": 0,
         "backoff_index": 0,
         "usage_backoff_index": 0,
@@ -1388,6 +1389,7 @@ class ResidentSupervisor:
     def _finish_child(self, exit_code: int, now: dt.datetime) -> bool:
         requested = self.storage.exists(self.storage.root / "standdown.request")
         self.storage.unlink(self.storage.root / "magistrate.lock")
+        self.state["resident_session"] = None
         self.state["clock_drain"] = False
         self.state["resident_hold_drain"] = None
         if requested:
@@ -1469,6 +1471,7 @@ class ResidentSupervisor:
         append_census_event(self.storage, self.state, now, census)
         if owner_gone:
             self.storage.unlink(self.storage.root / "magistrate.lock")
+            self.state["resident_session"] = None
             self.state["clock_drain"] = False
             self.state["resident_hold_drain"] = None
         self.storage.unlink(self.storage.root / "standdown.request")
@@ -1538,6 +1541,8 @@ class ResidentSupervisor:
         record_resident_start: bool = False,
     ) -> bool:
         self._write_request(None, now, reason=reason)
+        resident_hold = self.state.get("resident_hold_drain")
+        drain_state = dict(resident_hold) if isinstance(resident_hold, Mapping) else None
         if record_resident_start:
             self.storage.append_jsonl(
                 self.storage.root / "events.jsonl",
@@ -1550,6 +1555,8 @@ class ResidentSupervisor:
                     "reason": reason,
                 },
             )
+            if drain_state is not None:
+                drain_state["started"] = True
         requested = json.loads(self.storage.read_text(self.storage.root / "standdown.request"))
         try:
             requested_monotonic = float(requested["requested_monotonic"])
@@ -1557,19 +1564,32 @@ class ResidentSupervisor:
         except (KeyError, TypeError, ValueError):
             elapsed = max(0.0, now.timestamp() - float(requested["requested_epoch_s"]))
         if elapsed >= STOP_COOPERATIVE_S + STOP_TERM_GRACE_S:
+            if drain_state is not None:
+                drain_state["stage"] = "KILL"
+                self.state["resident_hold_drain"] = drain_state
             owner = owned_process(self.lock_record, self.deps.processes.snapshot())
             if owner is None:
                 return self._forced_hold(now)
             pids = signal_owned_tree(self.deps.processes, owner.pid, signal.SIGKILL)
             self._record_signal(now, signal.SIGKILL, pids)
             return self._forced_hold(now)
-        if elapsed >= STOP_COOPERATIVE_S and self.state.get("standdown_phase") != "TERM":
+        if (
+            elapsed >= STOP_COOPERATIVE_S
+            and self.state.get("standdown_phase") != "TERM"
+            and (drain_state is None or drain_state.get("stage") != "TERM")
+        ):
             owner = owned_process(self.lock_record, self.deps.processes.snapshot())
             if owner is None:
                 return self._forced_hold(now)
             pids = signal_owned_tree(self.deps.processes, owner.pid, signal.SIGTERM)
             self._record_signal(now, signal.SIGTERM, pids)
             self.state["standdown_phase"] = "TERM"
+            if drain_state is not None:
+                drain_state["stage"] = "TERM"
+        elif drain_state is not None and drain_state.get("stage") not in {"TERM", "KILL"}:
+            drain_state["stage"] = "REQUEST"
+        if drain_state is not None:
+            self.state["resident_hold_drain"] = drain_state
         transition(self.storage, self.state, state_name, reason, now, notice=notice)
         self.storage.atomic_json(self.storage.root / "state.json", self.state)
         return True
@@ -1619,6 +1639,7 @@ class ResidentSupervisor:
                     if resident_hold.get("notice") is not None
                     else None
                 ),
+                record_resident_start=not bool(resident_hold.get("started")),
             )
         if snapshot.errors or conflicts:
             reason = (
@@ -1630,6 +1651,8 @@ class ResidentSupervisor:
             self.state["resident_hold_drain"] = {
                 "reason": reason,
                 "notice": notice,
+                "stage": None,
+                "started": False,
             }
             return self._enforce_drain(
                 now,
@@ -1753,6 +1776,7 @@ def start_session(
         "status": "ACTIVE",
     }
     storage.atomic_json(storage.root / "magistrate.lock", lock_record)
+    state["resident_session"] = lock_record
     state["standdown_phase"] = None
     state["clock_drain"] = False
     transition(storage, state, "ACTIVE", f"spawned activation {activation_id}", now)
@@ -1806,6 +1830,7 @@ def adopt_session(
     )
     if isinstance(launch_epoch_s, (int, float)) and not isinstance(launch_epoch_s, bool):
         state["activation_spawn_epoch_s"] = float(launch_epoch_s)
+    state["resident_session"] = dict(lock_record)
     attempt = int(state.get("attempt", 1) or 1)
     attempt_dir = storage.root / "attempts" / activation_id
     storage.append_jsonl(
@@ -1824,6 +1849,89 @@ def adopt_session(
         state,
         AdoptedChild(deps.processes, lock_record),
         dict(lock_record),
+        attempt_dir / f"attempt-{attempt}.stream.jsonl",
+        attempt_dir / f"attempt-{attempt}.stderr.log",
+    )
+
+
+def adopt_recorded_session_for_drain(
+    storage: Storage,
+    deps: Dependencies,
+    state: dict[str, Any],
+    *,
+    reason: str,
+    notice: str | None,
+) -> ResidentSupervisor | None:
+    """Adopt one state-recorded child for a single durable drain step."""
+
+    recorded = state.get("resident_session")
+    if not isinstance(recorded, Mapping) or recorded.get("schema") != LOCK_SCHEMA:
+        return None
+    lock_record = dict(recorded)
+    pid = lock_record.get("pid")
+    start_time = lock_record.get("start_time")
+    activation = str(lock_record.get("activation_id") or state.get("activation_id"))
+    owner = owned_process(lock_record, deps.processes.snapshot())
+    now = deps.wall_now().astimezone()
+    if owner is None:
+        storage.append_jsonl(
+            storage.root / "events.jsonl",
+            {
+                "schema": EVENT_SCHEMA,
+                "kind": "already_gone",
+                "pid": pid,
+                "start_time": start_time,
+                "activation": activation,
+                "epoch_s": now.timestamp(),
+            },
+        )
+        state["resident_session"] = None
+        state["resident_hold_drain"] = {
+            "reason": reason,
+            "notice": notice,
+            "stage": "already_gone",
+            "started": False,
+        }
+        current_lock = read_lock(storage)
+        if current_lock == lock_record:
+            storage.unlink(storage.root / "magistrate.lock")
+        storage.atomic_json(storage.root / "state.json", state)
+        return None
+
+    state["activation_id"] = activation
+    launch_epoch_s = lock_record.get(
+        "activation_spawn_epoch_s", lock_record.get("launch_epoch_s")
+    )
+    if isinstance(launch_epoch_s, (int, float)) and not isinstance(launch_epoch_s, bool):
+        state["activation_spawn_epoch_s"] = float(launch_epoch_s)
+    resident_hold = state.get("resident_hold_drain")
+    if not isinstance(resident_hold, Mapping) or resident_hold.get("stage") == "already_gone":
+        state["resident_hold_drain"] = {
+            "reason": reason,
+            "notice": notice,
+            "stage": None,
+            "started": False,
+        }
+    storage.append_jsonl(
+        storage.root / "events.jsonl",
+        {
+            "schema": EVENT_SCHEMA,
+            "kind": "resident_adopted",
+            "pid": owner.pid,
+            "start_time": owner.start_time,
+            "activation": activation,
+            "activation_id": activation,
+            "epoch_s": now.timestamp(),
+        },
+    )
+    attempt = int(state.get("attempt", 1) or 1)
+    attempt_dir = storage.root / "attempts" / activation
+    return ResidentSupervisor(
+        storage,
+        deps,
+        state,
+        AdoptedChild(deps.processes, lock_record),
+        lock_record,
         attempt_dir / f"attempt-{attempt}.stream.jsonl",
         attempt_dir / f"attempt-{attempt}.stderr.log",
     )
@@ -1865,6 +1973,17 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
     transition(storage, state, decision.state, decision.reason, now, notice=notice)
     storage.atomic_json(storage.root / "state.json", state)
     if dry_run:
+        return decision
+    if decision.state == "HOLD_UNSAFE":
+        supervisor = adopt_recorded_session_for_drain(
+            storage,
+            deps,
+            state,
+            reason=decision.reason,
+            notice=notice,
+        )
+        if supervisor is not None:
+            supervisor.step()
         return decision
     if not decision.launch and not decision.adopt:
         return decision

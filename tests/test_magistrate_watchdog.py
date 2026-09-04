@@ -687,6 +687,113 @@ class SupervisorTests(WatchdogTestCase):
         ]
         self.assertEqual(["resident_drain_started", "SIGTERM", "SIGKILL"], ladder)
 
+    def test_replacement_ticks_adopt_recorded_session_and_continue_unsafe_drain(self) -> None:
+        plan = self.make_plan()
+        plan_path = Path(plan.custody_root) / "night_plan.json"
+        plan_path.write_text("{truncated", encoding="utf-8")
+        lock_record = self.write_live_lock()
+        lock_record["activation_spawn_epoch_s"] = self.base.timestamp()
+        state = wd.initial_state()
+        state.update(
+            {
+                "state": "ACTIVE",
+                "activation_id": "activation-a",
+                "activation_spawn_epoch_s": self.base.timestamp(),
+                "resident_session": lock_record,
+            }
+        )
+        self.harness.storage.atomic_json(
+            self.harness.storage.root / "state.json", state
+        )
+        self.harness.processes.rows = [
+            wd.ProcessInfo(100, 1, "token-a", "recorded resident")
+        ]
+        self.assertEqual(9 * 60, wd.STOP_COOPERATIVE_S)
+        self.assertEqual(60, wd.STOP_TERM_GRACE_S)
+
+        first = wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual("HOLD_UNSAFE", first.state)
+        persisted = json.loads(
+            (self.harness.storage.root / "state.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual("REQUEST", persisted["resident_hold_drain"]["stage"])
+        self.assertTrue((self.harness.storage.root / "standdown.request").exists())
+
+        self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_COOPERATIVE_S)
+        self.harness.clock.mono += wd.STOP_COOPERATIVE_S
+        second = wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual("HOLD_UNSAFE", second.state)
+        persisted = json.loads(
+            (self.harness.storage.root / "state.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual("TERM", persisted["resident_hold_drain"]["stage"])
+        self.assertEqual([(100, signal.SIGTERM)], self.harness.processes.signals)
+
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        adopted = [event for event in events if event["kind"] == "resident_adopted"]
+        self.assertEqual(2, len(adopted))
+        self.assertEqual(
+            {"pid": 100, "start_time": "token-a", "activation": "activation-a"},
+            {
+                key: adopted[0][key]
+                for key in ("pid", "start_time", "activation")
+            },
+        )
+
+        self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_TERM_GRACE_S)
+        self.harness.clock.mono += wd.STOP_TERM_GRACE_S
+        third = wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual("HOLD_UNSAFE", third.state)
+        self.assertEqual(
+            [(100, signal.SIGTERM), (100, signal.SIGKILL)],
+            self.harness.processes.signals,
+        )
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual(3, sum(event["kind"] == "resident_adopted" for event in events))
+        ladder = [
+            event.get("signal", event["kind"])
+            for event in events
+            if event["kind"] in {"resident_drain_started", "signal"}
+        ]
+        self.assertEqual(["resident_drain_started", "SIGTERM", "SIGKILL"], ladder)
+
+        stale_record = self.write_live_lock()
+        stale_state = wd.initial_state()
+        stale_state.update(
+            {
+                "state": "ACTIVE",
+                "activation_id": "activation-a",
+                "activation_spawn_epoch_s": self.base.timestamp(),
+                "resident_session": stale_record,
+            }
+        )
+        self.harness.storage.atomic_json(
+            self.harness.storage.root / "state.json", stale_state
+        )
+        self.harness.processes.rows = [
+            wd.ProcessInfo(100, 1, "reused-token", "unrelated replacement")
+        ]
+        before = list(self.harness.processes.signals)
+        wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual(before, self.harness.processes.signals)
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual(1, sum(event["kind"] == "already_gone" for event in events))
+
     def test_cooperative_exit_after_request_never_signals(self) -> None:
         plan = self.make_plan()
         supervisor = self.supervisor(plan)

@@ -289,6 +289,103 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
                     resident.kill()
                     resident.wait(timeout=2)
 
+    def test_real_cli_adopts_recorded_resident_on_unsafe_replacement_tick(self) -> None:
+        custody_parent = self.root / "replacement-drain-custody"
+        plan_path = self._write_valid(
+            custody_parent, "replacement-plan", t0_offset_s=2 * 60 * 60
+        )
+        watchdog_root = custody_parent / "magistrate"
+        stub = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            start_new_session=True,
+        )
+        try:
+            start_time = "cli-stub-start"
+            activation = "cli-replacement-activation"
+            spawn_epoch = time.time()
+            session = {
+                "schema": wd.LOCK_SCHEMA,
+                "activation_id": activation,
+                "activation_spawn_epoch_s": spawn_epoch,
+                "pid": stub.pid,
+                "start_time": start_time,
+                "supervisor_pid": stub.pid + 1,
+                "launch_epoch_s": spawn_epoch,
+                "binary_symlink": "stub",
+                "binary_version": "stub",
+                "status": "ACTIVE",
+            }
+            state = wd.initial_state()
+            state.update(
+                {
+                    "state": "ACTIVE",
+                    "activation_id": activation,
+                    "activation_spawn_epoch_s": spawn_epoch,
+                    "resident_session": session,
+                }
+            )
+            storage = wd.Storage(watchdog_root)
+            storage.atomic_json(watchdog_root / "state.json", state)
+            storage.atomic_json(watchdog_root / "magistrate.lock", session)
+            _truncate(plan_path, 0.4)
+
+            cli_source = (
+                "import os, sys\n"
+                "from scripts import magistrate_watchdog as wd\n"
+                "pid=int(sys.argv[1]); start=sys.argv[2]\n"
+                "class Table:\n"
+                " def snapshot(self): return [wd.ProcessInfo(pid, 1, start, 'stub resident')]\n"
+                " def send_signal(self, target, signum): os.kill(target, signum)\n"
+                "deps=wd.real_dependencies(); deps.processes=Table()\n"
+                "wd.real_dependencies=lambda:deps\n"
+                "raise SystemExit(wd.main(sys.argv[3:]))\n"
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    cli_source,
+                    str(stub.pid),
+                    start_time,
+                    "tick",
+                    "--custody-root",
+                    str(watchdog_root),
+                ],
+                cwd=REPO_ROOT,
+                env=self.environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            self.assertNotIn("Traceback", completed.stderr)
+            self.assertIsNone(stub.poll(), "first ladder event must remain cooperative")
+            self.assertTrue((watchdog_root / "standdown.request").exists())
+            events = [
+                json.loads(line)
+                for line in (watchdog_root / "events.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            adopted = [event for event in events if event["kind"] == "resident_adopted"]
+            self.assertEqual(1, len(adopted))
+            self.assertEqual(stub.pid, adopted[0]["pid"])
+            self.assertEqual(start_time, adopted[0]["start_time"])
+            self.assertEqual(activation, adopted[0]["activation"])
+            self.assertEqual(
+                1,
+                sum(event["kind"] == "resident_drain_started" for event in events),
+            )
+        finally:
+            if stub.poll() is None:
+                stub.terminate()
+                try:
+                    stub.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    stub.kill()
+                    stub.wait(timeout=2)
+
 
 if __name__ == "__main__":
     unittest.main()

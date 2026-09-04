@@ -218,3 +218,17 @@ This addendum supersedes round 5 only for retired-v1 identification, resident un
 | S-4 — documented writer blocks produce bytes accepted by `NightPlan.from_mapping` | `docs/process/MAGISTRATE_WATCHDOG.md:224-251,315-341` | `tests/test_magistrate_watchdog.py:1102-1138`; deleting `measurement_head` from the first block fails with the pasted missing-argument mutation in trace 17. |
 
 Final authorized modules: watchdog 52 OK, CLI 2 OK, night gate 47 OK, run-night 55 OK, installer 11 OK (167 total). The prompt remains 23 lines. No install, agent launch, launchd mutation, default-custody write, live signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 7 clause-map addendum (2026-09-04 PDT)
+
+This addendum narrows round 6 only for S-2b: recovery after a resident supervisor dies while its child remains live and the next short tick decides `HOLD_UNSAFE`. The complete RED/GREEN transcript, per-module tails, and detailed map are in `19-sol-fix-round-7-report.md`.
+
+| Round-7 specification | Production site | Biting assertion / counterfactual |
+|---|---|---|
+| S-2b — every unsafe replacement tick validates and adopts the state-recorded PID/start/activation, records `resident_adopted`, and advances the durable request → TERM → KILL stage without restarting its timestamps | `scripts/magistrate_watchdog.py:472-490,1533-1595,1766-1783,1818-1937,1956-1987` | `tests/test_magistrate_watchdog.py:690-768`; deleting the early unsafe-tick adoption leaves `resident_hold_drain` null and no request, while dropping stage persistence repeats the allowance instead of producing TERM/KILL on the threshold ticks. |
+| S-2b — a mismatched start token is `already_gone`, never a signal target | `scripts/magistrate_watchdog.py:1870-1899` | `tests/test_magistrate_watchdog.py:770-795`; treating PID equality alone as ownership signals the reused-token row and fails both the unchanged-signal and event assertions. |
+| S-2b — the real CLI replacement path records adoption and the first ladder event | `scripts/magistrate_watchdog.py:1956-1987` | `tests/test_magistrate_watchdog_cli.py:292-387`; the trace-18 counterfactual leaves `standdown.request` absent and records no `resident_adopted`/`resident_drain_started`. |
+
+Final authorized modules: watchdog 53 OK, CLI 3 OK, night gate 47 OK, run-night 55 OK, installer 11 OK. No install, agent launch, launchd mutation, default-custody write, production-agent signal, or quiet-machine run occurred.

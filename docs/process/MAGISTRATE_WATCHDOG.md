@@ -10,10 +10,10 @@ The durable states are:
 
 - `BOOT`/`IDLE`: no current decision or a clean activation ended.
 - `LAUNCHING`: launch predicates passed and a resident supervisor is being forked.
-- `ACTIVE`: the recorded child PID and start time are live. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
+- `ACTIVE`: the recorded child PID, start time, and activation are live in both `state.json` and `magistrate.lock`. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
 - `FENCED`: a plan span, the 02:45–03:30 belt, or the 07:00 minute forbids launch.
-- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
+- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
 - `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility.
@@ -48,6 +48,12 @@ For the earliest relevant plan, the resident supervisor re-reads plans at most e
 
 The process-tree walk is deliberately independent of process groups because an agent host can escape its parent's PGID. Only descendants of the validated lock PID are signaled. An unrelated census hit is evidence for a hold, never authority to signal.
 
+### Replacement-supervisor drain handoff
+
+Every successful spawn or ordinary supervisor adoption copies the complete owned-session record into `state.json`: PID, exact start-time token, activation, and launch metadata. If an unreadable, malformed, future-authored, or conflicting plan produces `HOLD_UNSAFE` after the resident supervisor has disappeared, the short tick compares that durable PID/start pair with the current process table before doing anything else to the child. A match appends `resident_adopted{pid,start_time,activation}` and executes one bounded drain step. The first such tick atomically creates `standdown.request`, records `resident_drain_started`, and persists `resident_hold_drain.stage = REQUEST`; later launchd ticks reuse the original request timestamps and persist `TERM` and `KILL` as those thresholds become due. They never rewrite the request time or restart the nine-minute allowance.
+
+If the PID is absent or its start token differs, the tick records `already_gone`, clears the durable session identity, and sends no signal. Thus PID reuse cannot inherit either adoption or signal authority. The ordinary 10-second resident loop and replacement-tick recovery share the same `STOP_COOPERATIVE_S = 540` and `STOP_TERM_GRACE_S = 60` ladder; only their polling cadence differs.
+
 ## Kill switch
 
 Every launchd tick that acquires the service lock first proves remote transport with anonymous `git ls-remote --exit-code` against `refs/heads/main`, then probes the glob `refs/heads/ops/stop*`. It seeds the resident with that observation. While a child is resident, one daemon thread refreshes the cached observation at most every five minutes; a slow or unreachable GitHub probe never blocks the 10-second enforcement loop, and no second probe begins while one is live. Control rc 0 plus stop rc 2 means clear; a stop match means stopped. Control rc 128, any other nonzero control result, a stop-probe result other than 0/2, timeout, or exception means `NETWORK_UNCERTAIN`, never clear. The commands disable credential helpers and terminal prompts and never fetch or mutate a checkout.
@@ -67,8 +73,8 @@ Usage retries are 15, 30, 60, 120, then 120 minutes, plus a deterministic 0–12
 The program guards every write path against the configured custody root. The mechanism creates only:
 
 - `watchdog.lock`: stable advisory service-lock inode.
-- `state.json`: atomic durable state, clocks, backoff, activation id and spawn epoch, resident-drain latch, transition sequence, and `notice_pending`.
-- `events.jsonl`: fsynced transition, census, signal, resident-drain-start, plan-diagnostic, and supervisor-adoption events.
+- `state.json`: atomic durable state, clocks, backoff, activation id and spawn epoch, complete resident-session identity, resident-drain stage, transition sequence, and `notice_pending`.
+- `events.jsonl`: fsynced transition, census, signal, resident-drain-start, plan-diagnostic, supervisor-adoption, replacement `resident_adopted`, and `already_gone` events.
 - `magistrate.lock`: exclusive launch claim, then the child PID, exact start token, activation id and spawn epoch, symlink path, and version; removed only after the child exit is proved.
 - `standdown.request`: atomic request and exact plan deadlines.
 - `attempts/<activation>/prompt.md`, `attempt-<n>.stream.jsonl`, and `attempt-<n>.stderr.log`.
