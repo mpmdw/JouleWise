@@ -174,6 +174,19 @@ modified here. No paper-skeleton or decision-log edit is indicated: the kernel
 acceptance already settles external corpus resolution, and the diagnostic
 vocabulary did not change.
 
+## Clause map
+
+| Contract clause | Production site | Biting assertion | Counterfactual |
+|---|---|---|---|
+| “typed config's `hardware_target.telemetry_backend` is the mockness authority” (`docs/contracts/adapter_contracts.md:681`) | `joulewise/reduce.py:694` | `tests/test_reduce.py:2546` | Restore the metadata-label `mock` early return; an awake post-run display produces no refusal. |
+| Same telemetry-authority clause | `joulewise/reduce.py:784` | `tests/test_reduce.py:2650` | Restore the metadata-label `mock` early return; duplicated CPU-attempt rows leave every claim gate eligible. |
+| “artifact without the freshness block is therefore malformed” (`docs/contracts/adapter_contracts.md:414`) | `joulewise/whole_window.py:1623` | `tests/test_run_campaign.py:8540` | Re-enable the pre-freshness compatibility branch; the self-sealed no-freshness artifact validates instead of remaining underived. |
+| “resolve against the exact bytes” (`docs/contracts/adapter_contracts.md:421`) | `joulewise/whole_window.py:1552` | `tests/test_run_campaign.py:7922`; positive arm `tests/test_run_campaign.py:8109` | Trust only the artifact's self-seal; the self-asserted corpus authenticates without external bytes. |
+| “no other JSON file in that directory is a registered corpus authority” (`docs/contracts/adapter_contracts.md:428`) | `joulewise/whole_window.py:1601` | `tests/test_run_campaign.py:7967` | Glob sibling `*.json` files; a matching `untracked.json` authenticates the forged corpus. |
+| “At file ingress” (`docs/contracts/adapter_contracts.md:422`) | `joulewise/whole_window.py:1740` | `tests/test_run_campaign.py:7922` | Remove `require_corpus_identity=True`; the forged artifact loader returns a bound. |
+| “exact bytes of either the tracked settled-corpus manifest or a manifest held by the calling custody boundary” (`docs/contracts/adapter_contracts.md:423`) | `joulewise/whole_window.py:3707` | `tests/test_run_campaign.py:7817` | Remove the mint postcondition; the real derivation CLI writes a self-sealed artifact whose manifest digest disagrees with the tracked source bytes. |
+| Same exact-byte clause at claim admission | `joulewise/whole_window.py:5439` | `tests/test_run_campaign.py:7990` | Remove `require_corpus_identity=True`; a claim row carrying a structurally valid forged drift artifact validates. |
+
 ## Verification notes
 
 The repository-wide unit-test suite was intentionally not run, per the
