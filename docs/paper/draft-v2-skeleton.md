@@ -53,13 +53,13 @@ start time to its recorded end time. An inference request first reads its
 input through production of the first output token; this paper calls that
 prompt processing, or *prefill*. It then emits later output tokens; this is
 token generation, or *decode*. The runtime-recorded time between those parts
-is the phase edge.
+is the **phase boundary**, with **phase edge** as an equivalent name.
 
 One sampling record can begin during prefill and end during decode. It then
 reports one average power for a span that contains both parts, rather than one
 value for each. JouleWise assigns the record by multiplying that average by
-the time on each side of the phase edge. The record's integrated energy is the
-time integral \(\int P(t)\,dt\) over its full span. Moving the edge within the
+the time on each side of the phase boundary. The record's integrated energy is
+the time integral \(\int P(t)\,dt\) over its full span. Moving the edge within the
 same record transfers a slice of that energy from one phase to the other, but
 the request total does not change. Repeating the request can narrow ordinary
 run-to-run scatter; it cannot remove a displacement shared by every repeat,
@@ -77,8 +77,9 @@ power record. **Commanded graphics-processor pulses** are fixed-duration GPU
 work with time-stamped start and stop commands, recorded inside a measurement
 window—one uninterrupted measurement session.
 The largest displacement between the commanded times and every edge position
-allowed by the pulse records is the **pulse-derived limit**. Applying that
-limit to inference assumes that the power record locates pulse edges and
+allowed by the pulse records, plus the **clock-anchor bound**—the uncertainty in
+placing the power record on wall-clock time—is the **pulse-derived limit**.
+Applying that limit to inference assumes that the power record locates pulse edges and
 model-work edges with the same error. Because pulses are not inference, a
 later **inserted-gap check** creates about 500 ms of no work between prefill and
 decode and compares the gap's independently time-stamped edges with the power
@@ -91,7 +92,7 @@ rate. Instead, it places each wall-clock reading between the monotonic-clock
 readings taken immediately before and after it. Those are the bracketed
 readings; the method retains every fixed-rate, offset mapping that they and the
 power-record labels permit. The pulse calibration and clock mapping together
-bound how far a phase edge may move before its energy is recomputed.
+bound how far a phase boundary may move before its energy is recomputed.
 
 A **configuration cell**, shortened below to **cell**, is the set of runs with
 one phase, workload, model, hardware, software, and power-measurement boundary,
@@ -111,7 +112,8 @@ gate value after those safeguards the **cell floor**.
 The research question is whether permitted edge movement—every lower-or-upper
 edge position allowed by that calibration and mapping—at least doubles each
 component's source of false difference. Let \(U_{\mathrm{point}}\) be a component bound calculated
-at the recorded edges; this is the **recorded-edge limit**. Let
+at the recorded edges; this is the **point-only value**, with **recorded-edge
+limit** as its plain-word alias. Let
 \(U_{\mathrm{corner}}\) be its counterpart after every allowed
 lower-or-upper edge choice for that component is evaluated jointly and the
 largest result retained. This is the **moved-edge limit**. Their quotient,
@@ -123,7 +125,7 @@ A, where A and B label the two compared conditions, here the two models. A
 timing-error sign says which direction the allowed error moves energy. A
 shared sign is one choice applied across all blocks, while a local sign is
 chosen separately for each block. Shared movement uses a different numerator:
-let \(U_{\mathrm{cmp,point}}\) be the four-run comparison's recorded-edge limit, and
+let \(U_{\mathrm{cmp,point}}\) be the four-run comparison's point-only value, and
 let \(U_{\mathrm{cmp,shared}}\) be its largest limit after one timing-error sign
 is replayed across all blocks and one local sign is chosen per block. Their
 quotient, the **shared-error ratio**, is
@@ -133,12 +135,12 @@ ordinary variation already present in the repeated measurements.
 
 Before either ratio is compared with 2, **authentication** matches every input
 to its named source-file contents. **Evaluation** then requires a nonzero
-recorded-edge limit, making the ratio evaluable. The twelve required ratios are one independent-edge ratio for each of the
+point-only value, making the ratio evaluable. The twelve required ratios are one independent-edge ratio for each of the
 eight components (two models, two phases, and for each of those the
 repeated measurements of one model and the four-run comparison of two
 models) and one shared-error ratio for each of the four four-run-comparison
 components. Any of the twelve below 2 falsifies the claim; equality passes. A ratio of at least 2 means that moving
-the edge adds at least one entire recorded-edge limit to the bound—the
+the edge adds at least one entire point-only value to the bound—the
 **twofold boundary contribution** tested here.
 
 That ratio result does not by itself choose between models. The
@@ -190,9 +192,9 @@ For each commanded pulse, the detector estimates resting GPU power from samples 
 
 The clock anchor uses five wall-clock readings, each bracketed by readings from a monotonic clock—a counter that advances but is never corrected to civil time—together with every whole-second label embedded in the native power records. The **first-record endpoint** is the wall-clock time assigned to the end of the first native power record. The method retains every straight-line mapping whose rate and offset satisfy four evidence constraints: each wall reading lies inside its monotonic stamp bracket; each native whole-second label contains its modeled record end; the first record starts after sampler launch; and that record is parsed only after it is written. Appendix A.3.3 gives the inequalities. The method permits the two clocks to run at slightly different fixed rates and charges the full allowed departure of a native label from that line. It refuses missing or malformed inputs, an empty set or an unbounded one (the allowed rate reaches the edge of its search box), inadequate capture span, implausible clock rate, active automatic network-time correction, or a bound outside the accepted range. Otherwise it finds the earliest and latest allowed first-record endpoint and adds four allowances: half the endpoint range, the observed wall-versus-monotonic span, the largest reported clock resolution, and a fixed numeric-rounding pad. This corrected rate-aware model replaced the false equal-rate assumption, which could move every fitted edge in the same direction.
 
-Finally, the pre-window and post-window capture bounds form a bracket. The frozen **calibration-acceptance rule** is the pre-collection rule that decides whether those two captures may bracket one window; it derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—the two-sided 99% point, written \(t_{0.995,16}\) because it leaves 0.5% in each tail with 16 degrees of freedom, and larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation (the \(n-1\) formula of Section 4) is \(s_b = 2.460856\) ms (unrounded, \(2.460856207694636\) ms) and \(t_{0.995,16}=2.92078162242509999197\); the two-draw rule—two fresh capture bounds are drawn, and the spread of their difference is \(\sqrt{2}\) times one capture's spread—so \(t_{0.995,16}\times s_b\times\sqrt{2}\) records \(10.164834757777545\) ms, printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest microsecond, with an exact tie going to the even digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained calibration acceptance file `configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (registry source S17). The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. Appendix A.3.6 calls one capture's pulse-plus-anchor bound \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
+Finally, the pre-window and post-window capture bounds form a bracket. The frozen **calibration-acceptance rule** is the pre-collection rule that decides whether those two captures may bracket one window; it derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—the two-sided 99% point, written \(t_{0.995,16}\) because it leaves 0.5% in each tail with 16 degrees of freedom, and larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation (the \(n-1\) formula of Section 4) is \(s_b = 2.460856\) ms (unrounded, \(2.460856207694636\) ms) and \(t_{0.995,16}=2.92078162242509999197\); the two-draw rule—two fresh capture bounds are drawn, and the spread of their difference is \(\sqrt{2}\) times one capture's spread—so \(t_{0.995,16}\times s_b\times\sqrt{2}\) records \(10.164834757777545\) ms, printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest microsecond, with an exact tie going to the even digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained calibration acceptance file `configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (registry source S17). The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. Appendix A.3.6 calls one capture's pulse-derived limit \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
 
-Commanded GPU pulses calibrate edge placement, but applying that bound to sustained mixed inference is an assumption. The before-and-after bracket tests for change across the measurement window; it does not test whether the pulse-derived bound applies to inference.
+Commanded GPU pulses calibrate edge placement, but applying that bound to sustained mixed inference is an assumption. The before-and-after bracket tests for change across the measurement window; it does not test whether the pulse-derived limit applies to inference.
 
 Figure 2 orders the before-and-after pulse calibrations, the **entry check**, the pass/fail checks on recorded machine state that a stage must satisfy before its first run is measured (Section 5), fixed reference workloads repeated at the
 window's opening, midpoint when present, and close to track drift, and science blocks within
@@ -274,8 +276,8 @@ must fit both the bundle's allowed timing half-width and a floor issued earlier
 for that same cell.
 
 For one A/B/B/A block, let
-\(\delta=(B_1+B_2-A_1-A_2)/2\). Each of the four member energies has a
-point-only value at its recorded edge and an edge-moved allowance
+\(\delta=(B_1+B_2-A_1-A_2)/2\). Each of the four member energies has its
+recorded value at the phase boundary and an edge-moved allowance
 \([A_1^L,A_1^U]\), \([B_1^L,B_1^U]\), \([B_2^L,B_2^U]\), or
 \([A_2^L,A_2^U]\). Evaluate \(\delta\) over the fixed set of allowed endpoint
 combinations and retain the interval of allowed differences
@@ -434,15 +436,15 @@ called a cell attribution-limited when its exact edge-moved corner maximum
 exceeded its point-only value after that point-only value was multiplied by a
 fixed factor to allow for limited repetition. The
 current calculation instead uses the corner-to-point ratios in Section 4.
-Point-only component bounds are the
-components' false-difference limits with every phase edge left at its recorded
-time. For prompt processing, token generation, and short prompt processing
+Those point-only values are the
+components' false-difference limits with every phase boundary left at its
+recorded time. For prompt processing, token generation, and short prompt processing
 respectively, they were 0.2888 J, 0.4934 J, and 0.3113 J.
 <!-- DG-044; DG-045; DG-046 -->
 Re-evaluating the complete component calculation at its jointly worst allowed
 edge endpoints gave 3.153 J, 2.922 J, and 2.184 J. <!-- DG-047; DG-048; DG-049 -->
 The corresponding independently moved-edge ratios—each worst-endpoint bound
-divided by its point-only bound while every member edge may move separately—
+divided by its point-only value while every member edge may move separately—
 were 10.92, 5.92, and 7.02. <!-- DG-050; DG-051; DG-052 -->
 
 Across the 30 phase-energy runs collected in that July 25 diagnostic window,
@@ -476,10 +478,10 @@ instead give 1.50 J to each phase. This 0.30-J movement is the physical reason
 to calculate a bound on a false phase-energy difference rather than treating
 the recorded split as exact.
 
-### Comparing the boundary-moved and point-only bounds
+### Comparing the boundary-moved and point-only values
 
 The forcing problem is that any positive boundary interval can make a
-boundary-moved bound exceed a point-only bound, so mere exceedance cannot show
+boundary-moved bound exceed a point-only value, so mere exceedance cannot show
 that boundary placement is the limiting uncertainty. The comparison therefore
 asks for a fixed twofold increase in the complete bound, not just a positive
 increase in one timing term.
@@ -500,7 +502,7 @@ A. The order gives the two A runs and the two B runs the same average position
 in time, which cancels steady linear drift; curved change remains covered by a
 separate whole-window allowance.
 
-For either component, first calculate a **point-only unguarded bound**. An
+For either component, first calculate its **point-only value**. An
 **admitted energy** is an energy from a run that passed the Section 5 entry
 checks and may therefore bear a claim. “Point only” means using each admitted
 energy at its recorded value. “Unguarded” means before the later **small-sample multiplier**, the factor that widens a result to allow for limited repetition, and before the whole-window allowance. Here \(n\), the number of
@@ -541,7 +543,7 @@ U_{\mathrm{cmp,point}}=
 |\bar\delta|+t_{.975,n-1}s_\delta\sqrt{1+1/n}\right).
 \]
 
-For a worked point-only example, take five repeated energies 8, 9, 10, 11,
+For a worked example of that bound, take five repeated energies 8, 9, 10, 11,
 and 12 J. Their mean is 10 J, their residuals are −2, −1, 0, 1, and 2 J,
 and their sample standard deviation is \(\sqrt{10/4}=1.581139\) J. With
 \(t_{.975,4}=2.776445\), the prediction amount is
@@ -553,7 +555,7 @@ standard deviation is again 1.581139 J; therefore
 demonstrate the formulas and are not campaign evidence.
 
 Each admitted energy also has a lower and upper value obtained by moving its
-phase edges through every position allowed by the session calibration. To
+phase boundaries through every position allowed by the session calibration. To
 calculate the **independent-edge corner bound**, choose either the lower or
 upper value for every admitted energy, enumerate every joint choice, and at
 each choice recalculate the complete applicable formula above—including its
@@ -573,7 +575,7 @@ formula, once after allowed edge movement and once at the recorded points.
 Neither is a timing term alone or a value after the multiplier or
 whole-window allowance is added. In this paper, allowed boundary movement
 **dominates** a component only when \(R\ge2\): it adds at least one entire
-point-only bound. Exact equality at \(R=2\) passes. A threshold merely above 1
+point-only value. Exact equality at \(R=2\) passes. A threshold merely above 1
 would let any positive interval width do the decisive work. If
 \(U_{\mathrm{point}}=0\), the program refuses with the fixed reason name
 `dominance_ratio_zero_denominator`; it does not print infinity.
@@ -668,7 +670,7 @@ the \(2\times2^n\) choices, replace each point difference with
 
 recalculate the complete comparative unguarded formula, and retain the largest
 value \(U_{\mathrm{cmp,shared}}\). Divide that complete shared/local replay
-bound by the point-only comparative bound. This quotient is the comparative
+bound by the comparative point-only value. This quotient is the comparative
 **shared-error ratio** \(R_{cm}\):
 
 \[
@@ -758,7 +760,7 @@ unguarded corner values 1.6656 J absolute and 1.7656 J comparative. With
 \(g(5)=1.5\) and a 0.4 J allowance for each component, the published values
 are \(1.5(1.6656)+0.4=2.8984\) J and
 \(1.5(1.7656)+0.4=3.0484\) J. Their maximum, 3.0484 J, is the cell floor.
-The example's point-only bounds are zero, so it demonstrates floor composition
+The example's point-only values are zero, so it demonstrates floor composition
 but correctly refuses \(R\); it supplies no boundary-doubling result.
 
 Two directional comparisons—token generation and prompt processing, each with its
@@ -870,11 +872,11 @@ Do not soften, combine, or mechanically retensor these sentences.
 
 **A — every required ratio passes:**
 
-> Every required independent-edge ratio \(R\) was at least 2 and every required comparative shared-error ratio \(R_{cm}\) was at least 2, so allowed boundary movement at least doubled every component's point-only bound on the Apple M3 Max hardware, MLX, and *powermetrics* power-recording configuration named in Section 1. This result supports the headline that boundary placement dominates point-only variation only if the post-campaign **inserted-gap check**—a test that inserts an approximately 500-ms no-work gap and compares its independently known edges with the power record—supports applying the pulse-derived timing bound to inference.
+> Every required independent-edge ratio \(R\) was at least 2 and every required comparative shared-error ratio \(R_{cm}\) was at least 2, so allowed boundary movement at least doubled every component's point-only value on the Apple M3 Max hardware, MLX, and *powermetrics* power-recording configuration named in Section 1. This result supports the headline that boundary placement dominates variation at the recorded boundaries only if the post-campaign **inserted-gap check**—a test that inserts an approximately 500-ms no-work gap and compares its independently known edges with the power record—supports applying the pulse-derived limit to inference.
 
 **B — an authenticated, evaluable ratio is below 2:**
 
-> Every required ratio was authenticated and evaluable, but at least one independent-edge ratio \(R\) or comparative shared-error ratio \(R_{cm}\) was below 2. We therefore withdraw the boundary-doubling sentence and report each failed component without claiming that boundary placement dominated point-only variation.
+> Every required ratio was authenticated and evaluable, but at least one independent-edge ratio \(R\) or comparative shared-error ratio \(R_{cm}\) was below 2. We therefore withdraw the boundary-doubling sentence and report each failed component without claiming that boundary placement dominated variation at the recorded boundaries.
 
 **Refusal — stopped before comparison or at close-out:**
 
@@ -1004,7 +1006,7 @@ start-to-end span is the sampling record's interval; its duration is the
 \min(p_e,r_e)>\max(p_s,r_s).
 \]
 The **overlap count**, also called **record support**, is the number of sampling
-records with positive overlap. A sampling record that crosses a phase edge
+records with positive overlap. A sampling record that crosses a phase boundary
 counts because the shared part has positive duration; one that only touches an
 edge does not. The overlap count, record support, and the three-record minimum
 are the same test: count the sampling records with positive overlap, and
@@ -1015,7 +1017,7 @@ resolvable** because its record support is too small, using the label
 `not_resolvable_sample_count`; Section 4 uses the same verdict words for a
 different reason, an estimate that does not clear the cell floor.
 
-Figure 5, the phase–record overlap diagram, names the phase edges, adjacent
+Figure 5, the phase–record overlap diagram, names the phase boundaries, adjacent
 sampling-record intervals, shared portions, overlap count, and three-record
 minimum for both sides of the decision.
 
@@ -1025,9 +1027,9 @@ minimum for both sides of the decision.
 the same illustrative width. In the upper row, sampling records about as wide
 as the phase are misaligned with it: the phase straddles one record boundary and
 overlaps two records. In the lower row, a shorter middle sampling record lies
-entirely between the phase edges, producing three positive overlaps. Every
+entirely between the phase boundaries, producing three positive overlaps. Every
 drawn data mark is labelled: each sampling record, prompt-processing interval,
-phase edge, positive-overlap segment, count box, decision, and axis. Widths and
+phase boundary, positive-overlap segment, count box, decision, and axis. Widths and
 positions are not to scale; the count labels explain the three-record minimum
 rather than population frequencies, and the diagram contains no measured timing
 value.*
@@ -1053,11 +1055,11 @@ The 0.121-s phase is only barely longer than the median-width sampling record,
 and dividing phase duration by either issued median cannot reproduce the
 decision because division discards the phase's position relative to record
 boundaries. Three overlaps require one whole middle sampling record to lie
-between the phase edges: the phase must start before that record and end after
+between the phase boundaries: the phase must start before that record and end after
 it. When the phase and middle record have about the same width, only a very
 narrow range of relative positions satisfies both conditions. A middle record
 at the short end of the issued middle-half width spread leaves more room for
-both phase edges to fall outside it, making that full fit easier rather than
+both phase boundaries to fall outside it, making that full fit easier rather than
 first making it possible. Alignment, not width alone, therefore denies the
 third overlap in most phases. In this run, exactly two sampling records shared
 positive time with the phase. Two is less than the required three, so the phase
@@ -1142,7 +1144,7 @@ the stricter design floor and leaves the two-comparison Holm family unchanged.
 
 > ### What a twofold boundary contribution changes
 >
-> Every independent-edge ratio and every required shared-error ratio was at least 2. This result supports the headline that boundary placement dominates point-only variation only if the post-campaign inserted-gap check supports applying the pulse-derived timing bound to inference. If that check supports the transfer, measurement practice must change before collection: characterize the named workload boundary—identify the exact transition whose energy assignment can change and measure how far its recorded time may move—construct a separate bound for each configuration cell, and size the comparison against that bound—choose before collection a workload difference whose expected energy separation is larger than the bound. Additional repeats can narrow the point-only component, but they cannot remove the larger contribution from allowed boundary movement; the fixed Qwen3-8B-versus-Qwen3-1.7B pair demonstrates that decision behavior, not a model-size scaling law. Independently of the ratio disposition, its authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-099], [FILL:DG-100], and [FILL:DG-101], respectively; these historical examples neither supplied nor selected the campaign result. Independently of that ratio outcome, the inserted-gap check described below [FILL:TR-01].
+> Every independent-edge ratio and every required shared-error ratio was at least 2. This result supports the headline that boundary placement dominates variation at the recorded boundaries only if the post-campaign inserted-gap check supports applying the pulse-derived limit to inference. If that check supports the transfer, measurement practice must change before collection: characterize the named workload boundary—identify the exact transition whose energy assignment can change and measure how far its recorded time may move—construct a separate bound for each configuration cell, and size the comparison against that bound—choose before collection a workload difference whose expected energy separation is larger than the bound. Additional repeats can narrow the point-only value, but they cannot remove the larger contribution from allowed boundary movement; the fixed Qwen3-8B-versus-Qwen3-1.7B pair demonstrates that decision behavior, not a model-size scaling law. Independently of the ratio disposition, its authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-099], [FILL:DG-100], and [FILL:DG-101], respectively; these historical examples neither supplied nor selected the campaign result. Independently of that ratio outcome, the inserted-gap check described below [FILL:TR-01].
 <!-- OUTCOME-BRANCH:A:END -->
 
 <!-- OUTCOME-BRANCH:B:START -->
@@ -1170,13 +1172,13 @@ First, the pulse-to-inference transfer is untested. The calibration commands
 long, square GPU work and measures how its reported edges differ from the
 commanded edges, whereas inference has a different sequence of GPU work at the
 transition from prompt processing to token generation. A difference in those
-two physical edge responses could make the pulse-derived timing bound either
+two physical edge responses could make the pulse-derived limit either
 too narrow or unnecessarily wide; its effect on the reported phase energies is
-unquantified. The retained diagnostic capture's pulse-derived bound was
+unquantified. The retained diagnostic capture's pulse-derived limit was
 \(0.030067931757111657\) s. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA / REPLAY_FENCED. --> This is a calibration value, not a bound on real inference. The concrete closing check is the inserted-gap
 experiment in the next subsection: command a no-work interval inside real
 inference, fit both of its independently stamped edges, and compare the
-largest absolute residual with the pulse-derived bound; an exceedance would
+largest absolute residual with the pulse-derived limit; an exceedance would
 withdraw transfer rather than inflate the bound after seeing the result.
 
 Second, the evidence covers one physical machine and one software/counter
@@ -1191,7 +1193,7 @@ contrast decisions under the same pre-registered workload.
 
 Third, the reported joules come from internal CPU, GPU, and neural-engine
 counter channels, with no external gain check. CPU, GPU, and neural-engine
-power share the same start-to-end averaging window, so the same phase edges
+power share the same start-to-end averaging window, so the same phase boundaries
 clip all three channels before their energies are summed; no separate timing
 bound for the CPU or neural-engine channel is issued. <!-- Reviewer D8; the channel-window answer is fixed by the Section 2 record definition. -->
 An external power meter—a separate instrument measuring the machine's physical
@@ -1320,7 +1322,7 @@ when decode resumes. For each edge
 Report every signed \(r_e\) and record its comparison with
 \(B_{\mathrm{fiducial}}\), where
 \(B_{\mathrm{fiducial}}=0.030067931757111657\) s is the retained diagnostic
-capture's pulse-derived bound. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA /
+capture's pulse-derived limit. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA /
 REPLAY_FENCED. --> The registered row does not prescribe an acceptance
 threshold for that comparison, so this paper does not label a result a pass or
 transfer failure. A reader can recompute both residuals from the retained
@@ -1345,7 +1347,7 @@ questions remain outside this capstone's scope.
 
 Running Average Power Limit (RAPL) is a processor-exposed energy counter. Khan et al.'s *RAPL in Action* and Jay et al. own the gain axis: how accurately a software counter reports the magnitude of energy use [5] [6]. For phase-resolved `powermetrics` inference on Apple Silicon, JouleWise opens the complementary time axis: where in time a counter places the energy it reports. Khan et al. align lag, model the relationship between RAPL and wall power, account for temporal correlation, and inspect update granularity, sampler overhead, jitter, overflow, and timestamps [5]. Jay et al. show through controlled regression against wall power that disagreement changes with load, and they decline component claims that their reference meter cannot test [6]. Those studies establish how to validate counter gain; an external wall meter still cannot determine how a software trace should divide a correct total between prompt processing and token generation.
 
-Hähnel et al. are the closest ancestor to this boundary problem. RAPL's update interval limits how short a code path can receive a defensible energy attribution, and they respond by aligning the start and end of the measured path to the counter's own update boundaries — spinning on the register until it advances before entering the code path, and again on leaving it — then enumerating the errors that remain when entry and exit fall inside a single update interval [29]. That is edge placement as an explicit technique, on a different interface and at a different scale. Dauner et al. provide the strongest corroboration. Across RAPL and the NVIDIA Management Library (NVML) software power counter, they show that counter-update behavior and requested sampling frequency can materially change an energy reading; on one evaluated GPU, very frequent polling severely underestimated integrated power, with agreement recovering only at a much longer interval [23]. JouleWise's distinct contribution is to calibrate runtime phase edges in the same measurement window, propagate their permitted positions through the energy integral, and make the resulting cell-specific resolution bound a claim gate (Sections 2, 3, and 5).
+Hähnel et al. are the closest ancestor to this boundary problem. RAPL's update interval limits how short a code path can receive a defensible energy attribution, and they respond by aligning the start and end of the measured path to the counter's own update boundaries — spinning on the register until it advances before entering the code path, and again on leaving it — then enumerating the errors that remain when entry and exit fall inside a single update interval [29]. That is edge placement as an explicit technique, on a different interface and at a different scale. Dauner et al. provide the strongest corroboration. Across RAPL and the NVIDIA Management Library (NVML) software power counter, they show that counter-update behavior and requested sampling frequency can materially change an energy reading; on one evaluated GPU, very frequent polling severely underestimated integrated power, with agreement recovering only at a much longer interval [23]. JouleWise's distinct contribution is to calibrate runtime phase boundaries in the same measurement window, propagate their permitted positions through the energy integral, and make the resulting cell-specific resolution bound a claim gate (Sections 2, 3, and 5).
 
 ### LLM energy measurement
 
@@ -1384,19 +1386,19 @@ Split and disaggregated inference remain a demanding application rather than thi
 <!-- OUTCOME-BRANCH:A:START -->
 **A — every required ratio passes:**
 
-> JouleWise makes a false phase-energy difference measurable before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each configuration cell. Every independent-edge ratio was at least 2, and every comparative ratio remained at least 2 when timing error shared within a four-run block moved together, so allowed boundary movement at least doubled every component's point-only bound. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained short-input diagnostic separately found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Independently of the ratio outcome, the post-campaign inserted-gap check [FILL:TR-01].
+> JouleWise makes a false phase-energy difference measurable before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each configuration cell. Every independent-edge ratio was at least 2, and every comparative ratio remained at least 2 when timing error shared within a four-run block moved together, so allowed boundary movement at least doubled every component's point-only value. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with brief prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Independently of the ratio outcome, the post-campaign inserted-gap check [FILL:TR-01].
 <!-- OUTCOME-BRANCH:A:END -->
 
 <!-- OUTCOME-BRANCH:B:START -->
 **B — an authenticated, evaluable ratio is below 2:**
 
-> JouleWise makes a false phase-energy difference measurable before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each configuration cell. Every required ratio was authenticated and evaluable, but at least one independent-edge ratio or required shared-error ratio was below 2, so the paper does not claim that boundary placement doubled every point-only bound. The components with a below-two ratio were [FILL:OB-01]. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained short-input diagnostic separately found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Independently of the ratio outcome, the post-campaign inserted-gap check [FILL:TR-01].
+> JouleWise makes a false phase-energy difference measurable before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each configuration cell. Every required ratio was authenticated and evaluable, but at least one independent-edge ratio or required shared-error ratio was below 2, so the paper does not claim that boundary placement doubled every point-only value. The components with a below-two ratio were [FILL:OB-01]. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with brief prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Independently of the ratio outcome, the post-campaign inserted-gap check [FILL:TR-01].
 <!-- OUTCOME-BRANCH:B:END -->
 
 <!-- OUTCOME-BRANCH:REFUSAL:START -->
 **Refusal — stopped before comparison or at close-out:**
 
-> JouleWise fixes how a false phase-energy difference would be measured before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each usable configuration cell. The result stopped at one of two points. Before comparison, it stopped if a model-specific measurement window was excluded or if an authenticated token-generation or prompt-processing verdict was absent. At close-out, it stopped if a required ratio was missing, unauthenticated, or had a zero denominator. The applicable stop and its issued reason were [FILL:OR-01]. The stopped evidence supports neither a boundary-doubling result nor a below-two result, and it supports no model direction or scaling law. The retained short-input diagnostic separately found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The stopped result is confined to one Apple computer, one software and internal-counter configuration, and the tested workloads. Independently of the stopped outcome, the post-campaign inserted-gap check [FILL:TR-01].
+> JouleWise fixes how a false phase-energy difference would be measured before using that limit to judge a model comparison: it corrects clock placement inside each collection, measures allowed edge movement with deliberately started graphics-processor work, and combines the resulting boundary contribution with repeat-to-repeat variation for each usable configuration cell. The result stopped at one of two points. Before comparison, it stopped if a model-specific measurement window was excluded or if an authenticated token-generation or prompt-processing verdict was absent. At close-out, it stopped if a required ratio was missing, unauthenticated, or had a zero denominator. The applicable stop and its issued reason were [FILL:OR-01]. The stopped evidence supports neither a boundary-doubling result nor a below-two result, and it supports no model direction or scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with brief prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The stopped result is confined to one Apple computer, one software and internal-counter configuration, and the tested workloads. Independently of the stopped outcome, the post-campaign inserted-gap check [FILL:TR-01].
 <!-- OUTCOME-BRANCH:REFUSAL:END -->
 <!-- OUTCOME-BRANCHES:CONCLUSION:END -->
 
@@ -1732,17 +1734,16 @@ The reading order tested here is the selected draft's real order: title, the one
 | Term | First reader-facing home | Status | Definition or disposition |
 |---|---|---|---|
 | commanded graphics-processor pulses | 1. Introduction | glossed-at-first-use | Fixed-duration graphics-processor work with time-stamped start and stop commands inside one uninterrupted measurement session. |
-| pulse-derived limit | 1. Introduction | glossed-at-first-use | Largest displacement between the commanded times and every edge position allowed by the pulse records. |
+| pulse-derived limit | 1. Introduction | glossed-at-first-use | Largest displacement between the commanded times and every edge position allowed by the pulse records, plus the clock-anchor bound. |
 | component | 1. Introduction | glossed-at-first-use | One separate within-model repeat calculation or between-model four-run calculation. |
 | permitted edge movement | 1. Introduction | glossed-at-first-use | Every lower-or-upper edge position allowed by the pulse calibration and clock mapping. |
-| independent-edge ratio / four-run comparison / timing error common to a four-run comparison | 1. Introduction | glossed-at-first-use | Moved-edge limit divided by recorded-edge limit with separate movement per run; the shared version moves one timing error across four comparison runs. |
-| moved-edge limit / recorded-edge limit | 1. Introduction | glossed-at-first-use | The first uses every allowed edge movement; the second uses the stored edge times. |
+| independent-edge ratio / four-run comparison / timing error common to a four-run comparison | 1. Introduction | glossed-at-first-use | Moved-edge limit divided by the point-only value with separate movement per run; the shared version moves one timing error across four comparison runs. |
+| moved-edge limit / point-only value / recorded-edge limit | 1. Introduction | glossed-at-first-use | The first uses every allowed edge movement; the other two are explicit aliases for the value using the stored boundary times. |
 | decision rule | 1. Introduction | glossed-at-first-use | A direction prints only when the measured difference clears its cell floor and the lowest-to-highest range after known measurement errors stays on the direction fixed before collection. |
-| twofold boundary contribution | 1. Introduction | glossed-at-first-use | The moved-edge limit is at least twice the recorded-edge limit. |
+| twofold boundary contribution | 1. Introduction | glossed-at-first-use | The moved-edge limit is at least twice the point-only value. |
 | prompt processing / prefill | 1. Introduction | glossed-at-first-use | Prompt work through the first output token; the shorthand follows the physical phrase. |
 | token generation / decode | 1. Introduction | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
-| phase edge | 1. Introduction | glossed-at-first-use | Runtime-recorded time between prompt processing and token generation. |
-| phase boundary | 2. In-window calibration method | glossed-at-first-use | Runtime-recorded time separating prompt processing and token generation. |
+| phase boundary / phase edge | 1. Introduction | glossed-at-first-use | Explicit aliases for the runtime-recorded time between prompt processing and token generation; phase boundary is used thereafter. |
 | powermetrics | 1. Introduction | glossed-at-first-use | The macOS power sampler and its start-to-end interval-average record are stated at first use. |
 | Apple M3 Max / 128 GB unified memory | 1. Introduction | glossed-at-first-use | The single measured machine and its memory capacity. |
 | sampling record | 1. Introduction | glossed-at-first-use | One sampler output averaging processor power from its recorded start to its recorded end. |
@@ -1766,6 +1767,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | prompt pin | 1. Introduction | glossed-at-first-use | The record fixing the selected prompt and generation inputs. |
 | phase reduction | 1. Introduction | glossed-at-first-use | Computes separate phase energies from overlapping sampler records. |
 | measurement refusal | 1. Introduction | glossed-at-first-use | A no-result stop when the fixed support requirement fails. |
+| short-input diagnostic records | 10. Conclusion | glossed-at-first-use | Earlier measurements of requests with brief prompt processing. |
 | declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | Bracketed pulse-train algorithm | glossed-at-first-use | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
 | mint | Bracketed pulse-train algorithm | glossed-at-first-use | The analysis run that issues the paper's fixed results. |
 | frozen | Bracketed pulse-train algorithm | glossed-at-first-use | Fixed and fingerprinted before collection. |
@@ -1782,7 +1784,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | resting GPU power / pulse height / plateau / pulse plateau | Bracketed pulse-train algorithm | glossed-at-first-use | Resting level, pulse height, and the flat high-power portion are built in physical words. |
 | trace-coverage | Bracketed pulse-train algorithm | glossed-at-first-use | The captured trace extends through the fixed margin on both sides of every pulse. |
 | accepted capture bound / capture bound | Bracketed pulse-train algorithm | built-before | The pulse search, surviving rectangles, stamp widening, and refusal checks precede the largest-displacement label. |
-| clock-anchor bound | Bracketed pulse-train algorithm | glossed-at-first-use | The appositive gives the uncertainty in placing the trace on wall-clock time and points to the construction next. |
+| clock-anchor bound | 1. Introduction | glossed-at-first-use | The appositive gives the uncertainty in placing the power record on wall-clock time. |
 | complete / completeness | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English criteria words; the surrounding lists state what must be present. |
 | refused / refuses | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English rejection verbs used consistently for a calculation that cannot authorize evidence. |
 | monotonic clock | 1. Introduction | glossed-at-first-use | A counter that advances but is never corrected to civil time. |
@@ -1796,7 +1798,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | two-draw rule | Bracketed pulse-train algorithm | glossed-at-first-use | Two fresh bounds make the difference spread \(\sqrt{2}\) times one capture's spread. |
 | corpus range | Bracketed pulse-train algorithm | audience-vocabulary | Textbook largest-minus-smallest range of the retained corpus. |
 | ROUND_HALF_EVEN / nearest microsecond | Bracketed pulse-train algorithm | glossed-at-first-use | Nearest-microsecond rounding with an exact tie going to the even digit. |
-| minimum allowance / operative timing bound / \(B_{\mathrm{fiducial}}\) / \(b\) | Bracketed pulse-train algorithm | glossed-at-first-use | The corpus lower allowance, one-capture pulse-plus-anchor bound, and distinct window bound are separated and numerically worked. |
+| minimum allowance / operative timing bound / \(B_{\mathrm{fiducial}}\) / \(b\) | Bracketed pulse-train algorithm | glossed-at-first-use | The corpus lower allowance, one-capture pulse-derived limit, and distinct window bound are separated and numerically worked. |
 | stage / block member | Bracketed pulse-train algorithm | glossed-at-first-use | A back-to-back declared run group and one of its four individual A/B/B/A runs. |
 | members | Bracketed pulse-train algorithm | glossed-at-first-use | The four individual runs in an A/B/B/A science block. |
 | A/B/B/A order / block difference | Bracketed pulse-train algorithm | glossed-at-first-use | The four-member order and \((B_1+B_2-A_1-A_2)/2\) contrast are printed together. |
@@ -1832,35 +1834,33 @@ The reading order tested here is the selected draft's real order: title, the one
 | package power | 3. Instrument characterization | glossed-at-first-use | Summed CPU, GPU, and neural-engine power. |
 | reference roles | 3. Instrument characterization | glossed-at-first-use | Separate opening, midpoint, and closing allowance builders from held-out probes. |
 | passing cooldown exit | 3. Instrument characterization | glossed-at-first-use | First post-hold gate evaluation meeting the frozen rolling-power, coverage, and thermal checks. |
-| retired calculation | Pilot observations under the retired calculation | glossed-at-first-use | The former equal-rate anchor and yes/no rule that compared a corner maximum with a point value multiplied by a fixed limited-repetition factor, replaced by the current rate-aware anchor and corner-to-point ratio. |
-| point-only component bounds | Pilot observations under the retired calculation | glossed-at-first-use | Component false-difference limits with every phase edge left at its recorded time. |
-| independently moved-edge ratios | Pilot observations under the retired calculation | glossed-at-first-use | Worst-endpoint bound divided by its point-only bound while every member edge moves separately. |
+| retired calculation | Pilot observations under the retired calculation | glossed-at-first-use | The former equal-rate anchor and yes/no rule that compared a corner maximum with a point-only value multiplied by a fixed limited-repetition factor, replaced by the current rate-aware anchor and corner-to-point ratio. |
+| independently moved-edge ratios | Pilot observations under the retired calculation | glossed-at-first-use | Worst-endpoint bound divided by its point-only value while every member edge moves separately. |
 | bracket screen | Pilot observations under the retired calculation | glossed-at-first-use | Minimum pre/post allowance retained from the calibration corpus. |
-| absolute component / comparative component | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Same-model repeat spread versus A/B/B/A block-difference spread. |
-| point-only unguarded bound | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The complete component formula at recorded energies before the multiplier and allowance. |
-| admitted energy | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Energy from a run that passed Section 5 entry checks and may bear a claim. |
+| absolute component / comparative component | Comparing the boundary-moved and point-only values | glossed-at-first-use | Same-model repeat spread versus A/B/B/A block-difference spread. |
+| admitted energy | Comparing the boundary-moved and point-only values | glossed-at-first-use | Energy from a run that passed Section 5 entry checks and may bear a claim. |
 | independent units | 3. Instrument characterization | glossed-at-first-use | Singular first use defines one separately admitted bundle; later the component-specific units are stated. |
 | independent-edge corner bound / corner | 1. Introduction | glossed-at-first-use | The corner counterpart evaluates every allowed lower-or-upper edge choice jointly. |
-| independent-edge ratio \(R\) / dominates | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Complete corner bound divided by the matching point bound; dominates means \(R\ge2\). |
+| independent-edge ratio \(R\) / dominates | Comparing the boundary-moved and point-only values | glossed-at-first-use | Complete corner bound divided by the matching point-only value; dominates means \(R\ge2\). |
 | threshold / exact equality | 3. Instrument characterization | glossed-at-first-use | A threshold is the numerical cutoff that the positive slope must exceed. |
 | authentication / evaluation | 1. Introduction | glossed-at-first-use | Authentication matches inputs to named source-file contents; evaluation requires a nonzero second value. |
 | registered rounding / registered | 3. Instrument characterization | glossed-at-first-use | Registered means fixed before collection; the later rounding rule remains fixed in fingerprinted plan bytes. |
-| reintegrate | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
-| onset set / offset set / zero-shift value | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
-| shared lower and upper excursions | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
-| binary64 / member-envelope integral sum | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The usual 64-bit float format and a nonnegative four-member joule scale that covers the integrals before contrast. |
-| ulp | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The gap between 1 and the next larger representable number. |
+| reintegrate | Comparing the boundary-moved and point-only values | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
+| onset set / offset set / zero-shift value | Comparing the boundary-moved and point-only values | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
+| shared lower and upper excursions | Comparing the boundary-moved and point-only values | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
+| binary64 / member-envelope integral sum | Comparing the boundary-moved and point-only values | glossed-at-first-use | The usual 64-bit float format and a nonnegative four-member joule scale that covers the integrals before contrast. |
+| ulp | Comparing the boundary-moved and point-only values | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local sign | 1. Introduction | glossed-at-first-use | The comparative replay chooses one separately for each block. |
 | local half-width / shared sign | 1. Introduction | glossed-at-first-use | Shared sign is defined in Section 1; the later construction defines the local half-width. |
 | half-width | 3. Instrument characterization | glossed-at-first-use | A timing half-width is half an allowed timing range. |
-| \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Comparative edge-moved ratio with one shared timing-error sign across all blocks and one local sign per block. |
+| \(R_{cm}\) | Comparing the boundary-moved and point-only values | glossed-at-first-use | Comparative edge-moved ratio with one shared timing-error sign across all blocks and one local sign per block. |
 | shared-error ratio | 1. Introduction | glossed-at-first-use | The moved-edge to recorded-edge division when one timing error moves across the four-run comparison. |
-| not_applicable / absolute \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A uniform shared shift cancels when the absolute formula subtracts its cell mean. |
-| two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
+| not_applicable / absolute \(R_{cm}\) | Comparing the boundary-moved and point-only values | glossed-at-first-use | A uniform shared shift cancels when the absolute formula subtracts its cell mean. |
+| two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only values | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
 | resolution bound | 1. Introduction | glossed-at-first-use | Largest false phase-energy difference allowed by the fixed cell calculation. |
 | cell floor | 1. Introduction | glossed-at-first-use | Artifact name for the final resolution bound, bridged in Section 1 to the detection-floor name. |
 | same-cell floor | Adding publication safeguards after the ratio | glossed-at-first-use | That floor for exactly the phase, workload, model, hardware, software, and power-measurement boundary being tested. |
-| small-sample multiplier / \(g(n)\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A factor that widens a result to allow for limited repetition; its formula follows under publication safeguards. |
+| small-sample multiplier / \(g(n)\) | Comparing the boundary-moved and point-only values | glossed-at-first-use | A factor that widens a result to allow for limited repetition; its formula follows under publication safeguards. |
 | directional comparison / directional comparisons | Adding publication safeguards after the ratio | glossed-at-first-use | The expected direction is fixed before collection. |
 | Holm step-down correction / raw probability | Adding publication safeguards after the ratio | glossed-at-first-use | One two-comparison correction controls any false direction claim at 0.05; the later worked ordering supplies mechanics. |
 | repeat standard error | Adding publication safeguards after the ratio | glossed-at-first-use | Repeat-to-repeat scatter divided by \(\sqrt n\). |
@@ -1878,7 +1878,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | not resolvable | Adding publication safeguards after the ratio | glossed-at-first-use | The estimate does not clear the cell floor; it is not zero. |
 | measurement interval / decision interval / deterministic bound | Adding publication safeguards after the ratio | glossed-at-first-use | Total-standard-error interval; that interval extended by authenticated non-random maximum displacements. |
 | deterministic-bound kinds / interpolation edge | Adding publication safeguards after the ratio | glossed-at-first-use | A phase-window start or end between samples gets straight-line power, then both edges move through their neighboring-sample gaps; this joint movement is listed beside idle-power drift, clock-anchor movement, and the whole-window allowance. |
-| close-out artifact | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Post-campaign artifact that checks every required ratio. |
+| close-out artifact | Comparing the boundary-moved and point-only values | glossed-at-first-use | Post-campaign artifact that checks every required ratio. |
 | signed clearance or shortfall | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute point estimate minus cell floor, with positive clearance and nonpositive shortfall. |
 | A — every required ratio passes / B — an authenticated, evaluable ratio is below 2 / Refusal — stopped before comparison or at close-out / outcome A / outcome B / request total / issued reason | Abstract | glossed-at-first-use | The three control labels name the all-pass, below-two, and two-stage stopped outcomes and are removed by selection; the Refusal paragraph names the before-comparison and at-close-out stops and uses OR-01 for the applicable stop and reason issued by the evidence; the Abstract states physically that moving the dividing time leaves the request total unchanged. |
 | MLX | 1. Introduction | glossed-at-first-use | Apple's on-device inference framework. |
@@ -2003,4 +2003,4 @@ The reading order tested here is the selected draft's real order: title, the one
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 268; FAILS: 0.
+a failure. Terms inventoried: 266; FAILS: 0.
