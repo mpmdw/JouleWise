@@ -1,0 +1,37 @@
+# Execution-lens refuter on 2b4476cb (terra xhigh + wrapper adjudication), verbatim
+
+Both no-bite claims corroborate by my own execution (row 4 `TERM_LEAD_S=17*60` and row 9 rung `7199` each leave 27 tests OK). The pyc the seat flagged has mtime 2026-09-03 20:11:44 PDT, before the seat started (20:17:26 PDT) and before my first command; neither of us wrote it. I have everything needed to adjudicate.
+
+# Execution-lens refuter — watchdog build @ 2b4476cb — ADJUDICATED: NOT LANDABLE
+
+**Protocol.** Head verified 2b4476cb (start = end). Seat: gpt-5.6-terra xhigh, default tier, `codex-run-v3 --genre review --write-scope '[]'`, run key `20260904T031726Z-59254-out`, 814 s, `run_status=OK`, `scope_action=passed`, envelope valid (header 5,507 B), 0 changed paths. No install, launchctl, session, or checkout write by seat or lead. Seat's blocking hygiene flag resolved by me: `scripts/__pycache__/*.pyc` mtime 20:11:44 PDT predates seat start 20:17:26 PDT (pre-existing, not ours); `.codex-bridge/` is the wrapper's own ignored state. All lead replays ran in a `git archive` copy under `$TMPDIR/wd-refuter/replay`.
+
+Report: `<tmp>/wd-refuter/out.md` (brief, manifest, log alongside).
+
+## Findings (severity adjudicated by lead; every one executed)
+
+**B1 — blocker — real 429 text classifies `generic_error`** (`scripts/magistrate_watchdog.py:93-99`, `:689`). Found independently by lead before the seat returned, then by Terra (distinct lens, same mechanism). `classify_exit(1, "<the supplied 429 text>")` → `generic_error`; all five `USAGE_EXHAUSTED_PATTERNS` return False (`rate_limit` has an underscore, "hit your **monthly spend** limit" breaks `hit your (usage )?limit`, "limit resets 12:50am" lacks "at/in"). Consequence: ladder 120/300/900/1800/3600 instead of ruled 900/1800/3600/7200/7200+jitter; notice class `launch_failure` not `usage_backoff`; row 9 is unreachable by its real trigger (ruled-not-installed pattern). Committed test `:330` pins only synthetic strings. Physics-safe (backoff never applies in a span; `decide` never launches in a span), so the cold gate may choose should_fix-high; I concur with blocker because it defeats an adopted row. Cure is bench-sized: add `spend limit`, `rate_limit`, `limit resets` patterns; regression pins the verbatim string.
+
+**S1 — should_fix — forced stand-down false-holds on the zombie (lead-found; not in seat report)** (`:969-990 _forced_hold`, `:156-186 RealProcessTable`). Executed: SIGKILL a real `sleep` child, don't reap → `ps` row persists as `<defunct>` with the identical `lstart`; `owned_process` still returns it; `pgrep -f` still matches (rc 0). `_forced_hold` never calls `child.poll()` in its 10-s loop, so the launch-owning supervisor records `HOLD_CENSUS "owned process survived"`, leaves `magistrate.lock`, queues a `forced_standdown` notice claiming survival; the census check (`pgrep -lf "codex|claude|t3"`) false-holds on the same zombie. Not physics: supervisor exits → launchd reaps before t0; lock cleared next tick. `FakeProcessTable` drops rows on SIGKILL so no test can see it. Cure: `self.child.poll()` inside the loop and/or drop `<defunct>` rows; regression with a fake that keeps the defunct row until poll.
+
+**S2/S3 — should_fix — clause-map rows 4 and 9 do not bite** (Terra F3/F4; lead-corroborated). `TERM_LEAD_S=17*60` → 27 OK; `USAGE_BACKOFF_S[3]=7199` → 27 OK. Tests `:151-153` and `:361` derive expectations from the constants. Contract §1: rows lacking a biting counterfactual are findings. Cure: literal 1500/960/900 and the literal tuple.
+
+**S4 — should_fix-low (downgraded from Terra's should_fix)** — `_enforce_plan :1005-1031` signals `child.pid`'s tree without re-validating `owned_process` against the lock token. Production exposure ~nil: a `Popen` child's pid cannot be reused before the supervisor reaps it via `poll()` at the top of every `step`. Cheap defense-in-depth; not landing-relevant.
+
+**N1** (Terra, corroborated by my probe c): map row 1 claims two bites; dropping the request step fails only `test_cooperative_exit_after_request_never_signals` (`:278`); `:294` passes. **N2** (lead): stop glob catches suffix typos only — `ops/stop-magistrat` is a silent CLEAR (`fnmatch` False); faithful to row 6 as ruled, but row 6's "typo not silent" claim is over-broad; `refs/heads/ops/stop*` would close it. **N3** (lead): inside the belt/07:00 minute an owned live session with no resident supervisor returns `FENCED adopt=False`, deferring re-adoption ≤45 min; only matters if the supervisor died (flock inheritance across fork verified by execution, so ticks never fork a second supervisor onto a live session).
+
+## Charge results (lead replay; seat agrees on every row)
+
+1. 27 tests OK (copy + seat in checkout).
+2. Fences exact as ruled: t0−25m−1s → phase None/span False/`ACTIVE`|`LAUNCHING`; t0−25m → REQUEST; t0−16m → TERM; t0−15m → KILL; completion and dead-man+FRESH inclusive (`dm+1` → span False); `courier.sent` closes span at completion+1; open `chain.started` keeps span True a day later, `chain.exited` releases; 06:59:59 None / 07:00:00–07:00:59 fence / 07:01:00 None; 02:44:59 None / 02:45:00–03:29:59 belt / 03:30:00 None. In-span, owner present → `STANDDOWN_<phase>`; no owner + live census → `HOLD_CENSUS`.
+3. Tree P→C→G (pgid irrelevant, ppid walk): TERM/KILL signal `[G,C,P]`, unowned U and its child never signaled; post-KILL unowned hit → `HOLD_CENSUS`; a grandchild appearing between walks is captured (4 snapshots, converged).
+4. (stop,control): (0,0) STOPPED; (2,0) CLEAR; (2,2)/(128,*)/timeouts NETWORK_UNCERTAIN; control runs first and a failed control never reaches the stop query; `ops/stop-magistrat` → CLEAR silently; `ops/stop-magistrate-x` → STOPPED.
+5. Real 429 → generic (B1); unknown/empty nonzero → generic; rc0+429 → clean. Ladders usage 986/1886/3686/7286/7286 (jitter 86 for `act-1`, deterministic, ≤120), generic 120/300/900/1800/3600/3600; exactly one event + one notice per state transition; plan span preempts backoff → FENCED.
+6. Reused pid/different lstart → not owned, lock unlinked, `LAUNCHING`; same pid+lstart → `ACTIVE adopt`; pid absent → `LAUNCHING`. Installer token and watchdog token both whitespace-collapse `lstart` → `exact_equal=True` on a live pid.
+7. Render + `plutil -lint` OK; ProgramArguments = `/usr/bin/env python3 <script>`; the only `claude` substring is the `MAGISTRATE_SESSION_BIN` env value; no `codex`/`t3`; `StartInterval`/`RunAtLoad`, no `KeepAlive`.
+8. Mutations: (a) positive control ignored → killed by `:202`; (b) belt flipped → killed by `:186`, `:193` (+5 collateral); (c) request step dropped → killed by `:278`. Clause map: rows 1,2,3,5,6,7,8,10,11 bite; rows 4 and 9 do not (S2/S3).
+Real `--dry-run`: no plan → `LAUNCHING`, all writes as `WOULD_WRITE`, custody root absent; fake plan at t0+10 min → `HOLD_CENSUS`, `WOULD_SPAWN none`.
+
+## Landing verdict for the cold gate
+
+**NOT LANDABLE at 2b4476cb.** The physics fences, kill path, lock liveness, render, and dry-run all execute as ruled; what fails is B1 (the adopted usage policy is unreachable by its real trigger) plus two dead clause-map rows, with S1 as a records-quality defect. Every cure is below the bench-vs-session threshold (pattern additions + verbatim-string regression; literal assertions for rows 4/9; `poll()` in `_forced_hold` with a defunct-row fake). After those land, a delta re-audit of the touched rows is owed before the gate re-convenes.

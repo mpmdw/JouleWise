@@ -19,3 +19,7 @@ No blockers from either seat. Adopted rulings, with the seat that decided each p
 Hygiene defects recorded (file 14 Q8, file 12 Q8): Q3's authority mislabel (R-3 binds the driver); the `--bg` premise carried as fact; the audit file the brief cited was absent from the manifest; the packet's `claude --bg --help` instruction would have breached §5 (it starts a session — Opus executed it and left two spare processes); the two seats shared a scratch directory in the FIRST convening (cured on the relaunch: the cold seat got its own). Claude binary is now 2.1.260 (auto-updated during the gate).
 
 Interlock with `run_night.py` (Sol design): deferred to the plan-pin lane, which already edits the driver.
+
+## Dated amendments (magistrate, 2026-09-04 02:20 PDT; the built object implements these)
+- Row 4 (timings): the resident supervisor's enforcement loop performs no network I/O; remote-stop probing lives in the launchd tick (300 s), so a stop set on GitHub is recognized within one tick. Rationale: D-161 (the kill switch is Ed's remote lever, not a physics fence; enforcement resolution must stay ≤10 s even with GitHub unreachable).
+- Row 6 (kill switch): the ref glob is `refs/heads/ops/stop*` (widened from `ops/stop-magistrate*` on the execution refuter's finding that a prefix typo would be a silent CLEAR); the positive-control probe of `refs/heads/main` and the local STOP file are unchanged.
