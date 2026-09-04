@@ -680,6 +680,27 @@ def make_t0_fixture(
     }
     for name, value in captures.items():
         _write_json(input_root / name, value)
+
+    if portable_launch_program:
+        # The portable mode is consumed by the launch-window integration test,
+        # which composes this T-0 stage fragment with make_author_fixture's
+        # independently complete verdict/backup graph before re-authoring all
+        # freeze evidence.  Keep the R1-complete closeout graph for ordinary
+        # T-0 callers, but do not contribute a second pair of backups to that
+        # composition: DOCTRINE_PIN requires exactly two in the final pack.
+        composable_tree = json.loads(tree_path.read_text())
+        composable_tree["stage_graph"] = [
+            stage
+            for stage in composable_tree["stage_graph"]
+            if stage.get("stage_id") not in {"fixture-verdict", "fixture-backup"}
+        ]
+        composable_raw = readiness.render_json(composable_tree)
+        tree_path.write_bytes(composable_raw)
+        (pack / "plan_tree.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                hashlib.sha256(composable_raw).hexdigest(), "plan_tree.json"
+            )
+        )
     return temporary, repository, pack, custody, context, input_root
 
 
@@ -867,6 +888,37 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             ),
         ):
             return author_arm_readiness_evidence_t0(pack, custody)
+
+    def test_portable_launch_stage_fragment_composes_to_exactly_two_backups(
+        self,
+    ) -> None:
+        """The launch integration must not compose two complete closeouts."""
+
+        from tests.test_arm_readiness_evidence_author import make_author_fixture
+
+        temporary, _repository, pack, _custody, _context, _inputs = (
+            make_t0_fixture(portable_launch_program=True)
+        )
+        author_temporary, _author_repository, author_pack, _unused, _arm = (
+            make_author_fixture(pack.name)
+        )
+        self.addCleanup(author_temporary.cleanup)
+        self.addCleanup(temporary.cleanup)
+
+        t0_tree = json.loads((pack / "plan_tree.json").read_text())
+        author_tree = json.loads((author_pack / "plan_tree.json").read_text())
+        composed_stages = [*t0_tree["stage_graph"], *author_tree["stage_graph"]]
+        backup_commands = [
+            command
+            for stage in composed_stages
+            for command in stage.get("launch", {}).get("commands", [])
+            if command.get("command_kind") == "backup"
+        ]
+        self.assertEqual(len(backup_commands), 2)
+        self.assertEqual(
+            sum(stage.get("kind") == "whole_window_verdict" for stage in composed_stages),
+            1,
+        )
 
     def test_issuance_refuses_t0_when_r1_batch_is_stale_by_600s_plus_1ns(
         self,
