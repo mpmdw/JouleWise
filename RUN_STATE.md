@@ -5113,7 +5113,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-04). Latest report: [Fan-out magistrate rulings installed in the state kernel](docs/process_traces/2026-09-03-kernel-batch/06-fanout-rulings-batch.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-04). Latest report: [2026-09-04 live kernel-row reconciliation](docs/process_traces/2026-09-04-kernel-rows/01-sol-report.md).
 
 ### [ED-EXTERNAL]
 
@@ -5125,7 +5125,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- CONTINUE — A88 `NIGHT-REHEARSAL-01`: Prove the stage-1 machinery end to end before the first live night: bench cold-start measurement sets COURIER_DEADLINE_S; at least one REHEARSAL_STUB night fires FROM the installed LaunchAgent, pushes its results branch, and delivers the courier email; the stage-1 plan email naming the first armed date is SENT to Ed before arming.
+- CONTINUE — A139 `PAPER-CUSTODY-SEAM-01`: Finish the shared paper-custody read seam that wraps the existing authentication session, derives all bindings from a clean-Git supply map, replays validators, and returns only family-specific frozen verified objects.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
