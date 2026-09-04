@@ -1,0 +1,36 @@
+{
+  "checks": [
+    {
+      "id": "POST-W1-BYTE-PIN-SYMBOL",
+      "kind": "symbol_existence",
+      "reference": "test_pinset_is_byte_pinned_and_has_no_update_lane",
+      "reference_occurrences": 5,
+      "source_path": "tests/test_receipt_histsem.py",
+      "symbol": "ReceiptHistoricalSemanticsTests.test_pinset_is_byte_pinned_and_has_no_update_lane"
+    },
+    {
+      "block_anchor": "capture 101-ordinary",
+      "command": "generate_arm_readiness.py\" freeze",
+      "id": "POST-MINT-CONFIRMATION-PAIR",
+      "kind": "contract_required_cli_inputs",
+      "required_flags": [
+        "--step6-confirmation-table",
+        "--expected-confirmation-digest"
+      ]
+    },
+    {
+      "cited_end": 192,
+      "cited_start": 28,
+      "end_symbol": "main",
+      "id": "GENERATE-ARM-READINESS-WHOLE-CLI",
+      "kind": "file_line_coordinates",
+      "reference": "scripts/generate_arm_readiness.py 28,192p",
+      "source_path": "scripts/generate_arm_readiness.py",
+      "start_symbol": "_parser"
+    }
+  ],
+  "executing_head": "43525fb9b45638e25798f486af1351c4cec252bf",
+  "runsheet": "docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md",
+  "runsheet_revision": "9fd5baceba0ce78a94e4d8c35d74e79daf36a2d4",
+  "schema": "joulewise.runsheet_epoch_lint"
+}

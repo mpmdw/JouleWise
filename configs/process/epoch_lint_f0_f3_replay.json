@@ -1,0 +1,36 @@
+{
+  "checks": [
+    {
+      "id": "F1-NONEXISTENT-TEST-METHOD",
+      "kind": "symbol_existence",
+      "reference": "test_successor_pinset_is_byte_pinned_at_fixation",
+      "source_path": "tests/test_receipt_histsem.py",
+      "symbol": "test_successor_pinset_is_byte_pinned_at_fixation"
+    },
+    {
+      "block_anchor": "capture 101-ordinary",
+      "command": "generate_arm_readiness.py\" freeze",
+      "id": "F3-POST-MINT-CONFIRMATION-PAIR",
+      "kind": "contract_required_cli_inputs",
+      "required_flags": [
+        "--step6-confirmation-table",
+        "--expected-confirmation-digest"
+      ]
+    },
+    {
+      "cited_end": 165,
+      "cited_start": 146,
+      "end_symbol": "ReceiptHistoricalSemanticsTests.test_verifier_cli_refusal_is_canonical_and_exit_two",
+      "id": "F13-TEST-COORDINATES",
+      "kind": "file_line_coordinates",
+      "reference": "tests/test_receipt_histsem.py:146-165",
+      "reference_occurrences": 3,
+      "source_path": "tests/test_receipt_histsem.py",
+      "start_symbol": "ReceiptHistoricalSemanticsTests.test_verifier_cli_refusal_is_canonical_and_exit_two"
+    }
+  ],
+  "executing_head": "7d586a691f3c97054b474ee0223558438f24d67e",
+  "runsheet": "docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md",
+  "runsheet_revision": "7d586a691f3c97054b474ee0223558438f24d67e",
+  "schema": "joulewise.runsheet_epoch_lint"
+}

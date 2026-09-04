@@ -1,0 +1,18 @@
+{
+  "checks": [
+    {
+      "cited_end": 186,
+      "cited_start": 28,
+      "end_symbol": "main",
+      "id": "B1-GENERATE-ARM-READINESS-WHOLE-CLI",
+      "kind": "file_line_coordinates",
+      "reference": "scripts/generate_arm_readiness.py 28,186p",
+      "source_path": "scripts/generate_arm_readiness.py",
+      "start_symbol": "_parser"
+    }
+  ],
+  "executing_head": "558007f0a123641c3419152b3e3888e8cc6f2549",
+  "runsheet": "docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md",
+  "runsheet_revision": "7c068e606fae450316996b52aba33c35a681a5cd",
+  "schema": "joulewise.runsheet_epoch_lint"
+}
