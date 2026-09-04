@@ -1,0 +1,24 @@
+"""Q4: the bundle-loading seam. Does _read_bundle refuse (raise) before any BundleEvidence row for a
+lineage-required bundle whose lineage is gone, and what does the missing-directory branch do?"""
+import json, pathlib, sys, tempfile
+sys.path.insert(0, "/Users/edr/code/JouleWise-wt-decode-id")
+from joulewise.analysis_engine import inputs as inp
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="coldgate45-bundle-"))
+runs = tmp / "runs"; b = runs / "bundle-1"; b.mkdir(parents=True)
+(b / "config.json").write_text(json.dumps({"run_metadata": {"tags": ["launch_lineage_required"]}}))
+(b / "metadata.json").write_text(json.dumps({"extra": {}}))
+(b / "summary_metrics.json").write_text(json.dumps({"status": "succeeded"}))
+def go(name, path):
+    try:
+        row = inp._read_bundle({}, path, runs, {}, lambda p, s: [])
+        print(f"{name}: RETURNED BundleEvidence inclusion={row.inclusion_status!r} base_reason_codes={row.base_reason_codes!r} launch_lineage={row.launch_lineage!r}")
+    except inp.AnalysisInputError as e:
+        print(f"{name}: RAISED AnalysisInputError: {str(e)[:120]}")
+    except Exception as e:
+        print(f"{name}: {type(e).__name__}: {str(e)[:120]}")
+go("B1 lineage-required bundle, stamp absent      ", b)
+(b / "metadata.json").write_text(json.dumps({"extra": {"launch_lineage": {"schema_version": "x"}, "launch_lineage_locator_sha256": "0"*64}}))
+go("B2 stamp present, root locator file absent    ", b)
+go("B3 bundle directory itself missing            ", runs / "bundle-missing")
+(b / "config.json").write_text(json.dumps({"run_metadata": {"tags": []}}))
+go("B4 NOT lineage-required, no stamp             ", b)

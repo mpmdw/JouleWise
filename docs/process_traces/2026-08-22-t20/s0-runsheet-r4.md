@@ -1069,11 +1069,23 @@ chmod 0555 "$CUSTODY/tools/s0_anchor_map.py"
 ```
 
 **Immutable line audit.** Run next, in its own shell. The ranges are the §0.3
-map; each is a whole symbol, so a rename shows up as a shifted or empty extract
-rather than as silently wrong bytes.
+map; each is intended to select a whole symbol. The anchor map above detects
+movement of its named anchors. This audit independently checks that every
+source file contributes selected lines and that the number of lines selected
+equals the total demanded by that file's ranges. It also authenticates each
+exact source/ranges string together with the selected source bytes, so a
+same-length shifted range or content movement fails closed. A shortened range
+or a range past the end of a file therefore stops the run instead of hiding
+inside a non-empty combined transcript.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+audit_output="$TRANS/006-pinned-line-audit.txt"
+audit_part=$(mktemp "$PROOF/line-audit-part.XXXXXX") \
+  || die 'cannot create the line-audit temporary file'
+trap 'rm -f "$audit_part"' EXIT
+: > "$audit_output" || die 'cannot create the line-audit transcript'
 
 for spec in \
   'joulewise/arm_readiness.py 1050,1076p;1999,2120p;3168,3228p;3605,3636p;3639,3707p;4115,4163p;4166,4253p;4256,4399p;5214,5263p;5266,5485p;5488,5743p;6098,6224p;6227,6262p;6265,6475p;6531,6807p;7307,7553p;10160,10261p;10370,10514p' \
@@ -1088,10 +1100,67 @@ for spec in \
   'pyproject.toml 1,16p'
 do
   source_file=${spec%% *}; line_ranges=${spec#* }
-  git -C "$CLONE" show "${BASE}:${source_file}" | nl -ba | sed -n "$line_ranges" \
-    || die "line audit failed for $source_file"
-done > "$TRANS/006-pinned-line-audit.txt"
-test -s "$TRANS/006-pinned-line-audit.txt" || die 'line audit is empty'
+  expected_line_count=$(printf '%s\n' "$line_ranges" | tr ';' '\n' | awk '
+    BEGIN { total = 0; valid = 1 }
+    $0 !~ /^[1-9][0-9]*,[1-9][0-9]*p$/ { valid = 0; exit }
+    {
+      range = substr($0, 1, length($0) - 1)
+      split(range, bounds, ",")
+      if (bounds[2] < bounds[1]) { valid = 0; exit }
+      total += bounds[2] - bounds[1] + 1
+    }
+    END {
+      if (!valid || NR == 0) exit 2
+      print total
+    }
+  ') || die "invalid line-audit ranges for $source_file: $line_ranges"
+
+  if ! git -C "$CLONE" show "${BASE}:${source_file}" \
+      | nl -ba | sed -n "$line_ranges" > "$audit_part"; then
+    die "line audit failed for $source_file"
+  fi
+  actual_line_count=$(wc -l < "$audit_part" | tr -d '[:space:]')
+  test "$actual_line_count" -gt 0 \
+    || die "line audit extract is empty for $source_file"
+  test "$actual_line_count" -eq "$expected_line_count" \
+    || die "line audit count mismatch for $source_file: expected $expected_line_count lines, emitted $actual_line_count"
+
+  case "$source_file" in
+    'joulewise/arm_readiness.py')
+      expected_extract_sha256='b9f916a9c818ac3fe15152d4e4cc3cb9791de62b4aeac36dc338e003b3a5b37c' ;;
+    'joulewise/identity_pins.py')
+      expected_extract_sha256='22faeb35572dbca4c020f056fda3c908dbcf2d492e86b1cac0b25faf49763bba' ;;
+    'joulewise/arm_readiness_evidence.py')
+      expected_extract_sha256='4313862b3ebd9c843fffb1bb521c11bab0f0501b6e260b9cad15d113ff824280' ;;
+    'scripts/generate_arm_readiness.py')
+      expected_extract_sha256='c27f8fb6d96508d93f2bed76bb7365f93a63f066db344ffc5cc21a4347295adc' ;;
+    'scripts/project_identity_pins.py')
+      expected_extract_sha256='4caf28484875d01b12cae20570a3e9770b0c1215e0bf2c31e38803f2f07002be' ;;
+    'scripts/verify_receipt_histsem.py')
+      expected_extract_sha256='754b41012b89461f35fd4ff024b4f34e04145083ed0b44652fd0bb3462621551' ;;
+    'scripts/author_arm_readiness_evidence.py')
+      expected_extract_sha256='00bb6b8aee5fc18569ead635c266527335c6ce60f880de498433cc93f61b9753' ;;
+    'tests/test_receipt_histsem.py')
+      expected_extract_sha256='81c05a63db62709af256e9ca8d46977fcb7121866daa21d44057fe335a9cc77e' ;;
+    'configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py')
+      expected_extract_sha256='681f854fc2bdcb6a1399e7c8784432942861ea2701756b48de1cf776612ae2ae' ;;
+    'pyproject.toml')
+      expected_extract_sha256='a32caf323ff5df82273b58fe8971ff3dbe4e7335683a5e8b48848791c577a303' ;;
+    *) die "line audit has no authenticated extract for $source_file" ;;
+  esac
+  actual_extract_sha256=$(
+    git -C "$CLONE" show "${BASE}:${source_file}" \
+      | sed -n "$line_ranges" \
+      | "$PY" -c 'import hashlib, sys; h = hashlib.sha256(); h.update(sys.argv[1].encode("utf-8")); h.update(b"\0"); h.update(sys.stdin.buffer.read()); print(h.hexdigest())' "$spec"
+  ) || die "line audit authentication failed for $source_file"
+  test "$actual_extract_sha256" = "$expected_extract_sha256" \
+    || die "line audit coordinate/content mismatch for $source_file"
+  cat "$audit_part" >> "$audit_output" \
+    || die "cannot append the line-audit extract for $source_file"
+done
+rm -f "$audit_part"
+trap - EXIT
+test -s "$audit_output" || die 'line audit is empty'
 ```
 
 Authority: R4 r4-2, r4-3, r4-7 and the task's immutable-HEAD verification

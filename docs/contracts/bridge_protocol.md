@@ -891,6 +891,8 @@ Tracked implementation:
 
 - `scripts/bridge`: session wrappers, leases, baseline manifests, scope checks,
   and thread registry
+- `node scripts/check-bridge-docs.mjs`: standalone drift gate for the canonical
+  enforcement snippets and their consumer pointers
 - `.codex-bridge/receipts/`: immutable local session-open receipts
 - `scripts/codex-bridge` + `scripts/codex-app-bridge.mjs`: audited
   Claude-to-Sol script route and optional desktop-owned turn transport; the

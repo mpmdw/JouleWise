@@ -9,7 +9,7 @@ import json
 import math
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
@@ -23,6 +23,13 @@ CURRENT_FAMILY_SUFFIX = "_v5"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.campaign_generator_core import (  # noqa: E402
+    actual_pack_paths,
+    make_render_json,
+    sha256_bytes,
+    sidecar_bytes,
+    validate_generation_write_boundary,
+)
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
@@ -173,6 +180,7 @@ N_BLOCKS = 10
 MEMBERS_PER_BLOCK = 4
 MEMBERS_PER_ARM = N_BLOCKS * MEMBERS_PER_BLOCK
 TOTAL_SCIENCE_MEMBERS = MEMBERS_PER_ARM * 2
+ABBA_POSITIONS = (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2"))
 
 
 def freeze_aware_status(freeze_reference: object) -> str:
@@ -361,6 +369,9 @@ def thread_generation_identity(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(thread_generation_identity(item) for item in value)
     return value
+
+
+render_json = make_render_json(thread_generation_identity)
 
 
 def embedded_generator_bytes() -> bytes:
@@ -1107,15 +1118,11 @@ END_REF_MANIFEST_PATH = Path(
 )
 
 
-def render_json(value: Any) -> bytes:
-    return (
-        json.dumps(thread_generation_identity(value), indent=2, ensure_ascii=False)
-        + "\n"
-    ).encode("utf-8")
+def render_suite_manifest_bytes(value: dict[str, Any]) -> bytes:
+    """Render exactly the effective bytes named by suite_manifest_sha256."""
 
-
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+    effective = SuiteManifest.from_mapping(value).to_dict()
+    return (json.dumps(effective, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
 def file_sha256(path: Path) -> str:
@@ -1153,71 +1160,6 @@ def write_bytes(path: Path, data: bytes) -> None:
         raise ValueError(f"output path is outside the closed inventory: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
-
-
-def validate_generation_write_boundary(
-    output_root: Path, outputs: Iterable[Path]
-) -> None:
-    """Refuse link traversal or anomalous existing nodes before any write."""
-
-    # Registered residual (lead disposition; registration lives in
-    # docs/risk_register.md -- this comment is not the registration). This
-    # boundary is check-then-write: a concurrent process could substitute a
-    # validated ancestor or write target with a symlink after this function
-    # returns and before the bytes land.
-    #
-    # The disposition rests on DESK-TIME SINGLE-OPERATOR GENERATION, not on the
-    # measurement threat model. Pack generation is hand-run by one operator at
-    # the desk, outside any measurement window, against a repository checkout
-    # the operator controls; nothing else is scheduled to write into the pack
-    # path while it runs. The non-adversarial concurrency that genuinely occurs
-    # here -- editors, backup and sync daemons, the parallel worktree fleet --
-    # clobbers or duplicates files; none of it substitutes an ancestor
-    # directory with a symlink in the microseconds after validation. Winning
-    # this race requires a local program acting adversarially and with
-    # knowledge of the boundary, which single-operator desk discipline
-    # excludes. D-139 A1 ("no adversarial programs affecting the measurement
-    # can be assumed") is cited BY ANALOGY only: its own scope is the
-    # measurement environment, not this generator's desk-time write boundary.
-    #
-    # The accidental class IS closed: pre-existing links anywhere in the pack
-    # path, spec, sidecar, or ancestors refuse before any write. The residual
-    # reopens if the threat model is revised to admit concurrent adversarial
-    # local processes, or if generation moves to multi-operator/shared-machine
-    # use (cold-gate conditions C-B1a and C-B1b, 2026-08-18; C-B1b formally
-    # supersedes delta-4's F2 dirfd remedy demand). No dirfd/O_NOFOLLOW
-    # hardening is attempted here; the residual is registered, not closed.
-
-    root = output_root.absolute()
-
-    def refuse(path: Path, reason: str) -> None:
-        destination = path.resolve(strict=False)
-        raise ValueError(
-            f"refusing generation: {reason}: {path} -> {destination}"
-        )
-
-    if root.is_symlink():
-        refuse(root, "output root is a symlink")
-    if root.exists() and not root.is_dir():
-        refuse(root, "output root is not a real directory")
-
-    for relative in sorted(outputs, key=lambda path: path.as_posix()):
-        current = root
-        for component in relative.parts[:-1]:
-            current = current / component
-            if current.is_symlink():
-                refuse(current, "write ancestor is a symlink")
-            if current.exists() and not current.is_dir():
-                refuse(current, "write ancestor is not a real directory")
-        target = current / relative.name
-        if target.is_symlink():
-            refuse(target, "write target is a symlink")
-        if target.exists() and not target.is_file():
-            refuse(target, "existing write target is not a regular file")
-
-
-def sidecar_bytes(digest: str, filename: str) -> bytes:
-    return f"{digest}  {filename}\n".encode("utf-8")
 
 
 def repo_sha(path: Path) -> str:
@@ -1310,7 +1252,6 @@ def workload_for(
             "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
             "repetitions": 1,
             "warmup_runs": 1,
-            "prompt_tokens": DECODE_PROMPT_TOKENS["A"],
             "output_tokens": 512,
         }
     if arm not in {"A", "B"}:
@@ -1466,6 +1407,53 @@ def decode_suite_manifest(arm: str, prompt_index: int) -> dict[str, Any]:
     }
     SuiteManifest.from_mapping(manifest)
     return manifest
+
+
+def decode_declared_suite_manifest_set(arm: str) -> list[dict[str, Any]]:
+    """Declare the closed manifest census from the registered block rotation."""
+
+    counts = [0] * len(DECODE_PROFILE["prompts"])
+    members_per_block = sum(label == arm for label, _position in ABBA_POSITIONS)
+    for stage in STAGE_SPECS:
+        if stage["measurement_arm"] != "decode":
+            continue
+        for block in range(stage["first_block"], stage["last_block"] + 1):
+            counts[decode_prompt_index(block)] += members_per_block
+    return [
+        {
+            "suite_manifest_ref": (
+                active_generation().pack_rel / decode_suite_relpath(arm, prompt_index)
+            ).as_posix(),
+            "suite_manifest_sha256": suite_manifest_sha256(
+                decode_suite_manifest(arm, prompt_index)
+            ),
+            "declared_member_count": counts[prompt_index],
+        }
+        for prompt_index in range(len(DECODE_PROFILE["prompts"]))
+    ]
+
+
+def declared_identity_workload_profile(
+    measurement_arm: str, arm: str
+) -> dict[str, Any]:
+    if measurement_arm == "decode":
+        return {
+            "name": f"{DECODE_PROFILE['profile_id']}_chat_rendered",
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "prompt_tokens": None,
+            "output_tokens": 512,
+            "prompt_text": None,
+            "dataset_ref": None,
+            "suite_manifest_set": decode_declared_suite_manifest_set(arm),
+        }
+    workload = workload_for(measurement_arm, arm)
+    return {
+        **workload,
+        "prompt_tokens": workload.get("prompt_tokens"),
+        "prompt_text": workload.get("prompt_text"),
+        "dataset_ref": None,
+    }
 
 
 def decode_workload_candidate() -> dict[str, Any]:
@@ -1632,13 +1620,12 @@ def arm_plan(
 def build_runs() -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
     all_runs: list[dict[str, Any]] = []
     by_stage: dict[str, list[dict[str, Any]]] = {}
-    positions = (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2"))
     for stage in STAGE_SPECS:
         stage_runs: list[dict[str, Any]] = []
         measurement_arm = stage["measurement_arm"]
         for block in range(stage["first_block"], stage["last_block"] + 1):
             prompt_index = decode_prompt_index(block) if measurement_arm == "decode" else None
-            for sequence_index, (arm, position) in enumerate(positions, start=1):
+            for sequence_index, (arm, position) in enumerate(ABBA_POSITIONS, start=1):
                 member_id = run_id(measurement_arm, block, position.lower())
                 row = {
                     "run_id": member_id,
@@ -2577,16 +2564,9 @@ def build_tree(
                     "model_source": MODELS[arm]["source"],
                     "model_revision": MODELS[arm]["revision"],
                     "quantization": dict(QUANTIZATION),
-                    "workload_profile": {
-                        **workload_for(measurement_arm, arm),
-                        "prompt_tokens": (
-                            workload_for(measurement_arm, arm).get("prompt_tokens")
-                        ),
-                        "prompt_text": (
-                            workload_for(measurement_arm, arm).get("prompt_text")
-                        ),
-                        "dataset_ref": None,
-                    },
+                    "workload_profile": declared_identity_workload_profile(
+                        measurement_arm, arm
+                    ),
                 },
                 "config_inventory": [
                     {
@@ -2774,6 +2754,43 @@ def build_tree(
             "member_replacement_authority": False,
         },
     }
+
+
+def validate_gamma_identity_unit_roster(tree: Mapping[str, Any]) -> None:
+    """Enforce R-7's exact ordered GAMMA roster and producer-plan mapping."""
+
+    expected = [
+        (
+            f"{arm}/{measurement_arm}",
+            {
+                "plan_id": (
+                    f"plan-d117-floor-{MODEL_ID_TOKENS[arm]}-"
+                    f"decode-prefill-p{PREFILL_LENGTH}-v5"
+                ),
+                "path": f"../{FLOOR_PACKS[arm].name}/calibration_plan.json",
+            },
+        )
+        for arm, measurement_arm in (
+            ("A", "decode"),
+            ("A", PREFILL_ARM),
+            ("B", "decode"),
+            ("B", PREFILL_ARM),
+        )
+    ]
+    try:
+        units = tree["arm_attachments"]["identity_pin_projection"]["identity_units"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("gamma_identity_unit_roster_invalid: roster is absent") from exc
+    observed = [
+        (unit.get("identity_unit_id"), unit.get("producer_plan_reference"))
+        for unit in units
+        if isinstance(unit, Mapping)
+    ]
+    if observed != expected:
+        raise ValueError(
+            "gamma_identity_unit_roster_invalid: expected ordered "
+            + ", ".join(unit_id for unit_id, _producer in expected)
+        )
 
 
 def readme_bytes() -> bytes:
@@ -2978,7 +2995,9 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     write_bytes(out / "decode_workload_candidate.json", decode_workload_bytes)
     for arm in ("A", "B"):
         for prompt_index in range(len(DECODE_PROFILE["prompts"])):
-            suite_bytes = render_json(decode_suite_manifest(arm, prompt_index))
+            suite_bytes = render_suite_manifest_bytes(
+                decode_suite_manifest(arm, prompt_index)
+            )
             write_bytes(out / decode_suite_relpath(arm, prompt_index), suite_bytes)
 
     declaration_bytes = render_json(consumer_declaration())
@@ -3144,6 +3163,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
         declaration_sha,
         decode_workload_sha,
     )
+    validate_gamma_identity_unit_roster(tree)
     tree_bytes = (
         (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
         if active_generation().preserve_current_frozen_bytes
@@ -3349,14 +3369,6 @@ def validate_prompt_realization_registration(pack_root: Path) -> None:
                 "prompt_realization_registration_inconsistent",
                 f"{config_path.relative_to(pack_root)}: config/candidate/family disagree",
             )
-
-
-def actual_pack_paths(pack_root: Path) -> set[Path]:
-    return {
-        path.relative_to(pack_root)
-        for path in pack_root.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
-    }
 
 
 def check(

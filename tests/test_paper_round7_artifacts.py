@@ -38,6 +38,7 @@ REGISTRY_PATH = Path(
     os.environ.get("R7F_REGISTRY", ROOT / "docs" / "paper" / "results-fill-registry.md")
 )
 SKELETON_PATH = ROOT / "docs" / "paper" / "draft-v2-skeleton.md"
+CHECKLIST_PATH = ROOT / "docs" / "paper" / "round7" / "fill-checklist.md"
 CORPUS_ROOT = Path(
     os.environ.get("R7F_CORPUS_ROOT", "/Users/edr/code/JouleWise")
 )
@@ -799,6 +800,121 @@ class TypedArtifactCliTests(unittest.TestCase):
         self.assertIn("MISMATCH placement standing sentence", output)
         self.assertIn("observed '1 [FILL:DX- markers'", output)
 
+    def _checklist_standing_sentence(self) -> str:
+        checklist = CHECKLIST_PATH.read_text(encoding="utf-8")
+        marker = "  The mandatory standing sentence is:\n\n"
+        quoted = checklist.split(marker, 1)[1].split("\n\n", 1)[0]
+        sentence = " ".join(
+            line.removeprefix("  > ").strip() for line in quoted.splitlines()
+        )
+        self.assertTrue(sentence.startswith(FENCE.DX_STANDING_SENTENCE_HEAD))
+        return sentence
+
+    def _real_shaped_dx_region(self, *extra_lines: str) -> str:
+        skeleton = SKELETON_PATH.read_text(encoding="utf-8")
+        reconstruction = skeleton.split("### One diagnostic reconstruction", 1)[1]
+        opening = reconstruction.split("\n\n", 2)[1]
+        marker = {
+            row_id: f"[FILL:{row_id}] {self.spec.rows[row_id].marker}"
+            for row_id in FENCE._placement_row_ids(self.spec)
+        }
+        paragraphs = [
+            self._checklist_standing_sentence(),
+            opening,
+            (
+                f"Across the retained excursion reconstruction, the onset and "
+                f"offset medians were {marker['DX-010']} and {marker['DX-011']}; "
+                f"the signed directions held for {marker['DX-012']} onsets and "
+                f"{marker['DX-013']} offsets. Their median absolute deviations "
+                f"were {marker['DX-014']} and {marker['DX-015']}; these are "
+                f"sample summaries, not claim evidence."
+            ),
+            (
+                f"The ramp explained {marker['DX-016']} of the apparent shift, "
+                f"while the worst onset exceeded the center by {marker['DX-017']}; "
+                f"both remain diagnostic."
+            ),
+            (
+                f"The anchor comparison covered {marker['DX-020']} captures: "
+                f"{marker['DX-021']}, with {marker['DX-022']} admissibility "
+                f"flips and a v2 control of {marker['DX-023']}; the control "
+                f"failure stays named."
+            ),
+            (
+                f"The bound changes had median {marker['DX-024']}, maximum "
+                f"{marker['DX-025']}, maximum relative change {marker['DX-026']}, "
+                f"and median relative change {marker['DX-027']}; none supplies "
+                f"a claim."
+            ),
+            *extra_lines,
+        ]
+        return "\n\n".join(paragraphs) + "\n"
+
+    def test_prose_fixture_uses_checklist_sentence_and_real_skeleton_prose(self) -> None:
+        region = self._real_shaped_dx_region()
+        self.assertTrue(region.startswith(self._checklist_standing_sentence()))
+        self.assertIn(
+            "The following table and arithmetic reconstruct one retained "
+            "diagnostic capture",
+            region,
+        )
+        self.assertEqual(region.count("[FILL:DX-"), 16)
+
+    def test_unmarked_rendered_literal_inside_dx_prose_region_is_refused(self) -> None:
+        skeleton = self._real_shaped_dx_region(
+            "The retained calibration refused 49 of 59 pulses."
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-prose-unmarked-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                skeleton, encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 2, output)
+        self.assertIn("MISMATCH prose DX-013", output)
+
+    def test_unmarked_rendered_literal_outside_dx_prose_region_passes(self) -> None:
+        skeleton = self._real_shaped_dx_region(
+            "# Next section",
+            "The retained calibration refused 49 of 59 pulses.",
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-prose-outside-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                skeleton, encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertNotIn("MISMATCH prose DX-013", output)
+
+    def test_rendered_literal_with_own_marker_inside_dx_prose_region_passes(self) -> None:
+        skeleton = self._real_shaped_dx_region(
+            "The retained calibration refused [FILL:DX-013] 49 of 59 pulses."
+        )
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-prose-marked-", dir=SCRATCH_PARENT
+        ) as directory:
+            root = Path(directory)
+            _copy_checker_inputs(root)
+            (root / FENCE.SKELETON_RELATIVE_PATH).write_text(
+                skeleton, encoding="utf-8"
+            )
+            completed = _run_scratch_checker(root)
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertNotIn("MISMATCH prose DX-013", output)
+
 
 class InvocationTests(unittest.TestCase):
     def test_literals_only_cli_passes(self) -> None:
@@ -832,10 +948,7 @@ class InvocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(
             prefix="r7f-unavailable-", dir=SCRATCH_PARENT
         ) as directory:
-            # The fence prints the RESOLVED corpus root; resolve here too so a
-            # symlinked TMPDIR (macOS /var -> /private/var) cannot fail the exact
-            # last-line comparison.
-            scratch = Path(directory).resolve()
+            scratch = Path(directory)
             missing_root = scratch / "no-such-corpus"
             registry = _registry_with_current_source_pins(scratch)
             completed = subprocess.run(
@@ -853,10 +966,20 @@ class InvocationTests(unittest.TestCase):
                 check=False,
             )
         self.assertEqual(completed.returncode, 3, completed.stdout + completed.stderr)
-        self.assertIn(str(missing_root), completed.stdout)
+        prefix = "R7F CORPUS UNAVAILABLE: "
+        last_line = completed.stdout.splitlines()[-1]
+        self.assertTrue(last_line.startswith(prefix), last_line)
+        reported_missing = Path(last_line.removeprefix(prefix)).resolve()
+        expected_missing = (
+            missing_root
+            / "runs_window_a_20260722"
+            / "instrument_validation"
+            / "20260722T145535-e941c821"
+            / "instrument_evidence.json"
+        ).resolve()
         self.assertEqual(
-            completed.stdout.splitlines()[-1],
-            f"R7F CORPUS UNAVAILABLE: {missing_root / 'runs_window_a_20260722' / 'instrument_validation' / '20260722T145535-e941c821' / 'instrument_evidence.json'}",
+            reported_missing,
+            expected_missing,
         )
         self.assertFalse(
             any("COMPARED" in line for line in completed.stdout.splitlines())
