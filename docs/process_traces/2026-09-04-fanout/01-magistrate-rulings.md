@@ -25,3 +25,9 @@ Each fan branch `feat/2026-09-04-fan-<name>` holds its UNREVIEWED landing; every
 | rq-refresh | Already ruled in the paper lane (all four §3 characterizations stay with an honest status column). |
 | v5-desk-gaps | Freeze a non-mintable requirements record in the pack and issue the final inputs in transaction custody; one extraction specification per producing model; the paper contracts are issued after paper-g merges; scope for the generated packs is granted on the desk day only. |
 | night-launcher, transfer-fiducial, reading-copy, floor-guarantee, one-name-sweep, advisor-brief, claim-surfaces, rq-refresh, skill-distill, aud-wo-rows, and the completed row seats | Enter the gauntlet queue (refuter lenses on Sol, delta, Opus counter-review only for merge-bound code); merge order after the paper PRs. |
+
+## LINEAGE-RELOCATABLE-01 — ruling (magistrate, 2026-09-04, on the seat's NR-1..NR-3)
+
+| Mission | Ruling |
+|---|---|
+| LINEAGE-RELOCATABLE-01 | NR-1: adopt an explicit NON-authoritative relocation carrier over immutable issued bytes (issued artifacts are never rewritten to relocate). NR-2: relocation is permitted only for post-hoc analysis when explicitly supplied; live launch and campaign replay remain absolute-path and refuse relocation. NR-3: preserve every existing artifact-specific refusal code; every newly accepted relocated state must be proven same-byte/same-pack relocation, and that proof goes before a cold gate before the landing merges. Resume with an end-to-end moved-source regression and the named refusal legs: tamper, committed-pack-change, repository-relative-move, swapped-chain, traversal, symbolic-link. Merge is gated on the cold-gate proof (NR-3); the landing stays on its branch until then. |
