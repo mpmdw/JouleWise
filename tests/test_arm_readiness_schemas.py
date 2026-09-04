@@ -496,8 +496,7 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         # (finish round, gap G-2).
         self.assertIn(successor, allowlist)
         self.assertIn(successor, readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
-        self.assertFalse(any("d117_step6_confirmation" in path for path in allowlist))
-        self.assertFalse(any("family_publication" in path for path in allowlist))
+        self.assertFalse(readiness._r1_authenticator_allowlist_conflicts(allowlist))
         policies = {item["kind"]: item for item in lifecycle["evidence_policies"]}
         generic = {
             "ACCEPTANCE_OWNER", "ACCEPTANCE_SUCCESSOR", "ESTIMATOR_IDENTITY",
@@ -529,6 +528,49 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             {item["code"] for item in vocabulary.values()},
             readiness.READINESS_REASON_CODES,
         )
+
+    def test_registry_refuses_every_registered_authenticator_path_class(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        roles = {
+            role
+            for _family, _reason_type, role in readiness.R1_AUTHENTICATOR_PATH_REGISTRY
+        }
+        self.assertTrue(roles)
+        for role in sorted(roles):
+            with self.subTest(role=role):
+                mutated = copy.deepcopy(registry)
+                allowlist = mutated["freeze_evidence_lifecycle"][
+                    "irrelevant_path_allowlist"
+                ]
+                allowlist.append(f"configs/arm_readiness/{role.lower()}.json")
+                allowlist.sort()
+                with self.assertRaises(ArmReadinessError) as caught:
+                    validate_registry(mutated)
+                self.assertEqual(
+                    caught.exception.reason_code, "readiness_row_registry_mismatch"
+                )
+                self.assertIn(
+                    "registered authenticator path class", str(caught.exception)
+                )
+
+    def test_newly_registered_authenticator_name_is_refused_in_allowlist(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        mutated = copy.deepcopy(registry)
+        allowlist = mutated["freeze_evidence_lifecycle"][
+            "irrelevant_path_allowlist"
+        ]
+        allowlist.append("configs/arm_readiness/future-confirmation-token.json")
+        allowlist.sort()
+        future_class = ("FUTURE", "CUSTODY", "FUTURE_CONFIRMATION_TOKEN")
+        with mock.patch.object(
+            readiness,
+            "R1_AUTHENTICATOR_PATH_REGISTRY",
+            readiness.R1_AUTHENTICATOR_PATH_REGISTRY | {future_class},
+        ):
+            with self.assertRaises(ArmReadinessError) as caught:
+                validate_registry(mutated)
+        self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
+        self.assertIn("registered authenticator path class", str(caught.exception))
 
     def test_registry_load_closes_conditional_code_paths_against_allowlist(self) -> None:
         registry, _raw = load_registry(ROOT)

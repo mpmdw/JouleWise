@@ -554,6 +554,19 @@ R1_REFUSAL_ROLES = frozenset(
         "V1_GRANDFATHERING",
     }
 )
+# D-151 clause 7's fixed-point rule applies to authenticator path classes,
+# independently of the transaction-specific irrelevant-path allowlist.  Keep
+# those classes in one family/type/role registry so validation can derive the
+# forbidden path tokens instead of naming today's artifacts at the test site.
+# The role is the canonical path-class spelling; comparison normalizes path
+# punctuation, so a registered ``SOME_AUTHENTICATOR`` also covers
+# ``some-authenticator.json``.
+R1_AUTHENTICATOR_PATH_REGISTRY = frozenset(
+    {
+        ("D117", "CUSTODY", "D117_STEP6_CONFIRMATION"),
+        ("D117", "CUSTODY", "FAMILY_PUBLICATION"),
+    }
+)
 FAMILY_PUBLICATION_CHECK_IDS = frozenset(
     {
         "marker_absent",
@@ -1652,6 +1665,26 @@ def _r1_contains_reserved(value: object) -> bool:
     return False
 
 
+def _r1_path_class_token(value: str) -> str:
+    """Normalize a registry role or repository path for class comparison."""
+
+    return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+
+def _r1_authenticator_allowlist_conflicts(allowlist: list[str]) -> list[str]:
+    """Return allowlist paths belonging to any registered authenticator class."""
+
+    roles = {
+        _r1_path_class_token(role)
+        for _family, _reason_type, role in R1_AUTHENTICATOR_PATH_REGISTRY
+    }
+    return sorted(
+        path
+        for path in allowlist
+        if any(role in _r1_path_class_token(path) for role in roles)
+    )
+
+
 def validate_r1_lifecycle_registry(
     value: object,
     *,
@@ -1705,6 +1738,13 @@ def validate_r1_lifecycle_registry(
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
             "R1 irrelevant-path allowlist must be sorted unique exact repository paths",
+        )
+    authenticator_conflicts = _r1_authenticator_allowlist_conflicts(allowlist)
+    if authenticator_conflicts:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 irrelevant-path allowlist contains a registered authenticator "
+            f"path class: {authenticator_conflicts!r}",
         )
 
     raw_policies = registry["evidence_policies"]
@@ -12002,6 +12042,7 @@ __all__ = [
     "PACK_DIGEST_ALGORITHM",
     "READINESS_REASON_CODES",
     "R1ConditionalDeferral",
+    "R1_AUTHENTICATOR_PATH_REGISTRY",
     "R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS",
     "R1_DIGEST_CONDITIONAL_ENTRY_POINTS",
     "R1_DIGEST_CONDITIONAL_GATE_ID",
