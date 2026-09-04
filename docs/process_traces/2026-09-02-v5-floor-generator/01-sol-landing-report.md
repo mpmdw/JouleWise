@@ -235,7 +235,7 @@ The six `_v3` condition-family drift refusals (source-byte and domain-hash
 pins for decode, prefill, and the selected prefill-length family) are absent
 from the `_v5` floor generators by design while the packs remain authoring
 drafts. They stay absent only until `V5-DESK-DAY-01` freezes the generated
-packs. After that freeze, follow-up kernel row `FLOOR-V5-DRIFT-REPIN-01` must (Row registration is a bookkeeping change on main, launched 2026-09-03 23:05 PDT; until it merges the row is queued, not registered.)
+packs. After that freeze, follow-up kernel row `FLOOR-V5-DRIFT-REPIN-01` must (Registered on main at 0f80c98a on 2026-09-03, status blocked on V5-DESK-DAY-01.)
 restore all six drift refusals against the frozen family bytes; the magistrate
 registers that row.
 
