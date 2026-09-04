@@ -23,9 +23,11 @@ import tempfile
 import time
 import uuid
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import wraps
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from joulewise import clock_reference as _clock_reference
 from joulewise.identity_pins import (
@@ -554,19 +556,71 @@ R1_REFUSAL_ROLES = frozenset(
         "V1_GRANDFATHERING",
     }
 )
-# D-151 clause 7's fixed-point rule applies to authenticator path classes,
-# independently of the transaction-specific irrelevant-path allowlist.  Keep
-# those classes in one family/type/role registry so validation can derive the
-# forbidden path tokens instead of naming today's artifacts at the test site.
-# The role is the canonical path-class spelling; comparison normalizes path
-# punctuation, so a registered ``SOME_AUTHENTICATOR`` also covers
-# ``some-authenticator.json``.
-R1_AUTHENTICATOR_PATH_REGISTRY = frozenset(
-    {
-        ("D117", "CUSTODY", "D117_STEP6_CONFIRMATION"),
-        ("D117", "CUSTODY", "FAMILY_PUBLICATION"),
-    }
-)
+
+
+@dataclass(frozen=True)
+class _R1AuthenticatorRegistration:
+    """One authenticator implementation and its explicit repository path class."""
+
+    family: str
+    reason_type: str
+    role: str
+    path_class: str
+    implementation: Callable[..., Any]
+
+
+R1_AUTHENTICATOR_REGISTRY: dict[
+    tuple[str, str, str], _R1AuthenticatorRegistration
+] = {}
+
+
+def _r1_authenticator(
+    *, family: str, reason_type: str, role: str, path_class: str
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Declare and bind a callable authenticator to an explicit path class.
+
+    The decorated callable is the implementation consumers execute.  It checks
+    that its complete family/type/role declaration is still the owning registry
+    entry before authenticating, so this registry is not a parallel guard-only
+    list.  ``path_class`` is deliberately independent of ``role`` spelling.
+    """
+
+    key = (family, reason_type, role)
+    if any(
+        not isinstance(item, str)
+        or re.fullmatch(r"[A-Z][A-Z0-9_]*", item) is None
+        for item in key
+    ):
+        raise ValueError("authenticator family/type/role must be uppercase identifiers")
+    normalized_path_class = _r1_path_class_token(path_class)
+    if not normalized_path_class or path_class != normalized_path_class:
+        raise ValueError("authenticator path_class must be a normalized path token")
+
+    def decorate(implementation: Callable[..., Any]) -> Callable[..., Any]:
+        if key in R1_AUTHENTICATOR_REGISTRY:
+            raise ValueError(f"duplicate authenticator role declaration {key!r}")
+
+        @wraps(implementation)
+        def registered(*args: Any, **kwargs: Any) -> Any:
+            declaration = R1_AUTHENTICATOR_REGISTRY.get(key)
+            if declaration is None or declaration.implementation is not registered:
+                raise RuntimeError(
+                    f"authenticator implementation is detached from its declaration: {key!r}"
+                )
+            return implementation(*args, **kwargs)
+
+        R1_AUTHENTICATOR_REGISTRY[key] = _R1AuthenticatorRegistration(
+            family=family,
+            reason_type=reason_type,
+            role=role,
+            path_class=path_class,
+            implementation=registered,
+        )
+        return registered
+
+    return decorate
+
+
 FAMILY_PUBLICATION_CHECK_IDS = frozenset(
     {
         "marker_absent",
@@ -1674,14 +1728,30 @@ def _r1_path_class_token(value: str) -> str:
 def _r1_authenticator_allowlist_conflicts(allowlist: list[str]) -> list[str]:
     """Return allowlist paths belonging to any registered authenticator class."""
 
-    roles = {
-        _r1_path_class_token(role)
-        for _family, _reason_type, role in R1_AUTHENTICATOR_PATH_REGISTRY
-    }
+    if not R1_AUTHENTICATOR_REGISTRY:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 authenticator implementation registry is empty",
+        )
+    path_classes: set[str] = set()
+    for key, declaration in R1_AUTHENTICATOR_REGISTRY.items():
+        if (
+            key
+            != (declaration.family, declaration.reason_type, declaration.role)
+            or declaration.path_class != _r1_path_class_token(declaration.path_class)
+            or not declaration.path_class
+            or not callable(declaration.implementation)
+            or declaration.path_class in path_classes
+        ):
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "R1 authenticator implementation registry is malformed",
+            )
+        path_classes.add(declaration.path_class)
     return sorted(
         path
         for path in allowlist
-        if any(role in _r1_path_class_token(path) for role in roles)
+        if any(path_class in _r1_path_class_token(path) for path_class in path_classes)
     )
 
 
@@ -11566,6 +11636,12 @@ def _read_external_canonical(
     return value, raw
 
 
+@_r1_authenticator(
+    family="D117",
+    reason_type="CUSTODY",
+    role="D117_STEP6_CONFIRMATION",
+    path_class="d117_step6_confirmation",
+)
 def _authenticate_confirmation_table(
     confirmation_path: Path | str | None,
     expected_confirmation_digest: str | None,
@@ -11614,6 +11690,12 @@ def _authenticate_confirmation_table(
     return table, table_raw
 
 
+@_r1_authenticator(
+    family="D117",
+    reason_type="CUSTODY",
+    role="FAMILY_PUBLICATION",
+    path_class="family_publication",
+)
 def verify_family_publication_marker(
     repository_root: Path | str,
     marker_path: Path | str,
@@ -12042,7 +12124,7 @@ __all__ = [
     "PACK_DIGEST_ALGORITHM",
     "READINESS_REASON_CODES",
     "R1ConditionalDeferral",
-    "R1_AUTHENTICATOR_PATH_REGISTRY",
+    "R1_AUTHENTICATOR_REGISTRY",
     "R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS",
     "R1_DIGEST_CONDITIONAL_ENTRY_POINTS",
     "R1_DIGEST_CONDITIONAL_GATE_ID",

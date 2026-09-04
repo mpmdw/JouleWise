@@ -531,18 +531,26 @@ class ArmReadinessSchemaTests(unittest.TestCase):
 
     def test_registry_refuses_every_registered_authenticator_path_class(self) -> None:
         registry, _raw = load_registry(ROOT)
-        roles = {
-            role
-            for _family, _reason_type, role in readiness.R1_AUTHENTICATOR_PATH_REGISTRY
-        }
-        self.assertTrue(roles)
-        for role in sorted(roles):
-            with self.subTest(role=role):
+        declarations = readiness.R1_AUTHENTICATOR_REGISTRY
+        self.assertIs(
+            declarations[("D117", "CUSTODY", "D117_STEP6_CONFIRMATION")].implementation,
+            readiness._authenticate_confirmation_table,
+        )
+        self.assertIs(
+            declarations[("D117", "CUSTODY", "FAMILY_PUBLICATION")].implementation,
+            readiness.verify_family_publication_marker,
+        )
+        for declaration in sorted(
+            declarations.values(), key=lambda item: item.path_class
+        ):
+            with self.subTest(role=declaration.role):
                 mutated = copy.deepcopy(registry)
                 allowlist = mutated["freeze_evidence_lifecycle"][
                     "irrelevant_path_allowlist"
                 ]
-                allowlist.append(f"configs/arm_readiness/{role.lower()}.json")
+                allowlist.append(
+                    f"configs/arm_readiness/{declaration.path_class}.json"
+                )
                 allowlist.sort()
                 with self.assertRaises(ArmReadinessError) as caught:
                     validate_registry(mutated)
@@ -553,6 +561,18 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                     "registered authenticator path class", str(caught.exception)
                 )
 
+    def test_registered_authenticator_implementations_require_their_declarations(
+        self,
+    ) -> None:
+        declarations = tuple(readiness.R1_AUTHENTICATOR_REGISTRY.values())
+        self.assertTrue(declarations)
+        for declaration in declarations:
+            with self.subTest(role=declaration.role):
+                with mock.patch.dict(readiness.R1_AUTHENTICATOR_REGISTRY, clear=True):
+                    with self.assertRaises(RuntimeError) as caught:
+                        declaration.implementation()
+                self.assertIn("detached from its declaration", str(caught.exception))
+
     def test_newly_registered_authenticator_name_is_refused_in_allowlist(self) -> None:
         registry, _raw = load_registry(ROOT)
         mutated = copy.deepcopy(registry)
@@ -561,12 +581,21 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         ]
         allowlist.append("configs/arm_readiness/future-confirmation-token.json")
         allowlist.sort()
-        future_class = ("FUTURE", "CUSTODY", "FUTURE_CONFIRMATION_TOKEN")
-        with mock.patch.object(
-            readiness,
-            "R1_AUTHENTICATOR_PATH_REGISTRY",
-            readiness.R1_AUTHENTICATOR_PATH_REGISTRY | {future_class},
-        ):
+        with mock.patch.dict(readiness.R1_AUTHENTICATOR_REGISTRY):
+
+            @readiness._r1_authenticator(
+                family="FUTURE",
+                reason_type="CUSTODY",
+                role="FUTURE_AUTHENTICATOR",
+                path_class="future_confirmation_token",
+            )
+            def future_authenticator() -> None:
+                return None
+
+            declaration = readiness.R1_AUTHENTICATOR_REGISTRY[
+                ("FUTURE", "CUSTODY", "FUTURE_AUTHENTICATOR")
+            ]
+            self.assertIs(declaration.implementation, future_authenticator)
             with self.assertRaises(ArmReadinessError) as caught:
                 validate_registry(mutated)
         self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
