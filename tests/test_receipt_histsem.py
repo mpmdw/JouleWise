@@ -2150,26 +2150,62 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
                 )
 
     def test_projection_grammar_owner_mutation_reaches_both_consumers(self) -> None:
-        candidate = "identity_pin_projection.receipts/projection-0001.sig"
-        self.assertFalse(
-            identity_pins.identity_pin_projection_freeze_path_matches(candidate)
-        )
-        self.assertTrue(readiness._histsem_tree_has_authoring_custody((candidate,)))
+        coordinate = "identity_pin_projection.receipts/projection-0001.json"
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, pack, historical, _current = self._repository(
+                temporary, ("identity_pin_projection.receipts",)
+            )
+            committed_path = f"{self.PACK_RELATIVE}/{coordinate}"
+            committed_sha256 = hashlib.sha256(
+                (pack / coordinate).read_bytes()
+            ).hexdigest()
 
-        amended = identity_pins.IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN.replace(
-            "json|sha256", "json|sha256|sig"
-        )
-        with mock.patch.object(
-            identity_pins,
-            "IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN",
-            amended,
-        ):
-            self.assertTrue(
-                identity_pins.identity_pin_projection_freeze_path_matches(candidate)
+            # Both consumers accept this coordinate under the owner's real
+            # grammar: committed history finds no anomaly, and the ARM
+            # pre-authoring gate excludes it from authoring custody.
+            self.assertIsNone(
+                identity_pins._committed_successor(
+                    pack,
+                    repository,
+                    historical,
+                    committed_path,
+                    committed_sha256,
+                )
             )
             self.assertFalse(
-                readiness._histsem_tree_has_authoring_custody((candidate,))
+                readiness._histsem_tree_has_authoring_custody((coordinate,))
             )
+
+            amended = (
+                identity_pins.IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN.replace(
+                    "json|sha256", "sha256"
+                )
+            )
+            with mock.patch.object(
+                identity_pins,
+                "IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN",
+                amended,
+            ):
+                # Mutating the owner now makes the same coordinate refuse at
+                # both consumers.  Calling _committed_successor directly also
+                # kills a crash-mutant of that consumer.
+                with self.assertRaises(
+                    identity_pins.IdentityPinProjectionError
+                ) as caught:
+                    identity_pins._committed_successor(
+                        pack,
+                        repository,
+                        historical,
+                        committed_path,
+                        committed_sha256,
+                    )
+                self.assertEqual(
+                    caught.exception.reason_code,
+                    "readiness_identity_receipt_namespace_anomalous",
+                )
+                self.assertTrue(
+                    readiness._histsem_tree_has_authoring_custody((coordinate,))
+                )
 
     def test_authoring_and_freeze_custody_still_refuse(self) -> None:
         for directory in (
