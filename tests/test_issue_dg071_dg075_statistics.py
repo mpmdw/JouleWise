@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import warnings
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,82 @@ def _independent_reference(raw: bytes) -> dict[str, object]:
         render = lambda value: format((value * Decimal(1000)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_EVEN), "f")
         return {"sample_count": len(ordered), "q1_s": format(q1, "f"), "median_s": format(median, "f"), "q3_s": format(q3, "f"), "iqr_s": format(iqr, "f"), "q1_ms": render(q1), "median_ms": render(median), "q3_ms": render(q3), "iqr_ms": render(iqr)}
     return {"statistics": {"DG-071": describe(widths), "DG-075": describe(spacings)}, "max_tiling_gap_s": format(max(gaps, default=Decimal(0)), "f"), "tiling_gap_nonzero_boundaries": sum(gap != 0 for gap in gaps)}
+
+
+def _verify_asymmetric_replay(
+    *,
+    checkout: Path,
+    bundle: Path,
+    issued_json: Path,
+    replay_json: Path,
+) -> dict[str, str]:
+    """Authenticate immutable provenance, then replay by content identity."""
+
+    issued_payload = json.loads(issued_json.read_text(encoding="utf-8"))
+    producer = issued_payload["producer"]
+    stored_commit = producer["git_commit"]
+    stored_script_sha256 = producer["script_sha256"]
+    script_repository_path = producer["script_path"]
+    current_script = checkout / script_repository_path
+
+    current_script_sha256 = hashlib.sha256(current_script.read_bytes()).hexdigest()
+    if current_script_sha256 != stored_script_sha256:
+        raise AssertionError(
+            "current_script_sha256_mismatch: "
+            f"stored={stored_script_sha256} current={current_script_sha256}"
+        )
+
+    historical_script = subprocess.run(
+        ["git", "show", f"{stored_commit}:{script_repository_path}"],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+    ).stdout
+    historical_script_sha256 = hashlib.sha256(historical_script).hexdigest()
+    if historical_script_sha256 != stored_script_sha256:
+        raise AssertionError(
+            "historical_script_sha256_mismatch: "
+            f"stored={stored_script_sha256} historical={historical_script_sha256}"
+        )
+
+    replayed_payload = ISSUER.issue_artifacts(
+        bundle,
+        replay_json,
+        expected_bundle_path=bundle,
+        expected_bundle_sha256=issued_payload["input_bundle"]["sha256"],
+        repository_root=checkout,
+        script_path=current_script,
+    )
+    current_last_touch = replayed_payload["producer"]["git_commit"]
+
+    normalized_payload = json.loads(json.dumps(replayed_payload))
+    normalized_payload["producer"]["git_commit"] = stored_commit
+    normalized_json = (
+        json.dumps(normalized_payload, indent=2, sort_keys=True, allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
+    if normalized_json != issued_json.read_bytes():
+        raise AssertionError("semantic_json_replay_mismatch")
+    if (
+        ISSUER.render_markdown(normalized_payload).encode("utf-8")
+        != issued_json.with_suffix(".md").read_bytes()
+    ):
+        raise AssertionError("semantic_markdown_replay_mismatch")
+
+    warning_record = {
+        "reason": "producer_last_touch_divergence",
+        "stored_commit": stored_commit,
+        "current_last_touch": current_last_touch,
+    }
+    if current_last_touch != stored_commit:
+        warnings.warn(
+            "producer_last_touch_divergence: "
+            f"stored={stored_commit} current={current_last_touch}; "
+            "replay accepted by content identity",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return warning_record
 
 
 class Dg071Dg075StatisticsTests(unittest.TestCase):
@@ -776,6 +853,122 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             "p2015-df-ph-decode-abs-r03/power_trace.csv",
         )
         self.assertFalse(payload["input_bundle"]["path"].startswith("/"))
+
+    def test_change_then_exact_restore_replays_with_divergence_warning(self) -> None:
+        """Current last-touch divergence warns; content-identity replay passes."""
+
+        checkout = self.root / "checkout"
+        checkout.mkdir()
+        fixture_raw = self.bundle.read_bytes()
+        fixture = checkout / ISSUER.PINNED_BUNDLE_REPOSITORY_PATH
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(fixture_raw)
+        script_raw = SCRIPT_PATH.read_bytes()
+        script = checkout / ISSUER.SCRIPT_REPOSITORY_PATH
+        script.parent.mkdir(parents=True)
+        script.write_bytes(script_raw)
+
+        def git_environment(date: str) -> dict[str, str]:
+            return {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Fixture Author",
+                "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+                "GIT_AUTHOR_DATE": date,
+                "GIT_COMMITTER_NAME": "Fixture Committer",
+                "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
+                "GIT_COMMITTER_DATE": date,
+            }
+
+        def git(*arguments: str, date: str) -> str:
+            completed = subprocess.run(
+                ["git", "-c", "commit.gpgSign=false", *arguments],
+                cwd=checkout,
+                env=git_environment(date),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return completed.stdout.strip()
+
+        git("init", "--quiet", date="2000-01-01T00:00:00+00:00")
+        git(
+            "add",
+            ISSUER.SCRIPT_REPOSITORY_PATH,
+            date="2000-01-01T00:00:00+00:00",
+        )
+        git(
+            "commit",
+            "--quiet",
+            "-m",
+            "producer P",
+            date="2000-01-01T00:00:00+00:00",
+        )
+        producer_commit = git(
+            "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00"
+        )
+        issued_json = self.root / "issued.json"
+        issued_payload = ISSUER.issue_artifacts(
+            fixture,
+            issued_json,
+            expected_bundle_path=fixture,
+            expected_bundle_sha256=hashlib.sha256(fixture_raw).hexdigest(),
+            repository_root=checkout,
+            script_path=script,
+        )
+        self.assertEqual(issued_payload["producer"]["git_commit"], producer_commit)
+
+        script.write_bytes(script_raw + b"# counterfactual producer edit\n")
+        git(
+            "add",
+            ISSUER.SCRIPT_REPOSITORY_PATH,
+            date="2000-01-02T00:00:00+00:00",
+        )
+        git(
+            "commit",
+            "--quiet",
+            "-m",
+            "producer edit",
+            date="2000-01-02T00:00:00+00:00",
+        )
+        script.write_bytes(script_raw)
+        git(
+            "add",
+            ISSUER.SCRIPT_REPOSITORY_PATH,
+            date="2000-01-03T00:00:00+00:00",
+        )
+        git(
+            "commit",
+            "--quiet",
+            "-m",
+            "exact restoration R",
+            date="2000-01-03T00:00:00+00:00",
+        )
+        restoration_commit = git(
+            "rev-parse", "HEAD", date="2000-01-03T00:00:00+00:00"
+        )
+        self.assertNotEqual(restoration_commit, producer_commit)
+        self.assertEqual(ISSUER._git_commit(checkout), restoration_commit)
+
+        replay_json = self.root / "replayed.json"
+        with self.assertWarnsRegex(
+            RuntimeWarning,
+            r"producer_last_touch_divergence: stored=[0-9a-f]{40} "
+            r"current=[0-9a-f]{40}; replay accepted by content identity",
+        ):
+            warning_record = _verify_asymmetric_replay(
+                checkout=checkout,
+                bundle=fixture,
+                issued_json=issued_json,
+                replay_json=replay_json,
+            )
+        self.assertEqual(
+            warning_record,
+            {
+                "reason": "producer_last_touch_divergence",
+                "stored_commit": producer_commit,
+                "current_last_touch": restoration_commit,
+            },
+        )
 
     def test_retained_bundle_values_of_record(self) -> None:
         """Pin the numbers the paper prints, on the retained bundle itself.
