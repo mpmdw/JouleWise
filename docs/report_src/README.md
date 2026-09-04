@@ -30,12 +30,11 @@ committed generated page, validates full-report assembly in memory, and exits
 2 on drift. It neither requires `runs/` nor uses the untracked assembled
 document as a reference.
 
-Full evidence re-derivation is **controlled/internal**, not a clean-clone or
-external reproducibility claim. The following command re-derives the retained
-historical dataset, aggregates, figure, tables, and claims-index artifact, then
-regenerates the VOIDED demonstration page and assembled report only when the
-internal corpus is available. The generated report does not render the
-historical figure, tables, or energy values:
+The controlled/internal full route is not a clean-clone or external
+reproducibility claim. The following command authenticates the retained
+historical inputs, then regenerates only void placeholders for the dataset,
+aggregates, figure, and tables, plus the retained claims-index row with status
+`voided`. It never re-derives or emits the corpus's measurement values:
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline \
@@ -63,8 +62,9 @@ python3 scripts/make_figures.py --runs-root runs \
 The legacy corpus is **VOIDED permanently for claim use**, as stated in the
 [root README](../../README.md#current-state). The generated results page is a
 historical pipeline demonstration only: it emits no energy-result table,
-energy values, or rendered figure. The historical derived artifacts remain in
-`analysis/rpt001-v2/` and `figures/rpt001-v2/` for provenance only.
+energy values, or rendered result figure. The immutable historical derived
+artifacts remain under `analysis/rpt001-v1/` and `figures/rpt001-v1/`; the v2
+paths contain regenerated void placeholders only.
 
 ## Bibliography verification boundary
 
@@ -84,6 +84,4 @@ an explicit recognized verification state.
 - `{{jw:include-section}}` contract transclusion: not implemented; the
   assembler supports whole-file `{{jw:include path="..."}}` only. Chapters
   reference contracts instead of mirroring exact wording.
-- `claims_lint --mode phase4` and the generated
-  `docs/phase_4/claims_index.md` view: not yet implemented.
-- Offline (`--offline`) CI build mode and the CI hook: not yet wired.
+- A final PDF renderer remains pending the P1-008 format-adapter decision.

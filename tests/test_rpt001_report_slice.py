@@ -1,8 +1,8 @@
 """Offline smoke tests for the RPT-001 report vertical slice.
 
-These run against the committed rpt001-v2 artifacts and report source; they
-do NOT reread the real bundle corpus (which is gitignored). Real-bundle
-ingestion is the lead-run local gate (spec §0.4/§9.4).
+Most tests run against the committed rpt001-v2 artifacts and report source.
+The route-census test uses the controlled corpus when it is available and
+executes the full profile in a tracked-file-only temporary copy.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ import csv
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
-import statistics
 import subprocess
 import sys
 import tempfile
@@ -29,8 +29,38 @@ from scripts import package_bundle_pack
 REPO = Path(__file__).resolve().parent.parent
 ANALYSIS = REPO / "analysis" / "rpt001-v2"
 SEALED_ANALYSIS = REPO / "analysis" / "rpt001-v1"
-LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
+RETIRED_LABEL = "legacy L1 (manual review; pre-2M)"
+VOID_LABEL = "VOIDED historical evidence — permanently ineligible for claim use"
 RUNS = REPO / "runs"
+CONTROLLED_RUNS = Path("/Users/edr/code/JouleWise/runs")
+
+FULL_ROUTE_OUTPUTS = {
+    "analysis/rpt001-v2/aggregates.json",
+    "analysis/rpt001-v2/artifact_manifest.json",
+    "analysis/rpt001-v2/claims_index.jsonl",
+    "analysis/rpt001-v2/dataset.csv",
+    "analysis/rpt001-v2/tables/S1_legacy_stack_identity.csv",
+    "analysis/rpt001-v2/tables/S1_legacy_stack_identity.md",
+    "analysis/rpt001-v2/tables/T1_legacy_l1_results.csv",
+    "analysis/rpt001-v2/tables/T1_legacy_l1_results.md",
+    "build/capstone/rpt001/report.md",
+    "docs/phase_4/claims_index.md",
+    "docs/report_src/generated/rpt001_vertical_slice.md",
+    "figures/rpt001-v2/F1_legacy_l1_instrument_results.svg",
+}
+
+VOIDED_RESULT_TOKENS = (
+    "47.22042349222679",
+    "304.02005544776165",
+    "44.42591347410544",
+    "298.68731644234157",
+    "47.2",
+    "304.0",
+    "44.4",
+    "298.7",
+    RETIRED_LABEL,
+    "primary basis",
+)
 
 
 def load_script(name: str, filename: str):
@@ -77,8 +107,10 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertEqual(build_capstone.ANALYSIS, ANALYSIS)
         self.assertEqual(
             build_capstone.LEGACY_LABEL,
-            "VOIDED historical evidence — permanently ineligible for claim use",
+            VOID_LABEL,
         )
+        self.assertEqual(make_figures.VOID_LABEL, VOID_LABEL)
+        self.assertEqual(make_figures.VOID_STATUS, "voided")
         self.assertEqual(
             build_capstone.CHECK_COMMAND,
             "python3 scripts/build_capstone.py --profile rpt001 --offline --check",
@@ -227,25 +259,17 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertEqual(rows[0]["energy_output_token_j"], "")
 
     def test_fixture_scale_double_generation_is_byte_identical(self):
-        with open(ANALYSIS / "dataset.csv", newline="", encoding="utf-8") as fh:
-            rows = list(csv.DictReader(fh))
-        stacks_a = make_figures.per_stack_metrics(rows)
-        stacks_b = make_figures.per_stack_metrics([dict(row) for row in rows])
         outputs_a = (
-            make_figures.render_figure(stacks_a),
-            make_figures.csv_table(make_figures.T1_COLUMNS,
-                make_figures.t1_rows(stacks_a, {})),
-            json.dumps(make_figures.claims_row(stacks_a, {
-                sid: value["metrics"]["energy_request_j"]["mean"]
-                for sid, value in stacks_a.items()}), sort_keys=True) + "\n",
+            make_figures.render_void_csv("dataset"),
+            make_figures.dump_json(make_figures.voided_aggregates()),
+            make_figures.render_void_figure(),
+            json.dumps(make_figures.voided_claim_row(), sort_keys=True) + "\n",
         )
         outputs_b = (
-            make_figures.render_figure(stacks_b),
-            make_figures.csv_table(make_figures.T1_COLUMNS,
-                make_figures.t1_rows(stacks_b, {})),
-            json.dumps(make_figures.claims_row(stacks_b, {
-                sid: value["metrics"]["energy_request_j"]["mean"]
-                for sid, value in stacks_b.items()}), sort_keys=True) + "\n",
+            make_figures.render_void_csv("dataset"),
+            make_figures.dump_json(make_figures.voided_aggregates()),
+            make_figures.render_void_figure(),
+            json.dumps(make_figures.voided_claim_row(), sort_keys=True) + "\n",
         )
         self.assertEqual([v.encode() for v in outputs_a], [v.encode() for v in outputs_b])
 
@@ -280,35 +304,13 @@ class TestRpt001Artifacts(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 make_figures.gate_inputs(root, manifest)
 
-    @unittest.skipUnless(RUNS.is_dir(), "real runs corpus unavailable")
-    def test_exact_means_are_derived_from_source_summaries(self):
-        manifest = json.loads((ANALYSIS / "input_manifest.json").read_text())
-        expected = {}
-        for exp in manifest["experiments"]:
-            values = [json.loads((RUNS / member / "summary_metrics.json").read_text())[
-                "energy_request_j"] for member in exp["members"]]
-            expected[make_figures.STACK_IDS[exp["experiment_id"]]] = statistics.mean(values)
-        claim = json.loads((ANALYSIS / "claims_index.jsonl").read_text())
-        for stack_id, mean in expected.items():
-            self.assertIn(f"{mean!r} J for stack {stack_id}", claim["claim_text"])
-
-    def test_dataset_six_rows_pinned_order(self):
+    def test_dataset_is_explicit_void_placeholder(self):
         with open(ANALYSIS / "dataset.csv", newline="", encoding="utf-8") as fh:
             rows = list(csv.DictReader(fh))
-        self.assertEqual(len(rows), 6)
-        self.assertEqual(
-            [r["run_id"] for r in rows],
-            [f"example-mac-mlx-local__r{i}" for i in (1, 2, 3)]
-            + [f"example-mac-mlx-qwen35-122b-512t__r{i}" for i in (1, 2, 3)],
-        )
-        for row in rows:
-            self.assertEqual(row["evidence_class"], "legacy_l1_manual_review_pre_2m")
-            self.assertFalse(row["bundle_path"].startswith("/"))
-            self.assertEqual(row["runtime_output_tokens"], "512")
-            self.assertEqual(row["token_count_source"], "outputs/tokens.jsonl")
-            self.assertEqual(row["runtime_stop_reason"], "unknown")
-            self.assertEqual(row["output_policy"], "unknown")
-            self.assertEqual(row["energy_output_token_j"], "")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "voided")
+        self.assertEqual(rows[0]["artifact_id"], "dataset")
+        self.assertIn("no measurement", rows[0]["disposition"])
 
     def test_claims_row_shape(self):
         lines = (ANALYSIS / "claims_index.jsonl").read_text(encoding="utf-8").splitlines()
@@ -317,44 +319,40 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertEqual(row["schema"], "joulewise.claims_index.v1")
         self.assertEqual(row["claim_id"], "CLM-RPT001-LEGACY-L1-001")
         self.assertEqual(row["claim_level"], "L1")
-        self.assertEqual(row["legacy_label"], LEGACY_LABEL)
+        self.assertEqual(row["status"], "voided")
+        self.assertEqual(row["legacy_label"], VOID_LABEL)
         self.assertIsNone(row["analysis_manifest_ref"])
-        self.assertEqual(row["verdict_ref"]["status"], "not_applicable_l1")
-        self.assertIn("44.42591347410544", row["claim_text"])
-        self.assertIn("298.68731644234157", row["claim_text"])
-        self.assertEqual(
+        self.assertEqual(row["verdict_ref"]["status"], "voided")
+        self.assertEqual(row["strict_validation"]["result"], "not_applicable_voided")
+        self.assertNotEqual(
             (ANALYSIS / "claims_index.jsonl").read_bytes(),
             (SEALED_ANALYSIS / "claims_index.jsonl").read_bytes(),
         )
+        for forbidden in VOIDED_RESULT_TOKENS:
+            self.assertNotIn(forbidden.lower(), json.dumps(row).lower())
 
     def test_figure_labels_and_honesty(self):
         svg = (REPO / "figures" / "rpt001-v2" /
                "F1_legacy_l1_instrument_results.svg").read_text(encoding="utf-8")
-        self.assertIn(LEGACY_LABEL, svg)
-        self.assertIn("min–max range (not a confidence interval)", svg)
-        self.assertIn("idle-subtracted energy_request_j", svg)
-        self.assertIn("gross gross_energy_j", svg)
-        self.assertIn("Per-output-token companion omitted", svg)
-        self.assertIn("no stop reason is inferred", svg)
-        self.assertNotIn("runtime-observed output token", svg)
-        self.assertNotIn("Panel B", svg)
-        self.assertNotIn("95%", svg)
-        self.assertNotIn("CI", svg.replace("CPU", ""))
+        self.assertIn("VOIDED historical evidence", svg)
+        self.assertIn("No measurement values are rendered", svg)
+        for forbidden in VOIDED_RESULT_TOKENS:
+            self.assertNotIn(forbidden.lower(), svg.lower())
 
     def test_t1_and_s1_labels(self):
         t1 = (ANALYSIS / "tables" / "T1_legacy_l1_results.md").read_text(encoding="utf-8")
         s1 = (ANALYSIS / "tables" / "S1_legacy_stack_identity.md").read_text(encoding="utf-8")
-        self.assertIn(LEGACY_LABEL, t1)
-        self.assertIn("cooldown cap hit", t1)
-        self.assertIn("per-output-token companion is omitted", t1)
-        self.assertNotIn("idlesub_mj_output_token_mean", t1)
-        self.assertIn("unknown (legacy bundle)", s1)
-        for field in ("tokenizer_identity", "measurement_boundary", "telemetry_backend"):
-            self.assertIn(field, s1)
+        for text in (t1, s1):
+            self.assertIn(VOID_LABEL, text)
+            self.assertIn("no measurement", text)
+            for forbidden in VOIDED_RESULT_TOKENS:
+                self.assertNotIn(forbidden.lower(), text.lower())
 
     def test_v2_artifact_manifest_references_only_v2_outputs(self):
         manifest = json.loads((ANALYSIS / "artifact_manifest.json").read_text())
         self.assertEqual(manifest["artifact_version"], "rpt001-v2")
+        self.assertEqual(manifest["status"], "voided")
+        self.assertEqual(manifest["build_mode"], "voided-placeholder")
         self.assertEqual(manifest["bundle_tree_identity"], tree_identity_descriptor())
         input_manifest = json.loads((ANALYSIS / "input_manifest.json").read_text())
         self.assertEqual(input_manifest["bundle_tree_identity"], tree_identity_descriptor())
@@ -388,7 +386,7 @@ class TestRpt001Artifacts(unittest.TestCase):
         ):
             self.assertIn(needed, page)
         for forbidden in (
-            LEGACY_LABEL,
+            RETIRED_LABEL,
             "CLM-RPT001-LEGACY-L1-001",
             "--full",
             "artifact_manifest.json",
@@ -404,6 +402,72 @@ class TestRpt001Artifacts(unittest.TestCase):
             "scales with model size",
         ):
             self.assertNotIn(forbidden.lower(), page.lower())
+
+    @unittest.skipUnless(CONTROLLED_RUNS.is_dir(), "controlled runs corpus unavailable")
+    def test_full_route_census_emits_only_void_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / "clone"
+            tracked = subprocess.run(
+                ["git", "ls-files", "-z"],
+                cwd=REPO,
+                check=True,
+                capture_output=True,
+            ).stdout.split(b"\0")
+            for encoded in tracked:
+                if not encoded:
+                    continue
+                relative = Path(encoded.decode("utf-8"))
+                source = REPO / relative
+                target = clone / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+
+            for relative in FULL_ROUTE_OUTPUTS:
+                (clone / relative).unlink(missing_ok=True)
+            before = {
+                path.relative_to(clone).as_posix()
+                for path in clone.rglob("*")
+                if path.is_file()
+            }
+            env = dict(os.environ)
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/build_capstone.py",
+                    "--profile", "rpt001",
+                    "--full",
+                    "--offline",
+                    "--runs-root", str(CONTROLLED_RUNS),
+                ],
+                cwd=clone,
+                text=True,
+                capture_output=True,
+                env=env,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+
+            after = {
+                path.relative_to(clone).as_posix()
+                for path in clone.rglob("*")
+                if path.is_file()
+            }
+            produced = after - before
+            self.assertEqual(produced, FULL_ROUTE_OUTPUTS)
+            for relative in sorted(produced):
+                text = (clone / relative).read_text(encoding="utf-8")
+                with self.subTest(relative=relative):
+                    self.assertIn("void", text.lower())
+                    for forbidden in VOIDED_RESULT_TOKENS:
+                        self.assertNotIn(forbidden.lower(), text.lower())
+
+            row = json.loads(
+                (clone / "analysis/rpt001-v2/claims_index.jsonl").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(row["status"], "voided")
+            self.assertNotIn("supported", json.dumps(row).lower())
 
     def test_source_only_check_passes_with_tracked_files_only(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -466,14 +530,14 @@ class TestRpt001Artifacts(unittest.TestCase):
             self.assertIn("root README void disposition", generated_text)
             self.assertIn("No energy-result table or energy values", generated_text)
             self.assertIn(build_capstone.CHECK_COMMAND, generated_text)
-            self.assertNotIn(LEGACY_LABEL, generated_text)
+            self.assertNotIn(RETIRED_LABEL, generated_text)
             self.assertNotIn("--full", generated_text)
             self.assertIn(
                 "Source-only assembly and `--check` are reproducible from a pristine clone",
                 assembled_text,
             )
             self.assertIn(
-                "Full evidence re-derivation is controlled/internal",
+                "Controlled/internal full input authentication",
                 assembled_text,
             )
             self.assertIn(

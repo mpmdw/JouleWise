@@ -185,7 +185,7 @@ Evidence class: **{LEGACY_LABEL}**, per the
 
 No energy-result table or energy values from that corpus are reproduced here.
 
-The historical figure is retained under `figures/` for provenance only; it is not rendered here.
+The v2 figure path contains only a void placeholder; it is not rendered here.
 
 ### Demonstration check
 
@@ -196,8 +196,8 @@ assembly from a pristine clone:
 {CHECK_COMMAND}
 ```
 
-Historical derived artifacts remain under `analysis/rpt001-v2/` and
-`figures/rpt001-v2/` for provenance; neither location is a claim source.
+The regenerated paths under `analysis/rpt001-v2/` and `figures/rpt001-v2/`
+carry only the void disposition and no legacy-corpus measurement values.
 """
     return page
 
@@ -260,7 +260,7 @@ def main() -> int:
     ap.add_argument("--check", action="store_true",
                     help="Compare regenerated outputs against tracked sources; exit 2 on drift.")
     ap.add_argument("--full", action="store_true",
-                    help="Regenerate analysis, lint claims, verify hashes, then assemble.")
+                    help="Authenticate inputs, regenerate void artifacts, lint claims, then assemble.")
     ap.add_argument("--offline", action="store_true",
                     help="Run only the explicitly network-free build path.")
     ap.add_argument("--runs-root", type=Path, default=Path("runs"))

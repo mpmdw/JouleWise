@@ -127,6 +127,42 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 CLAIM_INDEX_AP_RE = re.compile(r"^AP-\d+$")
 PRE_P2037_LEGACY_CLAIM_ID = "CLM-RPT001-LEGACY-L1-001"
 PRE_P2037_LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
+VOIDED_LEGACY_STATUS = "voided"
+VOIDED_LEGACY_LABEL = (
+    "VOIDED historical evidence — permanently ineligible for claim use"
+)
+VOIDED_LEGACY_CLAIM_TEXT = (
+    "The retained RPT-001 legacy L1 history row is voided because its pre-repair "
+    "time anchor invalidates physical energy attribution; it is permanently "
+    "ineligible for claim use and carries no energy result."
+)
+VOIDED_LEGACY_REASON_CODES = ["pre_repair_time_anchor_invalid"]
+VOIDED_LEGACY_REQUIRED_FIELDS = {
+    "analysis_function",
+    "analysis_manifest_ref",
+    "artifact_manifest",
+    "boundary_labels",
+    "bundle_ids",
+    "claim_ceiling_reason_codes",
+    "claim_id",
+    "claim_level",
+    "claim_role",
+    "claim_text",
+    "dataset_filter",
+    "evidence_class",
+    "figure_ids",
+    "floor_ref",
+    "legacy_label",
+    "manifest_ids",
+    "metrics",
+    "quality_waivers",
+    "schema",
+    "stack_ids",
+    "status",
+    "strict_validation",
+    "table_ids",
+    "verdict_ref",
+}
 # SHA-256 of compact, sorted canonical JSON for the one adjudicated RPT-001 row.
 PRE_P2037_LEGACY_ROW_SHA256 = (
     "9378a3e16c23b17e598381b80d124c4dc4634f731809be36700dda5718a918ad"
@@ -907,6 +943,18 @@ def render_phase4_projection(rows: Sequence[dict]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _voided_legacy_projection_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Sanitize even the immutable v1 grandfather before reader projection."""
+
+    projection = dict(row)
+    projection.update({
+        "claim_text": VOIDED_LEGACY_CLAIM_TEXT,
+        "legacy_label": VOIDED_LEGACY_LABEL,
+        "status": VOIDED_LEGACY_STATUS,
+    })
+    return projection
+
+
 def lint_phase4(
     root: Path,
     index_path: Path,
@@ -1073,6 +1121,8 @@ def _claim_row_dialect(row: Mapping[str, Any]) -> str:
         return "engine-linked"
     if legacy and _is_grandfathered_pre_p2037_legacy_row(row):
         return "exact-legacy"
+    if legacy and row.get("status") == VOIDED_LEGACY_STATUS:
+        return "voided-legacy"
     return "unknown"
 
 
@@ -1083,7 +1133,7 @@ def lint_claim_index(
     projection_path: Path | None = None,
     write_projection: bool = False,
 ) -> list[Finding]:
-    """Version-aware lint for every supported canonical claims-index row."""
+    """Version-aware lint for every canonical claims-index row."""
 
     findings: list[Finding] = []
     path = index_path if index_path.is_absolute() else root / index_path
@@ -1129,7 +1179,7 @@ def lint_claim_index(
                 index_path,
                 line_no,
                 "CLAIM_INDEX_UNKNOWN_DIALECT",
-                "row is neither the exact legacy grandfather nor an engine-linked row",
+                "row is neither an exact historical grandfather, an explicit void, nor an engine-linked row",
             )
             continue
         if dialect == "exact-legacy":
@@ -1151,7 +1201,112 @@ def lint_claim_index(
                 "pre-P2-037 manual-review L1 row has no governed verdict artifact",
                 severity="warning",
             )
+            projection_rows.append(_voided_legacy_projection_row(row))
+            continue
+        if dialect == "voided-legacy":
             projection_rows.append(dict(row))
+            missing = sorted(VOIDED_LEGACY_REQUIRED_FIELDS - set(row))
+            if missing:
+                _claim_index_finding(
+                    findings,
+                    index_path,
+                    line_no,
+                    "CLAIM_INDEX_VOIDED_LEGACY_MISSING_FIELDS",
+                    f"missing required fields: {', '.join(missing)}",
+                )
+                continue
+            claim_id = row.get("claim_id")
+            if claim_id != PRE_P2037_LEGACY_CLAIM_ID or claim_id in seen_claim_ids:
+                _claim_index_finding(
+                    findings,
+                    index_path,
+                    line_no,
+                    "CLAIM_INDEX_INVALID_CLAIM_ID",
+                    "voided legacy claim_id must be canonical and unique",
+                )
+            if isinstance(claim_id, str):
+                seen_claim_ids.add(claim_id)
+            exact_values = {
+                "schema": "joulewise.claims_index.v1",
+                "claim_level": "L1",
+                "claim_role": "secondary",
+                "status": VOIDED_LEGACY_STATUS,
+                "evidence_class": "legacy_l1_manual_review_pre_2m",
+                "legacy_label": VOIDED_LEGACY_LABEL,
+                "claim_text": VOIDED_LEGACY_CLAIM_TEXT,
+                "analysis_function": "emit_rpt001_void_placeholders",
+                "dataset_filter": "none (legacy corpus voided)",
+                "analysis_manifest_ref": None,
+                "metrics": [],
+                "quality_waivers": [],
+                "artifact_manifest": "analysis/rpt001-v1/artifact_manifest.json",
+            }
+            for key, expected in exact_values.items():
+                if row.get(key) != expected:
+                    _claim_index_finding(
+                        findings,
+                        index_path,
+                        line_no,
+                        "CLAIM_INDEX_VOIDED_LEGACY_INVALID",
+                        f"{key} must equal the explicit voided-legacy schema value",
+                    )
+            if row.get("strict_validation") != {
+                "result": "not_applicable_voided",
+                "mode": "none",
+                "legacy_allowlist": False,
+            }:
+                _claim_index_finding(
+                    findings,
+                    index_path,
+                    line_no,
+                    "CLAIM_INDEX_VOIDED_LEGACY_INVALID",
+                    "strict_validation must be inapplicable and may not use the legacy allowlist",
+                )
+            if row.get("floor_ref") != {
+                "status": VOIDED_LEGACY_STATUS,
+                "artifact": None,
+                "row_id": None,
+            }:
+                _claim_index_finding(
+                    findings,
+                    index_path,
+                    line_no,
+                    "CLAIM_INDEX_VOIDED_LEGACY_INVALID",
+                    "floor_ref must carry the voided status and no artifact",
+                )
+            verdict_ref = row.get("verdict_ref")
+            if not isinstance(verdict_ref, Mapping) or (
+                verdict_ref.get("status") != VOIDED_LEGACY_STATUS
+                or verdict_ref.get("reason_codes") != VOIDED_LEGACY_REASON_CODES
+                or verdict_ref.get("artifact") is not None
+                or verdict_ref.get("sha256") is not None
+                or verdict_ref.get("row_id") is not None
+                or verdict_ref.get("contrast_id") is not None
+            ):
+                _claim_index_finding(
+                    findings,
+                    index_path,
+                    line_no,
+                    "CLAIM_INDEX_VOIDED_LEGACY_INVALID",
+                    "verdict_ref must carry the explicit void disposition and no artifact",
+                )
+            for key in (
+                "figure_ids",
+                "table_ids",
+                "bundle_ids",
+                "manifest_ids",
+                "stack_ids",
+                "boundary_labels",
+                "claim_ceiling_reason_codes",
+            ):
+                if not _is_string_list(row.get(key), nonempty=True):
+                    _claim_index_finding(
+                        findings,
+                        index_path,
+                        line_no,
+                        "CLAIM_INDEX_VOIDED_LEGACY_INVALID",
+                        f"{key} must contain nonempty historical identifiers or reason codes",
+                    )
             continue
         missing = sorted(CLAIM_INDEX_REQUIRED_FIELDS - set(row))
         if missing:
