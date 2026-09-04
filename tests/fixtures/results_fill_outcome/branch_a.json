@@ -1,0 +1,9 @@
+{
+  "before_comparison_stops": [],
+  "builder": "branch_a",
+  "expected": {
+    "OB-01": "STOP_FILL",
+    "OR-01": "STOP_FILL"
+  },
+  "precedence": null
+}
