@@ -56,7 +56,16 @@ def fixture_prefill_pin(root: Path) -> Path:
     bundle = root / "authority"
     bundle.mkdir()
     selection_path = bundle / "selection-record.json"
-    selection_path.write_text('{"fixture":"selection"}\n', encoding="utf-8")
+    selection_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.g2a_prefill_selection.v1",
+                "status": "selected",
+                "collection_prefill_tokens": 512,
+            }
+        ),
+        encoding="utf-8",
+    )
     selection_sha = hashlib.sha256(selection_path.read_bytes()).hexdigest()
 
     def rung(token_count: int) -> dict[str, object]:
@@ -90,6 +99,9 @@ def fixture_prefill_pin(root: Path) -> Path:
                     "enable_thinking": "false",
                     "panel_sha256": hashlib.sha256(PANEL.read_bytes()).hexdigest(),
                 },
+                "rendering_mode": "raw_prompt_text",
+                "chat_template_applied": False,
+                "thinking_policy": "not_applicable_raw_prefill",
                 "rungs": [target, companion],
             }
         ),
@@ -136,6 +148,20 @@ def fixture_prefill_pin(root: Path) -> Path:
     path = root / "prefill-pin.json"
     path.write_text(json.dumps(value), encoding="utf-8")
     return path
+
+
+def rewrite_bound_json(pin: Path, field: str, value: dict[str, object]) -> None:
+    pin_value = json.loads(pin.read_text(encoding="utf-8"))
+    bound_path = pin.parent / pin_value[field]["path"]
+    bound_path.write_text(json.dumps(value), encoding="utf-8")
+    digest = hashlib.sha256(bound_path.read_bytes()).hexdigest()
+    pin_value[field]["sha256"] = digest
+    if field == "selection_record":
+        pin_value["g2a_record_sha256"] = digest
+        pin_value["selection_authority"]["g2a_record"]["record_id"] = (
+            f"sha256:{digest}"
+        )
+    pin.write_text(json.dumps(pin_value), encoding="utf-8")
 
 
 def file_snapshot(pack: Path) -> dict[str, bytes]:
@@ -236,6 +262,96 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                         ValueError, "selection_record_sha256_mismatch"
                     ):
                         load_generator(pack_id).configure_prefill_pin(pin)
+
+    def test_prefill_pin_rejects_boolean_repeat_count(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-floor-bool-rung-") as temporary:
+            pin = fixture_prefill_pin(Path(temporary))
+            pin_value = json.loads(pin.read_text(encoding="utf-8"))
+            ladder_path = pin.parent / pin_value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text(encoding="utf-8"))
+            target = ladder["rungs"][0]
+            target["repeat_count"] = True
+            target["generation_method"] = (
+                f"True x '{ladder['prompt_sentence']}' + "
+                f"'{target['closing_sentence']}' under tokenizer "
+                f"sha256:{ladder['tokenizer_json_sha256']}"
+            )
+            rewrite_bound_json(pin, "prompt_ladder", ladder)
+            pin_value = json.loads(pin.read_text(encoding="utf-8"))
+            pin_value["repeat_count"] = True
+            pin_value["generation_method"] = target["generation_method"]
+            pin.write_text(json.dumps(pin_value), encoding="utf-8")
+
+            for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+                with self.subTest(pack_id=pack_id):
+                    with self.assertRaisesRegex(
+                        ValueError, "prefill_prompt_pin_invalid: prompt realization"
+                    ):
+                        load_generator(pack_id).configure_prefill_pin(pin)
+
+    def test_prefill_pin_rejects_ladder_missing_prompt_sentence(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-floor-open-ladder-") as temporary:
+            pin = fixture_prefill_pin(Path(temporary))
+            pin_value = json.loads(pin.read_text(encoding="utf-8"))
+            ladder_path = pin.parent / pin_value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text(encoding="utf-8"))
+            del ladder["prompt_sentence"]
+            rewrite_bound_json(pin, "prompt_ladder", ladder)
+
+            for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+                with self.subTest(pack_id=pack_id):
+                    with self.assertRaisesRegex(
+                        ValueError, "prefill_prompt_pin_invalid: prompt_ladder"
+                    ):
+                        load_generator(pack_id).configure_prefill_pin(pin)
+
+    def test_prefill_pin_parses_and_validates_selection_record(self) -> None:
+        cases = (
+            (
+                "wrong_schema",
+                {
+                    "schema_version": "joulewise.g2a_prefill_selection.v0",
+                    "status": "selected",
+                    "collection_prefill_tokens": 512,
+                },
+                "selection_record_schema_version_invalid",
+            ),
+            (
+                "wrong_tokens",
+                {
+                    "schema_version": "joulewise.g2a_prefill_selection.v1",
+                    "status": "selected",
+                    "collection_prefill_tokens": 1024,
+                },
+                "selection_record_collection_prefill_tokens_mismatch",
+            ),
+        )
+        for case, selection, code in cases:
+            for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+                with self.subTest(case=case, pack_id=pack_id):
+                    with tempfile.TemporaryDirectory(
+                        prefix=f"d117-floor-selection-{case}-"
+                    ) as temporary:
+                        pin = fixture_prefill_pin(Path(temporary))
+                        rewrite_bound_json(pin, "selection_record", selection)
+                        with self.assertRaisesRegex(ValueError, code):
+                            load_generator(pack_id).configure_prefill_pin(pin)
+
+    def test_alpha_dominance_registration_matches_contrast(self) -> None:
+        floor = load_generator("d117_floor_qwen3-1p7b_v5")
+        contrast = load_generator("d117_contrast_v5")
+        self.assertEqual(
+            floor.dominance_criterion_registration(),
+            contrast.dominance_criterion_registration(),
+        )
+
+    def test_beta_dominance_registration_matches_contrast(self) -> None:
+        floor = load_generator("d117_floor_qwen3-8b_v5")
+        contrast = load_generator("d117_contrast_v5")
+        self.assertEqual(
+            floor.dominance_criterion_registration(),
+            contrast.dominance_criterion_registration(),
+        )
 
     def test_generators_do_not_synthesize_a_missing_g2a_prompt_pin(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-floor-no-pin-") as temporary:

@@ -1165,6 +1165,26 @@ def configure_prefill_pin(path: Path) -> None:
     ladder_rel, ladder_path, ladder_raw = bound_file("prompt_ladder")
     if sha256_bytes(selection_raw) != value["g2a_record_sha256"]:
         raise ValueError("selection_record_sha256_mismatch")
+    try:
+        selection = json.loads(
+            selection_raw,
+            object_pairs_hook=reject_duplicates,
+            parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(
+            f"prefill_prompt_pin_invalid: selection_record: {exc}"
+        ) from exc
+    if (
+        not isinstance(selection, dict)
+        or selection.get("schema_version")
+        != "joulewise.g2a_prefill_selection.v1"
+    ):
+        raise ValueError("selection_record_schema_version_invalid")
+    if selection.get("status") not in ("selected", "refused"):
+        raise ValueError("selection_record_status_invalid")
+    if selection.get("collection_prefill_tokens") != PREFILL_LENGTH:
+        raise ValueError("selection_record_collection_prefill_tokens_mismatch")
     ladder = json.loads(
         ladder_raw,
         object_pairs_hook=reject_duplicates,
@@ -1172,6 +1192,20 @@ def configure_prefill_pin(path: Path) -> None:
     )
     if (
         not isinstance(ladder, dict)
+        or set(ladder)
+        != {
+            "schema_version",
+            "prompt_sentence",
+            "tokenizer_json_sha256",
+            "panel_thinking_policy",
+            "rendering_mode",
+            "chat_template_applied",
+            "thinking_policy",
+            "rungs",
+        }
+        or ladder.get("schema_version")
+        != "joulewise.g2a_prefill_prompt_ladder.v1"
+        or ladder.get("prompt_sentence") != PROMPT_SENTENCE
         or ladder.get("tokenizer_json_sha256") != MODEL["tokenizer_json_sha256"]
         or ladder.get("panel_thinking_policy")
         != {"enable_thinking": "false", "panel_sha256": PANEL_SHA256}
@@ -1189,6 +1223,11 @@ def configure_prefill_pin(path: Path) -> None:
     text = value["prompt_text"]
     if (
         rung is None
+        or isinstance(rung.get("prefill_tokens"), bool)
+        or not isinstance(rung.get("prefill_tokens"), int)
+        or isinstance(rung.get("repeat_count"), bool)
+        or not isinstance(rung.get("repeat_count"), int)
+        or rung["repeat_count"] <= 0
         or not isinstance(text, str)
         or not isinstance(ids, list)
         or len(ids) != PREFILL_LENGTH

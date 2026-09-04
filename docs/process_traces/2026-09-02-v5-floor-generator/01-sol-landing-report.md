@@ -217,3 +217,14 @@ artefact, not a scope violation: the wrapper's enforced `**` scope passed
 with zero violations and every write is inside the four allowlisted subtrees.
 The seat's envelope listed both generators as modified this session; their
 bytes are the predecessor's (mtimes 2026-09-02 21:55) — recorded.
+
+## Fix-round addendum (2026-09-03)
+
+Audit finding 5 is corrected to read: “Prefill uses `p512` and accepts prompt
+bytes only through a G2-a pin bundle hash-bound to the G2-a selection record.”
+The generator now parses the record's required selection semantics after
+verifying its digest.
+
+### Magistrate addendum (2026-09-03): p42 rider provenance
+
+The p42 prefill rider is the D-164 carry-over of the `_v3` decode-prompt-length rider (p128 there); its length is the panel's index-0 rendering with thinking off (42 token ids, tail [151667, 271, 151668, 271]), refused on panel mismatch (`decode_index_zero_rendering_mismatch`); it does not enter GAMMA's four units.
