@@ -27,6 +27,13 @@ ORDER_SCHEMA = "joulewise.order_manifest.v1"
 SPEC_SCHEMA = "joulewise.campaign_spec.v1"
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+_ISSUED_ABBA_PATTERN = (
+    {"label": "A", "position": "A1"},
+    {"label": "B", "position": "B1"},
+    {"label": "B", "position": "B2"},
+    {"label": "A", "position": "A2"},
+)
+_MINIMUM_GOVERNED_N = 5
 
 
 class CampaignSpecError(ValueError):
@@ -132,8 +139,15 @@ def load_campaign_spec(path: Path) -> CampaignSpec:
         _identifier(campaign[key], f"campaign_spec.campaign.{key}")
     if not isinstance(campaign["runs_dir"], str) or not campaign["runs_dir"].strip():
         raise CampaignSpecError("campaign_spec.campaign.runs_dir: expected nonempty text")
-    if isinstance(campaign["n"], bool) or not isinstance(campaign["n"], int) or campaign["n"] < 1:
-        raise CampaignSpecError("campaign_spec.campaign.n: expected a positive integer")
+    if (
+        isinstance(campaign["n"], bool)
+        or not isinstance(campaign["n"], int)
+        or campaign["n"] < _MINIMUM_GOVERNED_N
+    ):
+        raise CampaignSpecError(
+            "campaign_spec.campaign.n: expected an integer >= "
+            f"{_MINIMUM_GOVERNED_N} for the governed floor estimator"
+        )
 
     model = _require_keys(root["model"], {"tag", "plan_tag", "config"}, "campaign_spec.model")
     _identifier(model["tag"], "campaign_spec.model.tag")
@@ -188,6 +202,11 @@ def load_campaign_spec(path: Path) -> CampaignSpec:
         positions.append(row["position"])
     if len(positions) != len(set(positions)):
         raise CampaignSpecError("campaign_spec.block_pattern: duplicate position")
+    if pattern != list(_ISSUED_ABBA_PATTERN):
+        raise CampaignSpecError(
+            "campaign_spec.block_pattern: the current governed estimator requires "
+            "exactly A1/B1/B2/A2 with labels A/B/B/A"
+        )
 
     profiles = root["profiles"]
     if not isinstance(profiles, Mapping) or not profiles:
@@ -671,6 +690,11 @@ def manifest_entry(
 def generate_campaign(spec: CampaignSpec, out_dir: Path) -> tuple[int, str]:
     """Write one deterministic campaign assembly and return count plus plan hash."""
 
+    if out_dir != OUT and out_dir.exists() and any(out_dir.iterdir()):
+        raise CampaignSpecError(
+            f"output directory {out_dir} is not empty; refusing to mix generated "
+            "and pre-existing files"
+        )
     try:
         subcampaigns, cells = build_assembly(spec)
     except KeyError as exc:

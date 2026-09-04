@@ -16,6 +16,13 @@ from typing import Any, Mapping
 
 
 REGISTRY_SCHEMA_VERSION = "joulewise.detection_floor_closed_sets.v1"
+REGISTRY_ID = "detection_floor_closed_sets_v1"
+# The adjacent digest detects accidental corruption. This source pin is the
+# reviewed authority that prevents edited declarations from retaining the
+# frozen v1 identity merely by editing that adjacent digest too.
+FROZEN_REGISTRY_SHA256 = (
+    "fc91df6d14b02d17dba31d1018c31287b65bde2d94f2b608825411f98b2aed1d"
+)
 REGISTRY_RELATIVE_PATH = Path(
     "configs/analysis_registry/detection_floor_closed_sets.v1.json"
 )
@@ -113,6 +120,11 @@ def load_detection_floor_closed_sets(
         raise DetectionFloorRegistryError(
             f"{path}: sha256 mismatch (expected {expected_sha256}, observed {observed_sha256})"
         )
+    if observed_sha256 != FROZEN_REGISTRY_SHA256:
+        raise DetectionFloorRegistryError(
+            f"{path}: immutable trust anchor mismatch for {REGISTRY_ID!r}; "
+            "changed declarations require a new registry identity"
+        )
     try:
         value = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -124,9 +136,9 @@ def load_detection_floor_closed_sets(
         raise DetectionFloorRegistryError(
             f"registry.schema_version: expected {REGISTRY_SCHEMA_VERSION!r}"
         )
-    if value["registry_id"] != "detection_floor_closed_sets_v1":
+    if value["registry_id"] != REGISTRY_ID:
         raise DetectionFloorRegistryError(
-            "registry.registry_id: expected 'detection_floor_closed_sets_v1'"
+            f"registry.registry_id: expected {REGISTRY_ID!r}"
         )
     if value["freeze_status"] != "frozen":
         raise DetectionFloorRegistryError("registry.freeze_status: expected 'frozen'")
@@ -202,6 +214,8 @@ def default_detection_floor_closed_sets() -> DetectionFloorClosedSets:
 __all__ = [
     "DetectionFloorClosedSets",
     "DetectionFloorRegistryError",
+    "FROZEN_REGISTRY_SHA256",
+    "REGISTRY_ID",
     "REGISTRY_DIGEST_RELATIVE_PATH",
     "REGISTRY_RELATIVE_PATH",
     "REGISTRY_SCHEMA_VERSION",

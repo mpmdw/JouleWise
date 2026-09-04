@@ -9,6 +9,7 @@ perform statistical analysis.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -552,10 +553,10 @@ def validate_analysis_registry(
         if len(metric_names) != len(set(metric_names)):
             errors.append("registry.metrics: duplicate metric name")
     pairs = value["condition_pairs"]
+    observed_pairs: list[tuple[str, str]] = []
     if not isinstance(pairs, list) or not pairs:
         errors.append("registry.condition_pairs: must contain at least one declared pair")
     else:
-        observed_pairs: list[tuple[str, str]] = []
         for index, pair in enumerate(pairs):
             where = f"registry.condition_pairs[{index}]"
             if _exact_keys(pair, REGISTRY_PAIR_KEYS, where, errors):
@@ -580,6 +581,48 @@ def validate_analysis_registry(
             errors.append("registry.claim_role disagrees with AP-2")
         if "holm" not in ap_row.values["multiplicity_rule"].lower():
             errors.append("registry multiplicity method disagrees with AP-2")
+        selection_scope = ap_row.values["selection_scope"]
+        scope_profiles = tuple(
+            dict.fromkeys(re.findall(r"`([a-z0-9_]+)`", selection_scope))
+        )
+        if len(scope_profiles) != 4 or not selection_scope.startswith(
+            "Frozen four-profile 2M matrix:"
+        ):
+            errors.append(
+                "AP-2 selection_scope must declare the frozen four-profile 2M matrix"
+            )
+        else:
+            expected_pairs = {
+                frozenset(pair) for pair in itertools.combinations(scope_profiles, 2)
+            }
+            valid_observed_pairs = [
+                (condition_a, condition_b)
+                for condition_a, condition_b in observed_pairs
+                if condition_a in scope_profiles
+                and condition_b in scope_profiles
+                and condition_a != condition_b
+            ]
+            observed_unordered_pairs = [
+                frozenset(pair) for pair in valid_observed_pairs
+            ]
+            observed_profiles = {
+                profile for pair in valid_observed_pairs for profile in pair
+            }
+            if (
+                len(valid_observed_pairs) != len(observed_pairs)
+                or observed_profiles != set(scope_profiles)
+            ):
+                errors.append(
+                    "registry.condition_pairs: profiles must match AP-2 selection_scope"
+                )
+            if (
+                len(observed_unordered_pairs) != len(set(observed_unordered_pairs))
+                or set(observed_unordered_pairs) != expected_pairs
+            ):
+                errors.append(
+                    "registry.condition_pairs: must cover every pair in AP-2's "
+                    "frozen four-profile selection_scope exactly once"
+                )
     return errors
 
 

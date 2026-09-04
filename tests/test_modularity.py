@@ -9,10 +9,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.analysis_manifest import validate_analysis_registry
-from joulewise.detection_floor import (
-    calibration_scope_is_registered,
-    validate_floor_metric_window_class,
+from joulewise.analysis_manifest import (
+    extract_analysis_plan_row,
+    validate_analysis_registry,
 )
 from joulewise.detection_floor_registry import (
     DetectionFloorRegistryError,
@@ -25,6 +24,7 @@ CAMPAIGN_DIR = ROOT / "configs" / "campaigns" / "p2_015_floors"
 GENERATOR = CAMPAIGN_DIR / "generate_configs.py"
 CAMPAIGN_SPEC = CAMPAIGN_DIR / "campaign_spec.json"
 ANALYSIS_REGISTRY = ROOT / "configs" / "analysis_registry" / "slice_2m_ap2.v1.json"
+ANALYSIS_PLANS = ROOT / "docs" / "contracts" / "analysis_plans.md"
 DETECTION_REGISTRY = (
     ROOT / "configs" / "analysis_registry" / "detection_floor_closed_sets.v1.json"
 )
@@ -81,10 +81,10 @@ class CampaignSpecificationTests(unittest.TestCase):
                         (CAMPAIGN_DIR / relative_path).read_bytes(),
                     )
 
-    def test_model_n_profiles_block_pattern_suite_and_prefix_come_from_one_spec(self) -> None:
+    def test_model_n_profiles_issued_block_pattern_suite_and_prefix_come_from_one_spec(self) -> None:
         source = json.loads(CAMPAIGN_SPEC.read_text(encoding="utf-8"))
         changed = copy.deepcopy(source)
-        changed["campaign"]["n"] = 2
+        changed["campaign"]["n"] = 5
         changed["campaign"]["run_id_prefix"] = "swap7"
         changed["campaign"]["runs_dir"] = "runs/spec_swap"
         changed["model"]["tag"] = "qwen3-4b-mlx"
@@ -102,12 +102,6 @@ class CampaignSpecificationTests(unittest.TestCase):
             "ref": "configs/suite_manifests/replacement_suite.json",
             "sha256": "a" * 64,
         }
-        changed["block_pattern"] = [
-            {"label": "B", "position": "B1"},
-            {"label": "A", "position": "A1"},
-            {"label": "A", "position": "A2"},
-            {"label": "B", "position": "B2"},
-        ]
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -135,9 +129,9 @@ class CampaignSpecificationTests(unittest.TestCase):
             )
 
         self.assertEqual(plan["plan_id"], "p2-015-window-a-m3max-qwen3-4b-v1")
-        self.assertEqual(plan["fixed_n"], 2)
+        self.assertEqual(plan["fixed_n"], 5)
         self.assertEqual(plan["runs_dir"], "runs/spec_swap")
-        self.assertEqual(plan["execution_modes"]["expanded_window_a"]["planned_bundles"], 58)
+        self.assertEqual(plan["execution_modes"]["expanded_window_a"]["planned_bundles"], 142)
         self.assertTrue(all(row["run_id"].startswith("swap7-") for row in order["executed_order"]))
         self.assertEqual({row["model_tag"] for row in order["executed_order"]}, {"qwen3-4b-mlx"})
         self.assertEqual(request_config["model"]["name"], "Qwen3-4B-Instruct-4bit")
@@ -149,7 +143,7 @@ class CampaignSpecificationTests(unittest.TestCase):
         comparative = next(cell for cell in plan["cells"] if cell["kind"] == "comparative_abba")
         self.assertEqual(
             comparative["ordered_blocks"][0]["executed_labels"],
-            ["B", "A", "A", "B"],
+            ["A", "B", "B", "A"],
         )
 
     def test_invalid_spec_refuses_before_creating_output(self) -> None:
@@ -164,6 +158,48 @@ class CampaignSpecificationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("campaign specification error", result.stderr)
             self.assertFalse(out_dir.exists())
+
+    def test_n_below_governed_floor_minimum_is_refused_before_output(self) -> None:
+        value = json.loads(CAMPAIGN_SPEC.read_text(encoding="utf-8"))
+        value["campaign"]["n"] = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            spec_path = tmp_path / "n1.json"
+            spec_path.write_text(json.dumps(value), encoding="utf-8")
+            out_dir = tmp_path / "generated"
+            result = run_campaign(spec_path, out_dir)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("expected an integer >= 5", result.stderr)
+            self.assertFalse(out_dir.exists())
+
+    def test_non_abba_pattern_is_refused_before_output(self) -> None:
+        value = json.loads(CAMPAIGN_SPEC.read_text(encoding="utf-8"))
+        value["block_pattern"] = [
+            {"label": "X", "position": "X1"},
+            {"label": "Y", "position": "Y1"},
+            {"label": "Z", "position": "Z1"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            spec_path = tmp_path / "xyz.json"
+            spec_path.write_text(json.dumps(value), encoding="utf-8")
+            out_dir = tmp_path / "generated"
+            result = run_campaign(spec_path, out_dir)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("exactly A1/B1/B2/A2", result.stderr)
+            self.assertFalse(out_dir.exists())
+
+    def test_occupied_custom_output_root_is_refused_without_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "generated"
+            out_dir.mkdir()
+            stale = out_dir / "stale.json"
+            stale.write_text('{"stale":true}\n', encoding="utf-8")
+            result = run_campaign(CAMPAIGN_SPEC, out_dir)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("is not empty", result.stderr)
+            self.assertEqual(stale.read_text(encoding="utf-8"), '{"stale":true}\n')
+            self.assertEqual(list(out_dir.iterdir()), [stale])
 
 
 class ClosedSetRegistryTests(unittest.TestCase):
@@ -180,6 +216,17 @@ class ClosedSetRegistryTests(unittest.TestCase):
         self.assertIn(
             "registry.condition_pairs: duplicate ordered pair",
             validate_analysis_registry(duplicate),
+        )
+
+    def test_frozen_ap2_row_requires_all_pairs_from_its_four_profiles(self) -> None:
+        registry = json.loads(ANALYSIS_REGISTRY.read_text(encoding="utf-8"))
+        registry["condition_pairs"] = [
+            {"condition_a": "short_short", "condition_b": "long_short"}
+        ]
+        ap_row = extract_analysis_plan_row(ANALYSIS_PLANS)
+        self.assertIn(
+            "registry.condition_pairs: profiles must match AP-2 selection_scope",
+            validate_analysis_registry(registry, ap_row=ap_row),
         )
 
     def test_detection_floor_registry_bytes_are_checksum_bound(self) -> None:
@@ -224,25 +271,14 @@ class ClosedSetRegistryTests(unittest.TestCase):
                 f"{digest}  {registry_path.name}\n",
                 encoding="utf-8",
             )
-            loaded = load_detection_floor_closed_sets(
-                registry_path=registry_path,
-                digest_path=digest_path,
-            )
-
-        self.assertEqual(
-            validate_floor_metric_window_class(
-                "phase_energy_j.score",
-                "phase",
-                registry=loaded,
-            ),
-            ("phase_energy_j.score", "phase"),
-        )
-        self.assertTrue(
-            calibration_scope_is_registered(
-                "successor_window",
-                registry=loaded,
-            )
-        )
+            with self.assertRaisesRegex(
+                DetectionFloorRegistryError,
+                "immutable trust anchor mismatch.*new registry identity",
+            ):
+                load_detection_floor_closed_sets(
+                    registry_path=registry_path,
+                    digest_path=digest_path,
+                )
 
 
 if __name__ == "__main__":
