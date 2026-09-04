@@ -94,12 +94,15 @@ power-record labels permit. The pulse calibration and clock mapping together
 bound how far a phase edge may move before its energy is recomputed.
 
 A **configuration cell**, shortened below to **cell**, is the set of runs with
-one phase, workload, model, hardware, software, and power-measurement boundary.
+one phase, workload, model, hardware, software, and power-measurement boundary,
+meaning which power is counted: here the processor power macOS reports, not power
+at the wall outlet.
 Within a cell, repeated measurements of one model's phase energy produce a
 spread after their mean is subtracted. A four-run model comparison produces a
-difference after the phase energies of its two A runs are subtracted from those
-of its two B runs and the result is divided by two. JouleWise bounds each source
-separately; each separately bounded source is a component. The cell's
+difference after the phase energies of its two runs of one model are subtracted
+from those of its two runs of the other model and the result is divided by two.
+JouleWise bounds each source separately; each separately bounded source is a
+component. The cell's
 **resolution bound**—the **detection floor** in the advisor's terminology—is the
 largest false phase-energy difference allowed by the fixed calculation for
 that cell before the safeguards in Section 4; the artifacts call the final
@@ -116,11 +119,12 @@ largest result retained. This is the **moved-edge limit**. Their quotient,
 run's edge may move separately. A four-run comparison has an additional
 physical problem: one timing error can
 be common to all four runs. An A/B/B/A block is four runs in the order A, B, B,
-A. A timing-error sign says which direction the allowed error moves energy. A
+A, where A and B label the two compared conditions, here the two models. A
+timing-error sign says which direction the allowed error moves energy. A
 shared sign is one choice applied across all blocks, while a local sign is
 chosen separately for each block. Shared movement uses a different numerator:
 let \(U_{\mathrm{cmp,point}}\) be the four-run comparison's recorded-edge limit, and
-let \(U_{\mathrm{cmp,shared}}\) be its largest limit after one calibration-error sign
+let \(U_{\mathrm{cmp,shared}}\) be its largest limit after one timing-error sign
 is replayed across all blocks and one local sign is chosen per block. Their
 quotient, the **shared-error ratio**, is
 \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). In plain terms, both ratios ask whether
@@ -129,8 +133,11 @@ ordinary variation already present in the repeated measurements.
 
 Before either ratio is compared with 2, **authentication** matches every input
 to its named source-file contents. **Evaluation** then requires a nonzero
-recorded-edge limit, making the ratio evaluable. Any required ratio below 2
-falsifies the claim; equality passes. A ratio of at least 2 means that moving
+recorded-edge limit, making the ratio evaluable. Any of the twelve required
+ratios below 2 falsifies the claim; equality passes. The twelve are one
+independent-edge ratio for each of the eight components (two models, two phases,
+within-model repeat and four-run comparison) and one shared-error ratio for each
+of the four four-run comparison components. A ratio of at least 2 means that moving
 the edge adds at least one entire recorded-edge limit to the bound—the
 **twofold boundary contribution** tested here.
 
@@ -478,7 +485,7 @@ asks for a fixed twofold increase in the complete bound, not just a positive
 increase in one timing term.
 
 A cell groups runs that use the same phase, workload, model, hardware,
-software, and processor-power definition. It has two false-difference
+software, and power-measurement boundary. It has two false-difference
 components. The **absolute component** measures spread among repeated runs of
 one model. The **comparative component** measures differences from four-run
 blocks executed in A, B, B, A order. If the four phase energies in one block
@@ -1742,9 +1749,11 @@ The reading order tested here is the selected draft's real order: title, the one
 | power sample | Adding publication safeguards after the ratio | glossed-at-first-use | A sampler record that reports one start-to-end average; the interpolation calculation uses its neighboring samples. |
 | integrated energy | 1. Introduction | glossed-at-first-use | The time integral of power over a sampling record. |
 | detection floor | 1. Introduction | glossed-at-first-use | The advisor's term for the resolution bound before the safeguards; the artifacts call the final gate value after those safeguards the cell floor. |
+| power-measurement boundary | 1. Introduction | glossed-at-first-use | Which power is counted: the processor power macOS reports, not power at the wall outlet. |
 | \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | 1. Introduction | glossed-at-first-use | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement uses the separately defined \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
 | A/B/B/A block | 1. Introduction | glossed-at-first-use | Four runs in the order A, B, B, A. |
 | timing-error sign | 1. Introduction | glossed-at-first-use | Says which direction an allowed timing error moves energy. |
+| twelve required ratios | 1. Introduction | glossed-at-first-use | Eight independent-edge ratios (two models, two phases, absolute and comparative) and four comparative shared-error ratios. |
 | reasoning disabled | 1. Introduction | glossed-at-first-use | Qwen3's optional chain-of-thought output is switched off. |
 | bracketed readings | 1. Introduction | glossed-at-first-use | One wall-clock reading placed between the monotonic-clock readings taken immediately before and after it. |
 | repeatability / repetition / random scatter | 2. In-window calibration method | audience-vocabulary | Ordinary metrology words for between-repeat spread and repeated observation. |
@@ -1994,4 +2003,4 @@ The reading order tested here is the selected draft's real order: title, the one
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 266; FAILS: 0.
+a failure. Terms inventoried: 268; FAILS: 0.
