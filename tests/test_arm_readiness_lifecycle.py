@@ -49,6 +49,11 @@ from tests.test_arm_readiness_schemas import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_DETECTION_FLOOR_REGISTRY_BUNDLE = (
+    "joulewise/detection_floor_registry.py",
+    "configs/analysis_registry/detection_floor_closed_sets.v1.json",
+    "configs/analysis_registry/detection_floor_closed_sets.v1.sha256",
+)
 # The ruled R1 registry installs the _v5 family as the successor identities
 # (MAGISTRATE-RULING.md:124-131).  These fixtures build their packs
 # synthetically, so they carry the ruled ID to exercise the registry's admit
@@ -385,6 +390,7 @@ def make_go_fixture(
     predecessor_plan_path_spelling: str | None = None,
     identity_status: str = "PASS",
     project: bool = True,
+    detection_floor_source_root: Path = ROOT,
 ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path]:
     """Build a committed one-pack repository.
 
@@ -409,6 +415,28 @@ def make_go_fixture(
     registry_target = repo / registry_relative
     registry_target.parent.mkdir(parents=True)
     registry_target.write_bytes(fixture_row_registry(pack_name))
+    detection_floor_sources = tuple(
+        detection_floor_source_root / relative
+        for relative in _DETECTION_FLOOR_REGISTRY_BUNDLE
+    )
+    if any(source.exists() for source in detection_floor_sources):
+        missing = tuple(
+            relative
+            for relative, source in zip(
+                _DETECTION_FLOOR_REGISTRY_BUNDLE, detection_floor_sources
+            )
+            if not source.is_file()
+        )
+        if missing:
+            raise FileNotFoundError(
+                "incomplete detection-floor registry bundle: " + ", ".join(missing)
+            )
+        for relative, source in zip(
+            _DETECTION_FLOOR_REGISTRY_BUNDLE, detection_floor_sources
+        ):
+            target = repo / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
     pack.mkdir(parents=True)
     plan_raw = render_json({"plan_id": "plan-test"})
     (pack / "calibration_plan.json").write_bytes(plan_raw)
@@ -638,6 +666,31 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 text=True,
             ).stdout.strip()
             self.assertEqual(got, want, key)
+
+    def test_fixture_repo_copies_detection_floor_registry_bundle(self) -> None:
+        expected_registry_files = (
+            "joulewise/detection_floor_registry.py",
+            "configs/analysis_registry/detection_floor_closed_sets.v1.json",
+            "configs/analysis_registry/detection_floor_closed_sets.v1.sha256",
+        )
+        self.assertEqual(_DETECTION_FLOOR_REGISTRY_BUNDLE, expected_registry_files)
+        with tempfile.TemporaryDirectory() as source_directory:
+            source_root = Path(source_directory)
+            for index, relative in enumerate(expected_registry_files):
+                source = source_root / relative
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_bytes(f"registry fixture {index}\n".encode())
+
+            temporary, repository, _pack, _custody, _arm = make_go_fixture(
+                detection_floor_source_root=source_root
+            )
+            self.addCleanup(temporary.cleanup)
+            for relative in expected_registry_files:
+                self.assertEqual(
+                    (repository / relative).read_bytes(),
+                    (source_root / relative).read_bytes(),
+                    relative,
+                )
 
     def test_freeze_receipts_can_never_carry_go(self) -> None:
         receipt = sample_freeze()
