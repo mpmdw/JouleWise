@@ -272,9 +272,10 @@ record width and start-to-start spacing describe the same record-period
 distribution apart from endpoint convention, so duration divided by a nominal
 period cannot replace the overlap count. Require a diagram showing the record
 supports, the prefill interval, and the marked two- and three-overlap counts.
-Consume `DG-067`–`DG-077`; render `DG-071` and `DG-075` with their exact
-registered omission sentences until their path- and SHA-pinned statistic
-artifacts issue.
+Consume `DG-067`–`DG-077`; `DG-071` and `DG-075` are issued by
+`docs/paper/round7/dg071-dg075-statistics.md` at SHA-256
+`041a045e088379ccaf47f8b147efe6c73f17f8f579cd3c1dff3db0143f24927b`, so render
+their pinned statistics rather than their former omission sentences.
 
 ## Demonstration fixed before collection — frozen lines 258–265 — REWRITE
 

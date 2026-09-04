@@ -620,6 +620,8 @@ cadence_harder_than_calibration
 clock_anchor_harder_than_calibration
 interpolation_harder_than_calibration
 drift_harder_than_calibration
+consumer_identity_set_unauthenticated
+consumer_identity_undeclared
 consumer_term_unknown
 transport_group_incomplete
 ```
