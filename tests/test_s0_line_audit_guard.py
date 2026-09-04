@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -148,6 +149,7 @@ class S0LineAuditGuardTests(unittest.TestCase):
                     f"export BASE={shlex.quote(head)}",
                     f"export PROOF={shlex.quote(str(proof))}",
                     f"export TRANS={shlex.quote(str(transcripts))}",
+                    f"export PY={shlex.quote(sys.executable)}",
                     "die() { printf 'S-0 STOP: %s\\n' \"$*\" >&2; exit 1; }",
                     "",
                 )
@@ -180,6 +182,29 @@ class S0LineAuditGuardTests(unittest.TestCase):
                 transcript.read_bytes(),
                 _legacy_transcript(ROOT, EXECUTED_S0_HEAD, _block_specs(block)),
             )
+
+    def test_same_length_shifted_range_refuses(self) -> None:
+        """The refuter's exact 165-line coordinate shift must fail closed."""
+
+        block = _line_audit_block()
+        specs = _block_specs(block)
+        original = "scripts/generate_arm_readiness.py 28,192p"
+        shifted = "scripts/generate_arm_readiness.py 27,191p"
+        specs[specs.index(original)] = shifted
+        block = _replace_specs(block, specs)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            completed, _transcript = self._run(
+                block, ROOT, EXECUTED_S0_HEAD, root
+            )
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn(
+            "line audit coordinate/content mismatch for "
+            "scripts/generate_arm_readiness.py",
+            completed.stderr,
+        )
 
     def test_short_first_extract_refuses_despite_a_later_valid_spec(self) -> None:
         """Removing the count check recreates the concatenated-nonempty bypass."""
