@@ -179,3 +179,20 @@ beside its prompt; harvest from disk, never relaunch blind.
 - Legacy L1: rounds 1+2 on feat/2026-09-04-legacy-l1 (a379b5af), execution refuter running → PR.
 - Paper-J: PR #286 open (rows 9/11/12 pending). Wave-2 PR #285 replay-3 still running. AUTH round 3 running
   (last round; PARK after).
+
+## 2026-09-05 ~02:00 PT — final ruling 17 written; cold-gate packet sealing; paper-K launched
+
+- Peer discussion closed (14 astra plan, 15 reply, 16 astra final). FINAL ruling 17 on main (e323f1aa) with the
+  decision-log addendum texts (D-078, D-083, D-165, D-166, scope-freeze rule, D-161 line). NOT ratified until the
+  cold Fable gate rules: packet seat → 40-coldgate-packet-ruling-17.md (wt-packet-ruling-17); then convene cold
+  Fable (doctrine-free worktree, foreground-only charge) + Opus refuter; then decision-log edits + email Ed.
+- Ed emailed (thread "three questions only you can answer"): due date / fallback acceptability; same-condition vs
+  ensemble prompt question (default prompt-0 contrast); estimand relabel veto. Defaults proceed if silent.
+- Seats running: paper-K (wt-paper-k, off paper-J head + 17 staged; provisional under 17); wave-2 T0 test cure
+  (wt-int-fan-wave2; test-only; fanout/31); legacy-L1 delta 3 (24); AUTH round 3 (last; PARK after);
+  paper-J full replay (~/.claude/jobs/3c46c831/tmp/paperj-replay.log) for PR #286 row 9.
+- Held branches: feat/2026-09-04-estimand-enclosure (accepted conditionally in 17 Q1; needs inside-one-record
+  oracle + delta), feat/2026-09-04-fb-metadata (re-brief to 17 Q3 shape after the gate).
+- Wave-2 #285: replay-3 5116 tests, 2 failures diagnosed (fanout/30): node-worker = environmental pre-existing
+  (ledger wording in 30); T0 real-boot = test defect, cure seat running; row 9 fills with the re-run tail.
+- Internal cuts adopted: readiness proven by 6 Sep or fallback; last acquisition night 8 Sep; freeze 9 Sep.
