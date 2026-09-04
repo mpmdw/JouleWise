@@ -232,6 +232,24 @@ class TransferResultContractTests(unittest.TestCase):
         mutated["edge_records"][-1]["composed_absolute_residual_bound_s"] = 0.5
         self.assertTrue(_all_stop(_render(_reissue(mutated))))
 
+        # Interval ordering is exact even when distinct JSON integers alias as
+        # binary floats above 2^53.
+        mutated = copy.deepcopy(supported)
+        mutated["edge_records"][-1].update(
+            fitted_residual_interval_s={
+                "lower": 9007199254740993,
+                "upper": 9007199254740992,
+            },
+            effective_clock_anchor_bound_s=0,
+            composed_absolute_residual_bound_s=9007199254740993,
+        )
+        mutated["largest_inserted_gap_edge"] = copy.deepcopy(
+            mutated["edge_records"][-1]
+        )
+        mutated["largest_composed_edge_residual_bound_s"] = 9007199254740993
+        mutated["support_outcome"] = "not_supported"
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
         mutated = copy.deepcopy(supported)
         mutated["edge_records"][0]["composed_absolute_residual_bound_s"] = 0.013
         self.assertTrue(_all_stop(_render(_reissue(mutated))))

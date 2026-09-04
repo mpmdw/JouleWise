@@ -343,7 +343,7 @@ def _validate_edge_record(
     if not _finite_number(lower) or not _finite_number(upper):
         errors.append(f"{where} fitted residual interval endpoints must be finite numbers")
         return None
-    if float(upper) < float(lower):
+    if _decimal(upper) < _decimal(lower):
         errors.append(f"{where} fitted residual interval upper must be >= lower")
         return None
     if not _nonnegative_number(anchor):
