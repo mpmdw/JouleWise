@@ -895,6 +895,18 @@ appears anywhere in this paper except the explicitly labeled instrument diagnost
 live row for that same site would violate the one-site/one-row census. No value,
 supplier, or fill authority changed in this consolidation.
 
+### Successor-skeleton outcome-branch slots
+
+These rows govern nonnumeric semantic placements added to
+`draft-v2-skeleton.md`; they are outside the frozen-draft marker census above.
+Each repeated marker shares one result across the Abstract, Section 7, and
+Section 10. Neither row authorizes prose to be inferred at the desk.
+
+| Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
+|---|---|---|---|---|---|---|
+| OB-01 — Outcome-B failed-component list in the Abstract, Section 7, and Section 10 | `[FILL:OB-01]` | Authenticated `joulewise.d165_dominance_closeout.v1`: conservatively render every record with `passes` false from `independent_ratios[].{cell_id,component,passes}` and `comparative_common_mode_ratios[].{cell_id,component,passes}`; no professor-facing list renderer exists yet | alpha and beta / all required absolute, comparative, and comparative shared-error components | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; TOKEN_MISSING; never render from an unauthenticated or incomplete close-out | DRAFT, D165 |
+| TR-01 — Branch-independent inserted-gap result in the Abstract, Section 7, and Section 10 | `[FILL:TR-01]` | Accepted `TRANSFER-FIDUCIAL-01` evidence record: render whether the largest fitted inserted-gap edge residual supported applying the session's pulse-derived timing bound to inference; the task has a named evidence supplier but no issued schema field or professor-facing result token | post-campaign inserted-gap diagnostic / all three outcome branches | STOP_FILL | SUPPLIER_NAMED / VALUE_UNISSUED; TOKEN_MISSING; no branch selection may remove this placement | DRAFT, AUTH |
+
 ## Authority discrepancies and non-token gaps
 
 These are recorded rather than repaired because `docs/paper/draft-v1.md` is
