@@ -1,7 +1,51 @@
 # Built-terms lexicon
 
-Generated mechanically from `docs/paper/draft-v1.md` by `scripts/paper_terms_lint.py`.
-Only terms found in the draft appear here; ruled terms absent from the draft remain lint vocabulary.
+The base table was generated mechanically from `docs/paper/draft-v1.md` by
+`scripts/paper_terms_lint.py`. The successor-draft additions below record terms
+built or glossed while curing the first-use ledger; ruled terms absent from
+either draft remain lint vocabulary. `tests/test_paper_first_use_ledger.py`
+binds this hand-maintained successor table so regenerating the base cannot
+silently discard it.
+
+## Successor-draft first-use additions
+
+| term | first-use home | build or gloss |
+|---|---|---|
+| Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
+| powermetrics | §1 | macOS `powermetrics` is the power sampler used here. |
+| MLX | §1 | Apple's on-device inference framework used to run the models. |
+| cell / power-measurement boundary | §1 | A cell groups runs sharing one phase, workload, model, hardware, software, and boundary defining the measured power. |
+| resolution bound / detection floor / cell floor | §1 | The resolution bound is the largest allowed false phase-energy difference before safeguards; “detection floor” is the advisor's term for that bound, and “cell floor” is the artifact term for the final gate value after the Section 4 safeguards. |
+| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | §1 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement instead uses \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
+| member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
+| timing-error sign / shared sign / local sign | §1 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
+| reasoning disabled | §1 | Qwen3's optional chain-of-thought output is switched off. |
+| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
+| mint | §2 | The analysis run that issues the paper's fixed results. |
+| frozen | §2 | Fixed and fingerprinted before collection. |
+| signal, fit, range, trace-coverage, and completeness checks | §2 | Signal rises above rest; the fit beats a no-pulse model; shifts stay in range; both trace margins exist; and required pulses, fingerprints, and binding fields are present. |
+| shared search-work limits | §2 | Caps on the number of search rectangles and the elapsed search time for one capture. |
+| first-record endpoint | §2 | Wall-clock time assigned to the end of the first native power record. |
+| clock-anchor allowances | §2 | Endpoint half-range, observed wall-versus-monotonic span, largest clock resolution, and numeric-rounding pad. |
+| calibration-acceptance rule | §2 | Pre-collection rule deciding whether two capture bounds may bracket one window. |
+| entry check | §2 | The pass/fail checks on recorded machine state that a stage must satisfy before its first run is measured. |
+| reference runs | §2 | Fixed workloads repeated at window opening, midpoint when present, and close to track drift. |
+| admitted | §2 | A stage that passes the entry check is allowed to begin its measured runs. |
+| gross energy | §2 | Processor energy recorded during a run. |
+| idle-subtracted energy | §2 | Gross energy minus mean idle power multiplied by run duration. |
+| null-test blocks | §3 | Identical-condition blocks whose allowed differences should contain zero. |
+| package power | §3 | Summed CPU, GPU, and neural-engine power. |
+| workload level / workload magnitude / per-token conversion | §3 | One fixed output-token count; one fixed identical-condition target size; and the fitted joules per output token. |
+| cadence ratio / sampling flags | §3 | A window's sampling cadence relative to its phase rate; missing or below-minimum values are named sampling refusals. |
+| floor packs / contrast pack | §3 | Floor packs are campaign plans that collect calibration data used to build comparator floors; the contrast pack is the campaign plan that collects model-comparison data. |
+| retired calculation | §3 | The former equal-rate anchor and yes/no rule that compared the corner maximum with a point value multiplied by a fixed limited-repetition factor, superseded by the rate-aware anchor and corner-to-point ratio. |
+| close-out artifact | §4 | Post-campaign artifact that checks every required ratio. |
+| small-sample multiplier | §4 | A factor that widens a result to allow for limited repetition. |
+| energy terms | §4 | The four claim-bearing terms: gross request, idle-subtracted request, gross prompt-processing, and gross token-generation energy. |
+| interpolation edge / deterministic-bound kinds | §4 | A phase-window start or end between samples gets straight-line power; both edges move through their neighboring-sample gaps, and that joint movement is listed beside idle-power drift, clock-anchor movement, and whole-window drift. |
+| measured contrast / custody / Figure 3 | §4 | The figure input is a point estimate plus composed interval; custody means fingerprints still match recorded bytes; the refusal lane, two sequential gates, yes/no arrows, and four outcomes are named. |
+
+## Draft-v1 generated base
 
 | term | first line | how detected | line (first 80 chars) |
 |---|---:|---|---|

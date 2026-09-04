@@ -43,6 +43,7 @@ from .inputs import (
     FloorRequest,
     FloorResolution,
     LoadedAnalysisInputs,
+    _floor_request_or_refusal,
     deterministic_bounds,
     floor_binding_reason_codes,
     floor_request_for_evidence,
@@ -378,17 +379,24 @@ def _resolve_contrast_floor(
     }
     for condition_id in contrast["floor_selector"]["condition_family_ids"]:
         evidence = included.get(condition_id, ())
-        request = (
-            request_factory(contrast, condition_id, evidence, inputs.floor_artifact)
-            if request_factory is not None
-            else floor_request_for_evidence(
+        request_refusal_reasons: tuple[str, ...] = ()
+        if request_factory is not None:
+            request = request_factory(
+                contrast, condition_id, evidence, inputs.floor_artifact
+            )
+        else:
+            request_or_refusal = _floor_request_or_refusal(
                 inputs.floor_artifact,
                 inputs.floor_binding,
                 contrast,
                 condition_id,
                 evidence,
             )
-        )
+            if isinstance(request_or_refusal, tuple):
+                request = None
+                request_refusal_reasons = request_or_refusal
+            else:
+                request = request_or_refusal
         if request is None or (
             request.metric != contrast["floor_selector"]["metric"]
             or request.window_class != contrast["floor_selector"]["window_class"]
@@ -399,7 +407,22 @@ def _resolve_contrast_floor(
                 != arm_hashes.get(condition_id)
             )
         ):
-            if request_factory is None and (
+            if request_refusal_reasons:
+                resolutions.append(
+                    FloorResolution(
+                        status="refused",
+                        artifact_id=str(inputs.floor_artifact.get("artifact_id", "")),
+                        artifact_sha256=inputs.floor_sha256,
+                        source_cell_ids=(),
+                        transport_group_id=None,
+                        transport_rule_id=None,
+                        floor_abs_j=None,
+                        floor_cmp_j=None,
+                        floor_gate_j=None,
+                        reason_codes=request_refusal_reasons,
+                    )
+                )
+            elif request_factory is None and (
                 inputs.floor_binding.global_problems
                 or any(inputs.floor_binding.problems_by_cell.values())
             ):
