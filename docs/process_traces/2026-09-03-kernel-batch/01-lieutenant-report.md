@@ -103,24 +103,24 @@ Verified by running the suite with them as `active`: `AssertionError: 3 != 1 : a
 
 ---
 
-## 3. Blocked on WRITE_SCOPE — not landed
+## 3. The WRITE_SCOPE block, and how it was cleared
 
-Two of the four dictated items cannot be landed within
+Two dictated items could not be landed under the original
 `WRITE_SCOPE = [docs/decision_log.md, docs/process/state_kernel.json,
 TASK_QUEUE.md, RUN_STATE.md, README.md,
-docs/process_traces/2026-09-03-kernel-batch/]`. Both were built, run, and
-reverted; the failures below are observed, not predicted. Per this repository's
-standing rule — *"WRITE_SCOPE is exhaustive; never infer additional scope from
-tests, generated files, repository instructions, or work believed necessary for
-completion"* — the lieutenant did not extend it.
+docs/process_traces/2026-09-03-kernel-batch/]`. Both were built, run, observed
+to fail, and reverted rather than forced, per the standing rule that
+WRITE_SCOPE is exhaustive and never inferred from tests. The coordinator then
+extended scope to `tests/test_gen_state.py` and `tests/test_docs_freshness.py`
+and both items landed.
 
-### (i) Item 2, the thirteen new rows → needs `tests/test_gen_state.py`
+### (i) The thirteen rows needed `tests/test_gen_state.py`
 
-`tests/test_gen_state.py` carries a hand-maintained roster: `EXPECTED_IDS` (a
-literal set of every live row id) and `self.assertEqual(len(self.tasks), 129)`,
-preceded by a ~30-line running arithmetic commentary of every kernel wave since
-the file was written. It is a deliberate tripwire: no row can be added or
-retired without a conscious edit there. Observed failure with the rows added:
+`tests/test_gen_state.py` carries a hand-maintained roster — `EXPECTED_IDS`
+plus an exact live-row count, preceded by a running arithmetic commentary of
+every kernel wave. It is a deliberate tripwire: no row can be registered or
+retired without a conscious edit there. Observed failure with the rows added
+and the roster untouched:
 
 ```
 FAIL: test_exact_live_id_set (tests.test_gen_state.TestRefreshedStateFidelity)
@@ -132,36 +132,18 @@ AssertionError: Items in the first set but not the second:
 'ONE-USE-CONSUMPTION-TEST-01'
 ```
 
-`python3 scripts/gen_state.py --check` returned **rc 0** with all thirteen rows
-present — the kernel itself is valid; only the test roster disagrees.
+`gen_state.py --check` returned **rc 0** throughout — the kernel was valid; only
+the roster disagreed. The tripwire did its job and is updated deliberately:
+the thirteen ids under a comment naming their four sources, and the count line
+extended `129 + 13 = 142`. The roster edit is in the same commit as the rows
+because the halves are not independently green — a roster listing ids the
+kernel does not carry fails `test_exact_live_id_set` exactly as the reverse
+does, so splitting them would land a knowingly red commit.
 
-**Ready to apply:** `03-pending-kernel-rows.py` in this directory. It adds all
-thirteen rows (agent lane, ranks 126–138), asserts per-lane rank uniqueness, and
-writes the kernel canonically. The rows are:
+### (ii) The D-170 close needed `tests/test_docs_freshness.py` — and this was the more interesting one
 
-| id | status | authority |
-|---|---|---|
-| `LINEAGE-RELOCATABLE-01` | queued | file 32 S3 (d) |
-| `LINEAGE-RESOLVE-RACE-01` | queued | file 46 NIT-1 |
-| `ONE-USE-CONSUMPTION-TEST-01` | queued | file 46 NIT-2 |
-| `RAW-CAPTURE-DIGEST-01` | queued | code audit §5 item 1 |
-| `SILENT-REFUSAL-TESTS-01` | queued | code audit §5 item 2 + §2.2/§2.3 |
-| `CANONICAL-JSON-ONE-HOME-01` | queued | code audit §5 item 3 |
-| `INSTRUMENT-PATH-PIN-01` | queued | code audit §5 item 4 |
-| `GENERATOR-CORE-01` | queued | code audit §5 item 5 |
-| `WATCHDOG-INSTALL-01` | partial | watchdog gate synthesis |
-| `NIGHT-PLAN-PIN-01` | partial | watchdog gate synthesis row 7 |
-| `R7F-EXIT3-SEMANTICS-01` | queued | r7f-unavailable ruling `:73` |
-| `PREWINDOW-V5-PIN-01` | queued | unattended stage-1 R-12 |
-| `CHARTER-V3-PACKET-INPUTS-01` | queued | D-170 item 4 deferral |
-
-The last three, with `LINEAGE-RELOCATABLE-01`, are the audit's four
-ruled-not-installed rows.
-
-### (ii) Item 3's D-170 close → needs `tests/test_docs_freshness.py`
-
-D-170 is the **live fixture** for that file's open-decision mutation guards.
-Closing it makes four counterfactual assertions stop raising. Observed:
+D-170 was the **live fixture** for four of that file's guards. Closing it made
+them stop firing *while still reporting green*:
 
 ```
 FAIL: test_malformed_decision_index_status_is_not_skipped
@@ -172,23 +154,40 @@ FAIL: test_open_decision_counterfactuals_bind_all_installation_limbs
 FAIL: test_terminal_decision_counterfactuals (mutation='M6c')
 ```
 
-`M6c` is explicit about it: it flips D-170 to `adopted` against the live kernel
-and requires an `AssertionError` naming a "pending decision dependency on task".
-Once the nine dependencies are satisfied there is none, so the guard no longer
-fires. Again `gen_state.py --check` returned **rc 0** — the kernel is valid;
-these are test fixtures that must move with D-170.
+That is a guard-disarming failure mode, not a bookkeeping nuisance: had the
+close landed with the fixtures adjusted only far enough to go green, four
+assertions would have been silently retired by a bookkeeping edit. The file's
+own history records the same class — `_next_unused_decision_id`'s docstring
+says D-171 "landed on 2026-09-02 and broke the literal."
 
-**Ready to apply:** `04-pending-d170-close.py`. It satisfies all nine
-dependencies with the pointers D-170's own item-1 rule demands (a `tests/*.py`
-path whose label names a test defined in that file):
-`tests/test_gen_state.py::test_satisfied_decision_dependency_requires_named_test_regression`
-for the item-1 rows, and
-`tests/test_arm_readiness.py::test_t0_liveness_bound_refuses_at_600s_plus_1ns`
-for `V5-TRANSACTION-01` (item 3). It then unblocks the six rows whose only
-pending dependency was D-170, retires `T26-RULING-INSTALL-01`, and unblocks
-`ED-BRANCH-PROTECTION-E1-01`. The decision-log index flip to
-`adopted (magistrate, 2026-09-03; installed by PRs #273, #274, #275)` is a
-one-line edit applied alongside it.
+Per the coordinator's ruling the fixtures are now **synthesized, not
+borrowed**: a new helper `_synthetic_open_decision` builds a decision id above
+every live one, an index row naming a synthetic installing task, that task with
+the `kind: decision` close dependency, and a carrier task with the pending
+hard/start one. Each mutant group also asserts its baseline passes *before*
+mutating, so a mutant can never fire on a broken baseline and be mistaken for a
+working guard. Coverage widened rather than merely moved: the limb test went
+from four subtests to five, and the malformed-status probe now derives its row
+from the live index and asserts the malformation actually makes the parser skip
+a row it still counts — the old version quoted one decision's exact text, so
+any edit to that row would have turned the probe into a silent no-op.
+
+**The rework was mutation-probed at the bench**, because a rebuilt guard that
+is merely green proves nothing. Each check was deleted or neutered in turn and
+the suite observed to go red:
+
+| Probe | Mutation | Result |
+|---|---|---|
+| limb 1 | `assertIsNotNone(installing, …)` → `continue` | KILLED (`limb 1 open status names no installing task`) |
+| limb 2 | installer-dependency assertion neutered with `True or …` | KILLED (`limb 2 named task carries no dependency`) |
+| limb 3 | assertion deleted outright | KILLED (`limb 3 installer close dependency but no start dependency`) |
+| terminal | terminal-status-over-pending check disabled with `if False and …` | KILLED (`M6c terminal status over a pending dependency`) |
+| index | `assertEqual` → `assertLessEqual` in `_assert_index_rows_complete` | KILLED (`test_malformed_decision_index_status_is_not_skipped`) |
+
+One earlier probe (`state == "pending"` → `state in ("pending","satisfied")`)
+did **not** kill, and is recorded because it is a lesson rather than a defect:
+that mutation does not weaken what the limb-3 subtest exercises, so it was a
+bad probe, not a gap. It was replaced with the outright deletion above.
 
 ---
 
@@ -197,24 +196,31 @@ one-line edit applied alongside it.
 | Commit | What |
 |---|---|
 | `01232da1` | D-171 dated addendum: item 6's ratification corrected, item 7's timing superseded, with an Executed-evidence block per D-170 item 4. Original D-171 text untouched. |
-| `471c2f01` | Kernel row-state corrections A4 (`V4-TRANSACTION-01` retired by supersession, with a dated D-167 addendum), A5 (`PIPELINE-SMOKE-LIVE-01` ghost dependency retargeted to `V5-DECODE-IDENTITY-SET-01`; goal `_v4`→`_v5`), A9 (`T0-UNATTENDED-01` re-stated as blocked on `NIGHT-REHEARSAL-01`), A7-adjacent (`NIGHT-REHEARSAL-01` fifth acceptance row + uninstall-now-done note). |
-| `bac9ae31` | README activity blurb rewritten; RUN_STATE T31 NEXT MACHINE STEP set to watchdog install → plan pin → G2-a night; audit A2, C1, B1, B2, B3 applied. |
-| `c365825b` | README B4 reverted — see below. |
+| `471c2f01` | Audit A4 (`V4-TRANSACTION-01` retired by supersession, dated D-167 addendum), A5 (`PIPELINE-SMOKE-LIVE-01` ghost dependency retargeted; goal `_v4`→`_v5`), A9 (`T0-UNATTENDED-01` blocked on `NIGHT-REHEARSAL-01`), A7-adjacent (`NIGHT-REHEARSAL-01` fifth acceptance row, uninstall-now-done). |
+| `bac9ae31` | README activity blurb; RUN_STATE T31 NEXT MACHINE STEP = watchdog install → plan pin → G2-a night; audit A2, C1, B1, B2, B3. |
+| `c365825b` | README B4 reverted — see §5. |
+| `f053a145` | This report (first round). |
+| `2daa699a` | The thirteen kernel rows + the `EXPECTED_IDS` tripwire and count. |
+| `299dbf80` | The decision-log guards unpinned from D-170's literal state. |
+| `2ef6094d` | D-170 closed: `adopted`, its three installing PRs named, nine dependencies satisfied, `T26-RULING-INSTALL-01` retired, `ED-BRANCH-PROTECTION-E1-01` unblocked. |
+| `bdf59853` | `ARM-PACKET-01` retargeted to `V5-TRANSACTION-01`, dated D-167 addendum citing D-164/D-167. |
 
-Two notes on what landed:
+Kernel: 129 → **142** live rows. Six rows unblocked by the D-170 close
+(`GAMMA-UNIT-ROSTER-GUARD-01` and the five S9 sweep rows), plus
+`ED-BRANCH-PROTECTION-E1-01`.
 
-- **"Retired" is recorded as `shelved`.** The kernel's status enum has no
-  `retired`, so `V4-TRANSACTION-01` and (in the pending script)
-  `T26-RULING-INSTALL-01` are `shelved` with the reason in the status note.
-  `gen_state.py` exempts `shelved` from the blocked-iff-pending-hard-start
-  invariant, so this is the mechanically correct choice, but it is a vocabulary
-  substitution and is flagged as such.
-- **A consequence the magistrate should rule on.** `ARM-PACKET-01` carries a
-  pending hard-start dependency on the now-shelved `V4-TRANSACTION-01`. It is
-  visibly blocked rather than silently broken, but it wants a disposition
-  (retarget to `V5-TRANSACTION-01`, or retire alongside). Recorded in the D-167
-  addendum; not decided here — retargeting a claim-path packet row is not a
-  lieutenant call.
+Two vocabulary notes on what landed:
+
+- **"Retired" is recorded as `shelved`.** The status enum has no `retired`, so
+  `V4-TRANSACTION-01` and `T26-RULING-INSTALL-01` are `shelved` with the reason
+  in the status note. `gen_state.py` exempts `shelved` from the
+  blocked-iff-pending-hard-start invariant, so this is mechanically correct,
+  but it is a substitution and is flagged as one. It is also why the row count
+  rises by thirteen rather than by eleven: retirements here keep the row live
+  in the kernel.
+- **`in_progress` does not exist either**, and `active` is barred by the
+  one-active-row-per-lane test (observed: `AssertionError: 3 != 1 : agent`), so
+  `WATCHDOG-INSTALL-01` and `NIGHT-PLAN-PIN-01` are `partial`.
 
 ---
 
@@ -222,29 +228,20 @@ Two notes on what landed:
 
 | Audit item | Reason skipped |
 |---|---|
-| **B4** — README status-site paragraph (D-136 retired the lane; the README still instructs sessions to do site work) | Applied, then **reverted**. `tests/test_docs_freshness.py::test_site_closeout_is_drift_report_then_ed_deploy` requires every site-publish section to carry the DRIFT-report-then-Ed-deploy sentence, and `_site_publish_instructions` rejected the replacement prose. Landing B4 needs that test edited — out of WRITE_SCOPE. **The audit did not notice this test.** Observed failures: `test_site_closeout_is_drift_report_then_ed_deploy` and `test_checker_mutation_probes_are_rejected_and_history_is_ignored`. |
-| **A1** — copy pause-state file 39 to main | Target `docs/process_traces/2026-09-02-decode-identity-set/` is outside WRITE_SCOPE. Mitigated: the T31 addendum now says the pointer resolves only on the decode-identity branch. |
-| **A3** — D-170 close | Blocked on `tests/test_docs_freshness.py`; see §3(ii). |
+| **B4** — README status-site paragraph (D-136 retired the lane; the README still instructs sessions to do site work) | Applied, then **reverted**, and stays reverted by the coordinator's ruling. `tests/test_docs_freshness.py::test_site_closeout_is_drift_report_then_ed_deploy` requires every site-publish section to carry the DRIFT-report-then-Ed-deploy sentence, and `_site_publish_instructions` rejected the replacement prose. **The audit did not notice this test.** Landing B4 means deciding whether that guard should still exist under D-136 — a doctrine question, not a wording fix. Observed failures: `test_site_closeout_is_drift_report_then_ed_deploy`, `test_checker_mutation_probes_are_rejected_and_history_is_ignored`. |
+| **A1** — copy pause-state file 39 to main | Target directory outside WRITE_SCOPE. Mitigated: the T31 addendum now says the pointer resolves only on the decode-identity branch. |
 | **A6 (second half)** — `PROJECT_STATUS.md` paragraph on the unattended driver | `PROJECT_STATUS.md` outside WRITE_SCOPE. |
-| **A7** — register the four ruled-not-installed rows | Blocked on `tests/test_gen_state.py`; see §3(i). Prepared. |
-| **A8** — open the `paper-c` PR | Not a file edit; opening a PR is outside this task and is an irreversible action a lieutenant does not take alone. `origin/feat/2026-09-02-paper-c` still carries two commits with no PR. |
-| **A10** — `latest_report` repoint / catch-up run report | Both branches need `docs/run_reports/`, outside WRITE_SCOPE. The kernel's `latest_report` still points at 2026-08-25. |
-| **B5** — publication checklist D-078 fence | `docs/publication_release_checklist.md` outside WRITE_SCOPE. This one adds a soundness fence and should be prioritised. |
-| **B6** — `docs/milestones.md` rewrite | Outside WRITE_SCOPE. |
-| **B7** — `docs/agent_playbook.md` mission menu | Outside WRITE_SCOPE. |
-| **B8** — `docs/orchestration.md` roles section | Outside WRITE_SCOPE. |
-| **B9** — `docs/risk_register.md` | Outside WRITE_SCOPE. Note it proposes two new rows (unattended nights with Ed absent; the paper deadline) that are live risks right now. |
-| **B10** — orphan "A" in `PROJECT_STATUS.md:136` | Outside WRITE_SCOPE. |
-| **C2** — D-131 cl.2/cl.3 amendment | Genuinely owed and in flight on the decode-identity branch; not this batch's to land. |
-| **C3** — trace retenses | All targets are trace files outside WRITE_SCOPE. |
-| **C4** — dated addendum on the dx-t26a ruling's grep predicate | Trace file outside WRITE_SCOPE. |
-| **C5** — label the unresolvable sha | Trace file outside WRITE_SCOPE. |
-| **C6** — `TASK_QUEUE.md` intake rule + T30 council-log block | The intake rule sits outside the generated marker fence, and WRITE_SCOPE permits `TASK_QUEUE.md` changes only via `gen_state.py`; `docs/council_log.md` is outside WRITE_SCOPE. |
-| **A5 (partial)** — `_v4` wording inside `PIPELINE-SMOKE-LIVE-01`'s acceptance evidence | In WRITE_SCOPE but deliberately not applied: editing a claim-path gate's acceptance text is a magistrate call. The dependency and goal are fixed; the acceptance wording is flagged in the row's status note. |
+| **A8** — open the `paper-c` PR | Not a file edit, and opening a PR is an irreversible action a lieutenant does not take alone. `origin/feat/2026-09-02-paper-c` still carries two commits with no PR. |
+| **A10** — `latest_report` repoint / catch-up run report | Both branches need `docs/run_reports/`, outside WRITE_SCOPE. `latest_report` still points at 2026-08-25. |
+| **B5** — publication checklist D-078 fence | Outside WRITE_SCOPE. **This one adds a soundness fence and should be prioritised**: step 3 as written regenerates a publishable-looking report from bundles whose energy values D-078 voided. |
+| **B6–B10** — `docs/milestones.md`, `docs/agent_playbook.md`, `docs/orchestration.md`, `docs/risk_register.md`, `PROJECT_STATUS.md` | All outside WRITE_SCOPE. B9 proposes two rows for live risks (unattended nights with Ed absent; the paper deadline). |
+| **C2–C5** | Targets are trace files or the decode-identity branch, outside WRITE_SCOPE. C2 (the D-131 amendment) is genuinely owed and in flight on that branch. |
+| **C6** — `TASK_QUEUE.md` intake rule + T30 council-log block | The intake rule sits outside the generated marker fence and WRITE_SCOPE permits `TASK_QUEUE.md` changes only via `gen_state.py`; `docs/council_log.md` is outside WRITE_SCOPE. |
+| **A5 / ARM-PACKET-01 (partial)** — `_v4` wording surviving inside two rows' acceptance evidence | In WRITE_SCOPE but deliberately not applied: acceptance text on claim-path rows. Both are flagged in their status notes for the ruling that re-cuts the packet contents. |
 
-Nothing in the audit's "soundness fences — KEEP" list was touched. In
-particular the D-078 voiding language in `README.md` and the
-`V5-TRANSACTION-01` fences are exactly as they were.
+Nothing in the audit's "soundness fences — KEEP" list was touched: the D-078
+voiding language in `README.md` and the `V5-TRANSACTION-01` fences stand as
+they were.
 
 ---
 
@@ -258,13 +255,16 @@ Ran 65 tests in 2.537s
 OK
 ```
 
-At the branch head:
+At the branch head, with 142 kernel rows and D-170 closed:
 
 ```
 $ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_gen_state tests.test_docs_freshness
-Ran 65 tests in 2.572s
+Ran 65 tests
 OK
 
 $ python3 scripts/gen_state.py --check ; echo rc=$?
 rc=0
 ```
+
+The test count is unchanged at 65 because the reworked guards gained subtests
+inside existing test methods rather than new methods.
