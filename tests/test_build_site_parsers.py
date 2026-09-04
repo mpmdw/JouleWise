@@ -96,6 +96,21 @@ class BuildSiteParserTests(unittest.TestCase):
         self.assertEqual(["in progress", "planned"], [phase.state for phase in phases])
         self.assert_fail_closed(build_site.parse_status_at_glance, md.replace("Status", "State"))
 
+    def test_parse_status_at_glance_accepts_compact_table_rows(self):
+        md = """# X
+
+### Status At A Glance
+
+|Phase|Scope|Status|
+|---|---|---|
+|1. One|work|planned|
+"""
+        phases = build_site.parse_status_at_glance(md)
+        self.assertEqual(
+            [build_site.StatusPhase("1. One", "work", "planned", "planned")],
+            phases,
+        )
+
     def test_compact_project_status_satisfies_production_consumers(self):
         project = build_site.read_source("PROJECT_STATUS.md")
         run = build_site.read_source("RUN_STATE.md")
@@ -269,18 +284,18 @@ class BuildSiteParserTests(unittest.TestCase):
         self.assertEqual("P2-011", rows[0]["ID"])
         self.assert_fail_closed(build_site.parse_completed_queue, md.replace("| ID | Priority | Completed | Task | Evidence |", "| ID | Task |"))
 
-    def test_parse_completed_queue_keeps_inline_code_pipe_in_one_cell(self):
-        md = """# Queue
+    def test_parse_completed_queue_keeps_escaped_and_inline_code_pipes_in_one_cell(self):
+        md = r"""# Queue
 
 ## Completed Queue Items
 
 | ID | Priority | Completed | Task | Evidence |
 |---|---|---|---|---|
-| FIX-1 | P2 | 2026-09-04 | Preserve max|r| and the filter | Checked with `git diff -G 'flagless|allowlist|preserve'`. |
+|FIX-1|P2|2026-09-04|Preserve max\|r\| and the filter|Checked with `git diff -G 'flagless|allowlist|preserve'`.|
 """
         rows = build_site.parse_completed_queue(md)
         self.assertEqual(1, len(rows))
-        self.assertIn("max|r|", rows[0]["Task"])
+        self.assertIn(r"max\|r\|", rows[0]["Task"])
         self.assertIn("flagless|allowlist|preserve", rows[0]["Evidence"])
 
     def test_parse_do_not_do(self):

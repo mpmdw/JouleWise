@@ -686,41 +686,66 @@ def git_source_stamp(source: str) -> SourceStamp:
     return SourceStamp(source=source, commit=commit, dirty=dirty)
 
 
-def parse_pipe_row(line: str) -> list[str]:
-    row = line.strip().strip("|")
-    cells: list[str] = []
-    cell: list[str] = []
-    code_ticks = 0
-    index = 0
-    while index < len(row):
-        char = row[index]
-        if char == "`":
-            run_end = index
-            while run_end < len(row) and row[run_end] == "`":
-                run_end += 1
-            tick_count = run_end - index
-            if code_ticks == 0:
-                code_ticks = tick_count
-            elif tick_count == code_ticks:
-                code_ticks = 0
-            cell.append(row[index:run_end])
-            index = run_end
-            continue
-        if (
-            char == "|"
-            and code_ticks == 0
-            and index > 0
-            and index + 1 < len(row)
-            and row[index - 1].isspace()
-            and row[index + 1].isspace()
-            and row[index - 1] != "\\"
-        ):
-            cells.append("".join(cell).strip())
-            cell = []
-        else:
-            cell.append(char)
-        index += 1
-    cells.append("".join(cell).strip())
+def parse_pipe_row(line: str, expected_cells: int | None = None) -> list[str]:
+    row = line.strip()
+
+    def is_escaped(index: int) -> bool:
+        preceding_backslashes = 0
+        index -= 1
+        while index >= 0 and row[index] == "\\":
+            preceding_backslashes += 1
+            index -= 1
+        return preceding_backslashes % 2 == 1
+
+    if row.startswith("|"):
+        row = row[1:]
+    if row.endswith("|") and not is_escaped(len(row) - 1):
+        row = row[:-1]
+
+    def split(*, whitespace_boundaries_only: bool) -> list[str]:
+        cells: list[str] = []
+        cell: list[str] = []
+        code_ticks = 0
+        index = 0
+        while index < len(row):
+            char = row[index]
+            if char == "`":
+                run_end = index
+                while run_end < len(row) and row[run_end] == "`":
+                    run_end += 1
+                tick_count = run_end - index
+                if code_ticks == 0:
+                    code_ticks = tick_count
+                elif tick_count == code_ticks:
+                    code_ticks = 0
+                cell.append(row[index:run_end])
+                index = run_end
+                continue
+            whitespace_boundary = (
+                index > 0
+                and index + 1 < len(row)
+                and row[index - 1].isspace()
+                and row[index + 1].isspace()
+            )
+            if (
+                char == "|"
+                and code_ticks == 0
+                and not is_escaped(index)
+                and (not whitespace_boundaries_only or whitespace_boundary)
+            ):
+                cells.append("".join(cell).strip())
+                cell = []
+            else:
+                cell.append(char)
+            index += 1
+        cells.append("".join(cell).strip())
+        return cells
+
+    cells = split(whitespace_boundaries_only=False)
+    if expected_cells is not None and len(cells) > expected_cells:
+        legacy_cells = split(whitespace_boundaries_only=True)
+        if len(legacy_cells) == expected_cells:
+            return legacy_cells
     return cells
 
 
@@ -752,7 +777,7 @@ def parse_table_after_heading(
             break
     if table_start is None:
         fail(heading, source, "markdown table after heading")
-    parsed_headers = parse_pipe_row(lines[table_start])
+    parsed_headers = parse_pipe_row(lines[table_start], expected_cells=len(headers))
     if parsed_headers != headers:
         fail(heading, source, f"table headers {headers!r}")
     if table_start + 1 >= len(lines) or not re.match(r"^\s*\|?\s*:?-{3,}", lines[table_start + 1]):
@@ -761,7 +786,7 @@ def parse_table_after_heading(
     for line in lines[table_start + 2:]:
         if not line.strip().startswith("|"):
             break
-        cells = parse_pipe_row(line)
+        cells = parse_pipe_row(line, expected_cells=len(headers))
         if len(cells) != len(headers):
             fail(heading, source, f"{len(headers)} table cells per row")
         rows.append(dict(zip(headers, cells)))
@@ -1037,7 +1062,7 @@ def is_table_separator(line: str) -> bool:
 
 def render_table(lines: list[str]) -> str:
     headers = parse_pipe_row(lines[0])
-    rows = [parse_pipe_row(line) for line in lines[2:]]
+    rows = [parse_pipe_row(line, expected_cells=len(headers)) for line in lines[2:]]
     head = "".join(f"<th>{inline_md(cell)}</th>" for cell in headers)
     body_rows = []
     for row in rows:
