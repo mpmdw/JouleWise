@@ -232,3 +232,21 @@ This addendum narrows round 6 only for S-2b: recovery after a resident superviso
 | S-2b — the real CLI replacement path records adoption and the first ladder event | `scripts/magistrate_watchdog.py:1956-1987` | `tests/test_magistrate_watchdog_cli.py:292-387`; the trace-18 counterfactual leaves `standdown.request` absent and records no `resident_adopted`/`resident_drain_started`. |
 
 Final authorized modules: watchdog 53 OK, CLI 3 OK, night gate 47 OK, run-night 55 OK, installer 11 OK. No install, agent launch, launchd mutation, default-custody write, production-agent signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 8 clause-map addendum (2026-09-04 PDT)
+
+This final pre-cold-gate addendum supersedes round 7 only where trace 22 C-1 through C-8 amend drain timing, installer identity/transaction coverage, persisted backoff, and the rehearsal/LaunchAgent documentation. The complete test-first RED/GREEN transcript and six required module tails are in `23-sol-fix-round-8-report.md`.
+
+| Round-8 clause | Production/documentation | Biting assertion |
+|---|---|---|
+| C-1/C-5 — every latched drain is plan-clamped; replacement ticks apply the wall-time stage immediately | `scripts/magistrate_watchdog.py:1596-1770` | `tests/test_magistrate_watchdog.py:690-783` |
+| C-2 — install and rendered plist are pinned to the canonical checkout | `scripts/install_magistrate_watchdog.sh:35-75,190-209`; `docs/process/MAGISTRATE_WATCHDOG.md:105-123` | `tests/test_install_magistrate_watchdog.py:132-186` |
+| C-3 — backoff persists a wall deadline plus boot identity and resets after reboot | `scripts/magistrate_watchdog.py:472-492,504-508,1139-1186,1198,1258` | `tests/test_magistrate_watchdog.py:1041-1086` |
+| C-4 — behavioral installer transaction coverage, including failed-seed plist cleanup | `scripts/install_magistrate_watchdog.sh:85-263` | `tests/test_install_magistrate_watchdog.py:188-218` |
+| C-6 — GUI-login limitation and 15-minute liveness rule | `docs/process/MAGISTRATE_WATCHDOG.md:61,76-77` | `tests/test_magistrate_watchdog.py:1395-1406` |
+| C-7 — fake rehearsal roots cannot conflict with a real measurement root | `docs/process/MAGISTRATE_WATCHDOG.md:222,253,343` | `tests/test_magistrate_watchdog.py:1352-1393` |
+| C-8 — rendered plist pins install-time `sys.executable` and refuses `/usr/bin/python3` | `scripts/install_magistrate_watchdog.sh:49-64,190-209` | `tests/test_install_magistrate_watchdog.py:147-176` |
+
+Final authorized modules: watchdog 60 OK, CLI 3 OK, watchdog installer 6 OK, night gate 47 OK, run-night 55 OK, night installer 11 OK. The prompt remains 23 lines. No install, real launchctl, agent/session launch, LaunchAgent mutation, default-custody access, production signal, or quiet-machine run occurred.

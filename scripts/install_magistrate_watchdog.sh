@@ -34,6 +34,7 @@ done
 
 script_dir="${0:A:h}"
 repo="${script_dir:h}"
+canonical_repo="/Users/edr/code/JouleWise"
 template="$repo/configs/launchd/com.joulewise.magistrate.plist.template"
 [[ -f "$template" ]] || { print "template not found: $template" >&2; exit 2; }
 /usr/bin/grep -q "KeepAlive" "$template" && {
@@ -45,6 +46,34 @@ label="com.joulewise.magistrate"
 custody_root="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-$HOME/night-custody/magistrate}"
 session_bin="${MAGISTRATE_SESSION_BIN:-/Users/edr/.local/bin/claude}"
 path_value="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+python_bin=""
+if [[ "$mode" != "--uninstall" ]]; then
+  python_command="$(command -v python3 || true)"
+  [[ -n "$python_command" && -x "$python_command" ]] || {
+    print "python3 executable not found" >&2
+    exit 2
+  }
+  if [[ "$python_command" == "/usr/bin/python3" ]]; then
+    print "unacceptable_system_python: /usr/bin/python3 does not carry the repository dependencies" >&2
+    exit 3
+  fi
+  python_bin="$("$python_command" -c 'import sys; print(sys.executable)')"
+  [[ "$python_bin" == /* && -x "$python_bin" ]] || {
+    print "python3 did not report an executable absolute sys.executable: $python_bin" >&2
+    exit 2
+  }
+fi
+
+if [[ "$mode" == "--install" ]]; then
+  canonical_repo="${canonical_repo:A}"
+  resolved_repo="${repo:A}"
+  git_root="$(/usr/bin/git -C "$resolved_repo" rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$git_root" ]] && git_root="${git_root:A}"
+  if [[ "$resolved_repo" != "$canonical_repo" || "$git_root" != "$canonical_repo" ]]; then
+    print "noncanonical_checkout: --install requires $canonical_repo (script repo=$resolved_repo git root=${git_root:-unavailable})" >&2
+    exit 3
+  fi
+fi
 
 if [[ "$mode" != "--uninstall" ]]; then
   [[ -L "$session_bin" && -x "$session_bin" ]] || {
@@ -61,7 +90,7 @@ if [[ "$mode" == "--install" ]]; then
   # File 15 row 10: the installing, Terminal-hosted magistrate is the one
   # exceptional pre-watchdog tree that the first supervisor must adopt.
   read -r adopt_pid adopt_start adopt_activation adopt_version < <(
-    /usr/bin/python3 - "$session_bin" <<'PY'
+    "$python_bin" - "$session_bin" <<'PY'
 import os
 import re
 import subprocess
@@ -123,6 +152,17 @@ else
 fi
 plist="$launch_dir/$label.plist"
 uid="$(id -u)"
+plist_written=false
+
+cleanup_failed_install() {
+  local exit_code=$?
+  trap - EXIT
+  if (( exit_code != 0 )) && [[ "$mode" == "--install" && "$plist_written" == true ]]; then
+    rm -f "$plist"
+  fi
+  exit "$exit_code"
+}
+trap cleanup_failed_install EXIT
 
 if [[ "$mode" == "--uninstall" ]]; then
   if [[ "$launchctl_bin" != */* ]]; then
@@ -143,11 +183,12 @@ if [[ "$mode" == "--install" ]]; then
   mkdir -p "$custody_root"
 fi
 
-/usr/bin/python3 - "$template" "$plist" "$repo" "$custody_root" "$session_bin" "$path_value" <<'PY'
+"$python_bin" - "$template" "$plist" "$canonical_repo" "$custody_root" "$session_bin" "$path_value" "$python_bin" <<'PY'
 from pathlib import Path
 import sys
+from xml.sax.saxutils import escape
 
-template, output, repo, custody, session_bin, path_value = sys.argv[1:]
+template, output, repo, custody, session_bin, path_value, python_bin = sys.argv[1:]
 replacements = {
     "@@REPO@@": repo,
     "@@CUSTODY_ROOT@@": custody,
@@ -156,11 +197,16 @@ replacements = {
 }
 text = Path(template).read_text(encoding="utf-8")
 for old, new in replacements.items():
-    text = text.replace(old, new)
+    text = text.replace(old, escape(new))
+interpreter_pair = "    <string>/usr/bin/env</string>\n    <string>python3</string>"
+if text.count(interpreter_pair) != 1:
+    raise SystemExit("template interpreter pair is missing or duplicated")
+text = text.replace(interpreter_pair, f"    <string>{escape(python_bin)}</string>")
 if "@@" in text:
     raise SystemExit("unresolved template token")
 Path(output).write_text(text, encoding="utf-8")
 PY
+plist_written=true
 /usr/bin/plutil -lint "$plist"
 
 if [[ "$mode" == "--render-only" ]]; then
@@ -168,7 +214,7 @@ if [[ "$mode" == "--render-only" ]]; then
   exit 0
 fi
 
-/usr/bin/python3 - "$custody_root/magistrate.lock" "$adopt_pid" "$adopt_start" "$adopt_activation" "$session_bin" "$adopt_version" <<'PY'
+"$python_bin" - "$custody_root/magistrate.lock" "$adopt_pid" "$adopt_start" "$adopt_activation" "$session_bin" "$adopt_version" <<'PY'
 import json
 import os
 import sys
@@ -214,4 +260,5 @@ if ! "$launchctl_bin" print "gui/$uid/$label"; then
   print "launch agent verification failed; rolled back $label" >&2
   exit 3
 fi
+trap - EXIT
 print "installed and verified $label"

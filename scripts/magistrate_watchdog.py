@@ -469,6 +469,28 @@ def real_dependencies() -> Dependencies:
     )
 
 
+def current_boot_id() -> str:
+    """Return a stable identifier for this boot without writing machine state."""
+
+    try:
+        result = subprocess.run(
+            ("/usr/sbin/sysctl", "-n", "kern.boottime"),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+    except Exception:
+        result = None
+    if result is not None and result.returncode == 0 and result.stdout.strip():
+        return "kern.boottime:" + result.stdout.strip()
+    # time.monotonic() is boot-relative on the deployment Mac.  Quantizing the
+    # derived wall origin absorbs scheduler jitter while still changing after a
+    # reboot even when sysctl is unavailable.
+    boot_origin_minute = round((time.time() - time.monotonic()) / 60.0) * 60
+    return f"monotonic-origin-minute:{boot_origin_minute:.0f}"
+
+
 def initial_state() -> dict[str, Any]:
     return {
         "schema": SCHEMA,
@@ -482,6 +504,8 @@ def initial_state() -> dict[str, Any]:
         "usage_backoff_index": 0,
         "generic_backoff_index": 0,
         "next_eligible_monotonic": 0.0,
+        "next_eligible_epoch_s": 0.0,
+        "backoff_boot_id": None,
         "notice_pending": [],
         "last_clock": None,
         "clock_sane_samples": 0,
@@ -1115,6 +1139,8 @@ def apply_backoff(
     state[index_key] = min(index + 1, len(ladder) - 1)
     state["backoff_index"] = min(index + 1, len(ladder) - 1)
     state["next_eligible_monotonic"] = monotonic + delay
+    state["next_eligible_epoch_s"] = now.timestamp() + delay
+    state["backoff_boot_id"] = current_boot_id()
     state["last_exit_class"] = exit_class
     transition(
         storage,
@@ -1123,6 +1149,40 @@ def apply_backoff(
         detail,
         now,
         notice="usage_backoff" if usage else "launch_failure",
+    )
+
+
+def reset_backoff_after_reboot(
+    storage: Storage,
+    state: dict[str, Any],
+    now: dt.datetime,
+) -> None:
+    """Discard a persisted deadline that belongs to a different boot."""
+
+    try:
+        monotonic_deadline = float(state.get("next_eligible_monotonic", 0.0))
+        epoch_deadline = float(state.get("next_eligible_epoch_s", 0.0))
+    except (TypeError, ValueError):
+        monotonic_deadline = 0.0
+        epoch_deadline = 0.0
+    if monotonic_deadline <= 0.0 and epoch_deadline <= 0.0:
+        return
+    observed_boot_id = current_boot_id()
+    stored_boot_id = state.get("backoff_boot_id")
+    if stored_boot_id == observed_boot_id:
+        return
+    state["next_eligible_monotonic"] = 0.0
+    state["next_eligible_epoch_s"] = 0.0
+    state["backoff_boot_id"] = observed_boot_id
+    storage.append_jsonl(
+        storage.root / "events.jsonl",
+        {
+            "schema": EVENT_SCHEMA,
+            "kind": "backoff_reset_after_reboot",
+            "epoch_s": now.timestamp(),
+            "stored_boot_id": stored_boot_id,
+            "observed_boot_id": observed_boot_id,
+        },
     )
 
 
@@ -1135,6 +1195,7 @@ def decide(
 ) -> Decision:
     wall = deps.wall_now().astimezone()
     monotonic = deps.monotonic()
+    reset_backoff_after_reboot(storage, state, wall)
     if clock_uncertain(state, wall, monotonic):
         return Decision("CLOCK_UNCERTAIN", "wall and monotonic deltas disagree")
 
@@ -1194,7 +1255,7 @@ def decide(
         return Decision("FENCED", fixed)
     if owner is not None:
         return Decision("ACTIVE", f"owned pid {owner.pid} is live", adopt=True)
-    if monotonic < float(state.get("next_eligible_monotonic", 0.0)):
+    if wall.timestamp() < float(state.get("next_eligible_epoch_s", 0.0)):
         waiting_state = (
             "BACKOFF_USAGE"
             if state.get("last_exit_class") == "usage_exhausted"
@@ -1410,6 +1471,8 @@ class ResidentSupervisor:
                 self.state["usage_backoff_index"] = 0
                 self.state["generic_backoff_index"] = 0
                 self.state["next_eligible_monotonic"] = self.deps.monotonic() + 300
+                self.state["next_eligible_epoch_s"] = now.timestamp() + 300
+                self.state["backoff_boot_id"] = current_boot_id()
                 transition(self.storage, self.state, "IDLE", "clean activation exit", now)
             else:
                 apply_backoff(
@@ -1537,10 +1600,11 @@ class ResidentSupervisor:
         *,
         reason: str,
         state_name: str,
+        plan: NightPlan | None,
         notice: str | None = None,
         record_resident_start: bool = False,
     ) -> bool:
-        self._write_request(None, now, reason=reason)
+        self._write_request(plan, now, reason=reason)
         resident_hold = self.state.get("resident_hold_drain")
         drain_state = dict(resident_hold) if isinstance(resident_hold, Mapping) else None
         if record_resident_start:
@@ -1563,7 +1627,27 @@ class ResidentSupervisor:
             elapsed = max(0.0, monotonic - requested_monotonic)
         except (KeyError, TypeError, ValueError):
             elapsed = max(0.0, now.timestamp() - float(requested["requested_epoch_s"]))
-        if elapsed >= STOP_COOPERATIVE_S + STOP_TERM_GRACE_S:
+        plan_phase = standdown_phase(plan, now.timestamp()) if plan is not None else None
+        kill_due = (
+            elapsed >= STOP_COOPERATIVE_S + STOP_TERM_GRACE_S
+            or plan_phase == "KILL"
+        )
+        term_due = elapsed >= STOP_COOPERATIVE_S or plan_phase in {"TERM", "KILL"}
+        if kill_due:
+            if (
+                plan_phase == "KILL"
+                and isinstance(self.child, AdoptedChild)
+                and self.state.get("standdown_phase") != "TERM"
+                and (drain_state is None or drain_state.get("stage") != "TERM")
+            ):
+                owner = owned_process(self.lock_record, self.deps.processes.snapshot())
+                if owner is None:
+                    return self._forced_hold(now)
+                term_pids = signal_owned_tree(
+                    self.deps.processes, owner.pid, signal.SIGTERM
+                )
+                self._record_signal(now, signal.SIGTERM, term_pids)
+                self.state["standdown_phase"] = "TERM"
             if drain_state is not None:
                 drain_state["stage"] = "KILL"
                 self.state["resident_hold_drain"] = drain_state
@@ -1574,7 +1658,7 @@ class ResidentSupervisor:
             self._record_signal(now, signal.SIGKILL, pids)
             return self._forced_hold(now)
         if (
-            elapsed >= STOP_COOPERATIVE_S
+            term_due
             and self.state.get("standdown_phase") != "TERM"
             and (drain_state is None or drain_state.get("stage") != "TERM")
         ):
@@ -1607,15 +1691,6 @@ class ResidentSupervisor:
         uncertain = clock_uncertain(self.state, now, monotonic)
         if uncertain:
             self.state["clock_drain"] = True
-        if self.state.get("clock_drain"):
-            return self._enforce_drain(
-                now,
-                monotonic,
-                reason="wall and monotonic deltas disagree; conservative resident drain",
-                state_name="CLOCK_UNCERTAIN",
-                notice="clock_uncertain",
-            )
-
         snapshot = load_plans(self.storage, now_epoch_s=now.timestamp())
         record_plan_diagnostics(
             self.storage,
@@ -1627,6 +1702,16 @@ class ResidentSupervisor:
         armed = armed_plans(plans, now.timestamp(), self.storage)
         self.state["fenced_checkouts"] = fenced_checkout_rows(armed)
         conflicts = plan_conflicts(armed)
+        plan = relevant_standdown_plan(plans, now.timestamp(), self.storage)
+        if self.state.get("clock_drain"):
+            return self._enforce_drain(
+                now,
+                monotonic,
+                reason="wall and monotonic deltas disagree; conservative resident drain",
+                state_name="CLOCK_UNCERTAIN",
+                plan=plan,
+                notice="clock_uncertain",
+            )
         resident_hold = self.state.get("resident_hold_drain")
         if isinstance(resident_hold, Mapping):
             return self._enforce_drain(
@@ -1634,6 +1719,7 @@ class ResidentSupervisor:
                 monotonic,
                 reason=str(resident_hold.get("reason", "durable unsafe-plan hold")),
                 state_name="HOLD_UNSAFE",
+                plan=plan,
                 notice=(
                     str(resident_hold["notice"])
                     if resident_hold.get("notice") is not None
@@ -1659,11 +1745,11 @@ class ResidentSupervisor:
                 monotonic,
                 reason=reason,
                 state_name="HOLD_UNSAFE",
+                plan=plan,
                 notice=notice,
                 record_resident_start=True,
             )
 
-        plan = relevant_standdown_plan(plans, now.timestamp(), self.storage)
         # Physical stand-down deadlines are resolved before consulting even a
         # cached remote result.  An in-flight network probe runs independently
         # and can never delay this path.
@@ -1680,6 +1766,7 @@ class ResidentSupervisor:
                 monotonic,
                 reason=stop.detail,
                 state_name="STOP_REQUESTED",
+                plan=plan,
             )
         if stop.state != "CLEAR":
             transition(

@@ -687,6 +687,102 @@ class SupervisorTests(WatchdogTestCase):
         ]
         self.assertEqual(["resident_drain_started", "SIGTERM", "SIGKILL"], ladder)
 
+    def test_latched_drain_at_t0_minus_22_is_killed_by_t0_minus_15(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() + 30 * 60)
+        supervisor = self.supervisor(plan)
+        supervisor.state["resident_hold_drain"] = {
+            "reason": "durable unsafe-plan hold",
+            "notice": None,
+            "stage": None,
+            "started": False,
+        }
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - 22 * 60, tz=self.local_tz
+        )
+
+        self.assertTrue(supervisor.step())
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - wd.KILL_LEAD_S, tz=self.local_tz
+        )
+        self.harness.clock.mono += 7 * 60
+
+        self.assertFalse(supervisor.step())
+        self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
+
+    def test_latched_drain_inside_kill_phase_kills_on_first_poll(self) -> None:
+        plan = self.make_plan(t0=self.base.timestamp() + 30 * 60)
+        supervisor = self.supervisor(plan)
+        supervisor.state["resident_hold_drain"] = {
+            "reason": "durable unsafe-plan hold",
+            "notice": None,
+            "stage": None,
+            "started": False,
+        }
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - 10 * 60, tz=self.local_tz
+        )
+
+        self.assertFalse(supervisor.step())
+        self.assertEqual([(100, signal.SIGKILL)], self.harness.processes.signals)
+
+    def test_future_sibling_hold_is_killed_by_valid_plan_deadline(self) -> None:
+        t0 = self.base.timestamp() + 30 * 60
+        plan = self.make_plan(t0=t0, name="valid-plan")
+        supervisor = self.supervisor(plan)
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            t0 - 20 * 60, tz=self.local_tz
+        )
+        self.make_plan(
+            t0=t0 + 3600,
+            name="future-sibling",
+            authored_epoch_s=self.harness.clock.wall.timestamp() + 3600,
+            measurement_root=str(self.temp / "future-measurement"),
+        )
+
+        self.assertTrue(supervisor.step())
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            t0 - wd.KILL_LEAD_S, tz=self.local_tz
+        )
+        self.harness.clock.mono += 5 * 60
+
+        self.assertFalse(supervisor.step())
+        self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
+
+    def test_unsafe_replacement_tick_in_term_phase_signals_term_immediately(self) -> None:
+        t0 = self.base.timestamp() + 30 * 60
+        plan = self.make_plan(t0=t0, name="valid-plan")
+        plan_path = self.temp / "torn-sibling" / "night_plan.json"
+        plan_path.parent.mkdir()
+        plan_path.write_text("{truncated", encoding="utf-8")
+        lock_record = self.write_live_lock()
+        lock_record["activation_spawn_epoch_s"] = self.base.timestamp()
+        state = wd.initial_state()
+        state.update(
+            {
+                "state": "ACTIVE",
+                "activation_id": "activation-a",
+                "activation_spawn_epoch_s": self.base.timestamp(),
+                "resident_session": lock_record,
+            }
+        )
+        self.harness.storage.atomic_json(
+            self.harness.storage.root / "state.json", state
+        )
+        self.harness.processes.rows = [
+            wd.ProcessInfo(100, 1, "token-a", "recorded resident")
+        ]
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - 12 * 60, tz=self.local_tz
+        )
+
+        decision = wd.tick(self.harness.storage, self.harness.deps)
+
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertEqual(
+            [(100, signal.SIGTERM), (100, signal.SIGKILL)],
+            self.harness.processes.signals,
+        )
+
     def test_replacement_ticks_adopt_recorded_session_and_continue_unsafe_drain(self) -> None:
         plan = self.make_plan()
         plan_path = Path(plan.custody_root) / "night_plan.json"
@@ -941,6 +1037,53 @@ class BackoffAndEventTests(WatchdogTestCase):
             mono += observed[-1]
         self.assertEqual(observed, [base + jitter for base in expected_ladder])
         self.assertEqual(len(state["notice_pending"]), 1, "unchanged backoff transition queues one notice")
+
+    def test_foreign_boot_discards_persisted_backoff_and_records_event(self) -> None:
+        state = wd.initial_state()
+        state.update(
+            {
+                "state": "BACKOFF_USAGE",
+                "last_exit_class": "usage_exhausted",
+                "next_eligible_monotonic": self.harness.clock.mono + 99999,
+                "next_eligible_epoch_s": self.base.timestamp() + 99999,
+                "backoff_boot_id": "foreign-boot-id",
+            }
+        )
+
+        with mock.patch.object(wd, "current_boot_id", return_value="current-boot-id"):
+            decision = wd.decide(self.harness.storage, self.harness.deps, state)
+
+        self.assertEqual("LAUNCHING", decision.state)
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertEqual(
+            ["backoff_reset_after_reboot"],
+            [event["kind"] for event in events],
+        )
+
+    def test_backoff_persists_wall_deadline_and_current_boot_id(self) -> None:
+        state = wd.initial_state()
+        state.update({"state": "ACTIVE", "activation_id": "stable-activation"})
+        delay = wd.USAGE_BACKOFF_S[0] + wd.jitter_for_activation(
+            "stable-activation"
+        )
+
+        with mock.patch.object(wd, "current_boot_id", return_value="current-boot-id"):
+            wd.apply_backoff(
+                self.harness.storage,
+                state,
+                self.base,
+                self.harness.clock.mono,
+                "usage_exhausted",
+                "usage limit reached",
+            )
+
+        self.assertEqual(self.base.timestamp() + delay, state["next_eligible_epoch_s"])
+        self.assertEqual("current-boot-id", state["backoff_boot_id"])
 
     def test_backoff_never_overrides_new_plan_span(self) -> None:
         self.make_plan(t0=self.base.timestamp() + 10 * 60)
@@ -1243,6 +1386,23 @@ class ContractTests(WatchdogTestCase):
                 documented_bytes = paths[0].read_bytes()
                 documented = wd.NightPlan.from_mapping(json.loads(documented_bytes))
                 self.assertEqual(documented_bytes, night_plan_json_bytes(documented))
+                self.assertEqual("REHEARSAL_STUB", documented.receipt_class)
+                self.assertTrue(
+                    documented.measurement_root.startswith("/private/tmp/"),
+                    documented.measurement_root,
+                )
+
+    def test_launchagent_login_limit_and_dead_watchdog_threshold_are_explicit(self) -> None:
+        watchdog = (
+            Path(__file__).resolve().parents[1]
+            / "docs"
+            / "process"
+            / "MAGISTRATE_WATCHDOG.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("does not load before GUI login", watchdog)
+        self.assertIn("no `state.json` write for more than 15 minutes", watchdog)
+        self.assertIn("watchdog is dead", watchdog)
+        self.assertIn("courier email for the next window", watchdog)
 
     def test_install_handoff_is_ordered_and_measurement_checkout_owned(self) -> None:
         repo = Path(__file__).resolve().parents[1]
