@@ -1,0 +1,714 @@
+diff --git a/docs/agent_playbook.md b/docs/agent_playbook.md
+index 220f143129c40ea259030220f19b3778d59781bf..c04313f4420595934c0f9760017d65f099c4e675 100644
+--- a/docs/agent_playbook.md
++++ b/docs/agent_playbook.md
+@@ -475,3 +475,24 @@ The M0 step-6 handoff list, plus: if you changed an adapter or bundle
+ contract, `docs/contracts/` must already reflect it (same run); if you
+ made a choice between real alternatives, the decision log must already
+ hold it. A mission whose bookkeeping is missing is not done.
++
++## Addendum 2026-09-04 — verification instructions at preflight
++
++Mission M0's default suite command applies only when the task does not issue a
++narrower verification rule. If the task says to edit first, names focused test
++modules, prohibits repository-wide discovery, or makes the seat read-only,
++obey that rule: perform the intake and workspace checks, make the authorized
++edit when applicable, and run only the named checks afterward. Record the
++broader suite as deliberately not run and leave any required merge-wide replay
++to the lead; do not spend the seat on a default discovery run that the task
++cannot use. The watchdog contract review demonstrated the trap: broad discovery
++ended in an interrupted calibration test while the focused module completed
++cleanly (`docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`).
++
++Verification must not manufacture workspace dirt that the runner later
++misclassifies as the seat's change. Set `PYTHONDONTWRITEBYTECODE=1` for Python
++tests and direct compilation caches and other generated output to a disposable
++directory unless the task explicitly owns those artifacts. The watchdog build
++and fix reports provide the executed pattern
++(`docs/process_traces/2026-09-02-hands-free-week/17f-watchdog-01-landing.md`;
++`docs/process_traces/2026-09-02-hands-free-week/17h-watchdog-03-fix-round-1.md`).
+diff --git a/docs/orchestration.md b/docs/orchestration.md
+index d3ef1ffb605b96e9246fe0230e5caf46d1983c3d..3455343bef11566fd64d222b817a648aba3b7c3c 100644
+--- a/docs/orchestration.md
++++ b/docs/orchestration.md
+@@ -350,3 +350,93 @@ Pointer map only; mechanics stay in their owning files.
+   design council; C-009 topology consensus; C-010 validation).
+ - The binding rules themselves: `docs/decision_log.md`.
+ - Per-decision, in-stream reasoning: `docs/stream_logs/`.
++
++## Addendum 2026-09-04 — direct seats, replay custody, and cold-gate isolation
++
++This addendum records execution details exposed by the 2026-09-02/03
++hands-free work. It does not supersede D-129: Opus-directed Sol lanes remain the
++standing default. The direct-seat account below is limited to Ed's recorded
++2026-09-03 budget regime, while its launch and recovery safeguards
++apply whenever separate authority permits a direct invocation.
++
++### Direct model seats
++
++A *direct seat* is a bounded model invocation started by the lead through the
++runner, without a second model session whose only job is to start and watch it.
++During the specifically recorded 2026-09-03 budget regime, Ed
++directed the lead to start bounded Sol seats directly after fixing their role,
++prompt, authority, and review lens. This was a dated exception to D-129, not a
++repository-wide replacement for its standing Opus-directed default. It avoided
++the passive wrapper's cost during that regime while preserving lead review of
++every merge-bound result
++(`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
++“2026-09-03 21:05 update”).
++
++Before a direct runner invocation, record its checkout, starting revision,
++comparison base, write scope, output path, report genre, and expected
++verification. Put a read-only seat in a clean disposable checkout or archive,
++because lead-created untracked files can make the runner report a scope failure
++even when the seat changed nothing. Keep the machine-readable report envelope
++within its declared byte limit and put detailed audits in the prose body. A
++runner failure caused only by pre-existing, explicitly attributed dirt is not a
++semantic verdict; the lead records and adjudicates the mismatch before using
++the result
++(`docs/process_traces/2026-09-02-dx-registry/MAGISTRATE-NOTES.md`;
++`docs/process_traces/2026-09-02-dx-registry/22a-terra-243-protocol-failure.md`;
++`docs/process_traces/2026-09-02-hands-free-week/17i-watchdog-04-refuter-execution.md`).
++
++After an interrupted wrapper or usage cutoff, inspect the named worktree,
++branch, report, status file, and log before launching a replacement. A finished
++model run may outlive the wrapper that started it; harvesting that evidence is
++the first recovery action, and blind relaunch is prohibited
++(`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
++“Resume sequence after a usage stall”).
++
++### Replay custody
++
++A *replay* is a repeated check used to show that a reviewed result still holds
++at a named candidate revision or integration tree. Run a merge-bearing replay
++in a clean disposable tree, record the exact revision and merge parents, the
++working directory, full command, unpiped log, exit status, and stable tail. Run
++each mutation from a fresh baseline or verify the restored file digest before
++the next mutation. When reproducibility of a generated artifact is claimed,
++reissue it at the candidate revision and compare bytes with the issued artifact
++(`docs/process_traces/2026-09-02-hands-free-week/17c-planpin-06-fix-round-1.md`;
++`docs/process_traces/2026-09-02-hands-free-week/17h-watchdog-03-fix-round-1.md`;
++`docs/process_traces/2026-09-02-paper-d-dg071/43-integration-replay-and-terminal-review-e7425eef.md`).
++
++### Cold-gate packets and seats
++
++A *cold gate* is an independent review performed before an irreversible process
++mechanism is accepted or installed. Its packet must use neutral, separable
++questions; distinguish executed observations from proposals; time- or
++revision-pin volatile facts; and list every load-bearing source or bounded
++excerpt with its path, digest, and relevant span. Commands in the packet must
++be checked for side effects: a mode-changing option followed by `--help` is not
++assumed to be read-only. Contrary evidence and competing positions receive the
++same level of detail
++(`docs/process_traces/2026-09-02-hands-free-week/12-coldgate-opus-refutation-packet-11.md`,
++“Q8 — Packet hygiene”; `docs/process_traces/2026-09-02-hands-free-week/14-coldgate-fable-ruling-packet-11.md`,
++“Q8 — Packet hygiene”).
++
++Every cold-gate seat receives a distinct scratch directory and sealed output.
++It must not read another seat's scratch material or answer before its prescribed
++independent read order is complete; the lead opens and compares the outputs
++only after both are sealed. The first watchdog convening shared scratch space,
++and the relaunch cured that defect by separating the seats
++(`docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`).
++
++### First-use evidence
++
++A *first-use review* checks that a defined term or code literal is built or
++glossed before a reader must rely on it. For contract edits that add, move, or
++rename such terms, the pre-landing first-use table is mandatory. D-171's dated
++addendum separates that ratified table rule from the executed-probe proposal:
++the latter remains PROPOSAL PENDING ED and does not bind a behavioral contract
++edit outside a magistrate-commissioned brief. The magistrate may require an
++executed first-real-use probe as evidence for a brief it commissions under its
++own authority; that local requirement must be labelled as such and must not be
++cited as a generally ratified repository rule
++(`docs/process_traces/2026-09-03-kernel-batch/01-lieutenant-report.md`,
++“Item 1 — the D-171 addendum”; `docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`,
++finding F4).
+diff --git a/docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md b/docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..aa06253500c0d646a264925fdb1a3f2ce611102e
+--- /dev/null
++++ b/docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md
+@@ -0,0 +1,109 @@
++```json
++{
++  "schema": "claude-codex-report/v1",
++  "genre": "implementation",
++  "status": "clean",
++  "completion": "complete",
++  "summary": "Distilled the seven process lessons and installed authority-bounded doctrine in the repository playbook and orchestration guide.",
++  "workspace": {
++    "base_requested": null,
++    "base_mode": "informational",
++    "head_start": "849915bc1393a6c1cb962a4dc12b25c33dad1f74",
++    "head_end": "849915bc1393a6c1cb962a4dc12b25c33dad1f74",
++    "upstream_end": "849915bc1393a6c1cb962a4dc12b25c33dad1f74",
++    "branch": "feat/2026-09-04-fan-skill-distill"
++  },
++  "pathspec": [
++    "docs/agent_playbook.md",
++    "docs/orchestration.md",
++    "docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md",
++    "docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md"
++  ],
++  "unowned_dirty": [],
++  "verdict": {
++    "implementation": "implemented",
++    "acceptance": "ready"
++  },
++  "verification": [
++    {
++      "id": "V1",
++      "kind": "lint",
++      "cmd": "git diff --check -- docs/agent_playbook.md docs/orchestration.md docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md && echo DIFF-CHECK-OK",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["DIFF-CHECK-OK"]},
++      "expected": {"exit_code": 0, "tail_regex": "DIFF-CHECK-OK"}
++    },
++    {
++      "id": "V2",
++      "kind": "inspection",
++      "cmd": "python3 -c 'import pathlib,re,sys; fs=[pathlib.Path(\"docs/orchestration.md\"),pathlib.Path(\"docs/agent_playbook.md\"),pathlib.Path(\"docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md\")]; refs=sorted({p for f in fs for p in re.findall(r\"`(docs/process_traces/[^`]+[.]md)`\",f.read_text())}); missing=[p for p in refs if not pathlib.Path(p).is_file()]; print(\"EVIDENCE-PATHS-OK\" if not missing else \"MISSING: \"+\" \".join(missing)); sys.exit(bool(missing))'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["EVIDENCE-PATHS-OK"]},
++      "expected": {"exit_code": 0, "tail_regex": "EVIDENCE-PATHS-OK"}
++    },
++    {
++      "id": "V3",
++      "kind": "inspection",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'import subprocess,sys; allowed={\"docs/agent_playbook.md\",\"docs/orchestration.md\",\"docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md\",\"docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md\"}; paths=set(subprocess.check_output([\"git\",\"diff\",\"--name-only\",\"849915bc1393a6c1cb962a4dc12b25c33dad1f74..5a5fc60653c7e1d1d662692e518bcd72b074df5c\"],text=True).splitlines()); extra=sorted(paths-allowed); print(\"COMMITTED-SCOPE-OK\" if not extra else \"UNEXPECTED: \"+\" \".join(extra)); sys.exit(bool(extra))'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["COMMITTED-SCOPE-OK"]},
++      "expected": {"exit_code": 0, "tail_regex": "COMMITTED-SCOPE-OK"}
++    },
++    {
++      "id": "V4",
++      "kind": "inspection",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'import pathlib,re; fs=[(pathlib.Path(\"docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md\"),r\"^## [1-7][.]\"),(pathlib.Path(\"docs/orchestration.md\"),r\"^## Addendum 2026-09-04\"),(pathlib.Path(\"docs/agent_playbook.md\"),r\"^## Addendum 2026-09-04\")]; counts=[len(re.findall(p,f.read_text(),re.M)) for f,p in fs]; assert counts==[7,1,1],counts; print(\"HEADINGS-OK lessons=7 orchestration_addendum=1 playbook_addendum=1\")'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["HEADINGS-OK lessons=7 orchestration_addendum=1 playbook_addendum=1"]},
++      "expected": {"exit_code": 0, "tail_regex": "HEADINGS-OK lessons=7 orchestration_addendum=1 playbook_addendum=1"}
++    },
++    {
++      "id": "V5",
++      "kind": "inspection",
++      "cmd": "python3 -c 'import json,pathlib,re,sys; p=pathlib.Path(\"docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md\"); m=re.match(r\"```json\\n(.*?)\\n```\",p.read_text(),re.S); assert m; n=len(m.group(1).encode()); json.loads(m.group(1)); print(\"ENVELOPE-JSON-OK\"); sys.exit(n>8192)'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["ENVELOPE-JSON-OK"]},
++      "expected": {"exit_code": 0, "tail_regex": "ENVELOPE-JSON-OK"}
++    }
++  ],
++  "flags": []
++}
++```
++
++## Change
++
++The lesson record defines each process term in plain language, ties every lesson
++to repository evidence, supplies one proposed doctrine sentence, and identifies
++the global skill that should receive the same rule later. The orchestration
++addendum installs direct-seat ceremony, harvest-before-retry, clean replay
++custody, packet hygiene, first-use evidence, and independent cold-seat scratch
++space. The playbook addendum makes an explicit task-local, edit-first, or
++focused-test rule override Mission M0's default repository-wide preflight test.
++
++| Finding | Decision | Evidence |
++|---|---|---|
++| A passive model wrapper added cost during the 2026-09-03 budget regime. | Apply direct-seat safeguards only when separate authority permits a direct invocation; D-129's Opus-directed default otherwise governs. | Hands-free durable state, D-129, budget and recovery sections. |
++| Direct runner status can be invalidated by lead dirt or an oversized envelope. | Pin the invocation, isolate read-only work, separate semantic judgment from runner status, and harvest before retry. | DX and T26 magistrate notes; failed and corrected final-head reports. |
++| Generic preflight discovery can consume a bounded seat without answering its question. | Task-local verification instructions govern; edit first and run focused checks when required. | Watchdog contract review and focused landing report. |
++| Replays can be invalidated by wrong parents, contaminated trees, or bad mutation restores. | Use disposable exact trees, recorded parents/logs/status, restored digests, and artifact byte comparison. | Plan-pin, watchdog, and paper integration replay records. |
++| A mechanically complete packet can still bias or contaminate its gate. | Require neutral questions, evidence labels and pins, complete manifests, symmetric alternatives, and side-effect-safe commands. | Watchdog cold-gate refuter and ruling. |
++| Vocabulary first-use and behavioral first-use have different authority. | Require the ratified term table; treat the universal behavioral probe as pending Ed and apply it only to magistrate-commissioned briefs when required under magistrate authority. | Projection pedagogy review, D-171 dated addendum, watchdog first-use finding. |
++| Shared cold-seat scratch space weakens independence. | Give each seat a separate scratch root and open outputs only after sealing. | Watchdog gate synthesis. |
++
++No forbidden state or paper files were edited. The needed global-skill changes
++are proposals only because the skill files are outside the repository write
++scope:
++
++| Global skill | Proposed edit |
++|---|---|
++| `operation-loop` | Preserve D-129's default; apply direct-seat safeguards only under a separately authorized exception, and add task-local verification precedence, harvest-before-retry, and clean exact-parent replay checks. |
++| `codex-delegation` | Add the direct-run launch checklist, small-envelope rule, clean read-only checkout rule, and separate semantic verdict from wrapper failure caused by attributed pre-existing dirt. |
++| `adversarial-review` | Require packet side-effect review and a distinct sealed scratch root for every cold-gate seat. |
++| `council` | Add neutral atomic questions, symmetric alternatives, complete bounded exhibits, volatile-fact pins, and post-seal-only comparison. |
++| `consistency-sweep` | Produce the ratified defined-term first-use table; do not add a universal behavioral-probe gate unless Ed ratifies it. |
++
++## Verification notes
++
++Verification was intentionally deferred until after the documentation edits.
++No repository-wide unit-test discovery was run, and no test module was named or
++touched. Executed commands and stable tails are recorded in the final envelope.
+diff --git a/docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md b/docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..4ef787f4a10af635590fdccaadaaa32a2c099368
+--- /dev/null
++++ b/docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md
+@@ -0,0 +1,177 @@
++# Process lessons distilled from the 2026-09-02/03 work
++
++This record separates seven lessons that arose during the hands-free work. A
++*wrapper* is a model session or launcher layer placed around another model
++invocation. A *direct seat* is a bounded invocation started through
++`codex-run-v3` without a model wrapper. A *preflight* is the intake and checking
++done before an edit. A *replay* repeats a check at a named revision. A *packet*
++is the bounded evidence set given to an independent reviewer. A *first-use
++gate* checks whether a reader can understand a term at its first use. An
++executed first-real-use probe is a separate proposed behavioral gate, not part
++of the generally ratified rule. A *cold gate* is an independent review before
++an irreversible process mechanism is accepted or installed.
++
++## 1. Wrapper cost
++
++The usage cutoff stopped the wrapper fleet while completed Sol work remained on
++disk. On resumption, Ed's recorded 2026-09-03 budget regime moved
++bounded Sol work to direct runner seats, reserved Fable for merge-bound reading
++and the mandatory cold gate, and required disk harvest before relaunch. This is
++evidence about that dated regime; it does not replace D-129's standing
++Opus-directed Sol default.
++
++- Evidence: `docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
++  “2026-09-03 19:45 update,” “2026-09-03 21:05 update,” and “Resume sequence
++  after a usage stall.”
++- Doctrine boundary: “Use direct bounded seats only when a separately recorded
++  authority, such as Ed's 2026-09-03 budget regime, permits the
++  exception; otherwise D-129's Opus-directed Sol default governs.”
++- Installed in-repository: `docs/orchestration.md`, dated addendum.
++- Proposed global-skill edit: record the direct-run safeguards as conditional
++  on a separately authorized exception and preserve D-129's default.
++
++## 2. Direct `codex-run-v3` pitfalls
++
++Direct invocation removes a wrapper but not launch ceremony. Two clean seats
++were reported as scope violations because the lead had added untracked files in
++their linked worktrees. Another semantically clean review was unusable because
++its JSON envelope exceeded the runner's declared byte cap. Successful later
++reviews pinned an empty write scope, ran in a disposable archive or clone, kept
++the machine-readable envelope small, and placed detail in the prose body.
++Interrupted wrappers also required harvesting the worktree and output files
++before any retry because the underlying run could finish after its wrapper
++died.
++
++- Evidence: `docs/process_traces/2026-09-02-dx-registry/MAGISTRATE-NOTES.md`;
++  `docs/process_traces/2026-09-02-t26-items-1-4/MAGISTRATE-NOTES.md`;
++  `docs/process_traces/2026-09-02-dx-registry/22a-terra-243-protocol-failure.md`;
++  `docs/process_traces/2026-09-02-dx-registry/22-fresh-pass-brief.md`;
++  `docs/process_traces/2026-09-02-hands-free-week/17i-watchdog-04-refuter-execution.md`;
++  `docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`.
++- Proposed doctrine sentence: “A direct runner call must pin checkout, revision,
++  comparison base, write scope, output, genre, and verification; isolate
++  read-only work from lead dirt, keep the envelope within its byte contract,
++  and harvest all named outputs before retrying.”
++- Installed in-repository: `docs/orchestration.md`, dated addendum.
++- Proposed global-skill edit: add a direct-run checklist and a harvest-before-
++  retry branch to `codex-delegation`; distinguish semantic findings from runner
++  failures caused solely by attributed pre-existing dirt.
++
++## 3. The preflight trap
++
++The general playbook says to run repository-wide discovery during preflight.
++That default became counterproductive for a bounded watchdog review: discovery
++entered a broader calibration test and was interrupted, while the named
++watchdog module passed. The useful result was the focused review, not the
++pre-edit broad run. Direct seats therefore need the task's explicit verification
++rule to take precedence over the generic default, especially when the prompt
++says “edit first,” names modules, or prohibits discovery.
++
++- Evidence: `docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`,
++  verification V1, V2, and flag G2; contrast the focused-only build record in
++  `docs/process_traces/2026-09-02-hands-free-week/17f-watchdog-01-landing.md`.
++- Proposed doctrine sentence: “When a task supplies a narrower or edit-first
++  verification rule, preflight performs intake and workspace checks but defers
++  testing until after the edit and runs only the named checks.”
++- Installed in-repository: `docs/agent_playbook.md`, dated addendum.
++- Proposed global-skill edit: make task-local verification precedence explicit
++  in `codex-delegation` and `operation-loop`, and require the report to mark the
++  broader suite deliberately not run rather than failed.
++
++## 4. Replay hygiene
++
++The day produced three complementary replay safeguards. A mutation restore
++that also changed an adjacent command was caught by the full-file digest before
++the next mutation. Later mutation probes began from a fresh restoration. The
++merge-bearing paper replay named the exact scratch merge and both parents, kept
++the full suite unpiped in a log, reissued the generated artifacts at the final
++head, and compared their bytes with the issued copies.
++
++- Evidence: `docs/process_traces/2026-09-02-hands-free-week/17c-planpin-06-fix-round-1.md`,
++  “Mutation probes”; `docs/process_traces/2026-09-02-hands-free-week/17h-watchdog-03-fix-round-1.md`,
++  “Mutation probes”; `docs/process_traces/2026-09-02-paper-d-dg071/43-integration-replay-and-terminal-review-e7425eef.md`.
++- Proposed doctrine sentence: “A merge-bearing replay runs in a clean
++  disposable tree at named revision and parents, records its unpiped log and
++  exit status, starts each mutation from verified bytes, and byte-compares any
++  artifact whose reproducibility it claims.”
++- Installed in-repository: `docs/orchestration.md`, dated addendum.
++- Proposed global-skill edit: add the clean-tree, exact-parent, restore-digest,
++  and artifact-byte-comparison checks to `operation-loop` replay and final-head
++  recipes.
++
++## 5. Packet hygiene
++
++The watchdog packet was mechanically strong but still carried decisive
++defects: a proposed `--bg` behavior was described as executed fact; a
++load-bearing audit was cited but omitted from the manifest; current-state facts
++had no time pin; competing arguments were summarized asymmetrically; and
++`claude --bg --help`, presented as a read-only inspection, actually started a
++session and left processes visible to the production census. The cold seats
++could recover only by independently rebuilding the missing evidence.
++
++- Evidence: `docs/process_traces/2026-09-02-hands-free-week/12-coldgate-opus-refutation-packet-11.md`,
++  “Q8 — Packet hygiene”; `docs/process_traces/2026-09-02-hands-free-week/14-coldgate-fable-ruling-packet-11.md`,
++  “Q8 — Packet hygiene”; synthesis in
++  `docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`.
++- Proposed doctrine sentence: “A cold-gate packet uses neutral atomic
++  questions, labels observation versus proposal, pins volatile facts, manifests
++  every load-bearing source or bounded excerpt, presents contrary evidence
++  symmetrically, and executes no command until its side effects are known.”
++- Installed in-repository: `docs/orchestration.md`, dated addendum.
++- Proposed global-skill edit: add a packet-lint checklist to `council` and
++  `adversarial-review`, including a prohibition on assuming that `--help`
++  neutralizes a mode-changing option.
++
++## 6. First-use gate outcomes
++
++The first-use rule had two different outcomes, and both matter. The contract
++review successfully exposed defined vocabulary that appeared before its plain-
++language explanation. For the watchdog, however, the implementation existed
++while the first install/stand-down rehearsal was not replicable; the contract
++review therefore kept that artifact not landable. D-171's dated addendum
++resolves the authority boundary: a first-use vocabulary table is mandatory for
++changed terms and literals, while the general executed-probe rule remains
++PROPOSAL PENDING ED. The magistrate may require a probe only for a brief it
++commissions under its own authority.
++
++- Evidence: `docs/process_traces/2026-09-02-projection-02/163-terra-proj02-pedagogy.md`;
++  `docs/process_traces/2026-09-02-projection-02/181-luna-proj02-delta.md`;
++  `docs/process_traces/2026-09-03-kernel-batch/01-lieutenant-report.md`,
++  “Item 1 — the D-171 addendum”; `docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`,
++  finding F4.
++- Doctrine sentence: “A contract edit that changes defined terms or literals
++  carries a pre-landing first-use table.” A behavioral-probe requirement must
++  identify separate authority: pending Ed's decision, it applies only to a
++  magistrate-commissioned brief when the magistrate requires it.
++- Installed in-repository: `docs/orchestration.md`, dated addendum.
++- Proposed global-skill edit: teach `consistency-sweep` to produce the ratified
++  term table; do not install a universal behavioral-probe rejection rule unless
++  Ed ratifies the pending proposal.
++
++## 7. Cold-gate seat separation
++
++The first watchdog convening placed both independent seats in the same scratch
++directory. Even without a recorded overwrite, that arrangement made accidental
++cross-reading and file collision possible and weakened the meaning of
++independence. The relaunch assigned the cold adjudicator its own scratch
++directory; the final synthesis records the cure.
++
++- Evidence: `docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`,
++  final hygiene paragraph; the resumed plan in
++  `docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`, watchdog
++  lane.
++- Proposed doctrine sentence: “Each cold-gate seat receives a distinct scratch
++  directory and sealed output, cannot read another seat's work before sealing
++  its own, and is compared only by the lead after all seats finish.”
++- Installed in-repository: `docs/orchestration.md`, dated addendum.
++- Proposed global-skill edit: make per-seat scratch roots and post-seal harvest
++  mandatory in `council` and `adversarial-review`.
++
++## Distillation disposition
++
++The in-repository doctrine changes are additive and evidence-linked. No global
++skill was edited because those files are outside this session's write scope.
++No state-kernel, queue, run-state, decision-log, or paper-skeleton change is
++needed for this distillation: D-129 and D-171 already supply the controlling
++boundaries. If the global skills are revised later, their version record should
++point back to this file rather than copy the incident narrative.
+diff --git a/docs/process_traces/2026-09-04-fanout/skill-distill/02-refuter-merge-base.md b/docs/process_traces/2026-09-04-fanout/skill-distill/02-refuter-merge-base.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..ecf3186a07e4fc089fd7500e23850327459c95f2
+--- /dev/null
++++ b/docs/process_traces/2026-09-04-fanout/skill-distill/02-refuter-merge-base.md
+@@ -0,0 +1,183 @@
++```json
++{
++  "schema": "claude-codex-report/v1",
++  "genre": "review",
++  "status": "findings",
++  "completion": "complete",
++  "summary": "The merge-base delta is scope-clean and its focused checks pass, but two authority conflicts and a false-green scope check make the mission not landable.",
++  "workspace": {
++    "base_requested": "ed3dd99b",
++    "base_mode": "exact",
++    "head_start": "ed3dd99b1a24cc321077ee8043d707bcc8261ba2",
++    "head_end": "ed3dd99b1a24cc321077ee8043d707bcc8261ba2",
++    "upstream_end": "ec8f780337326f82feb1848a972c4746612da6cc",
++    "branch": "feat/2026-09-04-fan-skill-distill"
++  },
++  "pathspec": [
++    "docs/process_traces/2026-09-04-fanout/skill-distill/02-refuter-merge-base.md"
++  ],
++  "unowned_dirty": [],
++  "verdict": {
++    "gauntlet": "NOT LANDABLE",
++    "findings": [
++      {
++        "id": "F1",
++        "severity": "blocker",
++        "location": "docs/orchestration.md:427; docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md:128",
++        "text": "The branch installs an executed-probe requirement for every behavioral contract clause and says D-171 resolves it. D-171's dated addendum says the opposite: the probe half is PROPOSAL PENDING ED, applies only under the magistrate's authority to briefs it commissions, and may not be cited as generally ratified. The distillation therefore promotes an explicitly unratified proposal into repository-wide doctrine.",
++        "counterfactual": "Input: a behavioral contract edit outside a magistrate-commissioned brief with a valid first-use table but no executed first-use probe. D-171 does not bind it to the probe proposal, while the new orchestration text rejects it; removing the new probe sentence killed policy mutation B9."
++      },
++      {
++        "id": "F2",
++        "severity": "blocker",
++        "location": "docs/orchestration.md:362; docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md:14",
++        "text": "The new direct-seat default conflicts with binding D-129, which assigns launch/poll/harvest and other ceremony to Opus subagents and makes Opus-directed Sol lanes the standing default. The cited later budget note records a dated operating regime, but this branch neither amends D-129 nor scopes the new rule to that regime; 02-lessons.md instead says no decision-log change is needed.",
++        "counterfactual": "Input: a bounded Sol lane whose role and prompt are fixed and whose Opus wrapper would only launch, poll, and harvest. D-129 routes that ceremony through the Opus-directed default; the new text mandates a direct seat. Removing the direct-seat selection sentence killed policy mutation B3."
++      },
++      {
++        "id": "F3",
++        "severity": "blocker",
++        "location": "docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md:45",
++        "text": "Claimed verification V3 checks only git status, so it cannot detect committed out-of-scope delta paths. In a clean temporary repository whose sole candidate commit added forbidden RUN_STATE.md, the exact V3 command returned WRITE-SCOPE-OK. The mission delta is independently scope-clean, but its mandatory implementation report contains a spoofable scope attestation.",
++        "counterfactual": "Input: clean worktree, base commit, then committed RUN_STATE.md delta. Exact V3 returned exit 0 and WRITE-SCOPE-OK while git diff HEAD^..HEAD named RUN_STATE.md."
++      },
++      {
++        "id": "F4",
++        "severity": "should_fix",
++        "location": "docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md:53",
++        "text": "V4 exits 0, but its recorded observed.tail is not the exact tail produced by its command: replay emits repository-relative paths and both addendum matches, while the report records shortened lesson paths only. The expected regex is present, so this is evidence-record drift rather than a failed heading inspection.",
++        "counterfactual": "Input: exact V4 replay at ed3dd99b. OBSERVED_TAIL_MATCH=False while V4_EXIT=0."
++      }
++    ]
++  },
++  "verification": [
++    {
++      "id": "V1",
++      "kind": "inspection",
++      "cmd": "git status --short --branch && git rev-parse HEAD && git branch --show-current && git merge-base origin/main HEAD",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["## feat/2026-09-04-fan-skill-distill...origin/feat/2026-09-04-fan-skill-distill", "ed3dd99b1a24cc321077ee8043d707bcc8261ba2", "feat/2026-09-04-fan-skill-distill", "b0ed6991c11f3a515ad293760c6dfc031adda8e1"]},
++      "expected": {"exit_code": 0, "tail_regex": "b0ed6991c11f3a515ad293760c6dfc031adda8e1"}
++    },
++    {
++      "id": "V2",
++      "kind": "inspection",
++      "cmd": "git diff --name-only \"$(git merge-base origin/main HEAD)\"..HEAD && test -z \"$(git diff --name-only \"$(git merge-base origin/main HEAD)\"..HEAD -- RUN_STATE.md TASK_QUEUE.md docs/process/state_kernel.json docs/decision_log.md)\" && echo STATE-DOCS-NO-DELTA",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["docs/agent_playbook.md", "docs/orchestration.md", "docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md", "docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md", "STATE-DOCS-NO-DELTA"]},
++      "expected": {"exit_code": 0, "tail_regex": "STATE-DOCS-NO-DELTA"}
++    },
++    {
++      "id": "V3",
++      "kind": "inspection",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'import json,pathlib,re,subprocess; t=pathlib.Path(\"docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md\").read_text(); r=json.loads(re.match(r\"```json\\n(.*?)\\n```\",t,re.S).group(1)); xs=[(v[\"id\"],subprocess.run(v[\"cmd\"],shell=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode) for v in r[\"verification\"]]; print(\" \".join(f\"{i}={c}\" for i,c in xs)); raise SystemExit(any(c for _,c in xs))'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["V1=0 V2=0 V3=0 V4=0 V5=0"]},
++      "expected": {"exit_code": 0, "tail_regex": "V1=0 V2=0 V3=0 V4=0 V5=0"}
++    },
++    {
++      "id": "V4",
++      "kind": "other",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'from pathlib import Path; a=Path(\"docs/agent_playbook.md\").read_text(); o=Path(\"docs/orchestration.md\").read_text(); ps=[(\"B1\",a,\"run only the named checks afterward\"),(\"B2\",a,\"PYTHONDONTWRITEBYTECODE=1\"),(\"B3\",o,\"retain a stream director only when\"),(\"B4\",o,\"comparison base\"),(\"B5\",o,\"blind relaunch is prohibited\"),(\"B6\",o,\"compare bytes with the issued artifact\"),(\"B7\",o,\"mode-changing option followed by `--help`\"),(\"B8\",o,\"distinct scratch directory and sealed output\"),(\"B9\",o,\"behavioral\\nclause also needs an executed probe\")]; rs=[(i,s in t,s not in t.replace(s,\"\",1)) for i,t,s in ps]; print(\" \".join(f\"{i}=BASE_PASS/MUTANT_KILLED\" if b and k else f\"{i}=FAIL\" for i,b,k in rs)); raise SystemExit(not all(b and k for _,b,k in rs))'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["B1=BASE_PASS/MUTANT_KILLED B2=BASE_PASS/MUTANT_KILLED B3=BASE_PASS/MUTANT_KILLED B4=BASE_PASS/MUTANT_KILLED B5=BASE_PASS/MUTANT_KILLED B6=BASE_PASS/MUTANT_KILLED B7=BASE_PASS/MUTANT_KILLED B8=BASE_PASS/MUTANT_KILLED B9=BASE_PASS/MUTANT_KILLED"]},
++      "expected": {"exit_code": 0, "tail_regex": "B9=BASE_PASS/MUTANT_KILLED"}
++    }
++  ],
++  "flags": [
++    {
++      "id": "G1",
++      "kind": "lead_ruling",
++      "level": "blocking",
++      "text": "The direct-seat default and universal executed-probe rule conflict with the current decision-log authority.",
++      "needs": "Either obtain and record superseding rulings, or narrow the new doctrine to the authority and dated operating regime already recorded."
++    }
++  ]
++}
++```
++
++## Findings
++
++### F1 — blocker: unratified executed-probe proposal installed as doctrine
++
++`docs/orchestration.md:427-431` makes an executed probe mandatory for every
++behavioral clause, and `02-lessons.md:132-143` says D-171 resolves that rule.
++D-171's controlling addendum at `docs/decision_log.md:10667-10692` says the
++probe half is pending Ed, is not generally binding, and may be applied only by
++the magistrate to briefs it commissions. This needs a ruling or narrower text.
++
++### F2 — blocker: direct-seat default conflicts with D-129
++
++`docs/orchestration.md:362-366` says to use a direct seat whenever the lead has
++fixed the contract and to retain a director only for real mid-stream judgment.
++D-129 at `docs/decision_log.md:8318-8332` assigns even launch/poll/harvest
++ceremony to Opus subagents and makes Opus-directed Sol lanes the standing
++default. The later budget-regime note can support a dated exception or a
++superseding ruling, but not an uncited silent replacement while
++`02-lessons.md:170-173` says no decision-log change is needed.
++
++### F3 — blocker: committed-scope verification is spoofable
++
++The exact V3 command was run inside a clean temporary repository after a
++candidate commit added `RUN_STATE.md`. It returned:
++
++```text
++WRITE-SCOPE-OK
++COMMITTED_DELTA=RUN_STATE.md
++```
++
++The actual mission delta was checked independently from the required merge
++base and contains exactly the four paths declared in `01-sol-report.md`; all
++four magistrate-owned state paths have no delta. That correct result does not
++repair the false-green attestation already embedded in the landing report.
++
++### F4 — should_fix: V4's recorded tail is not its replayed tail
++
++The exact command exits 0 and finds all headings, but a direct comparison
++returned `OBSERVED_TAIL_MATCH=False`. The report's shortened seven-line tail is
++not exact command output. Replace it with a deterministic summary command or
++record the real output.
++
++## Evidence
++
++All five commands claimed by the landing report were extracted from its JSON
++and executed at the required head before this review report was written:
++`V1=0 V2=0 V3=0 V4=0 V5=0`. No unit-test module was named or changed; per the
++task's preflight rule, repository-wide discovery was not run.
++
++The merge-base delta is:
++
++```text
++docs/agent_playbook.md
++docs/orchestration.md
++docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md
++docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md
++STATE-DOCS-NO-DELTA
++```
++
++Disposable policy-contract probes exercised each behavioral addition from a
++fresh in-memory baseline. Each named phrase was removed once; all mutants were
++killed:
++
++| Probe | Counterfactual input | Result |
++|---|---|---|
++| B1 | task requires focused-only verification | baseline pass; mutant killed |
++| B2 | Python test would create unowned bytecode cache | baseline pass; mutant killed |
++| B3 | fixed bounded lane with launch/watch-only wrapper | baseline pass; mutant killed |
++| B4 | dirty lead checkout plus capped report envelope | baseline pass; mutant killed |
++| B5 | wrapper dies after child may have completed | baseline pass; mutant killed |
++| B6 | replay has sequential mutants and generated artifact | baseline pass; mutant killed |
++| B7 | packet proposes `--bg --help` and omits contrary evidence | baseline pass; mutant killed |
++| B8 | two cold seats share scratch before sealing | baseline pass; mutant killed |
++| B9 | behavioral clause has vocabulary table but no executed probe | baseline pass; mutant killed |
++
++No previous refuter verdict is present in this directory or repository history
++for this path, so there was no mission-specific prior non-staleness blocker to
++retest. The current round independently re-tested the spoofable-check and false-
++counterfactual classes: V3 false-greened on a forbidden committed path, while
++all nine policy mutations were killed.
++
++## Residual risk
++
++The mutation probes establish that the review checks discriminate the added
++policy clauses; they do not resolve the authority conflicts in F1 and F2.
+diff --git a/docs/process_traces/2026-09-04-fanout/skill-distill/03-sol-fix-round-1-report.md b/docs/process_traces/2026-09-04-fanout/skill-distill/03-sol-fix-round-1-report.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..9e162ef836ff6f931448afb289ebfa562682785f
+--- /dev/null
++++ b/docs/process_traces/2026-09-04-fanout/skill-distill/03-sol-fix-round-1-report.md
+@@ -0,0 +1,94 @@
++```json
++{
++  "schema": "claude-codex-report/v1",
++  "genre": "implementation",
++  "status": "clean",
++  "completion": "complete",
++  "summary": "Cured all four refuter findings by restoring D-129/D-171 authority boundaries and replacing two false-green report attestations with discriminating checks.",
++  "workspace": {
++    "base_requested": "ed3dd99b",
++    "base_mode": "exact",
++    "head_start": "ed3dd99b1a24cc321077ee8043d707bcc8261ba2",
++    "head_end": "ed3dd99b1a24cc321077ee8043d707bcc8261ba2",
++    "upstream_end": "ed3dd99b1a24cc321077ee8043d707bcc8261ba2",
++    "branch": "feat/2026-09-04-fan-skill-distill"
++  },
++  "pathspec": [
++    "docs/orchestration.md",
++    "docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md",
++    "docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md",
++    "docs/process_traces/2026-09-04-fanout/skill-distill/03-sol-fix-round-1-report.md"
++  ],
++  "unowned_dirty": [
++    "docs/process_traces/2026-09-04-fanout/skill-distill/02-refuter-merge-base.md"
++  ],
++  "verdict": {
++    "implementation": "implemented",
++    "acceptance": "ready"
++  },
++  "verification": [
++    {
++      "id": "V1",
++      "kind": "lint",
++      "cmd": "git diff --check -- docs/orchestration.md docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md && ! rg -n '[[:blank:]]+$' docs/process_traces/2026-09-04-fanout/skill-distill/03-sol-fix-round-1-report.md && echo DIFF-CHECK-OK",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["DIFF-CHECK-OK"]},
++      "expected": {"exit_code": 0, "tail_regex": "DIFF-CHECK-OK"}
++    },
++    {
++      "id": "V2",
++      "kind": "test",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'from pathlib import Path; o=Path(\"docs/orchestration.md\").read_text(); f1=[\"PROPOSAL PENDING ED\",\"does not bind a behavioral contract\",\"outside a magistrate-commissioned brief\",\"brief it commissions under its\"]; f2=[\"does not supersede D-129\",\"Opus-directed Sol lanes remain the\",\"dated exception to D-129\",\"repository-wide replacement for its standing Opus-directed default\"]; assert all(x in o for x in f1); assert not all(x in o.replace(\"does not bind a behavioral contract\",\"binds every behavioral contract\",1) for x in f1); assert all(x in o for x in f2); assert not all(x in o.replace(\"Opus-directed Sol lanes remain the\",\"Direct seats are the\",1) for x in f2); print(\"F1_OUTSIDE_BRIEF_NO_PROBE=ACCEPTED F1_MUTANT=KILLED F2_FIXED_LANE=OPUS_DIRECTED F2_MUTANT=KILLED\")'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["F1_OUTSIDE_BRIEF_NO_PROBE=ACCEPTED F1_MUTANT=KILLED F2_FIXED_LANE=OPUS_DIRECTED F2_MUTANT=KILLED"]},
++      "expected": {"exit_code": 0, "tail_regex": "F1_OUTSIDE_BRIEF_NO_PROBE=ACCEPTED .* F2_FIXED_LANE=OPUS_DIRECTED F2_MUTANT=KILLED"}
++    },
++    {
++      "id": "V3",
++      "kind": "test",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'import pathlib,subprocess,tempfile; t=tempfile.TemporaryDirectory(prefix=\"skill-distill-scope-\"); d=t.name; run=lambda *a: subprocess.run(a,check=True,stdout=subprocess.DEVNULL); run(\"git\",\"-C\",d,\"init\",\"-q\"); run(\"git\",\"-C\",d,\"config\",\"user.name\",\"fixture\"); run(\"git\",\"-C\",d,\"config\",\"user.email\",\"fixture@example.invalid\"); pathlib.Path(d,\"allowed.md\").touch(); run(\"git\",\"-C\",d,\"add\",\"allowed.md\"); run(\"git\",\"-C\",d,\"commit\",\"-q\",\"-m\",\"base\"); base=subprocess.check_output([\"git\",\"-C\",d,\"rev-parse\",\"HEAD\"],text=True).strip(); pathlib.Path(d,\"RUN_STATE.md\").touch(); run(\"git\",\"-C\",d,\"add\",\"RUN_STATE.md\"); run(\"git\",\"-C\",d,\"commit\",\"-q\",\"-m\",\"forbidden\"); candidate=subprocess.check_output([\"git\",\"-C\",d,\"rev-parse\",\"HEAD\"],text=True).strip(); paths=set(subprocess.check_output([\"git\",\"-C\",d,\"diff\",\"--name-only\",base+\"..\"+candidate],text=True).splitlines()); extra=sorted(paths-{\"allowed.md\"}); assert extra==[\"RUN_STATE.md\"],extra; print(\"F3_COMMITTED_RUN_STATE=REJECTED\"); t.cleanup()'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["F3_COMMITTED_RUN_STATE=REJECTED"]},
++      "expected": {"exit_code": 0, "tail_regex": "F3_COMMITTED_RUN_STATE=REJECTED"}
++    },
++    {
++      "id": "V4",
++      "kind": "inspection",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'import json,pathlib,re,subprocess; t=pathlib.Path(\"docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md\").read_text(); r=json.loads(re.match(r\"```json\\n(.*?)\\n```\",t,re.S).group(1)); v=next(x for x in r[\"verification\"] if x[\"id\"]==\"V4\"); p=subprocess.run(v[\"cmd\"],shell=True,text=True,capture_output=True); actual=p.stdout.strip().splitlines(); assert p.returncode==0,(p.returncode,p.stderr); assert actual==v[\"observed\"][\"tail\"],(actual,v[\"observed\"][\"tail\"]); print(\"F4_EXACT_REPLAY_TAIL=MATCH\")'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["F4_EXACT_REPLAY_TAIL=MATCH"]},
++      "expected": {"exit_code": 0, "tail_regex": "F4_EXACT_REPLAY_TAIL=MATCH"}
++    },
++    {
++      "id": "V5",
++      "kind": "inspection",
++      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -c 'import json,pathlib,re,sys; p=pathlib.Path(\"docs/process_traces/2026-09-04-fanout/skill-distill/03-sol-fix-round-1-report.md\"); m=re.match(r\"```json\\n(.*?)\\n```\",p.read_text(),re.S); assert m; n=len(m.group(1).encode()); json.loads(m.group(1)); assert n<=8192,n; print(\"REPORT-ENVELOPE-OK\")'",
++      "cwd": ".",
++      "observed": {"result": "pass", "exit_code": 0, "tail": ["REPORT-ENVELOPE-OK"]},
++      "expected": {"exit_code": 0, "tail_regex": "REPORT-ENVELOPE-OK"}
++    }
++  ],
++  "flags": []
++}
++```
++
++## Change
++
++| Finding | Cure | Location |
++|---|---|---|
++| F1 | Limited the universal gate to the ratified first-use table; marked behavioral probes pending Ed and binding only when the magistrate requires one for its own commissioned brief. | `docs/orchestration.md:429`; `docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md:125` |
++| F2 | Restored D-129's Opus-directed standing default and scoped direct seats to Ed's dated 2026-09-03 budget regime or another separately recorded authority. | `docs/orchestration.md:354`; `docs/process_traces/2026-09-04-fanout/skill-distill/02-lessons.md:14` |
++| F3 | Replaced worktree-only status inspection with an exact committed-delta comparison from the landing parent to its commit. | `docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md:45` |
++| F4 | Replaced variable `rg` output with one deterministic heading summary and recorded its exact emitted tail. | `docs/process_traces/2026-09-04-fanout/skill-distill/01-sol-report.md:53` |
++
++V2 uses the refuter's two authority counterfactuals and kills mutants that
++restore either overbroad rule. V3 recreates the refuter's clean repository with
++a sole forbidden committed `RUN_STATE.md` delta. V4 replays the amended report
++command and compares its complete stdout to the recorded tail.
++
++## Verification notes
++
++No unit-test module imports or executes these documentation files. Per the
++focused-only preflight rule, no repository-wide unit-test discovery was run;
++the documentation inspections and four defect-shaped regressions above are the
++touched-path checks.
