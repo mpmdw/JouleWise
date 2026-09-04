@@ -7,6 +7,8 @@ import os
 import signal
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -292,6 +294,79 @@ class StopAndDecisionTests(WatchdogTestCase):
 
 
 class SupervisorTests(WatchdogTestCase):
+    def test_notice_ack_is_consumed_before_child_exit(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        supervisor.state["notice_pending"] = [{"id": "transition-1-usage_backoff"}]
+        (self.harness.storage.root / "notice.ack").write_text(
+            json.dumps({"activation_id": "activation-a"}), encoding="utf-8"
+        )
+        self.harness.child.exit_code = 0
+
+        self.assertFalse(supervisor.step())
+        self.assertEqual(supervisor.state["notice_pending"], [])
+        self.assertFalse((self.harness.storage.root / "notice.ack").exists())
+        persisted = json.loads(
+            (self.harness.storage.root / "state.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(persisted["notice_pending"], [])
+
+    def test_sleeping_remote_probe_cannot_delay_plan_term_or_kill(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        probe_started = threading.Event()
+
+        def sleeping_probe() -> wd.StopObservation:
+            probe_started.set()
+            time.sleep(30)
+            return wd.StopObservation("CLEAR", "late clear")
+
+        self.harness.deps.git_probe = sleeping_probe
+        first_wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - wd.REQUEST_LEAD_S - 1, tz=self.local_tz
+        )
+        self.harness.clock.wall = first_wall
+        self.assertTrue(supervisor.step())
+        self.assertTrue(probe_started.wait(1), "resident must start the probe asynchronously")
+
+        started = time.monotonic()
+        term_wall = dt.datetime.fromtimestamp(plan.t0_epoch_s - wd.TERM_LEAD_S, tz=self.local_tz)
+        self.harness.clock.mono += (term_wall - first_wall).total_seconds()
+        self.harness.clock.wall = term_wall
+        self.assertTrue(supervisor.step())
+        self.assertIn((100, signal.SIGTERM), self.harness.processes.signals)
+
+        kill_wall = dt.datetime.fromtimestamp(plan.t0_epoch_s - wd.KILL_LEAD_S, tz=self.local_tz)
+        self.harness.clock.mono += (kill_wall - term_wall).total_seconds()
+        self.harness.clock.wall = kill_wall
+        self.assertFalse(supervisor.step())
+        self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
+        self.assertLess(time.monotonic() - started, 10)
+
+    def test_clock_uncertain_resident_drains_with_monotonic_deadlines(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        supervisor.state["last_clock"] = {
+            "epoch_s": self.base.timestamp() - 10,
+            "monotonic": self.harness.clock.mono - 100,
+        }
+
+        self.assertTrue(supervisor.step())
+        self.assertEqual(supervisor.state["state"], "CLOCK_UNCERTAIN")
+        self.assertTrue(supervisor.state["clock_drain"])
+        self.assertTrue((self.harness.storage.root / "standdown.request").exists())
+        self.assertEqual(self.harness.processes.signals, [])
+
+        self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_COOPERATIVE_S)
+        self.harness.clock.mono += wd.STOP_COOPERATIVE_S
+        self.assertTrue(supervisor.step())
+        self.assertIn((100, signal.SIGTERM), self.harness.processes.signals)
+
+        self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_TERM_GRACE_S)
+        self.harness.clock.mono += wd.STOP_TERM_GRACE_S
+        self.assertFalse(supervisor.step())
+        self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
+
     def test_cooperative_exit_after_request_never_signals(self) -> None:
         plan = self.make_plan()
         supervisor = self.supervisor(plan)
@@ -319,14 +394,18 @@ class SupervisorTests(WatchdogTestCase):
             (self.harness.storage.root / "standdown.request").exists(),
             "ignored-session enforcement must still begin with the cooperative request",
         )
-        self.harness.clock.wall = dt.datetime.fromtimestamp(
+        term_wall = dt.datetime.fromtimestamp(
             plan.t0_epoch_s - wd.TERM_LEAD_S, tz=self.local_tz
         )
+        self.harness.clock.mono += (term_wall - self.harness.clock.wall).total_seconds()
+        self.harness.clock.wall = term_wall
         self.assertTrue(supervisor.step())
         self.assertIn((100, signal.SIGTERM), self.harness.processes.signals)
-        self.harness.clock.wall = dt.datetime.fromtimestamp(
+        kill_wall = dt.datetime.fromtimestamp(
             plan.t0_epoch_s - wd.KILL_LEAD_S, tz=self.local_tz
         )
+        self.harness.clock.mono += (kill_wall - self.harness.clock.wall).total_seconds()
+        self.harness.clock.wall = kill_wall
         self.assertFalse(supervisor.step())
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
         self.assertEqual(self.harness.census_calls, 1, "KILL must be followed by production census")

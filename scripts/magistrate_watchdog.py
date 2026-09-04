@@ -22,6 +22,7 @@ import signal
 import stat
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -65,6 +66,7 @@ REQUEST_LEAD_S = 25 * 60
 TERM_LEAD_S = 16 * 60
 KILL_LEAD_S = 15 * 60
 SUPERVISOR_POLL_S = 10
+REMOTE_STOP_PROBE_CADENCE_S = 5 * 60
 STOP_COOPERATIVE_S = 9 * 60
 STOP_TERM_GRACE_S = 60
 CLOCK_SKEW_LIMIT_S = 60
@@ -451,6 +453,7 @@ def initial_state() -> dict[str, Any]:
         "notice_pending": [],
         "last_clock": None,
         "clock_sane_samples": 0,
+        "clock_drain": False,
         "standdown_phase": None,
     }
 
@@ -762,6 +765,11 @@ def decide(storage: Storage, deps: Dependencies, state: dict[str, Any]) -> Decis
         stop = deps.git_probe()
     except Exception as exc:
         stop = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
+    state["remote_stop"] = {
+        "state": stop.state,
+        "detail": stop.detail,
+        "observed_monotonic": monotonic,
+    }
     if storage.exists(storage.root / "STOP"):
         stop = StopObservation("STOPPED", "local STOP file present")
     if active_plans:
@@ -908,6 +916,60 @@ class ResidentSupervisor:
         self.lock_record = lock_record
         self.stdout_path = stdout_path
         self.stderr_path = stderr_path
+        cached_stop = state.get("remote_stop")
+        if isinstance(cached_stop, Mapping):
+            cached_state = str(cached_stop.get("state", "NETWORK_UNCERTAIN"))
+            cached_detail = str(cached_stop.get("detail", "remote stop has not been probed"))
+            try:
+                cached_monotonic = float(cached_stop.get("observed_monotonic", float("-inf")))
+            except (TypeError, ValueError):
+                cached_monotonic = float("-inf")
+        else:
+            cached_state = "NETWORK_UNCERTAIN"
+            cached_detail = "remote stop has not been probed"
+            cached_monotonic = float("-inf")
+        self._remote_stop = StopObservation(cached_state, cached_detail)
+        self._remote_stop_observed_monotonic = cached_monotonic
+        self._remote_probe_started_monotonic = cached_monotonic
+        self._remote_probe_thread: threading.Thread | None = None
+        self._remote_probe_lock = threading.Lock()
+
+    def _run_remote_probe(self) -> None:
+        try:
+            observation = self.deps.git_probe()
+        except Exception as exc:
+            observation = StopObservation("NETWORK_UNCERTAIN", f"git probe exception: {exc}")
+        observed_monotonic = self.deps.monotonic()
+        with self._remote_probe_lock:
+            self._remote_stop = observation
+            self._remote_stop_observed_monotonic = observed_monotonic
+
+    def _cached_remote_stop(self, monotonic: float) -> StopObservation:
+        """Return immediately; refresh the remote switch only on a daemon thread."""
+
+        with self._remote_probe_lock:
+            thread = self._remote_probe_thread
+            if thread is not None and not thread.is_alive():
+                self._remote_probe_thread = None
+                thread = None
+            due = monotonic - self._remote_probe_started_monotonic >= REMOTE_STOP_PROBE_CADENCE_S
+            if thread is None and due:
+                self._remote_probe_started_monotonic = monotonic
+                thread = threading.Thread(
+                    target=self._run_remote_probe,
+                    name="magistrate-remote-stop-probe",
+                    daemon=True,
+                )
+                self._remote_probe_thread = thread
+                thread.start()
+            observation = self._remote_stop
+            observed_monotonic = self._remote_stop_observed_monotonic
+        self.state["remote_stop"] = {
+            "state": observation.state,
+            "detail": observation.detail,
+            "observed_monotonic": observed_monotonic,
+        }
+        return observation
 
     def _output_tail(self) -> str:
         pieces: list[str] = []
@@ -921,6 +983,7 @@ class ResidentSupervisor:
     def _finish_child(self, exit_code: int, now: dt.datetime) -> bool:
         requested = self.storage.exists(self.storage.root / "standdown.request")
         self.storage.unlink(self.storage.root / "magistrate.lock")
+        self.state["clock_drain"] = False
         if requested:
             self.storage.unlink(self.storage.root / "standdown.request")
             self.state["standdown_phase"] = "COMPLETE"
@@ -959,6 +1022,7 @@ class ResidentSupervisor:
         value: dict[str, Any] = {
             "reason": reason,
             "requested_epoch_s": now.timestamp(),
+            "requested_monotonic": self.deps.monotonic(),
             "exit_within_s": STOP_COOPERATIVE_S,
         }
         if plan is not None:
@@ -999,6 +1063,7 @@ class ResidentSupervisor:
         append_census_event(self.storage, self.state, now, census)
         if owner_gone:
             self.storage.unlink(self.storage.root / "magistrate.lock")
+            self.state["clock_drain"] = False
         self.storage.unlink(self.storage.root / "standdown.request")
         self.state["standdown_phase"] = "COMPLETE"
         held = not census.empty or not owner_gone
@@ -1055,13 +1120,61 @@ class ResidentSupervisor:
         self.storage.atomic_json(self.storage.root / "state.json", self.state)
         return True
 
+    def _enforce_drain(
+        self,
+        now: dt.datetime,
+        monotonic: float,
+        *,
+        reason: str,
+        state_name: str,
+        notice: str | None = None,
+    ) -> bool:
+        self._write_request(None, now, reason=reason)
+        requested = json.loads(self.storage.read_text(self.storage.root / "standdown.request"))
+        try:
+            requested_monotonic = float(requested["requested_monotonic"])
+            elapsed = max(0.0, monotonic - requested_monotonic)
+        except (KeyError, TypeError, ValueError):
+            elapsed = max(0.0, now.timestamp() - float(requested["requested_epoch_s"]))
+        if elapsed >= STOP_COOPERATIVE_S + STOP_TERM_GRACE_S:
+            owner = owned_process(self.lock_record, self.deps.processes.snapshot())
+            if owner is None:
+                return self._forced_hold(now)
+            pids = signal_owned_tree(self.deps.processes, owner.pid, signal.SIGKILL)
+            self._record_signal(now, signal.SIGKILL, pids)
+            return self._forced_hold(now)
+        if elapsed >= STOP_COOPERATIVE_S and self.state.get("standdown_phase") != "TERM":
+            owner = owned_process(self.lock_record, self.deps.processes.snapshot())
+            if owner is None:
+                return self._forced_hold(now)
+            pids = signal_owned_tree(self.deps.processes, owner.pid, signal.SIGTERM)
+            self._record_signal(now, signal.SIGTERM, pids)
+            self.state["standdown_phase"] = "TERM"
+        transition(self.storage, self.state, state_name, reason, now, notice=notice)
+        self.storage.atomic_json(self.storage.root / "state.json", self.state)
+        return True
+
     def step(self) -> bool:
         now = self.deps.wall_now().astimezone()
+        monotonic = self.deps.monotonic()
+        # The email acknowledgement is durable evidence and must win even if
+        # the child exits between resident polls.
+        consume_notice_ack(self.storage, self.state, now)
         exit_code = self.child.poll()
         if exit_code is not None:
             return self._finish_child(exit_code, now)
 
-        consume_notice_ack(self.storage, self.state, now)
+        uncertain = clock_uncertain(self.state, now, monotonic)
+        if uncertain:
+            self.state["clock_drain"] = True
+        if self.state.get("clock_drain"):
+            return self._enforce_drain(
+                now,
+                monotonic,
+                reason="wall and monotonic deltas disagree; conservative resident drain",
+                state_name="CLOCK_UNCERTAIN",
+                notice="clock_uncertain",
+            )
 
         plans, errors = load_plans(self.storage)
         if errors:
@@ -1070,30 +1183,24 @@ class ResidentSupervisor:
             self.storage.atomic_json(self.storage.root / "state.json", self.state)
             return True
 
-        stop = self.deps.git_probe()
-        if self.storage.exists(self.storage.root / "STOP"):
-            stop = StopObservation("STOPPED", "local STOP file present")
         plan = relevant_standdown_plan(plans, now.timestamp(), self.storage)
-        # Physical stand-down deadlines outrank a blind remote switch.  The
-        # branch was still probed on this poll, but uncertainty cannot delay
-        # TERM/KILL at the ruled boundary.
+        # Physical stand-down deadlines are resolved before consulting even a
+        # cached remote result.  An in-flight network probe runs independently
+        # and can never delay this path.
         if plan is not None:
             return self._enforce_plan(plan, now)
+
+        if self.storage.exists(self.storage.root / "STOP"):
+            stop = StopObservation("STOPPED", "local STOP file present")
+        else:
+            stop = self._cached_remote_stop(monotonic)
         if stop.state == "STOPPED":
-            self._write_request(None, now, reason=stop.detail)
-            requested = json.loads(self.storage.read_text(self.storage.root / "standdown.request"))
-            elapsed = now.timestamp() - float(requested["requested_epoch_s"])
-            if elapsed >= STOP_COOPERATIVE_S + STOP_TERM_GRACE_S:
-                pids = signal_owned_tree(self.deps.processes, self.child.pid, signal.SIGKILL)
-                self._record_signal(now, signal.SIGKILL, pids)
-                return self._forced_hold(now)
-            if elapsed >= STOP_COOPERATIVE_S and self.state.get("standdown_phase") != "TERM":
-                pids = signal_owned_tree(self.deps.processes, self.child.pid, signal.SIGTERM)
-                self._record_signal(now, signal.SIGTERM, pids)
-                self.state["standdown_phase"] = "TERM"
-            transition(self.storage, self.state, "STOP_REQUESTED", stop.detail, now)
-            self.storage.atomic_json(self.storage.root / "state.json", self.state)
-            return True
+            return self._enforce_drain(
+                now,
+                monotonic,
+                reason=stop.detail,
+                state_name="STOP_REQUESTED",
+            )
         if stop.state != "CLEAR":
             transition(
                 self.storage,
@@ -1185,6 +1292,7 @@ def start_session(
     }
     storage.atomic_json(storage.root / "magistrate.lock", lock_record)
     state["standdown_phase"] = None
+    state["clock_drain"] = False
     transition(storage, state, "ACTIVE", f"spawned activation {activation_id}", now)
     storage.atomic_json(storage.root / "state.json", state)
     return ResidentSupervisor(

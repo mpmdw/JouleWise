@@ -15,7 +15,7 @@ The durable states are:
 - `FENCED`: a plan span, the 02:45–03:30 belt, or the 07:00 minute forbids launch.
 - `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, malformed plan, unavailable process table, surviving owned process, or other fail-closed condition forbids launch. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
-- `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). Launch remains held until two consecutive sane samples.
+- `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
 - `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility.
 - `STOP_REQUESTED`/`STOPPED`: the local file or remote branch has stopped launches; an already-owned child receives a nine-minute cooperative request before TERM and, 60 seconds later, KILL.
 
@@ -37,7 +37,7 @@ The local fixed fences are half-open: `[02:45:00, 03:30:00)` and `[07:00:00, 07:
 
 Inside either fixed fence, a live PID+start-time-owned session whose resident supervisor is absent remains fenced: the short tick returns `FENCED` with `adopt=False` and does not launch or adopt a supervisor. Re-adoption waits until the fixed fence clears, at most 45 minutes for the belt and at most one minute for the 07:00 fence.
 
-For the earliest relevant plan, the resident supervisor re-reads plans at most every 10 seconds and enforces:
+For the earliest relevant plan, the resident supervisor re-reads plans at most every 10 seconds and enforces. Plan and local-clock enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
 
 | Boundary | Action |
 |---|---|
@@ -50,11 +50,11 @@ The process-tree walk is deliberately independent of process groups because an a
 
 ## Kill switch
 
-Every poll first proves remote transport with anonymous `git ls-remote --exit-code` against `refs/heads/main`, then probes the glob `refs/heads/ops/stop*`. Control rc 0 plus stop rc 2 means clear; a stop match means stopped. Control rc 128, any other nonzero control result, a stop-probe result other than 0/2, timeout, or exception means `NETWORK_UNCERTAIN`, never clear. The commands disable credential helpers and terminal prompts and never fetch or mutate a checkout.
+Every launchd tick that acquires the service lock first proves remote transport with anonymous `git ls-remote --exit-code` against `refs/heads/main`, then probes the glob `refs/heads/ops/stop*`. It seeds the resident with that observation. While a child is resident, one daemon thread refreshes the cached observation at most every five minutes; a slow or unreachable GitHub probe never blocks the 10-second enforcement loop, and no second probe begins while one is live. Control rc 0 plus stop rc 2 means clear; a stop match means stopped. Control rc 128, any other nonzero control result, a stop-probe result other than 0/2, timeout, or exception means `NETWORK_UNCERTAIN`, never clear. The commands disable credential helpers and terminal prompts and never fetch or mutate a checkout.
 
 The local switch is `~/night-custody/magistrate/STOP`. It works without GitHub and wins over the remote result. Removing both switches permits a later safe launch; neither switch can rescue a wedged watchdog process, and there is intentionally no watchdog-for-the-watchdog.
 
-On GitHub mobile, create a branch named exactly `ops/stop-magistrate` from `main` to stop, and delete that branch to clear. Any branch under the wider `ops/stop*` glob also stops, so a shortened or suffixed emergency name is fail-safe. Do not prune any matching operational branch while it is acting as the switch.
+On GitHub mobile, create a branch named exactly `ops/stop-magistrate` from `main` to stop, and delete that branch to clear. Any branch under the wider `ops/stop*` glob also stops, so a shortened or suffixed emergency name is fail-safe. This width is the magistrate's 2026-09-03 ruling on execution-refuter N2 in `docs/process_traces/2026-09-03-watchdog-build/04-refuter-execution-2b4476cb.md`; it amends the narrower file-15 row-6 text. Do not prune any matching operational branch while it is acting as the switch.
 
 ## Exit classification, backoff, and notices
 
@@ -75,6 +75,7 @@ The program guards every write path against the configured custody root. The mec
 - `heartbeat` and an optional unsent-email record, written by the relaunched session under its prompt.
 - `notice.ack`, written by the session after its first email is accepted and consumed by the supervisor.
 - `launchd.out` and `launchd.err`, written by launchd at paths rendered in the plist.
+- Transient atomic replacements named `.<target>.<pid>.<uuid>.tmp` beside any target written through the atomic writer; each is normally replaced into its target after fsync, while a process crash can leave the temporary file for inspection.
 
 No status branch, checkout, plan, night result, `courier.sent`, or repository file is written by the service. The relaunched magistrate remains separately authorized to work in linked worktrees under repository rules.
 
@@ -88,14 +89,124 @@ The first real window must not be armed until plans pin the measurement checkout
 
 ## Bench rehearsal (no real night)
 
-Run all rehearsal outputs under a fresh temporary directory, never under the repository, `~/Library/LaunchAgents`, or the default custody root:
+Run the focused checks and create a fake `REHEARSAL_STUB` plan at `t0 = now + 10 minutes` under a fresh temporary custody parent. The Python block prints the exact `t0`; it does not write the repository or the default custody root:
 
 ```sh
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/magistrate-watchdog.XXXXXX")"
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_magistrate_watchdog -v
 scripts/install_magistrate_watchdog.sh --render-only "$tmp_root/render"
 /usr/bin/plutil -lint "$tmp_root/render/com.joulewise.magistrate.plist"
-MAGISTRATE_WATCHDOG_CUSTODY_ROOT="$tmp_root/custody/magistrate" scripts/magistrate_watchdog.py --dry-run
+BENCH_CUSTODY="$tmp_root/custody" python3 - <<'PY'
+import json
+import os
+import time
+from pathlib import Path
+
+custody = Path(os.environ["BENCH_CUSTODY"])
+plan_root = custody / "fake-night"
+plan_root.mkdir(parents=True)
+now = time.time()
+t0 = now + 10 * 60
+plan = {
+    "schema": "joulewise.night_plan.v1",
+    "plan_id": "watchdog-bench-now-plus-10m",
+    "receipt_class": "REHEARSAL_STUB",
+    "t0_epoch_s": t0,
+    "window_max_s": 600,
+    "authored_epoch_s": now,
+    "repo_head": "0" * 40,
+    "chain_path": str(plan_root / "chain.sh"),
+    "chain_sha256_path": str(plan_root / "chain.sh.sha256"),
+    "custody_root": str(plan_root),
+    "registration_path": str(plan_root / "registration.json"),
+}
+(plan_root / "night_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+print(f"t0_epoch_s={t0:.6f}")
+PY
+MAGISTRATE_WATCHDOG_CUSTODY_ROOT="$tmp_root/custody/magistrate" \
+  PYTHONDONTWRITEBYTECODE=1 scripts/magistrate_watchdog.py --dry-run
+test ! -e "$tmp_root/custody/magistrate"
 ```
 
-Before an actual install, also run the owed launchd/no-TTY `-p` bench using only a temporary LaunchAgent and temporary custody. Record heartbeat-before-email, stream-json completion, prompt-denial behavior under `--permission-mode auto`, the post-exit production census, and whether `--permission-prompts none` is required. Do not install until those observables and the row-10 first-tree adoption have passed review.
+At the first instant, `now = t0 - 10 minutes`, so the plan span is already closed against launch. With the implementing/reviewing agent still live, the exact expected decision is `HOLD_CENSUS`; on an agent-free bench it is `FENCED`. In both cases the transcript must end in `WOULD_SPAWN none`, every mutation is printed only as `WOULD_WRITE`, and the final `test` proves no custody root was created. At `t0 - 25 minutes` an owned resident would enter `STANDDOWN_REQUEST`; at `t0 - 16 minutes`, `STANDDOWN_TERM`; and at `t0 - 15 minutes`, KILL followed by `FENCED` only when ownership and the production census are empty. Those three exact boundary instants are injected and pinned by `test_plan_fence_boundaries_request_term_kill_and_completion` and the resident supervisor tests.
+
+The no-TTY spawn bench is already recorded, including the exact argv and four stream-json records, in `docs/process_traces/2026-09-03-watchdog-build/02-bench-headless-spawn.md`. To replay it without a TTY, from the canonical checkout run this bounded command; it starts one real print-mode session, so run it only in the magistrate-authorized bench:
+
+```sh
+NO_TTY_OUT="$tmp_root/no-tty.stream.jsonl" NO_TTY_ERR="$tmp_root/no-tty.stderr" \
+python3 - <<'PY'
+import os
+import subprocess
+from pathlib import Path
+
+prompt = "Reply with exactly the single word OK and nothing else. Do not use any tool."
+argv = [
+    "/Users/edr/.local/bin/claude", "-p", prompt,
+    "--output-format", "stream-json", "--verbose",
+    "--permission-mode", "auto", "--permission-prompts", "none",
+    "--model", "fable", "--effort", "low", "--allowedTools",
+    "Read,Glob,Grep,Bash,Edit,Write,Agent,Task,Skill,ScheduleWakeup,SendMessage,ListAgents,TaskCreate,TaskUpdate,TaskList,mcp__claude_ai_Gmail__send_message,mcp__codex__codex,mcp__codex__codex-reply",
+    "-n", "watchdog-argv-bench",
+]
+with Path(os.environ["NO_TTY_OUT"]).open("wb") as out, Path(os.environ["NO_TTY_ERR"]).open("wb") as err:
+    result = subprocess.run(
+        argv, cwd="/Users/edr/code/JouleWise", stdin=subprocess.DEVNULL,
+        stdout=out, stderr=err, start_new_session=True, timeout=240, check=False,
+    )
+raise SystemExit(result.returncode)
+PY
+grep -F '"text":"OK"' "$tmp_root/no-tty.stream.jsonl"
+grep -F '"stop_reason":"end_turn"' "$tmp_root/no-tty.stream.jsonl"
+test ! -s "$tmp_root/no-tty.stderr"
+```
+
+Expected: exit 0, one assistant `OK`, terminal `end_turn`, no permission prompt or stderr. Preserve the output with the bench record; do not install if any expectation differs.
+
+The first-tree adoption rehearsal is a separate, lead-controlled install gate. Its named twin is the **Terminal-hosted interactive magistrate session plus the `claude daemon` and all spares it parents**. In an observer Terminal, capture the exact production census and tree before install:
+
+```sh
+python3 - <<'PY'
+from scripts.magistrate_watchdog import production_census
+print(production_census())
+PY
+/bin/ps -axo pid=,ppid=,lstart=,command= | grep -E '[c]laude|[c]odex|[t]3'
+```
+
+Expected before: `empty=False`, with the Terminal-hosted interactive root, its `claude daemon`, and its spares visible. From that interactive magistrate session—not from the observer—run the authorized installation, then inspect the exclusive adoption record from the observer:
+
+```sh
+scripts/install_magistrate_watchdog.sh --install
+python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
+```
+
+Expected lock: `first_install_adoption=true`; its PID/start token names the Terminal-hosted interactive root, and the first `supervisor_adopted` event names the same activation without a second launch. Arm only a reviewed `REHEARSAL_STUB` so its first stand-down exercises that tree. The cooperative request should make the interactive session stop its children and exit; if ignored, the resident must TERM every validated descendant at `t0 - 16 minutes` and KILL survivors at `t0 - 15 minutes`. After the stand-down, rerun the observer commands above. Expected after: `CensusObservation(empty=True, ...)`, no Terminal-hosted twin, no `claude daemon`, no spares, `magistrate.lock` absent, and a final `FENCED` transition. Any survivor is `HOLD_CENSUS` and fails the rehearsal. Do not arm a real window until this before/after record passes review.
+
+After the lock and adoption event pass inspection, the exact rehearsal arm below sets `t0 = now + 26 minutes`: the request is due about one minute later, TERM about ten minutes later, and KILL about eleven minutes later. Run it only with the observer recording and after the lead authorizes this destructive twin stand-down:
+
+```sh
+ADOPTION_PLAN_ROOT="$HOME/night-custody/watchdog-adoption-rehearsal" python3 - <<'PY'
+import json
+import os
+import time
+from pathlib import Path
+
+root = Path(os.environ["ADOPTION_PLAN_ROOT"])
+root.mkdir(parents=True, exist_ok=False)
+now = time.time()
+plan = {
+    "schema": "joulewise.night_plan.v1",
+    "plan_id": "first-tree-adoption-rehearsal",
+    "receipt_class": "REHEARSAL_STUB",
+    "t0_epoch_s": now + 26 * 60,
+    "window_max_s": 60,
+    "authored_epoch_s": now,
+    "repo_head": "0" * 40,
+    "chain_path": str(root / "chain.sh"),
+    "chain_sha256_path": str(root / "chain.sh.sha256"),
+    "custody_root": str(root),
+    "registration_path": str(root / "registration.json"),
+}
+(root / "night_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+print(json.dumps({"plan_id": plan["plan_id"], "t0_epoch_s": plan["t0_epoch_s"]}))
+PY
+```
