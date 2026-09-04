@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -1421,7 +1422,7 @@ class ContractTests(WatchdogTestCase):
                     documented.measurement_root,
                 )
 
-    def test_documented_reaper_executes_in_its_own_session(self) -> None:
+    def test_documented_reaper_executes_for_both_process_group_shapes(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         text = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
             encoding="utf-8"
@@ -1430,8 +1431,8 @@ class ContractTests(WatchdogTestCase):
         reaper = next(block for block in blocks if "magistrate_handoff_receipt" in block)
         reaper_bytes = textwrap.dedent(reaper)
         self.assertTrue(
-            reaper_bytes.startswith("import os\nos.setsid()\n"),
-            "the executable reaper must detach before importing project code",
+            reaper_bytes.startswith("import os\ninitial_process_group_id = os.getpgid(0)\n"),
+            "the executable reaper must inspect its process group before detaching",
         )
 
         shadow = self.temp / "reaper-shadow"
@@ -1457,19 +1458,36 @@ class ContractTests(WatchdogTestCase):
             encoding="utf-8",
         )
 
-        completed = subprocess.run(
-            [sys.executable, "-", str(inventory), str(shadow)],
-            input=reaper_bytes,
-            env={**os.environ, "PYTHONPATH": str(shadow)},
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
+        def run_reaper(*, process_group_leader: bool) -> dict[str, object]:
+            completed = subprocess.run(
+                [sys.executable, "-", str(inventory), str(shadow)],
+                input=reaper_bytes,
+                env={**os.environ, "PYTHONPATH": str(shadow)},
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+                preexec_fn=os.setpgrp if process_group_leader else None,
+            )
+            self.assertEqual(0, completed.returncode, completed.stderr)
+            receipt = json.loads(completed.stdout)
+            self.assertEqual("pass", receipt["verdict"])
+            self.assertEqual({}, receipt["after_term"])
+            self.assertEqual({}, receipt["after_kill"])
+            return receipt
 
-        self.assertEqual(0, completed.returncode, completed.stderr)
-        receipt = json.loads(completed.stdout)
-        self.assertEqual(receipt["reaper_pid"], receipt["reaper_session_id"])
+        nonleader = run_reaper(process_group_leader=False)
+        self.assertNotEqual(
+            nonleader["reaper_pid"], nonleader["initial_process_group_id"]
+        )
+        self.assertEqual("new_session", nonleader["reaper_detachment"])
+        self.assertEqual(nonleader["reaper_pid"], nonleader["reaper_session_id"])
+
+        leader = run_reaper(process_group_leader=True)
+        self.assertEqual(leader["reaper_pid"], leader["initial_process_group_id"])
+        self.assertEqual(
+            "already_process_group_leader", leader["reaper_detachment"]
+        )
 
     def test_launchagent_login_limit_and_dead_watchdog_threshold_are_explicit(self) -> None:
         watchdog = (
@@ -1509,7 +1527,7 @@ class ContractTests(WatchdogTestCase):
             "docs/process/NIGHT_HANDBACK.md",
         ):
             self.assertIn(pinned, watchdog)
-        self.assertIn("against their matching packet exhibits", watchdog)
+        self.assertIn("against the merge commit on `main`", watchdog)
         self.assertIn("never signals an unclassified or census PID", watchdog)
 
         handback = (repo / "docs" / "process" / "NIGHT_HANDBACK.md").read_text(
@@ -1518,6 +1536,89 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("For every v2 plan", handback)
         self.assertIn("FROM", handback)
         self.assertIn("plan's `measurement_root`", handback)
+
+    def test_documented_merge_commit_digest_gate_compares_all_five_files(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        watchdog = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
+            encoding="utf-8"
+        )
+        blocks = re.findall(r"```zsh\n(.*?)\n\s*```", watchdog, re.DOTALL)
+        gate = next(block for block in blocks if 'merge_sha="$(' in block)
+        for command in (
+            'test "$(/usr/bin/git branch --show-current)" = main',
+            'test "$(/usr/bin/git rev-parse refs/heads/main)" = "$merge_sha"',
+            'test "$(/usr/bin/git show -s --format=%P "$merge_sha" | '
+            "/usr/bin/awk '{print NF}')" + '" -eq 2',
+            '/usr/bin/git show "$merge_sha:$path"',
+            'test "$checkout_sha256" = "$main_sha256"',
+        ):
+            self.assertIn(command, gate)
+
+        checkout = self.temp / "merge-gate"
+        checkout.mkdir()
+
+        def git(*args: str) -> None:
+            subprocess.run(
+                (
+                    "/usr/bin/git",
+                    "-c",
+                    "user.name=Watchdog Test",
+                    "-c",
+                    "user.email=watchdog@example.invalid",
+                    *args,
+                ),
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        git("init", "-b", "main")
+        pinned = (
+            "scripts/magistrate_watchdog.py",
+            "scripts/install_magistrate_watchdog.sh",
+            "docs/process/MAGISTRATE_WATCHDOG.md",
+            "docs/process/MAGISTRATE_RELAUNCH_PROMPT.md",
+            "docs/process/NIGHT_HANDBACK.md",
+        )
+        for index, relative in enumerate(pinned):
+            path = checkout / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"pinned-{index}\n", encoding="utf-8")
+        git("add", ".")
+        git("commit", "-m", "base")
+        git("switch", "-c", "watchdog")
+        (checkout / "branch-marker").write_text("watchdog\n", encoding="utf-8")
+        git("add", "branch-marker")
+        git("commit", "-m", "watchdog")
+        git("switch", "main")
+        git("merge", "--no-ff", "watchdog", "-m", "merge watchdog")
+
+        executable_gate = gate.replace(
+            "cd /Users/edr/code/JouleWise",
+            f"cd {shlex.quote(str(checkout))}",
+            1,
+        )
+        passed = subprocess.run(
+            ("/bin/zsh", "-eu", "-c", executable_gate),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(0, passed.returncode, passed.stderr)
+        for relative in pinned:
+            self.assertEqual(2, passed.stdout.count(relative), relative)
+
+        (checkout / pinned[0]).write_text("mutated\n", encoding="utf-8")
+        failed = subprocess.run(
+            ("/bin/zsh", "-eu", "-c", executable_gate),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertNotEqual(0, failed.returncode)
 
 
 if __name__ == "__main__":

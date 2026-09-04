@@ -281,3 +281,16 @@ This addendum installs the packet-21 cold-gate cure table's round-10 rows. The f
 | B-A / S-A — ordered landing and explicit round-9 licence | `docs/process/MAGISTRATE_WATCHDOG.md:92`; `24a-magistrate-ruling-delta-8-signature.md:3` | Step 0 precedes handoff; the one-paragraph ruling binds trace 24 YES to traces 16/22. |
 
 Final authorized six-module gate: 187 tests OK in 32.484 s. No install, canonical-checkout mutation, default-custody access, agent/session launch, production signal, email, or quiet-machine work occurred.
+
+---
+
+## Fix round 11 clause-map addendum (2026-09-04 PDT)
+
+This addendum cures trace 28 findings F1 and F2. The exact clause-to-line map, red-first transcript, unconditional-`setsid` mutation kill, and both authorized module tails are in `29-sol-fix-round-11-report.md`.
+
+| Round-11 clause | Production/documentation | Biting assertion / counterfactual |
+|---|---|---|
+| F1 — the exact handoff reaper proceeds through the ladder as both a process-group leader and a non-leader child | `docs/process/MAGISTRATE_WATCHDOG.md:157-163,183-248` | `tests/test_magistrate_watchdog.py:1425-1490`; restoring unconditional `os.setsid()` reproduces EPERM in the forced group-leader subprocess and fails the test. |
+| F2 — step 0 compares all five canonical-checkout files with the merge commit at `main` HEAD using `git show "$merge_sha:$path"` | `docs/process/MAGISTRATE_WATCHDOG.md:92-113` | `tests/test_magistrate_watchdog.py:1540-1621` executes the exact digest block against a real two-parent merge and proves a one-file working-tree mutation fails. |
+
+Final authorized modules: watchdog 63 OK; watchdog installer 8 OK. `scripts/magistrate_watchdog.py` has no diff, so D-172 is vacuous. No broader discovery ran and no install, canonical-checkout mutation, default-custody access, agent/session launch, production signal, email, or quiet-machine work occurred.

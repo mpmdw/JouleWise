@@ -89,7 +89,29 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-0. Land the watchdog branch on `main` through the normal twelve-row gate: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 3, verify SHA-256 byte identity for the five pinned files — `scripts/magistrate_watchdog.py`, `scripts/install_magistrate_watchdog.sh`, `docs/process/MAGISTRATE_WATCHDOG.md`, `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`, and `docs/process/NIGHT_HANDBACK.md` — against their matching packet exhibits. Record both columns of `shasum -a 256` output and stop if any pair differs. Do not substitute this development worktree for the canonical checkout.
+0. Land the watchdog branch on `main` through the normal twelve-row gate: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 3, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
+
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   test "$(/usr/bin/git branch --show-current)" = main
+   merge_sha="$(/usr/bin/git rev-parse HEAD)"
+   test "$(/usr/bin/git rev-parse refs/heads/main)" = "$merge_sha"
+   test "$(/usr/bin/git show -s --format=%P "$merge_sha" | /usr/bin/awk '{print NF}')" -eq 2
+   pinned_files=(
+     scripts/magistrate_watchdog.py
+     scripts/install_magistrate_watchdog.sh
+     docs/process/MAGISTRATE_WATCHDOG.md
+     docs/process/MAGISTRATE_RELAUNCH_PROMPT.md
+     docs/process/NIGHT_HANDBACK.md
+   )
+   for path in "${pinned_files[@]}"; do
+     main_sha256="$(/usr/bin/git show "$merge_sha:$path" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
+     checkout_sha256="$(/usr/bin/shasum -a 256 "$path" | /usr/bin/awk '{print $1}')"
+     /usr/bin/printf '%s  %s:%s\n' "$main_sha256" "$merge_sha" "$path"
+     /usr/bin/printf '%s  %s\n' "$checkout_sha256" "$path"
+     test "$checkout_sha256" = "$main_sha256"
+   done
+   ```
 
 1. In the magistrate session, stop every background task and wait for each stop to complete. Repeat the session's background-task listing until it is empty; do not proceed while any Codex child, task, monitor, or background shell remains active.
 
@@ -133,7 +155,12 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    watchdog_checkout="$(/usr/bin/git rev-parse --show-toplevel)"
    /usr/bin/nohup /usr/bin/python3 - "$handoff_file" "$watchdog_checkout" > "$handoff_file.verify.log" 2>&1 <<'PY' &
    import os
-   os.setsid()
+   initial_process_group_id = os.getpgid(0)
+   if initial_process_group_id != os.getpid():
+       os.setsid()
+       reaper_detachment = "new_session"
+   else:
+       reaper_detachment = "already_process_group_leader"
 
    import json
    import signal
@@ -208,7 +235,9 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    print(json.dumps({
        "schema": "joulewise.magistrate_handoff_receipt.v1",
        "reaper_pid": os.getpid(),
+       "initial_process_group_id": initial_process_group_id,
        "reaper_session_id": os.getsid(0),
+       "reaper_detachment": reaper_detachment,
        "checkout": checkout,
        "owned": owned,
        "outcomes": outcomes,
