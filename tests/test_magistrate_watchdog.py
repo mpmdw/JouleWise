@@ -294,6 +294,39 @@ class StopAndDecisionTests(WatchdogTestCase):
 
 
 class SupervisorTests(WatchdogTestCase):
+    def test_supervisor_poll_is_exactly_ten_seconds(self) -> None:
+        self.assertEqual(wd.SUPERVISOR_POLL_S, 10)
+
+    def test_resident_loop_hits_term_to_kill_deadline(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - wd.TERM_LEAD_S, tz=self.local_tz
+        )
+
+        def advance_clock(seconds: float) -> None:
+            self.harness.clock.wall += dt.timedelta(seconds=seconds)
+            self.harness.clock.mono += seconds
+
+        self.harness.deps.sleep = advance_clock
+        supervisor.run()
+
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        signal_events = [event for event in events if event["kind"] == "signal"]
+        self.assertEqual(
+            [event["signal"] for event in signal_events],
+            ["SIGTERM", "SIGKILL"],
+        )
+        self.assertEqual(
+            signal_events[1]["epoch_s"] - signal_events[0]["epoch_s"],
+            wd.STOP_TERM_GRACE_S,
+        )
+
     def test_notice_ack_is_consumed_before_child_exit(self) -> None:
         plan = self.make_plan()
         supervisor = self.supervisor(plan)
@@ -635,6 +668,12 @@ class ContractTests(WatchdogTestCase):
         self.assertLess(prompt.index("First act"), prompt.index("Email Ed"))
         self.assertIn("notice_pending", prompt)
         self.assertIn("exit within nine minutes", prompt)
+        self.assertIn("/Users/edr/JouleWise-measurement-20260813", prompt)
+        self.assertIn("never fast-forward, pull, checkout, or otherwise move", prompt)
+        self.assertIn("requires a re-arm with a re-pinned plan", prompt)
+        self.assertIn("Do not ratify or amend any process rule", prompt)
+        self.assertIn("cold gate or Ed", prompt)
+        self.assertIn("Arming a night obligates this session to end its loop", prompt)
 
 
 if __name__ == "__main__":

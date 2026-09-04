@@ -77,7 +77,7 @@ The program guards every write path against the configured custody root. The mec
 - `launchd.out` and `launchd.err`, written by launchd at paths rendered in the plist.
 - Transient atomic replacements named `.<target>.<pid>.<uuid>.tmp` beside any target written through the atomic writer; each is normally replaced into its target after fsync, while a process crash can leave the temporary file for inspection.
 
-No status branch, checkout, plan, night result, `courier.sent`, or repository file is written by the service. The relaunched magistrate remains separately authorized to work in linked worktrees under repository rules.
+No status branch, checkout, plan, night result, `courier.sent`, or repository file is written by the service. The relaunched magistrate remains separately authorized to work in linked worktrees under repository rules; its prompt adds no service write path. While a plan is armed, that prompt forbids every git operation in `/Users/edr/code/JouleWise` and forbids fast-forwarding, pulling, checking out, or otherwise moving the plan-schema-v2 measurement checkout `/Users/edr/JouleWise-measurement-20260813`. A post-arm fast-forward invalidates the pin and requires a re-arm with a re-pinned plan. Arming also obligates the session to end its loop and exit by the request deadline. The relaunched session may not ratify or amend process rules, decision-log entries, or skill doctrine; rule 11 routes those decisions to the cold gate or Ed.
 
 ## Install handoff
 
@@ -85,7 +85,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 
 That seeded lock is the one-time file-15 row-10 exception. The first resident supervisor adopts the current Terminal-hosted magistrate tree, including its descendants, instead of launching a second magistrate. At the first stand-down, the cooperative path is preferred; if necessary the same PPID-tree TERM/KILL enforcement reaches the interactive twin and the daemon/spares within its ruled owned tree. After it exits, every later owned magistrate begins as the watchdog's one-turn `-p` child.
 
-The first real window must not be armed until plans pin the measurement checkout and the night agents are installed from it. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
+The first real window must not be armed until plans pin the measurement checkout and the night agents are installed from it. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
 
 ## Bench rehearsal (no real night)
 
