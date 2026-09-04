@@ -14,6 +14,7 @@ silently discard it.
 | Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
 | powermetrics | §1 | macOS's built-in power sampler. |
 | MLX | §1 | Apple's on-device inference framework used to run the models. |
+| cell / power-measurement boundary | §1 | A cell groups runs sharing one phase, workload, model, hardware, software, and boundary defining the measured power. |
 | resolution bound / detection floor / cell floor | §1 | One largest allowed false phase-energy difference: “detection floor” is another name for it, and “cell floor” is the artifact term for its final value after the Section 4 safeguards. |
 | \(U_{\rm point}\) / \(U_{\rm corner}\) | §1 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly; shared movement instead uses \(U_{\rm cmp,shared}/U_{\rm cmp,point}\). |
 | member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |

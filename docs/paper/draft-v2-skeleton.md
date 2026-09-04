@@ -174,7 +174,7 @@ Figure 1 shows interval-average power around the recorded boundary between promp
 
 ### Bracketed pulse-train algorithm
 
-Immediately before and after each science window—one uninterrupted measurement session—JouleWise records a calibration under the same declared machine state, meaning the hardware and operating conditions recorded before collection. Each capture carries an instrument-validation manifest, a list of its calibration artifacts and their SHA-256 fingerprints. JouleWise hashes that manifest's bytes and compares the result with `manifest_sha256` recorded in the capture, then hashes every listed artifact and compares the result with the manifest's entry; either mismatch refuses the capture as `instrument_calibration_invalid` (`joulewise/reduce.py:1234-1256`). Separately, it hashes the bytes of the frozen reservation plan, the file that names the reserved collection slots, and checks both that digest and the plan identifier against pins in the calibration ledger's session record; either mismatch is `PLAN_HASH_MISMATCH` (`joulewise/calibration_ledger.py:4626-4647`). The calibration-acceptance file, which contains the fixed rule used to judge a bracket, gets its expected digest from the in-code `ISSUED_ACCEPTANCE_REGISTRY`, or from `GENESIS_FIXTURE_ACCEPTANCE_SHA256` for the retained genesis test fixture, before its bytes are accepted (`joulewise/calibration_bracketing.py:735-741`). **Frozen** means fixed and fingerprinted before collection. The capture's timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. After three warm-up pulses, which are discarded, it commands 59 one-second GPU matrix-multiplication pulses on preallocated \(4096\times4096\) 16-bit floating-point matrices. A fixed base-two varied-gap schedule—gaps stepping through powers of two—prevents the pulse edges from repeatedly lining up with the requested 100-ms sampler cadence. Five seconds of quiet trace (no commanded pulse) are requested on both sides of the train, of which at least 4.5 s must be present.
+Immediately before and after each science window—one uninterrupted measurement session—JouleWise records a calibration under the same declared machine state, meaning the hardware and operating conditions recorded before collection. Each capture carries an instrument-validation manifest, a list of its calibration artifacts and their SHA-256 fingerprints. JouleWise hashes that manifest's bytes and compares the result with `validation_manifest_sha256` recorded in the capture, then hashes every listed artifact and compares the result with the manifest's entry; either mismatch refuses the capture as `instrument_calibration_invalid` in `joulewise/reduce.py`. Separately, it hashes the bytes of the frozen reservation plan, the file that names the reserved collection slots, and checks both that digest and the plan identifier against pins in the calibration ledger's session record; either mismatch is `PLAN_HASH_MISMATCH` in `joulewise/calibration_ledger.py`. The calibration-acceptance file, which contains the fixed rule used to judge a bracket, gets its expected digest from the in-code `ISSUED_ACCEPTANCE_REGISTRY`, or from `GENESIS_FIXTURE_ACCEPTANCE_SHA256` for the retained genesis test fixture, before its bytes are accepted by `joulewise/calibration_bracketing.py`. **Frozen** means fixed and fingerprinted before collection. The capture's timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. After three warm-up pulses, which are discarded, it commands 59 one-second GPU matrix-multiplication pulses on preallocated \(4096\times4096\) 16-bit floating-point matrices. A fixed base-two varied-gap schedule—gaps stepping through powers of two—prevents the pulse edges from repeatedly lining up with the requested 100-ms sampler cadence. Five seconds of quiet trace (no commanded pulse) are requested on both sides of the train, of which at least 4.5 s must be present.
 
 For each commanded pulse, the detector estimates resting GPU power from samples outside the fixed time margin around every pulse and pulse height from samples wholly inside its flat high-power portion, called the plateau. It predicts each reported interval average from the fraction of that interval covered by a shifted rectangular pulse, then scores the difference between predicted and observed power with a rule that limits the influence of one large discrepancy while moving the onset and offset separately. After finding the best pair, it encloses every pair close enough to that fit: a rectangle is rejected only when a mathematical lower bound proves that none of it can pass, and every surviving rectangle is split to a fixed resolution. The four outer edge values are widened for uncertainty in the two command timestamps. A capture is refused unless all 59 pulses pass five kinds of check: the signal rises far enough above resting power; the fitted pulse explains the trace better than a no-pulse model; the fitted onset and offset stay inside the accepted shift range; trace coverage extends through the fixed margin on both sides of the pulse; and the required pulses, file fingerprints, and machine-and-protocol fields are complete. Appendix A.3.5 gives the signal, fit, range, and trace-coverage calculations, and Appendix A.3.6 gives the completeness test. No uncommanded plateau may appear. The shared search-work limits cap both the number of search rectangles evaluated and the elapsed search time for the whole capture; exhausting either limit refuses the capture (Appendix A.3.7). The accepted capture bound is the largest allowed edge displacement among all pulses plus the trace's clock-anchor bound, the uncertainty in placing the trace on wall-clock time, built next.
 
@@ -247,7 +247,33 @@ references—while the machine recovers within the declared settling convention,
 its fixed maximum recovery time? An admitted bundle is a run allowed into the
 calculation because it passed its frozen entry and evidence checks.
 
-This campaign does not collect workload-response or identical-condition characterization; the method for them is stated so a later campaign can apply the already frozen calculations.
+This campaign does not collect workload-response or identical-condition
+characterization; the method for them is stated so a later campaign can apply
+the already frozen calculations. **Workload response:** do request and
+token-generation energy increase with realized output length in the registered
+way? A **workload level** is one output-token count fixed before collection.
+Complete every registered workload level; fit whole-request and token-generation
+energy against output length; require the lowest allowed slope to be positive
+and the largest departure from the fitted line to fit both one admitted
+bundle's timing half-width—half its allowed timing range—and an independently
+issued floor for that same cell. The unit is an admitted bundle. The slope and
+residual checks require forty admitted bundles, and the level-completeness check
+requires all five levels. Failure withdraws the affected **per-token
+conversion**, the fitted joules per output token; a response may then be
+reported only at its individual workload levels. **Identical-condition null:**
+does an A/B/B/A comparison manufacture a difference when its two conditions are
+the same? A **workload magnitude** is one target size fixed in the
+identical-condition ladder. At every registered magnitude, form each A/B/B/A
+block's **interval of allowed differences**, its minimum and maximum difference
+over the fixed member-energy endpoint combinations. Every interval must contain
+zero; the **mean interval**, the mean of the lower endpoints through the mean of
+the upper endpoints, and the largest absolute block difference must also fit
+inside the earlier comparator. The unit is an A/B/B/A block. The frozen ladder
+requires all three magnitudes. At each magnitude it requires five test blocks
+when an issued comparator floor for that cell exists and its evidence is
+disjoint; otherwise it requires five blocks to build the comparator and five
+different blocks to test it. A failed block or comparator check withdraws that
+cell's floor from claim use until the floor is re-derived.
 
 For workload response, an independent unit is one separately admitted bundle,
 not one sampler record within it. A workload-response slope is the fitted
@@ -333,7 +359,7 @@ fixed multiple of the phase rate. The required multiples are the design
 constants `SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0` for a short phase window and
 `REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0` for a request window. A missing ratio
 records `cadence_ratio_unrecorded`; a ratio below its required multiple records
-`cadence_ratio_below_threshold` (`joulewise/reduce.py:117-118,986-988`).
+`cadence_ratio_below_threshold` in `joulewise/reduce.py`.
 
 For drift and recovery, reference roles identify the allowance-building runs
 at the window opening, midpoint, and close and distinguish the held-out probes
@@ -346,8 +372,6 @@ ends and stops at that first pass.
 
 | Question | Calculation and fixed comparison | Independent unit, minimum basis, and refusal consequence |
 |---|---|---|
-| **Workload response:** do request and token-generation energy increase with realized output length in the registered way? | A **workload level** is one output-token count fixed before collection. Complete every registered workload level; fit whole-request and token-generation energy against output length; require the lowest allowed slope to be positive and the largest departure from the fitted line to fit both one admitted bundle's timing half-width—half its allowed timing range—and an independently issued floor for that same cell. | The unit is an admitted bundle. The slope and residual checks require forty admitted bundles, and the level-completeness check requires all five levels. Failure withdraws the affected **per-token conversion**, the fitted joules per output token; a response may then be reported only at its individual workload levels. |
-| **Identical-condition null:** does an A/B/B/A comparison manufacture a difference when its two conditions are the same? | A **workload magnitude** is one target size fixed in the identical-condition ladder. At every registered magnitude, form each A/B/B/A block's interval of allowed differences. Every interval must contain zero; the mean interval and largest absolute block difference must also fit inside the earlier comparator. | The unit is an A/B/B/A block. The frozen ladder requires all three magnitudes. At each magnitude it requires five test blocks when an issued comparator floor for that cell exists and its evidence is disjoint; otherwise it requires five blocks to build the comparator and five different blocks to test it. A failed block or comparator check withdraws that cell's floor from claim use until the floor is re-derived. |
 | **Phase accounting:** do the two phase energies close to request energy and remain separated at their shared boundary? | Compare the sum of the two phase energies with the enclosing request, allowing no positive double count beyond numerical rounding and no negative residual larger than the retained unphased gap can contain. Test whether prompt-processing energy stays inside both a resolution band and an earlier floor band as later output changes; keep the shared session timing term separate from member-local timing; require both bracket captures to lie in their registered band and no claim-bearing admitted member to carry the timing or sampling flags. | The main checks use admitted bundles and require at least twenty-four; the bracket check requires two captures, and the floor-label check requires every floor cell. Failure withdraws or narrows phase-specific claims: affected members become diagnostic, and an accounting failure narrows the result to request-total energy. |
 | **Drift and recovery:** does an allowance contain probes excluded from constructing it, and does the machine settle after sustained work? | Construct the drift allowance from its designated references, then test it only with held-out reference probes; require each probe's deviation to fit within that allowance. Separately measure time from a sustained workload to the first passing cooldown exit and compare it with the fixed settling convention. | Reference roles must be fixed for at least six reference members; containment needs at least three held-out probes, and recovery needs at least three sustained-hold/cooldown pairs. A containment failure re-derives every floor carrying that allowance; a recovery failure raises the settling interval in a successor policy and re-examines windows collected under the old one. |
 
@@ -667,8 +691,8 @@ subtracts the cell mean, so a uniform shared shift cancels from every residual.
 A retained two-block fixture makes the replay checkable without becoming
 campaign evidence. The Student-\(t\) critical used by the two-block interval is
 \(t_{0.975,1}=12.706\), the fixed-table value `_T_CRITICAL_95[1] = 12.706` in
-`joulewise/aggregate.py:41–42`, returned by `student_t_critical_95` and used by
-`joulewise/detection_floor.py:696`; the artifact records
+`joulewise/aggregate.py`, returned by `student_t_critical_95` and used by
+`joulewise/detection_floor.py`; the artifact records
 `t_critical_source: joulewise.aggregate.student_t_critical_95.v1`.
 Block 1 has
 \(\delta_1=z_1=0.2146256513\) J, onset values from 0.1098764207 to
@@ -693,7 +717,7 @@ The ratio is calculated before the safeguards used to publish the final
 **resolution bound**, the largest false phase-energy difference this cell
 admits. The final resolution bound is called the **cell floor** in the
 artifacts. A **same-cell floor** is that artifact for exactly the phase,
-workload, model, hardware, software, and counter cell being tested. For
+workload, model, hardware, software, and power-measurement boundary being tested. For
 \(n\ge5\) independent units, first apply the fixed
 small-sample multiplier
 
@@ -1679,10 +1703,12 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | Worked current-capture arithmetic | One diagnostic reconstruction | glossed-at-first-use | The bold label introduces a raw-stamp-to-maximal-pulse diagnostic calculation. |
 | onset lag / offset lag / pulse residual | One diagnostic reconstruction | glossed-at-first-use | Observed edge minus its matching commanded edge; the residual is the largest endpoint magnitude before the anchor term. |
 | record clipping / clip a record | 4. How the method bounds a false phase-energy difference | glossed-at-first-use | Keep only record time inside the phase and multiply duration by average power; the joule example is worked. |
-| cell | 1. Introduction | glossed-at-first-use | Runs sharing phase, workload, model, hardware, software, and power-counter boundary. |
+| cell | 1. Introduction | glossed-at-first-use | Runs sharing phase, workload, model, hardware, software, and power-measurement boundary. |
 | false-difference components / false-difference | 1. Introduction | built-before | The resolution bound is first constructed as the largest allowed false phase-energy difference for one cell. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | 3. Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
+| Workload response | 3. Instrument characterization | glossed-at-first-use | Whether request and token-generation energy increase with realized output length in the registered way. |
+| Identical-condition null | 3. Instrument characterization | glossed-at-first-use | Whether an A/B/B/A comparison manufactures a difference when both conditions are the same. |
 | independent unit | 3. Instrument characterization | glossed-at-first-use | One separately admitted bundle, not one sampler record within it. |
 | workload-response slope | 3. Instrument characterization | glossed-at-first-use | Fitted change in energy per output token. |
 | workload level | 3. Instrument characterization | glossed-at-first-use | One output-token count fixed before collection. |
@@ -1729,7 +1755,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
 | resolution bound | 1. Introduction | glossed-at-first-use | Largest false phase-energy difference allowed by the fixed cell calculation. |
 | cell floor | 1. Introduction | glossed-at-first-use | Artifact name for the final resolution bound, bridged in Section 1 to the detection-floor name. |
-| same-cell floor | Adding publication safeguards after the ratio | glossed-at-first-use | That floor for exactly the phase, workload, model, hardware, software, and counter cell being tested. |
+| same-cell floor | Adding publication safeguards after the ratio | glossed-at-first-use | That floor for exactly the phase, workload, model, hardware, software, and power-measurement boundary being tested. |
 | small-sample multiplier / \(g(n)\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A factor that widens a result to allow for limited repetition; its formula follows under publication safeguards. |
 | directional comparison / directional comparisons | Adding publication safeguards after the ratio | glossed-at-first-use | The expected direction is fixed before collection. |
 | Holm step-down correction / raw probability | Adding publication safeguards after the ratio | glossed-at-first-use | One two-comparison correction controls any false direction claim at 0.05; the later worked ordering supplies mechanics. |
@@ -1869,4 +1895,4 @@ The inventory excludes literal field names and reason names inside quoted omissi
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 248; FAILS: 0.
+a failure. Terms inventoried: 250; FAILS: 0.
