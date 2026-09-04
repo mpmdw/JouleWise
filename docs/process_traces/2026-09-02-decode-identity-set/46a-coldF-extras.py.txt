@@ -1,0 +1,61 @@
+"""Close three code-read gaps for the Cure C bullets: one-use write, lifecycle predecessor chain, env/chain path binding."""
+import pathlib, sys, tempfile, uuid
+from unittest import mock
+sys.path.insert(0, "/Users/edr/code/JouleWise-wt-decode-id")
+from joulewise import arm_readiness as ar
+from joulewise.arm_readiness import ArmReadinessError, LaunchLineageError, render_json, sha256_bytes
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="coldgate45-extras-")); Z = "0"*64; BOOT = str(uuid.uuid4())
+def probe(name, fn):
+    try: out = fn(); print(f"{name:<52} NO ERROR -> {str(out)[:80]}")
+    except (LaunchLineageError, ArmReadinessError) as e: print(f"{name:<52} reason_code={e.reason_code!r} :: {str(e)[:80]}")
+    except Exception as e: print(f"{name:<52} {type(e).__name__}: {str(e)[:80]}")
+# E1 one-use: the consumption writer's primitive refuses a second write of the same path
+p = tmp / "arm-0001.consumed.json"
+probe("E1a _exclusive_write first write", lambda: ar._exclusive_write(p, b"{}"))
+probe("E1b _exclusive_write second write, same path", lambda: ar._exclusive_write(p, b"{}"))
+# E2 env/chain binding: file exists but is not the path expected under the window plan root
+wpr = tmp / "wpr"; wpr.mkdir(); env = tmp / "elsewhere.env"; env.write_bytes(b"x")
+probe("E2a window.env exists but not under window plan root", lambda: ar._read_exact_launch_reference(
+    {"path": str(env), "sha256": sha256_bytes(b"x")}, max_bytes=1<<20, label="window environment", expected_path=wpr/"window.env"))
+(wpr/"window.env").write_bytes(b"x")
+probe("E2b window.env under root, bytes match", lambda: ar._read_exact_launch_reference(
+    {"path": str(wpr/"window.env"), "sha256": sha256_bytes(b"x")}, max_bytes=1<<20, label="window environment", expected_path=wpr/"window.env"))
+probe("E2c window.env under root, bytes changed", lambda: ar._read_exact_launch_reference(
+    {"path": str(wpr/"window.env"), "sha256": Z}, max_bytes=1<<20, label="window environment", expected_path=wpr/"window.env"))
+# E3 lifecycle chaining: real authenticate_launch_lineage body, start+settle stubbed as present, settle.predecessor wrong
+cons_path = tmp / "pack-a" / "arm_readiness.consumptions" / "arm-0001.consumed.json"
+arm_ctx = {"bracket_session_id": "b-1"}
+arm_full = {"receipt_id": "arm-0001", "receipt_kind": "arm", "boot_session_id": BOOT, "arm_context": arm_ctx,
+            "reviewed_main": {"head_commit": "a"*40}, "valid_until_monotonic_ns": 10**18, "pack": {"pack_root": str(tmp)}}
+pack_full = {"pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1", "window_id": "win-1"}
+mpath = tmp / "launch-manifest.json"; mpath.write_bytes(b"{}")
+consumption = {"boot_session_id": BOOT, "pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1", "window_id": "win-1",
+    "head_commit": "a"*40, "arm_context_sha256": sha256_bytes(render_json(arm_ctx)), "consumed_at_monotonic_ns": 1,
+    "consumption_id": "c-1", "launch_manifest": {"path": str(mpath), "sha256": Z},
+    "window_environment": {"path": str(wpr/"window.env"), "sha256": Z}, "window_chain": {"path": str(wpr/"window-chain.zsh"), "sha256": Z},
+    "exec_argv": ["caffeinate", "-is", "/bin/zsh", "x", "y"], "handoff_token_sha256": Z,
+    "arm_receipt": {"path": "arm_readiness.receipts/arm-0001.json", "sha256": Z, "receipt_id": "arm-0001"}}
+cons_ref = {"path": str(cons_path), "sha256": Z}; start_ref = {"path": str(tmp/"c-1.start.json"), "sha256": Z}; settle_ref = {"path": str(tmp/"c-1.settle.json"), "sha256": Z}
+lineage = {"schema_version": ar.LAUNCH_LINEAGE_SCHEMA, "collection_boot_session_id": BOOT, "pack_id": "pack-a", "plan_id": "plan-1",
+    "window_id": "win-1", "bracket_session_id": "b-1", "consumption": cons_ref, "start": start_ref, "settle": settle_ref, "completion": None}
+ident = {"boot_session_id": BOOT, "pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1", "window_id": "win-1",
+         "bracket_session_id": "b-1", "window_chain": consumption["window_chain"], "consumption": cons_ref, "handoff_token_sha256": Z}
+def lifecycle(settle_pred):
+    def rd(path, *, expected_kind):
+        if expected_kind == "launch_start":
+            return ({**ident, "receipt_kind": "launch_start", "predecessor": cons_ref, "issued_at_monotonic_ns": 2}, Z, path)
+        return ({**ident, "receipt_kind": "launch_settle", "predecessor": settle_pred, "issued_at_monotonic_ns": 3}, Z, path)
+    return rd
+def manifest_bytes():
+    return render_json({"schema_version": ar.LAUNCH_MANIFEST_SCHEMA, "boot_session_id": BOOT, "window_plan_root": str(wpr),
+                        "prewindow_command": ["true"], "launch_command": ["caffeinate", "-is", "/bin/zsh", "x", "y"]})
+def exact_ref(reference, *, max_bytes, label, expected_path=None, launch_binding_cache=None):
+    return (mpath, manifest_bytes()) if label == "launch manifest" else (expected_path, b"")
+def e3(settle_pred):
+    with mock.patch.multiple(ar, _read_v2_consumption=mock.Mock(return_value=(consumption, b"", Z, cons_path)),
+            _replay_consumed_arm=mock.Mock(return_value=(arm_full, tmp/"arm.json", tmp, pack_full)),
+            _read_exact_launch_reference=exact_ref, _launch_argv_matches=mock.Mock(return_value=True),
+            _read_lifecycle_receipt=lifecycle(settle_pred)):
+        return ar.authenticate_launch_lineage(lineage, require_completion=False)
+probe("E3a settle.predecessor == start ref (well-chained)", lambda: e3(start_ref))
+probe("E3b settle.predecessor != start ref", lambda: e3(cons_ref))
