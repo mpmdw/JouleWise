@@ -162,9 +162,55 @@ Figure 1 shows interval-average power around the recorded boundary between promp
 
 Immediately before and after each science window—one uninterrupted measurement session—JouleWise records a calibration under the same declared machine state. Its recorded SHA-256 values, which identify exact file bytes, must match the fixed record; its timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. After three warm-up pulses, which are discarded, it commands 59 one-second GPU matrix-multiplication pulses on preallocated \(4096\times4096\) 16-bit floating-point matrices. A fixed base-two varied-gap schedule—gaps stepping through powers of two—prevents the pulse edges from repeatedly lining up with the requested 100-ms sampler cadence. Five seconds of quiet trace (no commanded pulse) are requested on both sides of the train, of which at least 4.5 s must be present.
 
+The requested 100-ms interval is a design choice, not a statement that every
+record arrives exactly 100 ms after the preceding one. It places about ten
+record periods across each one-second calibration pulse, enough for the
+interval-averaged trace to show a high plateau and both transition regions,
+and places several records across a multi-second request. The calculation
+checks the achieved observation density from the recorded times. The **cadence ratio**
+is the window duration divided by the worse of the gap exceeded by only the
+largest 5% of gaps wholly inside the window and the largest record gap crossing
+either boundary. A short phase must have a ratio of at least 2.0 and at least
+three records inside it; a complete request must have a ratio of at least 4.0
+([fixed design constants](../../joulewise/reduce.py)). These rules say
+which windows have enough time support for reduction. They cannot reveal a
+change within one averaged record, make a phase shorter than a few record
+gaps resolvable, or prove that the command and trace clocks are aligned;
+refusal rules and the separate edge and clock bounds address those limits.
+<!-- design constants: joulewise/reduce.py SHORT_WINDOW_CADENCE_RATIO_MIN=2.0, REQUEST_WINDOW_CADENCE_RATIO_MIN=4.0, MIN_PHASE_SAMPLES=3; cadence denominator: _window_gap_stats -->
+
 For each commanded pulse, the detector estimates resting GPU power from samples outside the fixed time margin around every pulse and pulse height from samples wholly inside its flat high-power portion, called the plateau. It predicts each reported interval average from the fraction of that interval covered by a shifted rectangular pulse, then scores the difference between predicted and observed power with a rule that limits the influence of one large discrepancy while moving the onset and offset separately. After finding the best pair, it encloses every pair close enough to that fit: a rectangle is rejected only when a mathematical lower bound proves that none of it can pass, and every surviving rectangle is split to a fixed resolution. The four outer edge values are widened for uncertainty in the two command timestamps. A capture is refused unless all 59 pulses pass the signal, fit, range, trace-coverage (the captured trace extends through the fixed margin on both sides of every pulse), and completeness checks; no uncommanded plateau appears; and the shared search-work limits remain unexhausted. The accepted capture bound is the largest allowed edge displacement among all pulses plus the trace's clock-anchor bound, the uncertainty in placing the trace on wall-clock time, built next.
 
 The clock anchor uses five wall-clock readings, each bracketed by readings from a monotonic clock—a counter that advances but is never corrected to civil time—together with every whole-second label embedded in the native power records. It retains the complete set of straight-line clock mappings whose rate, offset, first-record endpoint, stamp brackets, native labels, and launch-to-first-parse ordering agree. The method permits the two clocks to run at slightly different fixed rates and charges the full allowed departure of a native label from that line. It refuses missing or malformed inputs, an empty set or an unbounded one (the allowed rate reaches the edge of its search box), inadequate capture span, implausible clock rate, active automatic network-time correction, or a bound outside the accepted range. Otherwise it finds the earliest and latest allowed first-record endpoint and adds four separately named allowances. This corrected rate-aware model replaced the false equal-rate assumption, which could move every fitted edge in the same direction.
+
+The following are diagnostic-era instrument statistics re-derived from
+retained captures under the current rate-aware clock anchor. The associated
+historical energy values remain void for claim use: these statistics
+characterize the instrument's timing calibration and are not evidence for the
+paper's current model comparison. Re-deriving a historical corpus with the
+current method does not turn that corpus into evidence for a claim. Across 15
+retained captures, the corrected anchor produced bounds for 12 and refused
+three. The old-anchor control reproduced the stored bound exactly for all 14
+captures it could evaluate; the fifteenth had already been refused by the old
+anchor. Of the 14 captures previously accepted, the corrected anchor refused
+two. Among the 12 numerical changes, the median relative change was +0.61%
+and the largest change in either direction was 4.05%. The analysis did not
+recompute the retired phase-energy floor ratios
+([quantified anchor-correction analysis](round7/anchor-correction-quantified.md)).
+<!-- registry trace: DX-020 through DX-027 in docs/paper/results-fill-registry.md; issued artifact: docs/paper/round7/anchor-correction-quantified.json -->
+
+Figure 4 opens one of those retained captures so that the edge behavior is
+visible rather than hidden inside its maximum. The single shift that best
+aligns an edge is its **best-fit lag**: observed minus commanded, with positive
+meaning later and negative meaning earlier. An **allowed edge interval** is
+the wider range of edge times the averaged records cannot rule out. The points
+show best-fit lags, whereas the calibration bound uses the most distant end of
+every allowed edge interval.
+
+![Figure 4. Best-fit edge lags for all 59 pulses in one retained diagnostic capture.](figures/fig4_edge_excursions.svg)
+
+*Figure 4. Edge timing excursions in one retained diagnostic capture. The white plotting field carries the title and two-line definition; pale horizontal grid lines, the gray vertical axis, and labeled horizontal pulse-index and vertical millisecond axes locate all marks, with ticks spanning pulse indices 0–58 and −20 to +30 ms. The black horizontal line and its right-hand label mark commanded edge time, zero. White-ringed blue circles show the 59 switch-on lags and white-ringed orange squares show the 59 switch-off lags; the dashed blue and orange lines and their right-hand labels mark the respective +13-ms and −5.5-ms medians. A short leader identifies pulse index 9's +27-ms switch-on point, whose allowed interval supplies the largest edge term. The two-symbol legend states that all 59 switch-on points are late and 49 of 59 switch-off points are early. The notes below the legend explain what the median lines mean, why the bound is taken from allowed intervals rather than these best-fit points, how the 28.93-ms edge term and 1.13-ms clock-anchor term give the 30.07-ms capture bound, that displayed values are rounded while the data retain full precision, and that the 0.5-ms point grid comes from the fit step while the allowed intervals are continuous.*
+<!-- figure trace: docs/paper/figures/fig4-verification.md; registry rows DX-003, DX-010 through DX-017; issued artifact docs/paper/round7/excursion-decomposition.json -->
 
 Finally, the pre-window and post-window capture bounds form a bracket. The calibration policy derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—the two-sided 99% point, written \(t_{0.995,16}\) because it leaves 0.5% in each tail with 16 degrees of freedom, and larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation (the \(n-1\) formula of Section 4) is \(s_b = 2.460856\) ms (unrounded, \(2.460856207694636\) ms) and \(t_{0.995,16}=2.92078162242509999197\); the two-draw rule—two fresh capture bounds are drawn, and the spread of their difference is \(\sqrt{2}\) times one capture's spread—so \(t_{0.995,16}\times s_b\times\sqrt{2}\) records \(10.164834757777545\) ms, printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest microsecond, with an exact tie going to the even digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained calibration acceptance file `configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (registry source S17). The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. Appendix A.3.6 calls one capture's pulse-plus-anchor bound \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
 
@@ -695,6 +741,16 @@ are \(1.5(1.6656)+0.4=2.8984\) J and
 The example's point-only bounds are zero, so it demonstrates floor composition
 but correctly refuses \(R\); it supplies no boundary-doubling result.
 
+In plain words, the cell floor guarantees that, within this authenticated
+evidence and fixed calculation, a reported difference at or below the larger
+guarded component will not be called resolvable: either the repeated-run
+spread or the four-run comparison could account for a difference that large.
+It does not guarantee that a difference above the floor is real, points in the
+registered direction, or matters in practice. Clearing the floor is only
+permission to continue to the separate direction analysis below, not its
+conclusion. The floor also does not cover an unmeasured bias, a different cell
+or sampler configuration, or future observations outside the admitted evidence.
+
 Two directional comparisons—token generation and prompt processing, each with its
 expected direction fixed before collection—share one
 two-sided Holm step-down correction, which keeps the chance of any false
@@ -1014,7 +1070,7 @@ transition from prompt processing to token generation. A difference in those
 two physical edge responses could make the pulse-derived timing bound either
 too narrow or unnecessarily wide; its effect on the reported phase energies is
 unquantified. The retained diagnostic capture's pulse-derived bound was
-\(0.030067931757111657\) s. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA / REPLAY_FENCED. --> This is a calibration value, not a bound on real inference. The concrete closing check is the inserted-gap
+\(0.030067931757111657\) s. <!-- DG-027; MEASURED / DIAGNOSTIC_ERA / REPLAY_FENCED. --> Figure 4's 118 plotted edge lags all come from that one pulse capture, so their pattern cannot establish how inference transitions behave. This is a calibration value, not a bound on real inference. The concrete closing check is the inserted-gap
 experiment in the next subsection: command a no-work interval inside real
 inference, fit both of its independently stamped edges, and compare the
 largest absolute residual with the pulse-derived bound; an exceedance would
@@ -1579,6 +1635,10 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | warm-up pulses | Bracketed pulse-train algorithm | glossed-at-first-use | The first use says the three pulses are discarded. |
 | base-two varied-gap schedule | Bracketed pulse-train algorithm | glossed-at-first-use | Its gaps step through powers of two to keep pulse edges from repeatedly aligning with samples. |
 | sampler cadence | Bracketed pulse-train algorithm | audience-vocabulary | Requested 100-ms sampling cadence is textbook/plain-English measurement vocabulary. |
+| cadence ratio | Bracketed pulse-train algorithm | glossed-at-first-use | Window duration divided by the worse of the high-end wholly internal record gap and the largest boundary-crossing record gap. |
+| best-fit lag | Bracketed pulse-train algorithm | glossed-at-first-use | The single shift that best aligns an edge, calculated as observed minus commanded and signed later-positive. |
+| allowed edge interval | Bracketed pulse-train algorithm | glossed-at-first-use | Wider range of edge times that the interval-averaged records cannot rule out. |
+| edge timing excursions | Bracketed pulse-train algorithm | built-before | The preceding best-fit-lag construction defines the signed edge movements plotted in Figure 4. |
 | quiet trace | Bracketed pulse-train algorithm | glossed-at-first-use | The parenthesis defines quiet as no commanded pulse. |
 | resting GPU power / pulse height / plateau / pulse plateau | Bracketed pulse-train algorithm | glossed-at-first-use | Resting level, pulse height, and the flat high-power portion are built in physical words. |
 | trace-coverage | Bracketed pulse-train algorithm | glossed-at-first-use | The captured trace extends through the fixed margin on both sides of every pulse. |
@@ -1787,4 +1847,4 @@ The inventory excludes literal field names and reason names inside quoted omissi
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 224; FAILS: 0.
+a failure. Terms inventoried: 228; FAILS: 0.

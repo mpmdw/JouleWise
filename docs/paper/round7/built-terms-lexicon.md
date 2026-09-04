@@ -1,7 +1,9 @@
 # Built-terms lexicon
 
-Generated mechanically from `docs/paper/draft-v1.md` by `scripts/paper_terms_lint.py`.
-Only terms found in the draft appear here; ruled terms absent from the draft remain lint vocabulary.
+The first table is generated mechanically from `docs/paper/draft-v1.md` by
+`scripts/paper_terms_lint.py`. Only terms found in that draft appear in the
+generated table; successor-draft additions audited after generation appear in
+the addendum below. Ruled terms absent from either draft remain lint vocabulary.
 
 | term | first line | how detected | line (first 80 chars) |
 |---|---:|---|---|
@@ -435,3 +437,16 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | τ_{j+1} | 464 | emphasis | 7. Drives the **59 measured pulses**. Pulse *j* (0-based) is commanded on at pla |
 | ẑ_hi | 624 | emphasis | - **Cell lower bound.** For a rectangle *C* = [on_lo, on_hi] × [off_lo, off_hi]  |
 | ẑ_lo | 624 | emphasis | - **Cell lower bound.** For a rectangle *C* = [on_lo, on_hi] × [off_lo, off_hi]  |
+
+## Successor-draft audit additions
+
+These rows cover terms introduced by the floor-guarantee and cadence audit of
+`docs/paper/draft-v2-skeleton.md`. Section homes are used instead of unstable
+line numbers.
+
+| term | first reader-facing home | how built | first-use wording |
+|---|---|---|---|
+| cadence ratio | Bracketed pulse-train algorithm | glossed at first use | Window duration divided by the worse of the high-end wholly internal record gap and the largest boundary-crossing record gap. |
+| best-fit lag | Bracketed pulse-train algorithm | glossed at first use | The single shift that best aligns an edge, calculated as observed minus commanded and signed later-positive. |
+| allowed edge interval | Bracketed pulse-train algorithm | glossed at first use | Wider range of edge times that the interval-averaged records cannot rule out. |
+| edge timing excursions | Bracketed pulse-train algorithm | built before first use | The preceding best-fit-lag construction defines the signed edge movements plotted in Figure 4. |
