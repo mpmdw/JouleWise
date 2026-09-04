@@ -126,6 +126,16 @@ ANCHOR_V3_R6_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
 ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256 = (
     "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
 )
+# D-079 instrument executable path-and-digest reissue.  The member table and
+# D-102 statistics are unchanged; r7 rotates only the governed powermetrics
+# fiducial estimator pin introduced by the executable identity hardening.
+ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r7.json"
+)
+ANCHOR_V3_R7_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r7"
+ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256 = (
+    "40af3fb15745f626cb80d771085b17fe770c594076475257634f55bc3d7624f3"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -168,10 +178,17 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R7_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r7.json"
+        ),
+        "file_sha256": ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R7_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R7_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -226,6 +243,8 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R5_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # r6 is the science-neutral capture-presentation reissue of r5.
     ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r7 is the science-neutral instrument executable identity reissue of r6.
+    ANCHOR_V3_R7_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
 
 

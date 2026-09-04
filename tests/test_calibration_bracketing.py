@@ -31,6 +31,8 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_ID,
+    ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R7_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_PATH,
@@ -582,14 +584,14 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
-        # The live default is the ACTIVE generation.  Since the S1 fix-round
-        # barrier/taxonomy pin moves it is the n=17 r6 generation; all
+        # The live default is the ACTIVE generation.  Since the instrument
+        # executable identity pin move it is the n=17 r7 generation; all
         # retained earlier generations keep their own registered pins and are
         # asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R7_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R6_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R7_ACCEPTANCE_ID)
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
@@ -604,6 +606,22 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(ANCHOR_V3_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
             ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
+        )
+        self.assertEqual(
+            hashlib.sha256(
+                Path(
+                    "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+                ).read_bytes()
+            ).hexdigest(),
+            ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
+        )
+        self.assertEqual(
+            json.loads(
+                Path(
+                    "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+                ).read_bytes()
+            )["acceptance_id"],
+            ANCHOR_V3_R6_ACCEPTANCE_ID,
         )
         self.assertEqual(
             json.loads(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes())["acceptance_id"],
