@@ -119,6 +119,45 @@ V2_BINDING_FIELDS = LEGACY_BINDING_FIELDS + (
 )
 BINDING_FIELDS = V2_BINDING_FIELDS
 
+# Append-only acceptance registry for the instrument executable.  A macOS
+# update that changes these bytes requires a reviewed successor row after the
+# replacement binary has been identified and hashed; existing rows are never
+# repointed.  A mismatch blocks both calibration authorship and window prepare,
+# so an in-flight window must stop before measurement rather than silently
+# adopting the replacement instrument.
+POWERMETRICS_ACCEPTANCE_ID = "macos_25G83_powermetrics_2026_09_03"
+POWERMETRICS_ACCEPTANCE_REGISTRY: dict[str, dict[str, str]] = {
+    POWERMETRICS_ACCEPTANCE_ID: {
+        "expected_sha256": (
+            "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5"
+        ),
+    },
+}
+INSTRUMENT_BINARY_DIGEST_MISMATCH = "instrument_binary_digest_mismatch"
+
+
+def instrument_binary_digest_refusal(binary: Any) -> str | None:
+    """Return the registered refusal for a new digest-pinned binary record.
+
+    Historical artifacts have no ``acceptance_id`` and remain readable.  Once
+    the field is present, its identifier, expected digest, and observed digest
+    must all agree with an append-only reviewed registry row.
+    """
+
+    if not isinstance(binary, Mapping) or "acceptance_id" not in binary:
+        return None
+    registered = POWERMETRICS_ACCEPTANCE_REGISTRY.get(binary.get("acceptance_id"))
+    expected = registered.get("expected_sha256") if registered else None
+    if (
+        not isinstance(binary.get("path"), str)
+        or not binary.get("path")
+        or not isinstance(expected, str)
+        or binary.get("expected_sha256") != expected
+        or binary.get("sha256") != expected
+    ):
+        return INSTRUMENT_BINARY_DIGEST_MISMATCH
+    return None
+
 
 def protocol_pulse_count(protocol_id: str) -> int:
     """Return the exact pulse count bound by one immutable protocol."""
@@ -163,6 +202,7 @@ FIDUCIAL_DIAGNOSTIC_CODES = frozenset(
         "capture_time_missing_or_invalid",
         DETECTION_NONCONVERGENT,
         CLOCK_ANCHOR_UNRESOLVED,
+        INSTRUMENT_BINARY_DIGEST_MISMATCH,
     }
 )
 
@@ -1373,6 +1413,8 @@ def instrument_evidence(
     protocol_id: str = PROTOCOL_ID,
     capture_wall_time_s: float | None = None,
     launch_lineage: Mapping[str, Any] | None = None,
+    sampler_binary_path: str | None = None,
+    instrument_acceptance_id: str | None = None,
 ) -> dict[str, Any]:
     """Assemble ``instrument_evidence.json`` content, failing closed.
 
@@ -1432,6 +1474,22 @@ def instrument_evidence(
             and float(capture_wall_time_s) >= 0.0
         )
     )
+    binary_evidence: dict[str, Any] = {
+        "sha256": bindings.get("powermetrics_sha256"),
+    }
+    if sampler_binary_path is not None:
+        binary_evidence["path"] = str(sampler_binary_path)
+    if instrument_acceptance_id is not None:
+        registered = POWERMETRICS_ACCEPTANCE_REGISTRY.get(instrument_acceptance_id)
+        binary_evidence.update(
+            {
+                "acceptance_id": instrument_acceptance_id,
+                "expected_sha256": (
+                    registered.get("expected_sha256") if registered else None
+                ),
+            }
+        )
+    instrument_digest_refusal = instrument_binary_digest_refusal(binary_evidence)
     valid = (
         detection.b_fiducial_s is not None
         and not missing
@@ -1442,6 +1500,7 @@ def instrument_evidence(
         and detection_reasons_ok
         and capture_time_ok
         and detection.projection_disposition is None
+        and instrument_digest_refusal is None
     )
     reasons = list(detection.reasons)
     if missing:
@@ -1458,6 +1517,8 @@ def instrument_evidence(
         reasons.append("raw_or_event_hash_missing_or_invalid")
     if not capture_time_ok:
         reasons.append("capture_time_missing_or_invalid")
+    if instrument_digest_refusal is not None:
+        reasons.append(instrument_digest_refusal)
     anchor_method = detection.anchor_method
     if not isinstance(anchor_method, str) or not anchor_method:
         raise ValueError("detection anchor method is missing")
@@ -1498,10 +1559,7 @@ def instrument_evidence(
                     allow_nan=False,
                 ).encode("utf-8")
             ).hexdigest(),
-            "powermetrics_binary": {
-                "path": "/usr/bin/powermetrics",
-                "sha256": bindings.get("powermetrics_sha256"),
-            },
+            "powermetrics_binary": binary_evidence,
             "power_policy": {"id": bindings.get("power_policy")},
         },
         "artifact_sha256": dict(artifact_sha256),

@@ -466,8 +466,16 @@ def _load_instrument_calibration_attachment(
             "runtime-observed power policy"
         )
     from joulewise.powermetrics_fiducial import (  # noqa: PLC0415
+        instrument_binary_digest_refusal,
         verify_stored_evidence_physics,
     )
+
+    binary_evidence = evidence.get("binding_evidence", {}).get(
+        "powermetrics_binary"
+    )
+    digest_refusal = instrument_binary_digest_refusal(binary_evidence)
+    if digest_refusal is not None:
+        raise ValueError(digest_refusal)
 
     try:
         effective_bound = verify_stored_evidence_physics(

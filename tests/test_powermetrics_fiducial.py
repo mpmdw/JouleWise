@@ -39,6 +39,7 @@ from joulewise.powermetrics_fiducial import (
     PROTOCOL_V2_SHA256,
     PROTOCOL_V3_SHA256,
     PULSE_COUNT,
+    INSTRUMENT_BINARY_DIGEST_MISMATCH,
     RESIDUAL_REGION_METHOD,
     CommandedPulse,
     TraceInterval,
@@ -961,6 +962,55 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(set(payload["bindings"]), set(self.bindings()))
         self.assertEqual(payload["pulse_count"], 3)
 
+    def test_digest_pinned_evidence_records_resolved_invoked_binary(self) -> None:
+        acceptance_id = "test-instrument-row"
+        invoked_binary = Path("relative/test/powermetrics").resolve()
+        expected_digest = self.bindings()["powermetrics_sha256"]
+        with patch.dict(
+            fiducial_module.POWERMETRICS_ACCEPTANCE_REGISTRY,
+            {acceptance_id: {"expected_sha256": expected_digest}},
+        ):
+            payload = instrument_evidence(
+                self.make_detection(),
+                bindings=self.bindings(),
+                validation_id="v-instrument-path",
+                artifact_sha256={
+                    "raw/powermetrics.plist": "cd" * 32,
+                    "events.jsonl": "ef" * 32,
+                },
+                protocol_pulse_count=3,
+                protocol_id=LEGACY_PROTOCOL_ID,
+                sampler_binary_path=str(invoked_binary),
+                instrument_acceptance_id=acceptance_id,
+            )
+        binary = payload["binding_evidence"]["powermetrics_binary"]
+        self.assertEqual(binary["path"], str(invoked_binary))
+        self.assertEqual(binary["sha256"], expected_digest)
+        self.assertEqual(binary["expected_sha256"], expected_digest)
+        self.assertEqual(payload["status"], "valid")
+
+    def test_digest_pin_mismatch_refuses_with_named_code(self) -> None:
+        acceptance_id = "test-instrument-row"
+        with patch.dict(
+            fiducial_module.POWERMETRICS_ACCEPTANCE_REGISTRY,
+            {acceptance_id: {"expected_sha256": "12" * 32}},
+        ):
+            payload = instrument_evidence(
+                self.make_detection(),
+                bindings=self.bindings(),
+                validation_id="v-instrument-mismatch",
+                artifact_sha256={
+                    "raw/powermetrics.plist": "cd" * 32,
+                    "events.jsonl": "ef" * 32,
+                },
+                protocol_pulse_count=3,
+                protocol_id=LEGACY_PROTOCOL_ID,
+                sampler_binary_path=str(Path("/test/powermetrics")),
+                instrument_acceptance_id=acceptance_id,
+            )
+        self.assertEqual(payload["status"], "invalid")
+        self.assertIn(INSTRUMENT_BINARY_DIGEST_MISMATCH, payload["reasons"])
+
     def test_healthy_evidence_bytes_match_pre_budget_baseline(self) -> None:
         bindings = self.bindings(
             os_build="25F84",
@@ -981,6 +1031,7 @@ class EvidenceTests(unittest.TestCase):
             protocol_pulse_count=3,
             protocol_id=PROTOCOL_ID,
             capture_wall_time_s=1_784_491_000.25,
+            sampler_binary_path="/usr/bin/powermetrics",
         )
         payload["clock_anchor"] = {
             "method": fiducial_module.CLOCK_METHOD_V2,
@@ -2281,6 +2332,14 @@ os._exit(23)
                     validation_script,
                     "sha256_path",
                     return_value="a" * 64,
+                ),
+                patch.dict(
+                    fiducial_module.POWERMETRICS_ACCEPTANCE_REGISTRY,
+                    {
+                        fiducial_module.POWERMETRICS_ACCEPTANCE_ID: {
+                            "expected_sha256": "a" * 64
+                        }
+                    },
                 ),
                 patch.object(
                     validation_script,

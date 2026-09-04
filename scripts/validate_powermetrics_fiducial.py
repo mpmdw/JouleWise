@@ -109,6 +109,9 @@ from joulewise.powermetrics_fiducial import (  # noqa: E402
     clock_stamp_half_width_s,
     detect_pulses,
     instrument_evidence,
+    POWERMETRICS_ACCEPTANCE_ID,
+    POWERMETRICS_ACCEPTANCE_REGISTRY,
+    instrument_binary_digest_refusal,
     protocol_definition_matches,
     protocol_sha256,
     pulse_schedule,
@@ -1180,6 +1183,11 @@ def rederive_artifact(source_dir: Path, output: Path) -> dict[str, object]:
         ),
         protocol_id=PROTOCOL_V2_ID,
         protocol_pulse_count=PROTOCOL_V2_PULSE_COUNT,
+        sampler_binary_path=(
+            stored.get("binding_evidence", {})
+            .get("powermetrics_binary", {})
+            .get("path")
+        ),
     )
     payload["clock_anchor"] = stored.get("clock_anchor")
     payload["clock_anchor_resolved"] = True
@@ -1664,6 +1672,35 @@ def main(argv: list[str] | None = None) -> int:
             RefusalCode.POWER_POLICY_REQUIRED,
             stream=sys.stderr,
         )
+    args.sampler_binary = args.sampler_binary.resolve()
+    if not args.sampler_direct_for_test:
+        expected_sampler_sha256 = POWERMETRICS_ACCEPTANCE_REGISTRY[
+            POWERMETRICS_ACCEPTANCE_ID
+        ]["expected_sha256"]
+        observed_sampler_sha256 = sha256_path(args.sampler_binary)
+        sampler_digest_refusal = instrument_binary_digest_refusal(
+            {
+                "path": str(args.sampler_binary),
+                "sha256": observed_sampler_sha256,
+                "acceptance_id": POWERMETRICS_ACCEPTANCE_ID,
+                "expected_sha256": expected_sampler_sha256,
+            }
+        )
+        if sampler_digest_refusal is not None:
+            print(
+                json.dumps(
+                    {
+                        "status": "refused",
+                        "code": sampler_digest_refusal,
+                        "path": str(args.sampler_binary),
+                        "expected_sha256": expected_sampler_sha256,
+                        "observed_sha256": observed_sampler_sha256,
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            return 2
     if args.time_scale_for_test <= 0 or args.time_scale_for_test > 1:
         return emit_refusal(
             RefusalCode.WRITER_BRACKET_ARGUMENTS,
@@ -2166,6 +2203,10 @@ def main(argv: list[str] | None = None) -> int:
             launch_authentication["launch_lineage"]
             if launch_authentication is not None
             else None
+        ),
+        sampler_binary_path=str(args.sampler_binary),
+        instrument_acceptance_id=(
+            None if args.sampler_direct_for_test else POWERMETRICS_ACCEPTANCE_ID
         ),
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]

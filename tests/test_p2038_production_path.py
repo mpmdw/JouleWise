@@ -356,6 +356,43 @@ def production_config() -> BenchmarkConfig:
 
 
 class P2038ProductionPathTests(unittest.TestCase):
+    def test_window_prepare_refuses_unregistered_instrument_digest_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            calibration = Path(tmp) / "calibration"
+            install_complete_calibration(calibration)
+            evidence_path = calibration / "instrument_evidence.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["binding_evidence"]["powermetrics_binary"].update(
+                {
+                    "acceptance_id": "unknown-instrument-row",
+                    "expected_sha256": evidence["bindings"][
+                        "powermetrics_sha256"
+                    ],
+                }
+            )
+            evidence_raw = (
+                json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+            ).encode()
+            evidence_path.write_bytes(evidence_raw)
+            manifest_path = calibration / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["instrument_evidence.json"] = hashlib.sha256(
+                evidence_raw
+            ).hexdigest()
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+            )
+            runtime_digest = hashlib.sha256(FIXTURE_PROCESS.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(
+                ValueError, "instrument_binary_digest_mismatch"
+            ):
+                _load_instrument_calibration_attachment(
+                    calibration,
+                    power_policy="ac_high_power",
+                    runtime_powermetrics_sha256=runtime_digest,
+                    runtime_power_policy="ac_high_power",
+                )
+
     def test_calibration_attachment_refuses_runtime_executable_digest_mismatch(
         self,
     ) -> None:

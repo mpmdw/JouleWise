@@ -2618,6 +2618,22 @@ class CalibrationBracketingTests(unittest.TestCase):
                 self.assertEqual(
                     candidate.bindings["anchor_method_version"], CLOCK_METHOD_V3
                 )
+                evidence["binding_evidence"]["powermetrics_binary"].update(
+                    {
+                        "acceptance_id": "unknown-instrument-row",
+                        "expected_sha256": bindings["powermetrics_sha256"],
+                    }
+                )
+                write_evidence_and_manifest()
+                self.assertIsNone(
+                    load_calibration_candidate(directory, runs_root=root)
+                )
+                evidence["binding_evidence"]["powermetrics_binary"].pop(
+                    "acceptance_id"
+                )
+                evidence["binding_evidence"]["powermetrics_binary"].pop(
+                    "expected_sha256"
+                )
                 evidence["anchor_method_version"] = CLOCK_METHOD_V2
                 evidence["bindings"]["anchor_method_version"] = CLOCK_METHOD_V2
                 write_evidence_and_manifest()

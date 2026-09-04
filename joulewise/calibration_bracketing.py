@@ -34,6 +34,7 @@ from joulewise.powermetrics_fiducial import (
     RESIDUAL_REGION_METHOD,
     V2_BINDING_FIELDS,
     capture_wall_time_from_events,
+    instrument_binary_digest_refusal,
     protocol_pulse_count,
     protocol_sha256,
     verify_stored_evidence_physics,
@@ -1072,6 +1073,7 @@ def _binding_evidence_authentic(
         and binary.get("sha256") == bindings.get("powermetrics_sha256")
         and isinstance(binary.get("path"), str)
         and bool(binary.get("path"))
+        and instrument_binary_digest_refusal(binary) is None
         and isinstance(power_policy, Mapping)
         and power_policy.get("id") == bindings.get("power_policy")
     )
