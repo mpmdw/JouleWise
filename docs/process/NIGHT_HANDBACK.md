@@ -13,6 +13,14 @@ night's custody root: `night/result.json`, then `night/receipt.json` or
 `night/refusal.json` as `result.json` directs. If this file and the result
 record disagree, the result record is right and the courier says so.
 
+The night driver independently reads the plan-configured sibling path
+`<custody-parent>/magistrate/state.json` when it constructs every courier
+message; for the production plan layout this is
+`~/night-custody/magistrate/state.json`. The email body reports that file's age
+and its last `state` decision without importing the watchdog. Operational
+liveness is 15 minutes: an age greater than 900 seconds, a missing file, or an
+unreadable decision means the watchdog is dead and must be reported as such.
+
 ## Purpose of this night
 
 Plan `rehearsal-20260903`, class `REHEARSAL_STUB`, armed by the magistrate
@@ -60,17 +68,28 @@ the magistrate harvests the custody root AND the stand-down log line,
 records both under `NIGHT-REHEARSAL-01`, then runs
 `scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260903/night_plan.json --hour 2 --minute 56 --uninstall`
 at the SAME commit the plan was RE-armed on (the re-arm commit that
-rewrote this file; the installer checks `repo_head` before the uninstall
-branch — after PR #268 the uninstall path no longer needs `claude` on
-PATH), so the dead-man job stops firing at 07:00. The canonical checkout
-must not be pulled or moved between the re-arm and the night's
-completion — the gate compares the plan's `repo_head` to the CANONICAL
-checkout HEAD, and the original arming of this plan was invalidated by
-exactly such a daytime pull (stage-2 finding: morning-before arming plus
-an active canonical checkout guarantees `night_plan_stale`). Then the last stage-1 item: the stage-1 plan email to Ed (first
+rewrote this file; on install the installer checks `repo_head` against the
+driver checkout HEAD and `measurement_head` against the HEAD of the plan's
+`measurement_root`, while `--uninstall` checks neither pin and no longer
+needs `claude` on PATH), so the dead-man job stops firing at 07:00. The
+measurement checkout of record (`/Users/edr/JouleWise-measurement-20260813`)
+must not move between the re-arm and the night's completion: the v2 gate
+compares the plan's `measurement_head` to that checkout's HEAD. Ordinary
+daytime work in the dev checkout no longer invalidates an armed night; only
+moving the pinned measurement checkout does. Then the last stage-1 item: the stage-1 plan email to Ed (first
 armed date; launches unless he replies NO) before any `DIAGNOSTIC_NO_PACK`
-plan is armed. Ed was emailed the arming notice for THIS night before it
+plan is armed. For every v2 plan, run `scripts/install_night_agent.sh` FROM
+the checkout named by the plan's `measurement_root`, with that checkout at
+the plan's `measurement_head`; never install those two night agents from the
+development checkout. Ed was emailed the arming notice for THIS night before it
 was armed (cold gate coldgate-e10 (b)); if Ed replied NO on that thread,
 stand the night down instead of harvesting. A refusal other than
 `night_refused_agent_present` on this night is a finding: cure the cause
 before re-arming; never re-arm the same plan on the same signature twice.
+Author every new v2 plan with
+`joulewise.night_plan_writer.write_night_plan`; invalid-plan tests begin with
+that writer's bytes and apply a named mutation. The writer emits both
+`schema: joulewise.night_plan.v2` and integer `schema_version: 2`; either field
+missing or inconsistent makes the plan malformed. Once authored, every armed
+plan's canonical `(plan_id, measurement_root, measurement_head)` is included
+in the magistrate relaunch prompt's frozen-checkout list until completion.

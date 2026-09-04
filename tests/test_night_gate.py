@@ -5,15 +5,18 @@ import hashlib
 import inspect
 import json
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from joulewise import night_gate
+from joulewise.night_plan_writer import night_plan_mapping
 
 
 HEAD = "a" * 40
 BOOT_UUID = "12345678-1234-5678-9234-567812345678"
 CHAIN_TEXT = "#!/bin/zsh\necho night\n"
 REGISTRATION_TEXT = '{"registered":true}\n'
+RETIRED_V1 = Path(__file__).resolve().parent / "fixtures" / "night_plan_v1_retired.json"
 
 
 def result(
@@ -61,6 +64,7 @@ class FakeProbeSource:
         results: dict[tuple[str, ...], night_gate.ProbeResult] | None = None,
         now_epoch_s: float = 1_005.0,
         checkout_head: str = HEAD,
+        measurement_head: str = HEAD,
         chain_text: str = CHAIN_TEXT,
         chain_digest: str | None = None,
         registration_text: str = REGISTRATION_TEXT,
@@ -68,6 +72,7 @@ class FakeProbeSource:
         self.results = green_results() if results is None else results
         self.now_value = now_epoch_s
         self.head_value = checkout_head
+        self.measurement_head_value = measurement_head
         self.text = {
             "/custody/chain.zsh": chain_text,
             "/custody/chain.zsh.sha256": chain_digest
@@ -81,6 +86,8 @@ class FakeProbeSource:
         self.monotonic_calls = 0
         self.monotonic_error: Exception | None = None
         self.checkout_calls = 0
+        self.measurement_calls: list[str] = []
+        self.measurement_error: Exception | None = None
         self.raise_for: dict[tuple[str, ...], Exception] = {}
 
     def run(self, argv: tuple[str, ...]) -> night_gate.ProbeResult:
@@ -107,6 +114,12 @@ class FakeProbeSource:
         self.checkout_calls += 1
         return self.head_value
 
+    def measurement_head(self, root: str) -> str:
+        self.measurement_calls.append(root)
+        if self.measurement_error is not None:
+            raise self.measurement_error
+        return self.measurement_head_value
+
     def probes(self) -> night_gate.Probes:
         return night_gate.Probes(
             run=self.run,
@@ -114,6 +127,7 @@ class FakeProbeSource:
             monotonic_ns=self.monotonic,
             read_text=self.read_text,
             checkout_head=self.checkout_head,
+            measurement_head=self.measurement_head,
         )
 
 
@@ -125,6 +139,8 @@ def make_plan(receipt_class: str = "DIAGNOSTIC_NO_PACK", **changes: object) -> n
         "window_max_s": 60,
         "authored_epoch_s": 900.0,
         "repo_head": HEAD,
+        "measurement_root": "/measurement-checkout",
+        "measurement_head": HEAD,
         "chain_path": "/custody/chain.zsh",
         "chain_sha256_path": "/custody/chain.zsh.sha256",
         "custody_root": "/custody",
@@ -137,20 +153,7 @@ def make_plan(receipt_class: str = "DIAGNOSTIC_NO_PACK", **changes: object) -> n
 
 
 def plan_mapping(receipt_class: str = "DIAGNOSTIC_NO_PACK") -> dict[str, object]:
-    plan = make_plan(receipt_class)
-    return {
-        "schema": night_gate.PLAN_SCHEMA,
-        "plan_id": plan.plan_id,
-        "receipt_class": plan.receipt_class,
-        "t0_epoch_s": plan.t0_epoch_s,
-        "window_max_s": plan.window_max_s,
-        "authored_epoch_s": plan.authored_epoch_s,
-        "repo_head": plan.repo_head,
-        "chain_path": plan.chain_path,
-        "chain_sha256_path": plan.chain_sha256_path,
-        "custody_root": plan.custody_root,
-        "registration_path": plan.registration_path,
-    }
+    return night_plan_mapping(make_plan(receipt_class))
 
 
 class NightGateTests(unittest.TestCase):
@@ -182,6 +185,9 @@ class NightGateTests(unittest.TestCase):
             ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"),
             night_gate.BOOT_SESSION_ARGV,
         )
+
+    def test_plan_schema_literal_is_v2(self) -> None:
+        self.assertEqual("joulewise.night_plan.v2", night_gate.PLAN_SCHEMA)
 
     def test_d166_registration_digest_is_the_ruled_literal(self) -> None:
         self.assertEqual(
@@ -294,6 +300,37 @@ class NightGateTests(unittest.TestCase):
             night_gate.NightPlan.from_mapping(extra)
         self.assertEqual("night_plan_malformed", raised.exception.reason)
 
+        retired = json.loads(RETIRED_V1.read_text(encoding="utf-8"))
+        with self.assertRaises(night_gate.PlanError) as retired_error:
+            night_gate.NightPlan.from_mapping(retired)
+        self.assertEqual("night_plan_malformed", retired_error.exception.reason)
+        self.assertIn("joulewise.night_plan.v1 is retired", retired_error.exception.detail)
+        self.assertIn(
+            "re-authored under joulewise.night_plan.v2", retired_error.exception.detail
+        )
+
+        malformed_v2_cases: list[tuple[str, dict[str, object]]] = []
+        for missing_field in ("measurement_head", "measurement_root"):
+            missing = dict(good)
+            del missing[missing_field]
+            malformed_v2_cases.append((f"missing_{missing_field}", missing))
+        relative_root = dict(good)
+        relative_root["measurement_root"] = "relative/checkout"
+        malformed_v2_cases.append(("relative_measurement_root", relative_root))
+        bad_measurement_head = dict(good)
+        bad_measurement_head["measurement_head"] = "A" * 40
+        malformed_v2_cases.append(("bad_measurement_head", bad_measurement_head))
+        for name, malformed in malformed_v2_cases:
+            with self.subTest(malformed_v2_case=name):
+                with self.assertRaises(night_gate.PlanError) as malformed_error:
+                    night_gate.NightPlan.from_mapping(malformed)
+                self.assertEqual(
+                    "night_plan_malformed", malformed_error.exception.reason
+                )
+                self.assertNotIn(
+                    "joulewise.night_plan.v1", malformed_error.exception.detail
+                )
+
     def test_a_direct_plan_with_missing_registration_is_refused_as_malformed(self) -> None:
         source = FakeProbeSource()
         receipt = self.evaluate(make_plan(registration_path=None), source)
@@ -401,11 +438,13 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual([], source.run_calls)
         self.assertEqual([], source.read_calls)
         self.assertEqual(0, source.checkout_calls)
+        self.assertEqual([], source.measurement_calls)
 
-    def test_wrong_checkout_head_is_stale_and_the_36_hour_boundary_is_current(self) -> None:
-        wrong_head = FakeProbeSource(checkout_head="b" * 40)
+    def test_wrong_measurement_head_is_stale_and_the_36_hour_boundary_is_current(self) -> None:
+        wrong_head = FakeProbeSource(measurement_head="b" * 40)
         receipt = self.evaluate(make_plan(), wrong_head)
         self.assertEqual("night_plan_stale", receipt.refusal.reason)
+        self.assertIn("measurement_head", receipt.refusal.detail)
         self.assertEqual([], wrong_head.run_calls)
 
         boundary = FakeProbeSource()
@@ -414,6 +453,42 @@ class NightGateTests(unittest.TestCase):
             boundary,
         )
         self.assertEqual("GO", receipt.verdict)
+
+    def test_driver_checkout_head_movement_is_informational_and_census_still_runs(self) -> None:
+        source = FakeProbeSource(checkout_head="b" * 40)
+        receipt = self.evaluate(make_plan(), source)
+        self.assertNotEqual(
+            "night_plan_stale",
+            None if receipt.refusal is None else receipt.refusal.reason,
+        )
+        self.assertIn(night_gate.AGENT_CENSUS_ARGV, source.run_calls)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual("b" * 40, c5.measured["driver_checkout_head"])
+        self.assertEqual(HEAD, c5.measured["plan_repo_head"])
+
+    def test_measurement_checkout_probe_failure_uses_existing_probe_refusal(self) -> None:
+        source = FakeProbeSource()
+        source.measurement_error = RuntimeError("measurement path is not a git repo")
+        receipt = self.evaluate(make_plan(), source)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("measurement path is not a git repo", receipt.refusal.detail)
+        self.assertEqual([], source.run_calls)
+
+    def test_plan_age_refusals_precede_head_probes(self) -> None:
+        cases = (
+            (-200_000.0, "night_plan_stale"),
+            (1_006.0, "night_plan_malformed"),
+        )
+        for authored_epoch_s, expected_reason in cases:
+            with self.subTest(expected_reason=expected_reason):
+                source = FakeProbeSource()
+                source.measurement_error = RuntimeError("head probe must not run")
+                receipt = self.evaluate(
+                    make_plan(authored_epoch_s=authored_epoch_s), source
+                )
+                self.assertEqual(expected_reason, receipt.refusal.reason)
+                self.assertEqual([], source.measurement_calls)
+                self.assertEqual(0, source.checkout_calls)
 
     def test_a_future_dated_plan_is_malformed(self) -> None:
         source = FakeProbeSource()
@@ -791,7 +866,7 @@ class NightGateTests(unittest.TestCase):
             "night_refused_boot_clock": "test_boot_clock_uses_a_canonical_uuid_and_never_invokes_sntp",
             "night_refused_registration": "test_a_wrong_registration_hash_refuses_after_every_machine_gate",
             "night_window_expired": "test_window_refusal_performs_no_command_or_file_or_head_probe",
-            "night_plan_stale": "test_wrong_checkout_head_is_stale_and_the_36_hour_boundary_is_current",
+            "night_plan_stale": "test_wrong_measurement_head_is_stale_and_the_36_hour_boundary_is_current",
             "night_plan_malformed": "test_a_direct_plan_with_missing_registration_is_refused_as_malformed",
             "night_chain_digest_mismatch": "test_chain_sidecar_refuses_case_name_and_token_count_defects",
             "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",

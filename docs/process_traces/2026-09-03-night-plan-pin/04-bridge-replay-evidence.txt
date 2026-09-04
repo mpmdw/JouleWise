@@ -1,0 +1,30 @@
+Bridge (Claude Code Sol bridge) lead replay, 2026-09-03 PDT, worktree /Users/edr/code/JouleWise-wt-planpin @ 2f59e791 + seat edits.
+Seat: codex-run-v3 run_key 20260904T023511Z-30028-sol-landing, gpt-5.6-sol xhigh, service_tier default, workspace-write,
+      wrapper rc=65 run_status=ACCEPTANCE_FAILED report_parse=invalid (cause: brief instructed the review-genre
+      verdict shape {counts,findings}; implementation genre requires verdict.implementation + verdict.acceptance).
+      Envelope otherwise well-formed: 6450-byte JSON header, all required keys, status blocked / completion partial,
+      NEEDS_SCOPE for the ignored joulewise/__pycache__/night_gate.cpython-314.pyc (deleted by the lead; no repo edit).
+      Resume refused by the wrapper ("run is not resumable from NEEDS_SCOPE"). Bridge session
+      planpin-20260903-sol-impl-01 closed NEEDS_SCOPE / SCOPE_OK (7 in-scope paths), lease then released by the lead.
+
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_run_night tests.test_night_gate tests.test_install_night_agent
+Ran 104 tests in 10.077s
+OK
+per module: tests.test_run_night Ran 54 OK; tests.test_night_gate Ran 46 OK; tests.test_install_night_agent Ran 4 OK
+
+Mutation probe 1 (night_gate.py:633 `if measurement_checkout_head != plan.measurement_head:` -> `if checkout_head != plan.repo_head:`):
+ERROR: test_wrong_measurement_head_is_stale_and_the_36_hour_boundary_is_current
+FAIL: test_driver_checkout_head_movement_is_informational_and_census_still_runs
+Ran 46 tests in 0.477s
+FAILED (failures=1, errors=1)
+restore verified by sha256 prefix 4d27cfe0dab79339 -> 4d27cfe0dab79339
+
+Mutation probe 2 (install_night_agent.sh:43 `if (( ! uninstall )); then` -> `if (( 1 )); then`):
+FAIL: test_uninstall_ignores_both_pin_mismatches_and_invokes_launchctl
+AssertionError: 0 != 3 : plan repo_head does not match driver checkout HEAD
+Ran 4 tests in 1.726s
+FAILED (failures=1)
+restore verified by sha256 prefix 2e9ddf778b5cb7e4 -> 2e9ddf778b5cb7e4
+
+Post-restore: git status --short shows only the seven in-scope paths dirty.
+Clause-map citations spot-checked (15 file:line rows) — every cited line holds the named symbol/test.
