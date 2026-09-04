@@ -31,6 +31,33 @@ to the peer session. Harvest PR #277. Next lane (peer joulewise-60 owns it):
 the first `DIAGNOSTIC_NO_PACK` plan (G2-a) + the stage-1 plan email before it
 is armed.**
 
+**T31 NEXT MACHINE STEP (set 2026-09-03, and this is the one that binds —
+the T29 and T28b lines below are superseded): watchdog install → plan pin →
+G2-a night.** In order and for the reason each comes first: the relaunch
+watchdog is installed (D-171 item 4; branch
+`feat/2026-09-03-magistrate-watchdog`, gate synthesis at
+`docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md`)
+so that a session can be stood down on a deadline by something other than
+itself; then night plans are pinned to the measurement checkout and the
+agents installed from it (branch `feat/2026-09-03-night-plan-pin`), because
+an ordinary daytime pull of the canonical checkout moves HEAD past a pinned
+`repo_head` and the gate then refuses the plan as `night_plan_stale` — which
+is exactly what a fresh audit caught on the evening of 09-02, forcing the
+rehearsal-20260903 re-arm; only then is the first real diagnostic night, the
+G2-a prefill probes, armed. The plan pin MUST land before any REAL window is
+armed (gate synthesis row 7); rehearsal stubs may run before it. The night
+LaunchAgents are currently UNINSTALLED (verified 2026-09-03 by `launchctl
+list`), so nothing fires until this sequence re-arms it.
+
+**T31 addendum (2026-09-03) — #274 is MERGED** at `b81a2ac5`, which is an
+ancestor of the head this file sits on. The T30 block below still tells a
+resuming session to run `gh pr ready` and `gh pr merge` on it; do not. The
+post-merge kernel batch that #274 gated is now DUE and is partly landed on
+branch `bookkeeping/2026-09-03-kernel-batch`. Note also that T30's "resume
+from ONE file" pointer names a path that does not exist on `main` — file 39
+lives only on branch `fix/2026-09-02-decode-identity-set` (worktree
+`/Users/edr/code/JouleWise-wt-decode-id`), so read it there.
+
 **T30 (2026-09-02) — DURABLE PAUSE (Ed: usage window exhausted).** A new
 session resumes from ONE file:
 `docs/process_traces/2026-09-02-decode-identity-set/39-pause-state-2026-09-02.md`
@@ -53,7 +80,7 @@ the stand-down rehearsal-20260903 needs. Ed's standing answer: email for
 every stand-down/relaunch approval — Ed is remote, never at the machine.**
 
 **T29 (2026-09-01) — DESK BLOCK CLOSED (#248 merged: the `_v5` fill registry
-+ DG-071/075 statistics); FRESH-MODEL REPO REVIEW IN FLIGHT.** Ed's 3-day
++ DG-071/075 statistics); FRESH-MODEL REPO REVIEW (CLOSED 2026-09-01 at `docs/process_traces/2026-09-01-fresh-model-review/00-MAGISTRATE-SYNTHESIS.md`, which carries all four seat reports and the addendum; the worktree removal list must be re-derived from `git worktree list` at resume, not read from the count below) — AS WRITTEN ON 2026-09-01 IT WAS IN FLIGHT.** Ed's 3-day
 `/loop` mandate (paper + research questions; new lead model reviews the whole
 repo first and says what it would change). Four read-only seats launched
 under `caffeinate -i` with distinct lenses — terra xhigh (code/tests), luna
@@ -64,7 +91,7 @@ synthesis + "would change" disposition follows there. Housekeeping: 17
 worktrees hold squash-merged branches (all but `wt-fiducial`, #239 held, and
 the dirty `.claude/worktrees/cs-pedagogy-*`) — removal is Ed's (classifier
 blocks deletes): `git worktree remove` each, then `git worktree prune`.
-NEXT MACHINE STEP unchanged: G2-a evening → desk day → transaction
+NEXT MACHINE STEP [SUPERSEDED 2026-09-03 by the T31 line above]: G2-a evening → desk day → transaction
 ≈ 09-02/03.**
 
 **T28b (2026-08-30/31) — THE STALLED QUEUE IS FULLY LANDED; the `_v5` desk
@@ -88,7 +115,7 @@ D-165 R-5 completed (absolute R_cm not_applicable). Estate 11 ran and HALTED
 correctly on delta drift (anchor #14 rename ruled correct; estate 12 derives
 symbol-pinned anchors at cut). OPEN: #239 (held). IN FLIGHT: the `_v5`
 fill-registry regeneration and the estate-12 delta template (Sol streams).
-NEXT MACHINE STEP: G2-a evening (brackets + four-rung prefill probes) — see
+NEXT MACHINE STEP [SUPERSEDED 2026-09-03 by the T31 line above]: G2-a evening (brackets + four-rung prefill probes) — see
 the T28 Ed items in the session summary; transaction ≈ 09-02/03 if G2-a runs
 tonight.**
 
@@ -5086,11 +5113,11 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-02). Latest report: [T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged](docs/run_reports/2026-08-25-t23-t24-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-04). Latest report: [Fan-out magistrate rulings installed in the state kernel](docs/process_traces/2026-09-03-kernel-batch/06-fanout-rulings-batch.md).
 
 ### [ED-EXTERNAL]
 
-- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- READY — E1 `ED-DATES-01`: Obtain the authoritative final-report and colloquium dates, record them in the milestones, and derive the internal cut dates.
 
 ### [QUIET-MAC]
 
