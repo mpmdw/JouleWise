@@ -12,6 +12,8 @@ GROUPS = ("ABSTRACT", "DISCUSSION", "CONCLUSION")
 BRANCH_LABELS = {
     "A": "**A — every required ratio passes:**",
     "B": "**B — an authenticated, evaluable ratio is below 2:**",
+    # The governed label names both OR-01 stop stages; the selected prose
+    # supplies the stage-specific conditions and issued-reason slot.
     "REFUSAL": "**Refusal — stopped before comparison or at close-out:**",
 }
 BRANCHES = tuple(BRANCH_LABELS)

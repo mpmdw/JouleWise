@@ -13,7 +13,7 @@
 
 This file is the round-7 substitution sheet; it does not edit the frozen draft.
 Round 7 selects one ready sentence at each hazard after authenticated artifacts and the replay check fix the outcome.
-Outcome A means every registered independent-corner ratio is at least 2 and every required comparative shared-error replay ratio is also at least 2. Outcome B means admitted evidence leaves at least one of those ratios below 2. Outcome C means required evidence was excluded before the comparison could be evaluated. Outcome D means the separate identical-workload characterization was not collected; its sentence is prefixed to the selected A, B, or C result wherever the null row is discussed.
+Outcome A means every registered independent-corner ratio is at least 2 and every required comparative shared-error replay ratio is also at least 2. Outcome B means admitted evidence leaves at least one of those ratios below 2. Outcome C means evidence stopped either before comparison or at close-out, and `[FILL:OR-01]` prints the stopped stage and its issued reason. Outcome D means the separate identical-workload characterization was not collected; its sentence is prefixed to the selected A, B, or C result wherever the null row is discussed.
 
 At fill time, print only the refusal-reason token or tokens for windows that actually refused. Never print both candidate tokens joined by “or”: print one issued reason for one refused window, or both issued reasons separately if both windows refused.
 
@@ -23,7 +23,7 @@ At fill time, print only the refusal-reason token or tokens for windows that act
 
 **Outcome B — boundary-placement dominance not reproduced.** Required evidence was usable, but at least one independent-edge quotient was below 2, or at least one comparative shared-error quotient was below 2. The paper states which component failed and withdraws the dominance sentence for that component; if all components in the other phase pass, the result narrows to that phase, while failures in both phases leave the corrected calibration followed by a result that did not reproduce the registered doubling.
 
-**Outcome C — comparison refused.** Before comparison, a model-specific measurement window was excluded or an authenticated token-generation or prompt-processing verdict was absent; at close-out, a required ratio was missing, unauthenticated, or had a zero denominator. In either case, `[FILL:OR-01]` names the stopped stage and prints its issued reason; it includes the affected Qwen-pair verdict only when that verdict's absence is the stop reason. No quotient or directional model comparison is reported from the stopped evidence.
+**Outcome C — comparison refused.** Before comparison, Refusal applies when a model-specific measurement window was excluded or an authenticated token-generation or prompt-processing verdict is absent. At close-out, it applies when a required ratio is missing, unauthenticated, or has a zero denominator. In either case, the paper names the stopped stage and prints its issued reason as [FILL:OR-01]; it selects neither outcome A nor outcome B and makes no boundary-doubling or directional model claim from the stopped evidence.
 
 **Outcome D — prefix: identical-workload characterization not collected.** When `characterization.run` is false, prepend the ruled no-characterization sentence to the selected A, B, or C result. No null-row token is printed because no authenticated characterization report supplies one.
 
@@ -99,6 +99,8 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 **B — dominance not reproduced:** What a below-two ratio changes
 
 **C — contrast refused:** What a stop before comparison or at close-out establishes
+
+Before comparison, Refusal applies when a model-specific measurement window was excluded or an authenticated token-generation or prompt-processing verdict is absent. At close-out, it applies when a required ratio is missing, unauthenticated, or has a zero denominator. In either case, the paper names the stopped stage and prints its issued reason as [FILL:OR-01]; it selects neither outcome A nor outcome B and makes no boundary-doubling or directional model claim from the stopped evidence.
 
 **Notes:** Heading forms intentionally remain headings. First-use audit: dominance / null outcome — draft line 21; refused contrast — draft lines 23 and 202–204. Draft lines 292–294 establish the discussion context, and the following paragraph uses the same selected outcome.
 
@@ -390,7 +392,7 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **B — dominance not reproduced:** At least one registered ratio was below 2, so the practice change is narrower: characterize edge placement for the named workload boundary and form a separate bound per configuration cell before sizing any comparison, while reporting which components did and did not reach the registered doubling.
 
-**C — contrast refused:** Before comparison, a model-specific measurement window was excluded or an authenticated token-generation or prompt-processing verdict was absent; at close-out, a required ratio was missing, unauthenticated, or had a zero denominator. In either case, `[FILL:OR-01]` names the stopped stage and prints its issued reason; the stopped evidence supports neither a directional model result nor a boundary-movement quotient.
+**C — contrast refused:** Before comparison, Refusal applies when a model-specific measurement window was excluded or an authenticated token-generation or prompt-processing verdict is absent. At close-out, it applies when a required ratio is missing, unauthenticated, or has a zero denominator. In either case, the paper names the stopped stage and prints its issued reason as [FILL:OR-01]; it selects neither outcome A nor outcome B and makes no boundary-doubling or directional model claim from the stopped evidence.
 
 **Notes:** This is Section 7's sole full ratio-result and exclusion carrier. Under A, all independent and required shared-error ratios passed by definition.
 

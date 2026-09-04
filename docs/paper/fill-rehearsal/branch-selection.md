@@ -4,12 +4,13 @@ The Abstract, Section 7 discussion, and Section 10 conclusion each contain one
 `OUTCOME-BRANCHES` group with the same three alternatives and their governed
 labels: `A` is **A — every required ratio passes:**, `B` is **B — an
 authenticated, evaluable ratio is below 2:**, and `REFUSAL` is **Refusal —
-stopped before comparison or at close-out:**. Select one alternative after the
-evidence either stops before comparison or reaches close-out. Before
-comparison, select `REFUSAL` when a model-specific measurement window was
-excluded or an authenticated token-generation or prompt-processing verdict is
-absent. If the evidence reaches close-out, select `REFUSAL` when a required
-ratio is missing, unauthenticated, or has a zero denominator. Otherwise, use
+stopped before comparison or at close-out:**. `REFUSAL` has exactly those two
+ordered stop stages. Before comparison, select it when a model-specific
+measurement window was excluded or an authenticated token-generation or
+prompt-processing verdict is absent. At close-out, select it when a required
+ratio is missing, unauthenticated, or has a zero denominator. At either stage,
+`[FILL:OR-01]` prints the stopped stage and the reason issued by the governing
+evidence. Otherwise, use
 `A` only when every required independent-edge and comparative shared-error
 ratio passes, and use `B` only when every required ratio is authenticated and
 evaluable and at least one is below the fixed cutoff.
