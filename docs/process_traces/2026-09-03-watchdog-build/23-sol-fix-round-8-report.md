@@ -1,6 +1,6 @@
 # Sol implementation report — fix round 8
 
-Date: 2026-09-04. Baseline and final Git HEAD: `1b51fecfdae7246015ed9d981636e21939d760fc` on `feat/2026-09-03-magistrate-watchdog`. Contract: trace 22 clauses C-1 through C-8; C-9 excluded. All writes stayed in the runner-owned allowlist. No install, real `launchctl`, agent/session launch, default-custody access, LaunchAgent mutation, signal to a production process, or quiet-machine work occurred.
+Date: 2026-09-04. Baseline Git HEAD: `1b51fecfdae7246015ed9d981636e21939d760fc`; final Git HEAD: `a15cc15e7773a2d4a593cd1ad8814a9595b83d82` on `feat/2026-09-03-magistrate-watchdog`. Contract: trace 22 clauses C-1 through C-8; C-9 excluded. All writes stayed in the runner-owned allowlist. No install, real `launchctl`, agent/session launch, default-custody access, LaunchAgent mutation, signal to a production process, or quiet-machine work occurred.
 
 ## RED — tests landed before implementation
 

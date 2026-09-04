@@ -44,7 +44,10 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         self.launch_log = self.root / "launchctl.log"
         launchctl = self.bin_dir / "launchctl"
         launchctl.write_text(
-            '#!/bin/zsh\nprint -r -- "$*" >> "$LAUNCH_LOG"\nexit 0\n',
+            "#!/bin/zsh\n"
+            'print -r -- "$*" >> "$LAUNCH_LOG"\n'
+            '[[ "${LAUNCHCTL_FAIL_COMMAND:-}" == "$1" ]] && exit 19\n'
+            "exit 0\n",
             encoding="utf-8",
         )
         launchctl.chmod(0o755)
@@ -201,19 +204,55 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         self.assertTrue(any(" bootstrap " in f" {call} " for call in calls))
         self.assertTrue(any(" print " in f" {call} " for call in calls))
 
-    def test_failed_lock_seed_removes_the_plist_written_by_this_attempt(self) -> None:
+    def test_failed_lock_seed_restores_exact_preexisting_plist_and_lock(self) -> None:
+        plist_path = self.home / "Library/LaunchAgents/com.joulewise.magistrate.plist"
+        plist_path.parent.mkdir(parents=True)
+        plist_path.write_bytes(b"pre-existing plist\x00bytes\n")
         lock_path = self.home / "night-custody/magistrate/magistrate.lock"
         lock_path.parent.mkdir(parents=True)
-        lock_path.write_text("pre-existing\n", encoding="utf-8")
+        lock_path.write_bytes(b"pre-existing lock\x00bytes\n")
+        before = {plist_path: plist_path.read_bytes(), lock_path: lock_path.read_bytes()}
 
         completed = self._run(self.shadow_script, "--install")
 
         self.assertNotEqual(0, completed.returncode)
-        self.assertFalse(
-            (self.home / "Library/LaunchAgents/com.joulewise.magistrate.plist").exists()
-        )
-        self.assertEqual("pre-existing\n", lock_path.read_text(encoding="utf-8"))
+        self.assertEqual(before[plist_path], plist_path.read_bytes())
+        self.assertEqual(before[lock_path], lock_path.read_bytes())
         self.assertFalse(self.launch_log.exists())
+
+    def test_failed_bootstrap_restores_exact_preexisting_plist_and_absent_lock(
+        self,
+    ) -> None:
+        plist_path = self.home / "Library/LaunchAgents/com.joulewise.magistrate.plist"
+        plist_path.parent.mkdir(parents=True)
+        plist_path.write_bytes(b"pre-bootstrap plist\x00bytes\n")
+        lock_path = self.home / "night-custody/magistrate/magistrate.lock"
+        before = {plist_path: plist_path.read_bytes(), lock_path: None}
+        self.environment["LAUNCHCTL_FAIL_COMMAND"] = "bootstrap"
+
+        completed = self._run(self.shadow_script, "--install")
+
+        self.assertEqual(3, completed.returncode, completed.stderr)
+        self.assertEqual(before[plist_path], plist_path.read_bytes())
+        self.assertFalse(lock_path.exists(), before[lock_path])
+        self.assertIn("failed to bootstrap", completed.stderr)
+
+    def test_failed_post_load_verification_restores_exact_preexisting_plist_and_absent_lock(
+        self,
+    ) -> None:
+        plist_path = self.home / "Library/LaunchAgents/com.joulewise.magistrate.plist"
+        plist_path.parent.mkdir(parents=True)
+        plist_path.write_bytes(b"pre-verification plist\x00bytes\n")
+        lock_path = self.home / "night-custody/magistrate/magistrate.lock"
+        before = {plist_path: plist_path.read_bytes(), lock_path: None}
+        self.environment["LAUNCHCTL_FAIL_COMMAND"] = "print"
+
+        completed = self._run(self.shadow_script, "--install")
+
+        self.assertEqual(3, completed.returncode, completed.stderr)
+        self.assertEqual(before[plist_path], plist_path.read_bytes())
+        self.assertFalse(lock_path.exists(), before[lock_path])
+        self.assertIn("launch agent verification failed", completed.stderr)
 
 
 if __name__ == "__main__":

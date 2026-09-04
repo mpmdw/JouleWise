@@ -250,3 +250,18 @@ This final pre-cold-gate addendum supersedes round 7 only where trace 22 C-1 thr
 | C-8 — rendered plist pins install-time `sys.executable` and refuses `/usr/bin/python3` | `scripts/install_magistrate_watchdog.sh:49-64,190-209` | `tests/test_install_magistrate_watchdog.py:147-176` |
 
 Final authorized modules: watchdog 60 OK, CLI 3 OK, watchdog installer 6 OK, night gate 47 OK, run-night 55 OK, night installer 11 OK. The prompt remains 23 lines. No install, real launchctl, agent/session launch, LaunchAgent mutation, default-custody access, production signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 9 clause-map addendum (2026-09-04 PDT)
+
+This addendum closes trace 24 findings F1 and F2. It supersedes round 8 only for installer rollback semantics and the round-8 report's Git-head metadata. The complete RED/GREEN transcript and detailed clause map are in `25-sol-fix-round-9-report.md`.
+
+| Round-9 clause | Production/report site | Biting assertion / counterfactual |
+|---|---|---|
+| F1 — a failed exclusive lock seed restores the exact pre-install plist and preserves the colliding lock byte-for-byte | `scripts/install_magistrate_watchdog.sh:155-205,238-284` | `tests/test_install_magistrate_watchdog.py:207-221`; the pre-fix trap deleted the plist, producing the pasted `FileNotFoundError`. |
+| F1 — failed bootstrap restores the exact pre-install plist and removes only this attempt's unchanged lock seed | `scripts/install_magistrate_watchdog.sh:161-178,294-298` | `tests/test_install_magistrate_watchdog.py:223-238`; the pre-fix trap deleted the plist and left the new lock. |
+| F1 — failed post-load verification restores the exact pre-install plist and removes only this attempt's unchanged lock seed | `scripts/install_magistrate_watchdog.sh:161-178,299-302` | `tests/test_install_magistrate_watchdog.py:240-255`; the pre-fix trap deleted the plist and left the new lock after `bootout`. |
+| F2 — trace 23 names its real final head | `23-sol-fix-round-8-report.md:3` | Direct `git log` comparison: baseline `1b51fecf...`, final round-8 implementation head `a15cc15e...`. |
+
+Final authorized modules: watchdog installer 8 OK; watchdog 60 OK. No broader discovery ran. No install, real `launchctl`, agent/session launch, LaunchAgent mutation, default-custody access, production signal, or quiet-machine run occurred.

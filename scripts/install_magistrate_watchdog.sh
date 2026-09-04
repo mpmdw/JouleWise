@@ -152,14 +152,30 @@ else
 fi
 plist="$launch_dir/$label.plist"
 uid="$(id -u)"
-plist_written=false
+plist_transaction_started=false
+plist_existed=false
+plist_backup=""
+lock_seeded=false
+lock_seed_snapshot=""
 
 cleanup_failed_install() {
   local exit_code=$?
   trap - EXIT
-  if (( exit_code != 0 )) && [[ "$mode" == "--install" && "$plist_written" == true ]]; then
-    rm -f "$plist"
+  if (( exit_code != 0 )) && [[ "$mode" == "--install" && "$plist_transaction_started" == true ]]; then
+    if [[ "$lock_seeded" == true && -n "$lock_seed_snapshot" && -f "$lock_seed_snapshot" && -f "$custody_root/magistrate.lock" ]] && \
+        /usr/bin/cmp -s "$lock_seed_snapshot" "$custody_root/magistrate.lock"; then
+      rm -f "$custody_root/magistrate.lock"
+    fi
+    if [[ "$plist_existed" == true && -n "$plist_backup" && -f "$plist_backup" ]]; then
+      if ! /bin/mv -f "$plist_backup" "$plist"; then
+        print "failed to restore pre-install plist: $plist" >&2
+      fi
+    else
+      rm -f "$plist"
+    fi
   fi
+  [[ -z "$plist_backup" || ! -e "$plist_backup" ]] || rm -f "$plist_backup"
+  [[ -z "$lock_seed_snapshot" || ! -e "$lock_seed_snapshot" ]] || rm -f "$lock_seed_snapshot"
   exit "$exit_code"
 }
 trap cleanup_failed_install EXIT
@@ -181,6 +197,12 @@ fi
 mkdir -p "$launch_dir"
 if [[ "$mode" == "--install" ]]; then
   mkdir -p "$custody_root"
+  if [[ -e "$plist" ]]; then
+    plist_backup="$(mktemp "$launch_dir/.${label}.plist.rollback.XXXXXX")"
+    /bin/cp -p "$plist" "$plist_backup"
+    plist_existed=true
+  fi
+  plist_transaction_started=true
 fi
 
 "$python_bin" - "$template" "$plist" "$canonical_repo" "$custody_root" "$session_bin" "$path_value" "$python_bin" <<'PY'
@@ -206,7 +228,6 @@ if "@@" in text:
     raise SystemExit("unresolved template token")
 Path(output).write_text(text, encoding="utf-8")
 PY
-plist_written=true
 /usr/bin/plutil -lint "$plist"
 
 if [[ "$mode" == "--render-only" ]]; then
@@ -214,13 +235,14 @@ if [[ "$mode" == "--render-only" ]]; then
   exit 0
 fi
 
-"$python_bin" - "$custody_root/magistrate.lock" "$adopt_pid" "$adopt_start" "$adopt_activation" "$session_bin" "$adopt_version" <<'PY'
+lock_seed_snapshot="$(mktemp "$custody_root/.magistrate.lock.seed.XXXXXX")"
+"$python_bin" - "$custody_root/magistrate.lock" "$lock_seed_snapshot" "$adopt_pid" "$adopt_start" "$adopt_activation" "$session_bin" "$adopt_version" <<'PY'
 import json
 import os
 import sys
 import time
 
-path, pid, start, activation, binary, version = sys.argv[1:]
+path, snapshot, pid, start, activation, binary, version = sys.argv[1:]
 record = {
     "schema": "joulewise.magistrate_lock.v1",
     "activation_id": activation,
@@ -234,13 +256,32 @@ record = {
     "first_install_adoption": True,
 }
 data = (json.dumps(record, sort_keys=True, indent=2) + "\n").encode("utf-8")
-descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+with open(snapshot, "wb") as stream:
+    stream.write(data)
+    stream.flush()
+    os.fsync(stream.fileno())
+descriptor = None
 try:
-    os.write(descriptor, data)
+    descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    offset = 0
+    while offset < len(data):
+        offset += os.write(descriptor, data[offset:])
     os.fsync(descriptor)
+except BaseException:
+    if descriptor is not None:
+        stat = os.fstat(descriptor)
+        try:
+            current = os.stat(path, follow_symlinks=False)
+            if (current.st_dev, current.st_ino) == (stat.st_dev, stat.st_ino):
+                os.unlink(path)
+        except FileNotFoundError:
+            pass
+    raise
 finally:
-    os.close(descriptor)
+    if descriptor is not None:
+        os.close(descriptor)
 PY
+lock_seeded=true
 
 if [[ "$launchctl_bin" != */* ]]; then
   launchctl_bin="$(command -v "$launchctl_bin" || true)"
@@ -261,4 +302,6 @@ if ! "$launchctl_bin" print "gui/$uid/$label"; then
   exit 3
 fi
 trap - EXIT
+[[ -z "$plist_backup" || ! -e "$plist_backup" ]] || rm -f "$plist_backup"
+[[ -z "$lock_seed_snapshot" || ! -e "$lock_seed_snapshot" ]] || rm -f "$lock_seed_snapshot"
 print "installed and verified $label"
