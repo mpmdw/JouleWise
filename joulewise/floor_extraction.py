@@ -69,6 +69,7 @@ from joulewise.analysis_engine.inputs import (
     governed_idle_variance_pair,
     window_evidence_precheck,
 )
+from joulewise.authentication_io import read_authentication_input
 from joulewise.arm_readiness import (
     LAUNCH_LINEAGE_REASON_CODES,
     LaunchLineageError,
@@ -1731,7 +1732,11 @@ def _read_summary(
         return None, None, "bundle_missing"
     summary_path = path / "summary_metrics.json"
     try:
-        raw = summary_path.read_bytes()
+        raw = read_authentication_input(
+            summary_path,
+            grammar="json",
+            label=f"floor extraction bundle {path.name} summary",
+        )
     except OSError:
         return None, None, "summary_unreadable"
     digest = hashlib.sha256(raw).hexdigest()
@@ -1822,7 +1827,11 @@ def _strict_admission_json_value(raw: bytes, label: str) -> Any:
 
 def _strict_admission_json_file(path: Path, label: str) -> Any:
     try:
-        raw = path.read_bytes()
+        raw = read_authentication_input(
+            path,
+            grammar="json",
+            label=f"floor extraction {label}",
+        )
     except OSError as exc:
         raise FloorExtractionError(f"{label} cannot be read: {exc}") from exc
     return _strict_admission_json_value(raw, label)

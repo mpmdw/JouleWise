@@ -11,10 +11,12 @@ from unittest import mock
 
 from joulewise.authentication_io import (
     V2_AUTHENTICATION_INPUT_CHANGED,
+    V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
     V2AuthenticationInputError,
     V2AuthenticationReadSession,
     direct_read_violations,
     ingest_git_authentication_input,
+    paper_supplier_signature_violations,
     read_authentication_input,
     read_authentication_input_nofollow,
     sha256_authentication_input,
@@ -24,6 +26,7 @@ from joulewise.authentication_io import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUTHENTICATION_SURFACE = (
+    "joulewise/paper_custody.py",
     "scripts/mint_floor_artifact_generalized.py",
     "scripts/mint_floor_artifact.py",
     "joulewise/calibration_ledger.py",
@@ -341,6 +344,26 @@ class V2AuthenticationReadSessionTests(unittest.TestCase):
                     1,
                 )
 
+    def test_pinned_nofollow_read_checks_digest_before_json_grammar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "input.json"
+            authentic = b'{"status":"ok"}\n'
+            path.write_bytes(b"!" + authentic[1:])
+            with V2AuthenticationReadSession() as session:
+                with self.assertRaises(V2AuthenticationInputError) as raised:
+                    session.read_nofollow_pinned(
+                        root,
+                        "input.json",
+                        expected_sha256=hashlib.sha256(authentic).hexdigest(),
+                        grammar="json",
+                        label="paper input",
+                    )
+            self.assertEqual(
+                raised.exception.reason,
+                V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
+            )
+
 
 class AuthenticationSurfaceGuardTests(unittest.TestCase):
     def test_issued_reducer_sha_and_five_direct_reads_are_characterized(self) -> None:
@@ -387,6 +410,32 @@ class AuthenticationSurfaceGuardTests(unittest.TestCase):
         self.assertEqual(
             classified_non_authentication_reads,
             CLASSIFIED_NON_AUTHENTICATION_READS,
+        )
+
+    def test_paper_supplier_signature_guard_closes_value_channels(self) -> None:
+        unsafe = """
+def supplier(payload: bytes, values: Mapping[str, object], *args, receipt=None):
+    return payload
+"""
+        self.assertEqual(
+            paper_supplier_signature_violations(
+                unsafe, marked_functions={"supplier"}
+            ),
+            (
+                "supplier:args:variadic",
+                "supplier:payload:annotation:bytes",
+                "supplier:receipt:value-channel",
+                "supplier:values:annotation:Mapping",
+            ),
+        )
+        source = (REPO_ROOT / "joulewise/paper_custody.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(
+            paper_supplier_signature_violations(
+                source, marked_functions={"open_paper_input"}
+            ),
+            (),
         )
 
     def test_guard_distinguishes_readable_and_output_only_open(self) -> None:

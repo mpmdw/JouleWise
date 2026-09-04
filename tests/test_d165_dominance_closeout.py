@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import CodeType, SimpleNamespace
 from unittest import mock
@@ -48,6 +49,7 @@ from tests.test_mint_floor_artifact_generalized import (
     freeze_mixed_estimator_v2_pinset,
 )
 from joulewise.identity_pins import build_stack_identity, stack_identity_sha256
+from joulewise import d165_dominance_closeout as paper_adapter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1973,6 +1975,97 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 [object()],
                 [invalid_members],
             )
+
+
+class D165PaperCustodyAdapterTests(unittest.TestCase):
+    def _validate(self) -> tuple[str, ...]:
+        return paper_adapter.validate_d165_paper_sources(
+            closeout={},
+            finalized_manifest_bytes=b"{}",
+            finalized_manifest_path=Path("manifest.json"),
+            custody_root=Path("."),
+            floor_artifact_bytes=b"{}",
+            replay_sidecar_bytes=b"{}",
+        )
+
+    def test_adapter_replays_all_four_owners_without_exposing_free_text(self) -> None:
+        with (
+            mock.patch.object(
+                paper_adapter, "validate_finalized_analysis_manifest_v3", return_value=()
+            ) as manifest_validator,
+            mock.patch.object(
+                paper_adapter, "authenticate_floor_artifact_bytes", return_value=object()
+            ) as floor_validator,
+            mock.patch.object(
+                paper_adapter, "validate_d165_replay_sidecar", return_value=[]
+            ) as sidecar_validator,
+            mock.patch.object(
+                paper_adapter, "validate_d165_closeout", return_value=[]
+            ) as closeout_validator,
+        ):
+            self.assertEqual(self._validate(), ())
+        manifest_validator.assert_called_once()
+        floor_validator.assert_called_once_with(b"{}")
+        sidecar_validator.assert_called_once_with({})
+        closeout_validator.assert_called_once()
+
+    def test_adapter_maps_each_owner_failure_to_one_closed_code(self) -> None:
+        cases = (
+            (
+                "manifest",
+                "d165_paper_finalized_manifest_invalid",
+                {"validate_finalized_analysis_manifest_v3": (object(),)},
+            ),
+            (
+                "floor",
+                "d165_paper_floor_artifact_invalid",
+                {"authenticate_floor_artifact_bytes": ValueError("private detail")},
+            ),
+            (
+                "sidecar",
+                "d165_paper_replay_sidecar_invalid",
+                {"validate_d165_replay_sidecar": ["private detail"]},
+            ),
+            (
+                "closeout",
+                "d165_paper_closeout_invalid",
+                {"validate_d165_closeout": ["private detail"]},
+            ),
+        )
+        for label, expected, override in cases:
+            with self.subTest(label=label), ExitStack() as stack:
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "validate_finalized_analysis_manifest_v3",
+                    return_value=override.get(
+                        "validate_finalized_analysis_manifest_v3", ()
+                    ),
+                ))
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "authenticate_floor_artifact_bytes",
+                    side_effect=(
+                        override.get("authenticate_floor_artifact_bytes")
+                        if isinstance(
+                            override.get("authenticate_floor_artifact_bytes"),
+                            Exception,
+                        )
+                        else None
+                    ),
+                    return_value=object(),
+                ))
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "validate_d165_replay_sidecar",
+                    return_value=override.get("validate_d165_replay_sidecar", []),
+                ))
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "validate_d165_closeout",
+                    return_value=override.get("validate_d165_closeout", []),
+                ))
+                self.assertEqual(self._validate(), (expected,))
+                self.assertIn(expected, paper_adapter.D165_PAPER_VALIDATOR_CODES)
 
 
 if __name__ == "__main__":
