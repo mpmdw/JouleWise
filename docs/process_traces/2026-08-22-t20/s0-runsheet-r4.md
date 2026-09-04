@@ -1069,11 +1069,21 @@ chmod 0555 "$CUSTODY/tools/s0_anchor_map.py"
 ```
 
 **Immutable line audit.** Run next, in its own shell. The ranges are the §0.3
-map; each is a whole symbol, so a rename shows up as a shifted or empty extract
-rather than as silently wrong bytes.
+map; each is intended to select a whole symbol. The anchor map above detects
+movement of its named anchors. This audit independently checks that every
+source file contributes selected lines and that the number of lines selected
+equals the total demanded by that file's ranges. A shortened range or a range
+past the end of a file therefore stops the run instead of hiding inside a
+non-empty combined transcript.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+audit_output="$TRANS/006-pinned-line-audit.txt"
+audit_part=$(mktemp "$PROOF/line-audit-part.XXXXXX") \
+  || die 'cannot create the line-audit temporary file'
+trap 'rm -f "$audit_part"' EXIT
+: > "$audit_output" || die 'cannot create the line-audit transcript'
 
 for spec in \
   'joulewise/arm_readiness.py 1050,1076p;1999,2120p;3168,3228p;3605,3636p;3639,3707p;4115,4163p;4166,4253p;4256,4399p;5214,5263p;5266,5485p;5488,5743p;6098,6224p;6227,6262p;6265,6475p;6531,6807p;7307,7553p;10160,10261p;10370,10514p' \
@@ -1088,10 +1098,36 @@ for spec in \
   'pyproject.toml 1,16p'
 do
   source_file=${spec%% *}; line_ranges=${spec#* }
-  git -C "$CLONE" show "${BASE}:${source_file}" | nl -ba | sed -n "$line_ranges" \
-    || die "line audit failed for $source_file"
-done > "$TRANS/006-pinned-line-audit.txt"
-test -s "$TRANS/006-pinned-line-audit.txt" || die 'line audit is empty'
+  expected_line_count=$(printf '%s\n' "$line_ranges" | tr ';' '\n' | awk '
+    BEGIN { total = 0; valid = 1 }
+    $0 !~ /^[1-9][0-9]*,[1-9][0-9]*p$/ { valid = 0; exit }
+    {
+      range = substr($0, 1, length($0) - 1)
+      split(range, bounds, ",")
+      if (bounds[2] < bounds[1]) { valid = 0; exit }
+      total += bounds[2] - bounds[1] + 1
+    }
+    END {
+      if (!valid || NR == 0) exit 2
+      print total
+    }
+  ') || die "invalid line-audit ranges for $source_file: $line_ranges"
+
+  if ! git -C "$CLONE" show "${BASE}:${source_file}" \
+      | nl -ba | sed -n "$line_ranges" > "$audit_part"; then
+    die "line audit failed for $source_file"
+  fi
+  actual_line_count=$(wc -l < "$audit_part" | tr -d '[:space:]')
+  test "$actual_line_count" -gt 0 \
+    || die "line audit extract is empty for $source_file"
+  test "$actual_line_count" -eq "$expected_line_count" \
+    || die "line audit count mismatch for $source_file: expected $expected_line_count lines, emitted $actual_line_count"
+  cat "$audit_part" >> "$audit_output" \
+    || die "cannot append the line-audit extract for $source_file"
+done
+rm -f "$audit_part"
+trap - EXIT
+test -s "$audit_output" || die 'line audit is empty'
 ```
 
 Authority: R4 r4-2, r4-3, r4-7 and the task's immutable-HEAD verification
