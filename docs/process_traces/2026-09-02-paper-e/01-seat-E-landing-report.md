@@ -296,3 +296,18 @@ The bare R7F command fails because its default corpus root is the isolated workt
 ## Residual risk
 
 The lead should visually glance at the SVG during the final diff gate because this environment could not produce a raster preview. No scientific or registry acceptance item remains unmet.
+
+---
+
+## Addendum (magistrate, 2026-09-03 20:15 PDT): SVG digest of record
+
+The refuter (file 02, SF-1) found the SHA-256 quoted above for `fig5_phase_record_overlap.svg` does not reproduce. Bench, at commit 0857bd59:
+
+```
+$ shasum -a 256 docs/paper/figures/fig5_phase_record_overlap.svg
+6a5aed4e20996d8239b0b108fbb95943e393b8dfb011e59a1aa08b416aaed1b3  docs/paper/figures/fig5_phase_record_overlap.svg
+$ git rev-parse HEAD:docs/paper/figures/fig5_phase_record_overlap.svg
+d306aec928ca984f185e589c13e3ddf4dc96fd87
+```
+
+The digest of record is `6a5aed4e20996d8239b0b108fbb95943e393b8dfb011e59a1aa08b416aaed1b3`; the value quoted earlier in this report is superseded. The figure carries no measured value; no registry row depends on it.
