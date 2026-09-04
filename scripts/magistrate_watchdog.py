@@ -58,6 +58,7 @@ SESSION_BIN_ENV = "MAGISTRATE_SESSION_BIN"
 CUSTODY_ROOT_ENV = "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"
 DEFAULT_SESSION_BIN = Path("/Users/edr/.local/bin/claude")
 PROMPT_TEMPLATE = REPO_ROOT / "docs" / "process" / "MAGISTRATE_RELAUNCH_PROMPT.md"
+RETIRED_V1_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "night_plan_v1_retired.json"
 STOP_REPOSITORY = "https://github.com/mpmdw/JouleWise.git"
 STOP_REF_GLOB = "refs/heads/ops/stop*"
 POSITIVE_CONTROL_REF = "refs/heads/main"
@@ -104,6 +105,40 @@ USAGE_EXHAUSTED_PATTERNS = (
     re.compile(r"\bhttp\s+429\b", re.IGNORECASE),
     re.compile(r"\bhit\s+(?:your|the)\s+(?:usage\s+)?limit\b", re.IGNORECASE),
 )
+
+
+def _load_retired_v1_keys() -> frozenset[str]:
+    """Derive the retired-plan shape from the immutable golden fixture."""
+
+    try:
+        value = json.loads(RETIRED_V1_FIXTURE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"retired-v1 fixture is unavailable: {exc}") from exc
+    if (
+        not isinstance(value, Mapping)
+        or value.get("schema") != "joulewise.night_plan.v1"
+        or not all(isinstance(key, str) for key in value)
+    ):
+        raise RuntimeError("retired-v1 fixture is not the golden v1 object")
+    return frozenset(value)
+
+
+RETIRED_V1_KEYS = _load_retired_v1_keys()
+# The frozen v1 producer emitted one exact required-key shape.  Keeping the
+# required set tied to the same imported fixture prevents a second hand-coded
+# legacy schema from drifting away from the positive identification rule.
+RETIRED_V1_REQUIRED_KEYS = RETIRED_V1_KEYS
+
+
+def is_retired_v1_plan(value: object) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    keys = set(value)
+    return (
+        value.get("schema") == "joulewise.night_plan.v1"
+        and keys <= RETIRED_V1_KEYS
+        and RETIRED_V1_REQUIRED_KEYS <= keys
+    )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -440,6 +475,7 @@ def initial_state() -> dict[str, Any]:
         "state": "BOOT",
         "transition_seq": 0,
         "activation_id": None,
+        "activation_spawn_epoch_s": None,
         "attempt": 0,
         "backoff_index": 0,
         "usage_backoff_index": 0,
@@ -449,6 +485,7 @@ def initial_state() -> dict[str, Any]:
         "last_clock": None,
         "clock_sane_samples": 0,
         "clock_drain": False,
+        "resident_hold_drain": None,
         "standdown_phase": None,
     }
 
@@ -486,17 +523,30 @@ class PlanSnapshot:
     diagnostics: tuple[PlanDiagnostic, ...]
 
 
+def _activation_spawn_epoch_s(state: Mapping[str, Any]) -> float | None:
+    value = state.get("activation_spawn_epoch_s")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 def _plan_event_key(
-    activation_id: str, plan_dir: str, kind: str, detail: str
-) -> tuple[str, str, str, str]:
+    activation_id: str,
+    activation_spawn_epoch_s: float | None,
+    plan_dir: str,
+    kind: str,
+    detail: str,
+) -> tuple[str, float | None, str, str, str]:
     digest = hashlib.sha256(detail.encode("utf-8")).hexdigest()
-    return activation_id, plan_dir, kind, digest
+    return activation_id, activation_spawn_epoch_s, plan_dir, kind, digest
 
 
 def recorded_plan_event_keys(
-    storage: Storage, activation_id: str
-) -> set[tuple[str, str, str, str]]:
-    keys: set[tuple[str, str, str, str]] = set()
+    storage: Storage,
+    activation_id: str,
+    activation_spawn_epoch_s: float | None = None,
+) -> set[tuple[str, float | None, str, str, str]]:
+    keys: set[tuple[str, float | None, str, str, str]] = set()
     path = storage.root / "events.jsonl"
     if not storage.exists(path):
         return keys
@@ -509,13 +559,25 @@ def recorded_plan_event_keys(
             event = json.loads(line)
         except (TypeError, ValueError):
             continue
-        if not isinstance(event, Mapping) or event.get("activation_id") != activation_id:
+        if (
+            not isinstance(event, Mapping)
+            or event.get("activation_id") != activation_id
+            or event.get("activation_spawn_epoch_s") != activation_spawn_epoch_s
+        ):
             continue
         plan_dir = event.get("plan_dir")
         kind = event.get("kind")
         digest = event.get("detail_sha256")
         if all(isinstance(item, str) for item in (plan_dir, kind, digest)):
-            keys.add((activation_id, plan_dir, kind, digest))
+            keys.add(
+                (
+                    activation_id,
+                    activation_spawn_epoch_s,
+                    plan_dir,
+                    kind,
+                    digest,
+                )
+            )
     return keys
 
 
@@ -524,12 +586,21 @@ def record_plan_diagnostics(
     diagnostics: Iterable[PlanDiagnostic],
     *,
     activation_id: str,
+    activation_spawn_epoch_s: float | None = None,
 ) -> None:
-    seen = recorded_plan_event_keys(storage, activation_id)
+    seen = recorded_plan_event_keys(
+        storage, activation_id, activation_spawn_epoch_s
+    )
     for diagnostic in diagnostics:
         plan_dir = str(diagnostic.path.parent.resolve(strict=False))
         detail = diagnostic.detail[:4000]
-        key = _plan_event_key(activation_id, plan_dir, diagnostic.kind, detail)
+        key = _plan_event_key(
+            activation_id,
+            activation_spawn_epoch_s,
+            plan_dir,
+            diagnostic.kind,
+            detail,
+        )
         if key in seen:
             continue
         storage.append_jsonl(
@@ -539,6 +610,7 @@ def record_plan_diagnostics(
                 "kind": diagnostic.kind,
                 "reason": diagnostic.reason,
                 "activation_id": activation_id,
+                "activation_spawn_epoch_s": activation_spawn_epoch_s,
                 "plan_dir": plan_dir,
                 "plan_path": str(diagnostic.path.resolve(strict=False)),
                 "detail": detail,
@@ -575,7 +647,7 @@ def load_plans(storage: Storage, *, now_epoch_s: float | None = None) -> PlanSna
             )
             errors.append(f"night_plan_unreadable {path}: {detail}")
             continue
-        if isinstance(raw, Mapping) and raw.get("schema") == "joulewise.night_plan.v1":
+        if is_retired_v1_plan(raw):
             diagnostics.append(
                 PlanDiagnostic(
                     "plan_retired_v1",
@@ -1317,6 +1389,7 @@ class ResidentSupervisor:
         requested = self.storage.exists(self.storage.root / "standdown.request")
         self.storage.unlink(self.storage.root / "magistrate.lock")
         self.state["clock_drain"] = False
+        self.state["resident_hold_drain"] = None
         if requested:
             self.storage.unlink(self.storage.root / "standdown.request")
             self.state["standdown_phase"] = "COMPLETE"
@@ -1397,6 +1470,7 @@ class ResidentSupervisor:
         if owner_gone:
             self.storage.unlink(self.storage.root / "magistrate.lock")
             self.state["clock_drain"] = False
+            self.state["resident_hold_drain"] = None
         self.storage.unlink(self.storage.root / "standdown.request")
         self.state["standdown_phase"] = "COMPLETE"
         held = not census.empty or not owner_gone
@@ -1461,8 +1535,21 @@ class ResidentSupervisor:
         reason: str,
         state_name: str,
         notice: str | None = None,
+        record_resident_start: bool = False,
     ) -> bool:
         self._write_request(None, now, reason=reason)
+        if record_resident_start:
+            self.storage.append_jsonl(
+                self.storage.root / "events.jsonl",
+                {
+                    "schema": EVENT_SCHEMA,
+                    "kind": "resident_drain_started",
+                    "activation_id": self.state.get("activation_id"),
+                    "activation_spawn_epoch_s": _activation_spawn_epoch_s(self.state),
+                    "epoch_s": now.timestamp(),
+                    "reason": reason,
+                },
+            )
         requested = json.loads(self.storage.read_text(self.storage.root / "standdown.request"))
         try:
             requested_monotonic = float(requested["requested_monotonic"])
@@ -1514,28 +1601,44 @@ class ResidentSupervisor:
             self.storage,
             snapshot.diagnostics,
             activation_id=str(self.state.get("activation_id") or "pre-activation"),
+            activation_spawn_epoch_s=_activation_spawn_epoch_s(self.state),
         )
         plans = list(snapshot.plans)
         armed = armed_plans(plans, now.timestamp(), self.storage)
         self.state["fenced_checkouts"] = fenced_checkout_rows(armed)
         conflicts = plan_conflicts(armed)
+        resident_hold = self.state.get("resident_hold_drain")
+        if isinstance(resident_hold, Mapping):
+            return self._enforce_drain(
+                now,
+                monotonic,
+                reason=str(resident_hold.get("reason", "durable unsafe-plan hold")),
+                state_name="HOLD_UNSAFE",
+                notice=(
+                    str(resident_hold["notice"])
+                    if resident_hold.get("notice") is not None
+                    else None
+                ),
+            )
         if snapshot.errors or conflicts:
-            self._write_request(None, now, reason="malformed plan")
             reason = (
                 "; ".join(snapshot.errors)
                 if snapshot.errors
                 else "plan_conflict: " + "; ".join(conflicts)
             )
-            transition(
-                self.storage,
-                self.state,
-                "HOLD_UNSAFE",
-                reason,
+            notice = "plan_conflict" if conflicts else None
+            self.state["resident_hold_drain"] = {
+                "reason": reason,
+                "notice": notice,
+            }
+            return self._enforce_drain(
                 now,
-                notice="plan_conflict" if conflicts else None,
+                monotonic,
+                reason=reason,
+                state_name="HOLD_UNSAFE",
+                notice=notice,
+                record_resident_start=True,
             )
-            self.storage.atomic_json(self.storage.root / "state.json", self.state)
-            return True
 
         plan = relevant_standdown_plan(plans, now.timestamp(), self.storage)
         # Physical stand-down deadlines are resolved before consulting even a
@@ -1588,8 +1691,11 @@ def start_session(
     binary_path: Path | None = None,
 ) -> ResidentSupervisor:
     now = deps.wall_now().astimezone()
-    activation_id = str(state.get("activation_id") or uuid.uuid4())
+    activation_id = str(uuid.uuid4())
+    activation_spawn_epoch_s = now.timestamp()
     state["activation_id"] = activation_id
+    state["activation_spawn_epoch_s"] = activation_spawn_epoch_s
+    state["resident_hold_drain"] = None
     state["attempt"] = int(state.get("attempt", 0)) + 1
     requested_binary = binary_path or Path(
         os.environ.get(SESSION_BIN_ENV, str(DEFAULT_SESSION_BIN))
@@ -1608,6 +1714,7 @@ def start_session(
     starting_lock = {
         "schema": LOCK_SCHEMA,
         "activation_id": activation_id,
+        "activation_spawn_epoch_s": activation_spawn_epoch_s,
         "pid": os.getpid(),
         "start_time": (
             supervisor_process.start_time if supervisor_process is not None else "unobserved"
@@ -1636,6 +1743,7 @@ def start_session(
     lock_record = {
         "schema": LOCK_SCHEMA,
         "activation_id": activation_id,
+        "activation_spawn_epoch_s": activation_spawn_epoch_s,
         "pid": child.pid,
         "start_time": process.start_time,
         "supervisor_pid": os.getpid(),
@@ -1693,6 +1801,11 @@ def adopt_session(
         raise RuntimeError("owned session disappeared before supervisor adoption")
     activation_id = str(lock_record["activation_id"])
     state["activation_id"] = activation_id
+    launch_epoch_s = lock_record.get(
+        "activation_spawn_epoch_s", lock_record.get("launch_epoch_s")
+    )
+    if isinstance(launch_epoch_s, (int, float)) and not isinstance(launch_epoch_s, bool):
+        state["activation_spawn_epoch_s"] = float(launch_epoch_s)
     attempt = int(state.get("attempt", 1) or 1)
     attempt_dir = storage.root / "attempts" / activation_id
     storage.append_jsonl(
@@ -1740,6 +1853,7 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
         storage,
         snapshot.diagnostics,
         activation_id=str(state.get("activation_id") or "pre-activation"),
+        activation_spawn_epoch_s=_activation_spawn_epoch_s(state),
     )
     decision = decide(storage, deps, state, plan_snapshot=snapshot)
     now = deps.wall_now().astimezone()

@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from joulewise.night_gate import PLAN_SCHEMA, NightPlan
+from joulewise.night_gate import PLAN_SCHEMA, PLAN_SCHEMA_VERSION, NightPlan
 
 
 def night_plan_mapping(plan: NightPlan) -> dict[str, Any]:
@@ -17,7 +17,11 @@ def night_plan_mapping(plan: NightPlan) -> dict[str, Any]:
 
     if not isinstance(plan, NightPlan):
         raise TypeError("plan must be a NightPlan")
-    value = {"schema": PLAN_SCHEMA, **dataclasses.asdict(plan)}
+    value = {
+        "schema": PLAN_SCHEMA,
+        "schema_version": PLAN_SCHEMA_VERSION,
+        **dataclasses.asdict(plan),
+    }
     # Keep the producer and consumer in one executable contract.
     NightPlan.from_mapping(value)
     return value

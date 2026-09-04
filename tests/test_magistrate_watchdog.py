@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import datetime as dt
 import fnmatch
+import io
 import json
 import os
 import re
@@ -17,7 +19,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise.night_plan_writer import night_plan_mapping, write_night_plan
+from joulewise.night_plan_writer import (
+    night_plan_json_bytes,
+    night_plan_mapping,
+    write_night_plan,
+)
 from scripts import magistrate_watchdog as wd
 
 
@@ -204,6 +210,43 @@ class FenceTests(WatchdogTestCase):
         ignored = [event for event in events if event["kind"] == "plan_retired_v1"]
         self.assertEqual(len(ignored), 1)
         self.assertEqual(ignored[0]["plan_dir"], str(retired_root.resolve()))
+
+    def test_retired_v1_requires_golden_shape_and_v2_requires_version(self) -> None:
+        golden = json.loads(RETIRED_V1.read_text(encoding="utf-8"))
+        source = self.make_plan(name="shape-source")
+        current = night_plan_mapping(source)
+        current["schema_version"] = 2
+        (Path(source.custody_root) / "night_plan.json").unlink()
+
+        cases = {
+            "golden": golden,
+            "golden-plus-v2-key": {**golden, "measurement_head": "b" * 40},
+            "v2-missing-version": {
+                key: value for key, value in current.items() if key != "schema_version"
+            },
+            "v2-version-one": {**current, "schema_version": 1},
+        }
+        for name, mapping in cases.items():
+            plan_root = self.temp / name
+            plan_root.mkdir()
+            (plan_root / "night_plan.json").write_text(
+                json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8"
+            )
+
+        snapshot = wd.load_plans(
+            self.harness.storage, now_epoch_s=self.base.timestamp()
+        )
+
+        self.assertEqual(frozenset(golden), wd.RETIRED_V1_KEYS)
+        self.assertEqual((), snapshot.plans)
+        self.assertEqual(3, len(snapshot.errors))
+        self.assertEqual(
+            ["plan_retired_v1", "plan_malformed", "plan_malformed", "plan_malformed"],
+            sorted(
+                (diagnostic.kind for diagnostic in snapshot.diagnostics),
+                key=lambda kind: (kind != "plan_retired_v1", kind),
+            ),
+        )
 
     def test_unreadable_plan_is_recorded_once_and_holds(self) -> None:
         broken_root = self.temp / "broken-plan"
@@ -604,6 +647,46 @@ class SupervisorTests(WatchdogTestCase):
         self.assertFalse(supervisor.step())
         self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
 
+    def test_resident_unsafe_plan_drains_with_pinned_ladder_and_reason(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        plan_path = Path(plan.custody_root) / "night_plan.json"
+        plan_path.write_text("{truncated", encoding="utf-8")
+        self.assertEqual(9 * 60, wd.STOP_COOPERATIVE_S)
+        self.assertEqual(60, wd.STOP_TERM_GRACE_S)
+
+        self.assertTrue(supervisor.step())
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        started = [event for event in events if event["kind"] == "resident_drain_started"]
+        self.assertEqual(1, len(started))
+        self.assertIn("night_plan_unreadable", started[0]["reason"])
+        self.assertEqual([], self.harness.processes.signals)
+
+        self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_COOPERATIVE_S)
+        self.harness.clock.mono += wd.STOP_COOPERATIVE_S
+        self.assertTrue(supervisor.step())
+        self.harness.clock.wall += dt.timedelta(seconds=wd.STOP_TERM_GRACE_S)
+        self.harness.clock.mono += wd.STOP_TERM_GRACE_S
+        self.assertFalse(supervisor.step())
+
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        ladder = [
+            event.get("signal", event["kind"])
+            for event in events
+            if event["kind"] in {"resident_drain_started", "signal"}
+        ]
+        self.assertEqual(["resident_drain_started", "SIGTERM", "SIGKILL"], ladder)
+
     def test_cooperative_exit_after_request_never_signals(self) -> None:
         plan = self.make_plan()
         supervisor = self.supervisor(plan)
@@ -788,6 +871,74 @@ class BackoffAndEventTests(WatchdogTestCase):
         self.assertEqual(state["notice_pending"], [])
         self.assertFalse((self.harness.storage.root / "notice.ack").exists())
 
+    def test_same_diagnostic_is_emitted_for_each_spawn_activation(self) -> None:
+        retired_root = self.temp / "retired-v1"
+        retired_root.mkdir()
+        shutil.copyfile(RETIRED_V1, retired_root / "night_plan.json")
+        snapshot = wd.load_plans(
+            self.harness.storage, now_epoch_s=self.base.timestamp()
+        )
+        target = self.temp / "versions" / "2.1.260"
+        target.parent.mkdir()
+        target.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        target.chmod(0o755)
+        link = self.temp / "bin" / "session"
+        link.parent.mkdir()
+        link.symlink_to(target)
+        self.harness.processes.rows = [
+            wd.ProcessInfo(100, 1, "child-token", "session")
+        ]
+        state = wd.initial_state()
+
+        first = wd.start_session(
+            self.harness.storage, self.harness.deps, state, binary_path=link
+        )
+        first_key = (state["activation_id"], state["activation_spawn_epoch_s"])
+        wd.record_plan_diagnostics(
+            self.harness.storage,
+            snapshot.diagnostics,
+            activation_id=str(first_key[0]),
+            activation_spawn_epoch_s=float(first_key[1]),
+        )
+        self.harness.child.exit_code = 0
+        self.assertFalse(first.step())
+
+        self.harness.clock.wall += dt.timedelta(seconds=1)
+        self.harness.clock.mono += 1
+        self.harness.child = FakeChild()
+        self.harness.processes.rows = [
+            wd.ProcessInfo(100, 1, "child-token", "session")
+        ]
+        second = wd.start_session(
+            self.harness.storage, self.harness.deps, state, binary_path=link
+        )
+        second_key = (state["activation_id"], state["activation_spawn_epoch_s"])
+        wd.record_plan_diagnostics(
+            self.harness.storage,
+            snapshot.diagnostics,
+            activation_id=str(second_key[0]),
+            activation_spawn_epoch_s=float(second_key[1]),
+        )
+
+        self.assertNotEqual(first_key, second_key)
+        events = [
+            json.loads(line)
+            for line in (self.harness.storage.root / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        retired = [event for event in events if event["kind"] == "plan_retired_v1"]
+        self.assertEqual(2, len(retired))
+        self.assertEqual(
+            {first_key, second_key},
+            {
+                (event["activation_id"], event["activation_spawn_epoch_s"])
+                for event in retired
+            },
+        )
+        self.harness.child.exit_code = 0
+        self.assertFalse(second.step())
+
     def test_missing_binary_enters_generic_backoff_without_spawn(self) -> None:
         state = wd.initial_state()
         state.update({"state": "LAUNCHING", "activation_id": "a"})
@@ -960,8 +1111,31 @@ class ContractTests(WatchdogTestCase):
         for index, block in enumerate(python_blocks):
             with self.subTest(block=index):
                 compile(textwrap.dedent(block), f"MAGISTRATE_WATCHDOG.md:{index}", "exec")
-        plan = self.make_plan(name="writer-contract")
-        self.assertEqual(plan, wd.NightPlan.from_mapping(night_plan_mapping(plan)))
+        plan_blocks = [block for block in python_blocks if "write_night_plan" in block]
+        self.assertEqual(2, len(plan_blocks))
+        for index, block in enumerate(plan_blocks):
+            with self.subTest(documented_plan=index):
+                example_root = self.temp / f"documented-plan-{index}"
+                environment = {
+                    "BENCH_CUSTODY": str(example_root / "bench"),
+                    "ADOPTION_PLAN_ROOT": str(example_root / "adoption"),
+                }
+                with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(
+                    io.StringIO()
+                ):
+                    exec(
+                        compile(
+                            textwrap.dedent(block),
+                            f"MAGISTRATE_WATCHDOG.md:plan-{index}",
+                            "exec",
+                        ),
+                        {"__name__": f"documented_plan_{index}"},
+                    )
+                paths = list(example_root.rglob("night_plan.json"))
+                self.assertEqual(1, len(paths))
+                documented_bytes = paths[0].read_bytes()
+                documented = wd.NightPlan.from_mapping(json.loads(documented_bytes))
+                self.assertEqual(documented_bytes, night_plan_json_bytes(documented))
 
     def test_install_handoff_is_ordered_and_measurement_checkout_owned(self) -> None:
         repo = Path(__file__).resolve().parents[1]

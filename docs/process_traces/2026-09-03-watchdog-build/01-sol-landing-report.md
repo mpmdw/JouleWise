@@ -203,3 +203,18 @@ This addendum supersedes the round-4 assertions that non-v1 parse failures are i
 | Fixture and documentation drift are structurally blocked | `joulewise/night_plan_writer.py:15-63`; `docs/process/MAGISTRATE_WATCHDOG.md:218-251,312-341` | All v2 tests consume writer output; `tests/test_magistrate_watchdog.py:951-964` compiles documented heredocs and round-trips the writer mapping through `NightPlan`. |
 
 Final authorized modules: watchdog 49 OK, CLI 1 OK, night gate 47 OK, run-night 55 OK, installer 11 OK. No install, agent launch, handoff signal, default-custody write, or quiet-machine run occurred.
+
+---
+
+## Fix round 6 clause-map addendum (2026-09-04 PDT)
+
+This addendum supersedes round 5 only for retired-v1 identification, resident unsafe-plan handling, activation identity, and the documentation-example assertion. The complete RED/GREEN transcripts, S-4 mutation, final module tails, and detailed map are in `17-sol-fix-round-6-report.md`.
+
+| Round-6 specification | Production site | Biting assertion / counterfactual |
+|---|---|---|
+| S-1 — v1 is the exact import-time golden shape; v2 carries integer `schema_version: 2` | `scripts/magistrate_watchdog.py:109-142,650`; `joulewise/night_gate.py:22,104-118,220-229`; `joulewise/night_plan_writer.py:15-28` | `tests/test_magistrate_watchdog.py:214-249`; restoring label-only identification, omitting the writer version, accepting a missing version, or accepting version 1 fails the golden-plus-v2-key and three-malformed-cases assertions. |
+| S-2 — resident `HOLD_UNSAFE` starts and durably completes the cooperative drain | `scripts/magistrate_watchdog.py:1530-1574,1598-1640` | `tests/test_magistrate_watchdog.py:650-688`; `tests/test_magistrate_watchdog_cli.py:210-282`; restoring the transition-only branch removes `resident_drain_started` and the ordered request/TERM/KILL evidence. |
+| S-3 — diagnostic identity is a fresh `(activation_id, spawn epoch)` per spawn | `scripts/magistrate_watchdog.py:526-621,1686-1766` | `tests/test_magistrate_watchdog.py:874-938`; reusing the prior id or deleting the epoch from the dedupe key suppresses the second identical diagnostic or fails the two-key equality. |
+| S-4 — documented writer blocks produce bytes accepted by `NightPlan.from_mapping` | `docs/process/MAGISTRATE_WATCHDOG.md:224-251,315-341` | `tests/test_magistrate_watchdog.py:1102-1138`; deleting `measurement_head` from the first block fails with the pasted missing-argument mutation in trace 17. |
+
+Final authorized modules: watchdog 52 OK, CLI 2 OK, night gate 47 OK, run-night 55 OK, installer 11 OK (167 total). The prompt remains 23 lines. No install, agent launch, launchd mutation, default-custody write, live signal, or quiet-machine run occurred.

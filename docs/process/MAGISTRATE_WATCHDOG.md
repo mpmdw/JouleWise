@@ -4,7 +4,7 @@
 
 ## Safety model and state machine
 
-The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping`, the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, local civil time, monotonic time, and the process table. Only a decoded mapping positively identified as retired schema v1 is ignored, with a `plan_retired_v1` event. Unreadable JSON holds as `night_plan_unreadable`; an invalid v2 or future authorship holds as `night_plan_malformed`. Each diagnostic is keyed by activation, plan directory, kind, and detail digest, so changed failures and later activations are reported independently. The watchdog's valid-plan set intentionally contains every plan the night gate could run and may conservatively contain a stale plan the gate would refuse. Inside a valid-v2 plan span the watchdog invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.
+The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping`, the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, local civil time, monotonic time, and the process table. A v2 plan carries both schema `joulewise.night_plan.v2` and integer `schema_version: 2`; a missing or different version is malformed. Only a decoded mapping whose complete key shape exactly matches the golden retired-v1 fixture is ignored, with a `plan_retired_v1` event; a v1 label attached to any v2-only key is not retired evidence. Unreadable JSON holds as `night_plan_unreadable`; an invalid v2 or future authorship holds as `night_plan_malformed`. Each diagnostic is keyed by the activation id and spawn epoch, plan directory, kind, and detail digest, so changed failures and later activations are reported independently. Every spawn mints a fresh activation id and spawn epoch. The watchdog's valid-plan set intentionally contains every plan the night gate could run and may conservatively contain a stale plan the gate would refuse. Inside a valid-v2 plan span the watchdog invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.
 
 The durable states are:
 
@@ -13,13 +13,13 @@ The durable states are:
 - `ACTIVE`: the recorded child PID and start time are live. If its prior supervisor disappeared, the next LaunchAgent tick adopts observation of that exact process; it does not spawn a second session.
 - `STANDDOWN_REQUESTED`, `STANDDOWN_TERM`, and the terminal `FENCED`/`HOLD_CENSUS`: the resident supervisor executes the request, TERM, KILL, and verification sequence below.
 - `FENCED`: a plan span, the 02:45–03:30 belt, or the 07:00 minute forbids launch.
-- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only positively identified retired v1 is ignored. Census matches are reported and never used as kill targets.
+- `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
 - `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility.
 - `STOP_REQUESTED`/`STOPPED`: the local file or remote branch has stopped launches; an already-owned child receives a nine-minute cooperative request before TERM and, 60 seconds later, KILL.
 
-Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation/kind/detail digest.
+Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, drain-start, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation-id/spawn-epoch/plan-directory/kind/detail-digest key.
 
 ## Fence and deadlines
 
@@ -67,9 +67,9 @@ Usage retries are 15, 30, 60, 120, then 120 minutes, plus a deterministic 0–12
 The program guards every write path against the configured custody root. The mechanism creates only:
 
 - `watchdog.lock`: stable advisory service-lock inode.
-- `state.json`: atomic durable state, clocks, backoff, activation, transition sequence, and `notice_pending`.
-- `events.jsonl`: fsynced transition, census, signal, plan-diagnostic, and supervisor-adoption events.
-- `magistrate.lock`: exclusive launch claim, then the child PID, exact start token, activation, symlink path, and version; removed only after the child exit is proved.
+- `state.json`: atomic durable state, clocks, backoff, activation id and spawn epoch, resident-drain latch, transition sequence, and `notice_pending`.
+- `events.jsonl`: fsynced transition, census, signal, resident-drain-start, plan-diagnostic, and supervisor-adoption events.
+- `magistrate.lock`: exclusive launch claim, then the child PID, exact start token, activation id and spawn epoch, symlink path, and version; removed only after the child exit is proved.
 - `standdown.request`: atomic request and exact plan deadlines.
 - `attempts/<activation>/prompt.md`, `attempt-<n>.stream.jsonl`, and `attempt-<n>.stderr.log`.
 - `heartbeat` and an optional unsent-email record, written by the relaunched session under its prompt.

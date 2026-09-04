@@ -11,9 +11,11 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import Callable
 
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
+from scripts import magistrate_watchdog as wd
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -96,12 +98,14 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def _plan(self, custody_root: Path, *, plan_id: str) -> NightPlan:
+    def _plan(
+        self, custody_root: Path, *, plan_id: str, t0_offset_s: float = 60
+    ) -> NightPlan:
         now = time.time()
         return NightPlan(
             plan_id=plan_id,
             receipt_class="TRANSACTION_PACK",
-            t0_epoch_s=now + 60,
+            t0_epoch_s=now + t0_offset_s,
             window_max_s=600,
             authored_epoch_s=now,
             repo_head=_git_head(REPO_ROOT),
@@ -113,11 +117,24 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
             registration_path=None,
         )
 
-    def _write_valid(self, custody_parent: Path, name: str) -> Path:
+    def _write_valid(
+        self, custody_parent: Path, name: str, *, t0_offset_s: float = 60
+    ) -> Path:
         plan_root = custody_parent / name
         path = plan_root / "night_plan.json"
-        write_night_plan(path, self._plan(plan_root, plan_id=name))
+        write_night_plan(
+            path, self._plan(plan_root, plan_id=name, t0_offset_s=t0_offset_s)
+        )
         return path
+
+    @staticmethod
+    def _wait_for(predicate: Callable[[], object], *, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.05)
+        return bool(predicate())
 
     def _run(
         self, custody_parent: Path, *, dry_run: bool = False
@@ -189,6 +206,88 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         self.assertRegex(decision_line, r"^decision=(?:FENCED|HOLD_CENSUS)\b")
         self.assertNotIn("decision=LAUNCHING", positive.stdout)
         self.assertNotIn("decision=HOLD_UNSAFE", positive.stdout)
+
+    def test_real_cli_resident_records_drain_after_plan_is_truncated(self) -> None:
+        custody_parent = self.root / "resident-drain-custody"
+        plan_path = self._write_valid(
+            custody_parent, "resident-plan", t0_offset_s=2 * 60 * 60
+        )
+        watchdog_root = custody_parent / "magistrate"
+        request_path = watchdog_root / "standdown.request"
+        resident_source = (
+            "import datetime as dt, json, os, sys, time\n"
+            "from pathlib import Path\n"
+            "from scripts import magistrate_watchdog as wd\n"
+            "root=Path(sys.argv[1])\n"
+            "storage=wd.Storage(root)\n"
+            "class Table:\n"
+            " def snapshot(self): return [wd.ProcessInfo(os.getpid(), os.getppid(), 'stub-start', 'stub resident')]\n"
+            " def send_signal(self, pid, signum): pass\n"
+            "class Child:\n"
+            " pid=os.getpid()\n"
+            " def poll(self): return None\n"
+            "state=wd.initial_state()\n"
+            "spawn_epoch=time.time()\n"
+            "state.update({'state':'ACTIVE','activation_id':'cli-resident-activation','activation_spawn_epoch_s':spawn_epoch})\n"
+            "lock={'schema':wd.LOCK_SCHEMA,'activation_id':state['activation_id'],'activation_spawn_epoch_s':spawn_epoch,'pid':os.getpid(),'start_time':'stub-start','supervisor_pid':os.getpid(),'launch_epoch_s':spawn_epoch,'binary_symlink':'stub','binary_version':'stub','status':'ACTIVE'}\n"
+            "storage.atomic_json(root/'magistrate.lock', lock)\n"
+            "deps=wd.Dependencies(wall_now=lambda:dt.datetime.now().astimezone(),monotonic=time.monotonic,census=lambda:wd.CensusObservation(True,1,'',''),git_probe=lambda:wd.StopObservation('CLEAR','clear'),processes=Table(),spawn=lambda *args:Child(),version_probe=lambda path:'stub',sleep=time.sleep)\n"
+            "supervisor=wd.ResidentSupervisor(storage,deps,state,Child(),lock,root/'stdout',root/'stderr')\n"
+            "storage.atomic_bytes(root/'resident.ready', b'ready\\n')\n"
+            "supervisor.run()\n"
+        )
+        resident = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                resident_source,
+                str(watchdog_root),
+            ],
+            start_new_session=True,
+        )
+        try:
+            self.assertTrue(
+                self._wait_for(
+                    (watchdog_root / "resident.ready").exists, timeout=2
+                ),
+                "stub resident did not start",
+            )
+            _truncate(plan_path, 0.4)
+            started = time.monotonic()
+            self.assertTrue(
+                self._wait_for(request_path.exists, timeout=wd.SUPERVISOR_POLL_S + 2),
+                "resident did not request cooperative stop within one poll",
+            )
+
+            def drain_events() -> list[dict[str, object]]:
+                events_path = watchdog_root / "events.jsonl"
+                if not events_path.exists():
+                    return []
+                return [
+                    event
+                    for event in (
+                        json.loads(line)
+                        for line in events_path.read_text(encoding="utf-8").splitlines()
+                    )
+                    if event.get("kind") == "resident_drain_started"
+                ]
+
+            self.assertTrue(
+                self._wait_for(lambda: bool(drain_events()), timeout=1),
+                "resident_drain_started was not recorded",
+            )
+            self.assertLessEqual(
+                time.monotonic() - started, wd.SUPERVISOR_POLL_S + 3
+            )
+            self.assertIn("night_plan_unreadable", str(drain_events()[0]["reason"]))
+        finally:
+            if resident.poll() is None:
+                resident.terminate()
+                try:
+                    resident.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    resident.kill()
+                    resident.wait(timeout=2)
 
 
 if __name__ == "__main__":

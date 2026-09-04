@@ -19,6 +19,7 @@ from typing import Callable, Mapping, Protocol
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"
 PLAN_SCHEMA = "joulewise.night_plan.v2"
+PLAN_SCHEMA_VERSION = 2
 RECEIPT_CLASSES = (
     "DIAGNOSTIC_NO_PACK",
     "REHEARSAL_STUB",
@@ -102,6 +103,7 @@ ORDER = (
 
 _PLAN_KEYS = {
     "schema",
+    "schema_version",
     "plan_id",
     "receipt_class",
     "t0_epoch_s",
@@ -214,6 +216,16 @@ class NightPlan:
                 "night_plan_malformed",
                 "schema joulewise.night_plan.v1 is retired and the plan must be "
                 "re-authored under joulewise.night_plan.v2",
+            )
+        schema_version = value.get("schema_version")
+        if (
+            isinstance(schema_version, bool)
+            or not isinstance(schema_version, int)
+            or schema_version != PLAN_SCHEMA_VERSION
+        ):
+            raise PlanError(
+                "night_plan_malformed",
+                f"schema_version must be integer {PLAN_SCHEMA_VERSION}",
             )
 
         def require_text(name: str) -> str:
