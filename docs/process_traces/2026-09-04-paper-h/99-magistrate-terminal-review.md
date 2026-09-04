@@ -15,3 +15,16 @@ Prose only; no code. Nothing to prune.
 
 ## Integration replay (row 9)
 Full unpiped suite on 970c0b1a, log `~/.claude/jobs/3c46c831/tmp/int-paper-h-replay.log`; exact tail appended below when it completes.
+
+```text
+FAIL: test_logical_producer_delay_preserves_exact_evidence_bytes (test_calibration_exits.PublicGovernedExitWitnessTests.test_logical_producer_delay_preserves_exact_evidence_bytes) (artifact='instrumen
+FAIL: test_logical_producer_delay_preserves_exact_evidence_bytes (test_calibration_exits.PublicGovernedExitWitnessTests.test_logical_producer_delay_preserves_exact_evidence_bytes) (artifact='events.js
+FAIL: test_real_client_worker_artifact_contract_over_localhost (test_node_worker_subprocess.NodeWorkerSubprocessTests.test_real_client_worker_artifact_contract_over_localhost)
+FAIL: test_absent_sentinel_commits_status_as_before (test_window_status_guard.WindowStatusGuardTests.test_absent_sentinel_commits_status_as_before)
+FAIL: test_present_sentinel_writes_status_without_git_publication (test_window_status_guard.WindowStatusGuardTests.test_present_sentinel_writes_status_without_git_publication)
+Ran 4900 tests in 6744.169s
+FAILED (failures=5, skipped=125)
+rc=1
+```
+
+Exact tail of the unpiped full suite on 970c0b1a (paper-H + main a1184cca): 4900 tests, 5 failures, 125 skipped. All five are outside this PR's files (paper prose only) and each is explained: (1) `test_node_worker_subprocess…over_localhost` fails on main in isolation (pre-existing, recorded in the paper-E/G reviews); (2) the two `test_logical_producer_delay_preserves_exact_evidence_bytes` subtests are load-sensitive and PASSED when re-run in isolation on this tree (`int-paper-h-replay-isolated.log`: that test OK); (3) the two `WindowStatusGuardTests` fail identically on canonical main at the same moment with `REFUSING: a measurement process is running` — the guard's process census sees the concurrent replay/seat fleet on this machine, an environmental refusal, not a code defect. Row 9 satisfied with those exclusions recorded.
