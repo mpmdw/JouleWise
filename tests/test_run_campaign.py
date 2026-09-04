@@ -45,6 +45,7 @@ from joulewise.uncertainty_evidence import (
     SCHEMA_FOR_ANCHOR_METHOD,
 )
 from joulewise.calibration_bracketing import discover_calibration_candidates
+from joulewise import whole_window as whole_window_module
 from joulewise.whole_window import (
     MINTED_CONSUMPTION_SEMANTICS_ID,
     NEG8_DRIFT_BOUND_MAX_AGE_S,
@@ -6866,6 +6867,52 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
                     evaluation.validation_problems,
                 )
 
+    def test_coordinated_mock_labels_cannot_override_custody_config(self):
+        """D-138 containment lives at consumers of the pinned reducer."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "coordinated-mock-labels"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["adapters"]["telemetry"]["name"] = "mock"
+            metadata_path.write_text(
+                json.dumps(metadata, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            identity = whole_window_module.custody_telemetry_identity(
+                bundle,
+                summary=summary,
+                metadata=metadata,
+            )
+            ordinary = self._evaluate(bundle, role="absolute_repeat")
+            whole_window = self._whole_window_evaluate(
+                bundle,
+                role="absolute_repeat",
+                waiver=False,
+            )
+
+        self.assertTrue(identity.custody_bound_config)
+        self.assertEqual(identity.config_backend_class, "powermetrics")
+        self.assertEqual(identity.metadata_backend_class, "mock")
+        self.assertEqual(identity.summary_backend_class, "mock")
+        self.assertFalse(identity.triangle_agrees)
+        for evaluation in (ordinary, whole_window):
+            with self.subTest(path=evaluation.config_name):
+                self.assertFalse(evaluation.strict_valid)
+                self.assertIn(
+                    "bundle_strict_invalid",
+                    evaluation.validation_problems,
+                )
+
     def test_fully_anchored_floor_member_remains_usable(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle, _raw_summary = self._bundle(
@@ -7346,26 +7393,34 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         derived_at_s: float | None = None,
         launch_lineage: dict | None = None,
     ) -> dict:
-        values = (
-            points
-            if points is not None
-            else [8.0 + 0.01 * index for index in range(10)]
+        corpus_path = (
+            ROOT
+            / "configs"
+            / "campaigns"
+            / "neg8_reference_corpus"
+            / "derivation"
+            / "settled_corpus.json"
         )
+        corpus_raw = corpus_path.read_bytes()
+        corpus = json.loads(corpus_raw)
+        values = points if points is not None else [
+            8.0 + 0.01 * index for index in range(len(corpus["members"]))
+        ]
         return run_campaign_module.build_neg8_drift_bound_artifact(
-            corpus_id="settled-neg8-test-corpus",
-            condition_id="df-rq-mid",
-            manifest_sha256="a" * 64,
+            corpus_id=corpus["corpus_id"],
+            condition_id=corpus["condition_id"],
+            manifest_sha256=hashlib.sha256(corpus_raw).hexdigest(),
             scientific_config_sha256="b" * 64,
             members=[
                 {
-                    "bundle_id": f"reference-{index:02d}",
+                    "bundle_id": corpus_member["bundle_id"],
                     "point_gross_j": point,
                     "point_idle_subtracted_j": point - 0.2,
                     "bundle_evidence_sha256": hashlib.sha256(
-                        f"reference-{index:02d}".encode()
+                        corpus_member["bundle_id"].encode()
                     ).hexdigest(),
                 }
-                for index, point in enumerate(values)
+                for corpus_member, point in zip(corpus["members"], values)
             ],
             derivation_timestamp_s=(
                 time.time() if derived_at_s is None else derived_at_s
@@ -7401,6 +7456,53 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             encoding="utf-8",
         )
         return path
+
+    def _bound_for_manifest_bytes(self, manifest_raw: bytes) -> dict:
+        manifest = json.loads(manifest_raw)
+        return run_campaign_module.build_neg8_drift_bound_artifact(
+            corpus_id=manifest["corpus_id"],
+            condition_id=manifest["condition_id"],
+            manifest_sha256=hashlib.sha256(manifest_raw).hexdigest(),
+            scientific_config_sha256="b" * 64,
+            members=[
+                {
+                    "bundle_id": member["bundle_id"],
+                    "point_gross_j": 8.0 + index / 100.0,
+                    "point_idle_subtracted_j": 7.0 + index / 100.0,
+                    "bundle_evidence_sha256": hashlib.sha256(
+                        member["bundle_id"].encode()
+                    ).hexdigest(),
+                }
+                for index, member in enumerate(manifest["members"])
+            ],
+            derivation_timestamp_s=time.time(),
+            freshness_bindings={
+                "os_build": "25F84",
+                "power_supply_identity_sha256": "c" * 64,
+                "calibration_identity_sha256": "d" * 64,
+            },
+        )
+
+    def _unregistered_manifest_bytes(self) -> bytes:
+        return (
+            json.dumps(
+                {
+                    "schema_version": "joulewise.neg8_reference_corpus.v1",
+                    "corpus_id": "unregistered-corpus",
+                    "freeze_status": "settled_reference",
+                    "condition_id": "df-rq-mid",
+                    "members": [
+                        {
+                            "bundle_id": f"unregistered-{index:02d}",
+                            "bundle_path": f"run-{index:02d}",
+                        }
+                        for index in range(10)
+                    ],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
 
     def _member(
         self,
@@ -7605,9 +7707,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             run_campaign_module.validate_neg8_drift_bound_artifact(emitted)
         )
 
-    def test_neg8_reference_campaign_corpus_is_accepted_by_derivation_cli(
-        self,
-    ) -> None:
+    def _install_neg8_reference_derivation_fixture(self):
         campaign_dir = (
             ROOT / "configs" / "campaigns" / "neg8_reference_corpus"
         )
@@ -7719,6 +7819,17 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 )
             )
 
+        return corpus_path, member_ids, reduce_synthetic_bundle
+
+    def test_neg8_reference_campaign_corpus_is_accepted_by_derivation_cli(
+        self,
+    ) -> None:
+        (
+            corpus_path,
+            member_ids,
+            reduce_synthetic_bundle,
+        ) = self._install_neg8_reference_derivation_fixture()
+
         output = self.root / "derived-bound.json"
         args = run_campaign_module.parse_args(
             [
@@ -7748,6 +7859,51 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertTrue(
             run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
         )
+
+    def test_derivation_cli_mint_rejects_source_identity_postcondition_failure(
+        self,
+    ) -> None:
+        (
+            corpus_path,
+            _member_ids,
+            reduce_synthetic_bundle,
+        ) = self._install_neg8_reference_derivation_fixture()
+        real_build = whole_window_module.build_neg8_drift_bound_artifact
+
+        def build_with_self_sealed_wrong_manifest(**kwargs):
+            return real_build(
+                **{**kwargs, "manifest_sha256": "f" * 64}
+            )
+
+        output = self.root / "must-not-mint.json"
+        args = run_campaign_module.parse_args(
+            [
+                "--derive-neg8-drift-bound",
+                str(corpus_path),
+                "--neg8-drift-bound-output",
+                str(output),
+                "--runs-dir",
+                str(self.root),
+            ]
+        )
+        with (
+            patch(
+                "joulewise.reduce.reduce_bundle",
+                side_effect=reduce_synthetic_bundle,
+            ),
+            patch.object(
+                whole_window_module,
+                "build_neg8_drift_bound_artifact",
+                side_effect=build_with_self_sealed_wrong_manifest,
+            ),
+            redirect_stdout(io.StringIO()),
+            self.assertRaisesRegex(
+                ValueError,
+                "corpus identity did not bind to manifest bytes",
+            ),
+        ):
+            run_campaign_module.run_derive_neg8_drift_bound(args)
+        self.assertFalse(output.exists())
 
     def test_prospective_window_reference_configs_are_same_condition_3_1_3(
         self,
@@ -7808,6 +7964,242 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "n >= 10"):
             self._drift_bound([8.0 + index * 0.01 for index in range(9)])
+
+    def test_drift_bound_corpus_identity_requires_external_bytes(self) -> None:
+        artifact = self._drift_bound()
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                artifact, require_corpus_identity=True
+            )
+        )
+
+        forged = run_campaign_module.build_neg8_drift_bound_artifact(
+            corpus_id="self-asserted-corpus",
+            condition_id="df-rq-mid",
+            manifest_sha256="a" * 64,
+            scientific_config_sha256="b" * 64,
+            members=[
+                {
+                    "bundle_id": f"forged-{index:02d}",
+                    "point_gross_j": 8.0 + index / 100.0,
+                    "point_idle_subtracted_j": 7.0 + index / 100.0,
+                    "bundle_evidence_sha256": hashlib.sha256(
+                        f"forged-{index:02d}".encode()
+                    ).hexdigest(),
+                }
+                for index in range(10)
+            ],
+            derivation_timestamp_s=time.time(),
+            freshness_bindings={
+                "os_build": "25F84",
+                "power_supply_identity_sha256": "c" * 64,
+                "calibration_identity_sha256": "d" * 64,
+            },
+        )
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(forged)
+        )
+        self.assertFalse(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                forged, require_corpus_identity=True
+            )
+        )
+        forged_path = self.root / "self-asserted-bound.json"
+        forged_path.write_text(json.dumps(forged) + "\n", encoding="utf-8")
+        self.assertIsNone(
+            run_campaign_module.load_neg8_drift_bound_artifact(forged_path)
+        )
+
+    def test_untracked_sibling_manifest_cannot_authenticate_forged_corpus(
+        self,
+    ) -> None:
+        manifest_raw = self._unregistered_manifest_bytes()
+        artifact = self._bound_for_manifest_bytes(manifest_raw)
+        registry = self.root / "registry"
+        registry.mkdir()
+        (registry / "untracked.json").write_bytes(manifest_raw)
+
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
+        )
+        with patch.object(
+            whole_window_module,
+            "REGISTERED_NEG8_REFERENCE_CORPUS_DIR",
+            registry,
+        ):
+            self.assertFalse(
+                run_campaign_module.validate_neg8_drift_bound_artifact(
+                    artifact, require_corpus_identity=True
+                )
+            )
+
+    def test_claim_row_rejects_structurally_valid_unregistered_drift_corpus(
+        self,
+    ) -> None:
+        forged = self._bound_for_manifest_bytes(
+            self._unregistered_manifest_bytes()
+        )
+        policy_sha = "a" * 64
+        family = {"drift_allowance_j": 0.1}
+        families = {
+            "gross_energy": dict(family),
+            "idle_subtracted_energy": dict(family),
+        }
+        bracket_policy = {"require_bracket": True}
+        bracket = {
+            "schema_version": whole_window_module.NEG8_BRACKET_SCHEMA,
+            "estimand": whole_window_module.NEG8_POINT_DRIFT_ESTIMAND,
+            "decision": "passed",
+            "policy": bracket_policy,
+            "claim_families": families,
+            "drift_bound_artifact": forged,
+            "bound_freshness": {},
+        }
+        source_raw = b"{}\n"
+        row = {
+            "schema_version": whole_window_module.WHOLE_WINDOW_SCHEMA,
+            "consumption_semantics_id": MINTED_CONSUMPTION_SEMANTICS_ID,
+            "bundle_ids": ["member-1"],
+            "campaign_policy": {"sha256": policy_sha},
+            "row_provenance": {
+                "schema_version": (
+                    whole_window_module.WHOLE_WINDOW_PROVENANCE_SCHEMA
+                ),
+                "policy_sha256": policy_sha,
+                "membership_sha256": canonical_sha256(["member-1"]),
+                "source_campaign_manifests": [
+                    {
+                        "path": "campaign_manifests/source.json",
+                        "sha256": hashlib.sha256(source_raw).hexdigest(),
+                    }
+                ],
+            },
+            "status": "passed",
+            "idle_admission_core": {
+                "schema_version": whole_window_module.IDLE_ADMISSION_CORE_SCHEMA,
+                "policy_sha256": policy_sha,
+                "neg8_bracket": bracket,
+                "adapter_wattage_continuity": {
+                    "schema_version": whole_window_module.ADAPTER_CONTINUITY_SCHEMA,
+                    "decision": "stable",
+                },
+                "members": [
+                    {
+                        "bundle_id": "member-1",
+                        "cpu_admission": {"decision": "admitted"},
+                    }
+                ],
+            },
+        }
+        authenticated_source = Mock(
+            raw_bytes=source_raw,
+            value={"campaign_policy": {"sha256": policy_sha}},
+        )
+        session = Mock(
+            ready=True,
+            runs_root=self.root,
+            referenced_bundle_ids=frozenset({"member-1"}),
+            evaluation_basis_sha256=None,
+            _row_validation_results={},
+        )
+        derived = {
+            "decision": "passed",
+            "claim_families": copy.deepcopy(families),
+            "bound_freshness": {},
+        }
+
+        with (
+            patch.object(
+                whole_window_module,
+                "load_authenticated_campaign_manifest",
+                return_value=authenticated_source,
+            ),
+            patch.object(
+                whole_window_module,
+                "_manifest_members",
+                return_value={"member-1"},
+            ),
+            patch.object(
+                whole_window_module,
+                "_current_core_rederivation_reasons",
+                return_value=set(),
+            ),
+            patch.object(
+                whole_window_module,
+                "_registered_bracket_policy",
+                return_value=bracket_policy,
+            ),
+            patch.object(
+                whole_window_module,
+                "_row_references_current_strict_member",
+                return_value=True,
+            ),
+            patch.object(
+                whole_window_module,
+                "_derived_neg8_decision",
+                return_value=(derived, None),
+            ),
+        ):
+            valid, reasons = whole_window_module._validate_row(
+                row,
+                self.root,
+                {"member-1"},
+                consumption_session=session,
+            )
+
+        self.assertFalse(valid)
+        self.assertEqual(
+            reasons, ("whole_window_verdict_provenance_invalid",)
+        )
+
+    def test_drift_bound_accepts_exact_custodied_manifest_bytes(self) -> None:
+        members = [
+            {"bundle_id": f"custody-{index:02d}", "bundle_path": f"run-{index:02d}"}
+            for index in range(10)
+        ]
+        manifest_raw = (
+            json.dumps(
+                {
+                    "schema_version": "joulewise.neg8_reference_corpus.v1",
+                    "corpus_id": "custodied-corpus",
+                    "freeze_status": "settled_reference",
+                    "condition_id": "df-rq-mid",
+                    "members": members,
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+        artifact = run_campaign_module.build_neg8_drift_bound_artifact(
+            corpus_id="custodied-corpus",
+            condition_id="df-rq-mid",
+            manifest_sha256=hashlib.sha256(manifest_raw).hexdigest(),
+            scientific_config_sha256="b" * 64,
+            members=[
+                {
+                    "bundle_id": member["bundle_id"],
+                    "point_gross_j": 8.0 + index / 100.0,
+                    "point_idle_subtracted_j": 7.0 + index / 100.0,
+                    "bundle_evidence_sha256": hashlib.sha256(
+                        member["bundle_id"].encode()
+                    ).hexdigest(),
+                }
+                for index, member in enumerate(members)
+            ],
+            derivation_timestamp_s=time.time(),
+            freshness_bindings={
+                "os_build": "25F84",
+                "power_supply_identity_sha256": "c" * 64,
+                "calibration_identity_sha256": "d" * 64,
+            },
+        )
+        self.assertTrue(
+            run_campaign_module.validate_neg8_drift_bound_artifact(
+                artifact,
+                reference_corpus_bytes=manifest_raw,
+                require_corpus_identity=True,
+            )
+        )
 
     def test_superseded_gross_only_bound_shape_is_intentionally_not_replayable(
         self,
@@ -8191,7 +8583,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 )
                 self.assertEqual(section["neg8_bracket"]["decision"], "failed")
 
-    def test_prefreshness_bound_wire_is_parseable_but_always_stale(self) -> None:
+    def test_unissued_prefreshness_bound_wire_is_malformed_and_underived(self) -> None:
         binding = self._binding()
         artifact = self._drift_bound()
         artifact.pop("freshness")
@@ -8202,7 +8594,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 if key != "derivation_sha256"
             }
         )
-        self.assertTrue(
+        self.assertFalse(
             run_campaign_module.validate_neg8_drift_bound_artifact(artifact)
         )
         section = run_campaign_module.idle_admission_core_verdict(
@@ -8224,13 +8616,14 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             whole_window=True,
             neg8_drift_bound=artifact,
         )
-        freshness = section["neg8_bracket"]["bound_freshness"]
-        self.assertEqual(freshness["decision"], "stale")
-        self.assertIn(
-            "freshness_fields_missing",
-            freshness["triggered_rederivation_reasons"],
+        self.assertEqual(
+            section["neg8_bracket"]["bound_freshness"]["decision"],
+            "underived",
         )
-        self.assertIn("neg8_drift_bound_stale", section["conditions"])
+        self.assertIn("neg8_drift_bound_underived", section["conditions"])
+        self.assertIn(
+            "neg8_idle_sub_drift_bound_underived", section["conditions"]
+        )
 
     def test_family_point_drift_gates_while_gross_corners_are_diagnostic(self) -> None:
         binding = self._binding()
@@ -8275,7 +8668,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
         self.assertEqual(
             bracket["drift_bound_artifact"]["reference_corpus"]["member_ids"],
-            [f"reference-{index:02d}" for index in range(10)],
+            [f"neg8-refcorpus-r{index:02d}" for index in range(1, 13)],
         )
         self.assertEqual(
             bracket["drift_bound_artifact"]["estimator"]["id"],

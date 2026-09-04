@@ -411,14 +411,21 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   re-derivation reason. Horizon expiry, OS build change, power-supply change,
   calibration identity change, or unresolved current binding makes both
   family bounds stale and refuses with the registered
-  `neg8_drift_bound_stale`. A v1 artifact with an authentic pre-addendum seal
-  but no freshness block is replay-readable only to produce that stale
-  refusal; it is never grandfathered. Malformed or unsealed artifacts remain
+  `neg8_drift_bound_stale`. The dual-family shape and freshness block were
+  introduced together and no pre-freshness dual-family artifact was issued;
+  an artifact without the freshness block is therefore malformed and remains
   underived under the two family-specific spellings. The superseded
   pre-SCREEN+BUDGET gross-only v1 shape (no `claim_family_bounds`) is not
-  replayable and refuses as malformed/underived; "pre-addendum replay" applies
-  only to the dual-family shape with `claim_family_bounds` present and
-  freshness absent.
+  replayable and likewise refuses as malformed/underived.
+
+  Structural seal verification alone does not authenticate the corpus: an
+  internally consistent artifact can name a digest it minted itself. At file
+  ingress, the corpus ID, condition ID, member order, and manifest digest must
+  resolve against the exact bytes of either the tracked settled-corpus
+  manifest or a manifest held by the calling custody boundary. The governed
+  repository path is
+  `configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json`;
+  no other JSON file in that directory is a registered corpus authority.
 
   The bracket is a WHOLE-WINDOW check: the evaluated basis must contain both
   endpoints. Legacy pair-only windows (a5-a8) remain evaluable as 1+0+1:
@@ -680,6 +687,16 @@ consumers retain their permissive role), never production evidence inferred
 from a summary label. At claim admission, a custody-bound mock backend refuses
 unwaivably as `mock_telemetry_claim_ineligible`; campaign collection/readiness
 behavior remains unchanged.
+
+`joulewise/reduce.py` is also an issued D-079 estimator input governed by
+D-138. Its bytes remain at the issued pin until an atomic successor re-freeze
+reissues every dependent pin; custody hardening must not rotate that file on
+an ordinary hardening branch. Reducer-local eligibility is therefore not
+claim authority by itself. The campaign/whole-window and analysis-input
+boundaries independently reopen the custody-bound config, enforce the
+config/metadata/summary telemetry triangle, and apply the terminal mock bar.
+Diagnostic labels cannot grant a mock exemption at either claim consumer,
+even while the issued reducer retains its historical label-sensitive helper.
 
 ## Structured Failure Reasons
 
