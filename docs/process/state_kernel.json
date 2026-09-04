@@ -1908,6 +1908,47 @@
       "status_note": "BLOCKED 2026-08-27 (T26 scope check; magistrate ruling Option 1 - sequence after _v4 mint closure, no pre-mint coupling). Row is PARTIALLY SUPERSEDED, not closed: the mint-side half of E1/E2 is discharged by S5 contract Q4/W6/W3 and D-117/D-120, but the claim-consumption half stands exactly as CR9-1 described it. At claim consumption the extraction report's bytes are never read (SHA only hex-syntax-checked, detection_floor.py:3472), admissible half-widths come from the artifact's own admissible_half_widths_j with _validate_estimate_math recomputing the corner from that same array (detection_floor.py:3106), and complete governed campaign membership is not enforced (inputs.py:1522 proves only that artifact-listed members occur in order, never the converse). E3 has no consumption-path regression at all. LEAD-EXECUTED PROOF that the reviewed repository pinset is inert against the artifact: six single-field mutations of mint1.json supplied through the explicit pinset route against the real frozen pack df-ph-decode-floor-mint1.json all returned an empty finding list, including operative_floor_six_decimal 7.377086 -> 9.999999 and extraction_spec_members 30 -> 999; _project_floor_mint_pinset_v2 validates those pins for pinset-internal consistency and then returns only family_identities and evidence_root_ids (detection_floor.py:2059, :2601). The cheap cure (compare the artifact's floor to the pinned six-decimal literal) was proposed by the lead and REFUTED by the design consult with a repro: scaling one component's widths by 0.99999999 moves the exact operative floor 7.377085735735073 -> 7.377085672752914, both rendering as 7.377086, and a non-maximizing width can change with no floor change at all - so floor-literal comparison can never discharge E2's 'any stored width mismatch'. LIVE REMAINDER: strengthened A + B per design-consult D6 - (A) widen the pinset projection to carry the v2 component-artifact digests and exact member dispositions and compare them against the artifact inside validate_floor_artifact; (B) accept per-root governed extraction-spec evidence at claim consumption, authenticate it against the v2 pin, replay floor_extraction, and compare replayed members/widths/corners/floors before populating bound_cell_ids. RESIDUAL (i) for a post-_v4 named decision: E1 is NOT discharged by the pinset route - E1 requires binding to the extraction report and source-member disposition, or rederivation, and a reviewed pin is a third anchor that is neither; consult verbatim: 'Claim consumption proves that the artifact matches reviewer-frozen assertions, but still cannot independently prove that those assertions match the governed extraction report and source bytes.' Closing on the pinset half alone would need an explicit E1 amendment. RESIDUAL (ii): B's --floor-extraction-spec hard-requirement for claim-bearing runs breaks four currently-passing claim fixtures (tests/test_analysis_integration.py:541, :1944, :3580, :3585) and must land with them re-fixtured with governed synthetic extraction specs and matching final-pinset pins in the same change. L1's workflow rule continues to mitigate until this closes. Record: docs/process_traces/2026-08-27-t26/floor-bind/ (00-README.md, p0-scopecheck.md, design-consult.md; D6 is the ready-to-execute implementation contract). Minted 2026-07-22 from confirmation round 9 (CR9-1, lead-reproduced).",
       "stop_card": null
     },
+    "FLOOR-V5-DRIFT-REPIN-01": {
+      "acceptance": {
+        "evidence": [
+          "Both _v5 floor generators pin the frozen source bytes and domain hashes for the decode, prefill, and p512 condition families",
+          "A counterfactual test independently drifts each of the six pins and proves the corresponding generator refuses",
+          "The restored refusals preserve the frozen desk-day pack bytes and do not alter the _v5 condition-family schemas"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FLOOR-V5-DRIFT-REPIN-01/acceptance",
+          "label": "FLOOR-V5-DRIFT-REPIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The two _v5 floor generators restore all six source-byte and domain-hash drift refusals after their condition-family bytes are frozen."
+      },
+      "authority": {
+        "label": "V5 floor-generator Opus counter-review CR-3, preserved from feat/2026-09-02-v5-floor-generator",
+        "path": "docs/process_traces/2026-09-03-kernel-batch/02-evidence-index.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the three _v5 packs are frozen before their source-byte and domain-hash pins can be restored",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-DESK-DAY-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Restore the six condition-family drift refusals (source-byte + domain-hash pins for decode/prefill families) in the `_v5` floor generators after the desk-day freeze; `_v3` carried them (d117_floor_qwen25_1p5b_v3/generate_configs.py ~:741-770), `_v5` assigns the domain hashes at runtime until the freeze",
+      "id": "FLOOR-V5-DRIFT-REPIN-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 69,
+      "status": "blocked",
+      "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
+      "stop_card": null
+    },
     "FLOOR-WORKLOAD-SIZING-01": {
       "acceptance": {
         "evidence": [

@@ -154,3 +154,27 @@ refusal is unguarded (M6).**" §2.3 separately names four refusals that are
 finding, not an absence of coverage. `SILENT-REFUSAL-TESTS-01` is therefore
 scoped to what §2.2/§2.3 support, and the "six" is left as an open reconciliation
 in that row's status note.
+
+---
+
+## Source E — `_v5` floor-generator counter-review CR-3, 2026-09-02
+
+Off-main path:
+`docs/process_traces/2026-09-02-v5-floor-generator/07-opus-counter-review-0f545c33.md`,
+branch `feat/2026-09-02-v5-floor-generator`.
+
+> v3's `load_and_verify_families()` carried **six drift refusals** —
+> source-byte pin + domain-hash pin for each of decode/prefill/p256, decode
+> read from `SOURCE_DECODE_FAMILY_REL` and byte-compared. v5 deletes all six:
+> families are generated in-file, and
+> `DECODE/PREFILL/P512_FAMILY_DOMAIN_SHA256` init `""` and are **assigned at
+> runtime**. Only the schema validator survives. Defensible at authoring time,
+> but unlike `CURRENT_FROZEN_RECEIPT_SHA256 = ""` (fail-closed, with a re-pin
+> path) this guard class is gone outright with **no registered step to restore
+> it after V5-DESK-DAY-01 freezes the packs**.
+
+The review verdict says to register CR-3 before the desk day. The magistrate
+selected option 1 for its row state: the freeze is a pending hard start
+dependency, so kernel invariant 3 requires `BLOCKED`.
+
+Owner row: `FLOOR-V5-DRIFT-REPIN-01`.

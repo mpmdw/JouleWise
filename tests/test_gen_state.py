@@ -45,6 +45,9 @@ EXPECTED_IDS = {
     "CHARTER-V3-PACKET-INPUTS-01",
     # 2026-09-02 paper-d fixture-shape cold gate (files 38-42).
     "DG071-PROVENANCE-TEST-01",
+    # 2026-09-03 V5 floor-generator counter-review CR-3 on branch
+    # feat/2026-09-02-v5-floor-generator.
+    "FLOOR-V5-DRIFT-REPIN-01",
     # 2026-08-27 T26 end-of-sprint kernel wave (WAVE-ROWS.md ledger: S5 sweep,
     # paper ruling item 16, D-156 Q1-B/Q4-B, S2 producers, S11 F4, D-160 R-3
     # in flight, D-158 A-5, D-160 R-4, D-158 R-3, S3 delta2 D4/D3, S9-04/09/10/11/12/13)
@@ -654,9 +657,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # DG071-PROVENANCE-TEST-01: 128 + 1 = 129. The 2026-09-03 post-merge
         # kernel batch registers thirteen rows and retires none (retirements in
         # that batch are recorded as `shelved`, which keeps the row live in the
-        # kernel and therefore in this set): 129 + 13 = 142.
+        # kernel and therefore in this set): 129 + 13 = 142; the V5
+        # floor-generator counter-review CR-3 row adds one: 142 + 1 = 143.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 142)
+        self.assertEqual(len(self.tasks), 143)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
