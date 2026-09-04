@@ -10,6 +10,10 @@ both. Each term is built from its physical inputs in §1.
 Status: executable contract for
 `joulewise.identity_pin_projection_receipt.v1`. The implementation in
 `joulewise/identity_pins.py` is authoritative when this text and code differ.
+For the launch-lineage sentences in §Analysis consumption,
+`joulewise/arm_readiness.py` (the launch-lineage authenticator) and
+`joulewise/analysis_engine/inputs.py` (the analysis input loader) are
+authoritative when this text and code differ.
 
 ## 1. Purpose and forcing problem
 
@@ -157,7 +161,7 @@ before their JSON is trusted.
   it is not the required integer, even though a human can read it.
 - **Custody** is the directory boundary in which authenticated receipt bytes
   are retained. Pack custody holds freeze receipts; window custody, outside
-  the pack, holds arm receipts.
+  the pack, holds the launchable receipts issued by Arm.
 - A **check** is a four-key receipt row containing an identifier, status,
   expected value, and observed value. A **shared-mint projection** is the
   derived three-pin value made by the same functions used by the floor mint:
@@ -461,7 +465,7 @@ probes runtime metadata or writes anything:
    resolves each declared member's `suite_manifest_ref` — a
    repository-relative path, of which only the part after the pack directory's
    name is kept — as a regular, non-symlink file whose resolved path stays
-   below the pack root, reads it, and requires its SHA-256 to equal the
+   within the campaign pack, reads it, and requires its SHA-256 to equal the
    member's declared `suite_manifest_sha256`. A reference that cannot be
    resolved that way, a file that cannot be read, or a digest that differs
    refuses with reason code `readiness_identity_environment_dirty` ("declared
@@ -565,9 +569,8 @@ comparison failed, all returned PASS checks precede the final REFUSE check and
 the current digest is available. The receipt status is `REFUSE` and carries the
 sorted refusal code. Errors raised before the frozen receipt can be
 authenticated escape to the readiness layer that maps projection evidence into
-the arm decision. That layer maps the same code into readiness refusal but may
-have no arm receipt to bind (`joulewise/identity_pins.py:2100-2234`;
-`joulewise/arm_readiness.py:5681-5729`).
+the arm decision. That layer maps the same code into readiness refusal, but Arm
+may have issued nothing to bind.
 
 Arm re-verification calls the same `_derive_projection_units` comparison, so
 the common-profile equality, declared manifest membership, exact census, and
@@ -582,7 +585,48 @@ derivation never edits its declaration or census.
 - **U11** is the identity-pin projection subsystem and its projection-evidence
   row inside the U8 freeze receipt.
 - **Launch lineage** is the authenticated receipt chain from a collected bundle
-  back to the consumed arm authorization and its exact pack digest.
+  back to the consumed arm authorization and its exact **pack digest**.
+- An **arm receipt** is the record written when the arm ceremony authorizes one
+  launch; that permission is the **single launch authorization**. Its
+  `pack` (pack record) carries the **pack root**, meaning the
+  absolute path of the campaign-pack directory on the machine that armed it.
+  `_pack_record` (the pack-record builder) copies that path, and
+  `generate_arm_receipt` (the arm-receipt generator) stores the record when the
+  arm is issued.
+- The **launch manifest** is the JSON declaration of the reviewed command and
+  its inputs.
+- The **consumption receipt**, also called the **one-use consumption record**,
+  is the one-use record the launcher writes in
+  `arm_readiness.consumptions/` (the consumption-receipt custody directory),
+  the sibling custody directory (a separate custody directory with the same
+  parent) of the arm receipt's
+  `arm_readiness.receipts/` (the arm-receipt custody directory), when it spends
+  that arm's single launch authorization. It names the launch manifest by
+  absolute path and SHA-256, stores `exec_argv` (the exact launch command), and
+  carries no pack root of its own.
+- The **window plan root** is the absolute directory that the launch manifest
+  names in `window_plan_root` (the manifest's plan-root field).
+  `window.env` (the window-environment file) and
+  `window-chain.zsh` (the window-chain file) must resolve directly under it.
+- The **lifecycle receipts** are the `launch_start` (start),
+  `launch_settle` (settle), and, when present, `launch_completion` (completion)
+  records written as the launched window runs. Each names the consumption
+  receipt and its **predecessor receipt**, meaning the immediately prior receipt
+  in the chain.
+- **Consuming** an arm means spending its single launch authorization by
+  writing the consumption receipt; a second write of that same receipt is
+  refused.
+- The **lineage locator** is the authenticated launch-lineage record stored in
+  a runs root beside the bundles it governs. The **recorded paths** are the
+  absolute artifact paths named across the lineage locator, arm receipt,
+  consumption receipt, launch manifest, and lifecycle receipts.
+- The **launch-lineage refusal codes used below** are
+  `launch_consumption_missing` (missing locator or consumption receipt),
+  `launch_consumption_invalid` (invalid consumption-bound artifact),
+  `launch_binding_mismatch` (unavailable or mismatching bound path),
+  `launch_lifecycle_incomplete` (missing required lifecycle receipt), and
+  `consumer_identity_set_unauthenticated` (the analysis gate could not
+  authenticate the consumer identity set).
 - The **exact-cell route** directly selects a bound floor cell only when the
   consumer has one scientific identity and the cell carries that same identity
   and runtime stack.
@@ -606,19 +650,37 @@ requested condition-family ID. It authenticates that unit's inventoried config
 bytes, re-derives their distinct member identity set, and checks the resulting
 unit config-set digest against the receipt.
 
-That root is the machine-absolute pack path recorded when the arm was consumed.
-Bundle loading authenticates the launch lineage before any evidence row exists:
-it replays the consumed arm and resolves the recorded pack root strictly, as it
-resolves the consumption receipt, the launch manifest, the window root and the
-lifecycle receipts, so a bundle whose arming-time paths no longer exist is
-refused at input loading (`launch_binding_mismatch`, or
-`launch_consumption_missing` when the consumption receipt itself is gone) and
-never reaches this gate. Analysis of successor-lineage bundles therefore runs
-on the filesystem that armed them; making the lineage relocatable is a separate
-design lane, not a property of this gate. Called directly with a lineage whose
-pack root does not resolve, the gate refuses with
-`consumer_identity_set_unauthenticated`, the same label as any pack it cannot
-authenticate.
+Only a bundle whose configuration carries `launch_lineage_required` (the
+launch-lineage-required tag) is lineage-checked. An untagged bundle is admitted
+without a lineage read. Before a lineage-checked bundle is admitted as analysis
+input, bundle loading authenticates its launch lineage through the recorded
+paths and refuses at input loading (the bundle-to-analysis admission step), so
+the bundle never reaches this gate if a named artifact below is gone. The
+following hop list (the named artifact sequence) is not exhaustive of every
+launch-lineage check. In execution order (the order bundle loading checks
+them), the named artifacts and the code each
+emits when gone are: the lineage locator beside the bundle
+(`launch_consumption_missing`); the consumption receipt
+(`launch_consumption_missing`); the arm receipt it names
+(`launch_consumption_invalid`); the pack root recorded in that arm receipt,
+which must exist and re-authenticate (`launch_binding_mismatch`); the launch
+manifest at the path the consumption receipt recorded
+(`launch_consumption_invalid`); the window plan root that manifest names
+(`launch_binding_mismatch`); `window.env` and `window-chain.zsh`
+(`launch_consumption_invalid`); and the start and settle lifecycle receipts
+(`launch_lifecycle_incomplete`). When a named artifact and every later artifact
+in this list are gone, the earliest gone artifact emits its listed code. A
+receipt whose `.sha256` (sidecar suffix) sidecar is gone emits the same code as
+the missing receipt itself.
+
+Bundle loading uses `require_completion=False` (the **completion policy**):
+start and settle are required, while completion need not be present.
+Analysis of lineage-checked bundles runs on the filesystem that armed and
+launched them; relocating the lineage is a separate design decision, not a
+property of this gate ([S3 ruling (d)](../process_traces/2026-09-02-decode-identity-set/32-magistrate-synthesis-s1-s3.md#s3--machine-absolute-pack-root-split-ruled-d-for-this-lane)).
+Called directly with a lineage whose pack root does not resolve, the gate
+refuses with `consumer_identity_set_unauthenticated`, the same label as any pack
+it cannot authenticate.
 
 The evidence member identities must be nonempty and a subset of that frozen
 set. Any outside identity or unreadable binding returns no floor request. A
@@ -667,10 +729,9 @@ them.
 
 ### What happens after arm
 
-The ordinary launch step authenticates and replays the arm receipt, pack
-digest, **launch manifest** (the JSON declaration of the reviewed command and
-its inputs), and **one-use consumption record** (the durable proof that this
-launch authorization has been spent exactly once). It does not call
+The **ordinary launch step** authenticates and replays the arm receipt, pack
+digest, launch manifest, and one-use consumption record, as defined in
+§Analysis-gate definitions. It does not call
 `verify_frozen_projection`, `_derive_projection_units`, runtime `prepare`, or
 the tokenizer (`scripts/launch_window.py:102-167,239-280`). Therefore a model,
 runtime, or tokenizer change after arm and before `execve`—the point where the
