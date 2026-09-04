@@ -364,6 +364,140 @@ def rebind_frozen_chain(
 
 
 class SharedDerivationTests(unittest.TestCase):
+    def test_identity_unit_set_digest_uses_sorted_distinct_hashes(self) -> None:
+        first = "a" * 64
+        second = "b" * 64
+        expected = "ca2dd22172c13b472f1b191a1de7900d351c2debab9fdb4844b39e691255b5bf"
+
+        self.assertEqual(
+            identity_pins.identity_unit_config_set_sha256(
+                [second, first, second]
+            ),
+            expected,
+        )
+        self.assertEqual(
+            identity_pins.identity_unit_config_set_sha256([first]),
+            first,
+        )
+
+    def test_common_profile_projection_removes_only_member_manifest_binding(self) -> None:
+        workload = {
+            "name": "rotating-decode",
+            "output_tokens": 512,
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "suite_manifest_ref": "manifests/one.json",
+            "suite_manifest_sha256": "a" * 64,
+        }
+
+        projected = identity_pins.project_identity_unit_common_profile(workload)
+
+        self.assertEqual(
+            projected,
+            {
+                "name": "rotating-decode",
+                "output_tokens": 512,
+                "repetitions": 1,
+                "warmup_runs": 1,
+            },
+        )
+        self.assertIn("suite_manifest_ref", workload)
+        self.assertIn("suite_manifest_sha256", workload)
+
+    def test_declared_manifest_identity_cardinality_refuses_synthetic_mismatch(self) -> None:
+        """Synthetic-set pin of a guard the production freeze path cannot reach.
+
+        ``_distinct_manifest_identity_refusal_reason`` (identity_pins.py, called
+        from the freeze census) is DOMINATED by the checks that precede its call:
+        every declared manifest must carry at least one member
+        (``manifest_counts != declared_counts`` raises first) and exactly one
+        scientific hash (``divergent_manifests`` raises next), and
+        ``scientific_config_identity`` retains
+        ``workload_profile.suite_manifest_sha256``, so two distinct manifests
+        always yield two distinct scientific hashes — executed proof in
+        ``test_distinct_manifest_bindings_produce_distinct_scientific_identities``
+        below. When the guard is reached, ``len(scientific_hashes)`` therefore
+        equals ``len(declared_by_manifest)`` and it cannot fire. This synthetic
+        call is the only site that exercises it (decode-identity cold gate,
+        docs/process_traces/2026-09-02-decode-identity-set/22 §Q3). Weakening a
+        preceding check to make it reachable is a protocol failure.
+        """
+
+        self.assertIsNone(
+            identity_pins._distinct_manifest_identity_refusal_reason(
+                2, {"a" * 64, "b" * 64}
+            )
+        )
+        self.assertEqual(
+            identity_pins._distinct_manifest_identity_refusal_reason(
+                2, {"a" * 64}
+            ),
+            "readiness_identity_environment_dirty",
+        )
+
+    def test_distinct_manifest_bindings_produce_distinct_scientific_identities(
+        self,
+    ) -> None:
+        first_raw = synthetic_config(Path("/synthetic/model"), "manifest-member")
+        first_raw["workload_profile"].pop("prompt_tokens")
+        first_raw["workload_profile"].update(
+            suite_manifest_ref="manifests/first.json",
+            suite_manifest_sha256="a" * 64,
+        )
+        second_raw = copy.deepcopy(first_raw)
+        second_raw["workload_profile"].update(
+            suite_manifest_ref="manifests/second.json",
+            suite_manifest_sha256="b" * 64,
+        )
+        first = BenchmarkConfig.from_mapping(first_raw).to_dict()
+        second = BenchmarkConfig.from_mapping(second_raw).to_dict()
+
+        first_identity = identity_pins.scientific_config_identity(first)
+        second_identity = identity_pins.scientific_config_identity(second)
+
+        self.assertIsNotNone(first_identity)
+        self.assertIsNotNone(second_identity)
+        self.assertEqual(
+            first_identity["workload_profile"]["suite_manifest_sha256"],
+            "a" * 64,
+        )
+        self.assertEqual(
+            second_identity["workload_profile"]["suite_manifest_sha256"],
+            "b" * 64,
+        )
+        self.assertEqual(
+            first_identity["workload_profile"]["suite_manifest_ref"],
+            "manifests/first.json",
+        )
+        self.assertEqual(
+            second_identity["workload_profile"]["suite_manifest_ref"],
+            "manifests/second.json",
+        )
+        self.assertNotEqual(
+            scientific_config_identity_sha256(first),
+            scientific_config_identity_sha256(second),
+        )
+
+    def test_single_identity_set_digest_matches_committed_v3_receipt(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        pack = root / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
+        receipt = read_json(
+            pack
+            / "identity_pin_projection.receipts"
+            / "projection-0001.json"
+        )
+        unit = receipt["identity_units"][0]
+        scientific_hashes = {
+            scientific_config_identity_sha256(read_json(pack / row["path"]))
+            for row in unit["config_inventory"]
+        }
+
+        self.assertEqual(len(scientific_hashes), 1)
+        self.assertEqual(
+            identity_pins.identity_unit_config_set_sha256(scientific_hashes),
+            unit["model_runtime_config"]["config_set_sha256"],
+        )
+
     def test_fixture_commits_start_no_detached_maintenance_process(self) -> None:
         """A fixture commit must leave nothing running behind it.
 
@@ -623,6 +757,62 @@ class ProjectionLifecycleTests(unittest.TestCase):
         receipt = read_json(receipt_path)
         self.assertEqual(receipt["receipt_kind"], "arm_reverification")
         self.assertEqual(receipt["status"], "PASS")
+
+    def test_verify_refuses_current_runtime_triple_mismatch(self) -> None:
+        """M11 dies when only the re-derived current runtime triple drifts."""
+
+        freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
+        original = identity_pins._derive_projection_units
+
+        def drift_current_triple(pack_root, projection):
+            units, projection_input_sha, checks = original(pack_root, projection)
+            units = copy.deepcopy(units)
+            units[0]["model_runtime_config"]["runtime_identity_sha256"] = "f" * 64
+            return units, projection_input_sha, checks
+
+        with mock.patch(
+            "joulewise.identity_pins._derive_projection_units",
+            side_effect=drift_current_triple,
+        ):
+            result = verify_frozen_projection(
+                self.pack,
+                self.root / "custody",
+                "bracket-runtime-triple-drift",
+            )
+
+        self.assertEqual(result["status"], "REFUSE")
+        self.assertEqual(
+            result["reason_codes"], ["readiness_identity_environment_dirty"]
+        )
+
+    def test_verify_refuses_changed_runtime_version_metadata(self) -> None:
+        """A current runtime-version observation may drift without declaration edits."""
+
+        freeze_projection(self.pack)
+        commit_pack(self.root, self.pack, "freeze A")
+
+        def drifted_probe(*args, **kwargs):
+            metadata = probe_metadata(*args, **kwargs)
+            metadata["adapters"]["runtime"]["prepare_metadata"]["version"] = (
+                "synthetic-runtime-v2"
+            )
+            return metadata
+
+        with mock.patch(
+            "joulewise.identity_pins._runtime_probe_metadata",
+            side_effect=drifted_probe,
+        ):
+            result = verify_frozen_projection(
+                self.pack,
+                self.root / "custody",
+                "bracket-runtime-metadata-drift",
+            )
+
+        self.assertEqual(result["status"], "REFUSE")
+        self.assertEqual(
+            result["reason_codes"], ["readiness_identity_environment_dirty"]
+        )
 
     def test_verify_refuses_when_pack_git_state_is_unresolvable(self) -> None:
         isolated_root = self.root / "isolated"
