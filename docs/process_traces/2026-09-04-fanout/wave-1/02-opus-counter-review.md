@@ -379,9 +379,23 @@ a claim above depends on them; the full suite was not run.
 | `tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_logical_producer_delay_preserves_exact_evidence_bytes` | 1 OK |
 | Whole-module confirmation run (pytest, `R7F_CORPUS_ROOT` pointed at a nonexistent path so the ~8-minute corpus replay skips rather than silently passing): `test_paper_round7_artifacts`, `test_receipt_histsem`, `test_coldgate_receipt`, `test_coldgate_charter_v3`, `test_midcampaign_cure_generation_docs`, `test_quiet_guard_process`, `test_prewindow_check` | 144 passed, 3 skipped, 223 subtests passed, 40 m 55 s, exit 0 |
 
-The last row supersedes the class-scoped rows above for the seven modules it
-covers: it runs each module whole, so a sibling test displaced or broken by a
-landing could not hide behind a narrow class selection.
+| Second whole-module run, **no corpus override** so the R7F replay executed rather than skipping: the seven modules above plus `test_calibration_exits` and `test_issue_dg071_dg075_statistics`, all whole | 221 passed, 2 skipped, 431 subtests passed, 1 h 00 m 28 s, exit 0 |
+
+**Coverage statement.** Between the last two rows and the `tests.test_quiet_guard`
+row, **every test module this wave touches has now been run whole and green** —
+all ten of `test_calibration_exits`, `test_coldgate_charter_v3`,
+`test_coldgate_receipt`, `test_issue_dg071_dg075_statistics`,
+`test_midcampaign_cure_generation_docs`, `test_paper_round7_artifacts`,
+`test_prewindow_check`, `test_quiet_guard`, `test_quiet_guard_process`,
+`test_receipt_histsem`. These supersede the class-scoped rows above: a sibling
+test displaced or broken by a landing cannot hide behind a narrow class
+selection. The two whole-module runs differ deliberately in one variable —
+the first points `R7F_CORPUS_ROOT` at a nonexistent path so the ~8-minute
+corpus replay skips, the second leaves it at the real corpus so the replay
+runs (hence 2 skips rather than 3). That module's own docstring warns a skip is
+not a pass, so it is the second run that discharges the replay. The full
+repository suite was still not run; nothing outside these ten modules is
+claimed.
 
 Direct probes (not tests) run against the landed code and the real artifacts:
 the two digest recomputations in CB-1 and CB-4; the corpus enumeration in CB-3;
