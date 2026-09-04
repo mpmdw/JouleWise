@@ -60,14 +60,15 @@ the magistrate harvests the custody root AND the stand-down log line,
 records both under `NIGHT-REHEARSAL-01`, then runs
 `scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260903/night_plan.json --hour 2 --minute 56 --uninstall`
 at the SAME commit the plan was RE-armed on (the re-arm commit that
-rewrote this file; the installer checks `repo_head` before the uninstall
-branch — after PR #268 the uninstall path no longer needs `claude` on
-PATH), so the dead-man job stops firing at 07:00. The canonical checkout
-must not be pulled or moved between the re-arm and the night's
-completion — the gate compares the plan's `repo_head` to the CANONICAL
-checkout HEAD, and the original arming of this plan was invalidated by
-exactly such a daytime pull (stage-2 finding: morning-before arming plus
-an active canonical checkout guarantees `night_plan_stale`). Then the last stage-1 item: the stage-1 plan email to Ed (first
+rewrote this file; on install the installer checks `repo_head` against the
+driver checkout HEAD and `measurement_head` against the HEAD of the plan's
+`measurement_root`, while `--uninstall` checks neither pin and no longer
+needs `claude` on PATH), so the dead-man job stops firing at 07:00. The
+measurement checkout of record (`/Users/edr/JouleWise-measurement-20260813`)
+must not move between the re-arm and the night's completion: the v2 gate
+compares the plan's `measurement_head` to that checkout's HEAD. Ordinary
+daytime work in the dev checkout no longer invalidates an armed night; only
+moving the pinned measurement checkout does. Then the last stage-1 item: the stage-1 plan email to Ed (first
 armed date; launches unless he replies NO) before any `DIAGNOSTIC_NO_PACK`
 plan is armed. Ed was emailed the arming notice for THIS night before it
 was armed (cold gate coldgate-e10 (b)); if Ed replied NO on that thread,

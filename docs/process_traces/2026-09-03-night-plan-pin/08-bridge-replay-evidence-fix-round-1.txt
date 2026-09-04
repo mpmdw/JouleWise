@@ -1,0 +1,92 @@
+Bridge (Claude Code Sol bridge) lead replay, FIX ROUND 1, 2026-09-03 PDT, worktree /Users/edr/code/JouleWise-wt-planpin @ 12ec41d2 + seat edits (uncommitted).
+Seat: codex-run-v3 run_key 20260904T031739Z-61371-sol-fix-round-1, gpt-5.6-sol high, service_tier default, workspace-write,
+      prompt sha256 4f1074500e9ac8aea283dd7a59d7699c41919465b89b278d2acd3540ee91c1ef (19269 bytes; copy at 07-fix-round-1-brief.md),
+      wrapper rc=0 run_status=OK report_parse=valid semantic_status=clean completion=complete, header 3274 bytes,
+      verification 5 pass / 0 fail, scope_violation_paths=[], duration 562 s.
+      pathspec_report_mismatch=true is bytecode only (joulewise/__pycache__/*.pyc from the installer's own python3 -c import; recorded separately, never a violation; deleted by the lead).
+Bridge session planpin-20260903-sol-fix-01 (lease-5c43a4baf4764b68952cb633b2a0ff8f) closed DONE / SCOPE_OK (7 in-scope paths; scripts/run_night.py unchanged), lease released.
+
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_run_night tests.test_night_gate tests.test_install_night_agent
+Ran 109 tests in 10.436s
+OK
+per module: tests.test_run_night Ran 55 OK; tests.test_night_gate Ran 47 OK; tests.test_install_night_agent Ran 7 OK
+$ zsh -n scripts/install_night_agent.sh  -> exit 0, no output
+
+Mutation replay (lead-executed, copy-backup/restore, full-file sha256 verified before/after; verbatim capture below):
+
+=== Mutation 1: stale compare reverted to repo_head [joulewise/night_gate.py] -> tests.test_night_gate
+  rc=1
+  ERROR: test_wrong_measurement_head_is_stale_and_the_36_hour_boundary_is_current (tests.test_night_gate.NightGateTests.test_wrong_measurement_head_is_stale_and_the_36_hour_boundary_is_current)
+  FAIL: test_driver_checkout_head_movement_is_informational_and_census_still_runs (tests.test_night_gate.NightGateTests.test_driver_checkout_head_movement_is_informational_and_census_still_runs)
+  AssertionError: 'night_plan_stale' == 'night_plan_stale'
+  Ran 47 tests in 0.481s
+  FAILED (failures=1, errors=1)
+  restore sha 45837c2b6cf0ac6e -> 45837c2b6cf0ac6e OK
+
+=== Mutation 2: installer guard unconditional [scripts/install_night_agent.sh] -> tests.test_install_night_agent
+  rc=1
+  FAIL: test_uninstall_ignores_both_pin_mismatches_and_invokes_launchctl (tests.test_install_night_agent.InstallNightAgentTests.test_uninstall_ignores_both_pin_mismatches_and_invokes_launchctl)
+  AssertionError: 0 != 3 : plan repo_head does not match driver checkout HEAD
+  FAIL: test_v1_install_is_retired_without_traceback_but_uninstall_still_works (tests.test_install_night_agent.InstallNightAgentTests.test_v1_install_is_retired_without_traceback_but_uninstall_still_wor
+  AssertionError: 0 != 3 : plan schema joulewise.night_plan.v1 is retired; re-author under joulewise.night_plan.v2 (missing measurement_root/measurement_head)
+  Ran 7 tests in 2.490s
+  FAILED (failures=2)
+  restore sha b04d8ca6e5da37e5 -> b04d8ca6e5da37e5 OK
+
+=== Mutation 3: probe block moved above the age checks [joulewise/night_gate.py] -> tests.test_night_gate
+  rc=1
+  FAIL: test_plan_age_refusals_precede_head_probes (tests.test_night_gate.NightGateTests.test_plan_age_refusals_precede_head_probes) (expected_reason='night_plan_stale')
+  AssertionError: 'night_plan_stale' != 'night_probe_error'
+  FAIL: test_plan_age_refusals_precede_head_probes (tests.test_night_gate.NightGateTests.test_plan_age_refusals_precede_head_probes) (expected_reason='night_plan_malformed')
+  AssertionError: 'night_plan_malformed' != 'night_probe_error'
+  Ran 47 tests in 0.484s
+  FAILED (failures=2)
+  restore sha 45837c2b6cf0ac6e -> 45837c2b6cf0ac6e OK
+
+=== Mutation 4: measurement probe reads REPO_ROOT [scripts/run_night.py] -> tests.test_run_night
+  rc=1
+  FAIL: test_matching_real_measurement_checkout_uses_requested_root_and_strips_head (tests.test_run_night.NightDriverTests.test_matching_real_measurement_checkout_uses_requested_root_and_strips_head)
+  AssertionError: 'b2c8ec0d787bfbcef1928e4430d66d2f846db897' != '12ec41d274bd3e7dfdb10800000604bd6ddff8f3'
+  Ran 55 tests in 6.543s
+  FAILED (failures=1)
+  restore sha a4ca020287587b0e -> a4ca020287587b0e OK
+
+=== Mutation 5: measurement probe .strip() removed [scripts/run_night.py] -> tests.test_run_night
+  rc=1
+  FAIL: test_matching_real_measurement_checkout_uses_requested_root_and_strips_head (tests.test_run_night.NightDriverTests.test_matching_real_measurement_checkout_uses_requested_root_and_strips_head)
+  AssertionError: 'a750e6073289a6699c10f2d9971634bca6686d83' != 'a750e6073289a6699c10f2d9971634bca6686d83\n'
+  Ran 55 tests in 6.423s
+  FAILED (failures=1)
+  restore sha a4ca020287587b0e -> a4ca020287587b0e OK
+
+=== Mutation 6: isabs guard removed [scripts/install_night_agent.sh] -> tests.test_install_night_agent
+  rc=1
+  FAIL: test_install_refuses_relative_measurement_root (tests.test_install_night_agent.InstallNightAgentTests.test_install_refuses_relative_measurement_root)
+  AssertionError: 'measurement_root' not found in 'plan measurement_head does not match measurement checkout HEAD\n'
+  Ran 7 tests in 3.188s
+  FAILED (failures=1)
+  restore sha b04d8ca6e5da37e5 -> b04d8ca6e5da37e5 OK
+
+=== Mutation 7: measurement_head hex guard removed [scripts/install_night_agent.sh] -> tests.test_install_night_agent
+  rc=1
+  FAIL: test_install_refuses_measurement_head_that_is_not_40_lowercase_hex (tests.test_install_night_agent.InstallNightAgentTests.test_install_refuses_measurement_head_that_is_not_40_lowercase_hex) (inv
+  AssertionError: '40 lowercase hex' not found in 'plan measurement_head does not match measurement checkout HEAD\n'
+  FAIL: test_install_refuses_measurement_head_that_is_not_40_lowercase_hex (tests.test_install_night_agent.InstallNightAgentTests.test_install_refuses_measurement_head_that_is_not_40_lowercase_hex) (inv
+  AssertionError: '40 lowercase hex' not found in 'plan measurement_head does not match measurement checkout HEAD\n'
+  Ran 7 tests in 3.271s
+  FAILED (failures=2)
+  restore sha b04d8ca6e5da37e5 -> b04d8ca6e5da37e5 OK
+
+=== Mutation 8: L2 schema/missing-key guard disabled [scripts/install_night_agent.sh] -> tests.test_install_night_agent
+  rc=1
+  FAIL: test_v1_install_is_retired_without_traceback_but_uninstall_still_works (tests.test_install_night_agent.InstallNightAgentTests.test_v1_install_is_retired_without_traceback_but_uninstall_still_wor
+  AssertionError: 3 != 1
+  Ran 7 tests in 2.701s
+  FAILED (failures=1)
+  restore sha b04d8ca6e5da37e5 -> b04d8ca6e5da37e5 OK
+
+Lead notes for adjudication:
+- B1 order now: window guard -> C5.authored_epoch_s recorded -> future check (night_plan_malformed) -> 36 h check (night_plan_stale) -> probes (night_probe_error) -> stale compare -> census. On an age refusal the C5 row carries authored_epoch_s only (no head fields) — seat's judgment call, within the brief's licence.
+- S1/S2 cured by one test (tests/test_run_night.py:1174); its direct probe assertion bites both mutations 4 and 5 before evaluate_night runs, and the GO verdict + C5 measurement_checkout_head assertion bite the gate path.
+- L1: isabs + 40-lowercase-hex guards precede the git probes; repo_head also gets the hex check (install path only). L2: one python read of the plan; non-v2 schema or missing keys -> exit 3 with the retirement text; uninstall path reads only custody_root (v1 uninstall test passes).
+- N1: exactly two hunks in docs/process/NIGHT_HANDBACK.md (@@ -17,9 and @@ -60,14). Hunk 1 rephrases the historical sentence ("the magistrate's own daytime pulls had moved the canonical checkout HEAD" -> "the old gate bound ordinary daytime pulls in the driver checkout to the plan's pinned repo_head"); it drops the concrete fact that the pulls DID move HEAD. Magistrate may prefer to keep the original hunk-1 wording and take only hunk 2 — a wording call, not a defect.
