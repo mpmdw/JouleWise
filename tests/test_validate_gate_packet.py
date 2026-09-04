@@ -298,6 +298,16 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertEqual(len(transported), 1)
         self.assertEqual(transported[0][-1:], b"\n")
         request = json.loads(transported[0].decode("utf-8"))
+        expected_request_bytes = (
+            json.dumps(
+                request,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+        self.assertEqual(transported[0], expected_request_bytes)
         receipt = result.runner_receipt
         self.assertEqual(request["schema"], "coldgate-judge-request/v1")
         self.assertEqual(request["validator_receipt"], result.validator_receipt)
