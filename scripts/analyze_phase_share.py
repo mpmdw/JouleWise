@@ -2,9 +2,11 @@
 """Replay one bundle's prefill/decode allocation over its shared boundary.
 
 This is a desk-analysis producer, not a claim-path reducer.  It reads the
-current-wire boundary bound from both stored phase envelopes, requires the two
-copies to agree, and re-integrates the retained interval-support power curve.
-The JSON result seals the three source files used for the calculation.
+current-wire composite anchor bound from both stored phase envelopes, requires
+the two copies to agree, and re-integrates the retained interval-support power
+curve as a sensitivity sweep.  The comparison box comes from the stored v3
+phase-envelope endpoints, not from the new sweep's marginals.  The JSON result
+seals the four source files used for the calculation.
 """
 
 from __future__ import annotations
@@ -23,12 +25,20 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.bundle_read import BundleReadError, BundleReader
-from joulewise.phase_share import PhaseBoundaryError, phase_boundary_envelope
+from joulewise.phase_share import (
+    Interval,
+    PhaseBoundaryError,
+    phase_boundary_envelope,
+)
 from joulewise.reduce import ANCHOR_SHIFT_METHOD
 
 
 SCHEMA_VERSION = "joulewise.phase_share_diagnostic.v1"
 REFUSAL_EXIT_CODE = 2
+BOUND_INTERPRETATION = (
+    "current_wire_composite_anchor_bound_s_used_as_sensitivity_range"
+)
+BOX_BASIS = "stored_current_wire_phase_envelope_lower_upper_j"
 
 
 class PhaseShareAnalysisRefused(RuntimeError):
@@ -60,6 +70,21 @@ def _phase_envelope(summary: dict[str, Any], phase: str) -> dict[str, Any]:
         or float(bound) < 0.0
     ):
         raise PhaseShareAnalysisRefused(f"{phase} phase boundary bound is invalid")
+    energy_values = {
+        key: candidate.get(key) for key in ("lower_j", "point_j", "upper_j")
+    }
+    if any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+        for value in energy_values.values()
+    ) or not (
+        float(energy_values["lower_j"])
+        <= float(energy_values["point_j"])
+        <= float(energy_values["upper_j"])
+    ):
+        raise PhaseShareAnalysisRefused(f"{phase} phase energy envelope is invalid")
     return candidate
 
 
@@ -101,6 +126,14 @@ def analyze_bundle(bundle: Path) -> dict[str, Any]:
         prefill_windows[0],
         decode_windows[0],
         prefill_bound,
+        independent_prefill_energy_j=Interval(
+            lower=float(prefill_envelope["lower_j"]),
+            upper=float(prefill_envelope["upper_j"]),
+        ),
+        independent_decode_energy_j=Interval(
+            lower=float(decode_envelope["lower_j"]),
+            upper=float(decode_envelope["upper_j"]),
+        ),
     )
     source_names = (
         "power_trace.csv",
@@ -135,6 +168,13 @@ def analyze_bundle(bundle: Path) -> dict[str, Any]:
         "source_sha256": source_sha256,
         "source_phase_envelope_method": ANCHOR_SHIFT_METHOD,
         "source_boundary_bound_s": prefill_bound,
+        "joint_sweep_bound_interpretation": BOUND_INTERPRETATION,
+        "independent_box_basis": BOX_BASIS,
+        "limitation": (
+            "the stored composite bound includes common trace shift and "
+            "independent edge terms, so this diagnostic does not identify a "
+            "standalone shared-interior-boundary nuisance distribution"
+        ),
         "nominal_phase_marker_gap_s": (
             decode_windows[0].start_s - prefill_windows[0].end_s
         ),

@@ -92,22 +92,40 @@ def phase_boundary_envelope(
     prefill_window: Window,
     decode_window: Window,
     boundary_bound_s: float,
+    independent_prefill_energy_j: Interval,
+    independent_decode_energy_j: Interval,
 ) -> PhaseBoundaryEnvelope:
     """Re-integrate two adjacent phases over one shared boundary displacement.
 
     The nominal marker gap, if any, is preserved: a displacement ``d`` uses
     ``prefill.end + d`` and ``decode.start + d``.  The outer phase edges do not
-    move.  This isolates the shared interior-boundary question from the
-    reducer's other anchor-error links.
+    move.  ``boundary_bound_s`` is a caller-selected sensitivity range; this
+    helper does not assert that it isolates one physical error component.
 
-    The independent-box comparator first sweeps the same measured curve but
-    then permits the prefill and decode extrema to be combined independently.
-    It is a comparator, not a second physical model.
+    The two ``independent_*`` intervals must be the reducer's independently
+    emitted phase envelopes.  They are intentionally not inferred from the
+    shared-boundary sweep: the mission comparison is between the new joint
+    projection and the reducer's existing marginal box.
     """
 
     if not _finite(boundary_bound_s) or float(boundary_bound_s) < 0.0:
         raise PhaseBoundaryError("boundary_bound_s must be finite and nonnegative")
     bound = float(boundary_bound_s)
+    for name, interval in (
+        ("prefill", independent_prefill_energy_j),
+        ("decode", independent_decode_energy_j),
+    ):
+        if (
+            not isinstance(interval, Interval)
+            or not _finite(interval.lower)
+            or not _finite(interval.upper)
+            or interval.lower < 0.0
+            or interval.lower > interval.upper
+        ):
+            raise PhaseBoundaryError(
+                f"independent {name} energy interval must be finite, "
+                "nonnegative, and ordered"
+            )
     window_values = (
         prefill_window.start_s,
         prefill_window.end_s,
@@ -226,9 +244,39 @@ def phase_boundary_envelope(
         [candidate.normalized_decode_minus_prefill for candidate in points]
     )
 
+    box_total = Interval(
+        lower=math.fsum(
+            (
+                independent_prefill_energy_j.lower,
+                independent_decode_energy_j.lower,
+            )
+        ),
+        upper=math.fsum(
+            (
+                independent_prefill_energy_j.upper,
+                independent_decode_energy_j.upper,
+            )
+        ),
+    )
+    box_lower_denominator = math.fsum(
+        (
+            independent_prefill_energy_j.lower,
+            independent_decode_energy_j.upper,
+        )
+    )
+    box_upper_denominator = math.fsum(
+        (
+            independent_prefill_energy_j.upper,
+            independent_decode_energy_j.lower,
+        )
+    )
+    if box_lower_denominator <= 0.0 or box_upper_denominator <= 0.0:
+        raise PhaseBoundaryError(
+            "independent marginal box has undefined phase-share corners"
+        )
     box_share = Interval(
-        lower=prefill.lower / math.fsum((prefill.lower, decode.upper)),
-        upper=prefill.upper / math.fsum((prefill.upper, decode.lower)),
+        lower=independent_prefill_energy_j.lower / box_lower_denominator,
+        upper=independent_prefill_energy_j.upper / box_upper_denominator,
     )
     return PhaseBoundaryEnvelope(
         method=PHASE_BOUNDARY_METHOD,
@@ -237,10 +285,7 @@ def phase_boundary_envelope(
         prefill_energy_j=prefill,
         decode_energy_j=decode,
         joint_total_phase_energy_j=joint_total,
-        independent_box_total_phase_energy_j=Interval(
-            lower=math.fsum((prefill.lower, decode.lower)),
-            upper=math.fsum((prefill.upper, decode.upper)),
-        ),
+        independent_box_total_phase_energy_j=box_total,
         joint_prefill_share=joint_share,
         independent_box_prefill_share=box_share,
         joint_normalized_decode_minus_prefill=joint_asymmetry,
