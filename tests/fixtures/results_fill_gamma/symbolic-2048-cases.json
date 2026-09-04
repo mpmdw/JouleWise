@@ -1,0 +1,38 @@
+{
+  "schema_version": "joulewise.results_fill_gamma_fixture.v1",
+  "fixture_only": true,
+  "measurement_values": false,
+  "claim_bearing": false,
+  "prefill_length": 2048,
+  "synthetic_cases": {
+    "supported": {"estimate_j": 2.0, "claim_side_bound_j": 0.25, "arm_floor_j": [1.0, 0.8], "overlap_count": 5},
+    "floor_failure": {"arm_floor_j": [2.5, 2.4]},
+    "direction_failure": {"claim_side_bound_j": 2.25},
+    "reducer_refusal": {"overlap_count": 2},
+    "pre_registration_refusal": {"overlap_count": 4},
+    "absent_verdict": {"phases": ["token-generation", "prompt-processing"]}
+  },
+  "expected": {
+    "floor_pass": "passes — |estimate| > armwise cell floor",
+    "floor_fail": "does not pass — |estimate| ≤ armwise cell floor",
+    "direction_pass": "passes — the fully composed interval lies wholly above zero",
+    "direction_fail": "does not pass — the fully composed interval does not lie wholly above zero",
+    "decode_supported": "supported — Qwen3-8B used more token-generation energy per request than Qwen3-1.7B under the registered comparison",
+    "prefill_supported": "supported — Qwen3-8B used more prompt-processing energy per request than Qwen3-1.7B under the registered comparison",
+    "decode_absent": "not evaluated — required token-generation verdict absent",
+    "prefill_absent": "not evaluated — required prompt-processing verdict absent",
+    "count_four": "not supported — below the pre-registered count floor of 5 (reducer result remained resolvable at observed overlap count 4)",
+    "count_two": "not supported — not resolvable (issued reasons: not_resolvable_sample_count)"
+  },
+  "pinned_source_mutations": [
+    {"label": "claim digest/content", "raw_key": "claim_verdicts_bytes", "byte_index": 1},
+    {"label": "G2-a digest/census/outcome", "raw_key": "g2a_selection_bytes", "byte_index": 1},
+    {"label": "prompt-pin digest/census/outcome", "raw_key": "prompt_pin_bytes", "byte_index": 1}
+  ],
+  "mutation_field_classes": {
+    "digest_exact": ["claim_verdicts_id"],
+    "digest_substring": "sha256",
+    "census_exact": ["m", "finite_test_count", "planned_n_blocks", "planned_n", "observed_complete_n", "n", "df", "raw_count", "validated_count", "window_count", "in_window_sample_count", "collection_prefill_tokens", "selected_prefill_tokens", "prefill_length", "prompt_tokens", "min_small_model_members_per_rung", "min_overlapping_power_interval_count", "min_phase_samples_pinned", "sample_count_margin_floor"],
+    "outcome_exact": ["status", "outcome", "direction", "rejected", "claim_ready_for_l2_l3", "claim_level_ceiling", "eligible", "refusal"]
+  }
+}

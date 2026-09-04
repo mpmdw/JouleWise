@@ -24,7 +24,12 @@ from joulewise.analysis_manifest_v3 import (
     is_abba_v3_consumable_schema,
 )
 
-from .artifact import finalize_claim_verdicts, write_claim_verdicts_atomic
+from .artifact import (
+    SCHEMA_VERSION_V2 as CLAIM_VERDICTS_SCHEMA_VERSION,
+    claim_side_bound_from_terms,
+    finalize_claim_verdicts,
+    write_claim_verdicts_atomic,
+)
 from .claims import evaluate_claim, ordered_reason_codes
 from .estimators import (
     DeterministicBoundTerm,
@@ -1595,6 +1600,7 @@ def _contrast_row(
         "total": estimate.deterministic_bound_total if estimate is not None else None,
         "decision_interval": _interval_dict(estimate.decision_interval) if estimate else None,
     }
+    claim_side_bound = claim_side_bound_from_terms(deterministic["terms"])
     return {
         "contrast_id": contrast["contrast_id"],
         "plan_id": contrast["plan_id"],
@@ -1627,6 +1633,7 @@ def _contrast_row(
         },
         "estimator": _estimator_dict(estimate, contrast["estimator"], len(prepared["observations"])),
         "deterministic_bounds": deterministic,
+        "claim_side_bound": claim_side_bound,
         "floor": dict(prepared["floor"]),
         "multiplicity": {
             "raw_p": multiplicity["raw_p"],
@@ -1825,7 +1832,7 @@ def analyze_claims(
             "authenticated floor artifact bytes are unavailable for embedding"
         )
     body = {
-        "schema_version": "joulewise.claim_verdicts.v1",
+        "schema_version": CLAIM_VERDICTS_SCHEMA_VERSION,
         "claim_verdicts_id": "",
         "engine": {
             "implementation": "joulewise.analysis_engine",

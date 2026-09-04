@@ -1,4 +1,4 @@
-"""Deterministic ``joulewise.claim_verdicts.v1`` artifact handling."""
+"""Deterministic claim-verdict artifact handling for v1 and v2."""
 
 from __future__ import annotations
 
@@ -39,7 +39,11 @@ from .ratio import (
 from .sensitivity import influence_triggers
 
 
-SCHEMA_VERSION = "joulewise.claim_verdicts.v1"
+SCHEMA_VERSION_V1 = "joulewise.claim_verdicts.v1"
+SCHEMA_VERSION_V2 = "joulewise.claim_verdicts.v2"
+# Preserve the legacy public constant for read compatibility.  The producer
+# imports ``SCHEMA_VERSION_V2`` explicitly.
+SCHEMA_VERSION = SCHEMA_VERSION_V1
 ALGORITHM_VERSION = "1"
 ID_RE = re.compile(r"^cv-[0-9a-f]{64}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -164,7 +168,7 @@ _FAMILY_KEYS = {
     "missing_test_ids",
     "structural_status",
 }
-_CONTRAST_KEYS = {
+_CONTRAST_KEYS_V1 = {
     "contrast_id",
     "plan_id",
     "family_instance_id",
@@ -185,6 +189,22 @@ _CONTRAST_KEYS = {
     "sensitivity_status",
     "claim_evaluation",
 }
+_CLAIM_SIDE_BOUND_KEYS = {
+    "role",
+    "source_term_name",
+    "value_j",
+    "composition_rule",
+    "single_count_discipline_rule_id",
+}
+_CONTRAST_KEYS_V2 = _CONTRAST_KEYS_V1 | {"claim_side_bound"}
+_CLAIM_SIDE_BOUND_ROLE = "claim_measurement_uncertainty_bound"
+_CLAIM_SIDE_BOUND_SOURCE_TERM = "E_clock_anchor_shift_bound_j"
+_CLAIM_SIDE_BOUND_COMPOSITION_RULE = (
+    "exact_named_contrast_deterministic_term.v1"
+)
+_CLAIM_SIDE_BOUND_SINGLE_COUNT_RULE = (
+    "attribution_floor_plus_claim_side_bound.v1"
+)
 _METRIC_KEYS = {"name", "metric_tag", "window_class", "unit", "ratio_estimand"}
 _CONDITION_KEYS = {
     "condition_a_id",
@@ -369,6 +389,7 @@ _CLAIMS_INDEX_KEY_ORDERS = {
         "sampling",
         "estimator",
         "deterministic_bounds",
+        "claim_side_bound",
         "floor",
         "multiplicity",
         "randomization_check",
@@ -388,6 +409,32 @@ _CLAIMS_INDEX_KEY_ORDERS = {
 
 class ClaimArtifactError(ValueError):
     """Raised when a verdict artifact cannot be rendered or validated."""
+
+
+def claim_side_bound_from_terms(
+    terms: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Project the one ruled clock-anchor term into the v2 sibling object."""
+
+    matching = [
+        term
+        for term in terms
+        if term.get("name") == _CLAIM_SIDE_BOUND_SOURCE_TERM
+    ]
+    if len(matching) != 1 or not _number(
+        matching[0].get("bound"), nonnegative=True
+    ):
+        raise ClaimArtifactError(
+            "claim-verdict v2 requires exactly one finite nonnegative "
+            "E_clock_anchor_shift_bound_j deterministic term"
+        )
+    return {
+        "role": _CLAIM_SIDE_BOUND_ROLE,
+        "source_term_name": _CLAIM_SIDE_BOUND_SOURCE_TERM,
+        "value_j": matching[0]["bound"],
+        "composition_rule": _CLAIM_SIDE_BOUND_COMPOSITION_RULE,
+        "single_count_discipline_rule_id": _CLAIM_SIDE_BOUND_SINGLE_COUNT_RULE,
+    }
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -947,7 +994,7 @@ def validate_claim_verdicts(
     *,
     frozen_manifest: Mapping[str, Any] | None = None,
 ) -> list[str]:
-    """Return every structural/canonical error in a v1 verdict artifact."""
+    """Return every structural/canonical error in a v1 or v2 verdict artifact."""
 
     errors: list[str] = []
     if not _exact_keys_with_optional_group(
@@ -958,8 +1005,12 @@ def validate_claim_verdicts(
         errors,
     ):
         return errors
-    if value.get("schema_version") != SCHEMA_VERSION:
-        errors.append(f"artifact.schema_version: expected {SCHEMA_VERSION!r}")
+    schema_version = value.get("schema_version")
+    if schema_version not in {SCHEMA_VERSION_V1, SCHEMA_VERSION_V2}:
+        errors.append(
+            "artifact.schema_version: expected "
+            f"{SCHEMA_VERSION_V1!r} or {SCHEMA_VERSION_V2!r}"
+        )
     identity = value.get("claim_verdicts_id")
     if not isinstance(identity, str) or not ID_RE.fullmatch(identity):
         errors.append("artifact.claim_verdicts_id: invalid canonical ID")
@@ -1659,7 +1710,12 @@ def validate_claim_verdicts(
     contrast_by_id: dict[str, Mapping[str, Any]] = {}
     for index, contrast in enumerate(contrasts):
         where = f"artifact.contrasts[{index}]"
-        if not _exact_keys(contrast, _CONTRAST_KEYS, where, errors):
+        contrast_keys = (
+            _CONTRAST_KEYS_V2
+            if schema_version == SCHEMA_VERSION_V2
+            else _CONTRAST_KEYS_V1
+        )
+        if not _exact_keys(contrast, contrast_keys, where, errors):
             continue
         contrast_id = contrast["contrast_id"]
         if not isinstance(contrast_id, str) or not contrast_id or contrast_id in contrast_by_id:
@@ -2161,6 +2217,60 @@ def validate_claim_verdicts(
                 errors,
                 nullable=True,
             )
+
+        if schema_version == SCHEMA_VERSION_V2:
+            claim_side_bound = contrast["claim_side_bound"]
+            if _exact_keys(
+                claim_side_bound,
+                _CLAIM_SIDE_BOUND_KEYS,
+                f"{where}.claim_side_bound",
+                errors,
+            ):
+                expected_literals = {
+                    "role": _CLAIM_SIDE_BOUND_ROLE,
+                    "source_term_name": _CLAIM_SIDE_BOUND_SOURCE_TERM,
+                    "composition_rule": _CLAIM_SIDE_BOUND_COMPOSITION_RULE,
+                    "single_count_discipline_rule_id": (
+                        _CLAIM_SIDE_BOUND_SINGLE_COUNT_RULE
+                    ),
+                }
+                for key, expected in expected_literals.items():
+                    if claim_side_bound[key] != expected:
+                        errors.append(
+                            f"{where}.claim_side_bound.{key}: expected {expected!r}"
+                        )
+                if not _number(claim_side_bound["value_j"], nonnegative=True):
+                    errors.append(
+                        f"{where}.claim_side_bound.value_j: must be a finite nonnegative number"
+                    )
+                terms = (
+                    deterministic.get("terms")
+                    if isinstance(deterministic, Mapping)
+                    else None
+                )
+                matching_terms = (
+                    [
+                        term
+                        for term in terms
+                        if isinstance(term, Mapping)
+                        and term.get("name") == _CLAIM_SIDE_BOUND_SOURCE_TERM
+                    ]
+                    if isinstance(terms, list)
+                    else []
+                )
+                if len(matching_terms) != 1:
+                    errors.append(
+                        f"{where}.claim_side_bound.source_term_name: deterministic bounds "
+                        "must contain exactly one E_clock_anchor_shift_bound_j term"
+                    )
+                elif (
+                    _number(claim_side_bound["value_j"], nonnegative=True)
+                    and matching_terms[0].get("bound")
+                    != claim_side_bound["value_j"]
+                ):
+                    errors.append(
+                        f"{where}.claim_side_bound.value_j: must exactly equal the named deterministic term"
+                    )
 
         floor = contrast["floor"]
         floor_expected_keys = set(_FLOOR_KEYS)
@@ -3517,9 +3627,14 @@ def validate_claim_verdicts_for_claim_index(value: Any) -> list[str]:
     contrasts = value.get("contrasts")
     if isinstance(contrasts, list):
         for index, contrast in enumerate(contrasts):
+            contrast_order = _CLAIMS_INDEX_KEY_ORDERS["artifact.contrast"]
+            if value.get("schema_version") == SCHEMA_VERSION_V1:
+                contrast_order = tuple(
+                    key for key in contrast_order if key != "claim_side_bound"
+                )
             _claims_index_key_order(
                 contrast,
-                _CLAIMS_INDEX_KEY_ORDERS["artifact.contrast"],
+                contrast_order,
                 f"artifact.contrasts[{index}]",
                 errors,
             )
@@ -3604,8 +3719,11 @@ __all__ = [
     "ALGORITHM_VERSION",
     "ClaimArtifactError",
     "SCHEMA_VERSION",
+    "SCHEMA_VERSION_V1",
+    "SCHEMA_VERSION_V2",
     "calculate_claim_verdicts_id",
     "canonical_json_bytes",
+    "claim_side_bound_from_terms",
     "finalize_claim_verdicts",
     "render_claim_verdicts",
     "validate_claim_verdicts",
