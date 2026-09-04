@@ -74,9 +74,9 @@ for value in (parsed.repo_head, parsed.measurement_root, parsed.measurement_head
     print(base64.b64encode(value.encode("utf-8")).decode("ascii"))
 PY
   )}") || exit $?
-  plan_head="$(print -rn -- "$plan_fields[1]" | /usr/bin/base64 -D)"
-  measurement_root="$(print -rn -- "$plan_fields[2]" | /usr/bin/base64 -D)"
-  plan_measurement_head="$(print -rn -- "$plan_fields[3]" | /usr/bin/base64 -D)"
+  plan_head="$(print -rn -- "$plan_fields[1]" | /usr/bin/base64 --decode)"
+  measurement_root="$(print -rn -- "$plan_fields[2]" | /usr/bin/base64 --decode)"
+  plan_measurement_head="$(print -rn -- "$plan_fields[3]" | /usr/bin/base64 --decode)"
   if ! actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"; then
     print "unable to read repo_head from driver checkout" >&2
     exit 3
