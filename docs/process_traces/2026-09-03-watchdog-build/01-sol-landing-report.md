@@ -143,3 +143,24 @@ File-15 text is shortened only to fit the table; the row number binds the comple
 - F2 / lead note 3: spawn argv gains `--permission-prompts none` (under launchd nobody can answer a prompt; anything that would prompt is denied rather than hung) and the allowed-tool list gains `Agent` (the current name of the subagent tool; `Task` retained for older builds), `SendMessage`, `ListAgents`, `TaskCreate`, `TaskUpdate`, `TaskList`. The bench rehearsal (first `-p` launch from launchd) is the proof of this argv; it is the single line the magistrate changes if the rehearsal shows otherwise.
 - Lead note 2: outside a plan span the census is not consulted — this is file 15 row 3 as ruled; an unowned interactive session does not block a daytime relaunch. No change.
 - Tests after edits: `tests.test_magistrate_watchdog` 27 OK; `py_compile` OK.
+
+---
+
+## Fix round 1 clause-map addendum (2026-09-03 PDT)
+
+This addendum does not rewrite the implementation seat's map. It replaces the biting-assertion and counterfactual evidence for the touched propositions below; untouched rows retain their original evidence.
+
+| Row / proposition delta | Production site | Biting assertion | One-site counterfactual |
+|---|---|---|---|
+| 1a — cooperative request precedes signals | `scripts/magistrate_watchdog.py:1024` | `tests/test_magistrate_watchdog.py:295` | Delete the plan `_write_request` call: `test_cooperative_exit_after_request_never_signals` fails. |
+| 1b — ignored child still gets request first | `scripts/magistrate_watchdog.py:1024` | `tests/test_magistrate_watchdog.py:311` | Delete the same request call: `test_ignored_request_gets_term_then_kill_and_census` independently fails on the missing request artifact. |
+| 3a — PID/start liveness excludes zombies | `scripts/magistrate_watchdog.py:558` | `tests/test_magistrate_watchdog.py:253` | Count a `<defunct>` row as live: `test_defunct_lock_owner_is_not_live` fails. |
+| 3b — forced hold reaps the child | `scripts/magistrate_watchdog.py:988` | `tests/test_magistrate_watchdog.py:336` | Remove the in-loop `child.poll()`: `test_forced_hold_polls_child_to_reap_defunct_owner` fails on the poll count. |
+| 4 — request −25, TERM −16, KILL −15 | `scripts/magistrate_watchdog.py:63` | `tests/test_magistrate_watchdog.py:147` | Change `TERM_LEAD_S` to `17 * 60`: the literal `960` assertion fails. The same test pins request `1500` and KILL `900`. |
+| 5 — only a currently validated lock owner may be signaled | `scripts/magistrate_watchdog.py:1035`, `:1049` | `tests/test_magistrate_watchdog.py:360` | Signal `child.pid` without rechecking PID+start token: `test_plan_signal_revalidates_lock_token` observes a signal to the reused PID. |
+| 6a — positive control gates stop-ref interpretation | `scripts/magistrate_watchdog.py:371` | `tests/test_magistrate_watchdog.py:207` | Ignore a nonzero positive-control result: `test_stop_branch_present_absent_and_positive_control_failure` fails on the extra stop probe. |
+| 6b — emergency stop glob catches shortened names | `scripts/magistrate_watchdog.py:59` | `tests/test_magistrate_watchdog.py:221` | Narrow the glob to `refs/heads/ops/stop-magistrate*`: the shortened `ops/stop-magistrat` assertion fails. |
+| 9a — real CLI usage exhaustion is classified as usage | `scripts/magistrate_watchdog.py:93` | `tests/test_magistrate_watchdog.py:404` | Remove the new spend/reset/`rate_limit`/HTTP-429 signatures: the verbatim production error is classified `generic_error`. |
+| 9b — usage ladder is exactly 15/30/60/120/120 | `scripts/magistrate_watchdog.py:72` | `tests/test_magistrate_watchdog.py:417` | Change the fourth element to `7199`: `test_usage_backoff_ladder_and_activation_jitter` fails against the literal tuple. |
+
+The fixed-fence operational consequence for row 3 is now explicit in `docs/process/MAGISTRATE_WATCHDOG.md`: an orphaned resident supervisor is not adopted during the belt or 07:00 minute (`FENCED`, `adopt=False`), so adoption can wait at most 45 minutes.

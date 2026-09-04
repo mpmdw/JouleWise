@@ -56,7 +56,7 @@ CUSTODY_ROOT_ENV = "MAGISTRATE_WATCHDOG_CUSTODY_ROOT"
 DEFAULT_SESSION_BIN = Path("/Users/edr/.local/bin/claude")
 PROMPT_TEMPLATE = REPO_ROOT / "docs" / "process" / "MAGISTRATE_RELAUNCH_PROMPT.md"
 STOP_REPOSITORY = "https://github.com/mpmdw/JouleWise.git"
-STOP_REF_GLOB = "refs/heads/ops/stop-magistrate*"
+STOP_REF_GLOB = "refs/heads/ops/stop*"
 POSITIVE_CONTROL_REF = "refs/heads/main"
 
 # File 15 rows 3-4: these are local-time/fence and resident deadlines.
@@ -92,9 +92,12 @@ SESSION_ARGV_AFTER_PROMPT = (
 
 USAGE_EXHAUSTED_PATTERNS = (
     re.compile(r"\busage\s+limit(?:ed|\s+reached)?\b", re.IGNORECASE),
+    re.compile(r"\bspend\s+limit\b", re.IGNORECASE),
     re.compile(r"\brate\s+limit(?:ed|\s+reached)?\b", re.IGNORECASE),
+    re.compile(r"\brate_limit\b", re.IGNORECASE),
     re.compile(r"\bquota\s+(?:exceeded|exhausted)\b", re.IGNORECASE),
-    re.compile(r"\b(?:limit|usage)\s+resets?\s+(?:at|in)\b", re.IGNORECASE),
+    re.compile(r"\b(?:limit|usage)\s+resets?(?:\s+(?:at|in))?\b", re.IGNORECASE),
+    re.compile(r"\bhttp\s+429\b", re.IGNORECASE),
     re.compile(r"\bhit\s+(?:your|the)\s+(?:usage\s+)?limit\b", re.IGNORECASE),
 )
 
@@ -553,7 +556,14 @@ def read_lock(storage: Storage) -> dict[str, Any] | None:
 
 
 def process_by_pid(processes: Sequence[ProcessInfo], pid: int) -> ProcessInfo | None:
-    return next((item for item in processes if item.pid == pid), None)
+    return next(
+        (
+            item
+            for item in processes
+            if item.pid == pid and "<defunct>" not in item.command.casefold()
+        ),
+        None,
+    )
 
 
 def owned_process(lock: Mapping[str, Any] | None, processes: Sequence[ProcessInfo]) -> ProcessInfo | None:
@@ -834,7 +844,11 @@ def stable_descendants(processes: ProcessTable, root_pid: int) -> list[int]:
     seen = {root_pid}
     unchanged = 0
     for _ in range(8):
-        snapshot = processes.snapshot()
+        snapshot = [
+            process
+            for process in processes.snapshot()
+            if "<defunct>" not in process.command.casefold()
+        ]
         before = set(seen)
         changed = True
         while changed:
@@ -974,6 +988,9 @@ class ResidentSupervisor:
     def _forced_hold(self, now: dt.datetime) -> bool:
         owner_gone = False
         for _ in range(SUPERVISOR_POLL_S):
+            if self.child.poll() is not None:
+                owner_gone = True
+                break
             if owned_process(self.lock_record, self.deps.processes.snapshot()) is None:
                 owner_gone = True
                 break
@@ -1015,7 +1032,10 @@ class ResidentSupervisor:
             )
         elif phase == "TERM":
             if self.state.get("standdown_phase") != "TERM":
-                pids = signal_owned_tree(self.deps.processes, self.child.pid, signal.SIGTERM)
+                owner = owned_process(self.lock_record, self.deps.processes.snapshot())
+                if owner is None:
+                    return self._forced_hold(now)
+                pids = signal_owned_tree(self.deps.processes, owner.pid, signal.SIGTERM)
                 self._record_signal(now, signal.SIGTERM, pids)
                 self.state["standdown_phase"] = "TERM"
             transition(
@@ -1026,7 +1046,10 @@ class ResidentSupervisor:
                 now,
             )
         elif phase == "KILL":
-            pids = signal_owned_tree(self.deps.processes, self.child.pid, signal.SIGKILL)
+            owner = owned_process(self.lock_record, self.deps.processes.snapshot())
+            if owner is None:
+                return self._forced_hold(now)
+            pids = signal_owned_tree(self.deps.processes, owner.pid, signal.SIGKILL)
             self._record_signal(now, signal.SIGKILL, pids)
             return self._forced_hold(now)
         self.storage.atomic_json(self.storage.root / "state.json", self.state)

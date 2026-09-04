@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import fnmatch
 import json
 import os
 import signal
@@ -146,6 +147,10 @@ class FenceTests(WatchdogTestCase):
     def test_plan_fence_boundaries_request_term_kill_and_completion(self) -> None:
         plan = self.make_plan()
         t0 = plan.t0_epoch_s
+        self.assertEqual(wd.PLAN_LEAD_S, 1500)
+        self.assertEqual(wd.REQUEST_LEAD_S, 1500)
+        self.assertEqual(wd.TERM_LEAD_S, 960)
+        self.assertEqual(wd.KILL_LEAD_S, 900)
         self.assertFalse(wd.plan_span_active(plan, t0 - wd.PLAN_LEAD_S - 0.001, self.harness.storage))
         self.assertTrue(wd.plan_span_active(plan, t0 - wd.PLAN_LEAD_S, self.harness.storage))
         self.assertEqual(wd.standdown_phase(plan, t0 - wd.REQUEST_LEAD_S), "REQUEST")
@@ -213,6 +218,11 @@ class StopAndDecisionTests(WatchdogTestCase):
             self.assertEqual(wd.remote_stop_probe().state, "NETWORK_UNCERTAIN")
             self.assertEqual(run.call_count, 1, "a failed positive control cannot clear the switch")
 
+    def test_stop_glob_catches_shortened_magistrate_branch_name(self) -> None:
+        shortened = "refs/heads/ops/stop-magistrat"
+        self.assertEqual(wd.STOP_REF_GLOB, "refs/heads/ops/stop*")
+        self.assertTrue(fnmatch.fnmatchcase(shortened, wd.STOP_REF_GLOB))
+
     def test_injected_stop_observations_gate_launch(self) -> None:
         for stop, expected in (
             (wd.StopObservation("STOPPED", "present"), "STOPPED"),
@@ -239,6 +249,13 @@ class StopAndDecisionTests(WatchdogTestCase):
         self.assertEqual(decision.state, "LAUNCHING")
         self.assertFalse((self.harness.storage.root / "magistrate.lock").exists())
         self.assertEqual(self.harness.processes.signals, [])
+
+    def test_defunct_lock_owner_is_not_live(self) -> None:
+        self.write_live_lock(pid=77, start="token-a")
+        self.harness.processes.rows = [wd.ProcessInfo(77, 1, "token-a", "session <defunct>")]
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual(decision.state, "LAUNCHING")
+        self.assertFalse((self.harness.storage.root / "magistrate.lock").exists())
 
     def test_live_lock_refuses_second_magistrate(self) -> None:
         self.write_live_lock()
@@ -298,6 +315,10 @@ class SupervisorTests(WatchdogTestCase):
             plan.t0_epoch_s - wd.REQUEST_LEAD_S, tz=self.local_tz
         )
         self.assertTrue(supervisor.step())
+        self.assertTrue(
+            (self.harness.storage.root / "standdown.request").exists(),
+            "ignored-session enforcement must still begin with the cooperative request",
+        )
         self.harness.clock.wall = dt.datetime.fromtimestamp(
             plan.t0_epoch_s - wd.TERM_LEAD_S, tz=self.local_tz
         )
@@ -311,6 +332,42 @@ class SupervisorTests(WatchdogTestCase):
         self.assertEqual(self.harness.census_calls, 1, "KILL must be followed by production census")
         self.assertEqual(supervisor.state["state"], "FENCED")
         self.assertEqual([item["kind"] for item in supervisor.state["notice_pending"]], ["forced_standdown"])
+
+    def test_forced_hold_polls_child_to_reap_defunct_owner(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        process_table = self.harness.processes
+        process_table.rows = [wd.ProcessInfo(100, 99, "token-a", "session <defunct>")]
+
+        class ReapingChild:
+            pid = 100
+
+            def __init__(self) -> None:
+                self.poll_calls = 0
+
+            def poll(self) -> int | None:
+                self.poll_calls += 1
+                process_table.rows = []
+                return -signal.SIGKILL
+
+        child = ReapingChild()
+        supervisor.child = child
+        self.assertFalse(supervisor._forced_hold(self.base))
+        self.assertEqual(child.poll_calls, 1)
+        self.assertFalse((self.harness.storage.root / "magistrate.lock").exists())
+        self.assertEqual(supervisor.state["state"], "FENCED")
+
+    def test_plan_signal_revalidates_lock_token(self) -> None:
+        plan = self.make_plan()
+        supervisor = self.supervisor(plan)
+        self.harness.processes.rows = [wd.ProcessInfo(100, 99, "reused-token", "unrelated")]
+        self.harness.clock.wall = dt.datetime.fromtimestamp(
+            plan.t0_epoch_s - wd.TERM_LEAD_S, tz=self.local_tz
+        )
+        self.assertFalse(supervisor.step())
+        self.assertEqual(self.harness.processes.signals, [])
+        self.assertFalse((self.harness.storage.root / "magistrate.lock").exists())
+        self.assertEqual(supervisor.state["state"], "FENCED")
 
     def test_process_tree_walk_kills_descendant_that_escaped_pgid(self) -> None:
         table = FakeProcessTable(
@@ -330,21 +387,39 @@ class BackoffAndEventTests(WatchdogTestCase):
     def test_usage_classification_is_conservative(self) -> None:
         accepted = (
             "Usage limit reached; resets in 2 hours",
+            "monthly spend limit",
             "rate limit reached",
+            "error type rate_limit",
             "quota exhausted",
             "usage resets at 09:00",
+            "session limit resets 12:50am",
+            "HTTP 429",
             "You've hit your limit",
         )
         for text in accepted:
             with self.subTest(text=text):
                 self.assertEqual(wd.classify_exit(1, text), "usage_exhausted")
-        self.assertEqual(wd.classify_exit(7, "unknown server error"), "generic_error")
         self.assertEqual(wd.classify_exit(0, "usage limit"), "clean")
+
+    def test_real_429_spend_limit_is_usage_exhausted(self) -> None:
+        output = (
+            "You've hit your monthly spend limit · raise it at "
+            "claude.ai/settings/usage?from=cc_cli_limit_message · your session limit "
+            "resets 12:50am (America/Los_Angeles) (error type rate_limit, HTTP 429, "
+            "request id req_011CefuL7Ahwwne6SEyTBqDt, model sent to the API: "
+            "claude-fable-5-1)"
+        )
+        self.assertEqual(wd.classify_exit(1, output), "usage_exhausted")
+
+    def test_unknown_error_is_generic_error(self) -> None:
+        self.assertEqual(wd.classify_exit(7, "unknown server error"), "generic_error")
 
     def test_usage_backoff_ladder_and_activation_jitter(self) -> None:
         state = wd.initial_state()
         state.update({"state": "ACTIVE", "activation_id": "stable-activation"})
         jitter = wd.jitter_for_activation("stable-activation")
+        expected_ladder = (900, 1800, 3600, 7200, 7200)
+        self.assertEqual(wd.USAGE_BACKOFF_S, expected_ladder)
         observed: list[int] = []
         mono = 100.0
         for index in range(5):
@@ -358,7 +433,7 @@ class BackoffAndEventTests(WatchdogTestCase):
             )
             observed.append(round(float(state["next_eligible_monotonic"]) - mono))
             mono += observed[-1]
-        self.assertEqual(observed, [base + jitter for base in wd.USAGE_BACKOFF_S])
+        self.assertEqual(observed, [base + jitter for base in expected_ladder])
         self.assertEqual(len(state["notice_pending"]), 1, "unchanged backoff transition queues one notice")
 
     def test_backoff_never_overrides_new_plan_span(self) -> None:
