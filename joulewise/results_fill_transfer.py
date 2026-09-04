@@ -607,6 +607,18 @@ def _format_seconds(value: int | float) -> str:
     return format(value, ".6f")
 
 
+def _strict_relation_collapses_at_render_precision(
+    value: Mapping[str, Any],
+) -> bool:
+    outcome = value["support_outcome"]
+    if outcome not in ("supported", "not_supported"):
+        return False
+    residual = value["largest_composed_edge_residual_bound_s"]
+    bound = value["pulse_derived_timing_bound_s"]
+    strict_relation = outcome == "not_supported" or _decimal(residual) < _decimal(bound)
+    return strict_relation and _format_seconds(residual) == _format_seconds(bound)
+
+
 def _render_sentence(value: Mapping[str, Any]) -> str:
     outcome = value["support_outcome"]
     if outcome == "supported":
@@ -663,6 +675,8 @@ def render_transfer_fiducial_result(
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return _stop_sites()
     if validate_transfer_fiducial_result(value):
+        return _stop_sites()
+    if _strict_relation_collapses_at_render_precision(value):
         return _stop_sites()
     sentence = _render_sentence(value)
     return dict.fromkeys(TRANSFER_FIDUCIAL_RESULT_SITES, sentence)

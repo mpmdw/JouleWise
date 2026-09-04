@@ -920,35 +920,6 @@ Section 10. No row authorizes prose to be inferred at the desk.
 | TR-01 — Branch-independent inserted-gap result in the Abstract, Section 7, and Section 10 | `[FILL:TR-01]` | `[TRANSFER_FIDUCIAL_RESULT]` from authenticated, content-addressed `joulewise.transfer_fiducial_result.v1`: compare `largest_composed_edge_residual_bound_s` with `pulse_derived_timing_bound_s`; require the selected `largest_inserted_gap_edge` raw fitted interval plus clock-anchor addend to replay the composed maximum, and bind the pulse-derived value to source field `b_fiducial_s`. Render exactly: `supported` — `Diagnostic only: the largest composed inserted-gap edge-residual bound was <R> s, no greater than the session pulse-derived timing bound of <B> s; this supports applying that timing bound to the studied inference boundary, but it does not mint a floor or license a claim.`; `not_supported` — `Diagnostic only: the largest composed inserted-gap edge-residual bound was <R> s, exceeding the session pulse-derived timing bound of <B> s; this does not support applying that timing bound to the studied inference boundary and does not mint a floor or license a claim.`; `not_evaluated` — `Diagnostic only: the inserted-gap transfer comparison was not evaluated (issued reasons: <semicolon-joined reason_codes>); applying the session pulse-derived timing bound to the studied inference boundary remains unestablished.` One selected sentence renders byte-identically at all nine A/B/Refusal sites | post-campaign inserted-gap diagnostic / all three outcome branches | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; token and fixture-only renderer registered; `diagnostic=true`, `claim_bearing=false`; no branch selection may remove this placement and no result may mint a floor or license a claim | DRAFT, AUTH |
 | OR-01 — Refusal stop stage and issued reason in the Section-4 form and the Abstract, Section 7, and Section 10 Refusal paragraphs | `[FILL:OR-01]` | Before comparison: the authenticated window-admission outcome for the affected model or the authenticated claim-evaluation outcome for the affected token-generation (`DS-32`) or prompt-processing (`PG-08`) verdict. At close-out: authenticated `joulewise.d165_dominance_closeout.v1`. At every placement, render exactly one stage label (`before comparison` or `at close-out`) plus the reason issued by that governing evidence; name each affected model or verdict; include a Qwen-pair verdict only when its absence is the stop reason; never infer a reason from ratio disposition | fixed Qwen3 pair / two-stage refusal | STOP_FILL | SUPPLIERS_NAMED / VALUE_UNISSUED; TOKEN_MISSING; refuse on absent, unauthenticated, conflicting, or multi-stage-without-precedence inputs | DRAFT, AUTH, D165 |
 
-**TR-01 v1 closed evidence and refusal contract (R3 fix round 1).** The
-authenticated projection carries `edge_records` in `source_capture.bundle_sha256`
-order, with `falling_gap_edge` before `rising_gap_edge`. Every record carries
-`bundle_id`, `edge`, the exact fitted residual interval, the effective
-clock-anchor bound, and the issued composed absolute bound. The validator
-replays every composed bound, requires one ordered record for each authenticated
-edge, derives the unrounded global maximum, and enforces first-in-order as the
-tie-break before accepting the duplicated top-level maximum and selected
-witness. Comparable outcomes require registered/observed censuses of 10/10 runs
-and 20/20 edges. The existing estimator is fixed to revision
-`joint_loss_sublevel_interval_branch_v2` and source SHA-256
-`386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92`;
-a different revision or source digest is a different measurement and returns
-STOP_FILL.
-
-The exact ordered `reason_codes` enum is `source_capture_refused`,
-`run_census_incomplete`, `edge_census_incomplete`,
-`pulse_derived_timing_bound_unavailable`. `source_capture_refused` requires a
-null source parent, zero observed runs/edges, an empty edge inventory, and null
-comparison evidence. `run_census_incomplete` is present iff authenticated
-observed runs are below 10; the bundle-digest list length equals that observed
-count. `edge_census_incomplete` is present iff authenticated observed edges are
-below two per observed run; `edge_records` length equals the observed edge
-count. Either coverage shortfall requires the global maximum and selected
-witness to be null. `pulse_derived_timing_bound_unavailable` is present iff an
-authenticated source exists but its pulse-derived bound is null; a complete
-edge inventory still replays and binds the global maximum and witness. No
-missing count, magnitude, parent, reason, or identity is defaulted.
-
 ## Authority discrepancies and non-token gaps
 
 These are recorded rather than repaired because `docs/paper/draft-v1.md` is

@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import re
 import unittest
 
 from joulewise.results_fill_transfer import (
@@ -26,6 +27,9 @@ from joulewise.results_fill_transfer import (
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "results_fill_transfer"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_FILL_REGISTRY = PROJECT_ROOT / "docs" / "paper" / "results-fill-registry.md"
+ESTIMATOR_SOURCE = PROJECT_ROOT / "joulewise" / "powermetrics_fiducial.py"
 
 FIXTURE_SHA256 = {
     "supported.json": "46fc110986a43f68cb815d427c558c1b08b3c3e664bf560ded0b60206c7f037f",
@@ -33,26 +37,42 @@ FIXTURE_SHA256 = {
     "not_evaluated.json": "c073dc0abb0af10f37a142206e1883be2ed01326cbbfc24c7939e79e52dc2edb",
 }
 
-EXPECTED_SENTENCES = {
-    "supported.json": (
-        "Diagnostic only: the largest composed inserted-gap edge-residual bound "
-        "was 0.022000 s, no greater than the session pulse-derived timing bound "
-        "of 0.030068 s; this supports applying that timing bound to the studied "
-        "inference boundary, but it does not mint a floor or license a claim."
-    ),
-    "not_supported.json": (
-        "Diagnostic only: the largest composed inserted-gap edge-residual bound "
-        "was 0.031000 s, exceeding the session pulse-derived timing bound of "
-        "0.030068 s; this does not support applying that timing bound to the "
-        "studied inference boundary and does not mint a floor or license a claim."
-    ),
-    "not_evaluated.json": (
-        "Diagnostic only: the inserted-gap transfer comparison was not evaluated "
-        "(issued reasons: run_census_incomplete); applying the session "
-        "pulse-derived timing bound to the studied inference boundary remains "
-        "unestablished."
-    ),
-}
+_REGISTERED_SENTENCE_RE = re.compile(
+    r"Render exactly: `supported` — `(?P<supported>Diagnostic only:[^`]+)`; "
+    r"`not_supported` — `(?P<not_supported>Diagnostic only:[^`]+)`; "
+    r"`not_evaluated` — `(?P<not_evaluated>Diagnostic only:[^`]+)` "
+    r"One selected sentence"
+)
+
+
+def _registered_tr01_sentences() -> dict[str, str]:
+    rows = [
+        line
+        for line in RESULTS_FILL_REGISTRY.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| TR-01 —")
+    ]
+    if len(rows) != 1:
+        raise AssertionError("results-fill registry must contain exactly one TR-01 row")
+    match = _REGISTERED_SENTENCE_RE.search(rows[0])
+    if match is None:
+        raise AssertionError("TR-01 row does not contain all three registered sentences")
+    return match.groupdict()
+
+
+def _registered_sentence(value: dict) -> str:
+    template = _registered_tr01_sentences()[value["support_outcome"]]
+    if value["support_outcome"] == "not_evaluated":
+        return template.replace(
+            "<semicolon-joined reason_codes>",
+            ";".join(value["reason_codes"]),
+        )
+    return template.replace(
+        "<R>",
+        format(value["largest_composed_edge_residual_bound_s"], ".6f"),
+    ).replace(
+        "<B>",
+        format(value["pulse_derived_timing_bound_s"], ".6f"),
+    )
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -112,10 +132,14 @@ class TransferResultContractTests(unittest.TestCase):
                 "pulse_derived_timing_bound_unavailable",
             ),
         )
+        self.assertEqual(
+            hashlib.sha256(ESTIMATOR_SOURCE.read_bytes()).hexdigest(),
+            ESTIMATOR_SOURCE_SHA256,
+        )
 
         issued: dict[str, dict] = {}
         issued_raw: dict[str, bytes] = {}
-        for fixture_name, sentence in EXPECTED_SENTENCES.items():
+        for fixture_name in FIXTURE_SHA256:
             raw = (FIXTURES / fixture_name).read_bytes()
             self.assertEqual(hashlib.sha256(raw).hexdigest(), FIXTURE_SHA256[fixture_name])
             value = json.loads(raw)
@@ -142,6 +166,7 @@ class TransferResultContractTests(unittest.TestCase):
                 expected_result_sha256=FIXTURE_SHA256[fixture_name],
             )
             self.assertEqual(tuple(rendered), TRANSFER_FIDUCIAL_RESULT_SITES)
+            sentence = _registered_sentence(value)
             self.assertEqual(list(rendered.values()), [sentence] * 9)
             self.assertEqual(len(set(rendered.values())), 1)
 
@@ -462,16 +487,39 @@ class TransferResultContractTests(unittest.TestCase):
         equality_raw = _reissue(equality)
         self.assertEqual(
             set(_render(equality_raw).values()),
-            {
-                "Diagnostic only: the largest composed inserted-gap edge-residual "
-                "bound was 0.022000 s, no greater than the session pulse-derived "
-                "timing bound of 0.022000 s; this supports applying that timing "
-                "bound to the studied inference boundary, but it does not mint a "
-                "floor or license a claim."
-            },
+            {_registered_sentence(equality)},
         )
         equality["support_outcome"] = "not_supported"
         self.assertTrue(_all_stop(_render(_reissue(equality))))
+
+        # A strict relation that disappears at the ruled six-decimal rendering
+        # precision is refused rather than printed as an apparent equality.
+        near_tie_not_supported = copy.deepcopy(issued["not_supported.json"])
+        near_tie_not_supported["edge_records"][13].update(
+            fitted_residual_interval_s={"lower": -0.0280682, "upper": 0.02},
+            effective_clock_anchor_bound_s=0.002,
+            composed_absolute_residual_bound_s=0.0300682,
+        )
+        near_tie_not_supported["largest_inserted_gap_edge"] = copy.deepcopy(
+            near_tie_not_supported["edge_records"][13]
+        )
+        near_tie_not_supported["largest_composed_edge_residual_bound_s"] = 0.0300682
+        near_tie_not_supported["pulse_derived_timing_bound_s"] = 0.0300679
+        near_tie_not_supported_raw = _reissue(near_tie_not_supported)
+        self.assertEqual(
+            validate_transfer_fiducial_result(json.loads(near_tie_not_supported_raw)),
+            [],
+        )
+        self.assertTrue(_all_stop(_render(near_tie_not_supported_raw)))
+
+        near_tie_supported = copy.deepcopy(supported)
+        near_tie_supported["pulse_derived_timing_bound_s"] = 0.0220002
+        near_tie_supported_raw = _reissue(near_tie_supported)
+        self.assertEqual(
+            validate_transfer_fiducial_result(json.loads(near_tie_supported_raw)),
+            [],
+        )
+        self.assertTrue(_all_stop(_render(near_tie_supported_raw)))
 
         # Missing, malformed, or unauthenticated inputs never expose a partial
         # site result.
