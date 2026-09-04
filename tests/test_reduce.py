@@ -473,6 +473,69 @@ class ReduceTestCase(unittest.TestCase):
 
 
 class RectangleTests(ReduceTestCase):
+    def _digest_bound_raw_bundle(self, run_id: str) -> BundleBuilder:
+        builder = self.builder(run_id=run_id)
+        builder.measured_window(100.0, 110.0)
+        builder.write_trace(
+            constant_samples(100.0, 110.0, hz=1.0, power_w=7.5)
+        )
+        builder._writer.write_raw("powermetrics.plist", b"captured bytes\x00")
+        builder.write_metadata(rail_manifest=["mock"])
+        return builder
+
+    def test_mutated_raw_capture_refuses_before_reduction(self) -> None:
+        builder = self._digest_bound_raw_bundle("raw-byte-mutation")
+        raw_path = builder.path / "raw" / "powermetrics.plist"
+        mutated = bytearray(raw_path.read_bytes())
+        mutated[0] ^= 0x01
+        raw_path.write_bytes(mutated)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("raw_capture_digest_mismatch", summary.failure_message)
+
+    def test_successor_bundle_without_raw_digest_map_refuses(self) -> None:
+        builder = self._digest_bound_raw_bundle("successor-map-missing")
+        metadata_path = builder.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        del metadata["raw_sha256"]
+        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertIn("raw_capture_digest_missing", summary.failure_message)
+
+    def test_legacy_bundle_without_raw_digest_map_remains_readable(self) -> None:
+        builder = self._digest_bound_raw_bundle("legacy-map-absent")
+        metadata_path = builder.path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        del metadata["raw_sha256"]
+        metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+        (builder.path / "summary_metrics.json").write_text(
+            json.dumps(
+                {
+                    "summary_provenance": {
+                        "reducer_version": (
+                            reduce_module.POINT_ANCHOR_FROZEN_REDUCER_VERSION
+                        )
+                    }
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+        summary = reduce_module.reduce_bundle(
+            builder.path,
+            reducer_version=reduce_module.REDUCER_VERSION,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+
     def test_constant_power_exact_energy(self) -> None:
         # Constant 7.5 W over a 10 s window, idle 5.0 W.
         builder = self.builder()
@@ -1446,6 +1509,13 @@ class SuiteReduceTests(ReduceTestCase):
                 "duration_s": math.fsum(intervals_s),
                 "sample_count": len(powers_w),
                 "telemetry_backend": "powermetrics",
+            }
+            metadata["raw_sha256"] = {
+                path.relative_to(bundle_path).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in sorted((bundle_path / "raw").iterdir())
+                if path.is_file()
             }
             metadata_path.write_text(
                 json.dumps(metadata, indent=2, sort_keys=True) + "\n"

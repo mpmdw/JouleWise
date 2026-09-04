@@ -1075,6 +1075,7 @@ class RunBundleWriter:
             "joulewise_version",
             "schema_version",
             "config_sha256",
+            "raw_sha256",
             "run_id",
             "git_commit",
             "source_provenance",
@@ -1096,6 +1097,13 @@ class RunBundleWriter:
             "joulewise_version": joulewise.__version__,
             "schema_version": self._config.schema_version,
             "config_sha256": self._config_sha256,
+            "raw_sha256": {
+                path.relative_to(self._path).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in sorted((self._path / "raw").iterdir())
+                if path.is_file()
+            },
             "run_id": self._run_id,
             "git_commit": self._source_state_start["git_commit"],
             "source_provenance": source_provenance,

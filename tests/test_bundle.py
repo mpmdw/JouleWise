@@ -507,6 +507,26 @@ class RunBundleWriterTests(unittest.TestCase):
             metadata["git_commit"],
         )
 
+    def test_metadata_authenticates_every_raw_capture(self) -> None:
+        writer = self.make_writer()
+        captures = {
+            "powermetrics.plist": b"raw powermetrics bytes\x00",
+            "runtime.json": b'{"result":"ok"}\n',
+        }
+        for name, raw in captures.items():
+            writer.write_raw(name, raw)
+
+        writer.write_metadata({})
+
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["raw_sha256"],
+            {
+                f"raw/{name}": hashlib.sha256(raw).hexdigest()
+                for name, raw in captures.items()
+            },
+        )
+
     def test_source_provenance_is_captured_at_creation_and_compared_at_metadata(self) -> None:
         start = source_state()
         probe_outputs = [
@@ -666,6 +686,7 @@ class RunBundleWriterTests(unittest.TestCase):
             "joulewise_version": joulewise.__version__,
             "schema_version": self.config.schema_version,
             "config_sha256": writer.config_sha256,
+            "raw_sha256": {},
             "run_id": writer.run_id,
             "git_commit": "a" * 40,
             "clock": self.clock.info(),

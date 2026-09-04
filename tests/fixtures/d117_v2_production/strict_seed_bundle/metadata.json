@@ -390,6 +390,11 @@
     "group_size": null,
     "name": "none"
   },
+  "raw_sha256": {
+    "raw/powermetrics.plist": "3935ab7ebe038f347b161a614de02ef00fd4bfe0fed56a71c5dc544e96977c82",
+    "raw/powermetrics_idle.plist": "1662c2f5ac4e1a02e1bc79f2da78387670c95c317491f93a0d90ce6ff12d9f94",
+    "raw/powermetrics_idle_post.plist": "71a0542f0159bab2fd447840284ac48f72cd5ec92c50da26a3768df43afd1bee"
+  },
   "run_id": "seed",
   "schema_version": "0.1",
   "source_provenance": {

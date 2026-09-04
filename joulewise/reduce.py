@@ -110,6 +110,11 @@ AXI_REDUCER_VERSION = "0.6.2"
 AXI_REDUCER_VERSIONS = frozenset(
     {AXI_FROZEN_REDUCER_VERSION, AXI_ANCHOR_REDUCER_VERSION, AXI_REDUCER_VERSION}
 )
+RAW_CAPTURE_DIGEST_REDUCER_VERSIONS = frozenset(
+    {REDUCER_VERSION, AXI_REDUCER_VERSION}
+)
+RAW_CAPTURE_DIGEST_MISSING = "raw_capture_digest_missing"
+RAW_CAPTURE_DIGEST_MISMATCH = "raw_capture_digest_mismatch"
 FROZEN_ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_span_v2"
 ANCHOR_SHIFT_METHOD = "common_trace_shift_plus_independent_edge_corners_v3"
 RAW_POWERMETRICS_NAME = "powermetrics.plist"
@@ -141,6 +146,60 @@ class _ReduceError(Exception):
 
 class ReducerVersionError(ValueError):
     """Governed reducer dispatch refusal, distinct from unrelated ValueError."""
+
+
+def _verify_raw_capture_digests(
+    bundle_path: Path,
+    metadata: dict[str, Any],
+    *,
+    bundle_reducer_version: str,
+) -> None:
+    """Check every unprocessed capture against its fingerprint of exact bytes."""
+
+    recorded = metadata.get("raw_sha256")
+    if recorded is None:
+        if bundle_reducer_version in RAW_CAPTURE_DIGEST_REDUCER_VERSIONS:
+            raise _ReduceError(
+                f"{RAW_CAPTURE_DIGEST_MISSING}: metadata.raw_sha256 is required "
+                f"for reducer {bundle_reducer_version}"
+            )
+        return
+    if not isinstance(recorded, dict):
+        raise _ReduceError(
+            f"{RAW_CAPTURE_DIGEST_MISMATCH}: metadata.raw_sha256 is not an object"
+        )
+
+    raw_dir = bundle_path / "raw"
+    try:
+        raw_files = (
+            sorted(path for path in raw_dir.iterdir() if path.is_file())
+            if raw_dir.exists()
+            else []
+        )
+    except OSError as exc:
+        raise _ReduceError(
+            f"{RAW_CAPTURE_DIGEST_MISMATCH}: raw capture directory cannot be read: {exc}"
+        ) from exc
+    actual_names = {path.relative_to(bundle_path).as_posix() for path in raw_files}
+    if set(recorded) != actual_names:
+        raise _ReduceError(
+            f"{RAW_CAPTURE_DIGEST_MISMATCH}: metadata.raw_sha256 does not name "
+            "the complete raw capture set"
+        )
+    for path in raw_files:
+        relative = path.relative_to(bundle_path).as_posix()
+        expected = recorded[relative]
+        try:
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise _ReduceError(
+                f"{RAW_CAPTURE_DIGEST_MISMATCH}: {relative} cannot be read: {exc}"
+            ) from exc
+        if expected != actual:
+            raise _ReduceError(
+                f"{RAW_CAPTURE_DIGEST_MISMATCH}: {relative} bytes do not match "
+                "metadata.raw_sha256"
+            )
 
 
 # ----------------------------------------------------------------------------
@@ -2668,6 +2727,29 @@ def reduce_bundle(
 
     idle_baseline: IdleBaseline | None = None
     try:
+        # A finalized bundle's stored reducer version identifies its evidence
+        # format.  A bundle still being assembled has no stored version, so
+        # the selected reducer identifies the format being written.
+        stored_summary = reader.raw_summary()
+        stored_provenance = (
+            stored_summary.get("summary_provenance")
+            if isinstance(stored_summary, dict)
+            else None
+        )
+        stored_reducer_version = (
+            stored_provenance.get("reducer_version")
+            if isinstance(stored_provenance, dict)
+            else None
+        )
+        _verify_raw_capture_digests(
+            reader.path,
+            metadata,
+            bundle_reducer_version=(
+                stored_reducer_version
+                if isinstance(stored_reducer_version, str)
+                else reducer_version
+            ),
+        )
         idle_baseline = _idle_baseline(metadata)
         if reducer_version in AXI_REDUCER_VERSIONS:
             return _reduce_v060(
