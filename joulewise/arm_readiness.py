@@ -2977,6 +2977,10 @@ _HISTSEM_PROJECTION_CUSTODY_DIRECTORY = "identity_pin_projection.receipts"
 _HISTSEM_AUTHORING_CUSTODY_DIRECTORIES = _HISTSEM_CUSTODY_DIRECTORIES - {
     _HISTSEM_PROJECTION_CUSTODY_DIRECTORY
 }
+_HISTSEM_PROJECTION_FREEZE_PATH_PATTERN = re.compile(
+    r"identity_pin_projection\.receipts/"
+    r"projection-[0-9]{4,}\.(?:json|sha256)"
+)
 """Custody written by EVIDENCE AUTHORING, as opposed to identity projection.
 
 ``_HISTSEM_CUSTODY_DIRECTORIES`` answers a different question than the
@@ -3002,18 +3006,30 @@ freeze that follows it, so all three still prove the coordinate is too late.
 
 
 def _histsem_tree_has_authoring_custody(paths: Iterable[str]) -> bool:
-    """True when a historical pack tree already contains AUTHORING custody.
+    """True when a historical pack tree is not a lawful pre-authoring tree.
 
     ``paths`` are pack-relative POSIX paths from ``_historical_pack_tree``.
-    Projection custody is deliberately not counted -- see
-    ``_HISTSEM_AUTHORING_CUSTODY_DIRECTORIES``.
+    Only direct children of the projection-receipt directory that match the
+    projection freeze grammar are excluded from authoring custody.  Any other
+    entry under that directory makes the coordinate ineligible here, rather
+    than relying on the later identity membrane to reject it.
     """
 
-    return any(
-        PurePosixPath(path).parts
-        and PurePosixPath(path).parts[0] in _HISTSEM_AUTHORING_CUSTODY_DIRECTORIES
-        for path in paths
-    )
+    for path in paths:
+        relative = PurePosixPath(path)
+        if not relative.parts:
+            continue
+        if relative.parts[0] in _HISTSEM_AUTHORING_CUSTODY_DIRECTORIES:
+            return True
+        if (
+            relative.parts[0] == _HISTSEM_PROJECTION_CUSTODY_DIRECTORY
+            and _HISTSEM_PROJECTION_FREEZE_PATH_PATTERN.fullmatch(
+                relative.as_posix()
+            )
+            is None
+        ):
+            return True
+    return False
 
 
 _HISTSEM_ALLOWED_MODIFICATIONS = frozenset(
