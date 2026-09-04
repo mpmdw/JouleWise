@@ -9,7 +9,7 @@
     },
     {
       "block_anchor": "capture 101-ordinary",
-      "command": "generate_arm_readiness.py\" freeze",
+      "command": "$PY $CASE/scripts/generate_arm_readiness.py freeze",
       "id": "F3-POST-MINT-CONFIRMATION-PAIR",
       "kind": "contract_required_cli_inputs",
       "required_flags": [
@@ -30,6 +30,7 @@
     }
   ],
   "executing_head": "7d586a691f3c97054b474ee0223558438f24d67e",
+  "mode": "historical_replay",
   "runsheet": "docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md",
   "runsheet_revision": "7d586a691f3c97054b474ee0223558438f24d67e",
   "schema": "joulewise.runsheet_epoch_lint"

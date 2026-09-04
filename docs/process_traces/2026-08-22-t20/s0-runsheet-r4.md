@@ -603,7 +603,7 @@ names its symbol so the next drift is detectable by name rather than by line.
 - U11 projection `joulewise/identity_pins.py:1826-1935`.
 - Generic applicability rows `joulewise/arm_readiness_evidence.py:1709-1731`;
   authoring implementation `:2379-2618`.
-- CLIs: freeze/arm/verify `scripts/generate_arm_readiness.py:28-192` (exit
+- CLIs: freeze/arm/verify `scripts/generate_arm_readiness.py:28-199` (exit
   semantics `:175-192`: 0 PASS, 1 governed REFUSE, 2 raised
   `ArmReadinessError`); identity U11 `scripts/project_identity_pins.py:23-60`;
   histsem `scripts/verify_receipt_histsem.py:22-73`; evidence author
@@ -672,6 +672,7 @@ This block runs in Bash **or** zsh; every later block is zsh. It refuses if a
 prior proof directory exists; custody and receipts are never reused.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 set -euo pipefail
 
 SESSION=<absolute path of this session's scratchpad root>
@@ -825,9 +826,79 @@ cat "$TRANS/000-source-line.txt"
 Paste the line printed at the end as the assignment that precedes every block
 from here on.
 
+**Epoch lint ratification.** Run next, in its own shell, before any source or
+custody gate. The inline declaration on every executable block is the complete
+revision census. This block authenticates the reviewed fixation patch as a
+post-image overlay on the exact green base, then retains both its generated
+contract and the clean result. Any missing declaration, stale coordinate,
+missing required CLI input, absent overlaid symbol, changed overlay byte/base,
+or missing exact invocation stops the run.
+
+```zsh
+# joulewise-epoch-lint: {"checks":[]}
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+EPOCH_STAGE="$CUSTODY/epoch-lint-ratification"
+EPOCH_CONTRACT="$EPOCH_STAGE/contract.json"
+test ! -e "$EPOCH_STAGE" || die 'epoch-lint ratification staging root is occupied'
+mkdir -p "$EPOCH_STAGE/base/tests" "$EPOCH_STAGE/result/tests"
+git -C "$CLONE" show "${BASE}:tests/test_receipt_histsem.py" \
+  > "$EPOCH_STAGE/base/tests/test_receipt_histsem.py"
+cp "$EPOCH_STAGE/base/tests/test_receipt_histsem.py" \
+  "$EPOCH_STAGE/result/tests/test_receipt_histsem.py"
+git -C "$EPOCH_STAGE/result" init -q
+git -C "$EPOCH_STAGE/result" apply \
+  "$CLONE/docs/process_traces/2026-08-22-t20/s0-fixation-delta.patch"
+
+"$PY" - "$BASE" "$EPOCH_STAGE/base/tests/test_receipt_histsem.py" \
+  "$EPOCH_STAGE/result/tests/test_receipt_histsem.py" "$EPOCH_CONTRACT" <<'PY'
+import hashlib, json, pathlib, sys
+
+base, base_path, result_path, output_path = sys.argv[1:]
+base_raw = pathlib.Path(base_path).read_bytes()
+result_raw = pathlib.Path(result_path).read_bytes()
+overlay = {
+    "schema": "joulewise.runsheet_epoch_lint.patch_overlay",
+    "base_revision": base,
+    "files": [{
+        "path": "tests/test_receipt_histsem.py",
+        "base_sha256": hashlib.sha256(base_raw).hexdigest(),
+        "result_sha256": hashlib.sha256(result_raw).hexdigest(),
+        "content": result_raw.decode("utf-8"),
+    }],
+}
+sealed = (
+    json.dumps(overlay, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    + "\n"
+).encode("utf-8")
+overlay["sha256"] = hashlib.sha256(sealed).hexdigest()
+contract = {
+    "schema": "joulewise.runsheet_epoch_lint",
+    "mode": "ratification",
+    "runsheet": "docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md",
+    "runsheet_revision": base,
+    "executing_head": base,
+    "contract_path": "$EPOCH_CONTRACT",
+    "patch_overlay": overlay,
+}
+pathlib.Path(output_path).write_text(
+    json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+
+"$PY" "$CLONE/scripts/lint_runsheet_epoch.py" "$EPOCH_CONTRACT" \
+  --repository "$CLONE" > "$TRANS/003a-epoch-lint-ratification.json"
+"$PY" - "$TRANS/003a-epoch-lint-ratification.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+if d["status"] != "PASS" or d["check_count"] != 3 or d["overlay_file_count"] != 1:
+    raise SystemExit("epoch-lint ratification did not prove the three-kind census")
+PY
+```
+
 **`$BASE` gate.** Run next, in its own shell.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # The delta committed at BASE must be byte-identical to the delta this
@@ -866,6 +937,7 @@ precondition defect: stop, re-derive the map on main through the ordinary
 review lane, and restart from a fresh estate.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 cat > "$CUSTODY/tools/s0_anchor_map.py" <<'PY'
@@ -1073,13 +1145,14 @@ map; each is a whole symbol, so a rename shows up as a shifted or empty extract
 rather than as silently wrong bytes.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[{"cited_end":199,"cited_start":28,"end_symbol":"main","id":"S0-GENERATE-CLI-COORDINATES","kind":"file_line_coordinates","reference":"scripts/generate_arm_readiness.py 28,199p","source_path":"scripts/generate_arm_readiness.py","start_symbol":"_parser"}]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 for spec in \
   'joulewise/arm_readiness.py 1050,1076p;1999,2120p;3168,3228p;3605,3636p;3639,3707p;4115,4163p;4166,4253p;4256,4399p;5214,5263p;5266,5485p;5488,5743p;6098,6224p;6227,6262p;6265,6475p;6531,6807p;7307,7553p;10160,10261p;10370,10514p' \
   'joulewise/identity_pins.py 1826,1935p' \
   'joulewise/arm_readiness_evidence.py 1709,1731p;2379,2618p' \
-  'scripts/generate_arm_readiness.py 28,192p' \
+  'scripts/generate_arm_readiness.py 28,199p' \
   'scripts/project_identity_pins.py 23,60p' \
   'scripts/verify_receipt_histsem.py 22,73p' \
   'scripts/author_arm_readiness_evidence.py 25,112p' \
@@ -1152,6 +1225,7 @@ r2's `$INPUT/<tool>.py` invocations could not have run. Tools execute from
 `$CLONE/scripts/`, authenticated against this manifest in §3.6.1.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" - "$CLONE" "$MANIFEST" "$BASE" "$CI_RUN_ID" <<'PY'
@@ -1224,6 +1298,7 @@ merged candidate, and append that per-file disposition to the transcript. There
 is no `rg` binary on this bench; the sweep uses `grep -E`.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 LIVE_V1_SURFACES=(
@@ -1322,6 +1397,7 @@ fixed-point principle forbids authenticators in any allowlist. Authority: D-151
 conditions 1, 2 and 7; S-1 MANIFEST §3.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 cat > "$CUSTODY/tools/s0_allowlist_contract.py" <<'PY'
@@ -1425,6 +1501,7 @@ After the evidence-author commands in §3.4, assert the exact eleven generic
 kinds.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 cat > "$CUSTODY/tools/check_census.py" <<'PY'
@@ -1482,6 +1559,7 @@ defined in `env.sh` (§1.1). There is no index arithmetic anywhere below;
 ### 3.1 Materialize the `_v4` roots from the reviewed generators
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -1518,6 +1596,7 @@ of any kind. Run each of the three blocks below in its own shell.
 **3.2.a — record and gate the runtime environment.**
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 test -x "$MEASURE_PY" || die 'the pinned measurement interpreter is absent'
@@ -1589,6 +1668,7 @@ The cure is a per-pack **freeze → assert → commit** interleave. Run this blo
 next pack until the previous one's commit exists.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 export HF_HUB_OFFLINE=1
@@ -1655,6 +1735,7 @@ commits from §3.2.b already carry every projection path, and this block only
 records which head they ended at.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -1731,6 +1812,7 @@ undeclared substitution is a failed proof rather than an unnoticed one. Do not
 create any commit between the three author commands.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -1760,6 +1842,7 @@ Authority: R4 r4-3, r4-5; R5 V-1.iii, V-2; AUDIT F-7.
 ### 3.4 Author all 33 generic receipts at the common head, then one evidence commit
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -1804,6 +1887,7 @@ touching the primary clone's unbuilt freeze slots, mint all three in a
 sacrificial clone and require PASS.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 PREFLIGHT=$(new_case pre-mint-clean "$EVIDENCE_COMMIT")
@@ -1833,6 +1917,7 @@ question; R5 V-2; `arm_readiness.py:6475-6691,6760-6806`.
 ### 3.6 Primary freeze ×3 and freeze commit
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -1874,6 +1959,7 @@ here first means a mismatch stops S-0 at a named step instead of surfacing as a
 `tool_mismatch` refusal in the middle of the marker build.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" - "$CLONE" "$MANIFEST" <<'PY'
@@ -1918,6 +2004,7 @@ Authority: MARKER-RULING split S-5; S-1 MANIFEST §§6 and 9.1 G-4; AUDIT F-1.
 The reviewed custody tool executes from the clone. Its exact interface:
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 test ! -e "$CLONE/$SUCCESSOR_PINSET" || die 'successor pinset output path is create-only and already exists'
@@ -1967,6 +2054,7 @@ and normative annexes, especially consolidated items D2–D8 and D10–D15.
 **Step 2 — assert the minted shape and close the ALLOWLIST CONTRACT.**
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" - "$CLONE/$SUCCESSOR_PINSET" "$TRANS/070-build-v4-pinset.json" <<'PY'
@@ -1997,6 +2085,7 @@ printf '%s\n' "$PINSET_MINT_HEAD" > "$TRANS/071-pinset-mint-head.txt"
 **Step 3 — close the contract at exactly 112 and verify the present chain.**
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" "$CUSTODY/tools/s0_allowlist_contract.py" \
@@ -2051,6 +2140,7 @@ D-150 leaves one legal branch: `BUILD-AT-BOUNDARY`, CUSTODY-EXTERNAL. It
 contributes no tracked path and leaves the contract at 112.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 test "$MARKER_BRANCH" = 'BUILD-AT-BOUNDARY' \
@@ -2125,6 +2215,7 @@ cannot be selected by sidecar presence (`arm_readiness.py:10477-10518`). The S-0
 marker stays outside the Git worktree.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 mkdir -p "$CUSTODY/marker-candidate"
@@ -2211,6 +2302,7 @@ and stops until Ed's YES names that digest. The literal YES is already in the
 immutable bytes Ed hashes; no timestamp or self-digest is added.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 STEP6_CANDIDATE="$CUSTODY/step6-candidate/d117_step6_confirmation_table_v4.json"
@@ -2260,6 +2352,7 @@ The `sys.path.insert` in that block is required: `$PY` is the estate venv and
 raised `ModuleNotFoundError`.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 STEP6_CANDIDATE="$CUSTODY/step6-candidate/d117_step6_confirmation_table_v4.json"
@@ -2307,6 +2400,7 @@ paired `verify` for that pack, and continues; a null receipt path for **all
 three** packs is a STOP, because then nothing was armed at all.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # ---- CONFIRMATION PAIR — the standard post-mint preamble (ruling R-2) ----
@@ -2505,6 +2599,7 @@ itself runs (`arm_readiness.py:4422-4465`), recomputed from primary evidence —
 the registry allowlist, the real digest-conditional constant, and `git diff`.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" - "$CLONE" "$REGISTRY" "$EVIDENCE_DERIVATION_HEAD" "$PINSET_MINT_HEAD" \
@@ -2545,6 +2640,7 @@ PY
 ```
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" - "$REGISTRY" "$CUSTODY/windows" <<'PY'
@@ -2593,7 +2689,7 @@ exactly that.
 
 Authority: R4 r4-2; R5 V-1.iii, V-2; actual changed-set site
 `arm_readiness.py:4426-4465`; CLI exit semantics
-`scripts/generate_arm_readiness.py:175-192`; AUDIT F-12.
+`scripts/generate_arm_readiness.py:175-199`; AUDIT F-12.
 
 ### 3.10 Two-part green record — local conditional, then PUBLISHED
 
@@ -2603,6 +2699,7 @@ result. Even at return code 0, this transcript's classification is
 filename nor its prose may say "suite green" or "published green."
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -2668,6 +2765,7 @@ writes into a custody directory of its own. It sources `env.sh` only for `$PY`,
 `hC` as every other enforcing block.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # Two operator inputs, substituted HERE and nowhere else.  The guards below
@@ -2761,6 +2859,7 @@ never reuse a case after a mutation. For R1 codes, extract the exact
 candidate-owned spellings first.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 CHANGED_CODE=$("$PY" -c 'import json,sys; r=json.load(open(sys.argv[1]))["freeze_evidence_lifecycle"]; print(next(x["code"] for x in r["refusal_vocabulary"] if x["role"]=="DEPENDENCY_CHANGED_SET"))' "$REGISTRY")
@@ -2779,6 +2878,7 @@ sourcing rather than by re-deriving.
 ### 4(a). Ordinary changed path refuses
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[{"block_anchor":"capture 101-ordinary","command":"$PY $CASE/scripts/generate_arm_readiness.py freeze","id":"S0-POST-MINT-CONFIRMATION-PAIR","kind":"contract_required_cli_inputs","required_flags":["--step6-confirmation-table","--expected-confirmation-digest"]}]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
@@ -2847,6 +2947,7 @@ exactly what r2's prose claimed: a governed arm REFUSE naming
 pack snapshot.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
@@ -2905,6 +3006,7 @@ evidence** bytes are unchanged, but `freeze-0004.json` and the plan pin are
 written. That is the ruled mint semantics, not a probe defect.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 CASE=$(new_case unexpected-pack-output "$EVIDENCE_COMMIT")
@@ -2966,6 +3068,7 @@ target) and a heredoc driver is already block-local. `tamper_class.py` in §4(e)
 is still a materialized file, because its eight classes share one driver.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block.
@@ -3036,6 +3139,7 @@ allowlist entry, is enforced elsewhere and evidenced elsewhere: the
 candidate-shape triplet `106-missing`, `107-extra` and `108-unused` in §4(d).
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block.
@@ -3100,6 +3204,7 @@ finding rows `104-plan-current` and `105-plan-sibling`,
 ### 4(d). Missing, extra, and unused candidate entries all fail
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" - "$TRANS" "$REGISTRY" <<'PY'
@@ -3208,6 +3313,7 @@ rather than merely asserting nonzero, because "refused with the wrong exit code"
 is a mechanism finding and r5's `!= 0` test could not see it.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block.
@@ -3466,6 +3572,7 @@ successor rewrite all refuse with the pre-existing `DEPENDENCY_CHANGED_SET`
 role; and `R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS` is exactly the successor path.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -3553,6 +3660,7 @@ through freeze replay — an entry point with a different gate order in front of
 it, as estate 9 demonstrated.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block.
@@ -3663,6 +3771,7 @@ manifest failure. Execution reaches the source/receipt conjunct at
 `:4467-4484`, which is the only manifest disagreement left standing.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block.
@@ -3785,6 +3894,7 @@ branches rather than only in the nonzero one, since a traceback under `rc=0` is
 just as much a mechanism failure.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # CONFIRMATION PAIR, re-pasted per block.
@@ -3888,6 +3998,7 @@ worktree. The probe therefore removes the successor member in a fresh case and
 names it.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 CASE=$(new_case histsem-successor-absent "$PROBE_BASE")
@@ -3907,6 +4018,7 @@ closed enumeration is actually closed, which is the property r2's probe
 accidentally exercised while claiming something else.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 ABSENT="$CASES/definitely-absent-pinset.json"
@@ -3937,6 +4049,7 @@ Create a case at `$EVIDENCE_COMMIT`, delete one generic evidence pair, mint,
 commit the refused mint, then replay unchanged.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 CASE=$(new_case poison "$EVIDENCE_COMMIT")
@@ -4001,6 +4114,7 @@ SHA-256, which cannot exist before the mint. The delta's header explains that
 design choice in full.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -4015,6 +4129,7 @@ test "$(cat "$TRANS/073-fixation-changed-paths.txt")" = 'tests/test_receipt_hist
 **Step 2 — substitute the one bench value and prove the substitution happened.**
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # S0-O3 cure: 074 is now PRODUCED in section 3.7 at the mint head.  Here the
@@ -4070,6 +4185,7 @@ fixation commit exists, so it is the fixed-worktree pre-commit run, not a
 not been made yet (Sol 33).
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[{"id":"S0-FIXATION-BYTE-PIN-SYMBOL","kind":"symbol_existence","reference":"grep -F 'test_successor_pinset_hs_byte_pin'","reference_occurrences":2,"source_path":"tests/test_receipt_histsem.py","symbol":"ReceiptHistoricalSemanticsTests.test_successor_pinset_hs_byte_pin"}]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
 
@@ -4139,6 +4255,7 @@ test_successor_pinset_hs_byte_pin` in the transcript's failure list. That holds
 however many other tests also fail.
 
 ```zsh
+# joulewise-epoch-lint: {"checks":[]}
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 CASE=$(new_case pinset-hs-byte-pin "$FIXATION_COMMIT")
