@@ -10690,3 +10690,49 @@ worktree `/Users/edr/code/JouleWise-wt-decode-id` (read-only, branch
 `fix/2026-09-02-decode-identity-set`);
 `grep -n -i 'six\|SILENT' docs/process_traces/2026-09-02-hands-free-week/13-audit-code-tests-opus.md`
 → the §2.2/§5 count discrepancy recorded under `SILENT-REFUSAL-TESTS-01`.
+
+## D-167 dated addendum (magistrate via lieutenant, 2026-09-03): V4-TRANSACTION-01 is retired by supersession
+
+D-167 retired the Qwen2.5 `_v3` window rows and installed the `_v5` rows in
+their place. It did not reach the row that carried the `_v4` family
+transaction, which stayed in the kernel as `partial` in the agent lane — the
+shape the generated queue renders as READY. The 2026-09-02 fresh-Fable
+docs-vs-truth audit (item A4) found it there and named the consequence
+plainly: a session picking a READY agent row would resume a transaction that
+will never run.
+
+**Ruling.** `V4-TRANSACTION-01` is RETIRED BY SUPERSESSION, on the same
+ground and by the same mechanism D-167 used for the window-council gate.
+The ground is D-164, which states that "`_v4` is never collected" because
+the production campaign runs the `_v5` Qwen3 pair; the successor is
+`V5-TRANSACTION-01`, which D-167 already installed as the live transaction
+row. The kernel has no `retired` status word, so the retirement is recorded
+as `shelved` with the reason in the row's status note.
+
+**What is kept.** The row's S-0 clone-proof record is retained verbatim in
+the status note and in
+`docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md`. That proof —
+estate 10 end to end with zero failures, the full probe battery, the
+magistrate's acceptance read — is executability evidence for the instrument
+and is untouched by this retirement. Retiring the row retires the scheduled
+work, not the evidence the work produced.
+
+**Consequential note, not ruled here.** `ARM-PACKET-01` carries a pending
+hard-start dependency on `V4-TRANSACTION-01` and therefore now depends on a
+shelved row. That is visible rather than hidden — the queue shows it blocked
+— but it wants its own disposition (retarget to `V5-TRANSACTION-01`, or
+retire alongside). Left for the magistrate; the lieutenant does not retarget
+a claim-path packet row on its own reading. Likewise the `_v4` wording that
+survives inside `PIPELINE-SMOKE-LIVE-01`'s acceptance evidence: the
+dependency and goal are corrected in this batch, the acceptance text is not,
+because editing a claim-path gate's acceptance is a magistrate call.
+
+**Executed evidence.** Run 2026-09-03 at `origin/main` = `46eaf18c`:
+`grep -n "_v4\` is never collected" docs/decision_log.md` → D-164 at the
+index row; `grep -n "Removed the retired Qwen2.5" docs/decision_log.md` →
+D-167's removal list at `:10444`; a kernel dump confirming
+`V5-TRANSACTION-01` is live (status `blocked`) and that
+`V5-QWEN3-PACK-GENERATED-S15`, the target of `PIPELINE-SMOKE-LIVE-01`'s
+former dependency, is absent from `tasks`; `python3 scripts/gen_state.py
+--check` → rc 0 after the edits; `python3 -m unittest tests.test_gen_state
+tests.test_docs_freshness` → 65 tests OK.
