@@ -10,7 +10,7 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-**T31 (2026-09-02 21:07 PDT) — HANDS-FREE WEEK BEGINS (Ed away up to a week;
+**T31 (2026-09-02 21:07 PDT; updated 09-03 19:45 — 22-h usage stall, night delivered, agents uninstalled, canonical unfrozen) — HANDS-FREE WEEK BEGINS (Ed away up to a week;
 D-171 delegations ratified; /loop "til done"). Resume from ONE file on main:
 `docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md` (all
 lanes, worktrees, evidence paths, the post-03:30 bookkeeping list). #274 is
