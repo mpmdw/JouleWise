@@ -1,134 +1,230 @@
 #!/usr/bin/env python3
-"""Deterministically generate the P2-015 Window-A floor campaign assembly.
+"""Deterministically generate a floor campaign from one campaign specification.
 
-This generator writes only below its own directory.  It freezes one calibration
-plan before any measurement, emits one order manifest per checkpointable
-sub-campaign, and emits a root order manifest for later P2-039 evidence binding.
-It deliberately does not synthesize DF-TELEM-ONOFF: the current BenchmarkConfig
-and powermetrics adapter expose no per-config extra-sampler setting.
+The default specification reproduces the frozen P2-015 Window-A assembly.  A
+different model, repetition count, workload size, block order, suite reference,
+or run-ID prefix is supplied by changing the specification, not this module.
 """
 
 from __future__ import annotations
 
+import argparse
+import copy
 import hashlib
 import json
+import re
+import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(__file__).resolve().parent
-N = 10
-MODEL_TAG = "qwen25-1p5b-mlx"
-PLAN_ID = "p2-015-window-a-m3max-qwen25-1p5b-v1"
+DEFAULT_SPEC = OUT / "campaign_spec.json"
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
 ORDER_SCHEMA = "joulewise.order_manifest.v1"
-RUNS_DIR = "runs/p2_015_floors_window_a"
-SUITE_REF = "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json"
-SUITE_SHA256 = "0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471"
+SPEC_SCHEMA = "joulewise.campaign_spec.v1"
+_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
-MODEL = {
-    "name": "Qwen2.5-1.5B-Instruct-4bit",
-    "family": "qwen2.5",
-    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
-    "weight_format": "mlx",
-    "context_window": 32768,
-}
-
-QUANTIZATION = {"name": "int4", "bits": 4}
-HARDWARE = {
-    "id": "macbook_m3_max",
-    "transport": "local",
-    "runtime_backend": "mlx",
-    "telemetry_backend": "powermetrics",
-    "device_kind": "apple_silicon_unified_memory",
-    "notes": (
-        "P2-015 Window-A floor calibration on the current M3 Max; "
-        "normal powermetrics sampler set only."
-    ),
-}
-SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
+class CampaignSpecError(ValueError):
+    """The campaign specification cannot produce a governed assembly."""
 
 
-PROFILES: dict[str, dict[str, Any]] = {
-    "df-rq-mid": {
-        "name": "df_rq_mid",
-        "prompt_tokens": 1024,
-        "output_tokens": 256,
-        "df_rows": ["DF-RQ-GROSS-MID", "DF-RQ-IDLE-MID"],
-        "metrics": ["gross_energy_j", "energy_request_j", "idle_subtracted_energy_j"],
-        "window_class": "request",
-        "use_role": "primary_claim_gate",
-    },
-    "df-rq-short": {
-        "name": "df_rq_short",
-        "prompt_tokens": 128,
-        "output_tokens": 64,
-        "df_rows": ["DF-RQ-GROSS-SHORT", "DF-RQ-IDLE-SHORT"],
-        "metrics": ["gross_energy_j", "energy_request_j", "idle_subtracted_energy_j"],
-        "window_class": "request",
-        "use_role": "primary_claim_gate",
-    },
-    "df-rq-long-prompt": {
-        "name": "df_rq_long_prompt",
-        "prompt_tokens": 4096,
-        "output_tokens": 64,
-        "df_rows": ["DF-RQ-GROSS-LONG-PROMPT", "DF-RQ-IDLE-LONG-PROMPT"],
-        "metrics": ["gross_energy_j", "energy_request_j", "idle_subtracted_energy_j"],
-        "window_class": "request",
-        "use_role": "optional_direct_coverage",
-    },
-    "df-rq-long-decode": {
-        "name": "df_rq_long_decode",
-        "prompt_tokens": 128,
-        "output_tokens": 512,
-        "df_rows": ["DF-RQ-GROSS-LONG-DECODE", "DF-RQ-IDLE-LONG-DECODE"],
-        "metrics": ["gross_energy_j", "energy_request_j", "idle_subtracted_energy_j"],
-        "window_class": "request",
-        "use_role": "optional_direct_coverage",
-    },
-    "df-ph-prefill": {
-        "name": "df_ph_prefill",
-        "prompt_tokens": 4096,
-        "output_tokens": 64,
-        "df_rows": ["DF-PH-PREFILL"],
-        "metrics": ["phase_energy_j.prefill"],
-        "window_class": "phase",
-        "use_role": "primary_claim_gate",
-    },
-    "df-ph-decode": {
-        "name": "df_ph_decode",
-        "prompt_tokens": 128,
-        "output_tokens": 512,
-        "df_rows": ["DF-PH-DECODE"],
-        "metrics": ["phase_energy_j.decode"],
-        "window_class": "phase",
-        "use_role": "primary_claim_gate",
-    },
-    "df-ph-short-prefill": {
-        "name": "df_ph_short_prefill",
-        "prompt_tokens": 128,
-        "output_tokens": 64,
-        "df_rows": ["DF-PH-SHORT-PREFILL"],
-        "metrics": ["phase_energy_j.prefill"],
-        "window_class": "phase",
-        "use_role": "identifiability_and_floor_if_eligible",
-    },
-    "df-su-sentinel": {
-        "name": "df_su_sentinel",
-        "suite_manifest_ref": SUITE_REF,
-        "suite_manifest_sha256": SUITE_SHA256,
-        "df_rows": ["DF-SU-ITEM", "DF-SU-LEVEL"],
-        "metrics": [
-            "suite_metrics.items[*].gross_energy_j",
-            "suite_metrics.levels[*].gross_energy_j",
-        ],
-        "window_class": "item_and_level",
-        "use_role": "primary_claim_gate",
-    },
-}
+@dataclass(frozen=True)
+class CampaignSpec:
+    path: Path
+    value: Mapping[str, Any]
+
+    @property
+    def campaign(self) -> Mapping[str, Any]:
+        return self.value["campaign"]
+
+    @property
+    def model(self) -> Mapping[str, Any]:
+        return self.value["model"]
+
+    @property
+    def hardware(self) -> Mapping[str, Any]:
+        return self.value["hardware_target"]
+
+    @property
+    def n(self) -> int:
+        return self.campaign["n"]
+
+    @property
+    def run_id_prefix(self) -> str:
+        return self.campaign["run_id_prefix"]
+
+    @property
+    def model_tag(self) -> str:
+        return self.model["tag"]
+
+    @property
+    def plan_id(self) -> str:
+        return "-".join(
+            (
+                self.campaign["campaign_id"],
+                self.hardware["plan_tag"],
+                self.model["plan_tag"],
+                self.campaign["plan_revision"],
+            )
+        )
+
+    @property
+    def profiles(self) -> Mapping[str, Mapping[str, Any]]:
+        return self.value["profiles"]
+
+    @property
+    def block_pattern(self) -> Sequence[Mapping[str, str]]:
+        return self.value["block_pattern"]
+
+
+def _require_keys(value: object, keys: set[str], where: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise CampaignSpecError(f"{where}: expected an object")
+    if set(value) != keys:
+        raise CampaignSpecError(
+            f"{where}: expected keys {sorted(keys)}, got {sorted(value)}"
+        )
+    return value
+
+
+def _identifier(value: object, where: str) -> str:
+    if not isinstance(value, str) or not _ID_RE.fullmatch(value):
+        raise CampaignSpecError(f"{where}: invalid identifier")
+    return value
+
+
+def load_campaign_spec(path: Path) -> CampaignSpec:
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+    except OSError as exc:
+        raise CampaignSpecError(f"cannot read campaign specification {path}: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CampaignSpecError(f"{path}: invalid UTF-8 JSON: {exc}") from exc
+    root = _require_keys(
+        value,
+        {
+            "schema_version",
+            "campaign",
+            "model",
+            "quantization",
+            "hardware_target",
+            "sampling",
+            "suite_manifest",
+            "block_pattern",
+            "profiles",
+        },
+        "campaign_spec",
+    )
+    if root["schema_version"] != SPEC_SCHEMA:
+        raise CampaignSpecError(f"campaign_spec.schema_version: expected {SPEC_SCHEMA!r}")
+    campaign = _require_keys(
+        root["campaign"],
+        {"campaign_id", "plan_revision", "run_id_prefix", "runs_dir", "n"},
+        "campaign_spec.campaign",
+    )
+    for key in ("campaign_id", "plan_revision", "run_id_prefix"):
+        _identifier(campaign[key], f"campaign_spec.campaign.{key}")
+    if not isinstance(campaign["runs_dir"], str) or not campaign["runs_dir"].strip():
+        raise CampaignSpecError("campaign_spec.campaign.runs_dir: expected nonempty text")
+    if isinstance(campaign["n"], bool) or not isinstance(campaign["n"], int) or campaign["n"] < 1:
+        raise CampaignSpecError("campaign_spec.campaign.n: expected a positive integer")
+
+    model = _require_keys(root["model"], {"tag", "plan_tag", "config"}, "campaign_spec.model")
+    _identifier(model["tag"], "campaign_spec.model.tag")
+    _identifier(model["plan_tag"], "campaign_spec.model.plan_tag")
+    model_config = _require_keys(
+        model["config"],
+        {"name", "family", "source", "revision", "weight_format", "context_window"},
+        "campaign_spec.model.config",
+    )
+    for key in ("name", "family", "source", "revision", "weight_format"):
+        if not isinstance(model_config[key], str) or not model_config[key].strip():
+            raise CampaignSpecError(f"campaign_spec.model.config.{key}: expected nonempty text")
+    if (
+        isinstance(model_config["context_window"], bool)
+        or not isinstance(model_config["context_window"], int)
+        or model_config["context_window"] < 1
+    ):
+        raise CampaignSpecError("campaign_spec.model.config.context_window: expected a positive integer")
+
+    hardware = _require_keys(
+        root["hardware_target"], {"plan_tag", "config"}, "campaign_spec.hardware_target"
+    )
+    _identifier(hardware["plan_tag"], "campaign_spec.hardware_target.plan_tag")
+    hardware_config = hardware["config"]
+    if not isinstance(hardware_config, Mapping) or not hardware_config:
+        raise CampaignSpecError("campaign_spec.hardware_target.config: expected a nonempty object")
+    for required in ("id", "runtime_backend", "telemetry_backend"):
+        if not isinstance(hardware_config.get(required), str) or not hardware_config[required].strip():
+            raise CampaignSpecError(
+                f"campaign_spec.hardware_target.config.{required}: expected nonempty text"
+            )
+    for key in ("quantization", "sampling"):
+        if not isinstance(root[key], Mapping) or not root[key]:
+            raise CampaignSpecError(f"campaign_spec.{key}: expected a nonempty object")
+    suite = _require_keys(root["suite_manifest"], {"ref", "sha256"}, "campaign_spec.suite_manifest")
+    if not isinstance(suite["ref"], str) or not suite["ref"].strip():
+        raise CampaignSpecError("campaign_spec.suite_manifest.ref: expected nonempty text")
+    if not isinstance(suite["sha256"], str) or not _SHA_RE.fullmatch(suite["sha256"]):
+        raise CampaignSpecError("campaign_spec.suite_manifest.sha256: expected 64 lowercase hex characters")
+
+    pattern = root["block_pattern"]
+    if not isinstance(pattern, list) or not pattern:
+        raise CampaignSpecError("campaign_spec.block_pattern: expected a nonempty array")
+    positions: list[str] = []
+    for index, item in enumerate(pattern):
+        row = _require_keys(item, {"label", "position"}, f"campaign_spec.block_pattern[{index}]")
+        for key in ("label", "position"):
+            if not isinstance(row[key], str) or not row[key].strip():
+                raise CampaignSpecError(
+                    f"campaign_spec.block_pattern[{index}].{key}: expected nonempty text"
+                )
+        positions.append(row["position"])
+    if len(positions) != len(set(positions)):
+        raise CampaignSpecError("campaign_spec.block_pattern: duplicate position")
+
+    profiles = root["profiles"]
+    if not isinstance(profiles, Mapping) or not profiles:
+        raise CampaignSpecError("campaign_spec.profiles: expected a nonempty object")
+    for profile_id, profile in profiles.items():
+        _identifier(profile_id, f"campaign_spec.profiles[{profile_id!r}]")
+        if not isinstance(profile, Mapping):
+            raise CampaignSpecError(f"campaign_spec.profiles.{profile_id}: expected an object")
+        common = {"name", "df_rows", "metrics", "window_class", "use_role", "cluster_reducer"}
+        workload_keys = set(profile) - common
+        if workload_keys not in (
+            {"prompt_tokens", "output_tokens"},
+            {"suite_manifest"},
+        ):
+            raise CampaignSpecError(
+                f"campaign_spec.profiles.{profile_id}: expected prompt/output sizes or suite_manifest=true"
+            )
+        for key in common:
+            if key not in profile:
+                raise CampaignSpecError(f"campaign_spec.profiles.{profile_id}: missing {key!r}")
+        if workload_keys == {"suite_manifest"}:
+            if profile["suite_manifest"] is not True:
+                raise CampaignSpecError(
+                    f"campaign_spec.profiles.{profile_id}.suite_manifest: expected true"
+                )
+        else:
+            for key in ("prompt_tokens", "output_tokens"):
+                number = profile[key]
+                if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+                    raise CampaignSpecError(
+                        f"campaign_spec.profiles.{profile_id}.{key}: expected a positive integer"
+                    )
+        if not isinstance(profile["df_rows"], list) or not profile["df_rows"]:
+            raise CampaignSpecError(f"campaign_spec.profiles.{profile_id}.df_rows: expected a nonempty array")
+        if not isinstance(profile["metrics"], list) or not profile["metrics"]:
+            raise CampaignSpecError(f"campaign_spec.profiles.{profile_id}.metrics: expected a nonempty array")
+    return CampaignSpec(path=path, value=copy.deepcopy(root))
 
 
 def render_json(value: Any) -> bytes:
@@ -187,15 +283,15 @@ def add_run(
 
 
 def add_absolute_round_robin(
-    subcampaign: dict[str, Any], condition_ids: list[str]
+    subcampaign: dict[str, Any], condition_ids: list[str], spec: CampaignSpec
 ) -> list[dict[str, Any]]:
     cells: list[dict[str, Any]] = []
     by_condition: dict[str, list[str]] = {condition_id: [] for condition_id in condition_ids}
-    for rep in range(1, N + 1):
+    for rep in range(1, spec.n + 1):
         offset = (rep - 1) % len(condition_ids)
         order = condition_ids[offset:] + condition_ids[:offset]
         for position, condition_id in enumerate(order, start=1):
-            run_id = f"p2015-{condition_id}-abs-r{rep:02d}"
+            run_id = f"{spec.run_id_prefix}-{condition_id}-abs-r{rep:02d}"
             add_run(
                 subcampaign,
                 run_id=run_id,
@@ -208,18 +304,18 @@ def add_absolute_round_robin(
             )
             by_condition[condition_id].append(run_id)
     for condition_id in condition_ids:
-        profile = PROFILES[condition_id]
+        profile = spec.profiles[condition_id]
         cells.append(
             {
                 "cell_id": f"{condition_id}-absolute",
                 "df_rows": profile["df_rows"],
                 "kind": "absolute",
                 "use_role": profile["use_role"],
-                "minimum_claim_n": N,
+                "minimum_claim_n": spec.n,
                 "window_class": profile["window_class"],
                 "metric_selectors": profile["metrics"],
                 "condition_family_id": condition_id,
-                "cluster_reducer": "mean" if condition_id == "df-su-sentinel" else "single",
+                "cluster_reducer": profile["cluster_reducer"],
                 "ordered_bundle_ids": by_condition[condition_id],
             }
         )
@@ -235,16 +331,19 @@ def add_abba(
     metrics: list[str],
     window_class: str,
     use_role: str,
+    spec: CampaignSpec,
 ) -> dict[str, Any]:
     blocks: list[dict[str, Any]] = []
-    for block in range(1, N + 1):
+    for block in range(1, spec.n + 1):
         block_id = f"{comparative_cell_id}-b{block:02d}"
         members = []
-        for sequence_index, (label, position) in enumerate(
-            (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2")),
-            start=1,
-        ):
-            run_id = f"p2015-{comparative_cell_id}-b{block:02d}-{position.lower()}"
+        for sequence_index, pattern_member in enumerate(spec.block_pattern, start=1):
+            label = pattern_member["label"]
+            position = pattern_member["position"]
+            run_id = (
+                f"{spec.run_id_prefix}-{comparative_cell_id}-"
+                f"b{block:02d}-{position.lower()}"
+            )
             add_run(
                 subcampaign,
                 run_id=run_id,
@@ -271,7 +370,7 @@ def add_abba(
         blocks.append(
             {
                 "block_id": block_id,
-                "executed_labels": ["A", "B", "B", "A"],
+                "executed_labels": [member["label"] for member in spec.block_pattern],
                 "members": members,
             }
         )
@@ -280,18 +379,20 @@ def add_abba(
         "df_rows": df_rows,
         "kind": "comparative_abba",
         "use_role": use_role,
-        "minimum_claim_n": N,
+        "minimum_claim_n": spec.n,
         "window_class": window_class,
         "metric_selectors": metrics,
         "condition_family_id": condition_id,
-        "cluster_reducer": "mean" if condition_id == "df-su-sentinel" else "single",
+        "cluster_reducer": spec.profiles[condition_id]["cluster_reducer"],
         "ordered_blocks": blocks,
     }
 
 
-def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def build_assembly(spec: CampaignSpec) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     subcampaigns: list[dict[str, Any]] = []
     cells: list[dict[str, Any]] = []
+    block_count_text = "Ten" if spec.n == 10 else str(spec.n)
+    pattern_text = "/".join(member["label"] for member in spec.block_pattern)
 
     neg8_start = new_subcampaign(
         "00_neg8_start",
@@ -301,7 +402,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     )
     add_run(
         neg8_start,
-        run_id="p2015-neg8-reference-start",
+        run_id=f"{spec.run_id_prefix}-neg8-reference-start",
         condition_id="df-rq-mid",
         rep=1,
         role="neg8_daily_reference",
@@ -318,7 +419,11 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         role="absolute_request_core",
         ordering_note="Two-condition round-robin alternates the leading condition by repetition.",
     )
-    cells.extend(add_absolute_round_robin(request_abs, ["df-rq-mid", "df-rq-short"]))
+    cells.extend(
+        add_absolute_round_robin(
+            request_abs, ["df-rq-mid", "df-rq-short"], spec
+        )
+    )
     subcampaigns.append(request_abs)
 
     phase_abs = new_subcampaign(
@@ -326,13 +431,15 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "Prefill, decode, and short-prefill absolute repeats",
         role="absolute_phase",
         ordering_note=(
-            "Three-condition cyclic round-robin rotates the leading condition; n=10 leaves "
+            f"Three-condition cyclic round-robin rotates the leading condition; n={spec.n} leaves "
             "the predeclared one-position imbalance visible in the manifest."
         ),
     )
     cells.extend(
         add_absolute_round_robin(
-            phase_abs, ["df-ph-prefill", "df-ph-decode", "df-ph-short-prefill"]
+            phase_abs,
+            ["df-ph-prefill", "df-ph-decode", "df-ph-short-prefill"],
+            spec,
         )
     )
     subcampaigns.append(phase_abs)
@@ -341,7 +448,9 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "03_request_abba",
         "Same-condition request ABBA blocks",
         role="comparative_request",
-        ordering_note="Ten contiguous A/B/B/A blocks; A and B are aliases of df-rq-mid.",
+        ordering_note=(
+            f"{block_count_text} contiguous {pattern_text} blocks; A and B are aliases of df-rq-mid."
+        ),
     )
     cells.append(
         add_abba(
@@ -352,6 +461,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             metrics=["gross_energy_j", "energy_request_j"],
             window_class="request",
             use_role="primary_claim_gate",
+            spec=spec,
         )
     )
     subcampaigns.append(request_abba)
@@ -360,7 +470,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "04_phase_prefill_abba",
         "Same-condition prefill-phase ABBA blocks",
         role="comparative_phase_prefill",
-        ordering_note="Ten contiguous A/B/B/A blocks over the exact df-ph-prefill profile.",
+        ordering_note=f"{block_count_text} contiguous {pattern_text} blocks over the exact df-ph-prefill profile.",
     )
     cells.append(
         add_abba(
@@ -371,6 +481,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             metrics=["phase_energy_j.prefill"],
             window_class="phase",
             use_role="primary_claim_gate",
+            spec=spec,
         )
     )
     subcampaigns.append(phase_prefill_abba)
@@ -379,7 +490,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "05_phase_decode_abba",
         "Same-condition decode-phase ABBA blocks",
         role="comparative_phase_decode",
-        ordering_note="Ten contiguous A/B/B/A blocks over the exact df-ph-decode profile.",
+        ordering_note=f"{block_count_text} contiguous {pattern_text} blocks over the exact df-ph-decode profile.",
     )
     cells.append(
         add_abba(
@@ -390,6 +501,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             metrics=["phase_energy_j.decode"],
             window_class="phase",
             use_role="primary_claim_gate",
+            spec=spec,
         )
     )
     subcampaigns.append(phase_decode_abba)
@@ -399,18 +511,18 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "Tiny-suite item/level absolute repeats",
         role="absolute_suite",
         ordering_note=(
-            "One frozen five-item same-shape suite condition repeated in ten independent bundles; "
+            f"One frozen five-item same-shape suite condition repeated in {block_count_text.lower()} independent bundles; "
             "items inside a bundle never increase n."
         ),
     )
-    cells.extend(add_absolute_round_robin(suite_abs, ["df-su-sentinel"]))
+    cells.extend(add_absolute_round_robin(suite_abs, ["df-su-sentinel"], spec))
     subcampaigns.append(suite_abs)
 
     suite_abba = new_subcampaign(
         "07_suite_abba",
         "Tiny-suite item/level same-condition ABBA blocks",
         role="comparative_suite",
-        ordering_note="Ten contiguous A/B/B/A blocks over the exact frozen suite condition.",
+        ordering_note=f"{block_count_text} contiguous {pattern_text} blocks over the exact frozen suite condition.",
     )
     cells.append(
         add_abba(
@@ -424,6 +536,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             ],
             window_class="item_and_level",
             use_role="primary_claim_gate",
+            spec=spec,
         )
     )
     subcampaigns.append(suite_abba)
@@ -437,7 +550,9 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     )
     cells.extend(
         add_absolute_round_robin(
-            optional_long_abs, ["df-rq-long-prompt", "df-rq-long-decode"]
+            optional_long_abs,
+            ["df-rq-long-prompt", "df-rq-long-decode"],
+            spec,
         )
     )
     subcampaigns.append(optional_long_abs)
@@ -447,7 +562,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         "Optional short-prefill stress ABBA blocks",
         role="comparative_phase_short_prefill_optional",
         optional=True,
-        ordering_note="Ten contiguous A/B/B/A blocks over the exact short-prefill stress profile.",
+        ordering_note=f"{block_count_text} contiguous {pattern_text} blocks over the exact short-prefill stress profile.",
     )
     cells.append(
         add_abba(
@@ -458,6 +573,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             metrics=["phase_energy_j.prefill"],
             window_class="phase",
             use_role="optional_short_prefill_comparative_claim_gate",
+            spec=spec,
         )
     )
     subcampaigns.append(optional_short_abba)
@@ -470,7 +586,7 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     )
     add_run(
         neg8_end,
-        run_id="p2015-neg8-reference-end",
+        run_id=f"{spec.run_id_prefix}-neg8-reference-end",
         condition_id="df-rq-mid",
         rep=2,
         role="neg8_daily_reference",
@@ -483,23 +599,27 @@ def build_assembly() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return subcampaigns, cells
 
 
-def workload_for(condition_id: str) -> dict[str, Any]:
-    profile = PROFILES[condition_id]
+def workload_for(spec: CampaignSpec, condition_id: str) -> dict[str, Any]:
+    profile = spec.profiles[condition_id]
     workload: dict[str, Any] = {
         "name": profile["name"],
         "repetitions": 1,
         "warmup_runs": 1,
     }
-    if "suite_manifest_ref" in profile:
-        workload["suite_manifest_ref"] = profile["suite_manifest_ref"]
-        workload["suite_manifest_sha256"] = profile["suite_manifest_sha256"]
+    if profile.get("suite_manifest") is True:
+        workload["suite_manifest_ref"] = spec.value["suite_manifest"]["ref"]
+        workload["suite_manifest_sha256"] = spec.value["suite_manifest"]["sha256"]
     else:
         workload["prompt_tokens"] = profile["prompt_tokens"]
         workload["output_tokens"] = profile["output_tokens"]
     return workload
 
 
-def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
+def config_for(
+    spec: CampaignSpec,
+    run: dict[str, Any],
+    plan_sha256: str,
+) -> dict[str, Any]:
     common_tags = [
         "phase2",
         "p2-015",
@@ -511,12 +631,12 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
-        "model": MODEL,
-        "quantization": QUANTIZATION,
-        "hardware_target": HARDWARE,
-        "workload_profile": workload_for(run["condition_id"]),
+        "model": dict(spec.model["config"]),
+        "quantization": dict(spec.value["quantization"]),
+        "hardware_target": dict(spec.hardware["config"]),
+        "workload_profile": workload_for(spec, run["condition_id"]),
         "interconnect": {"name": "local"},
-        "sampling": SAMPLING,
+        "sampling": dict(spec.value["sampling"]),
         "run_metadata": {
             "project": "capstone-joulewise",
             "operator": "lead",
@@ -525,12 +645,18 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
     }
 
 
-def manifest_entry(run: dict[str, Any], index: int, *, config: str) -> dict[str, Any]:
+def manifest_entry(
+    spec: CampaignSpec,
+    run: dict[str, Any],
+    index: int,
+    *,
+    config: str,
+) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "index": index,
         "config": config,
         "run_id": run["run_id"],
-        "model_tag": MODEL_TAG,
+        "model_tag": spec.model_tag,
         "rep": run["rep"],
         "workload": run["condition_id"],
         "role": run["role"],
@@ -542,8 +668,15 @@ def manifest_entry(run: dict[str, Any], index: int, *, config: str) -> dict[str,
     return entry
 
 
-def main() -> int:
-    subcampaigns, cells = build_assembly()
+def generate_campaign(spec: CampaignSpec, out_dir: Path) -> tuple[int, str]:
+    """Write one deterministic campaign assembly and return count plus plan hash."""
+
+    try:
+        subcampaigns, cells = build_assembly(spec)
+    except KeyError as exc:
+        raise CampaignSpecError(
+            f"campaign_spec.profiles: missing generator-required profile {exc.args[0]!r}"
+        ) from exc
     full_ids = [campaign["subcampaign_id"] for campaign in subcampaigns]
     core_ids = [
         campaign["subcampaign_id"]
@@ -552,21 +685,21 @@ def main() -> int:
     ]
     plan = {
         "schema_version": PLAN_SCHEMA,
-        "plan_id": PLAN_ID,
+        "plan_id": spec.plan_id,
         "calibration_scope": "window_a",
         "freeze_status": "frozen_before_measurement",
-        "fixed_n": N,
+        "fixed_n": spec.n,
         "stack_scope": {
-            "hardware_target": "macbook_m3_max",
-            "runtime_backend": "mlx",
-            "telemetry_backend": "powermetrics",
-            "model_name": MODEL["name"],
-            "model_revision": MODEL["revision"],
-            "model_source": MODEL["source"],
-            "quantization": "int4",
-            "sampling": SAMPLING,
-            "suite_manifest_ref": SUITE_REF,
-            "suite_manifest_sha256": SUITE_SHA256,
+            "hardware_target": spec.hardware["config"]["id"],
+            "runtime_backend": spec.hardware["config"]["runtime_backend"],
+            "telemetry_backend": spec.hardware["config"]["telemetry_backend"],
+            "model_name": spec.model["config"]["name"],
+            "model_revision": spec.model["config"]["revision"],
+            "model_source": spec.model["config"]["source"],
+            "quantization": spec.value["quantization"]["name"],
+            "sampling": dict(spec.value["sampling"]),
+            "suite_manifest_ref": spec.value["suite_manifest"]["ref"],
+            "suite_manifest_sha256": spec.value["suite_manifest"]["sha256"],
         },
         "replacement_rule": {
             "policy": "technical_invalid_same_slot_only",
@@ -577,12 +710,14 @@ def main() -> int:
             "expanded_window_a": {
                 "selected_for_this_frozen_plan": True,
                 "ordered_subcampaign_ids": full_ids,
-                "planned_bundles": 282,
+                "planned_bundles": sum(len(item["runs"]) for item in subcampaigns),
             },
             "core_claim_subset_if_lead_rejects_optional_cost_before_command_00": {
                 "selected_for_this_frozen_plan": False,
                 "ordered_subcampaign_ids": core_ids,
-                "planned_bundles": 222,
+                "planned_bundles": sum(
+                    len(item["runs"]) for item in subcampaigns if not item["optional"]
+                ),
                 "claim_caps": [
                     "No direct AP-2 long-prompt or long-decode request floor rows.",
                     "No short-prefill comparative L2/L3 floor row.",
@@ -592,8 +727,8 @@ def main() -> int:
         "cells": cells,
         "neg8_daily_reference": {
             "condition_family_id": "df-rq-mid",
-            "start_bundle_id": "p2015-neg8-reference-start",
-            "end_bundle_id": "p2015-neg8-reference-end",
+            "start_bundle_id": f"{spec.run_id_prefix}-neg8-reference-start",
+            "end_bundle_id": f"{spec.run_id_prefix}-neg8-reference-end",
             "session_id_is_blocking_factor": True,
         },
         "unavailable_cells": [
@@ -608,31 +743,33 @@ def main() -> int:
                 "floor_output": "unknown",
             }
         ],
-        "runs_dir": RUNS_DIR,
+        "runs_dir": spec.campaign["runs_dir"],
         "order_manifest": "order_manifest.json",
-        "campaign_log": f"{RUNS_DIR}/campaign_log.jsonl",
+        "campaign_log": f"{spec.campaign['runs_dir']}/campaign_log.jsonl",
     }
     plan_bytes = render_json(plan)
     plan_sha256 = hashlib.sha256(plan_bytes).hexdigest()
-    (OUT / "calibration_plan.json").write_bytes(plan_bytes)
-    (OUT / "calibration_plan.sha256").write_text(
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "calibration_plan.json").write_bytes(plan_bytes)
+    (out_dir / "calibration_plan.sha256").write_text(
         f"{plan_sha256}  calibration_plan.json\n", encoding="utf-8"
     )
 
     root_entries: list[dict[str, Any]] = []
     root_index = 1
     for campaign in subcampaigns:
-        directory = OUT / campaign["subcampaign_id"]
+        directory = out_dir / campaign["subcampaign_id"]
         directory.mkdir(parents=True, exist_ok=True)
         local_entries = []
         for local_index, run in enumerate(campaign["runs"], start=1):
-            config = config_for(run, plan_sha256)
+            config = config_for(spec, run, plan_sha256)
             write_json(directory / run["filename"], config)
             local_entries.append(
-                manifest_entry(run, local_index, config=run["filename"])
+                manifest_entry(spec, run, local_index, config=run["filename"])
             )
             root_entries.append(
                 manifest_entry(
+                    spec,
                     run,
                     root_index,
                     config=f"{campaign['subcampaign_id']}/{run['filename']}",
@@ -642,7 +779,7 @@ def main() -> int:
         leaf_manifest = {
             "schema_version": ORDER_SCHEMA,
             "manifest_id": f"p2-015-{campaign['subcampaign_id']}-order-v1",
-            "plan_id": PLAN_ID,
+            "plan_id": spec.plan_id,
             "calibration_plan_sha256": plan_sha256,
             "ordering_note": campaign["ordering_note"],
             "planned_n_bundles": len(local_entries),
@@ -653,7 +790,7 @@ def main() -> int:
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
         "manifest_id": "p2-015-window-a-expanded-order-v1",
-        "plan_id": PLAN_ID,
+        "plan_id": spec.plan_id,
         "calibration_plan_sha256": plan_sha256,
         "planned_n_bundles": len(root_entries),
         "subcampaign_order": [
@@ -670,15 +807,15 @@ def main() -> int:
         "unavailable_gap": {
             "subcampaign_id": "10_df_telem_onoff_unavailable",
             "df_row": "DF-TELEM-ONOFF",
-            "planned_n_blocks_if_implemented": 10,
-            "planned_n_bundles_if_implemented": 40,
+            "planned_n_blocks_if_implemented": spec.n,
+            "planned_n_bundles_if_implemented": spec.n * len(spec.block_pattern),
             "status": "not_in_executed_order",
         },
         "executed_order": root_entries,
     }
-    write_json(OUT / "order_manifest.json", root_manifest)
+    write_json(out_dir / "order_manifest.json", root_manifest)
 
-    unavailable = OUT / "10_df_telem_onoff_unavailable"
+    unavailable = out_dir / "10_df_telem_onoff_unavailable"
     unavailable.mkdir(parents=True, exist_ok=True)
     (unavailable / "README.md").write_text(
         "# DF-TELEM-ONOFF unavailable\n\n"
@@ -689,9 +826,34 @@ def main() -> int:
         "C-015/R2 smoke therefore remain unsatisfied; its floor is `unknown`.\n",
         encoding="utf-8",
     )
+    return len(root_entries), plan_sha256
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--campaign-spec",
+        type=Path,
+        default=DEFAULT_SPEC,
+        help="campaign specification JSON (default: sibling campaign_spec.json)",
+    )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=OUT,
+        help="output directory (default: the frozen P2-015 campaign directory)",
+    )
+    args = parser.parse_args(argv)
+    try:
+        spec = load_campaign_spec(args.campaign_spec)
+        count, plan_sha256 = generate_campaign(spec, args.out_dir)
+    except CampaignSpecError as exc:
+        print(f"campaign specification error: {exc}", file=sys.stderr)
+        return 2
     print(
-        f"generated {len(root_entries)} runnable configs across {len(subcampaigns)} "
-        f"subcampaigns; calibration_plan_sha256={plan_sha256}"
+        f"generated {count} runnable configs; "
+        f"model_tag={spec.model_tag}; plan_id={spec.plan_id}; "
+        f"calibration_plan_sha256={plan_sha256}"
     )
     return 0
 

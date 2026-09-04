@@ -26,8 +26,6 @@ REGISTRY_RELATIVE_PATH = Path("configs/analysis_registry/slice_2m_ap2.v1.json")
 AP_RELATIVE_PATH = Path("docs/contracts/analysis_plans.md")
 ROOT = Path(__file__).resolve().parents[1]
 
-PROFILE_NAMES = ("short_short", "long_short", "short_long", "mid_mid")
-SENTINEL_WORKLOAD = "short_short_sentinel"
 ENTRY_ROLES = {"condition", "drift_sentinel_start", "drift_sentinel_end"}
 ID_RE = re.compile(r"^[a-z0-9_-]+$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -522,41 +520,57 @@ def validate_analysis_registry(
         if multiplicity != {"method": "holm", "alpha": 0.05, "q": None}:
             errors.append("registry.multiplicity: AP-2 v1 requires holm alpha=0.05 and q=null")
     metrics = value["metrics"]
-    expected_metrics = (
-        ("gross_request", "gross_energy_j", "request"),
-        ("idle_request", "energy_request_j", "request"),
-        ("gross_prefill", "phase_energy_j.prefill", "phase"),
-        ("gross_decode", "phase_energy_j.decode", "phase"),
-    )
-    if not isinstance(metrics, list) or len(metrics) != 4:
-        errors.append("registry.metrics: must contain the four frozen AP-2 metric rows")
+    if not isinstance(metrics, list) or not metrics:
+        errors.append("registry.metrics: must contain at least one declared metric row")
     else:
-        for index, (metric, expected) in enumerate(zip(metrics, expected_metrics, strict=True)):
+        metric_tags: list[str] = []
+        metric_names: list[str] = []
+        for index, metric in enumerate(metrics):
             where = f"registry.metrics[{index}]"
             if _exact_keys(metric, METRIC_KEYS, where, errors):
-                observed = (metric["metric_tag"], metric["name"], metric["window_class"])
-                if observed != expected:
-                    errors.append(f"{where}: unexpected metric identity/order {observed!r}")
+                metric_tag = metric["metric_tag"]
+                name = metric["name"]
+                window_class = metric["window_class"]
+                if not isinstance(metric_tag, str) or not ID_RE.fullmatch(metric_tag):
+                    errors.append(f"{where}.metric_tag: invalid identifier")
+                else:
+                    metric_tags.append(metric_tag)
+                if not isinstance(name, str) or not ID_RE.fullmatch(name.replace(".", "_")):
+                    errors.append(f"{where}.name: invalid metric identifier")
+                else:
+                    metric_names.append(name)
+                if window_class not in {"request", "phase"}:
+                    errors.append(f"{where}.window_class: expected 'request' or 'phase'")
+                elif isinstance(name, str) and name.startswith("phase_energy_j.") != (
+                    window_class == "phase"
+                ):
+                    errors.append(f"{where}: metric name and window_class disagree")
                 if metric["unit"] != "J" or metric["ratio_estimand"] is not None:
                     errors.append(f"{where}: AP-2 v1 requires unit J and ratio_estimand null")
+        if len(metric_tags) != len(set(metric_tags)):
+            errors.append("registry.metrics: duplicate metric_tag")
+        if len(metric_names) != len(set(metric_names)):
+            errors.append("registry.metrics: duplicate metric name")
     pairs = value["condition_pairs"]
-    expected_pairs = (
-        ("short_short", "long_short"),
-        ("short_short", "short_long"),
-        ("short_short", "mid_mid"),
-        ("long_short", "short_long"),
-        ("long_short", "mid_mid"),
-        ("short_long", "mid_mid"),
-    )
-    if not isinstance(pairs, list) or len(pairs) != 6:
-        errors.append("registry.condition_pairs: must contain the six frozen AP-2 pairs")
+    if not isinstance(pairs, list) or not pairs:
+        errors.append("registry.condition_pairs: must contain at least one declared pair")
     else:
-        for index, (pair, expected) in enumerate(zip(pairs, expected_pairs, strict=True)):
+        observed_pairs: list[tuple[str, str]] = []
+        for index, pair in enumerate(pairs):
             where = f"registry.condition_pairs[{index}]"
             if _exact_keys(pair, REGISTRY_PAIR_KEYS, where, errors):
-                observed = (pair["condition_a"], pair["condition_b"])
-                if observed != expected:
-                    errors.append(f"{where}: unexpected condition pair/order {observed!r}")
+                condition_a = pair["condition_a"]
+                condition_b = pair["condition_b"]
+                if not isinstance(condition_a, str) or not ID_RE.fullmatch(condition_a):
+                    errors.append(f"{where}.condition_a: invalid identifier")
+                if not isinstance(condition_b, str) or not ID_RE.fullmatch(condition_b):
+                    errors.append(f"{where}.condition_b: invalid identifier")
+                if isinstance(condition_a, str) and condition_a == condition_b:
+                    errors.append(f"{where}: a condition cannot be paired with itself")
+                if isinstance(condition_a, str) and isinstance(condition_b, str):
+                    observed_pairs.append((condition_a, condition_b))
+        if len(observed_pairs) != len(set(observed_pairs)):
+            errors.append("registry.condition_pairs: duplicate ordered pair")
     if ap_row is not None:
         if value["plan_id"] != "AP-2":
             errors.append("registry.plan_id disagrees with AP-2")
@@ -567,6 +581,23 @@ def validate_analysis_registry(
         if "holm" not in ap_row.values["multiplicity_rule"].lower():
             errors.append("registry multiplicity method disagrees with AP-2")
     return errors
+
+
+def _registry_profile_names(registry: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return condition names in first-declaration order from the registry."""
+
+    names: list[str] = []
+    pairs = registry.get("condition_pairs")
+    if not isinstance(pairs, list):
+        return ()
+    for pair in pairs:
+        if not isinstance(pair, Mapping):
+            continue
+        for key in ("condition_a", "condition_b"):
+            name = pair.get(key)
+            if isinstance(name, str) and name not in names:
+                names.append(name)
+    return tuple(names)
 
 
 def load_analysis_registry(path: Path, ap_path: Path) -> tuple[AnalysisRegistry, AnalysisPlanRow]:
@@ -650,7 +681,10 @@ def _build_entries(config_dir: Path, order: Mapping[str, Any]) -> list[dict[str,
     return entries
 
 
-def _build_links(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _build_links(
+    entries: Sequence[Mapping[str, Any]],
+    profile_names: Sequence[str],
+) -> list[dict[str, Any]]:
     by_block: dict[str, list[Mapping[str, Any]]] = {}
     for entry in entries:
         by_block.setdefault(entry["block_id"], []).append(entry)
@@ -659,7 +693,7 @@ def _build_links(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
         block = by_block[block_id]
         by_role = {entry["role"]: entry for entry in block}
         by_condition = {entry["condition_id"]: entry for entry in block}
-        condition_ids = [f"cond-2m-{profile}" for profile in PROFILE_NAMES]
+        condition_ids = [f"cond-2m-{profile}" for profile in profile_names]
         try:
             start = by_role["drift_sentinel_start"]
             end = by_role["drift_sentinel_end"]
@@ -821,7 +855,10 @@ def build_slice_2m_analysis_manifest(
             ],
         },
         "entries": entries,
-        "sentinel_links": _build_links(entries),
+        "sentinel_links": _build_links(
+            entries,
+            _registry_profile_names(registry.value),
+        ),
         "families": families,
         "contrasts": contrasts,
     }
@@ -886,17 +923,20 @@ def _validate_entry_semantics(entry: Mapping[str, Any], index: int, errors: list
     model_tag = strings["model_tag"]
     assert condition_id is not None and model_tag is not None
     workload = condition_id.removeprefix("cond-2m-")
-    if sentinel_position is not None:
-        workload = SENTINEL_WORKLOAD
     expected = _semantic_ids(model_tag, rep, workload, sentinel_position)
     for key, expected_value in expected.items():
         if entry[key] != expected_value:
             errors.append(f"{where}.{key}: expected {expected_value!r}")
-    expected_run_id = f"{model_tag}-r{rep}-{workload}"
-    if sentinel_position is not None:
-        expected_run_id += f"-{sentinel_position}"
-    if entry["run_id"] != expected_run_id:
-        errors.append(f"{where}.run_id: expected semantic run_id {expected_run_id!r}")
+    if sentinel_position is None:
+        expected_run_id = f"{model_tag}-r{rep}-{workload}"
+        if entry["run_id"] != expected_run_id:
+            errors.append(f"{where}.run_id: expected semantic run_id {expected_run_id!r}")
+    else:
+        sentinel_run_re = re.compile(
+            rf"^{re.escape(model_tag)}-r{rep}-[a-z0-9_-]+-{re.escape(sentinel_position)}$"
+        )
+        if not sentinel_run_re.fullmatch(entry["run_id"]):
+            errors.append(f"{where}.run_id: invalid semantic sentinel run_id")
     if Path(entry["config"]).name != entry["config"]:
         errors.append(f"{where}.config: must be a basename")
     if not SHA256_RE.fullmatch(entry["config_sha256"]):
@@ -926,8 +966,12 @@ def _validate_config_link(
         errors.append(f"{where}.run_id: disagrees with config")
     workload = config.get("workload_profile")
     workload_name = workload.get("name") if isinstance(workload, Mapping) else None
+    is_sentinel = str(entry.get("role", "")).startswith("drift_sentinel_")
     expected_workload = (
-        SENTINEL_WORKLOAD if str(entry.get("role", "")).startswith("drift_sentinel_")
+        order_row.get("workload")
+        if is_sentinel and isinstance(order_row, Mapping)
+        else workload_name
+        if is_sentinel
         else str(entry.get("condition_id", "")).removeprefix("cond-2m-")
     )
     if workload_name != expected_workload:
@@ -1152,6 +1196,7 @@ def validate_analysis_manifest(
             errors.append(f"manifest.entries: unexpected JSON sidecar/config(s): {', '.join(unexpected)}")
         if missing:
             errors.append(f"manifest.entries: missing config(s): {', '.join(missing)}")
+    profile_names = _registry_profile_names(registry.value) if registry is not None else None
     condition_cell_blocks: dict[Any, set[Any]] = {}
     expected_roles = {"condition"} | {f"drift_sentinel_{position}" for position in ("start", "end")}
     for block_id, block in blocks.items():
@@ -1161,10 +1206,17 @@ def validate_analysis_manifest(
             for entry in block
             if entry.get("role") == "condition" and isinstance(entry.get("condition_id"), str)
         ]
-        if len(block) != 6 or set(roles) != expected_roles or roles.count("condition") != 4:
-            errors.append(f"{block_id}: must have four conditions and exactly two sentinels")
-        if set(conditions) != {f"cond-2m-{name}" for name in PROFILE_NAMES}:
-            errors.append(f"{block_id}: baseline condition set is incomplete")
+        if profile_names is not None:
+            if (
+                len(block) != len(profile_names) + 2
+                or set(roles) != expected_roles
+                or roles.count("condition") != len(profile_names)
+            ):
+                errors.append(
+                    f"{block_id}: must have the registry-declared conditions and exactly two sentinels"
+                )
+            if set(conditions) != {f"cond-2m-{name}" for name in profile_names}:
+                errors.append(f"{block_id}: baseline condition set is incomplete")
         for entry in block:
             if entry.get("role") == "condition":
                 cell_id = entry.get("cell_id")
@@ -1231,18 +1283,19 @@ def validate_analysis_manifest(
             errors.append(f"{where}.start_entry_id: does not link this block's start sentinel")
         if link["end_entry_id"] != by_role.get("drift_sentinel_end", {}).get("entry_id"):
             errors.append(f"{where}.end_entry_id: does not link this block's end sentinel")
-        expected_linked = []
-        by_condition = {
-            condition_id: entry
-            for entry in block
-            if isinstance((condition_id := entry.get("condition_id")), str)
-        }
-        for name in PROFILE_NAMES:
-            entry = by_condition.get(f"cond-2m-{name}")
-            if entry is not None:
-                expected_linked.append(entry.get("entry_id"))
-        if link["linked_condition_entry_ids"] != expected_linked:
-            errors.append(f"{where}.linked_condition_entry_ids: invalid workload-order linkage")
+        if profile_names is not None:
+            expected_linked = []
+            by_condition = {
+                condition_id: entry
+                for entry in block
+                if isinstance((condition_id := entry.get("condition_id")), str)
+            }
+            for name in profile_names:
+                entry = by_condition.get(f"cond-2m-{name}")
+                if entry is not None:
+                    expected_linked.append(entry.get("entry_id"))
+            if link["linked_condition_entry_ids"] != expected_linked:
+                errors.append(f"{where}.linked_condition_entry_ids: invalid workload-order linkage")
         if link["diagnostic"] != "end_minus_start":
             errors.append(f"{where}.diagnostic: invalid value")
         for entry_id in [link["start_entry_id"], link["end_entry_id"], *linked_entry_ids]:
@@ -1392,8 +1445,15 @@ def validate_analysis_manifest(
         if _exact_keys(multiplicity, MULTIPLICITY_KEYS, f"{where}.multiplicity", errors):
             if multiplicity["m"] != len(ids):
                 errors.append(f"{where}.multiplicity.m: does not equal contrast_ids length")
-            if multiplicity != {"method": "holm", "alpha": 0.05, "q": None, "m": 6}:
-                errors.append(f"{where}.multiplicity: AP-2 family must be Holm m=6")
+            if registry is not None:
+                expected_multiplicity = {
+                    **dict(registry.value["multiplicity"]),
+                    "m": len(ids),
+                }
+                if multiplicity != expected_multiplicity:
+                    errors.append(
+                        f"{where}.multiplicity: differs from the frozen registry declaration"
+                    )
             referenced_contrast_ids.extend(ids)
             for contrast_id in ids:
                 contrast = contrast_by_id.get(contrast_id)
