@@ -228,7 +228,11 @@ if "@@" in text:
     raise SystemExit("unresolved template token")
 Path(output).write_text(text, encoding="utf-8")
 PY
-/usr/bin/plutil -lint "$plist"
+if [[ -x /usr/bin/plutil ]]; then
+  /usr/bin/plutil -lint "$plist"
+else
+  "$python_bin" -c 'import plistlib, sys; plistlib.load(open(sys.argv[1], "rb"))' "$plist"
+fi
 
 if [[ "$mode" == "--render-only" ]]; then
   print "rendered $plist"
