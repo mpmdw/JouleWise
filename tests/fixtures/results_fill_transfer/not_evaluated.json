@@ -4,21 +4,41 @@
       "falling_gap_edge",
       "rising_gap_edge"
     ],
-    "observed_edge_count": 20,
-    "observed_run_count": 10,
+    "observed_edge_count": 18,
+    "observed_run_count": 9,
     "registered_edge_count": 20,
     "registered_run_count": 10
   },
   "claim_bearing": false,
   "diagnostic": true,
   "diagnostic_protocol_id": "TRANSFER-FIDUCIAL-01",
+  "edge_records": [
+    {"bundle_id": "synthetic-transfer-r01", "composed_absolute_residual_bound_s": 0.012, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.01, "upper": 0.009}},
+    {"bundle_id": "synthetic-transfer-r01", "composed_absolute_residual_bound_s": 0.013, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.011, "upper": 0.01}},
+    {"bundle_id": "synthetic-transfer-r02", "composed_absolute_residual_bound_s": 0.014, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.012, "upper": 0.011}},
+    {"bundle_id": "synthetic-transfer-r02", "composed_absolute_residual_bound_s": 0.015, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.013, "upper": 0.012}},
+    {"bundle_id": "synthetic-transfer-r03", "composed_absolute_residual_bound_s": 0.016, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.014, "upper": 0.013}},
+    {"bundle_id": "synthetic-transfer-r03", "composed_absolute_residual_bound_s": 0.017, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.015, "upper": 0.014}},
+    {"bundle_id": "synthetic-transfer-r04", "composed_absolute_residual_bound_s": 0.022, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.02, "upper": 0.018}},
+    {"bundle_id": "synthetic-transfer-r04", "composed_absolute_residual_bound_s": 0.019, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.017, "upper": 0.016}},
+    {"bundle_id": "synthetic-transfer-r05", "composed_absolute_residual_bound_s": 0.02, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.018, "upper": 0.017}},
+    {"bundle_id": "synthetic-transfer-r05", "composed_absolute_residual_bound_s": 0.018, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.016, "upper": 0.015}},
+    {"bundle_id": "synthetic-transfer-r06", "composed_absolute_residual_bound_s": 0.017, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.015, "upper": 0.014}},
+    {"bundle_id": "synthetic-transfer-r06", "composed_absolute_residual_bound_s": 0.016, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.014, "upper": 0.013}},
+    {"bundle_id": "synthetic-transfer-r07", "composed_absolute_residual_bound_s": 0.015, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.013, "upper": 0.012}},
+    {"bundle_id": "synthetic-transfer-r07", "composed_absolute_residual_bound_s": 0.014, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.012, "upper": 0.011}},
+    {"bundle_id": "synthetic-transfer-r08", "composed_absolute_residual_bound_s": 0.013, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.011, "upper": 0.01}},
+    {"bundle_id": "synthetic-transfer-r08", "composed_absolute_residual_bound_s": 0.012, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.01, "upper": 0.009}},
+    {"bundle_id": "synthetic-transfer-r09", "composed_absolute_residual_bound_s": 0.011, "edge": "falling_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.009, "upper": 0.008}},
+    {"bundle_id": "synthetic-transfer-r09", "composed_absolute_residual_bound_s": 0.01, "edge": "rising_gap_edge", "effective_clock_anchor_bound_s": 0.002, "fitted_residual_interval_s": {"lower": -0.008, "upper": 0.007}}
+  ],
   "largest_composed_edge_residual_bound_s": null,
   "largest_inserted_gap_edge": null,
-  "pulse_derived_timing_bound_s": null,
+  "pulse_derived_timing_bound_s": 0.030067931757111657,
   "reason_codes": [
-    "source_capture_refused"
+    "run_census_incomplete"
   ],
-  "result_id": "tfr-938ed3cf646b85fad5456efb9c5fadb82f62a27b5374debfe525c168be62a87e",
+  "result_id": "tfr-c786c864048796925cce6325611b35fd68a922975e5d13f72c8766cf0872f085",
   "schema_version": "joulewise.transfer_fiducial_result.v1",
   "source_capture": {
     "bundle_sha256": [
@@ -57,14 +77,10 @@
       {
         "bundle_id": "synthetic-transfer-r09",
         "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
-      },
-      {
-        "bundle_id": "synthetic-transfer-r10",
-        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
       }
     ],
-    "estimator_revision": "existing_pulse_estimator.synthetic_fixture.v1",
-    "estimator_source_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "estimator_source_sha256": "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92",
     "file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "fit_source_commit": "cccccccccccccccccccccccccccccccccccccccc",
     "plan_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",

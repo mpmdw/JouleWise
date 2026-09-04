@@ -13,6 +13,9 @@ from pathlib import Path
 import unittest
 
 from joulewise.results_fill_transfer import (
+    ESTIMATOR_REVISION,
+    ESTIMATOR_SOURCE_SHA256,
+    REASON_CODE_ORDER,
     RESULT_SCHEMA_VERSION,
     STOP_FILL,
     TRANSFER_FIDUCIAL_RESULT_SITES,
@@ -25,9 +28,9 @@ from joulewise.results_fill_transfer import (
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "results_fill_transfer"
 
 FIXTURE_SHA256 = {
-    "supported.json": "f528ab7932d7086b333d6d81e514c3a43b1bda48a57f67a08f4ee9b78f0fa8d5",
-    "not_supported.json": "f47285a4fb63f3eccfab5fcbd1cd714cff5f4a67d8f50c768be47648f060b0d9",
-    "not_evaluated.json": "7170183571e12600edb16799eedb209d0e2bc55400b746819bcf3c6d1c1cc999",
+    "supported.json": "46fc110986a43f68cb815d427c558c1b08b3c3e664bf560ded0b60206c7f037f",
+    "not_supported.json": "586fd7b4c24bb5609bb71364a4af7555008d044ce8f7761348e70a657b609335",
+    "not_evaluated.json": "c073dc0abb0af10f37a142206e1883be2ed01326cbbfc24c7939e79e52dc2edb",
 }
 
 EXPECTED_SENTENCES = {
@@ -45,7 +48,7 @@ EXPECTED_SENTENCES = {
     ),
     "not_evaluated.json": (
         "Diagnostic only: the inserted-gap transfer comparison was not evaluated "
-        "(issued reasons: source_capture_refused); applying the session "
+        "(issued reasons: run_census_incomplete); applying the session "
         "pulse-derived timing bound to the studied inference boundary remains "
         "unestablished."
     ),
@@ -100,6 +103,15 @@ class TransferResultContractTests(unittest.TestCase):
             "[TRANSFER_FIDUCIAL_RESULT]",
         )
         self.assertEqual(len(TRANSFER_FIDUCIAL_RESULT_SITES), 9)
+        self.assertEqual(
+            REASON_CODE_ORDER,
+            (
+                "source_capture_refused",
+                "run_census_incomplete",
+                "edge_census_incomplete",
+                "pulse_derived_timing_bound_unavailable",
+            ),
+        )
 
         issued: dict[str, dict] = {}
         issued_raw: dict[str, bytes] = {}
@@ -111,6 +123,19 @@ class TransferResultContractTests(unittest.TestCase):
             issued_raw[fixture_name] = raw
             self.assertEqual(value["schema_version"], RESULT_SCHEMA_VERSION)
             self.assertEqual(validate_transfer_fiducial_result(value), [])
+            if value["source_capture"] is not None:
+                self.assertEqual(
+                    value["source_capture"]["estimator_revision"],
+                    ESTIMATOR_REVISION,
+                )
+                self.assertEqual(
+                    value["source_capture"]["estimator_source_sha256"],
+                    ESTIMATOR_SOURCE_SHA256,
+                )
+                self.assertEqual(
+                    len(value["edge_records"]),
+                    value["census"]["observed_edge_count"],
+                )
 
             rendered = render_transfer_fiducial_result(
                 raw,
@@ -187,6 +212,73 @@ class TransferResultContractTests(unittest.TestCase):
         mutated["source_capture"]["bundle_sha256"].pop()
         self.assertTrue(_all_stop(_render(_reissue(mutated))))
 
+        # A freshly content-addressed projection cannot change the registered
+        # existing estimator revision or its source bytes.
+        mutated = copy.deepcopy(supported)
+        mutated["source_capture"]["estimator_revision"] = "arbitrary_changed_estimator.v99"
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        mutated = copy.deepcopy(supported)
+        mutated["source_capture"]["estimator_source_sha256"] = "0" * 64
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        # The authenticated twenty-edge inventory, not the selected witness,
+        # proves the unrounded global maximum and deterministic tie-break.
+        mutated = copy.deepcopy(supported)
+        mutated["edge_records"][-1]["fitted_residual_interval_s"] = {
+            "lower": -0.498,
+            "upper": 0.1,
+        }
+        mutated["edge_records"][-1]["composed_absolute_residual_bound_s"] = 0.5
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        mutated = copy.deepcopy(supported)
+        mutated["edge_records"][0]["composed_absolute_residual_bound_s"] = 0.013
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        mutated = copy.deepcopy(supported)
+        mutated["largest_inserted_gap_edge"] = copy.deepcopy(mutated["edge_records"][-1])
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        mutated = copy.deepcopy(supported)
+        mutated["edge_records"].pop()
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        mutated = copy.deepcopy(supported)
+        mutated["edge_records"][-1] = copy.deepcopy(mutated["edge_records"][-2])
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        mutated = copy.deepcopy(supported)
+        mutated["edge_records"][0], mutated["edge_records"][1] = (
+            mutated["edge_records"][1],
+            mutated["edge_records"][0],
+        )
+        self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        bundle_tie = copy.deepcopy(supported)
+        bundle_tie["edge_records"][18].update(
+            fitted_residual_interval_s={"lower": -0.02, "upper": 0.018},
+            effective_clock_anchor_bound_s=0.002,
+            composed_absolute_residual_bound_s=0.022,
+        )
+        self.assertFalse(_all_stop(_render(_reissue(bundle_tie))))
+        bundle_tie["largest_inserted_gap_edge"] = copy.deepcopy(
+            bundle_tie["edge_records"][18]
+        )
+        self.assertTrue(_all_stop(_render(_reissue(bundle_tie))))
+
+        edge_tie = copy.deepcopy(supported)
+        edge_tie["edge_records"][7].update(
+            fitted_residual_interval_s={"lower": -0.02, "upper": 0.018},
+            effective_clock_anchor_bound_s=0.002,
+            composed_absolute_residual_bound_s=0.022,
+        )
+        self.assertFalse(_all_stop(_render(_reissue(edge_tie))))
+        edge_tie["largest_inserted_gap_edge"] = copy.deepcopy(
+            edge_tie["edge_records"][7]
+        )
+        self.assertTrue(_all_stop(_render(_reissue(edge_tie))))
+
         # Census, public maximum, outcome, flags, witness arithmetic, and the
         # b_fiducial_s source binding all bite even after a fresh content ID.
         semantic_mutations = []
@@ -241,6 +333,10 @@ class TransferResultContractTests(unittest.TestCase):
         semantic_mutations.append(("anchor addend", mutated))
 
         mutated = copy.deepcopy(supported)
+        mutated["largest_inserted_gap_edge"]["composed_absolute_residual_bound_s"] = 0.021
+        semantic_mutations.append(("selected composed bound", mutated))
+
+        mutated = copy.deepcopy(supported)
         mutated["reason_codes"] = ["unregistered_reason"]
         semantic_mutations.append(("reason enum", mutated))
 
@@ -270,6 +366,75 @@ class TransferResultContractTests(unittest.TestCase):
         for label, mutated in semantic_mutations:
             with self.subTest(mutation=label):
                 self.assertTrue(_all_stop(_render(_reissue(mutated))))
+
+        # Coverage refusals must agree with authenticated observed counts and
+        # nullable global-comparison evidence.
+        false_complete = copy.deepcopy(supported)
+        false_complete.update(
+            largest_composed_edge_residual_bound_s=None,
+            largest_inserted_gap_edge=None,
+            support_outcome="not_evaluated",
+            reason_codes=["run_census_incomplete"],
+        )
+        self.assertTrue(_all_stop(_render(_reissue(false_complete))))
+
+        truthful_run_incomplete = issued["not_evaluated.json"]
+        self.assertEqual(
+            truthful_run_incomplete["census"]["observed_run_count"], 9
+        )
+        self.assertEqual(
+            truthful_run_incomplete["census"]["observed_edge_count"], 18
+        )
+        self.assertFalse(_all_stop(_render(issued_raw["not_evaluated.json"])))
+
+        truthful_edge_incomplete = copy.deepcopy(supported)
+        truthful_edge_incomplete["edge_records"].pop()
+        truthful_edge_incomplete["census"]["observed_edge_count"] = 19
+        truthful_edge_incomplete.update(
+            largest_composed_edge_residual_bound_s=None,
+            largest_inserted_gap_edge=None,
+            support_outcome="not_evaluated",
+            reason_codes=["edge_census_incomplete"],
+        )
+        self.assertEqual(
+            validate_transfer_fiducial_result(
+                json.loads(_reissue(truthful_edge_incomplete))
+            ),
+            [],
+        )
+        self.assertFalse(_all_stop(_render(_reissue(truthful_edge_incomplete))))
+
+        two_shortfalls = copy.deepcopy(truthful_run_incomplete)
+        two_shortfalls["edge_records"].pop()
+        two_shortfalls["census"]["observed_edge_count"] = 17
+        self.assertTrue(_all_stop(_render(_reissue(two_shortfalls))))
+        two_shortfalls["reason_codes"] = [
+            "run_census_incomplete",
+            "edge_census_incomplete",
+        ]
+        self.assertFalse(_all_stop(_render(_reissue(two_shortfalls))))
+
+        pulse_unavailable = copy.deepcopy(supported)
+        pulse_unavailable.update(
+            pulse_derived_timing_bound_s=None,
+            support_outcome="not_evaluated",
+            reason_codes=["pulse_derived_timing_bound_unavailable"],
+        )
+        self.assertFalse(_all_stop(_render(_reissue(pulse_unavailable))))
+
+        source_refused = copy.deepcopy(supported)
+        source_refused.update(
+            source_capture=None,
+            edge_records=[],
+            largest_composed_edge_residual_bound_s=None,
+            largest_inserted_gap_edge=None,
+            pulse_derived_timing_bound_s=None,
+            support_outcome="not_evaluated",
+            reason_codes=["source_capture_refused"],
+        )
+        source_refused["census"]["observed_run_count"] = 0
+        source_refused["census"]["observed_edge_count"] = 0
+        self.assertFalse(_all_stop(_render(_reissue(source_refused))))
 
         # Equality belongs to supported (<=), never not_supported (>).
         equality = copy.deepcopy(supported)

@@ -12,9 +12,152 @@
   "claim_bearing": false,
   "diagnostic": true,
   "diagnostic_protocol_id": "TRANSFER-FIDUCIAL-01",
+  "edge_records": [
+    {
+      "bundle_id": "synthetic-transfer-r01",
+      "composed_absolute_residual_bound_s": 0.012,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.01, "upper": 0.009}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r01",
+      "composed_absolute_residual_bound_s": 0.013,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.011, "upper": 0.01}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r02",
+      "composed_absolute_residual_bound_s": 0.014,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.012, "upper": 0.011}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r02",
+      "composed_absolute_residual_bound_s": 0.015,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.013, "upper": 0.012}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r03",
+      "composed_absolute_residual_bound_s": 0.016,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.014, "upper": 0.013}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r03",
+      "composed_absolute_residual_bound_s": 0.017,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.015, "upper": 0.014}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r04",
+      "composed_absolute_residual_bound_s": 0.022,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.02, "upper": 0.018}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r04",
+      "composed_absolute_residual_bound_s": 0.019,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.017, "upper": 0.016}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r05",
+      "composed_absolute_residual_bound_s": 0.02,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.018, "upper": 0.017}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r05",
+      "composed_absolute_residual_bound_s": 0.018,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.016, "upper": 0.015}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r06",
+      "composed_absolute_residual_bound_s": 0.017,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.015, "upper": 0.014}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r06",
+      "composed_absolute_residual_bound_s": 0.016,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.014, "upper": 0.013}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r07",
+      "composed_absolute_residual_bound_s": 0.015,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.013, "upper": 0.012}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r07",
+      "composed_absolute_residual_bound_s": 0.014,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.012, "upper": 0.011}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r08",
+      "composed_absolute_residual_bound_s": 0.013,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.011, "upper": 0.01}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r08",
+      "composed_absolute_residual_bound_s": 0.012,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.01, "upper": 0.009}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r09",
+      "composed_absolute_residual_bound_s": 0.011,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.009, "upper": 0.008}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r09",
+      "composed_absolute_residual_bound_s": 0.01,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.008, "upper": 0.007}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r10",
+      "composed_absolute_residual_bound_s": 0.021,
+      "edge": "falling_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.019, "upper": 0.018}
+    },
+    {
+      "bundle_id": "synthetic-transfer-r10",
+      "composed_absolute_residual_bound_s": 0.02,
+      "edge": "rising_gap_edge",
+      "effective_clock_anchor_bound_s": 0.002,
+      "fitted_residual_interval_s": {"lower": -0.018, "upper": 0.017}
+    }
+  ],
   "largest_composed_edge_residual_bound_s": 0.022,
   "largest_inserted_gap_edge": {
     "bundle_id": "synthetic-transfer-r04",
+    "composed_absolute_residual_bound_s": 0.022,
     "edge": "falling_gap_edge",
     "effective_clock_anchor_bound_s": 0.002,
     "fitted_residual_interval_s": {
@@ -24,7 +167,7 @@
   },
   "pulse_derived_timing_bound_s": 0.030067931757111657,
   "reason_codes": [],
-  "result_id": "tfr-7dd21b16d88a6e1389dfee21c6ababc00a697df5d8e69007ca6f17ce9eb807db",
+  "result_id": "tfr-03ebc689559f4bdc5000fd4f94429fa5f8f55eb9b248d92064da7407210218e7",
   "schema_version": "joulewise.transfer_fiducial_result.v1",
   "source_capture": {
     "bundle_sha256": [
@@ -69,8 +212,8 @@
         "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
       }
     ],
-    "estimator_revision": "existing_pulse_estimator.synthetic_fixture.v1",
-    "estimator_source_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "estimator_source_sha256": "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92",
     "file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "fit_source_commit": "cccccccccccccccccccccccccccccccccccccccc",
     "plan_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
