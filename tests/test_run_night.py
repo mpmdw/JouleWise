@@ -633,6 +633,28 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn(str(REPO_ROOT / "docs" / "process" / "NIGHT_HANDBACK.md"), argv[2])
         self.assertIn("may not exist yet", argv[2])
 
+    def test_courier_body_reads_watchdog_age_and_last_decision_directly(self) -> None:
+        plan = self.driver._load_plan(self.plan_path)
+        state_path = self.custody.parent / "magistrate" / "state.json"
+        state_path.parent.mkdir()
+        state_path.write_text(
+            json.dumps({"state": "HOLD_UNSAFE", "reason": "plan malformed"})
+            + "\n",
+            encoding="utf-8",
+        )
+        os.utime(state_path, (1_000.0, 1_000.0))
+
+        with mock.patch.object(self.driver.time, "time", return_value=1_901.25):
+            argv = self.driver._courier_argv(self.custody, plan, self.courier)
+
+        self.assertIn(f"Watchdog state path: {state_path}", argv[2])
+        self.assertIn("Watchdog state age seconds: 901.250", argv[2])
+        self.assertIn("Watchdog last decision: HOLD_UNSAFE", argv[2])
+        self.assertIn("include these watchdog fields in the email body", argv[2])
+        source = SCRIPT_PATH.read_text(encoding="utf-8")
+        self.assertNotIn("scripts.magistrate_watchdog", source)
+        self.assertNotIn("from scripts import magistrate_watchdog", source)
+
     def test_launch_agent_template_disables_restart_and_installer_rejects_keepalive(self) -> None:
         template = (
             REPO_ROOT / "configs" / "launchd" / "com.joulewise.night.plist.template"

@@ -89,6 +89,8 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
+0. Land the watchdog branch on `main` through the normal twelve-row gate: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 3, verify SHA-256 byte identity for the five pinned files — `scripts/magistrate_watchdog.py`, `scripts/install_magistrate_watchdog.sh`, `docs/process/MAGISTRATE_WATCHDOG.md`, `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`, and `docs/process/NIGHT_HANDBACK.md` — against their matching packet exhibits. Record both columns of `shasum -a 256` output and stop if any pair differs. Do not substitute this development worktree for the canonical checkout.
+
 1. In the magistrate session, stop every background task and wait for each stop to complete. Repeat the session's background-task listing until it is empty; do not proceed while any Codex child, task, monitor, or background shell remains active.
 
 2. Preserve the two retired-v1 custody trees below a directory the watchdog's one-level plan glob cannot reach:
@@ -130,8 +132,10 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    ```zsh
    watchdog_checkout="$(/usr/bin/git rev-parse --show-toplevel)"
    /usr/bin/nohup /usr/bin/python3 - "$handoff_file" "$watchdog_checkout" > "$handoff_file.verify.log" 2>&1 <<'PY' &
-   import json
    import os
+   os.setsid()
+
+   import json
    import signal
    import subprocess
    import sys
@@ -203,6 +207,8 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    verdict = "pass" if not survivors and census.empty else "fail"
    print(json.dumps({
        "schema": "joulewise.magistrate_handoff_receipt.v1",
+       "reaper_pid": os.getpid(),
+       "reaper_session_id": os.getsid(0),
        "checkout": checkout,
        "owned": owned,
        "outcomes": outcomes,

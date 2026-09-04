@@ -13,6 +13,14 @@ night's custody root: `night/result.json`, then `night/receipt.json` or
 `night/refusal.json` as `result.json` directs. If this file and the result
 record disagree, the result record is right and the courier says so.
 
+The night driver independently reads the plan-configured sibling path
+`<custody-parent>/magistrate/state.json` when it constructs every courier
+message; for the production plan layout this is
+`~/night-custody/magistrate/state.json`. The email body reports that file's age
+and its last `state` decision without importing the watchdog. Operational
+liveness is 15 minutes: an age greater than 900 seconds, a missing file, or an
+unreadable decision means the watchdog is dead and must be reported as such.
+
 ## Purpose of this night
 
 Plan `rehearsal-20260903`, class `REHEARSAL_STUB`, armed by the magistrate

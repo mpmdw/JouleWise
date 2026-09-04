@@ -170,6 +170,27 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         missing_path.parent.mkdir(parents=True)
         shutil.copyfile(valid_path, missing_path)
         _drop_field(missing_path, "measurement_head")
+        golden = json.loads(RETIRED_V1.read_text(encoding="utf-8"))
+        v2_label_v1_keys_path = (
+            custody_parent / "v2-label-v1-keys" / "night_plan.json"
+        )
+        v2_label_v1_keys_path.parent.mkdir(parents=True)
+        v2_label_v1_keys_path.write_text(
+            json.dumps(
+                {**golden, "schema": "joulewise.night_plan.v2"}, sort_keys=True
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        v1_label_subset_path = (
+            custody_parent / "v1-label-subset" / "night_plan.json"
+        )
+        v1_label_subset_path.parent.mkdir(parents=True)
+        v1_subset = dict(golden)
+        del v1_subset["t0_epoch_s"]
+        v1_label_subset_path.write_text(
+            json.dumps(v1_subset, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
         completed = self._run(custody_parent)
 
@@ -180,7 +201,9 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         self.assertEqual("HOLD_UNSAFE", state["state"])
         self.assertIn(str(torn_path), state["reason"])
         self.assertIn(str(missing_path), state["reason"])
-        self.assertNotIn("joulewise.night_plan.v1", state["reason"])
+        self.assertIn(str(v2_label_v1_keys_path), state["reason"])
+        self.assertIn(str(v1_label_subset_path), state["reason"])
+        self.assertNotIn(str(retired_path), state["reason"])
         self.assertFalse(state.get("launch", False))
         self.assertFalse((watchdog_root / "attempts").exists())
         events = [

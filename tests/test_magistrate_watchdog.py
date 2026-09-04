@@ -11,6 +11,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import textwrap
 import threading
@@ -1204,6 +1205,34 @@ class BackoffAndEventTests(WatchdogTestCase):
 
 
 class ContractTests(WatchdogTestCase):
+    def test_mutation_m8_failed_lock_seed_removes_new_plist(self) -> None:
+        from tests.test_install_magistrate_watchdog import (
+            InstallMagistrateWatchdogTests,
+        )
+
+        case = InstallMagistrateWatchdogTests(methodName="runTest")
+        case.setUp()
+        try:
+            lock_path = case.home / "night-custody/magistrate/magistrate.lock"
+            lock_path.parent.mkdir(parents=True)
+            lock_path.write_bytes(b"pre-existing lock\x00bytes\n")
+            plist_path = (
+                case.home
+                / "Library/LaunchAgents/com.joulewise.magistrate.plist"
+            )
+
+            completed = case._run(case.shadow_script, "--install")
+
+            self.assertNotEqual(0, completed.returncode)
+            self.assertFalse(
+                plist_path.exists(),
+                "M8 survived: a failed first install left its new plist behind",
+            )
+            self.assertEqual(b"pre-existing lock\x00bytes\n", lock_path.read_bytes())
+            self.assertFalse(case.launch_log.exists())
+        finally:
+            case.tearDown()
+
     def test_handoff_inventory_separates_owned_tree_and_unclassified_orphans(self) -> None:
         table = FakeProcessTable(
             [
@@ -1392,6 +1421,56 @@ class ContractTests(WatchdogTestCase):
                     documented.measurement_root,
                 )
 
+    def test_documented_reaper_executes_in_its_own_session(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        text = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
+            encoding="utf-8"
+        )
+        blocks = re.findall(r"<<'PY'.*?\n(.*?)\n\s*PY$", text, re.DOTALL | re.MULTILINE)
+        reaper = next(block for block in blocks if "magistrate_handoff_receipt" in block)
+        reaper_bytes = textwrap.dedent(reaper)
+        self.assertTrue(
+            reaper_bytes.startswith("import os\nos.setsid()\n"),
+            "the executable reaper must detach before importing project code",
+        )
+
+        shadow = self.temp / "reaper-shadow"
+        module = shadow / "scripts" / "magistrate_watchdog.py"
+        module.parent.mkdir(parents=True)
+        module.write_text(
+            "STOP_COOPERATIVE_S = 0\n"
+            "class Census:\n"
+            "    empty = True\n"
+            "    def __init__(self): self.detail = 'empty'\n"
+            "def production_census(): return Census()\n",
+            encoding="utf-8",
+        )
+        (shadow / "subprocess.py").write_text(
+            "class Result:\n"
+            "    stdout = ''\n"
+            "def run(*args, **kwargs): return Result()\n",
+            encoding="utf-8",
+        )
+        inventory = self.temp / "reaper-inventory.json"
+        inventory.write_text(
+            json.dumps({"owned": [], "interactive_pid": 999999}) + "\n",
+            encoding="utf-8",
+        )
+
+        completed = subprocess.run(
+            [sys.executable, "-", str(inventory), str(shadow)],
+            input=reaper_bytes,
+            env={**os.environ, "PYTHONPATH": str(shadow)},
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        receipt = json.loads(completed.stdout)
+        self.assertEqual(receipt["reaper_pid"], receipt["reaper_session_id"])
+
     def test_launchagent_login_limit_and_dead_watchdog_threshold_are_explicit(self) -> None:
         watchdog = (
             Path(__file__).resolve().parents[1]
@@ -1410,6 +1489,9 @@ class ContractTests(WatchdogTestCase):
             encoding="utf-8"
         )
         ordered = (
+            "normal twelve-row gate",
+            "pull --ff-only",
+            "five pinned files",
             "stop every background task",
             'mv "$HOME/night-custody/$name" "$HOME/night-custody/retired-v1/$name"',
             "magistrate_watchdog.py handoff-inventory",
@@ -1419,6 +1501,15 @@ class ContractTests(WatchdogTestCase):
         )
         positions = [watchdog.index(item) for item in ordered]
         self.assertEqual(positions, sorted(positions))
+        for pinned in (
+            "scripts/magistrate_watchdog.py",
+            "scripts/install_magistrate_watchdog.sh",
+            "docs/process/MAGISTRATE_WATCHDOG.md",
+            "docs/process/MAGISTRATE_RELAUNCH_PROMPT.md",
+            "docs/process/NIGHT_HANDBACK.md",
+        ):
+            self.assertIn(pinned, watchdog)
+        self.assertIn("against their matching packet exhibits", watchdog)
         self.assertIn("never signals an unclassified or census PID", watchdog)
 
         handback = (repo / "docs" / "process" / "NIGHT_HANDBACK.md").read_text(

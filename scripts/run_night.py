@@ -616,6 +616,22 @@ def _record_courier_substitution(
         )
 
 
+def _watchdog_liveness_for_courier(plan: NightPlan) -> tuple[Path, str, str]:
+    """Read watchdog liveness without importing the watchdog implementation."""
+
+    state_path = Path(plan.custody_root).parent / "magistrate" / "state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        modified_epoch_s = state_path.stat().st_mtime
+    except (OSError, ValueError):
+        return state_path, "unavailable", "unavailable"
+    decision = state.get("state") if isinstance(state, Mapping) else None
+    if not isinstance(decision, str) or re.fullmatch(r"[A-Z_]+", decision) is None:
+        decision = "unavailable"
+    age_s = max(0.0, time.time() - modified_epoch_s)
+    return state_path, f"{age_s:.3f}", decision
+
+
 def _courier_argv(
     custody_root: Path, plan: NightPlan, courier_bin: Path
 ) -> tuple[str, ...]:
@@ -626,6 +642,17 @@ def _courier_argv(
         prompt.replace("{custody_root}", str(custody_root))
         .replace("{plan_id}", plan.plan_id)
         .replace("@@REPO_ROOT@@", str(REPO_ROOT))
+    )
+    watchdog_path, watchdog_age_s, watchdog_decision = _watchdog_liveness_for_courier(
+        plan
+    )
+    prompt += (
+        "\nWatchdog state path: "
+        f"{watchdog_path}\n"
+        f"Watchdog state age seconds: {watchdog_age_s}\n"
+        f"Watchdog last decision: {watchdog_decision}\n"
+        "You must include these watchdog fields in the email body. An age greater "
+        "than 900 seconds, or an unavailable age, means the watchdog is dead.\n"
     )
     return (
         str(courier_bin),

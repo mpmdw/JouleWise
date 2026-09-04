@@ -265,3 +265,19 @@ This addendum closes trace 24 findings F1 and F2. It supersedes round 8 only for
 | F2 — trace 23 names its real final head | `23-sol-fix-round-8-report.md:3` | Direct `git log` comparison: baseline `1b51fecf...`, final round-8 implementation head `a15cc15e...`. |
 
 Final authorized modules: watchdog installer 8 OK; watchdog 60 OK. No broader discovery ran. No install, real `launchctl`, agent/session launch, LaunchAgent mutation, default-custody access, production signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 10 clause-map addendum (2026-09-04 PDT)
+
+This addendum installs the packet-21 cold-gate cure table's round-10 rows. The full RED/mutation transcripts, exact clause-to-line map, and required six-module tail are in `27-sol-fix-round-10-report.md`.
+
+| Round-10 clause | Production/documentation | Biting assertion |
+|---|---|---|
+| M-A — both retired-v1 classifier limbs hold under the real CLI | Unchanged `scripts/magistrate_watchdog.py:133-141`; `tests/test_magistrate_watchdog_cli.py:174-205` | Independent M1/M9 mutations each fail the sibling-path assertion. |
+| M-C — M8 absent-prior-plist rollback pin | `tests/test_magistrate_watchdog.py:1208-1235` | Named test fails if a failed exclusive seed leaves the newly written plist. |
+| M-B — reaper detaches before the kill ladder | `docs/process/MAGISTRATE_WATCHDOG.md:133-218`; `tests/test_magistrate_watchdog.py:1424-1471` | Exact snippet bytes execute and prove `reaper_pid == reaper_session_id`. |
+| H-2 — courier reports independent watchdog liveness | `scripts/run_night.py:619-664`; `tests/test_run_night.py:636-657`; `docs/process/NIGHT_HANDBACK.md:15-22` | Prompt carries direct state-file age and last decision; >900 s/unavailable is dead. |
+| B-A / S-A — ordered landing and explicit round-9 licence | `docs/process/MAGISTRATE_WATCHDOG.md:92`; `24a-magistrate-ruling-delta-8-signature.md:3` | Step 0 precedes handoff; the one-paragraph ruling binds trace 24 YES to traces 16/22. |
+
+Final authorized six-module gate: 187 tests OK in 32.484 s. No install, canonical-checkout mutation, default-custody access, agent/session launch, production signal, email, or quiet-machine work occurred.
