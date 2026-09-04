@@ -5701,6 +5701,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         # how long earlier modules took, even though elapsed host time is not
         # part of this suspension-immunity contract.
         origin = _LOGICAL_WRITER_TEST_ORIGIN_S
+        census_pid = os.getpid()
+        census_command = (
+            "Python /fixture/validate_powermetrics_fiducial.py "
+            "--exit-case logical-producer-delay-immunity"
+        )
 
         def capture(delay_s: float | None) -> tuple[bytes, bytes, bytes, bytes]:
             witness = type(self)(methodName="runTest")
@@ -5709,8 +5714,22 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 witness.setUp()
                 setup_complete = True
                 marker = witness.repo / "writer-fixtures" / "producer-delay.json"
+                fake_bin = witness.repo / "fake-bin"
+                fake_bin.mkdir()
+                fake_ps = fake_bin / "ps"
+                fake_ps.write_text(
+                    "#!/usr/bin/env python3\n"
+                    "import os\n"
+                    "print(os.environ['JW_FAKE_PS_OUTPUT'])\n",
+                    encoding="utf-8",
+                )
+                fake_ps.chmod(0o755)
                 witness.writer_env_overrides = {
                     "JW_FAKE_TIME_ORIGIN": repr(origin),
+                    "PATH": os.pathsep.join(
+                        (str(fake_bin), _fresh_cli_env()["PATH"])
+                    ),
+                    "JW_FAKE_PS_OUTPUT": f"{census_pid} {census_command}",
                 }
                 if delay_s is not None:
                     witness.writer_env_overrides.update(
@@ -5736,9 +5755,21 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                         {"delay_s": delay_s, "fence": 4},
                     )
                 self.assertFalse((custody / ".test-sampler-acks.jsonl").exists())
+                events_bytes = (custody / "events.jsonl").read_bytes()
+                census_rows = [
+                    json.loads(line)
+                    for line in events_bytes.splitlines()
+                    if json.loads(line).get("event_type")
+                    == validation_script.SAMPLER_CENSUS_DIAGNOSTIC
+                ]
+                self.assertEqual(
+                    [row["metadata"]["findings"] for row in census_rows],
+                    [[{"pid": census_pid, "command": census_command}]],
+                    "the byte-exactness fixture must select one fixed census case",
+                )
                 return (
                     (custody / "instrument_evidence.json").read_bytes(),
-                    (custody / "events.jsonl").read_bytes(),
+                    events_bytes,
                     (custody / "raw" / "powermetrics.plist").read_bytes(),
                     (custody / "power_trace.csv").read_bytes(),
                 )
