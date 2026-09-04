@@ -121,6 +121,7 @@ REGISTERED_NEG8_REFERENCE_CORPUS_DIR = (
     / "neg8_reference_corpus"
     / "derivation"
 )
+REGISTERED_NEG8_REFERENCE_CORPUS_FILENAME = "settled_corpus.json"
 NEG8_CLAIM_FAMILY_GROSS = "gross_energy"
 NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED = "idle_subtracted_energy"
 CONDITION_NEG8_DRIFT_BOUND_UNDERIVED = "neg8_drift_bound_underived"
@@ -1604,22 +1605,19 @@ def _neg8_corpus_identity_is_authenticated(
 
     if reference_corpus_bytes is not None:
         return _neg8_corpus_identity_matches_bytes(corpus, reference_corpus_bytes)
+    path = (
+        REGISTERED_NEG8_REFERENCE_CORPUS_DIR
+        / REGISTERED_NEG8_REFERENCE_CORPUS_FILENAME
+    )
     try:
-        candidates = sorted(REGISTERED_NEG8_REFERENCE_CORPUS_DIR.glob("*.json"))
-    except OSError:
+        raw = read_authentication_input(
+            path,
+            grammar="json",
+            label="registered NEG-8 settled reference corpus",
+        )
+    except (OSError, UnicodeDecodeError, ValueError):
         return False
-    for path in candidates:
-        try:
-            raw = read_authentication_input(
-                path,
-                grammar="json",
-                label=f"registered NEG-8 reference corpus {path.name}",
-            )
-        except (OSError, UnicodeDecodeError, ValueError):
-            continue
-        if _neg8_corpus_identity_matches_bytes(corpus, raw):
-            return True
-    return False
+    return _neg8_corpus_identity_matches_bytes(corpus, raw)
 
 
 def validate_neg8_drift_bound_artifact(

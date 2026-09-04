@@ -424,7 +424,8 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   resolve against the exact bytes of either the tracked settled-corpus
   manifest or a manifest held by the calling custody boundary. The governed
   repository path is
-  `configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json`.
+  `configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json`;
+  no other JSON file in that directory is a registered corpus authority.
 
   The bracket is a WHOLE-WINDOW check: the evaluated basis must contain both
   endpoints. Legacy pair-only windows (a5-a8) remain evaluable as 1+0+1:
