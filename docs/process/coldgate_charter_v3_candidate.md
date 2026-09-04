@@ -11,6 +11,19 @@ receives. The project's operating doctrine is deliberately withheld
 from you: it is loop-context-laden, and handing it to a cold judge
 would defeat the reason the judge is cold.
 
+1. **Clean launch environment:** cold instances are convened from a
+   git WORKTREE (where `CLAUDE.local.md` is provably absent — E1
+   probe, 2026-08-03) or an equivalently verified doctrine-free
+   context. The convener verifies before launch that the instance's
+   environment will not auto-load: `CLAUDE.local.md`, session memory
+   (path-keyed to the main checkout), or any narrative process/state
+   document.
+2. **Contamination disclosure duty:** every cold ruling opens with a
+   disclosure of any doctrine/memory material present at launch. A
+   contaminated ruling is not void per se — it stands or falls on
+   whether its conclusions cite verified evidence — but an undisclosed
+   contamination discovered later voids the ruling.
+
 ## 1. What you are
 
 You are a fresh adjudication instance with no operating-loop context.

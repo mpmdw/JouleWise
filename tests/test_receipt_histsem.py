@@ -18,6 +18,7 @@ from unittest import mock
 
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as evidence_author
+import joulewise.identity_pins as identity_pins
 from joulewise.arm_readiness import (
     HISTSEM_REASON_CODES,
     READINESS_REASON_CODES,
@@ -2147,6 +2148,28 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
                 self.assertTrue(
                     readiness._histsem_tree_has_authoring_custody((path,))
                 )
+
+    def test_projection_grammar_owner_mutation_reaches_both_consumers(self) -> None:
+        candidate = "identity_pin_projection.receipts/projection-0001.sig"
+        self.assertFalse(
+            identity_pins.identity_pin_projection_freeze_path_matches(candidate)
+        )
+        self.assertTrue(readiness._histsem_tree_has_authoring_custody((candidate,)))
+
+        amended = identity_pins.IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN.replace(
+            "json|sha256", "json|sha256|sig"
+        )
+        with mock.patch.object(
+            identity_pins,
+            "IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN",
+            amended,
+        ):
+            self.assertTrue(
+                identity_pins.identity_pin_projection_freeze_path_matches(candidate)
+            )
+            self.assertFalse(
+                readiness._histsem_tree_has_authoring_custody((candidate,))
+            )
 
     def test_authoring_and_freeze_custody_still_refuse(self) -> None:
         for directory in (

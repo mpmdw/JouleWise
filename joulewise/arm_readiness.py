@@ -36,6 +36,7 @@ from joulewise.identity_pins import (
     _render_json,
     _require_exact_keys as _identity_require_exact_keys,
     _require_lower_sha256 as _identity_require_lower_sha256,
+    identity_pin_projection_freeze_path_matches,
     validate_identity_pin_projection,
     validate_projection_receipt,
     verify_frozen_projection,
@@ -2977,10 +2978,6 @@ _HISTSEM_PROJECTION_CUSTODY_DIRECTORY = "identity_pin_projection.receipts"
 _HISTSEM_AUTHORING_CUSTODY_DIRECTORIES = _HISTSEM_CUSTODY_DIRECTORIES - {
     _HISTSEM_PROJECTION_CUSTODY_DIRECTORY
 }
-_HISTSEM_PROJECTION_FREEZE_PATH_PATTERN = re.compile(
-    r"identity_pin_projection\.receipts/"
-    r"projection-[0-9]{4,}\.(?:json|sha256)"
-)
 """Custody written by EVIDENCE AUTHORING, as opposed to identity projection.
 
 ``_HISTSEM_CUSTODY_DIRECTORIES`` answers a different question than the
@@ -3023,10 +3020,9 @@ def _histsem_tree_has_authoring_custody(paths: Iterable[str]) -> bool:
             return True
         if (
             relative.parts[0] == _HISTSEM_PROJECTION_CUSTODY_DIRECTORY
-            and _HISTSEM_PROJECTION_FREEZE_PATH_PATTERN.fullmatch(
+            and not identity_pin_projection_freeze_path_matches(
                 relative.as_posix()
             )
-            is None
         ):
             return True
     return False

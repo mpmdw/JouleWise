@@ -23,8 +23,8 @@ independently of the packet.
 | Field | Value |
 |---|---|
 | File | `docs/process/coldgate_charter_v3_candidate.md` |
-| Version | v3 candidate (packet-input amendment) |
-| sha256 | `9275316e46c6c7bf084e35caa927dae9727dd544dae72656bed22ba82d22b977` |
+| Version | v3 candidate (packet-input and convening-procedure amendments) |
+| sha256 | `473ada40f7e2725d78f80e1e7ac18489456f1442ff6091c123173737546a3228` |
 | Status | **CANDIDATE — NOT OPERATIVE; AWAITING ED RE-RATIFICATION.** Cold gates continue to use the v2 file and digest in the Operative charter table above. |
 | Change authority | D-170 item 4 and its charter-v3 deferral in `docs/decision_log.md` |
 | Tracked consult brief | `docs/process/coldgate_consult_brief_template.md` |
