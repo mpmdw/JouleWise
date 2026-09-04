@@ -59,6 +59,15 @@ ANCHOR = importlib.util.module_from_spec(AS_SPEC)
 sys.modules[AS_SPEC.name] = ANCHOR
 AS_SPEC.loader.exec_module(ANCHOR)
 
+XS_PATH = ROOT / "scripts" / "paper_excursion_decomposition.py"
+XS_SPEC = importlib.util.spec_from_file_location(
+    "paper_excursion_decomposition", XS_PATH
+)
+assert XS_SPEC is not None and XS_SPEC.loader is not None
+EXCURSION = importlib.util.module_from_spec(XS_SPEC)
+sys.modules[XS_SPEC.name] = EXCURSION
+XS_SPEC.loader.exec_module(EXCURSION)
+
 CORPUS_PRESENT = all(
     path.exists()
     for path in (
@@ -89,6 +98,17 @@ def _copy_checker_inputs(root: Path) -> None:
         target = root / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / relative_path, target)
+    registry_path = root / FENCE.REGISTRY_RELATIVE_PATH
+    registry_text = registry_path.read_text(encoding="utf-8")
+    spec = FENCE.parse_registry_text(registry_text)
+    for code in ("XS", "AS"):
+        current_sha256 = hashlib.sha256(
+            (root / spec.sources[code].path).read_bytes()
+        ).hexdigest()
+        registry_text = registry_text.replace(
+            spec.sources[code].sha256, current_sha256, 1
+        )
+    registry_path.write_text(registry_text, encoding="utf-8")
 
 
 def _update_scratch_json_pin(root: Path, code: str) -> None:
@@ -462,11 +482,12 @@ class RefusalTests(unittest.TestCase):
         with mock.patch.object(FENCE, "F4_REPLAY_COMMAND", mutated), mock.patch.object(
             FENCE, "_required_corpus_paths", return_value=[]
         ), mock.patch.object(FENCE, "_run_producer", side_effect=reject_unknown_flag):
-            comparisons = FENCE.replay_half(ROOT, ROOT, self.spec)
+            replay = FENCE.replay_half(ROOT, ROOT, self.spec)
 
-        self.assertEqual(len(comparisons), 1)
-        self.assertEqual(comparisons[0].label, "replay XS exit")
-        self.assertFalse(comparisons[0].match)
+        self.assertIsNone(replay.stop)
+        self.assertEqual(len(replay.comparisons), 1)
+        self.assertEqual(replay.comparisons[0].label, "replay XS exit")
+        self.assertFalse(replay.comparisons[0].match)
 
     def test_renamed_out_flag_in_pinned_command_is_refused(self) -> None:
         mutated = FENCE.F4_REPLAY_COMMAND.replace("--out ", "--outt ", 1)
@@ -474,13 +495,14 @@ class RefusalTests(unittest.TestCase):
         with mock.patch.object(FENCE, "F4_REPLAY_COMMAND", mutated), mock.patch.object(
             FENCE, "_required_corpus_paths", return_value=[]
         ):
-            comparisons = FENCE.replay_half(ROOT, ROOT, self.spec)
+            replay = FENCE.replay_half(ROOT, ROOT, self.spec)
 
-        self.assertEqual(len(comparisons), 1)
-        self.assertEqual(comparisons[0].label, "replay F4 command")
-        self.assertFalse(comparisons[0].match)
+        self.assertIsNone(replay.stop)
+        self.assertEqual(len(replay.comparisons), 1)
+        self.assertEqual(replay.comparisons[0].label, "replay F4 command")
+        self.assertFalse(replay.comparisons[0].match)
         self.assertEqual(
-            comparisons[0].observed,
+            replay.comparisons[0].observed,
             "pinned F4 command must contain exactly one --out",
         )
 
@@ -617,10 +639,318 @@ class TypedArtifactCliTests(unittest.TestCase):
         lines = output.getvalue().splitlines()
         self.assertEqual(exit_code, 3, output.getvalue())
         self.assertTrue(
-            lines[-1].startswith("R7F CORPUS UNAVAILABLE: "), output.getvalue()
+            lines[-1].startswith("R7F REPLAY INCOMPLETE: source=excursion; "),
+            output.getvalue(),
         )
         self.assertIn("producer line one | producer line two", lines[-1])
         self.assertFalse(any("COMPARED" in line for line in lines))
+
+    def test_mixed_mismatch_then_unavailable_keeps_mismatch_and_exits_three(
+        self,
+    ) -> None:
+        calls = 0
+
+        def fake_run(
+            command: list[str], repository_root: Path
+        ) -> subprocess.CompletedProcess[str]:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                xd_out = Path(command[command.index("--out") + 1])
+                f4_out = Path(command[command.index("--svg") + 1])
+                xd_out.write_bytes(
+                    (ROOT / FENCE.EXPECTED_SOURCE_PATHS["XD"]).read_bytes()
+                    + b"\n"
+                )
+                f4_out.write_bytes(
+                    (ROOT / FENCE.EXPECTED_SOURCE_PATHS["F4"]).read_bytes()
+                )
+                return subprocess.CompletedProcess(command, 0, "", "")
+            return subprocess.CompletedProcess(
+                command,
+                3,
+                "",
+                "population unavailable: /missing/anchor-population\n",
+            )
+
+        output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", side_effect=fake_run),
+            redirect_stdout(output),
+        ):
+            exit_code = FENCE.main(["--corpus-root", str(ROOT)])
+
+        lines = output.getvalue().splitlines()
+        self.assertEqual(exit_code, 3, output.getvalue())
+        self.assertTrue(
+            any(line.startswith("MISMATCH replay XD bytes") for line in lines),
+            output.getvalue(),
+        )
+        self.assertEqual(
+            lines[-1],
+            "R7F REPLAY INCOMPLETE: source=anchor_summary; "
+            "reason=required_input_unavailable; "
+            "detail=population unavailable: /missing/anchor-population",
+        )
+
+    def test_present_events_digest_drift_is_mismatch_in_producer_and_driver(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-events-drift-", dir=SCRATCH_PARENT
+        ) as directory:
+            corpus_root = Path(directory)
+            source = corpus_root / EXCURSION.SOURCE_DIRECTORY
+            source.mkdir(parents=True)
+            retained = b'{"event":"retained"}\n'
+            (source / "events.jsonl").write_bytes(b'{"event":"drifted"}\n')
+            (source / "instrument_evidence.json").write_text(
+                json.dumps(
+                    {
+                        "artifact_sha256": {
+                            "events.jsonl": hashlib.sha256(retained).hexdigest(),
+                            "raw/powermetrics.plist": "0" * 64,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            producer_stderr = io.StringIO()
+            with redirect_stderr(producer_stderr):
+                producer_exit = EXCURSION.main(
+                    [
+                        "--repository-root",
+                        str(ROOT),
+                        "--corpus-root",
+                        str(corpus_root),
+                        "--out",
+                        str(corpus_root / "not-written.json"),
+                    ]
+                )
+
+        self.assertEqual(producer_exit, 2, producer_stderr.getvalue())
+        self.assertIn("ARTIFACT INTEGRITY MISMATCH", producer_stderr.getvalue())
+        producer = subprocess.CompletedProcess(
+            ["stub-excursion"], producer_exit, "", producer_stderr.getvalue()
+        )
+        driver_output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=producer),
+            redirect_stdout(driver_output),
+        ):
+            driver_exit = FENCE.main(["--corpus-root", str(ROOT)])
+
+        self.assertEqual(driver_exit, 2, driver_output.getvalue())
+        self.assertIn("MISMATCH replay XS exit", driver_output.getvalue())
+        self.assertIn("ARTIFACT INTEGRITY MISMATCH", driver_output.getvalue())
+        self.assertTrue(
+            driver_output.getvalue().splitlines()[-1].startswith("R7F COMPARED ")
+        )
+
+    def test_present_raw_digest_drift_is_mismatch_in_producer_and_driver(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-raw-drift-", dir=SCRATCH_PARENT
+        ) as directory:
+            corpus_root = Path(directory)
+            source = corpus_root / EXCURSION.SOURCE_DIRECTORY
+            raw_path = source / "raw" / "powermetrics.plist"
+            raw_path.parent.mkdir(parents=True)
+            events = b'{"event":"retained"}\n'
+            (source / "events.jsonl").write_bytes(events)
+            raw_path.write_bytes(b"drifted raw capture")
+            (source / "instrument_evidence.json").write_text(
+                json.dumps(
+                    {
+                        "artifact_sha256": {
+                            "events.jsonl": hashlib.sha256(events).hexdigest(),
+                            "raw/powermetrics.plist": hashlib.sha256(
+                                b"retained raw capture"
+                            ).hexdigest(),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            producer_stderr = io.StringIO()
+            with (
+                mock.patch.object(EXCURSION, "BACKUP_ROOTS", ()),
+                redirect_stderr(producer_stderr),
+            ):
+                producer_exit = EXCURSION.main(
+                    [
+                        "--repository-root",
+                        str(ROOT),
+                        "--corpus-root",
+                        str(corpus_root),
+                        "--out",
+                        str(corpus_root / "not-written.json"),
+                    ]
+                )
+
+        self.assertEqual(producer_exit, 2, producer_stderr.getvalue())
+        self.assertIn("ARTIFACT INTEGRITY MISMATCH", producer_stderr.getvalue())
+        self.assertIn("raw/powermetrics.plist", producer_stderr.getvalue())
+        producer = subprocess.CompletedProcess(
+            ["stub-excursion"], producer_exit, "", producer_stderr.getvalue()
+        )
+        driver_output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=producer),
+            redirect_stdout(driver_output),
+        ):
+            driver_exit = FENCE.main(["--corpus-root", str(ROOT)])
+
+        self.assertEqual(driver_exit, 2, driver_output.getvalue())
+        self.assertIn("MISMATCH replay XS exit", driver_output.getvalue())
+        self.assertIn("raw/powermetrics.plist", driver_output.getvalue())
+        self.assertTrue(
+            driver_output.getvalue().splitlines()[-1].startswith("R7F COMPARED ")
+        )
+
+    def test_missing_events_is_incomplete_in_producer_and_driver(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-events-missing-", dir=SCRATCH_PARENT
+        ) as directory:
+            corpus_root = Path(directory)
+            source = corpus_root / EXCURSION.SOURCE_DIRECTORY
+            source.mkdir(parents=True)
+            (source / "instrument_evidence.json").write_text(
+                json.dumps(
+                    {
+                        "artifact_sha256": {
+                            "events.jsonl": hashlib.sha256(b"retained").hexdigest(),
+                            "raw/powermetrics.plist": "0" * 64,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            producer_stderr = io.StringIO()
+            with redirect_stderr(producer_stderr):
+                producer_exit = EXCURSION.main(
+                    [
+                        "--repository-root",
+                        str(ROOT),
+                        "--corpus-root",
+                        str(corpus_root),
+                        "--out",
+                        str(corpus_root / "not-written.json"),
+                    ]
+                )
+
+        self.assertEqual(producer_exit, 3, producer_stderr.getvalue())
+        self.assertIn("events.jsonl is not present", producer_stderr.getvalue())
+        producer = subprocess.CompletedProcess(
+            ["stub-excursion"], producer_exit, "", producer_stderr.getvalue()
+        )
+        driver_output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=producer),
+            redirect_stdout(driver_output),
+        ):
+            driver_exit = FENCE.main(["--corpus-root", str(ROOT)])
+
+        self.assertEqual(driver_exit, 3, driver_output.getvalue())
+        self.assertEqual(
+            driver_output.getvalue().splitlines()[-1],
+            "R7F REPLAY INCOMPLETE: source=excursion; "
+            "reason=required_input_unavailable; "
+            f"detail=artifacts unavailable: {source / 'events.jsonl'} is not present",
+        )
+
+    def test_disposition_table_drives_finalizer_and_help(self) -> None:
+        rendered_help = FENCE._exit_code_help()
+        expected = {
+            FENCE.DispositionKind.AGREEMENT: (
+                0,
+                "R7F COMPARED",
+                "when every requested comparison completes and agrees.",
+            ),
+            FENCE.DispositionKind.MISMATCH: (
+                2,
+                "R7F COMPARED",
+                "when a completed comparison, producer integrity check, or "
+                "producer execution definitively disagrees.",
+            ),
+            FENCE.DispositionKind.REPLAY_INCOMPLETE: (
+                3,
+                "R7F REPLAY INCOMPLETE",
+                "when required input is unavailable and the requested replay "
+                "cannot complete; earlier comparisons remain visible.",
+            ),
+        }
+        comparison_by_kind = {
+            FENCE.DispositionKind.AGREEMENT: FENCE._comparison("probe", 1, 1),
+            FENCE.DispositionKind.MISMATCH: FENCE._comparison("probe", 1, 2),
+            FENCE.DispositionKind.REPLAY_INCOMPLETE: FENCE._comparison(
+                "probe", 1, 1
+            ),
+        }
+        for kind, disposition in FENCE.DISPOSITIONS.items():
+            with self.subTest(kind=kind.value):
+                expected_code, expected_token, expected_clause = expected[kind]
+                output = io.StringIO()
+                stop = (
+                    FENCE.ReplayStop("excursion", "required_input_unavailable", "x")
+                    if kind is FENCE.DispositionKind.REPLAY_INCOMPLETE
+                    else None
+                )
+                with redirect_stdout(output):
+                    exit_code = FENCE._finalize(
+                        kind,
+                        [comparison_by_kind[kind]],
+                        SKELETON_PATH,
+                        self.spec,
+                        stop=stop,
+                    )
+                self.assertEqual(disposition.exit_code, expected_code)
+                self.assertEqual(exit_code, expected_code)
+                self.assertTrue(
+                    output.getvalue().splitlines()[-1].startswith(
+                        expected_token
+                    )
+                )
+                self.assertIn(
+                    f"  {expected_code} {expected_clause}", rendered_help
+                )
+
+        help_output = io.StringIO()
+        with self.assertRaises(SystemExit) as raised, redirect_stdout(help_output):
+            FENCE.main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        for expected_code, _expected_token, expected_clause in expected.values():
+            self.assertIn(
+                f"  {expected_code} {expected_clause}", help_output.getvalue()
+            )
+
+    def test_silent_producer_exit_three_names_source_and_no_output(self) -> None:
+        silent = subprocess.CompletedProcess(["stub-excursion"], 3, "", "")
+        output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=silent),
+            redirect_stdout(output),
+        ):
+            exit_code = FENCE.main(["--corpus-root", str(ROOT)])
+
+        self.assertEqual(exit_code, 3, output.getvalue())
+        self.assertEqual(
+            output.getvalue().splitlines()[-1],
+            "R7F REPLAY INCOMPLETE: source=excursion; "
+            "reason=required_input_unavailable; detail=no output",
+        )
+        self.assertNotIn(f"detail={ROOT.resolve()}", output.getvalue())
 
     def test_string_number_in_aq_is_refused_by_dx026(self) -> None:
         with tempfile.TemporaryDirectory(
@@ -966,7 +1296,10 @@ class InvocationTests(unittest.TestCase):
                 check=False,
             )
         self.assertEqual(completed.returncode, 3, completed.stdout + completed.stderr)
-        prefix = "R7F CORPUS UNAVAILABLE: "
+        prefix = (
+            "R7F REPLAY INCOMPLETE: source=preflight; "
+            "reason=required_input_unavailable; detail="
+        )
         last_line = completed.stdout.splitlines()[-1]
         self.assertTrue(last_line.startswith(prefix), last_line)
         reported_missing = Path(last_line.removeprefix(prefix)).resolve()
@@ -977,10 +1310,7 @@ class InvocationTests(unittest.TestCase):
             / "20260722T145535-e941c821"
             / "instrument_evidence.json"
         ).resolve()
-        self.assertEqual(
-            reported_missing,
-            expected_missing,
-        )
+        self.assertEqual(reported_missing, expected_missing)
         self.assertFalse(
             any("COMPARED" in line for line in completed.stdout.splitlines())
         )
@@ -1001,14 +1331,15 @@ class ReplayAgainstRetainedCorporaTests(unittest.TestCase):
         self.assertTrue(
             all(row.match for row in digest_comparisons), digest_comparisons
         )
-        comparisons = FENCE.replay_half(ROOT, CORPUS_ROOT, spec)
-        self.assertEqual([row.label for row in comparisons], [
+        replay = FENCE.replay_half(ROOT, CORPUS_ROOT, spec)
+        self.assertIsNone(replay.stop)
+        self.assertEqual([row.label for row in replay.comparisons], [
             "replay XD bytes",
             "replay F4 bytes",
             "replay AQ bytes",
         ])
-        self.assertTrue(all(row.match for row in comparisons), comparisons)
-        self.assertEqual(len(digest_comparisons) + len(comparisons), 184)
+        self.assertTrue(all(row.match for row in replay.comparisons), replay)
+        self.assertEqual(len(digest_comparisons) + len(replay.comparisons), 184)
 
 
 if __name__ == "__main__":
