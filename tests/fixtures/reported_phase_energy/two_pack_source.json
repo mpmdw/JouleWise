@@ -1,0 +1,25 @@
+{
+  "fixture_kind": "synthetic_non_measurement",
+  "selected_prefill_tokens": 512,
+  "members_per_cell": 50,
+  "packs": [
+    {
+      "campaign_role": "alpha",
+      "model_id": "qwen3-1p7b",
+      "source_commit_fill": "a",
+      "token_count_source": "runtime_observed",
+      "decode_point_base_j": 100,
+      "p42_point_base_j": 50,
+      "selected_prefill_point_base_j": 200
+    },
+    {
+      "campaign_role": "beta",
+      "model_id": "qwen3-8b",
+      "source_commit_fill": "b",
+      "token_count_source": "server_usage",
+      "decode_point_base_j": 400,
+      "p42_point_base_j": 350,
+      "selected_prefill_point_base_j": 500
+    }
+  ]
+}
