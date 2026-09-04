@@ -16,7 +16,7 @@ The durable states are:
 - `HOLD_CENSUS`/`HOLD_UNSAFE`: an in-span census hit, unavailable process table, unreadable or malformed current plan, armed-plan conflict, surviving owned process, or other fail-closed condition forbids launch. Only the exact golden retired-v1 shape is ignored. A resident that observes an unreadable, malformed, future-authored, or conflicting plan records `resident_drain_started` with the reason and irreversibly runs the same nine-minute/TERM/one-minute/KILL ladder. If that supervisor dies, each replacement tick validates and records `resident_adopted`, performs the next due ladder action, and persists the stage for the following tick; no later launch occurs until a fresh tick sees that plan hold clear. Census matches are reported and never used as kill targets.
 - `NETWORK_UNCERTAIN`: the positive-control or stop-ref probe was not conclusive; this is not equivalent to a cleared switch.
 - `CLOCK_UNCERTAIN`: wall and monotonic deltas disagree by more than 60 seconds (or go backwards). A tick never launches; a resident requests stand-down and completes its nine-minute/TERM/one-minute/KILL drain on monotonic time. Once that conservative drain begins, later sane samples do not cancel it.
-- `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility.
+- `BACKOFF_USAGE`/`BACKOFF`: a classified usage failure or a generic launch failure is waiting for eligibility. The persisted deadline is a wall-clock epoch paired with the current boot identifier; a different boot discards it and records `backoff_reset_after_reboot`.
 - `STOP_REQUESTED`/`STOPPED`: the local file or remote branch has stopped launches; an already-owned child receives a nine-minute cooperative request before TERM and, 60 seconds later, KILL.
 
 Every state transition appends exactly one transition event. Re-evaluating the same state does not append another transition. Census, signal, drain-start, and plan diagnostics are separate typed events. Plan events use `plan_dir` (never the plan-declared `custody_root`) and are de-duplicated only for an identical activation-id/spawn-epoch/plan-directory/kind/detail-digest key.
@@ -37,7 +37,7 @@ The local fixed fences are half-open: `[02:45:00, 03:30:00)` and `[07:00:00, 07:
 
 Inside either fixed fence, a live PID+start-time-owned session whose resident supervisor is absent remains fenced: the short tick returns `FENCED` with `adopt=False` and does not launch or adopt a supervisor. Re-adoption waits until the fixed fence clears, at most 45 minutes for the belt and at most one minute for the 07:00 fence.
 
-For the earliest relevant plan, the resident supervisor re-reads plans at most every 10 seconds and enforces. Plan and local-clock enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
+For the earliest relevant parseable plan, the resident supervisor re-reads plans and evaluates its stand-down phase on every poll, including while a clock or unsafe-plan drain is latched. Each drain action is due at the earlier of its cooperative-ladder time and the plan boundary, so REQUEST is no later than `t0 - 25 min`, TERM no later than `t0 - 16 min`, and KILL no later than `t0 - 15 min`. Plan and local-clock enforcement runs before any remote-stop cache lookup, and no network operation runs on this path:
 
 | Boundary | Action |
 |---|---|
@@ -58,7 +58,7 @@ If the PID is absent or its start token differs, the tick records `already_gone`
 
 Every launchd tick that acquires the service lock first proves remote transport with anonymous `git ls-remote --exit-code` against `refs/heads/main`, then probes the glob `refs/heads/ops/stop*`. It seeds the resident with that observation. While a child is resident, one daemon thread refreshes the cached observation at most every five minutes; a slow or unreachable GitHub probe never blocks the 10-second enforcement loop, and no second probe begins while one is live. Control rc 0 plus stop rc 2 means clear; a stop match means stopped. Control rc 128, any other nonzero control result, a stop-probe result other than 0/2, timeout, or exception means `NETWORK_UNCERTAIN`, never clear. The commands disable credential helpers and terminal prompts and never fetch or mutate a checkout.
 
-The local switch is `~/night-custody/magistrate/STOP`. It works without GitHub and wins over the remote result. Removing both switches permits a later safe launch; neither switch can rescue a wedged watchdog process, and there is intentionally no watchdog-for-the-watchdog.
+The local switch is `~/night-custody/magistrate/STOP`. It works without GitHub and wins over the remote result. Removing both switches permits a later safe launch; neither switch can rescue a wedged watchdog process, and there is intentionally no watchdog-for-the-watchdog. Because this is a user LaunchAgent, it does not load before GUI login after a reboot; unattended reboot before login is an accepted limitation for this week because Ed's machine stays logged in. Operational liveness is strict: no `state.json` write for more than 15 minutes means the watchdog is dead, and the courier email for the next window must say so.
 
 On GitHub mobile, create a branch named exactly `ops/stop-magistrate` from `main` to stop, and delete that branch to clear. Any branch under the wider `ops/stop*` glob also stops, so a shortened or suffixed emergency name is fail-safe. This width is the magistrate's 2026-09-03 ruling on execution-refuter N2 in `docs/process_traces/2026-09-03-watchdog-build/04-refuter-execution-2b4476cb.md`; it amends the narrower file-15 row-6 text. Do not prune any matching operational branch while it is acting as the switch.
 
@@ -73,8 +73,8 @@ Usage retries are 15, 30, 60, 120, then 120 minutes, plus a deterministic 0–12
 The program guards every write path against the configured custody root. The mechanism creates only:
 
 - `watchdog.lock`: stable advisory service-lock inode.
-- `state.json`: atomic durable state, clocks, backoff, activation id and spawn epoch, complete resident-session identity, resident-drain stage, transition sequence, and `notice_pending`.
-- `events.jsonl`: fsynced transition, census, signal, resident-drain-start, plan-diagnostic, supervisor-adoption, replacement `resident_adopted`, and `already_gone` events.
+- `state.json`: atomic durable state, clocks, wall-epoch/boot-identified backoff, activation id and spawn epoch, complete resident-session identity, resident-drain stage, transition sequence, and `notice_pending`.
+- `events.jsonl`: fsynced transition, census, signal, resident-drain-start, plan-diagnostic, supervisor-adoption, replacement `resident_adopted`, `already_gone`, and `backoff_reset_after_reboot` events.
 - `magistrate.lock`: exclusive launch claim, then the child PID, exact start token, activation id and spawn epoch, symlink path, and version; removed only after the child exit is proved.
 - `standdown.request`: atomic request and exact plan deadlines.
 - `attempts/<activation>/prompt.md`, `attempt-<n>.stream.jsonl`, and `attempt-<n>.stderr.log`.
@@ -102,9 +102,10 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    done
    ```
 
-3. From the Terminal-hosted interactive magistrate, record the exact handoff inventory. The read-only helper places the interactive twin and its ancestry-closed descendants in `owned`; PPID-1 command-shape matches and their descendants are only `unclassified_candidates`. It excludes the helper's transient call chain and rejects a headless `claude -p` ancestor. Inspect every candidate. Promote one only by repeating the command with its exact `--adopt-pid P --start T`; that explicit adoption and its descendants then appear in `owned` with provenance. Keep PID, start-time, command, and provenance together so PID reuse can be rejected:
+3. First `cd /Users/edr/code/JouleWise`, the canonical checkout, then from the Terminal-hosted interactive magistrate record the exact handoff inventory. The read-only helper places the interactive twin and its ancestry-closed descendants in `owned`; PPID-1 command-shape matches and their descendants are only `unclassified_candidates`. It excludes the helper's transient call chain and rejects a headless `claude -p` ancestor. Inspect every candidate. Promote one only by repeating the command with its exact `--adopt-pid P --start T`; that explicit adoption and its descendants then appear in `owned` with provenance. Keep PID, start-time, command, and provenance together so PID reuse can be rejected:
 
    ```zsh
+   cd /Users/edr/code/JouleWise
    handoff_epoch="$(date +%s)"
    handoff_file="$HOME/night-custody/magistrate/handoff-$handoff_epoch.json"
    mkdir -p "$HOME/night-custody/magistrate"
@@ -115,12 +116,14 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
      --adopt-pid "$candidate_pid" --start "$candidate_start" > "$handoff_file"
    ```
 
-4. Install from that same magistrate session. The installer seeds `magistrate.lock` with the interactive twin's PID and start token so the first resident observes it instead of launching a second session:
+4. Install from that same magistrate session and canonical checkout. The installer refuses any other resolved script repository or Git top level, renders the literal canonical checkout into both plist paths, and pins the installing `python3` process's absolute `sys.executable`. It seeds `magistrate.lock` with the interactive twin's PID and start token so the first resident observes it instead of launching a second session:
 
    ```zsh
    scripts/install_magistrate_watchdog.sh --install
    python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
    ```
+
+   If the exclusive lock seed fails, the installer removes the plist written by that attempt. Inspect the existing lock and remove it only after confirming that its PID/start owner is not live; then repeat the whole install step.
 
 5. Have the magistrate start this detached, non-agent reaper. It imports the installed implementation from the recorded absolute checkout, revalidates each `(pid,start_time)` immediately before each signal, signals only `owned` with the interactive root last, waits the full `STOP_COOPERATIVE_S`, re-snapshots after TERM and KILL, and requires every recorded pair absent independently of the final census. Absence is success; a changed start token is PID reuse and is skipped. The watchdog never signals an unclassified or census PID. The final JSON receipt records every per-PID outcome, survivor, census, and verdict:
 
@@ -216,7 +219,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 
 6. Read the verification log from an observer after the magistrate exits. The already-proved launchd path (`docs/process_traces/2026-09-02-hands-free-week/17n-bench-launchd-spawn.md` on main) means the next five-minute tick must create the first watchdog-owned one-turn `-p` magistrate. Verify a new `attempts/<activation>/` and a `magistrate.lock` without `first_install_adoption`; a nonempty census before that tick or absence of the new attempt after it is a failed handoff.
 
-The first real window must not be armed until a reviewed v2 plan pins its measurement checkout and both night agents have been installed FROM that plan's `measurement_root` at `measurement_head`. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
+The first real window must not be armed until a reviewed v2 plan pins its measurement checkout and both night agents have been installed FROM that plan's `measurement_root` at `measurement_head`. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move, but their documented `/private/tmp/...` measurement roots are deliberately fake and must never be reused by a real plan. Remove every `REHEARSAL_STUB` plan root before arming any real plan. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
 
 ## Bench rehearsal (no real night)
 
@@ -247,7 +250,7 @@ plan = NightPlan(
     window_max_s=600,
     authored_epoch_s=now,
     repo_head="0" * 40,
-    measurement_root="/Users/edr/JouleWise-measurement-20260813",
+    measurement_root="/private/tmp/joulewise-watchdog-bench-fake-measurement",
     measurement_head="0" * 40,
     chain_path=str(plan_root / "chain.sh"),
     chain_sha256_path=str(plan_root / "chain.sh.sha256"),
@@ -337,7 +340,7 @@ plan = NightPlan(
     window_max_s=60,
     authored_epoch_s=now,
     repo_head="0" * 40,
-    measurement_root="/Users/edr/JouleWise-measurement-20260813",
+    measurement_root="/private/tmp/joulewise-watchdog-adoption-fake-measurement",
     measurement_head="0" * 40,
     chain_path=str(root / "chain.sh"),
     chain_sha256_path=str(root / "chain.sh.sha256"),

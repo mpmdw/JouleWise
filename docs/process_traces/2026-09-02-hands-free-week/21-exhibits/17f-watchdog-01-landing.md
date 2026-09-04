@@ -172,3 +172,96 @@ The fixed-fence operational consequence for row 3 is now explicit in `docs/proce
 File 15 row 6 is amended by the magistrate's ruling on execution-refuter N2: the authoritative emergency-stop glob is the wider `refs/heads/ops/stop*`, not `refs/heads/ops/stop-magistrate*`. The wider glob makes shortened as well as suffixed emergency names fail-safe. This addendum supersedes only the row-6 glob literal; the positive-control, anonymous probe, and local-STOP clauses remain unchanged.
 
 The resident row-4 enforcement path now resolves plans before consulting the cached remote-stop observation. Remote refresh runs on a single daemon thread at no more than five-minute cadence, so an unreachable GitHub probe cannot consume any part of the resident's 10-second deadline-resolution budget. Row 8 now consumes a matching `notice.ack` before the child-exit return, and the resident applies the same clock-uncertainty detector as the launchd tick, irreversibly draining an owned child on monotonic time once uncertainty is observed.
+
+---
+
+## Fix round 4 clause-map addendum (2026-09-04 PDT)
+
+This addendum maps only the round-4 cures on the integrated plan-pin base. Untouched rows retain the earlier map and addenda.
+
+| Cure / proposition delta | Production site | Biting assertion | One-site counterfactual |
+|---|---|---|---|
+| B-1 — a retired-v1 plan is recorded once per custody root and ignored; a valid v2 sibling alone supplies the span | `scripts/magistrate_watchdog.py:480-555` | `tests/test_magistrate_watchdog.py:151` | Append the retired-v1 parse failure to `errors` at `scripts/magistrate_watchdog.py:540`; `decide` returns `HOLD_UNSAFE` instead of `FENCED`. The executed mutation failed on that exact state difference. |
+| B-1 — any other unparsable plan is recorded once as `plan_unparsable` and never holds | `scripts/magistrate_watchdog.py:480-555` | `tests/test_magistrate_watchdog.py:189` | Append every parse failure to `errors`; the test observes `HOLD_UNSAFE` instead of `LAUNCHING`. |
+| B-1 — watchdog fixtures and both runnable example plans use the exact v2 shape with `measurement_root` and `measurement_head` | `tests/test_magistrate_watchdog.py:99-118`; `docs/process/MAGISTRATE_WATCHDOG.md:202-215`, `:290-303` | `tests/test_magistrate_watchdog.py:769` | Change either example schema back to v1 or remove either measurement key; the exact count/schema assertions fail. |
+| M-2/M-3 — the read-only handoff inventory includes the invoking interactive twin tree and named PID-1 bg-host/shell-snapshot orphan trees, while excluding unrelated processes and its transient caller chain | `scripts/magistrate_watchdog.py:654-733`, `:1569-1597` | `tests/test_magistrate_watchdog.py:662` | Delete the PID-1 orphan-root union; the expected orphan host, spare, snapshot, and snapshot-child PIDs disappear from the inventory. |
+| M-2/M-3 + Q4 — install handoff order is stop tasks → preserve retired custody → inventory → install → kill only recorded list and prove empty census → next launchd tick creates `-p` | `docs/process/MAGISTRATE_WATCHDOG.md:82-179` | `tests/test_magistrate_watchdog.py:779` | Move install before the retired-root move or inventory, or delete the recorded-only signaling rule; the ordered-position or ownership assertion fails. |
+| Q4 — every v2 night installs both night agents FROM its pinned measurement checkout | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:13`; `docs/process/NIGHT_HANDBACK.md:72-76`; `docs/process/MAGISTRATE_WATCHDOG.md:179` | `tests/test_magistrate_watchdog.py:763-767`, `:779-801` | Replace “installed from that plan's `measurement_root`” with the old generic “pinned” wording; the prompt and handback contract assertions fail. |
+
+---
+
+## Fix round 5 clause-map addendum (2026-09-04 PDT)
+
+This addendum supersedes the round-4 assertions that non-v1 parse failures are ignored, that PID-1 command lookalikes are signal targets, and that documented plan examples may hand-author schema mappings. The authoritative detailed R-2…R-7 and AD-1…AD-13 map, RED/GREEN transcript, and mutation proof are in `14-sol-fix-round-5-report.md`.
+
+| Round-5 proposition | Production site | Biting assertion / counterfactual |
+|---|---|---|
+| Production composition is gated end-to-end | `joulewise/night_plan_writer.py:15-63`; `scripts/magistrate_watchdog.py:335`; `scripts/run_night.py:267-290` | `tests/test_magistrate_watchdog_cli.py:142` fails when the writer is absent and, after landing, fails again if the sole constructor loses `measurement_head`. |
+| Only positive retired-v1 identification is ignored | `scripts/magistrate_watchdog.py:552-603,1068-1076` | `tests/test_magistrate_watchdog.py:167-287`; truncation, missing current fields, and future authorship hold with named reasons while the frozen v1 fixture emits one event. |
+| Handoff signal authority is explicit | `scripts/magistrate_watchdog.py:775-899,1801-1837`; `docs/process/MAGISTRATE_WATCHDOG.md:99-203` | `tests/test_magistrate_watchdog.py:806-871`; moving command-shape candidates into `owned` without exact PID/start adoption fails the set/provenance assertions. |
+| Every armed checkout is rendered and conflicts hold | `scripts/magistrate_watchdog.py:642-707,1068-1076,1160`; `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:9-10` | `tests/test_magistrate_watchdog.py:289-351`; omit either root or accept overlapping roots/two heads and the prompt/conflict assertions fail. |
+| Fixture and documentation drift are structurally blocked | `joulewise/night_plan_writer.py:15-63`; `docs/process/MAGISTRATE_WATCHDOG.md:218-251,312-341` | All v2 tests consume writer output; `tests/test_magistrate_watchdog.py:951-964` compiles documented heredocs and round-trips the writer mapping through `NightPlan`. |
+
+Final authorized modules: watchdog 49 OK, CLI 1 OK, night gate 47 OK, run-night 55 OK, installer 11 OK. No install, agent launch, handoff signal, default-custody write, or quiet-machine run occurred.
+
+---
+
+## Fix round 6 clause-map addendum (2026-09-04 PDT)
+
+This addendum supersedes round 5 only for retired-v1 identification, resident unsafe-plan handling, activation identity, and the documentation-example assertion. The complete RED/GREEN transcripts, S-4 mutation, final module tails, and detailed map are in `17-sol-fix-round-6-report.md`.
+
+| Round-6 specification | Production site | Biting assertion / counterfactual |
+|---|---|---|
+| S-1 — v1 is the exact import-time golden shape; v2 carries integer `schema_version: 2` | `scripts/magistrate_watchdog.py:109-142,650`; `joulewise/night_gate.py:22,104-118,220-229`; `joulewise/night_plan_writer.py:15-28` | `tests/test_magistrate_watchdog.py:214-249`; restoring label-only identification, omitting the writer version, accepting a missing version, or accepting version 1 fails the golden-plus-v2-key and three-malformed-cases assertions. |
+| S-2 — resident `HOLD_UNSAFE` starts and durably completes the cooperative drain | `scripts/magistrate_watchdog.py:1530-1574,1598-1640` | `tests/test_magistrate_watchdog.py:650-688`; `tests/test_magistrate_watchdog_cli.py:210-282`; restoring the transition-only branch removes `resident_drain_started` and the ordered request/TERM/KILL evidence. |
+| S-3 — diagnostic identity is a fresh `(activation_id, spawn epoch)` per spawn | `scripts/magistrate_watchdog.py:526-621,1686-1766` | `tests/test_magistrate_watchdog.py:874-938`; reusing the prior id or deleting the epoch from the dedupe key suppresses the second identical diagnostic or fails the two-key equality. |
+| S-4 — documented writer blocks produce bytes accepted by `NightPlan.from_mapping` | `docs/process/MAGISTRATE_WATCHDOG.md:224-251,315-341` | `tests/test_magistrate_watchdog.py:1102-1138`; deleting `measurement_head` from the first block fails with the pasted missing-argument mutation in trace 17. |
+
+Final authorized modules: watchdog 52 OK, CLI 2 OK, night gate 47 OK, run-night 55 OK, installer 11 OK (167 total). The prompt remains 23 lines. No install, agent launch, launchd mutation, default-custody write, live signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 7 clause-map addendum (2026-09-04 PDT)
+
+This addendum narrows round 6 only for S-2b: recovery after a resident supervisor dies while its child remains live and the next short tick decides `HOLD_UNSAFE`. The complete RED/GREEN transcript, per-module tails, and detailed map are in `19-sol-fix-round-7-report.md`.
+
+| Round-7 specification | Production site | Biting assertion / counterfactual |
+|---|---|---|
+| S-2b — every unsafe replacement tick validates and adopts the state-recorded PID/start/activation, records `resident_adopted`, and advances the durable request → TERM → KILL stage without restarting its timestamps | `scripts/magistrate_watchdog.py:472-490,1533-1595,1766-1783,1818-1937,1956-1987` | `tests/test_magistrate_watchdog.py:690-768`; deleting the early unsafe-tick adoption leaves `resident_hold_drain` null and no request, while dropping stage persistence repeats the allowance instead of producing TERM/KILL on the threshold ticks. |
+| S-2b — a mismatched start token is `already_gone`, never a signal target | `scripts/magistrate_watchdog.py:1870-1899` | `tests/test_magistrate_watchdog.py:770-795`; treating PID equality alone as ownership signals the reused-token row and fails both the unchanged-signal and event assertions. |
+| S-2b — the real CLI replacement path records adoption and the first ladder event | `scripts/magistrate_watchdog.py:1956-1987` | `tests/test_magistrate_watchdog_cli.py:292-387`; the trace-18 counterfactual leaves `standdown.request` absent and records no `resident_adopted`/`resident_drain_started`. |
+
+Final authorized modules: watchdog 53 OK, CLI 3 OK, night gate 47 OK, run-night 55 OK, installer 11 OK. No install, agent launch, launchd mutation, default-custody write, production-agent signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 8 clause-map addendum (2026-09-04 PDT)
+
+This final pre-cold-gate addendum supersedes round 7 only where trace 22 C-1 through C-8 amend drain timing, installer identity/transaction coverage, persisted backoff, and the rehearsal/LaunchAgent documentation. The complete test-first RED/GREEN transcript and six required module tails are in `23-sol-fix-round-8-report.md`.
+
+| Round-8 clause | Production/documentation | Biting assertion |
+|---|---|---|
+| C-1/C-5 — every latched drain is plan-clamped; replacement ticks apply the wall-time stage immediately | `scripts/magistrate_watchdog.py:1596-1770` | `tests/test_magistrate_watchdog.py:690-783` |
+| C-2 — install and rendered plist are pinned to the canonical checkout | `scripts/install_magistrate_watchdog.sh:35-75,190-209`; `docs/process/MAGISTRATE_WATCHDOG.md:105-123` | `tests/test_install_magistrate_watchdog.py:132-186` |
+| C-3 — backoff persists a wall deadline plus boot identity and resets after reboot | `scripts/magistrate_watchdog.py:472-492,504-508,1139-1186,1198,1258` | `tests/test_magistrate_watchdog.py:1041-1086` |
+| C-4 — behavioral installer transaction coverage, including failed-seed plist cleanup | `scripts/install_magistrate_watchdog.sh:85-263` | `tests/test_install_magistrate_watchdog.py:188-218` |
+| C-6 — GUI-login limitation and 15-minute liveness rule | `docs/process/MAGISTRATE_WATCHDOG.md:61,76-77` | `tests/test_magistrate_watchdog.py:1395-1406` |
+| C-7 — fake rehearsal roots cannot conflict with a real measurement root | `docs/process/MAGISTRATE_WATCHDOG.md:222,253,343` | `tests/test_magistrate_watchdog.py:1352-1393` |
+| C-8 — rendered plist pins install-time `sys.executable` and refuses `/usr/bin/python3` | `scripts/install_magistrate_watchdog.sh:49-64,190-209` | `tests/test_install_magistrate_watchdog.py:147-176` |
+
+Final authorized modules: watchdog 60 OK, CLI 3 OK, watchdog installer 6 OK, night gate 47 OK, run-night 55 OK, night installer 11 OK. The prompt remains 23 lines. No install, real launchctl, agent/session launch, LaunchAgent mutation, default-custody access, production signal, or quiet-machine run occurred.
+
+---
+
+## Fix round 9 clause-map addendum (2026-09-04 PDT)
+
+This addendum closes trace 24 findings F1 and F2. It supersedes round 8 only for installer rollback semantics and the round-8 report's Git-head metadata. The complete RED/GREEN transcript and detailed clause map are in `25-sol-fix-round-9-report.md`.
+
+| Round-9 clause | Production/report site | Biting assertion / counterfactual |
+|---|---|---|
+| F1 — a failed exclusive lock seed restores the exact pre-install plist and preserves the colliding lock byte-for-byte | `scripts/install_magistrate_watchdog.sh:155-205,238-284` | `tests/test_install_magistrate_watchdog.py:207-221`; the pre-fix trap deleted the plist, producing the pasted `FileNotFoundError`. |
+| F1 — failed bootstrap restores the exact pre-install plist and removes only this attempt's unchanged lock seed | `scripts/install_magistrate_watchdog.sh:161-178,294-298` | `tests/test_install_magistrate_watchdog.py:223-238`; the pre-fix trap deleted the plist and left the new lock. |
+| F1 — failed post-load verification restores the exact pre-install plist and removes only this attempt's unchanged lock seed | `scripts/install_magistrate_watchdog.sh:161-178,299-302` | `tests/test_install_magistrate_watchdog.py:240-255`; the pre-fix trap deleted the plist and left the new lock after `bootout`. |
+| F2 — trace 23 names its real final head | `23-sol-fix-round-8-report.md:3` | Direct `git log` comparison: baseline `1b51fecf...`, final round-8 implementation head `a15cc15e...`. |
+
+Final authorized modules: watchdog installer 8 OK; watchdog 60 OK. No broader discovery ran. No install, real `launchctl`, agent/session launch, LaunchAgent mutation, default-custody access, production signal, or quiet-machine run occurred.
