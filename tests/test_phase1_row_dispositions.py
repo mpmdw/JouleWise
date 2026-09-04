@@ -22,10 +22,51 @@ def _section(text: str, heading: str) -> str:
     return match.group(1)
 
 
+def _first_paragraph_after(text: str, label: str) -> str:
+    try:
+        remainder = text.split(label, maxsplit=1)[1]
+    except IndexError as exc:
+        raise AssertionError(f"missing checklist label: {label}") from exc
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", remainder)]
+    return next((part for part in paragraphs if part), "")
+
+
+def _matrix_statuses(text: str) -> dict[str, str]:
+    rows: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) >= 2:
+            rows[cells[0]] = cells[1]
+    return rows
+
+
 class Phase1RowDispositionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.text = CHECKLIST.read_text(encoding="utf-8")
+
+    def test_current_status_keeps_only_calendar_mapping_open(self) -> None:
+        section = _section(self.text, "## Current Phase 1 Status")
+        still_required = _first_paragraph_after(section, "Still required:")
+        self.assertEqual(still_required, "- Calendar mapping (Step 7).")
+
+    def test_evidence_matrix_pins_reconciled_dispositions(self) -> None:
+        section = _section(self.text, "## Evidence Matrix")
+        statuses = _matrix_statuses(section)
+        expected = {
+            "Supervisor approval and scope": (
+                "complete by later authority (2026-07-30)"
+            ),
+            "Wall-meter decision": "complete; acquisition pending (2026-07-30)",
+            "Network plan": "blocker recorded; physical confirmation pending",
+            "NVIDIA telemetry permissions": "pending with recorded blocker",
+            "Orin telemetry permissions": "pending with recorded blocker",
+        }
+        for item, status in expected.items():
+            with self.subTest(item=item):
+                self.assertEqual(statuses.get(item), status)
 
     def test_supervisor_scope_points_to_later_binding_authority(self) -> None:
         section = _section(self.text, "## Supervisor Approval")
