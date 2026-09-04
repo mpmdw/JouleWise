@@ -114,6 +114,10 @@ class FakeProbeSource:
             monotonic_ns=self.monotonic,
             read_text=self.read_text,
             checkout_head=self.checkout_head,
+            verify_transaction=lambda _plan: night_gate.TransactionVerification(
+                evidence=("arm_receipt:/custody/arm-0001.json",),
+                measured={"expected_confirmation_digest": "a" * 64},
+            ),
         )
 
 
@@ -132,13 +136,23 @@ def make_plan(receipt_class: str = "DIAGNOSTIC_NO_PACK", **changes: object) -> n
         if receipt_class == "TRANSACTION_PACK"
         else "/custody/registration.json",
     }
+    if receipt_class == "TRANSACTION_PACK":
+        values.update(
+            {
+                "pack_root": "/packs/pack-1",
+                "arm_receipt": "/custody/arm-0001.json",
+                "arm_readiness_custody_root": "/arm-custody",
+                "launch_manifest": "/arm-custody/launch-manifest.json",
+                "step6_confirmation_table": "/arm-custody/confirmation.json",
+            }
+        )
     values.update(changes)
     return night_gate.NightPlan(**values)  # type: ignore[arg-type]
 
 
 def plan_mapping(receipt_class: str = "DIAGNOSTIC_NO_PACK") -> dict[str, object]:
     plan = make_plan(receipt_class)
-    return {
+    value = {
         "schema": night_gate.PLAN_SCHEMA,
         "plan_id": plan.plan_id,
         "receipt_class": plan.receipt_class,
@@ -151,6 +165,17 @@ def plan_mapping(receipt_class: str = "DIAGNOSTIC_NO_PACK") -> dict[str, object]
         "custody_root": plan.custody_root,
         "registration_path": plan.registration_path,
     }
+    if receipt_class == "TRANSACTION_PACK":
+        value.update(
+            {
+                "pack_root": plan.pack_root,
+                "arm_receipt": plan.arm_receipt,
+                "arm_readiness_custody_root": plan.arm_readiness_custody_root,
+                "launch_manifest": plan.launch_manifest,
+                "step6_confirmation_table": plan.step6_confirmation_table,
+            }
+        )
+    return value
 
 
 class NightGateTests(unittest.TestCase):
@@ -294,6 +319,26 @@ class NightGateTests(unittest.TestCase):
             night_gate.NightPlan.from_mapping(extra)
         self.assertEqual("night_plan_malformed", raised.exception.reason)
 
+    def test_a_transaction_plan_requires_every_launcher_input(self) -> None:
+        good = plan_mapping("TRANSACTION_PACK")
+        self.assertEqual(
+            make_plan("TRANSACTION_PACK"), night_gate.NightPlan.from_mapping(good)
+        )
+        for field in (
+            "pack_root",
+            "arm_receipt",
+            "arm_readiness_custody_root",
+            "launch_manifest",
+            "step6_confirmation_table",
+        ):
+            with self.subTest(field=field):
+                missing = dict(good)
+                del missing[field]
+                with self.assertRaises(night_gate.PlanError) as raised:
+                    night_gate.NightPlan.from_mapping(missing)
+                self.assertEqual("night_plan_malformed", raised.exception.reason)
+                self.assertIn(field, raised.exception.detail)
+
     def test_a_direct_plan_with_missing_registration_is_refused_as_malformed(self) -> None:
         source = FakeProbeSource()
         receipt = self.evaluate(make_plan(registration_path=None), source)
@@ -343,19 +388,38 @@ class NightGateTests(unittest.TestCase):
         self.assertTrue(all(row.status == "PASS" for row in receipt.conditions if row.condition_id != "C2"))
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
 
-    def test_a_transaction_plan_is_refused_until_stage_three_exists(self) -> None:
+    def test_a_verified_transaction_plan_yields_a_valid_go_receipt(self) -> None:
         source = FakeProbeSource()
         receipt = self.evaluate(make_plan("TRANSACTION_PACK"), source)
-        self.assertEqual("REFUSED", receipt.verdict)
-        self.assertEqual("FAIL", receipt.conditions[0].status)
-        self.assertEqual("stage 3 not implemented", receipt.conditions[0].measured["detail"])
-        self.assertEqual("night_refused_class_unbuilt", receipt.refusal.reason)
+        self.assertEqual("GO", receipt.verdict)
+        self.assertTrue(all(row.status == "PASS" for row in receipt.conditions))
         self.assertEqual(
-            "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
-            receipt.refusal.detail,
+            "a" * 64,
+            receipt.conditions[1].measured["expected_confirmation_digest"],
         )
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
         self.assertNotIn("/custody/registration.json", source.read_calls)
+
+    def test_a_transaction_verifier_failure_is_a_probe_refusal(self) -> None:
+        source = FakeProbeSource()
+        probes = source.probes()
+        probes = night_gate.Probes(
+            run=probes.run,
+            now_epoch_s=probes.now_epoch_s,
+            monotonic_ns=probes.monotonic_ns,
+            read_text=probes.read_text,
+            checkout_head=probes.checkout_head,
+            verify_transaction=lambda _plan: (_ for _ in ()).throw(
+                FileNotFoundError("arm receipt missing")
+            ),
+        )
+        with mock.patch.object(
+            night_gate, "D166_REGISTRATION_SHA256", hashlib.sha256(REGISTRATION_TEXT.encode()).hexdigest()
+        ):
+            receipt = night_gate.evaluate_night(make_plan("TRANSACTION_PACK"), probes)
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("night_probe_error", receipt.refusal.reason)
+        self.assertIn("arm receipt missing", receipt.refusal.detail)
 
     def test_an_agent_present_outranks_the_unbuilt_transaction_class(self) -> None:
         # R-3 census-first: the zero-agent fence is checked before the class
@@ -483,17 +547,15 @@ class NightGateTests(unittest.TestCase):
                 source.text["/custody/chain.zsh.sha256"] = (
                     hashlib.sha256(CHAIN_TEXT.encode("utf-8")).hexdigest() + "\n"
                 )
-            if index == 4:
-                plan = make_plan("TRANSACTION_PACK")
-            if index > 5:
+            if index > 4:
                 source.results[night_gate.HID_IDLE_ARGV] = result(
                     night_gate.HID_IDLE_ARGV, stdout="0\n"
                 )
-            if index > 6:
+            if index > 5:
                 source.results[night_gate.PMSET_BATT_ARGV] = result(
                     night_gate.PMSET_BATT_ARGV, stdout="Now drawing from 'AC Power'\n"
                 )
-            if index > 7:
+            if index > 6:
                 source.results[night_gate.BOOT_SESSION_ARGV] = result(
                     night_gate.BOOT_SESSION_ARGV, stdout=BOOT_UUID + "\n"
                 )
@@ -689,9 +751,8 @@ class NightGateTests(unittest.TestCase):
         defects = night_gate.validate_receipt(go_receipt)
         self.assertTrue(any("GO verdict requires null" in item for item in defects))
 
-        refused = json.loads(
-            self.evaluate(make_plan("TRANSACTION_PACK"), FakeProbeSource()).to_json_bytes()
-        )
+        refused = copy.deepcopy(go_receipt)
+        refused["verdict"] = "REFUSED"
         refused["refusal"] = None
         defects = night_gate.validate_receipt(refused)
         self.assertTrue(
@@ -779,7 +840,6 @@ class NightGateTests(unittest.TestCase):
             "night_plan_stale",
             "night_plan_malformed",
             "night_chain_digest_mismatch",
-            "night_refused_class_unbuilt",
             "night_receipt_class_invalid",
             "night_probe_error",
         }
@@ -794,7 +854,6 @@ class NightGateTests(unittest.TestCase):
             "night_plan_stale": "test_wrong_checkout_head_is_stale_and_the_36_hour_boundary_is_current",
             "night_plan_malformed": "test_a_direct_plan_with_missing_registration_is_refused_as_malformed",
             "night_chain_digest_mismatch": "test_chain_sidecar_refuses_case_name_and_token_count_defects",
-            "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",
             "night_receipt_class_invalid": "test_c2_pass_or_an_unregistered_basis_is_a_class_invalid_defect",
             "night_probe_error": "test_any_probe_exception_refuses_before_later_commands_run",
         }

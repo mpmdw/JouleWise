@@ -13,6 +13,40 @@ night's custody root: `night/result.json`, then `night/receipt.json` or
 `night/refusal.json` as `result.json` directs. If this file and the result
 record disagree, the result record is right and the courier says so.
 
+## Standing transaction handoff
+
+A frozen experiment pack is an immutable set of reviewed measurement inputs.
+An unattended transaction night is a scheduled measurement that uses one
+such pack without a person at the keyboard. The arming step is
+the preparation that checks that pack. An arm receipt is its one-use record
+that the pack passed those checks. The arming step must place the confirmed
+SHA-256 digest, a cryptographic fingerprint called `hC`, in the plan's custody
+root, the protected directory named by the night plan, as
+`085-ed-step6-confirmed-sha256.txt`. That custody file must be a regular file
+rather than a symbolic link, a filesystem pointer to another path; must have
+owner-only read and write permissions (filesystem mode `0600`); and must
+contain only the lowercase digest followed by one newline.
+
+The night gate is the pre-launch check that evaluates every required launch
+condition. It creates a GO receipt, the record that those conditions passed,
+only after it authenticates the arm receipt and the frozen launch inputs with
+the digest stored in custody. The night driver is the program started by the
+schedule. The reviewed launcher is the program that consumes the one-use arm
+receipt as one indivisible operation and starts the frozen measurement chain,
+the immutable sequence of measurement commands. The arm-readiness
+custody root is the protected directory that holds the arm records. The launch
+manifest is the authenticated record of the exact frozen command. The step-6
+confirmation table is the published record of the pack-family confirmation.
+When the receipt says GO, the night driver calls the reviewed launcher once
+and supplies those records and paths. A missing input, an altered digest, an
+insecure custody-file mode, or any launcher refusal ends that attempt without
+a retry.
+
+This is the narrow amendment to the earlier instruction that `hC` must never
+be stored in an environment file: automation may store `hC` in the protected
+custody file above, but it still must not store `hC` in an environment file or
+derive it again from the confirmation table at launch time.
+
 ## Purpose of this night
 
 Plan `rehearsal-20260903`, class `REHEARSAL_STUB`, armed by the magistrate

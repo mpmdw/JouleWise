@@ -85,6 +85,10 @@ class ProbeSource:
             monotonic_ns=self.monotonic_ns,
             read_text=lambda path: Path(path).read_text(encoding="utf-8"),
             checkout_head=lambda: HEAD,
+            verify_transaction=lambda _plan: night_gate.TransactionVerification(
+                evidence=("arm_receipt:fixture",),
+                measured={"expected_confirmation_digest": "a" * 64},
+            ),
         )
 
 
@@ -144,6 +148,14 @@ class NightDriverTests(unittest.TestCase):
         )
         self.registration = self.root / "registration.json"
         self.registration.write_text('{"registered":true}\n', encoding="utf-8")
+        self.pack = self.root / "pack"
+        self.arm_receipt = self.root / "arm-0001.json"
+        self.arm_custody = self.root / "arm-custody"
+        self.launch_manifest = self.root / "launch-manifest.json"
+        self.confirmation_table = self.root / "confirmation.json"
+        self.fake_launcher = self.root / "launch_window.py"
+        self.fake_launcher.write_text("raise SystemExit(0)\n", encoding="utf-8")
+        self.driver.LAUNCHER_PATH = self.fake_launcher
         self.t0_epoch_s = datetime(2026, 9, 2, 1, 0).timestamp()
         self.source = ProbeSource(self.t0_epoch_s + 1)
         self.plan_path = self.root / "plan.json"
@@ -194,9 +206,7 @@ class NightDriverTests(unittest.TestCase):
         receipt_class: str = "DIAGNOSTIC_NO_PACK",
     ) -> None:
         t0 = self.t0_epoch_s if t0_epoch_s is None else t0_epoch_s
-        self.plan_path.write_text(
-            json.dumps(
-                {
+        plan = {
                     "schema": night_gate.PLAN_SCHEMA,
                     "plan_id": "night-plan",
                     "receipt_class": receipt_class,
@@ -209,9 +219,21 @@ class NightDriverTests(unittest.TestCase):
                     "custody_root": str(self.custody),
                     "registration_path": str(self.registration),
                 }
-            ),
-            encoding="utf-8",
-        )
+        if receipt_class == "TRANSACTION_PACK":
+            plan.update(
+                {
+                    "registration_path": None,
+                    "pack_root": str(self.pack),
+                    "arm_receipt": str(self.arm_receipt),
+                    "arm_readiness_custody_root": str(self.arm_custody),
+                    "launch_manifest": str(self.launch_manifest),
+                    "step6_confirmation_table": str(self.confirmation_table),
+                }
+            )
+            digest_path = self.custody / self.driver.CONFIRMATION_DIGEST_BASENAME
+            digest_path.write_text("a" * 64 + "\n", encoding="ascii")
+            digest_path.chmod(0o600)
+        self.plan_path.write_text(json.dumps(plan), encoding="utf-8")
 
     def _popen_recorder(self, return_code: int = 0, running_once: bool = False):
         calls = []
@@ -563,6 +585,147 @@ class NightDriverTests(unittest.TestCase):
         exit_code, calls = self._run_night()
         self.assertEqual(exit_code, 0)
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+
+    def test_transaction_go_invokes_the_fake_launcher_once_with_frozen_inputs(self) -> None:
+        self._write_plan(receipt_class="TRANSACTION_PACK")
+        exit_code, calls = self._run_night()
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        self.assertEqual(
+            calls,
+            [
+                [
+                    sys.executable,
+                    str(self.fake_launcher),
+                    "--pack-root",
+                    str(self.pack),
+                    "--arm-receipt",
+                    str(self.arm_receipt),
+                    "--arm-readiness-custody-root",
+                    str(self.arm_custody),
+                    "--launch-manifest",
+                    str(self.launch_manifest),
+                    "--step6-confirmation-table",
+                    str(self.confirmation_table),
+                    "--expected-confirmation-digest",
+                    "a" * 64,
+                ]
+            ],
+        )
+        receipt = json.loads(
+            (self.custody / "night" / "receipt.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(receipt["receipt_class"], "TRANSACTION_PACK")
+        self.assertEqual(receipt["verdict"], "GO")
+        self.assertTrue(all(row["status"] == "PASS" for row in receipt["conditions"]))
+
+    def test_transaction_verifier_authenticates_without_consuming_the_arm(self) -> None:
+        self._write_plan(receipt_class="TRANSACTION_PACK")
+        plan = self.driver._load_plan(self.plan_path)
+        assembled = {
+            "pack_root": self.pack.resolve(),
+            "arm_receipt_sha256": "b" * 64,
+            "launch_manifest_sha256": "c" * 64,
+            "window_chain_sha256": "d" * 64,
+        }
+        from scripts import launch_window
+
+        with mock.patch.object(
+            launch_window,
+            "_verify_arm_receipt",
+            return_value={"status": "PASS", "arm_disposition": "GO"},
+        ) as verify_arm, mock.patch.object(
+            launch_window, "_assemble_launch_inputs", return_value=assembled
+        ) as authenticate, mock.patch.object(
+            launch_window, "_consumption_path", return_value=self.root / "unused"
+        ) as consumption_path, mock.patch.object(
+            launch_window, "_consume_launch_capability"
+        ) as consume:
+            verification = self.driver._verify_transaction_plan(plan)
+        arguments = authenticate.call_args.args[0]
+        self.assertEqual(arguments.pack_root, self.pack)
+        self.assertEqual(arguments.arm_receipt, self.arm_receipt)
+        self.assertEqual(arguments.launch_manifest, self.launch_manifest)
+        self.assertEqual(arguments.step6_confirmation_table, self.confirmation_table)
+        self.assertEqual(arguments.expected_confirmation_digest, "a" * 64)
+        self.assertTrue(verify_arm.call_args.kwargs["require_unconsumed"])
+        self.assertEqual(
+            verify_arm.call_args.kwargs["expected_confirmation_digest"], "a" * 64
+        )
+        self.assertEqual(
+            verification.measured["expected_confirmation_digest"], "a" * 64
+        )
+        consumption_path.assert_called_once_with(arguments)
+        consume.assert_not_called()
+
+    def test_failed_transaction_authentication_cannot_spawn_the_launcher(self) -> None:
+        self._write_plan(receipt_class="TRANSACTION_PACK")
+        probes = self.source.probes()
+        self.probes_mock.return_value = night_gate.Probes(
+            run=probes.run,
+            now_epoch_s=probes.now_epoch_s,
+            monotonic_ns=probes.monotonic_ns,
+            read_text=probes.read_text,
+            checkout_head=probes.checkout_head,
+            verify_transaction=lambda _plan: (_ for _ in ()).throw(
+                FileNotFoundError("launch manifest missing")
+            ),
+        )
+        exit_code, calls = self._run_night()
+        refusal = json.loads(
+            (self.custody / "night" / "refusal.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            refusal["refusal"]["reason"], self.driver._CODES["probe_error"]
+        )
+        self.assertIn("launch manifest missing", refusal["refusal"]["detail"])
+
+    def test_tampered_transaction_go_cannot_form_a_launcher_command(self) -> None:
+        self._write_plan(receipt_class="TRANSACTION_PACK")
+        plan = self.driver._load_plan(self.plan_path)
+        receipt = night_gate.evaluate_night(plan, self.source.probes())
+        value = json.loads(receipt.to_json_bytes())
+        value["conditions"][0]["status"] = "FAIL"
+        receipt_path = self.root / "tampered-receipt.json"
+        receipt_path.write_text(
+            json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+        with self.assertRaises(night_gate.PlanError) as raised:
+            self.driver._consume_transaction_go(plan, receipt_path)
+        self.assertEqual(
+            raised.exception.reason, self.driver._CODES["receipt_class_invalid"]
+        )
+
+    def test_transaction_refuses_missing_or_unprotected_confirmation_digest(self) -> None:
+        cases = ("missing", "wrong-mode", "malformed")
+        for case in cases:
+            with self.subTest(case=case):
+                case_root = self.root / case
+                case_root.mkdir()
+                self.custody = case_root / "custody"
+                self.custody.mkdir()
+                self.plan_path = case_root / "plan.json"
+                self._write_plan(receipt_class="TRANSACTION_PACK")
+                digest_path = self.custody / self.driver.CONFIRMATION_DIGEST_BASENAME
+                if case == "missing":
+                    digest_path.unlink()
+                elif case == "wrong-mode":
+                    digest_path.chmod(0o644)
+                else:
+                    digest_path.write_text("not-a-digest\n", encoding="ascii")
+                calls, spawn = self._popen_recorder()
+                with mock.patch.object(self.driver.subprocess, "Popen", spawn):
+                    exit_code = self.driver.run_night(self.plan_path)
+                refusal = json.loads(
+                    (self.custody / "night" / "refusal.json").read_text()
+                )
+                self.assertEqual(exit_code, self.driver.EXIT_REFUSED)
+                self.assertEqual(
+                    refusal["refusal"]["reason"], self.driver._CODES["plan_malformed"]
+                )
+                self.assertIn("confirmation digest custody file", refusal["refusal"]["detail"])
+                self.assertEqual(calls, [])
 
     def test_rehearsal_refuses_a_non_rehearsal_plan(self) -> None:
         exit_code, calls = self._run_night(rehearsal=True)

@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -32,10 +33,11 @@ from joulewise.night_gate import (  # noqa: E402
     PlanError,
     ProbeResult,
     Probes,
+    TransactionVerification,
     agent_census,
     evaluate_night,
+    validate_receipt,
 )
-
 
 RESULT_SCHEMA = "joulewise.unattended_night_result.v1"
 REFUSAL_SCHEMA = "joulewise.night_refusal.v1"
@@ -50,6 +52,8 @@ DEADMAN_MINUTE = 0
 COURIER_ALLOWED_TOOLS = (
     "Read,Glob,Grep,Bash,Edit,Write,mcp__claude_ai_Gmail__send_message"
 )
+LAUNCHER_PATH = REPO_ROOT / "scripts" / "launch_window.py"
+CONFIRMATION_DIGEST_BASENAME = "085-ed-step6-confirmed-sha256.txt"
 
 EXIT_GO = 0
 EXIT_REFUSED = 3
@@ -95,6 +99,119 @@ def _sidecar_digest(sidecar_text: str, chain_basename: str) -> str | None:
     if len(tokens) == 2 and tokens[1] != chain_basename:
         return None
     return tokens[0]
+
+
+def _read_confirmation_digest(custody_root: Path) -> str:
+    """Read the arm-time confirmation digest from owner-only custody."""
+
+    root = custody_root.resolve(strict=True)
+    path = root / CONFIRMATION_DIGEST_BASENAME
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise PlanError(
+            _CODES["plan_malformed"],
+            f"confirmation digest custody file is unavailable: {error}",
+        ) from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise PlanError(
+                _CODES["plan_malformed"],
+                "confirmation digest custody file is not a regular file",
+            )
+        if stat.S_IMODE(metadata.st_mode) != 0o600:
+            raise PlanError(
+                _CODES["plan_malformed"],
+                "confirmation digest custody file mode is not 0600",
+            )
+        raw = os.read(descriptor, 66)
+        if os.read(descriptor, 1):
+            raw += b"x"
+    finally:
+        os.close(descriptor)
+    if len(raw) != 65 or raw[-1:] != b"\n":
+        raise PlanError(
+            _CODES["plan_malformed"],
+            "confirmation digest custody file must contain 64 lowercase hexadecimal characters and one newline",
+        )
+    try:
+        digest = raw[:-1].decode("ascii")
+    except UnicodeDecodeError as error:
+        raise PlanError(
+            _CODES["plan_malformed"],
+            "confirmation digest custody file is not ASCII",
+        ) from error
+    if _SHA256_HEX_RE.fullmatch(digest) is None:
+        raise PlanError(
+            _CODES["plan_malformed"],
+            "confirmation digest custody file does not contain a lowercase SHA-256 digest",
+        )
+    return digest
+
+
+def _required_transaction_path(plan: NightPlan, name: str) -> Path:
+    value = getattr(plan, name)
+    if not isinstance(value, str) or not value:
+        raise PlanError(
+            _CODES["plan_malformed"],
+            f"transaction plan field {name} is unavailable",
+        )
+    return Path(value)
+
+
+def _verify_transaction_plan(plan: NightPlan) -> TransactionVerification:
+    """Rehearse the launcher's authentication without consuming the arm."""
+
+    from scripts import launch_window
+
+    digest = _read_confirmation_digest(Path(plan.custody_root))
+    arguments = argparse.Namespace(
+        pack_root=_required_transaction_path(plan, "pack_root"),
+        arm_receipt=_required_transaction_path(plan, "arm_receipt"),
+        arm_readiness_custody_root=_required_transaction_path(
+            plan, "arm_readiness_custody_root"
+        ),
+        launch_manifest=_required_transaction_path(plan, "launch_manifest"),
+        lifecycle_event=None,
+        step6_confirmation_table=_required_transaction_path(
+            plan, "step6_confirmation_table"
+        ),
+        expected_confirmation_digest=digest,
+    )
+    try:
+        launch_window._verify_arm_receipt(
+            arguments.pack_root,
+            arguments.arm_receipt,
+            require_unconsumed=True,
+            step6_confirmation_table=arguments.step6_confirmation_table,
+            expected_confirmation_digest=digest,
+        )
+        assembled = launch_window._assemble_launch_inputs(arguments)
+        launch_window._consumption_path(arguments)
+    except Exception as error:
+        raise PlanError(
+            _CODES["plan_malformed"],
+            f"transaction launch inputs did not authenticate: {error}",
+        ) from error
+    return TransactionVerification(
+        evidence=(
+            f"arm_receipt:{arguments.arm_receipt}",
+            f"launch_manifest:{arguments.launch_manifest}",
+            f"step6_confirmation_table:{arguments.step6_confirmation_table}",
+            f"confirmation_digest:{Path(plan.custody_root) / CONFIRMATION_DIGEST_BASENAME}",
+        ),
+        measured={
+            "pack_root": str(assembled["pack_root"]),
+            "arm_receipt_sha256": str(assembled["arm_receipt_sha256"]),
+            "launch_manifest_sha256": str(assembled["launch_manifest_sha256"]),
+            "window_chain_sha256": str(assembled["window_chain_sha256"]),
+            "expected_confirmation_digest": digest,
+        },
+    )
 
 
 def _json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -279,7 +396,63 @@ def make_probes() -> Probes:
         monotonic_ns=time.monotonic_ns,
         read_text=lambda path: Path(path).read_text(encoding="utf-8"),
         checkout_head=checkout_head,
+        verify_transaction=_verify_transaction_plan,
     )
+
+
+def _consume_transaction_go(plan: NightPlan, receipt_path: Path) -> list[str]:
+    """Validate the freshly custodied GO and assemble the sole launcher call."""
+
+    try:
+        raw = receipt_path.read_bytes()
+        value = json.loads(raw)
+    except (OSError, ValueError) as error:
+        raise PlanError(
+            _CODES["receipt_class_invalid"],
+            f"transaction GO receipt is unavailable or malformed: {error}",
+        ) from error
+    expected = (
+        json.dumps(value, sort_keys=True, indent=2, ensure_ascii=True) + "\n"
+    ).encode("utf-8")
+    defects = validate_receipt(value) if isinstance(value, Mapping) else ["not an object"]
+    if raw != expected:
+        defects.append("receipt bytes are not canonical")
+    if isinstance(value, Mapping):
+        if value.get("receipt_class") != "TRANSACTION_PACK":
+            defects.append("receipt class is not TRANSACTION_PACK")
+        if value.get("plan_id") != plan.plan_id:
+            defects.append("receipt plan_id does not match the night plan")
+        if value.get("verdict") != "GO" or value.get("refusal") is not None:
+            defects.append("receipt is not an unrefused GO")
+    if defects:
+        raise PlanError(
+            _CODES["receipt_class_invalid"],
+            f"transaction GO receipt is invalid: {defects!r}",
+        )
+    digest = _read_confirmation_digest(Path(plan.custody_root))
+    conditions = value["conditions"]
+    c2 = next(item for item in conditions if item["condition_id"] == "C2")
+    if c2["measured"].get("expected_confirmation_digest") != digest:
+        raise PlanError(
+            _CODES["receipt_class_invalid"],
+            "confirmation digest custody changed after the transaction gate",
+        )
+    return [
+        sys.executable,
+        str(LAUNCHER_PATH),
+        "--pack-root",
+        str(_required_transaction_path(plan, "pack_root")),
+        "--arm-receipt",
+        str(_required_transaction_path(plan, "arm_receipt")),
+        "--arm-readiness-custody-root",
+        str(_required_transaction_path(plan, "arm_readiness_custody_root")),
+        "--launch-manifest",
+        str(_required_transaction_path(plan, "launch_manifest")),
+        "--step6-confirmation-table",
+        str(_required_transaction_path(plan, "step6_confirmation_table")),
+        "--expected-confirmation-digest",
+        digest,
+    ]
 
 
 def _census_record(probe: ProbeResult, refusal: Any) -> dict[str, Any]:
@@ -881,6 +1054,11 @@ def _fallback_plan(plan_path: Path) -> NightPlan:
         chain_sha256_path="",
         custody_root=custody,
         registration_path=None,
+        pack_root=None,
+        arm_receipt=None,
+        arm_readiness_custody_root=None,
+        launch_manifest=None,
+        step6_confirmation_table=None,
     )
 
 
@@ -1192,7 +1370,38 @@ def run_night(
                 deadman_epoch_s=deadman_epoch_s,
                 courier_bin_substitution=courier_substitution,
             )
-        command = ["/bin/zsh", str(chain_path)]
+        if plan.receipt_class == "TRANSACTION_PACK":
+            try:
+                if LAUNCHER_PATH.is_symlink() or not LAUNCHER_PATH.is_file():
+                    raise PlanError(
+                        _CODES["plan_malformed"],
+                        "reviewed transaction launcher is unavailable or is a symlink",
+                    )
+                command = _consume_transaction_go(
+                    plan, night_dir / "receipt.json"
+                )
+            except PlanError as error:
+                _write_standard_refusal_result(
+                    custody_root,
+                    night_dir,
+                    plan,
+                    error.reason,
+                    error.detail,
+                    started_epoch_s,
+                    started_monotonic_ns,
+                )
+                _append_log(custody_root, "transaction launch input refused")
+                return _finish_reporting(
+                    custody_root,
+                    night_dir,
+                    plan,
+                    EXIT_REFUSED,
+                    resolved_courier,
+                    deadman_epoch_s=deadman_epoch_s,
+                    courier_bin_substitution=courier_substitution,
+                )
+        else:
+            command = ["/bin/zsh", str(chain_path)]
         _append_log(custody_root, "night chain digest verified")
 
     claim_descriptor = _claim_chain_start(night_dir)

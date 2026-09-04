@@ -60,7 +60,6 @@ NIGHT_GATE_REASON_CODES = frozenset(
         "night_plan_stale",
         "night_plan_malformed",
         "night_chain_digest_mismatch",
-        "night_refused_class_unbuilt",
         "night_receipt_class_invalid",
         "night_probe_error",
     }
@@ -92,7 +91,6 @@ ORDER = (
     "night_plan_stale",
     "night_refused_agent_present",
     "night_chain_digest_mismatch",
-    "night_refused_class_unbuilt",
     "night_refused_hid_idle",
     "night_refused_not_quiet",
     "night_refused_boot_clock",
@@ -111,6 +109,13 @@ _PLAN_KEYS = {
     "chain_sha256_path",
     "custody_root",
     "registration_path",
+}
+_TRANSACTION_PLAN_KEYS = {
+    "pack_root",
+    "arm_receipt",
+    "arm_readiness_custody_root",
+    "launch_manifest",
+    "step6_confirmation_table",
 }
 _RECEIPT_KEYS = {
     "schema",
@@ -163,6 +168,15 @@ class Probes:
     monotonic_ns: Callable[[], int]
     read_text: Callable[[str], str]
     checkout_head: Callable[[], str]
+    verify_transaction: Callable[["NightPlan"], "TransactionVerification"] | None = None
+
+
+@dataclass(frozen=True)
+class TransactionVerification:
+    """Authenticated pack-arm inputs observed before a transaction GO."""
+
+    evidence: tuple[str, ...]
+    measured: Mapping[str, object]
 
 
 @dataclass(frozen=True)
@@ -177,15 +191,26 @@ class NightPlan:
     chain_sha256_path: str
     custody_root: str
     registration_path: str | None
+    pack_root: str | None = None
+    arm_receipt: str | None = None
+    arm_readiness_custody_root: str | None = None
+    launch_manifest: str | None = None
+    step6_confirmation_table: str | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
         if not isinstance(value, Mapping):
             raise PlanError("night_plan_malformed", "plan must be an object")
+        receipt_class_value = value.get("receipt_class")
+        expected_keys = (
+            _PLAN_KEYS | _TRANSACTION_PLAN_KEYS
+            if receipt_class_value == "TRANSACTION_PACK"
+            else _PLAN_KEYS
+        )
         keys = set(value)
-        if keys != _PLAN_KEYS:
-            missing = sorted(repr(item) for item in _PLAN_KEYS - keys)
-            extra = sorted(repr(item) for item in keys - _PLAN_KEYS)
+        if keys != expected_keys:
+            missing = sorted(repr(item) for item in expected_keys - keys)
+            extra = sorted(repr(item) for item in keys - expected_keys)
             raise PlanError(
                 "night_plan_malformed",
                 f"plan keys are not exact (missing={missing}, extra={extra})",
@@ -236,6 +261,13 @@ class NightPlan:
                 "night_plan_malformed",
                 f"registration_path is required for {receipt_class}",
             )
+        transaction_values: dict[str, str | None] = {
+            name: None for name in _TRANSACTION_PLAN_KEYS
+        }
+        if receipt_class == "TRANSACTION_PACK":
+            transaction_values = {
+                name: require_text(name) for name in _TRANSACTION_PLAN_KEYS
+            }
         return NightPlan(
             plan_id=plan_id,
             receipt_class=receipt_class,
@@ -247,6 +279,7 @@ class NightPlan:
             chain_sha256_path=chain_sha256_path,
             custody_root=custody_root,
             registration_path=registration,
+            **transaction_values,
         )
 
 
@@ -432,9 +465,6 @@ def _initial_conditions(receipt_class: str) -> dict[str, _MutableCondition]:
             rows[condition_id] = _MutableCondition(
                 "FAIL", None, [], {"detail": "not evaluated after refusal"}
             )
-    if receipt_class == "TRANSACTION_PACK":
-        for condition_id in ("C1", "C2"):
-            rows[condition_id].measured = {"detail": "stage 3 not implemented"}
     return rows
 
 
@@ -677,16 +707,28 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
     rows["C5"].measured["detail"] = "window, plan freshness, HEAD, and chain identity passed"
 
     if plan.receipt_class == "TRANSACTION_PACK":
-        return _finish(
-            plan,
-            probes,
-            rows,
-            Refusal(
-                "night_refused_class_unbuilt",
-                "stage 3 not implemented: TRANSACTION_PACK is pack-bound and stays under E-10 (ruling R-10)",
-                (),
-            ),
-        )
+        try:
+            if probes.verify_transaction is None:
+                raise ProbeError("transaction verifier is unavailable")
+            transaction = probes.verify_transaction(plan)
+            if not isinstance(transaction, TransactionVerification):
+                raise ProbeError(
+                    "transaction verifier did not return TransactionVerification"
+                )
+            if not transaction.evidence:
+                raise ProbeError("transaction verifier returned no evidence")
+            if not isinstance(transaction.measured, Mapping):
+                raise ProbeError("transaction verifier measurements are malformed")
+        except Exception as exc:
+            return _probe_refusal(plan, probes, rows, evidence, exc)
+        rows["C1"].status = "PASS"
+        rows["C1"].evidence.append("authority:unattended_night_gate")
+        rows["C1"].measured = {
+            "detail": "transaction authority is delegated to the unattended night gate"
+        }
+        rows["C2"].status = "PASS"
+        rows["C2"].evidence.extend(transaction.evidence)
+        rows["C2"].measured = dict(transaction.measured)
 
     # R-6's unattended HID predicate precedes the remaining quiet predicates.
     try:
