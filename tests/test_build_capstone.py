@@ -32,8 +32,19 @@ class BuildCapstoneVoidFenceTests(unittest.TestCase):
         evidence_line = re.search(r"^Evidence class: \*\*(.*?)\*\*", page, re.MULTILINE)
         self.assertIsNotNone(evidence_line)
         self.assertIn("VOIDED", evidence_line.group(1))
-        for forbidden in ("47.2", "304.0", "primary"):
-            self.assertNotIn(forbidden, page.lower())
+        self.assertIn("root README void disposition", page)
+        self.assertIn("No energy-result table or energy values", page)
+        for forbidden in (
+            PRE_CURE_LABEL,
+            "47.2",
+            "44.4",
+            "304.0",
+            "298.7",
+            "primary",
+            "Table T1",
+            "Figure F1",
+        ):
+            self.assertNotIn(forbidden.lower(), page.lower())
 
     def test_generated_results_page_is_voided_and_omits_legacy_values(self):
         generated = build_capstone.generate_results_page()
