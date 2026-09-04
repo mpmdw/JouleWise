@@ -688,6 +688,16 @@ from a summary label. At claim admission, a custody-bound mock backend refuses
 unwaivably as `mock_telemetry_claim_ineligible`; campaign collection/readiness
 behavior remains unchanged.
 
+`joulewise/reduce.py` is also an issued D-079 estimator input governed by
+D-138. Its bytes remain at the issued pin until an atomic successor re-freeze
+reissues every dependent pin; custody hardening must not rotate that file on
+an ordinary hardening branch. Reducer-local eligibility is therefore not
+claim authority by itself. The campaign/whole-window and analysis-input
+boundaries independently reopen the custody-bound config, enforce the
+config/metadata/summary telemetry triangle, and apply the terminal mock bar.
+Diagnostic labels cannot grant a mock exemption at either claim consumer,
+even while the issued reducer retains its historical label-sensitive helper.
+
 ## Structured Failure Reasons
 
 Adapters should report failures with stable reason codes:

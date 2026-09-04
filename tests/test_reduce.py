@@ -2091,6 +2091,32 @@ class D078R01RegressionTests(unittest.TestCase):
     FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
     RAW_SHA256 = "cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81"
 
+    def test_d138_reduce_source_bytes_remain_at_issued_pin(self) -> None:
+        """Hardening work cannot silently rotate a physics/evidence input."""
+
+        issued_pin = (
+            "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
+        )
+        acceptance = json.loads(
+            (
+                REPO_ROOT
+                / "configs"
+                / "calibration"
+                / "calibration_acceptance_d079_v2_n17_r6.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            acceptance["prospective_rederivation"]["estimator_code_sha256"]
+            ["joulewise/reduce.py"],
+            issued_pin,
+        )
+        self.assertEqual(
+            hashlib.sha256(
+                (REPO_ROOT / "joulewise" / "reduce.py").read_bytes()
+            ).hexdigest(),
+            issued_pin,
+        )
+
     @staticmethod
     def _claim_gates() -> dict:
         return {
@@ -2543,28 +2569,6 @@ class D078R01RegressionTests(unittest.TestCase):
             reduce_module._environment_claim_reasons(metadata),
         )
 
-    def test_metadata_mock_label_cannot_bypass_current_environment_barrier(
-        self,
-    ) -> None:
-        """A forged diagnostic label cannot override config-derived dispatch."""
-
-        metadata = {
-            "adapters": {"telemetry": {"name": "mock"}},
-            "environment_admission": self._clean_environment_admission(),
-            "environment": {
-                "post_run_observation": {
-                    "capture_skipped": False,
-                    "display_power_state": "any_awake",
-                    "screensaver_engaged": False,
-                    "errors": {},
-                }
-            },
-        }
-        self.assertIn(
-            "environment_admission_failed",
-            reduce_module._environment_claim_reasons(metadata),
-        )
-
     def test_environment_claim_reason_channel_is_closed_and_decision_bound(self) -> None:
         # F1 exact defect: the misspelling on a flagged decision used to return
         # no reason; the inverse contradiction minted a refusal on admitted.
@@ -2598,7 +2602,6 @@ class D078R01RegressionTests(unittest.TestCase):
                 "adapters": {"telemetry": {"name": "mock"}},
                 "environment_admission": self._clean_environment_admission(),
             },
-            strict=False,
         )
         self.assertTrue(all(gate["eligible"] for gate in clean.values()))
 
@@ -2646,30 +2649,6 @@ class D078R01RegressionTests(unittest.TestCase):
             },
         )
         self.assertTrue(all(gate["eligible"] for gate in gates.values()))
-
-    def test_metadata_mock_label_cannot_bypass_cpu_admission_barrier(self) -> None:
-        gates = self._claim_gates()
-        clean_row = {
-            "attempt": 1,
-            "start_s": 1.0,
-            "end_s": 2.0,
-            "admitted": True,
-            "cpu_admission_enforced": True,
-            "cpu_admission": {"admitted": True},
-        }
-        reduce_module._apply_cpu_admission_claim_barrier(
-            gates,
-            {
-                "adapters": {"telemetry": {"name": "mock"}},
-                "environment_admission": {
-                    **self._clean_environment_admission(),
-                    "attempts": [clean_row, {**clean_row, "attempt": 1}],
-                },
-            },
-        )
-        for gate in gates.values():
-            self.assertFalse(gate["eligible"])
-            self.assertTrue(gate["reasons"])
 
     def test_fixture_raw_matches_sealed_evidence(self) -> None:
         import hashlib

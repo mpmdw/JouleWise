@@ -6867,6 +6867,52 @@ class AnchorFallbackCampaignGateTests(unittest.TestCase):
                     evaluation.validation_problems,
                 )
 
+    def test_coordinated_mock_labels_cannot_override_custody_config(self):
+        """D-138 containment lives at consumers of the pinned reducer."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "coordinated-mock-labels"
+            shutil.copytree(Path("tests/fixtures/d078_r01"), bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["measurement_quality"]["telemetry_source"] = "mock"
+            summary_path.write_text(
+                json.dumps(summary, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["adapters"]["telemetry"]["name"] = "mock"
+            metadata_path.write_text(
+                json.dumps(metadata, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            identity = whole_window_module.custody_telemetry_identity(
+                bundle,
+                summary=summary,
+                metadata=metadata,
+            )
+            ordinary = self._evaluate(bundle, role="absolute_repeat")
+            whole_window = self._whole_window_evaluate(
+                bundle,
+                role="absolute_repeat",
+                waiver=False,
+            )
+
+        self.assertTrue(identity.custody_bound_config)
+        self.assertEqual(identity.config_backend_class, "powermetrics")
+        self.assertEqual(identity.metadata_backend_class, "mock")
+        self.assertEqual(identity.summary_backend_class, "mock")
+        self.assertFalse(identity.triangle_agrees)
+        for evaluation in (ordinary, whole_window):
+            with self.subTest(path=evaluation.config_name):
+                self.assertFalse(evaluation.strict_valid)
+                self.assertIn(
+                    "bundle_strict_invalid",
+                    evaluation.validation_problems,
+                )
+
     def test_fully_anchored_floor_member_remains_usable(self):
         with tempfile.TemporaryDirectory() as tmp:
             bundle, _raw_summary = self._bundle(

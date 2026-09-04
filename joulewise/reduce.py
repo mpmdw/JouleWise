@@ -701,11 +701,10 @@ def _environment_claim_reasons(
     reasons: list[str] = []
     admission = metadata.get("environment_admission")
     if strict:
-        # ``strict`` is selected by the parsed, hash-bound config at both
-        # current reducer call sites. Do not re-derive an exemption from the
-        # unauthoritative telemetry labels copied into metadata or summary.
+        telemetry_source = _telemetry_source(metadata)
         if (
-            bundle_path is not None
+            telemetry_source != "mock"
+            and bundle_path is not None
             and measured_window is not None
         ):
             reasons.extend(
@@ -716,13 +715,15 @@ def _environment_claim_reasons(
                     measured_window_end_s=measured_window.end_s,
                 )
             )
-        else:
+        elif admission is not None or telemetry_source != "mock":
             reasons.extend(
                 environment_admission_refusals(
                     admission, require_attempt_timing=strict
                 )
             )
-        if bundle_path is None or measured_window is None:
+        if telemetry_source != "mock" and (
+            bundle_path is None or measured_window is None
+        ):
             reasons.extend(post_run_environment_refusals(metadata))
     elif (
         isinstance(admission, dict)
@@ -784,9 +785,8 @@ def _apply_environment_claim_barrier(
 def _apply_cpu_admission_claim_barrier(
     prechecks: dict[str, Any], metadata: dict[str, Any], *, strict: bool = True
 ) -> None:
-    # Current reducers decide the mock exemption from the parsed, hash-bound
-    # config before calling this barrier. Metadata and summary labels are
-    # diagnostic copies and must never create a second exemption here.
+    if _telemetry_source(metadata) == "mock":
+        return
     admission = metadata.get("environment_admission")
     reasons: list[str] = []
     if strict:
