@@ -116,7 +116,7 @@ else
   launch_dir="$HOME/Library/LaunchAgents"
 fi
 mkdir -p "$launch_dir"
-if [[ "$mode" != "--uninstall" ]]; then
+if [[ "${uninstall:-0}" != "1" ]]; then
   # Only an install may create custody; uninstall must never touch the plan's custody root.
   mkdir -p "$custody_root/night"
 fi
