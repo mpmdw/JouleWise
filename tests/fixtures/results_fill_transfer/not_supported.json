@@ -1,0 +1,86 @@
+{
+  "census": {
+    "edges_per_run": [
+      "falling_gap_edge",
+      "rising_gap_edge"
+    ],
+    "observed_edge_count": 20,
+    "observed_run_count": 10,
+    "registered_edge_count": 20,
+    "registered_run_count": 10
+  },
+  "claim_bearing": false,
+  "diagnostic": true,
+  "diagnostic_protocol_id": "TRANSFER-FIDUCIAL-01",
+  "largest_composed_edge_residual_bound_s": 0.031,
+  "largest_inserted_gap_edge": {
+    "bundle_id": "synthetic-transfer-r07",
+    "edge": "rising_gap_edge",
+    "effective_clock_anchor_bound_s": 0.002,
+    "fitted_residual_interval_s": {
+      "lower": -0.029,
+      "upper": 0.028
+    }
+  },
+  "pulse_derived_timing_bound_s": 0.030067931757111657,
+  "reason_codes": [],
+  "result_id": "tfr-c715d5b158a37c194ece2dff4e90924ef8168e36ce66544dd8baf8ab45f28a3c",
+  "schema_version": "joulewise.transfer_fiducial_result.v1",
+  "source_capture": {
+    "bundle_sha256": [
+      {
+        "bundle_id": "synthetic-transfer-r01",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r02",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r03",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r04",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r05",
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r06",
+        "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r07",
+        "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r08",
+        "sha256": "7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r09",
+        "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      {
+        "bundle_id": "synthetic-transfer-r10",
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      }
+    ],
+    "estimator_revision": "existing_pulse_estimator.synthetic_fixture.v1",
+    "estimator_source_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "fit_source_commit": "cccccccccccccccccccccccccccccccccccccccc",
+    "plan_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "pre_data_receipt_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "pulse_derived_timing_bound_source": {
+      "artifact_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "field": "b_fiducial_s"
+    },
+    "schema_version": "joulewise.transfer_fiducial_capture.v1",
+    "source_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "support_outcome": "not_supported"
+}
