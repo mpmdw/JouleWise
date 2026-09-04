@@ -979,7 +979,7 @@ phase. Two is less than the required three, so the phase was not resolvable.
 
 The population consists of short prompt-processing phases from the earlier
 1.5-billion-parameter diagnostic configuration during the July
-two-thousand-twenty-six diagnostic window. Here **diagnostic-era** means
+2026 diagnostic window. Here **diagnostic-era** means
 collected during that earlier diagnostic period, before the fixed before collection
 demonstration. Across this retained diagnostic-era population, 37 of 50 phases
 overlapped two sampling records and the remaining 13 of 50 overlapped three.
@@ -1743,7 +1743,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | interquartile range / IQR | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Upper edge minus lower edge of the middle half of sorted values. |
 | resolvability / not_resolvable_sample_count | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Here the not-resolvable verdict names record support below the three-record minimum and the printed label identifies that reason; Section 4 uses the same verdict words for failure to clear a cell floor. |
 | record width | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Record width is the duration of one sampling record's interval. |
-| diagnostic-era / prospective demonstration | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | The earlier diagnostic period precedes the pre-registered comparison that will be collected later. |
+| diagnostic-era / prospective demonstration | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | The earlier diagnostic period precedes the comparison, fixed before collection, that will be collected later. |
 | three-record minimum | 1. Introduction | glossed-at-first-use | A phase must overlap at least three sampler records to be reduced at all. |
 | two-record safety margin / design floor | Why the selected prompt length is not yet stated | glossed-at-first-use | Five overlaps are two above the three-overlap phase minimum; the design floor is stricter than reducer calculability. |
 | count floor | Why the selected prompt length is not yet stated | glossed-at-first-use | The registered minimum record count for a full-strength result. |
