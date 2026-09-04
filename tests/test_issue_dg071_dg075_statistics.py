@@ -992,7 +992,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             )
             return completed.stdout.strip()
 
-        git("init", "--quiet", date="2000-01-01T00:00:00+00:00")
+        init_git_fixture(checkout, "--quiet")
         git(
             "add",
             ISSUER.SCRIPT_REPOSITORY_PATH,
@@ -1104,7 +1104,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             )
             return completed.stdout.strip()
 
-        git("init", "--quiet")
+        init_git_fixture(checkout, "--quiet")
         git("add", ISSUER.SCRIPT_REPOSITORY_PATH)
         git("commit", "--quiet", "-m", "add producer")
         producer = git("rev-parse", "HEAD")

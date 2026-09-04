@@ -861,12 +861,18 @@ class TypedArtifactCliTests(unittest.TestCase):
             driver_exit = FENCE.main(["--corpus-root", str(ROOT)])
 
         self.assertEqual(driver_exit, 3, driver_output.getvalue())
-        self.assertEqual(
-            driver_output.getvalue().splitlines()[-1],
+        final_line = driver_output.getvalue().splitlines()[-1]
+        prefix = (
             "R7F REPLAY INCOMPLETE: source=excursion; "
             "reason=required_input_unavailable; "
-            f"detail=artifacts unavailable: {source / 'events.jsonl'} is not present",
+            "detail=artifacts unavailable: "
         )
+        suffix = " is not present"
+        self.assertTrue(final_line.startswith(prefix), final_line)
+        self.assertTrue(final_line.endswith(suffix), final_line)
+        reported_missing = Path(final_line[len(prefix) : -len(suffix)]).resolve()
+        expected_missing = (source / "events.jsonl").resolve()
+        self.assertEqual(reported_missing, expected_missing)
 
     def test_disposition_table_drives_finalizer_and_help(self) -> None:
         rendered_help = FENCE._exit_code_help()

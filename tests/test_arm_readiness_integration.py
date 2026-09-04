@@ -289,6 +289,13 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
     maxDiff = None
 
     def setUp(self) -> None:
+        # Keep fixture evidence and every in-test consumer on one logical
+        # instant.  These integration tests exercise validity semantics, not
+        # whether a slow aggregate test run can outrun the minimum horizon.
+        fixed_monotonic_ns = time.monotonic_ns()
+        monotonic_patcher = mock.patch.object(
+            time, "monotonic_ns", return_value=fixed_monotonic_ns
+        )
         boot_patcher = mock.patch.object(
             readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
         )
@@ -297,10 +304,12 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             "verify_family_publication_marker",
             side_effect=synthetic_family_publication_verification,
         )
+        monotonic_patcher.start()
         boot_patcher.start()
         publication_patcher.start()
         self.addCleanup(publication_patcher.stop)
         self.addCleanup(boot_patcher.stop)
+        self.addCleanup(monotonic_patcher.stop)
 
     def prepare_profile(self, profile: str):
         temporary, repo, pack, custody, _arm_path = make_go_fixture(PACKS[profile], profile)
