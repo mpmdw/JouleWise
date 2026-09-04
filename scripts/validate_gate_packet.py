@@ -53,7 +53,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import sys
-from typing import Any, BinaryIO, Sequence
+from typing import Any, BinaryIO, NamedTuple, Sequence
 
 
 RECEIPT_SCHEMA = "coldgate-validator-receipt/v2"
@@ -84,6 +84,27 @@ class CliError(Exception):
     """Raised instead of argparse terminating without a refusal receipt."""
 
 
+class FrozenExhibit(NamedTuple):
+    """One manifest-listed exhibit captured as immutable in-process bytes."""
+
+    manifest_path: str
+    data: bytes
+
+    @property
+    def sha256(self) -> str:
+        return _sha256(self.data)
+
+
+class ValidatedGateSnapshot(NamedTuple):
+    """The exact packet, charter, and exhibit bytes accepted together."""
+
+    packet_name: str
+    packet_bytes: bytes
+    charter_name: str
+    charter_bytes: bytes
+    exhibits: tuple[FrozenExhibit, ...]
+
+
 class ReceiptArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise CliError(message)
@@ -93,13 +114,13 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _sha256_handle(handle: BinaryIO) -> str:
-    digest = hashlib.sha256()
+def _read_handle_once(handle: BinaryIO) -> bytes:
+    chunks: list[bytes] = []
     while True:
         chunk = handle.read(1024 * 1024)
         if not chunk:
-            return digest.hexdigest()
-        digest.update(chunk)
+            return b"".join(chunks)
+        chunks.append(chunk)
 
 
 def _read_once(path: Path) -> bytes | None:
@@ -329,7 +350,7 @@ def _parse_manifest_lines(
 
 def _open_exhibit(
     packet_directory_fd: int, exhibit_path: str
-) -> tuple[str | None, tuple[int, int] | None, str | None]:
+) -> tuple[FrozenExhibit | None, tuple[int, int] | None, str | None]:
     components = PurePosixPath(exhibit_path).parts
     directory_fd: int | None = None
     try:
@@ -348,8 +369,12 @@ def _open_exhibit(
             opened_stat = os.fstat(handle.fileno())
             if not stat.S_ISREG(opened_stat.st_mode):
                 return None, None, "exhibit_custody_invalid"
+            data = _read_handle_once(handle)
             return (
-                _sha256_handle(handle),
+                FrozenExhibit(
+                    manifest_path=exhibit_path,
+                    data=data,
+                ),
                 (opened_stat.st_dev, opened_stat.st_ino),
                 None,
             )
@@ -364,14 +389,14 @@ def _open_exhibit(
             os.close(directory_fd)
 
 
-def validate(
+def capture_and_validate(
     *,
     packet_arg: str | None,
     charter_arg: str | None,
     expected_packet_sha256: str | None,
     expected_charter_sha256: str | None,
-) -> dict[str, Any]:
-    """Validate arguments and sealed inputs; this is the programmatic boundary."""
+) -> tuple[dict[str, Any], ValidatedGateSnapshot | None]:
+    """Validate once-read inputs and return their immutable bytes only on PASS."""
     receipt = _base_receipt(
         packet_arg=packet_arg,
         charter_arg=charter_arg,
@@ -389,11 +414,11 @@ def validate(
         if value is None
     ]
     if missing:
-        return _refuse(receipt, "cli_invalid", [{"missing": missing}])
+        return _refuse(receipt, "cli_invalid", [{"missing": missing}]), None
     if not HEX_RE.fullmatch(expected_packet_sha256):
-        return _refuse(receipt, "expected_packet_sha256_invalid")
+        return _refuse(receipt, "expected_packet_sha256_invalid"), None
     if not HEX_RE.fullmatch(expected_charter_sha256):
-        return _refuse(receipt, "expected_charter_sha256_invalid")
+        return _refuse(receipt, "expected_charter_sha256_invalid"), None
 
     trusted_packet_sha256 = expected_packet_sha256.lower()
     trusted_charter_sha256 = expected_charter_sha256.lower()
@@ -402,22 +427,28 @@ def validate(
 
     packet_bytes = _read_once(packet_path)
     if packet_bytes is None:
-        return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
+        return (
+            _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}]),
+            None,
+        )
     observed_packet_sha256 = _sha256(packet_bytes)
     receipt["digests"]["packet_sha256"] = observed_packet_sha256
     if observed_packet_sha256 != trusted_packet_sha256:
-        return _refuse(receipt, "packet_digest_mismatch")
+        return _refuse(receipt, "packet_digest_mismatch"), None
 
     charter_bytes = _read_once(charter_path)
     if charter_bytes is None:
-        return _refuse(receipt, "charter_unreadable", [{"path": charter_path.name}])
+        return (
+            _refuse(receipt, "charter_unreadable", [{"path": charter_path.name}]),
+            None,
+        )
     observed_charter_sha256 = _sha256(charter_bytes)
     receipt["digests"]["charter_sha256"] = observed_charter_sha256
 
     try:
         packet_text = packet_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        return _refuse(receipt, "packet_not_utf8")
+        return _refuse(receipt, "packet_not_utf8"), None
     raw_lines = packet_bytes.splitlines(keepends=True)
     text_lines = [line.decode("utf-8").rstrip("\r\n") for line in raw_lines]
     outside_fence = _outside_fence_mask(text_lines)
@@ -426,7 +457,7 @@ def validate(
         text_lines, outside_fence
     )
     if pin_error is not None:
-        return _refuse(receipt, pin_error)
+        return _refuse(receipt, pin_error), None
     receipt["packet_charter_path"] = packet_charter_path
     receipt["packet_charter_pin_sha256"] = packet_pin
 
@@ -434,7 +465,7 @@ def validate(
         trusted_charter_sha256, packet_pin, observed_charter_sha256
     )
     if mismatch_reason is not None:
-        return _refuse(receipt, mismatch_reason)
+        return _refuse(receipt, mismatch_reason), None
 
     manifest_body, manifest_lines, manifest_error = _manifest_block(
         raw_lines, text_lines, outside_fence
@@ -442,21 +473,27 @@ def validate(
     if manifest_body is not None:
         receipt["digests"]["exhibit_manifest_sha256"] = _sha256(manifest_body)
     if manifest_error is not None or manifest_lines is None:
-        return _refuse(receipt, "manifest_parse_error")
+        return _refuse(receipt, "manifest_parse_error"), None
     manifest, manifest_error = _parse_manifest_lines(manifest_lines)
     if manifest_error is not None or manifest is None:
-        return _refuse(receipt, "manifest_parse_error")
+        return _refuse(receipt, "manifest_parse_error"), None
 
     try:
         packet_directory = packet_path.parent.resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
-        return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
+        return (
+            _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}]),
+            None,
+        )
 
     packet_directory_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
     try:
         packet_directory_fd = os.open(packet_directory, packet_directory_flags)
     except OSError:
-        return _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}])
+        return (
+            _refuse(receipt, "packet_unreadable", [{"path": packet_path.name}]),
+            None,
+        )
 
     try:
         unreadable: list[dict[str, Any]] = []
@@ -464,11 +501,15 @@ def validate(
         mismatches: list[dict[str, Any]] = []
         aliases: list[dict[str, Any]] = []
         exhibit_receipts: list[dict[str, Any]] = []
+        exhibit_snapshots: list[FrozenExhibit] = []
         seen_identities: dict[tuple[int, int], str] = {}
         for exhibit_expected, exhibit_path in manifest:
             exhibit_name = Path(exhibit_path).name
-            exhibit_observed, identity, exhibit_error = _open_exhibit(
+            exhibit_snapshot, identity, exhibit_error = _open_exhibit(
                 packet_directory_fd, exhibit_path
+            )
+            exhibit_observed = (
+                exhibit_snapshot.sha256 if exhibit_snapshot is not None else None
             )
             exhibit_receipts.append(
                 {
@@ -487,6 +528,8 @@ def validate(
                 )
             elif identity is not None:
                 seen_identities[identity] = exhibit_name
+            if exhibit_snapshot is not None:
+                exhibit_snapshots.append(exhibit_snapshot)
             if exhibit_observed is not None and exhibit_observed != exhibit_expected:
                 mismatches.append({"path": exhibit_name})
     finally:
@@ -494,17 +537,40 @@ def validate(
     receipt["digests"]["exhibits"] = exhibit_receipts
 
     if unreadable:
-        return _refuse(receipt, "exhibit_unreadable", unreadable)
+        return _refuse(receipt, "exhibit_unreadable", unreadable), None
     if custody_invalid:
-        return _refuse(receipt, "exhibit_custody_invalid", custody_invalid)
+        return _refuse(receipt, "exhibit_custody_invalid", custody_invalid), None
     if aliases:
-        return _refuse(receipt, "exhibit_alias_duplicate", aliases)
+        return _refuse(receipt, "exhibit_alias_duplicate", aliases), None
     if mismatches:
-        return _refuse(receipt, "exhibit_digest_mismatch", mismatches)
+        return _refuse(receipt, "exhibit_digest_mismatch", mismatches), None
 
     receipt["result"] = "PASS"
     receipt["reason"] = None
     receipt["details"] = []
+    return receipt, ValidatedGateSnapshot(
+        packet_name=packet_path.name,
+        packet_bytes=packet_bytes,
+        charter_name=charter_path.name,
+        charter_bytes=charter_bytes,
+        exhibits=tuple(exhibit_snapshots),
+    )
+
+
+def validate(
+    *,
+    packet_arg: str | None,
+    charter_arg: str | None,
+    expected_packet_sha256: str | None,
+    expected_charter_sha256: str | None,
+) -> dict[str, Any]:
+    """Validate arguments and inputs while preserving the validator v2 API."""
+    receipt, _snapshot = capture_and_validate(
+        packet_arg=packet_arg,
+        charter_arg=charter_arg,
+        expected_packet_sha256=expected_packet_sha256,
+        expected_charter_sha256=expected_charter_sha256,
+    )
     return receipt
 
 

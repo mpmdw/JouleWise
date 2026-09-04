@@ -164,6 +164,82 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertNotIn("convening_attestations", receipt)
         self.assertNotIn(str(self.root).encode("utf-8"), completed.stdout)
 
+    def test_snapshot_survives_post_validation_path_replacement(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        receipt, snapshot = VALIDATOR_MODULE.capture_and_validate(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+        )
+        self.assertEqual(receipt["result"], "PASS")
+        self.assertIsNotNone(snapshot)
+        assert snapshot is not None
+
+        replacement_packet = self.packet_directory / "replacement-packet"
+        replacement_packet.write_bytes(b"replacement packet\n")
+        os.replace(replacement_packet, packet)
+        replacement_charter = self.root / "replacement-charter"
+        replacement_charter.write_bytes(b"replacement charter\n")
+        os.replace(replacement_charter, self.charter)
+        replacement_exhibit = self.exhibit.parent / "replacement-exhibit"
+        replacement_exhibit.write_bytes(b"replacement exhibit\n")
+        os.replace(replacement_exhibit, self.exhibit)
+
+        self.assertEqual(snapshot.packet_bytes, packet_bytes)
+        self.assertEqual(snapshot.charter_bytes, self.charter_bytes)
+        self.assertEqual(len(snapshot.exhibits), 1)
+        self.assertEqual(snapshot.exhibits[0].data, self.exhibit_bytes)
+        self.assertEqual(
+            sha256(snapshot.packet_bytes), receipt["digests"]["packet_sha256"]
+        )
+        self.assertEqual(
+            sha256(snapshot.charter_bytes), receipt["digests"]["charter_sha256"]
+        )
+        self.assertEqual(
+            snapshot.exhibits[0].sha256,
+            receipt["digests"]["exhibits"][0]["observed_sha256"],
+        )
+
+    def test_snapshot_survives_same_inode_mutation_through_second_descriptor(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        original_identity = self.exhibit.stat().st_ino
+        receipt, snapshot = VALIDATOR_MODULE.capture_and_validate(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+        )
+        self.assertEqual(receipt["result"], "PASS")
+        self.assertIsNotNone(snapshot)
+        assert snapshot is not None
+
+        with self.exhibit.open("r+b") as second_descriptor:
+            second_descriptor.seek(0)
+            second_descriptor.write(b"mutated evidence")
+            second_descriptor.truncate()
+
+        self.assertEqual(self.exhibit.stat().st_ino, original_identity)
+        self.assertNotEqual(self.exhibit.read_bytes(), self.exhibit_bytes)
+        self.assertEqual(snapshot.exhibits[0].data, self.exhibit_bytes)
+        self.assertEqual(
+            snapshot.exhibits[0].sha256,
+            receipt["digests"]["exhibits"][0]["observed_sha256"],
+        )
+
+    def test_refusal_never_releases_a_snapshot(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        self.exhibit.write_bytes(b"tampered before capture\n")
+        receipt, snapshot = VALIDATOR_MODULE.capture_and_validate(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+        )
+        self.assertEqual(receipt["result"], "REFUSE")
+        self.assertEqual(receipt["reason"], "exhibit_digest_mismatch")
+        self.assertIsNone(snapshot)
+
     def test_refuses_wrong_trusted_charter_digest(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)
         completed, receipt = self.run_validator(packet, expected_charter="0" * 64)
