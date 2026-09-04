@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import io
@@ -164,67 +165,102 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertNotIn("convening_attestations", receipt)
         self.assertNotIn(str(self.root).encode("utf-8"), completed.stdout)
 
-    def test_snapshot_survives_post_validation_path_replacement(self) -> None:
+    def test_runner_delivers_original_snapshot_after_path_replacement(self) -> None:
         packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
-        receipt, snapshot = VALIDATOR_MODULE.capture_and_validate(
-            packet_arg=str(packet),
-            charter_arg=str(self.charter),
-            expected_packet_sha256=sha256(packet_bytes),
-            expected_charter_sha256=self.charter_sha,
-        )
-        self.assertEqual(receipt["result"], "PASS")
-        self.assertIsNotNone(snapshot)
-        assert snapshot is not None
+        original_capture = VALIDATOR_MODULE.capture_and_validate
+        transported: list[bytes] = []
 
-        replacement_packet = self.packet_directory / "replacement-packet"
-        replacement_packet.write_bytes(b"replacement packet\n")
-        os.replace(replacement_packet, packet)
-        replacement_charter = self.root / "replacement-charter"
-        replacement_charter.write_bytes(b"replacement charter\n")
-        os.replace(replacement_charter, self.charter)
-        replacement_exhibit = self.exhibit.parent / "replacement-exhibit"
-        replacement_exhibit.write_bytes(b"replacement exhibit\n")
-        os.replace(replacement_exhibit, self.exhibit)
+        def capture_then_replace(**kwargs: object) -> object:
+            result = original_capture(**kwargs)
+            replacement_packet = self.packet_directory / "replacement-packet"
+            replacement_packet.write_bytes(b"replacement packet\n")
+            os.replace(replacement_packet, packet)
+            replacement_charter = self.root / "replacement-charter"
+            replacement_charter.write_bytes(b"replacement charter\n")
+            os.replace(replacement_charter, self.charter)
+            replacement_exhibit = self.exhibit.parent / "replacement-exhibit"
+            replacement_exhibit.write_bytes(b"replacement exhibit\n")
+            os.replace(replacement_exhibit, self.exhibit)
+            return result
 
-        self.assertEqual(snapshot.packet_bytes, packet_bytes)
-        self.assertEqual(snapshot.charter_bytes, self.charter_bytes)
-        self.assertEqual(len(snapshot.exhibits), 1)
-        self.assertEqual(snapshot.exhibits[0].data, self.exhibit_bytes)
+        def fake_transport(request_bytes: bytes) -> dict[str, str]:
+            transported.append(request_bytes)
+            return {
+                "judge_request_id": "judge-request-1",
+                "observed_request_sha256": sha256(request_bytes),
+            }
+
+        with mock.patch.object(
+            VALIDATOR_MODULE,
+            "capture_and_validate",
+            side_effect=capture_then_replace,
+        ):
+            result = VALIDATOR_MODULE.run_gate_handoff(
+                packet_arg=str(packet),
+                charter_arg=str(self.charter),
+                expected_packet_sha256=sha256(packet_bytes),
+                expected_charter_sha256=self.charter_sha,
+                transport=fake_transport,
+            )
+
+        self.assertEqual(result.runner_receipt["result"], "PASS")
+        self.assertEqual(len(transported), 1)
+        request = json.loads(transported[0].decode("utf-8"))
         self.assertEqual(
-            sha256(snapshot.packet_bytes), receipt["digests"]["packet_sha256"]
+            base64.b64decode(request["sources"]["packet"]["bytes_base64"]),
+            packet_bytes,
         )
         self.assertEqual(
-            sha256(snapshot.charter_bytes), receipt["digests"]["charter_sha256"]
+            base64.b64decode(request["sources"]["charter"]["bytes_base64"]),
+            self.charter_bytes,
         )
         self.assertEqual(
-            snapshot.exhibits[0].sha256,
-            receipt["digests"]["exhibits"][0]["observed_sha256"],
+            base64.b64decode(request["sources"]["exhibits"][0]["bytes_base64"]),
+            self.exhibit_bytes,
         )
 
-    def test_snapshot_survives_same_inode_mutation_through_second_descriptor(self) -> None:
+    def test_runner_delivers_original_snapshot_after_same_inode_mutation(self) -> None:
         packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
         original_identity = self.exhibit.stat().st_ino
-        receipt, snapshot = VALIDATOR_MODULE.capture_and_validate(
-            packet_arg=str(packet),
-            charter_arg=str(self.charter),
-            expected_packet_sha256=sha256(packet_bytes),
-            expected_charter_sha256=self.charter_sha,
-        )
-        self.assertEqual(receipt["result"], "PASS")
-        self.assertIsNotNone(snapshot)
-        assert snapshot is not None
+        original_capture = VALIDATOR_MODULE.capture_and_validate
+        transported: list[bytes] = []
 
-        with self.exhibit.open("r+b") as second_descriptor:
-            second_descriptor.seek(0)
-            second_descriptor.write(b"mutated evidence")
-            second_descriptor.truncate()
+        def capture_then_mutate(**kwargs: object) -> object:
+            result = original_capture(**kwargs)
+            with self.exhibit.open("r+b") as second_descriptor:
+                second_descriptor.seek(0)
+                second_descriptor.write(b"mutated evidence")
+                second_descriptor.truncate()
+            return result
+
+        def fake_transport(request_bytes: bytes) -> dict[str, str]:
+            transported.append(request_bytes)
+            return {
+                "judge_session_id": "judge-session-1",
+                "observed_request_sha256": sha256(request_bytes),
+            }
+
+        with mock.patch.object(
+            VALIDATOR_MODULE,
+            "capture_and_validate",
+            side_effect=capture_then_mutate,
+        ):
+            result = VALIDATOR_MODULE.run_gate_handoff(
+                packet_arg=str(packet),
+                charter_arg=str(self.charter),
+                expected_packet_sha256=sha256(packet_bytes),
+                expected_charter_sha256=self.charter_sha,
+                transport=fake_transport,
+            )
 
         self.assertEqual(self.exhibit.stat().st_ino, original_identity)
         self.assertNotEqual(self.exhibit.read_bytes(), self.exhibit_bytes)
-        self.assertEqual(snapshot.exhibits[0].data, self.exhibit_bytes)
+        self.assertEqual(result.runner_receipt["result"], "PASS")
+        self.assertEqual(len(transported), 1)
+        request = json.loads(transported[0].decode("utf-8"))
         self.assertEqual(
-            snapshot.exhibits[0].sha256,
-            receipt["digests"]["exhibits"][0]["observed_sha256"],
+            base64.b64decode(request["sources"]["exhibits"][0]["bytes_base64"]),
+            self.exhibit_bytes,
         )
 
     def test_refusal_never_releases_a_snapshot(self) -> None:
@@ -239,6 +275,170 @@ class ValidateGatePacketTests(unittest.TestCase):
         self.assertEqual(receipt["result"], "REFUSE")
         self.assertEqual(receipt["reason"], "exhibit_digest_mismatch")
         self.assertIsNone(snapshot)
+
+    def test_runner_binds_transported_bytes_digest_and_judge_identity(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        transported: list[bytes] = []
+
+        def fake_transport(request_bytes: bytes) -> dict[str, str]:
+            transported.append(request_bytes)
+            return {
+                "judge_request_id": "judge-request-binding",
+                "observed_request_sha256": sha256(request_bytes),
+            }
+
+        result = VALIDATOR_MODULE.run_gate_handoff(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+            transport=fake_transport,
+        )
+
+        self.assertEqual(len(transported), 1)
+        self.assertEqual(transported[0][-1:], b"\n")
+        request = json.loads(transported[0].decode("utf-8"))
+        receipt = result.runner_receipt
+        self.assertEqual(request["schema"], "coldgate-judge-request/v1")
+        self.assertEqual(request["validator_receipt"], result.validator_receipt)
+        self.assertEqual(receipt["schema"], "coldgate-runner-receipt/v1")
+        self.assertEqual(receipt["result"], "PASS")
+        self.assertIs(receipt["judge_handoff_bound"], True)
+        self.assertEqual(
+            receipt["judge_identity"],
+            {"kind": "request", "value": "judge-request-binding"},
+        )
+        self.assertEqual(receipt["request_sha256"], sha256(transported[0]))
+        self.assertEqual(
+            receipt["transport_observed_request_sha256"],
+            sha256(transported[0]),
+        )
+        self.assertEqual(
+            receipt["validator_receipt_sha256"],
+            sha256(VALIDATOR_MODULE._canonical_json(result.validator_receipt)),
+        )
+        self.assertEqual(
+            receipt["source_digests"], result.validator_receipt["digests"]
+        )
+        for source_name, receipt_key in (
+            ("packet", "packet_sha256"),
+            ("charter", "charter_sha256"),
+        ):
+            source = request["sources"][source_name]
+            received_sha256 = sha256(base64.b64decode(source["bytes_base64"]))
+            self.assertEqual(received_sha256, source["sha256"])
+            self.assertEqual(
+                received_sha256,
+                result.validator_receipt["digests"][receipt_key],
+            )
+        exhibit = request["sources"]["exhibits"][0]
+        received_exhibit_sha256 = sha256(
+            base64.b64decode(exhibit["bytes_base64"])
+        )
+        self.assertEqual(
+            received_exhibit_sha256,
+            result.validator_receipt["digests"]["exhibits"][0]["observed_sha256"],
+        )
+        self.assertEqual(received_exhibit_sha256, exhibit["sha256"])
+
+    def test_runner_refuses_bad_acknowledgements_after_one_delivery(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        cases = (
+            (
+                "digest_mismatch",
+                {
+                    "judge_request_id": "request-1",
+                    "observed_request_sha256": "0" * 64,
+                },
+                "request_digest_unacknowledged",
+            ),
+            (
+                "digest_missing",
+                {
+                    "judge_request_id": "request-1",
+                    "observed_request_sha256": None,
+                },
+                "request_digest_unacknowledged",
+            ),
+            (
+                "identity_missing",
+                {"observed_request_sha256": None},
+                "judge_identity_unacknowledged",
+            ),
+        )
+        for name, acknowledgement, reason in cases:
+            delivered: list[bytes] = []
+
+            def fake_transport(request_bytes: bytes) -> dict[str, str | None]:
+                delivered.append(request_bytes)
+                response = dict(acknowledgement)
+                if name == "identity_missing":
+                    response["observed_request_sha256"] = sha256(request_bytes)
+                return response
+
+            with self.subTest(name=name):
+                result = VALIDATOR_MODULE.run_gate_handoff(
+                    packet_arg=str(packet),
+                    charter_arg=str(self.charter),
+                    expected_packet_sha256=sha256(packet_bytes),
+                    expected_charter_sha256=self.charter_sha,
+                    transport=fake_transport,
+                )
+                self.assertEqual(len(delivered), 1)
+                self.assertEqual(result.runner_receipt["result"], "REFUSE")
+                self.assertIs(result.runner_receipt["judge_handoff_bound"], False)
+                self.assertEqual(result.runner_receipt["reason"], reason)
+
+    def test_stdin_transport_delivers_canonical_request_once(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        captured_request = self.root / "captured-request.json"
+        fake_judge = (
+            "import hashlib,json,pathlib,sys;"
+            "data=sys.stdin.buffer.read();"
+            "pathlib.Path(sys.argv[1]).open('xb').write(data);"
+            "json.dump({'judge_session_id':'stdin-session-1',"
+            "'observed_request_sha256':hashlib.sha256(data).hexdigest()},sys.stdout)"
+        )
+
+        result = VALIDATOR_MODULE.run_gate_handoff(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256=sha256(packet_bytes),
+            expected_charter_sha256=self.charter_sha,
+            transport=VALIDATOR_MODULE.stdin_json_transport(
+                [sys.executable, "-c", fake_judge, str(captured_request)]
+            ),
+        )
+
+        delivered = captured_request.read_bytes()
+        self.assertEqual(result.runner_receipt["result"], "PASS")
+        self.assertEqual(result.runner_receipt["request_sha256"], sha256(delivered))
+        self.assertEqual(
+            result.runner_receipt["judge_identity"],
+            {"kind": "session", "value": "stdin-session-1"},
+        )
+        self.assertEqual(
+            json.loads(delivered.decode("utf-8"))["schema"],
+            "coldgate-judge-request/v1",
+        )
+
+    def test_validation_refusal_never_invokes_judge_transport(self) -> None:
+        packet, packet_bytes, _ = self.write_packet(pin=self.charter_sha)
+        calls: list[bytes] = []
+
+        result = VALIDATOR_MODULE.run_gate_handoff(
+            packet_arg=str(packet),
+            charter_arg=str(self.charter),
+            expected_packet_sha256="0" * 64,
+            expected_charter_sha256=self.charter_sha,
+            transport=lambda request_bytes: calls.append(request_bytes),
+        )
+
+        self.assertEqual(calls, [])
+        self.assertEqual(result.validator_receipt["reason"], "packet_digest_mismatch")
+        self.assertEqual(result.runner_receipt["result"], "REFUSE")
+        self.assertEqual(result.runner_receipt["reason"], "validation_refused")
+        self.assertIsNone(result.runner_receipt["request_sha256"])
 
     def test_refuses_wrong_trusted_charter_digest(self) -> None:
         packet, _, _ = self.write_packet(pin=self.charter_sha)

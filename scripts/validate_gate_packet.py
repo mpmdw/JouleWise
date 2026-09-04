@@ -40,11 +40,21 @@ exits zero.
 A ``PASS`` means only that the bytes observed by this invocation matched the
 supplied anchors and manifest at validation time.  It is not launch
 authorization and does not bind a later judge handoff to those bytes.
+
+The programmatic ``run_gate_handoff`` operation is the separate runner
+boundary.  It builds canonical JSON with base64 source bytes from the accepted
+snapshot, makes exactly one transport call, verifies the transport-observed
+request digest, and returns a judge-identity-bound runner receipt.  The
+``stdin_json_transport`` adapter performs that call through one subprocess
+standard-input delivery.  The validation-only command-line interface does not
+select or launch a real judge.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import copy
 import errno
 import hashlib
 import json
@@ -52,11 +62,14 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import subprocess
 import sys
-from typing import Any, BinaryIO, NamedTuple, Sequence
+from typing import Any, BinaryIO, Callable, Mapping, NamedTuple, Sequence
 
 
 RECEIPT_SCHEMA = "coldgate-validator-receipt/v2"
+JUDGE_REQUEST_SCHEMA = "coldgate-judge-request/v1"
+RUNNER_RECEIPT_SCHEMA = "coldgate-runner-receipt/v1"
 REFUSAL_EXIT = 2
 HEX_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 HEX_TOKEN_RE = re.compile(r"(?<!\w)([0-9a-fA-F]{64})(?!\w)")
@@ -103,6 +116,16 @@ class ValidatedGateSnapshot(NamedTuple):
     charter_name: str
     charter_bytes: bytes
     exhibits: tuple[FrozenExhibit, ...]
+
+
+class GateHandoffResult(NamedTuple):
+    """Validator and runner receipts from one attempted judge handoff."""
+
+    validator_receipt: dict[str, Any]
+    runner_receipt: dict[str, Any]
+
+
+JudgeTransport = Callable[[bytes], Mapping[str, Any]]
 
 
 class ReceiptArgumentParser(argparse.ArgumentParser):
@@ -579,6 +602,167 @@ def _canonical_json(receipt: dict[str, Any]) -> bytes:
         json.dumps(receipt, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         + "\n"
     ).encode("utf-8")
+
+
+def _encoded_source(name: str, data: bytes) -> dict[str, str]:
+    return {
+        "bytes_base64": base64.b64encode(data).decode("ascii"),
+        "name": name,
+        "sha256": _sha256(data),
+    }
+
+
+def _judge_request(
+    validator_receipt: dict[str, Any], snapshot: ValidatedGateSnapshot
+) -> bytes:
+    """Build the one canonical request solely from the validated snapshot."""
+    request = {
+        "schema": JUDGE_REQUEST_SCHEMA,
+        "sources": {
+            "charter": _encoded_source(snapshot.charter_name, snapshot.charter_bytes),
+            "exhibits": [
+                _encoded_source(exhibit.manifest_path, exhibit.data)
+                for exhibit in snapshot.exhibits
+            ],
+            "packet": _encoded_source(snapshot.packet_name, snapshot.packet_bytes),
+        },
+        "validator_receipt": validator_receipt,
+    }
+    return _canonical_json(request)
+
+
+def _runner_receipt(
+    validator_receipt: dict[str, Any], request_sha256: str | None
+) -> dict[str, Any]:
+    return {
+        "binding_scope": "validated_snapshot_to_judge_request",
+        "judge_handoff_bound": False,
+        "judge_identity": None,
+        "reason": None,
+        "request_sha256": request_sha256,
+        "result": "REFUSE",
+        "schema": RUNNER_RECEIPT_SCHEMA,
+        "source_digests": copy.deepcopy(validator_receipt["digests"]),
+        "transport_observed_request_sha256": None,
+        "validator_receipt_sha256": _sha256(_canonical_json(validator_receipt)),
+    }
+
+
+def _runner_refuse(receipt: dict[str, Any], reason: str) -> dict[str, Any]:
+    receipt["reason"] = reason
+    return receipt
+
+
+def _acknowledged_identity(
+    acknowledgement: Mapping[str, Any],
+) -> dict[str, str] | None:
+    identities = [
+        (kind, acknowledgement.get(key))
+        for kind, key in (
+            ("request", "judge_request_id"),
+            ("session", "judge_session_id"),
+        )
+        if acknowledgement.get(key) is not None
+    ]
+    if len(identities) != 1:
+        return None
+    kind, value = identities[0]
+    if not isinstance(value, str) or not value:
+        return None
+    return {"kind": kind, "value": value}
+
+
+def stdin_json_transport(command: Sequence[str]) -> JudgeTransport:
+    """Return a transport that sends one request on stdin and parses one JSON ack."""
+    frozen_command = tuple(command)
+    if not frozen_command:
+        raise ValueError("judge command must not be empty")
+
+    def invoke(request_bytes: bytes) -> Mapping[str, Any]:
+        completed = subprocess.run(
+            frozen_command,
+            input=request_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError("judge transport exited nonzero")
+        acknowledgement = json.loads(completed.stdout.decode("utf-8"))
+        if not isinstance(acknowledgement, dict):
+            raise ValueError("judge acknowledgement must be a JSON object")
+        return acknowledgement
+
+    return invoke
+
+
+def run_gate_handoff(
+    *,
+    packet_arg: str | None,
+    charter_arg: str | None,
+    expected_packet_sha256: str | None,
+    expected_charter_sha256: str | None,
+    transport: JudgeTransport,
+) -> GateHandoffResult:
+    """Validate, deliver one canonical snapshot request, and bind its acknowledgement."""
+    validator_receipt, snapshot = capture_and_validate(
+        packet_arg=packet_arg,
+        charter_arg=charter_arg,
+        expected_packet_sha256=expected_packet_sha256,
+        expected_charter_sha256=expected_charter_sha256,
+    )
+    if snapshot is None:
+        return GateHandoffResult(
+            validator_receipt,
+            _runner_refuse(
+                _runner_receipt(validator_receipt, None), "validation_refused"
+            ),
+        )
+
+    request_bytes = _judge_request(validator_receipt, snapshot)
+    request_sha256 = _sha256(request_bytes)
+    runner_receipt = _runner_receipt(validator_receipt, request_sha256)
+    try:
+        acknowledgement = transport(request_bytes)
+    except Exception:
+        return GateHandoffResult(
+            validator_receipt,
+            _runner_refuse(runner_receipt, "transport_failed"),
+        )
+    if not isinstance(acknowledgement, Mapping):
+        return GateHandoffResult(
+            validator_receipt,
+            _runner_refuse(runner_receipt, "transport_ack_invalid"),
+        )
+
+    observed_request_sha256 = acknowledgement.get("observed_request_sha256")
+    if (
+        not isinstance(observed_request_sha256, str)
+        or not HEX_RE.fullmatch(observed_request_sha256)
+    ):
+        return GateHandoffResult(
+            validator_receipt,
+            _runner_refuse(runner_receipt, "request_digest_unacknowledged"),
+        )
+    runner_receipt["transport_observed_request_sha256"] = (
+        observed_request_sha256.lower()
+    )
+    if observed_request_sha256.lower() != request_sha256:
+        return GateHandoffResult(
+            validator_receipt,
+            _runner_refuse(runner_receipt, "request_digest_unacknowledged"),
+        )
+    identity = _acknowledged_identity(acknowledgement)
+    if identity is None:
+        return GateHandoffResult(
+            validator_receipt,
+            _runner_refuse(runner_receipt, "judge_identity_unacknowledged"),
+        )
+
+    runner_receipt["judge_handoff_bound"] = True
+    runner_receipt["judge_identity"] = identity
+    runner_receipt["result"] = "PASS"
+    return GateHandoffResult(validator_receipt, runner_receipt)
 
 
 def _parser() -> ReceiptArgumentParser:
