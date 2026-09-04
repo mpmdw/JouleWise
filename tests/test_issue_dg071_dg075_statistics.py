@@ -18,6 +18,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "issue_dg071_dg075_statistics.py"
@@ -693,7 +695,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             script = checkout / ISSUER.SCRIPT_REPOSITORY_PATH
             script.parent.mkdir(parents=True)
             script.write_bytes(script_raw)
-            git(checkout, "init", "--quiet", date="2000-01-01T00:00:00+00:00")
+            init_git_fixture(checkout, "--quiet")
             # History in each repository: root (empty) -> producer -> a commit
             # touching an unrelated file -> a later empty commit. The first
             # three are identical in both repositories (same trees, messages

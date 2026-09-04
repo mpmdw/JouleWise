@@ -21,6 +21,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = REPO_ROOT / "scripts" / "bridge"
@@ -118,7 +120,7 @@ class BridgeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.repo = Path(self.temporary.name)
-        self.git("init", "-q")
+        init_git_fixture(self.repo, "-q")
         self.git("config", "user.name", "Bridge Test")
         self.git("config", "user.email", "bridge@example.invalid")
         (self.repo / "tracked.txt").write_text("base\n", encoding="utf-8")
