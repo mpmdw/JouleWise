@@ -1,10 +1,37 @@
-# S14 stream status — feat/pinset-refresh-row-lane (D-161 reviewed refresh lane)
+# Current Work Status — 2026-09-04
 
-- DONE: rounds 1-2 + FIX-1..6 + bench cure of S14-F1 (identity-based write fence) and S14-F2 (write-intent guard); PR #228 open. Pinset bytes UNCHANGED (PINSET_SHA256 literal untouched).
-- NEXT: Sol high read-only delta check over the bench diff -> push -> CI foreground -> magistrate review. Do NOT merge; do NOT run the lane against the real `_v3` row here (S8 does that on #209).
-- Scratch: /private/tmp/claude-501/-Users-edr-code-JouleWise/5ce660ee-d53f-472d-98bc-e236206db99d/scratchpad/s14 (impl.prompt.md, impl.md report).
-- S8 commands (after this PR merges, on #209 rebased onto main; both must be pushed first — the lane refuses an unpublished HEAD):
-  FIRST reset Ed's two hand-edited files to main's bytes (`git checkout origin/main -- configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json tests/test_receipt_histsem.py`, re-apply any S8 test edits), then:
-  `python scripts/refresh_receipt_histsem_pinset.py --repository-root . --refresh-row d117_contrast_qwen25_1p5b_vs_7b_v3 --print-pinset-sha256 --write-test-pin tests/test_receipt_histsem.py`   (expected pinset SHA 3e513c53…8543; floor _v3 rows are current)
-  `python scripts/refresh_receipt_histsem_pinset.py --repository-root . --refresh-tool-sidecars`   (expect 4x "already current")
-  then `python scripts/verify_receipt_histsem.py --repository-root . --require-published` must PASS; commit pinset + test pin + sidecars together.
+JouleWise is between measurement runs. A claim-bearing result is a result
+permitted to support a scientific statement; none exists for the current
+campaign.
+
+The live campaign is generation `_v5`, comparing the four-bit Qwen3
+1.7-billion-parameter and 8-billion-parameter models. The `_v4` family is
+retired and will not be collected.
+
+The unattended-night rehearsal was delivered with the expected refusal because
+an agent, meaning an automated software worker, was present, so it produced no
+measurement result. The user-level background agents that scheduled it were
+then uninstalled; no scheduled measurement can fire from them.
+
+The next machine sequence is to complete the relaunch watchdog, a user-level
+supervisor that restarts the lead after a quiet run; pin each night plan to the
+dedicated measurement checkout, the repository copy reserved for measurement;
+and then run the four-length prompt probe, which compares four candidate input
+lengths before selecting one. Ed's standing hands-free delegation assigns each
+transaction decision and the mechanical confirmation of campaign bytes, the
+exact frozen campaign files, to the lead's independent readiness gate. A
+readiness gate is a pass-or-refuse review that must pass before collection, so
+no per-window reply from Ed is required.
+
+A pull request (PR) is a proposed repository change awaiting review or merge.
+PR #278, which repairs the declared identity set for decode workloads, remains
+open.
+
+The soundness boundaries are unchanged: no agent may run during measurement;
+the analysis rules are fixed before claim data are collected; raw evidence is
+immutable; failed gates issue refusals rather than favorable retries; and no
+claim sentence is filled before authenticated artifacts license it.
+
+See `RUN_STATE.md` for the live sequence, `TASK_QUEUE.md` for the generated
+work queue, `docs/process/state_kernel.json` for machine-readable task state,
+and `CLAIMS_STATUS.md` for the claim boundary.

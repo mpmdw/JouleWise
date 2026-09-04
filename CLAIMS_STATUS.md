@@ -1,11 +1,13 @@
 # Claims Status
 
-> **Era update (2026-08-19):** exclusion of pre-anchor-v3 evidence from
-> claims is now enforced MECHANICALLY by the instrument (the capture-era
-> claim barrier, D-146) — not only by the protocol decisions recorded
-> below. Every corpus collected before the anchor-v3 production flip is
-> non-claim-bearing under the current instrument; fresh collection under
-> the `_v3` family is the claim path.
+> **Current campaign update (2026-09-04):** evidence collected before the
+> third-generation timing anchor—the program that aligns workload events with
+> power samples—remains excluded from claims by a mechanical capture-era check,
+> not merely by policy. Every corpus collected before that production repair is
+> non-claim-bearing under the current instrument; fresh claim authority must
+> come from prospective collection in campaign generation `_v5`, the internal
+> label for the fixed design regenerated around the four-bit Qwen3
+> 1.7-billion-parameter and 8-billion-parameter models.
 
 > **Registered limitations (Ed rulings D-148.6/.7, 2026-08-19):** (a) the
 > stored anchor-v2 population — 748 bundles in the repository tree — is
@@ -35,26 +37,27 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-20** (B7 ruling pass). Since the 2026-08-07 entry
-below, all three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3)
-with the tighter pre-registered floor selector
-(`d124_two_shared_edge_common_mode.v1` — the estimator's identity, not any
-floor value, is what is pre-registered). NO results have been issued in this
-cycle; every floor value issues with its own cell at the first post-freeze
-mint. The superseded-era replay magnitudes formerly quoted here were removed
-under the B7 magistrate ruling (D-146 + D-148 cl.7: superseded-era diagnostic
-values are permanently non-claim-bearing and not recomputable under the
-present instrument).
+Last updated: **2026-09-04**. The current campaign generation is `_v5`; it
+uses the Qwen3-1.7B-4bit and Qwen3-8B-4bit model pair, and the superseded
+`_v4` family will not be collected. No `_v5` claim-bearing result has been
+issued.
 
-The **readiness council ruled NOT-READY 0/11** (2026-08-15). No window may be
-armed before a READY-candidate verdict, so every prospective claim remains
-BLOCKED on the repair program. The program's Phase-1 code is now **merged**
-(five PRs, 2026-08-16), including the claim-consumption gate: analysis accepts
-only an authenticated, finalized manifest, and it preserves refusals as
-reportable results. No claim-bearing number changed. Council L11 corrected the
-paper's characterization provenance without altering any value. The next
-claim-state change follows this sequence: the Phase-2 re-freeze → re-audit →
-READY-candidate council → the alpha/beta/gamma windows.
+The former readiness council is retired as a live gate. Readiness now comes
+from staged desk proof, a diagnostic shakedown—a short non-claim run on the
+frozen campaign pack—and a nightly check after collection begins. Ed has
+delegated the per-window transaction decision and the mechanical confirmation
+of campaign bytes, meaning the exact frozen campaign files, to the lead's
+independent readiness gate, so no reply from Ed is required for an
+otherwise passing window. An unattended-night rehearsal was delivered with
+the expected agent-presence refusal, proving the stand-down path without
+collecting claim data; the user-level background agents that scheduled it were
+then uninstalled. A pull request (PR) is a proposed repository change awaiting
+review or merge; PR #278, which repairs the declared identity set for decode
+workloads, remains open. The next claim-state change still requires the
+unattended watchdog, a supervisor that relaunches the lead after a quiet run;
+plan pinning, which binds a night plan to the repository copy reserved for
+measurement; the four-length prompt probe; the desk freeze; and the real-pack
+shakedown before claim-bearing collection can begin.
 
 Previous entry — Last updated: **2026-08-07** (D-117: the historical re-mint path is
 SUPERSEDED — structurally closed at main after the D-116 issuance
@@ -88,10 +91,9 @@ extraction reports, the artifact, and the statement BYTE-IDENTICAL
 (`docs/process_traces/2026-08-03-q1-remint-bytecompare/`). The taint is
 semantic (the selector the era used), not derivational.
 
-**2026-08-07 supersession (D-117):** the historical a10/re-mint and old
-C/D plan are retired. Claim authority can now arise only from the
-prospective alpha, beta, and gamma windows; the separately named Window C
-characterization night remains Ed ruling #1.
+**Current supersession:** the historical a10 re-mint, the old C/D plan, the
+Qwen2.5 `_v3` windows, and the `_v4` family are retired. Claim authority can
+now arise only from prospective collection under the Qwen3 `_v5` campaign.
 
 **2026-08-07 (D-117):** the historical re-mint order is SUPERSEDED —
 all three former re-mint conditions completed (D-109 via PR #100;
@@ -113,8 +115,8 @@ instrument-tightening program.
 
 | Candidate claim | Value (prose-only until gated) | Window / verdict | Blocker |
 |---|---|---|---|
-| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | **RE-SCOPED by D-117 (2026-08-07):** `window_7bfloor_20260729` is pre-genesis and cannot be claim-consumed; these values are DIAGNOSTIC and design inputs for the fresh 7B floor window (D-117 cl.2). The prior D-110 condition chain completed and was then superseded. |
-| **1.5B-vs-7B decode contrast** (demonstration study #1) | **Registered claim metric (frozen v3 manifest): `phase_energy_j.decode`, 7B−1.5B = 141.29 J per block.** The widely-quoted 146.730349 J (σ 0.241 J, n=10 ABBA) is the `idle_subtracted_energy_j` whole-request DIAGNOSTIC — quote it only labelled as such, never as the claim (sweep DC-1; both reproduce byte-exactly from disk). | `window_contrast_20260730`, **PASSED** | **RE-SCOPED by D-117 (2026-08-07):** `window_contrast_20260730` is pre-genesis and cannot be claim-consumed; values are DIAGNOSTIC and the design template for the fresh contrast window (D-117 cl.2). The D-095 chain now runs through the prospective windows' mints. |
+| **7B decode floors (Qwen2.5-7B)** | absolute 6.294380135190098 J / comparative 13.998036715259254 J (absolute-cell member mean 192.386233 J, n=10 — always name the cell) | `window_7bfloor_20260729`, **PASSED**, governed extraction clean | This earlier campaign record cannot be used for a claim. Its values are diagnostic records only and do not enter the Qwen3 `_v5` claim basis. |
+| **1.5B-vs-7B decode contrast** (demonstration study #1) | **Registered claim metric (frozen v3 manifest): `phase_energy_j.decode`, 7B−1.5B = 141.29 J per block.** The widely-quoted 146.730349 J (σ 0.241 J, n=10 ABBA) is the `idle_subtracted_energy_j` whole-request DIAGNOSTIC — quote it only labelled as such, never as the claim (sweep DC-1; both reproduce byte-exactly from disk). | `window_contrast_20260730`, **PASSED** | This earlier campaign record cannot be used for a claim. Its values are diagnostic records only and do not enter the Qwen3 `_v5` claim basis. |
 
 ## 3. COLLECTED — verdicts FAILED as-issued; adjudication RULED (D-100, 2026-08-01)
 
@@ -197,8 +199,8 @@ default consumption. Outcomes per window:
   7.377086 J, a10 components 3.823787 / 3.592138 J, window C
   comparative 7.377086 J** — retroactively non-claim-bearing (zero
   allowance where D-102 pin 3 mandates +max(drift, 0.010818 s));
-  the historical re-mint route is retired under D-117. Claim authority
-  can arise only from the prospective alpha, beta, and gamma windows.
+  the historical re-mint route is retired. Claim authority can arise only
+  from prospective collection under the Qwen3 `_v5` campaign.
 - **146.730349 J as "the contrast claim"** — it is the
   idle_subtracted_energy_j whole-request diagnostic; the registered
   claim metric is phase_energy_j.decode = 141.29 J (sweep DC-1). Either

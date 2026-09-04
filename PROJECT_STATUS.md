@@ -64,14 +64,16 @@ Freshness and authority:
   branch. The public status site is an Ed-deployed snapshot; the repository is
   authoritative, `docs/site/DRIFT.md` records differences, and Ed alone
   regenerates or deploys the site.
-- Project phase: Phases 1 and 2 remain in progress; the Mac instrument and
-  analysis path exist, while the current claim-bearing campaign is sequenced
-  but has no results data yet.
+- Project phase: Phases 1, 2, and 4 remain in progress; the Mac instrument and
+  analysis path exist, the current claim-bearing campaign is sequenced but has
+  no results data yet, and the paper's controlled result slots are prepared.
 
 ## Current Repository View — 30-second read
 
-**As of 2026-09-01, JouleWise is ready for the first machine step of a new
-prospective campaign, but no claim-bearing data from that campaign exist.**
+**As of 2026-09-04, JouleWise is between measurement runs and preparing the
+unattended controls required before the first diagnostic prompt-length probe,
+a non-claim comparison of candidate input lengths; no claim-bearing data from
+the current campaign exist.**
 The campaign now compares the Qwen3 1.7-billion-parameter and
 8-billion-parameter models using MLX, Apple's machine-learning framework, on
 an Apple M3 Max. Their quantized weights store each numeric value in four bits,
@@ -138,9 +140,14 @@ machine-readable close-out artifact—not prose judgment—decides which of the
 two permitted paper wordings may be filled. Missing, unauthenticated, or
 zero-denominator inputs license neither wording and stop the fill.
 
-**Next machine step: one instrumented evening, waiting on Ed.** The machine
-will measure four candidate prefill lengths—512, 1,024, 2,048, and 4,096
-tokens. Each candidate length is called a *rung*. At least five Qwen3-1.7B runs
+**Next machine sequence: finish the unattended controls, then run one
+instrumented evening.** The relaunch watchdog, a user-level supervisor that
+restarts the lead after a quiet run, must pass review and be installed. Each
+night plan must also be pinned to the dedicated measurement checkout, the
+repository copy reserved for measurement, before the prompt probe is armed.
+The machine will then measure four
+candidate prefill lengths—512, 1,024, 2,048, and 4,096 tokens. Each candidate
+length is called a *rung*. At least five Qwen3-1.7B runs
 are required at each rung; a rung with fewer than five small-model runs is
 unevaluable and cannot be selected. Qwen3-8B probes are retained but do not
 choose the length. A checked program selects the shortest rung for which every
@@ -161,12 +168,14 @@ measurement running, so the work cannot contaminate a power reading. That day
 pins and hashes the selection, generates the final packs, and re-proves them in
 a throwaway clone. Next comes a *shakedown*: one short run on the real, frozen
 pack that proves the machine, plan, and refusal checks behave as registered
-before claim-bearing data are collected. Ed then explicitly authorizes the
-claim-bearing transaction; about a week of collection follows with a desk check
-after each night; then floor production, claim close-out, and the registered
-results fill. `RUN_STATE.md` is the live status authority.
+before claim-bearing data are collected. The lead's independent readiness gate
+then exercises Ed's standing delegation for the claim-bearing transaction;
+about a week of collection follows with a desk check after each night; then
+floor production, claim close-out, and the registered results fill.
+`RUN_STATE.md` is the live status authority.
 
-**A fresh-model repository review began from scratch on 2026-09-01.** A new
+**A fresh-model repository review began from scratch on 2026-09-01 and issued
+its findings.** A new
 lead model coordinated four independent reviewers across code, tests, process,
 paper, and research questions. The reviewers were blind to each other and ran
 as separate sessions across more than one vendor's large-language model. Their
@@ -242,6 +251,7 @@ Custody record:
 
 | date | what changed |
 |---|---|
+| 2026-09-03/04 | The unattended-night rehearsal was delivered and its scheduled background agents were uninstalled; hands-free authority was delegated to the lead's independent readiness gate; the decode-identity correction remains under review as pull request #278. |
 | 2026-09-01 | The live work selector was reconciled to the Qwen3 `_v5` chain; the results-fill registry was regenerated; a fresh-model whole-repository review launched the paper skeleton, dependence, timing-marker, close-out, and probe-configuration follow-ups. |
 | 2026-08-30/31 | The Qwen3 plan preparation completed adversarial review; exact model and tokenizer identities, the two-times dominance rule, and the four-rung checked selector were pinned. |
 | 2026-08-28 | Ed selected Qwen3-1.7B-4bit and Qwen3-8B-4bit; three blind reviewers prompted the pre-data tightening of the paper's pass/fail rule. |
@@ -308,7 +318,7 @@ by the detection floor and its registered claim limit.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, and measurement design | contracts, methodology, hardware feasibility, advisor and calendar inputs | **in progress** — core contracts are settled; advisor/calendar and remote-hardware inputs remain external |
-| 2. Instrument and Apple-Silicon campaign | runnable harness, repaired Mac measurement path, Qwen3 `_v5` campaign | **in progress** — instrument and plan preparation are complete; the four-rung prompt probe is the next machine step and waits on Ed |
+| 2. Instrument and Apple-Silicon campaign | runnable harness, repaired Mac measurement path, Qwen3 `_v5` campaign | **in progress** — instrument and plan preparation are complete; unattended-control installation and plan pinning precede the four-rung prompt probe |
 | 3. Split-inference demonstration | cache transfer, offline replay, optional live split | **planned** — feasibility-first and not required for capstone completion |
 | 4. Analysis and paper | authenticated floors, claim close-out, figures, results, limitations | **in progress** — fill contract is landed and desk scaffolding is in flight; numerical fills wait on prospective data |
 | 5. Presentation and release | reproducible archive, final report, colloquium | **planned** — follows the claims audit and figure freeze |
@@ -475,8 +485,9 @@ The live campaign sequence is:
    proves one small/large/large/small block on the real pack, builds its
    calibration bracket and whole-window verdict, runs the desk checker, and
    confirms that finalization refuses for exactly the expected incomplete-
-   campaign reasons. Any other refusal stops. Ed then decides whether to open
-   the claim-bearing transaction.
+   campaign reasons. Any other refusal stops. The lead's independent readiness
+   review then applies Ed's standing delegation to decide whether to open the
+   claim-bearing transaction.
 4. **Claim-bearing collection.** The Qwen3-1.7B and Qwen3-8B arms use Qwen3's
    optional reasoning mode switched off, so the model emits no hidden
    deliberation tokens and output length remains controlled. They choose the
@@ -586,11 +597,11 @@ This document promises sequence, not dates. Live status is in `RUN_STATE.md`.
 
 | order | stage | start condition |
 |---:|---|---|
-| 1 | four-rung prompt-length evening | Ed present, with no automated agents running on the M3 Max and the machine otherwise idle, so nothing else draws measurable power |
+| 1 | four-rung prompt-length evening | unattended controls installed, the plan pinned to the dedicated measurement checkout, no agents running on the M3 Max, and the machine otherwise idle so nothing else draws measurable power |
 | 2 | desk selection, final pack generation, and throwaway-clone proof | immutable probe bracket, counts, and selector input |
 | 3 | real-pack one-block shakedown | desk proof passes |
-| 4 | Ed's claim-bearing transaction decision | complete, reviewable shakedown record |
-| 5 | approximately one week of collection with nightly desk checks | Ed authorizes; each preceding night passes its check |
+| 4 | delegated claim-bearing transaction decision | complete, reviewable shakedown record and a passing independent readiness review |
+| 5 | approximately one week of collection with nightly desk checks | the delegated readiness gate authorizes collection; each preceding night passes its check |
 | 6 | floor mint, finalization, claim and dominance close-out, results fill | complete authenticated campaign custody |
 | 7 | inserted timing-marker study, then optional scored-workload follow-up | campaign closes and its own gates pass |
 
@@ -633,18 +644,20 @@ window belong in `docs/milestones.md` when known.
 ## Process Note
 
 The project is developed by a human researcher directing a reviewed,
-multi-model engineering workflow. Ed owns research direction, physical machine
-operation, external access, and final authorization of claim-bearing
-collection. A designated lead owns decomposition, design rulings, final diff
-review, verification, and integration. Separate implementers and reviewers use
+multi-model engineering workflow. Ed owns research direction, external access,
+and standing authority for claim-bearing collection; during the hands-free
+week, he has delegated per-window operation and the transaction decision to the
+lead's independent readiness gate. A designated lead owns decomposition,
+design rulings, final diff review, verification, and integration. Separate
+implementers and reviewers use
 distinct perspectives so that an assumption shared by code and its first test
 does not become unchallenged evidence.
 
 Consequential changes—measurement physics, pre-registration, evidence
 identity, and paper-claim rules—receive deeper independent review than routine
 bookkeeping. Raw evidence is immutable, review findings receive explicit
-dispositions, and no agent performs final live-hardware verification on behalf
-of the human operator. The 2026-09-01 fresh-model review is an example: it
+dispositions, and no implementation worker treats its own output as final
+live-hardware proof. The 2026-09-01 fresh-model review is an example: it
 found a stale live-work selector, missing close-out ownership, a frozen draft
 that names the retired campaign, and dependence wording that needed a dedicated
 sensitivity analysis. The work selector and ownership question are now decided

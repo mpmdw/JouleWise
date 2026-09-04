@@ -1,18 +1,16 @@
 # 🟢 BETWEEN RUNS
-> **2026-08-20 (B-9 correction):** the S5 freeze-0003 mints LANDED
-> (fresh-pass-verified; record docs/process/ed-s5-mint-decision-2026-08-19.md),
-> but the evidence-expiry hazard was NOT closed by them: the `_v3` arm
-> evidence carried a 24h fuse from authoring, ruled to LAPSE
-> ~2026-08-20T16:51Z (D-148.5 R-2). The `_v3` family is not armable;
-> the compelled `_v4` transaction is the path to the next armable family.
-> **2026-08-24 update:** the mint license is GRANTED and the `_v4`
-> transaction is OPEN (D-150), and the hazard is MANAGED — not closed —
-> under the D-150a protocol: a ruled pre-campaign REBOOT after S-0
-> passes, immediately before the real transaction's evidence stamping,
-> then a no-reboot span from that boot through campaign close. Per
-> RUN_STATE, S-0 and that ruled reboot are still ahead, so the
-> no-reboot span has not started; with the `_v3` evidence lapsed,
-> a reboot before the ruled boot voids nothing.
+> **Current operational state (2026-09-04):** the production campaign is
+> generation `_v5`, the internal label for the fixed design regenerated around
+> the four-bit Qwen3 1.7-billion-parameter and 8-billion-parameter models; the
+> `_v4` family will not be collected. An unattended-night rehearsal was
+> delivered with the expected refusal—a recorded decision to issue no result—
+> because an agent, meaning an automated software worker, was present. The user-level
+> background agents that scheduled the rehearsal were then uninstalled, and no
+> scheduled measurement can fire from them. The next machine sequence is to
+> complete the relaunch watchdog, a user-level supervisor that restarts the
+> lead after a quiet run; pin each night plan to the dedicated measurement
+> checkout, the repository copy reserved for measurement; and only then arm the
+> four-length prompt probe.
 
 Terms used here: a *measurement window* is one uninterrupted, calibrated
 collection session; a *pack* is the frozen campaign plan and its authenticated
@@ -25,16 +23,15 @@ gate or piece of evidence fails. A *bundle* is the self-contained record of one
 workload run, including its configuration, raw trace, events, and derived
 summary.
 
-**D-117 pre-window state. This document does not assert that a measurement is
-in flight. Under the 2026-08-07 D-117 supersession, the historical a10/re-mint
-and old C/D plan are retired. Claim authority can now arise only from the
-prospective alpha, beta, and gamma windows; the separately named Window C
-characterization night remains Ed ruling #1.**
+**Current pre-window state. This document does not assert that a measurement
+is in flight. The historical a10 re-mint, the old C/D plan, the Qwen2.5 `_v3`
+windows, and the `_v4` family are retired. Claim authority can now arise only
+from prospective collection under the Qwen3 `_v5` campaign.**
 
 | | |
 |---|---|
 | State | `between` |
-| Updated | 2026-08-24 (B-9 re-verification: top hazard note and reboot rule brought to D-150/D-150a state; no machine-setting assertion) |
+| Updated | 2026-09-04 (rehearsal delivered; scheduled background agents uninstalled; Qwen3 `_v5` sequence current; no machine-setting assertion) |
 
 ## Live machine rules
 
@@ -44,14 +41,20 @@ characterization night remains Ed ruling #1.**
   no-reboot span runs from that boot through campaign close. A reboot inside
   the span voids the arm-readiness evidence, which must then be authored
   again before T-0.
-- Do not launch a measurement window before a READY-candidate council issues a
-  qualifying verdict.
+- Do not launch claim-bearing collection until the desk proof, real-pack
+  shakedown, and independent readiness review all pass; preserve every refusal
+  and do not retry merely to obtain a favorable outcome.
 
 ## Does anything need you?
 
-Verify network-time state directly before the next §5A sequence; this
-document does not assert the current machine setting. Wall-meter purchase
-(D-092) remains open.
+No per-window reply from Ed is required: his standing hands-free delegation
+assigns the transaction decision and mechanical campaign-byte confirmation to
+the lead's independent readiness gate. Verify network-time state directly
+before the next measurement sequence; this document does not assert the
+current machine setting. A wall meter remains an open equipment decision. A
+pull request (PR) is a proposed repository change awaiting review or merge;
+PR #278, which repairs the declared identity set for decode workloads, remains
+open.
 
 The two FAILED verdicts below were adjudicated on 2026-08-01/02 under D-100
 and D-106. The collected bundles are banked and backed up, but the two windows
@@ -95,9 +98,9 @@ three-part machinery adjudication is COMPLETE (D-100, 2026-08-01) and
 the repair is mainline (PR #94, 2026-08-02); window B's re-evaluation
 EXECUTED and stopped correctly 2026-08-03 (D-112). D-113 permanently
 retired Window B's re-evaluation/license chain; no set-aside or
-claim-consumption decision remains pending. D-117 governs the prospective
-alpha/beta/gamma path separately from the named Window C characterization
-night.
+claim-consumption decision remains pending. The current production path is
+prospective collection under the Qwen3 `_v5` campaign; the earlier alpha,
+beta, and gamma wording is historical.
 
 **New standing doc:** `CLAIMS_STATUS.md` (repo root) — the single home
 for what is claimable right now, what is holding, and which numbers must
