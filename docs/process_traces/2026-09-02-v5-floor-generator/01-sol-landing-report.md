@@ -228,3 +228,18 @@ verifying its digest.
 ### Magistrate addendum (2026-09-03): p42 rider provenance
 
 The p42 prefill rider is the D-164 carry-over of the `_v3` decode-prompt-length rider (p128 there); its length is the panel's index-0 rendering with thinking off (42 token ids, tail [151667, 271, 151668, 271]), refused on panel mismatch (`decode_index_zero_rendering_mismatch`); it does not enter GAMMA's four units.
+
+## Fix-round-2 addendum (2026-09-03)
+
+The six `_v3` condition-family drift refusals (source-byte and domain-hash
+pins for decode, prefill, and the selected prefill-length family) are absent
+from the `_v5` floor generators by design while the packs remain authoring
+drafts. They stay absent only until `V5-DESK-DAY-01` freezes the generated
+packs. After that freeze, follow-up kernel row `FLOOR-V5-DRIFT-REPIN-01` must
+restore all six drift refusals against the frozen family bytes; the magistrate
+registers that row.
+
+Ruling 171a R-7 fixes these floor drafts at 512 tokens and they fail closed on
+any other G2-a selection. Consequently, if G2-a selects a rung above 512,
+both `_v5` floor packs require re-authoring before either can be generated or
+armed; no loader fallback silently rebases them to the selected rung.

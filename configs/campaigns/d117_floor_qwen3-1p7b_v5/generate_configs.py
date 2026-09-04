@@ -129,9 +129,6 @@ SUCCESSOR_EMITTED_STATUS = "as_generated_pre_d134_freeze"
 CURRENT_FROZEN_RECEIPT_SHA256 = (
     ""
 )
-CURRENT_FROZEN_GENERATOR_SHA256 = (
-    ""
-)
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
 TREE_SCHEMA = "joulewise.d117_plan_tree.v1"
 ORDER_SCHEMA = "joulewise.order_manifest.v1"
@@ -162,7 +159,6 @@ PREFILL_PIN_REL = PACK_REL / "prefill_pin/prefill_prompt_pin.json"
 P512_PROMPT_UTF8_SHA256 = ""
 P512_SHARED_TOKENIZER_JSON_SHA256 = ""
 P512_PROMPT_TOKEN_IDS_SHA256 = ""
-P512_PROMPT_TOKEN_IDS: list[int] = []
 P512_PROMPT_TEXT = ""
 PREFILL_PIN_SOURCE_PATH: Path | None = None
 PREFILL_PIN_SOURCE_RAW = b""
@@ -1051,7 +1047,7 @@ def decode_workload_candidate() -> dict[str, Any]:
 
 def configure_prefill_pin(path: Path) -> None:
     global P512_PROMPT_UTF8_SHA256, P512_SHARED_TOKENIZER_JSON_SHA256
-    global P512_PROMPT_TOKEN_IDS_SHA256, P512_PROMPT_TOKEN_IDS, P512_PROMPT_TEXT
+    global P512_PROMPT_TOKEN_IDS_SHA256, P512_PROMPT_TEXT
     global PREFILL_PIN_SOURCE_PATH, PREFILL_PIN_SOURCE_RAW
     global PREFILL_LADDER_SOURCE_PATH, PREFILL_LADDER_SOURCE_REL
     global PREFILL_LADDER_SOURCE_RAW, PREFILL_SELECTION_SOURCE_PATH
@@ -1175,16 +1171,31 @@ def configure_prefill_pin(path: Path) -> None:
         raise ValueError(
             f"prefill_prompt_pin_invalid: selection_record: {exc}"
         ) from exc
-    if (
-        not isinstance(selection, dict)
-        or selection.get("schema_version")
-        != "joulewise.g2a_prefill_selection.v1"
-    ):
+    selection_keys = {
+        "collection_prefill_tokens",
+        "qualifying_prefill_tokens",
+        "refusal",
+        "rule",
+        "schema_version",
+        "selected_prefill_tokens",
+        "status",
+        "summary_sha256",
+    }
+    if not isinstance(selection, dict) or set(selection) != selection_keys:
+        raise ValueError("selection_record_closed_schema_mismatch")
+    if selection.get("schema_version") != "joulewise.g2a_prefill_selection.v1":
         raise ValueError("selection_record_schema_version_invalid")
-    if selection.get("status") not in ("selected", "refused"):
+    if selection.get("status") == "refused":
+        raise ValueError("selection_record_refused_not_supported")
+    if selection.get("status") != "selected":
         raise ValueError("selection_record_status_invalid")
     if selection.get("collection_prefill_tokens") != PREFILL_LENGTH:
         raise ValueError("selection_record_collection_prefill_tokens_mismatch")
+    if (
+        selection.get("selected_prefill_tokens") != PREFILL_LENGTH
+        or selection.get("refusal") is not None
+    ):
+        raise ValueError("selection_record_selected_branch_malformed")
     ladder = json.loads(
         ladder_raw,
         object_pairs_hook=reject_duplicates,
@@ -1212,13 +1223,23 @@ def configure_prefill_pin(path: Path) -> None:
         or not isinstance(ladder.get("rungs"), list)
     ):
         raise ValueError("prefill_prompt_pin_invalid: prompt_ladder")
-    rung = next(
-        (
-            row for row in ladder["rungs"]
-            if isinstance(row, dict) and row.get("prefill_tokens") == PREFILL_LENGTH
-        ),
-        None,
-    )
+    rungs = ladder["rungs"]
+    if len(rungs) != len(PREFILL_LADDER_PROMPT_TOKENS):
+        raise ValueError("prompt_ladder_expected_four_rungs")
+    rungs_by_length: dict[int, dict[str, Any]] = {}
+    for row in rungs:
+        length = row.get("prefill_tokens") if isinstance(row, dict) else None
+        if (
+            isinstance(length, bool)
+            or not isinstance(length, int)
+            or length not in PREFILL_LADDER_PROMPT_TOKENS
+            or length in rungs_by_length
+        ):
+            raise ValueError("prompt_ladder_rung_length_invalid_or_duplicate")
+        rungs_by_length[length] = row
+    if tuple(sorted(rungs_by_length)) != tuple(PREFILL_LADDER_PROMPT_TOKENS):
+        raise ValueError("prompt_ladder_lengths_mismatch")
+    rung = rungs_by_length[PREFILL_LENGTH]
     ids = value["prompt_token_ids"]
     text = value["prompt_text"]
     if (
@@ -1269,7 +1290,6 @@ def configure_prefill_pin(path: Path) -> None:
     P512_PROMPT_UTF8_SHA256 = value["prompt_text_utf8_sha256"]
     P512_SHARED_TOKENIZER_JSON_SHA256 = value["tokenizer_json_sha256"]
     P512_PROMPT_TOKEN_IDS_SHA256 = value["prompt_token_ids_sha256"]
-    P512_PROMPT_TOKEN_IDS = list(ids)
     P512_PROMPT_TEXT = text
 
 
@@ -2273,7 +2293,7 @@ def build_producer_contract(
         "draft_status": emitted_draft_status(),
         "plan_set_id": "plan-set-d117-qwen3-1p7b-8b-phase-floor-v5",
         "aggregate_artifact_id": "d117-qwen3-phase-floor-set-v5",
-        "producer_index": 1,
+        "producer_index": PRODUCER_INDEX,
         "component_artifact_id": "d117-qwen3-1p7b-phase-floor-component-v5",
         "cell_composition_rule": "componentwise_max_never_sum.v1",
         "consumer_floor_rule": "cross_stack_armwise_max.v1",
@@ -2334,12 +2354,12 @@ def build_producer_contract(
                     },
                     "consumer_bindings": [
                         {
-                            "arm": "A",
+                            "arm": CONSUMER_ARM,
                             "family": "sw-decode-a-qwen3-1p7b",
                             "measurement_arm": "decode",
                         },
                         {
-                            "arm": "A",
+                            "arm": CONSUMER_ARM,
                             "family": PREFILL_FAMILY_ID,
                             "measurement_arm": "prefill_p42",
                         },
@@ -2373,7 +2393,7 @@ def build_producer_contract(
                     },
                     "consumer_bindings": [
                         {
-                            "arm": "A",
+                            "arm": CONSUMER_ARM,
                             "family": "sw-prefill-p512-a-qwen3-1p7b",
                             "measurement_arm": "prefill_p512",
                         }

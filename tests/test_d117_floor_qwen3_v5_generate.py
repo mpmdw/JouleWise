@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -13,6 +14,8 @@ from pathlib import Path
 
 from joulewise import arm_readiness
 from joulewise.provenance import prompt_token_ids_sha256
+from scripts import issue_g2a_prefill_prompt_pin as issuer
+from scripts import select_g2a_prefill_length as selector
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,15 +58,28 @@ def fixture_prefill_pin(root: Path) -> Path:
     contrast = load_generator("d117_contrast_v5")
     bundle = root / "authority"
     bundle.mkdir()
+    summary = [
+        {
+            "length": token_count,
+            "small_members": contrast.PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG,
+            "large_members": 1,
+            "small_minimum_count": (
+                contrast.PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+            ),
+            "all_small_count_ge_5": True,
+        }
+        for token_count in contrast.PREFILL_LADDER_PROMPT_TOKENS
+    ]
+    summary_raw = (
+        json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    selection = selector.select(
+        summary,
+        summary_sha256=hashlib.sha256(summary_raw).hexdigest(),
+    )
     selection_path = bundle / "selection-record.json"
     selection_path.write_text(
-        json.dumps(
-            {
-                "schema_version": "joulewise.g2a_prefill_selection.v1",
-                "status": "selected",
-                "collection_prefill_tokens": 512,
-            }
-        ),
+        json.dumps(selection, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     selection_sha = hashlib.sha256(selection_path.read_bytes()).hexdigest()
@@ -86,8 +102,8 @@ def fixture_prefill_pin(root: Path) -> Path:
             ),
         }
 
-    target = rung(512)
-    companion = rung(1024)
+    rungs = [rung(token_count) for token_count in contrast.PREFILL_LADDER_PROMPT_TOKENS]
+    target = next(row for row in rungs if row["prefill_tokens"] == 512)
     ladder_path = bundle / "prompt-ladder.json"
     ladder_path.write_text(
         json.dumps(
@@ -102,7 +118,7 @@ def fixture_prefill_pin(root: Path) -> Path:
                 "rendering_mode": "raw_prompt_text",
                 "chat_template_applied": False,
                 "thinking_policy": "not_applicable_raw_prefill",
-                "rungs": [target, companion],
+                "rungs": rungs,
             }
         ),
         encoding="utf-8",
@@ -116,11 +132,15 @@ def fixture_prefill_pin(root: Path) -> Path:
             },
             "ruling_trace_paths": list(contrast.PREFILL_RULING_TRACE_PATHS),
         },
-        "ladder_prompt_tokens": [512, 1024, 2048, 4096],
-        "min_small_model_members_per_rung": 5,
-        "min_overlapping_power_interval_count": 5,
-        "min_phase_samples_pinned": 3,
-        "sample_count_margin_floor": 2,
+        "ladder_prompt_tokens": list(contrast.PREFILL_LADDER_PROMPT_TOKENS),
+        "min_small_model_members_per_rung": (
+            contrast.PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG
+        ),
+        "min_overlapping_power_interval_count": (
+            contrast.PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+        ),
+        "min_phase_samples_pinned": contrast.PREFILL_MIN_PHASE_SAMPLES_PINNED,
+        "sample_count_margin_floor": contrast.PREFILL_SAMPLE_COUNT_MARGIN_FLOOR,
         "selection_expression": contrast.PREFILL_SELECTION_EXPRESSION,
         "g2a_record_sha256": selection_sha,
         "selection_record": {
@@ -247,6 +267,117 @@ def family_marker(members: list[dict[str, object]]) -> dict[str, object]:
 class D117FloorQwen3V5PackTests(unittest.TestCase):
     maxDiff = None
 
+    def test_routing_constants_are_the_only_producer_routing_sources(self) -> None:
+        observed = {}
+        for profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+            module = load_generator(pack_id)
+            observed[profile] = (module.PRODUCER_INDEX, module.CONSUMER_ARM)
+            source = ast.parse(
+                (ROOT / "configs/campaigns" / pack_id / "generate_configs.py")
+                .read_text(encoding="utf-8")
+            )
+            function = next(
+                node
+                for node in source.body
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "build_producer_contract"
+            )
+            routing_values: dict[str, list[ast.expr]] = {
+                "producer_index": [],
+                "arm": [],
+            }
+            for node in ast.walk(function):
+                if not isinstance(node, ast.Dict):
+                    continue
+                for key, value in zip(node.keys, node.values):
+                    if isinstance(key, ast.Constant) and key.value in routing_values:
+                        routing_values[key.value].append(value)
+            self.assertEqual(len(routing_values["producer_index"]), 1)
+            self.assertEqual(len(routing_values["arm"]), 3)
+            self.assertTrue(
+                all(
+                    isinstance(value, ast.Name) and value.id == "PRODUCER_INDEX"
+                    for value in routing_values["producer_index"]
+                )
+            )
+            self.assertTrue(
+                all(
+                    isinstance(value, ast.Name) and value.id == "CONSUMER_ARM"
+                    for value in routing_values["arm"]
+                )
+            )
+        self.assertEqual(observed, {"ALPHA": (1, "A"), "BETA": (2, "B")})
+
+    def test_issuer_shaped_four_rung_pin_loads_and_two_rung_refuses(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-floor-issued-shape-") as temporary:
+            pin = fixture_prefill_pin(Path(temporary))
+            pin_value = json.loads(pin.read_text(encoding="utf-8"))
+            selection_path = pin.parent / pin_value["selection_record"]["path"]
+            selection = json.loads(selection_path.read_text(encoding="utf-8"))
+            ladder_path = pin.parent / pin_value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text(encoding="utf-8"))
+            self.assertEqual(set(pin_value), set(issuer.PROMPT_PIN_KEYS))
+            self.assertEqual(
+                set(selection),
+                {
+                    "collection_prefill_tokens",
+                    "qualifying_prefill_tokens",
+                    "refusal",
+                    "rule",
+                    "schema_version",
+                    "selected_prefill_tokens",
+                    "status",
+                    "summary_sha256",
+                },
+            )
+            self.assertEqual(selection["status"], "selected")
+            self.assertEqual(
+                (
+                    selection["collection_prefill_tokens"],
+                    selection["selected_prefill_tokens"],
+                    selection["refusal"],
+                ),
+                (512, 512, None),
+            )
+            self.assertEqual(set(ladder), set(issuer.PROMPT_LADDER_KEYS))
+            self.assertEqual(
+                [row["prefill_tokens"] for row in ladder["rungs"]],
+                list(selector.LADDER),
+            )
+            contrast = load_generator("d117_contrast_v5")
+            self.assertEqual(
+                pin_value["ladder_prompt_tokens"],
+                list(contrast.PREFILL_LADDER_PROMPT_TOKENS),
+            )
+            self.assertEqual(
+                pin_value["min_small_model_members_per_rung"],
+                contrast.PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG,
+            )
+            self.assertEqual(
+                pin_value["min_overlapping_power_interval_count"],
+                contrast.PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT,
+            )
+            self.assertEqual(
+                pin_value["min_phase_samples_pinned"],
+                contrast.PREFILL_MIN_PHASE_SAMPLES_PINNED,
+            )
+            self.assertEqual(
+                pin_value["sample_count_margin_floor"],
+                contrast.PREFILL_SAMPLE_COUNT_MARGIN_FLOOR,
+            )
+            for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+                with self.subTest(shape="issuer", pack_id=pack_id):
+                    load_generator(pack_id).configure_prefill_pin(pin)
+
+            ladder["rungs"] = ladder["rungs"][:2]
+            rewrite_bound_json(pin, "prompt_ladder", ladder)
+            for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+                with self.subTest(shape="two_rungs", pack_id=pack_id):
+                    with self.assertRaisesRegex(
+                        ValueError, "prompt_ladder_expected_four_rungs"
+                    ):
+                        load_generator(pack_id).configure_prefill_pin(pin)
+
     def test_prefill_pin_requires_g2_record_hash_binding(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-floor-g2-binding-") as temporary:
             pin = fixture_prefill_pin(Path(temporary))
@@ -305,34 +436,73 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
                     ):
                         load_generator(pack_id).configure_prefill_pin(pin)
 
+    def test_prefill_pin_rejects_duplicate_or_unknown_ladder_rungs(self) -> None:
+        cases = {
+            "duplicate": (512, "prompt_ladder_rung_length_invalid_or_duplicate"),
+            "unknown": (8192, "prompt_ladder_rung_length_invalid_or_duplicate"),
+        }
+        for case, (replacement, code) in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory(
+                prefix=f"d117-floor-rung-{case}-"
+            ) as temporary:
+                pin = fixture_prefill_pin(Path(temporary))
+                pin_value = json.loads(pin.read_text(encoding="utf-8"))
+                ladder_path = pin.parent / pin_value["prompt_ladder"]["path"]
+                ladder = json.loads(ladder_path.read_text(encoding="utf-8"))
+                ladder["rungs"][1]["prefill_tokens"] = replacement
+                rewrite_bound_json(pin, "prompt_ladder", ladder)
+                for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
+                    with self.subTest(pack_id=pack_id):
+                        with self.assertRaisesRegex(ValueError, code):
+                            load_generator(pack_id).configure_prefill_pin(pin)
+
     def test_prefill_pin_parses_and_validates_selection_record(self) -> None:
         cases = (
             (
                 "wrong_schema",
-                {
-                    "schema_version": "joulewise.g2a_prefill_selection.v0",
-                    "status": "selected",
-                    "collection_prefill_tokens": 512,
-                },
+                lambda selection: selection.update(
+                    {"schema_version": "joulewise.g2a_prefill_selection.v0"}
+                ),
                 "selection_record_schema_version_invalid",
             ),
             (
                 "wrong_tokens",
-                {
-                    "schema_version": "joulewise.g2a_prefill_selection.v1",
-                    "status": "selected",
-                    "collection_prefill_tokens": 1024,
-                },
+                lambda selection: selection.update(
+                    {"collection_prefill_tokens": 1024}
+                ),
                 "selection_record_collection_prefill_tokens_mismatch",
             ),
+            (
+                "refused",
+                lambda selection: selection.update(
+                    {
+                        "collection_prefill_tokens": 4096,
+                        "selected_prefill_tokens": None,
+                        "status": "refused",
+                        "refusal": {
+                            "code": "no_g2a_prefill_rung_qualifies",
+                            "fallback_action": "collect_at_4096",
+                        },
+                    }
+                ),
+                "selection_record_refused_not_supported",
+            ),
         )
-        for case, selection, code in cases:
+        for case, mutate, code in cases:
             for _profile, pack_id, _model_id, _model_name, _plan_id in FLOORS:
                 with self.subTest(case=case, pack_id=pack_id):
                     with tempfile.TemporaryDirectory(
                         prefix=f"d117-floor-selection-{case}-"
                     ) as temporary:
                         pin = fixture_prefill_pin(Path(temporary))
+                        pin_value = json.loads(pin.read_text(encoding="utf-8"))
+                        selection_path = (
+                            pin.parent / pin_value["selection_record"]["path"]
+                        )
+                        selection = json.loads(
+                            selection_path.read_text(encoding="utf-8")
+                        )
+                        mutate(selection)
                         rewrite_bound_json(pin, "selection_record", selection)
                         with self.assertRaisesRegex(ValueError, code):
                             load_generator(pack_id).configure_prefill_pin(pin)
