@@ -1,0 +1,145 @@
+# Magistrate watchdog build — Sol landing report
+
+Date: 2026-09-03 PDT  
+Base: `46eaf18c279edc76d0f1036abcbccc687ec85636`  
+Branch: `feat/2026-09-03-magistrate-watchdog`  
+Install/session/commit actions: none.
+
+## Files
+
+| File | Lines | Purpose |
+|---|---:|---|
+| `scripts/magistrate_watchdog.py` | 1328 | Short launchd tick, pure decision seams, guarded custody writer, resident supervisor, process-tree enforcement, classification/backoff, and dry-run CLI. |
+| `scripts/install_magistrate_watchdog.sh` | 214 | Install/uninstall/render interface, template validation, and one-time current-tree adoption claim. |
+| `configs/launchd/com.joulewise.magistrate.plist.template` | 33 | Five-minute, RunAtLoad, non-KeepAlive LaunchAgent with census-safe watchdog argv. |
+| `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md` | 20 | Headless magistrate resumption, email, handback, and stand-down contract. |
+| `docs/process/MAGISTRATE_WATCHDOG.md` | 99 | Operator/state/fence/write/install/rehearsal documentation. |
+| `tests/test_magistrate_watchdog.py` | 487 | 27 injected unit and contract cases. |
+| `docs/process_traces/2026-09-03-watchdog-build/01-sol-landing-report.md` | 135 | This executed-evidence and clause-map record. |
+
+## Executed evidence
+
+### Focused test module
+
+Command (the module was named explicitly; discovery was not run):
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_magistrate_watchdog -v
+```
+
+Tail, exit 0:
+
+```text
+test_stale_pid_reused_by_another_process_is_not_owned (tests.test_magistrate_watchdog.StopAndDecisionTests.test_stale_pid_reused_by_another_process_is_not_owned) ... ok
+test_stop_branch_present_absent_and_positive_control_failure (tests.test_magistrate_watchdog.StopAndDecisionTests.test_stop_branch_present_absent_and_positive_control_failure) ... ok
+test_unowned_census_hit_inside_span_holds_without_kill (tests.test_magistrate_watchdog.StopAndDecisionTests.test_unowned_census_hit_inside_span_holds_without_kill) ... ok
+test_cooperative_exit_after_request_never_signals (tests.test_magistrate_watchdog.SupervisorTests.test_cooperative_exit_after_request_never_signals) ... ok
+test_ignored_request_gets_term_then_kill_and_census (tests.test_magistrate_watchdog.SupervisorTests.test_ignored_request_gets_term_then_kill_and_census) ... ok
+test_process_tree_walk_kills_descendant_that_escaped_pgid (tests.test_magistrate_watchdog.SupervisorTests.test_process_tree_walk_kills_descendant_that_escaped_pgid) ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 0.064s
+
+OK
+```
+
+### Python and shell syntax
+
+Commands:
+
+```sh
+tmp_cache="$(mktemp -d "${TMPDIR:-/tmp}/wd-pycache-final.XXXXXX")"
+PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX="$tmp_cache" python3 -m py_compile scripts/magistrate_watchdog.py
+bash -n scripts/install_magistrate_watchdog.sh
+```
+
+Both exited 0. `py_compile` emitted no diagnostic; its bytecode root was `/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-pycache-final.tBg3UN`, outside the worktree.
+
+### Render-only and plist lint
+
+Commands:
+
+```sh
+tmp_render="$(mktemp -d "${TMPDIR:-/tmp}/wd-render-final.XXXXXX")"
+scripts/install_magistrate_watchdog.sh --render-only "$tmp_render"
+/usr/bin/plutil -lint "$tmp_render/com.joulewise.magistrate.plist"
+```
+
+Output, exit 0:
+
+```text
+/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-render-final.DgyU3y/com.joulewise.magistrate.plist: OK
+rendered /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-render-final.DgyU3y/com.joulewise.magistrate.plist
+/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T//wd-render-final.DgyU3y/com.joulewise.magistrate.plist: OK
+```
+
+Inspection of the rendered plist confirmed PATH begins `/Users/edr/.local/bin`, `StartInterval=300`, `RunAtLoad=true`, no KeepAlive key, and ProgramArguments only `/usr/bin/env`, `python3`, and the watchdog script path. The session binary is supplied only as `MAGISTRATE_SESSION_BIN` in the environment.
+
+### Dry run with fake plan at now + 10 minutes
+
+The fake `REHEARSAL_STUB` plan was placed at `/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/fake-night/night_plan.json` with `t0_epoch_s=1788491234`, computed as observed `date +%s + 600`. Its sibling watchdog root did not exist before or after the run.
+
+Command:
+
+```sh
+MAGISTRATE_WATCHDOG_CUSTODY_ROOT=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate PYTHONDONTWRITEBYTECODE=1 scripts/magistrate_watchdog.py --dry-run
+test ! -e /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate
+```
+
+Transcript, exit 0:
+
+```text
+decision=HOLD_CENSUS reason=production census non-empty inside plan span
+WOULD_WRITE mkdir /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate
+WOULD_WRITE open_and_flock /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate/watchdog.lock
+WOULD_WRITE append /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate/events.jsonl (259 bytes)
+WOULD_WRITE append /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate/events.jsonl (206 bytes)
+WOULD_WRITE atomic_write /private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/wd-dry.39J7f8/magistrate/state.json (714 bytes)
+WOULD_SPAWN none
+dry-run custody root absent: PASS
+```
+
+`HOLD_CENSUS` is the expected live observation while this Codex implementation session is running. It is evidence that a plan-span dry run uses the production predicate and that dry-run suppresses both custody writes and spawning; it is not hardware or installed-Agent evidence.
+
+## Clause map
+
+File-15 text is shortened only to fit the table; the row number binds the complete adopted proposition.
+
+| Row / adopted proposition | Production site | Biting assertion | One-site counterfactual |
+|---|---|---|---|
+| 1 — supervisor owns deadline/force; cooperative exit preferred | `scripts/magistrate_watchdog.py:877`, `:1003` | `tests/test_magistrate_watchdog.py:278`, `:294` | Delete the request-before-signal branch at `:1003`: the cooperative test no longer sees a request, and the ignored-request test loses the ordered path. |
+| 2 — `-p`, stream-json, one turn; interval is cadence | `scripts/magistrate_watchdog.py:76`, `:818`; `configs/launchd/com.joulewise.magistrate.plist.template:24` | `tests/test_magistrate_watchdog.py:441` | Replace `"-p"` with `"--bg"` at `:821`: the spawn-shape assertion fails. |
+| 3 — exact in-span census; span/courier/dead-man/chain extension; PID+start lock; belt and 07:00 | `scripts/magistrate_watchdog.py:483`, `:502`, `:557`, `:755` | `tests/test_magistrate_watchdog.py:146`, `:162`, `:176`, `:186`, `:193`, `:235`, `:243`, `:251` | Change the closed `<=` dead-man boundary at `:517` to `<`: the exact-boundary assertion at `:162` fails. |
+| 4 — request −25, TERM −16, KILL −15, census, resident ≤10 s | `scripts/magistrate_watchdog.py:63`, `:1090`, `:1003` | `tests/test_magistrate_watchdog.py:146`, `:278`, `:294` | Change `TERM_LEAD_S` at `:65`: both the phase-boundary assertion and TERM/KILL sequence fail. |
+| 5 — stable PPID-tree TERM/KILL; never killpg; unowned hit is HOLD | `scripts/magistrate_watchdog.py:829`, `:853`, `:765`, `:1027` | `tests/test_magistrate_watchdog.py:315`, `:251` | Replace the PPID closure at `:840` with root-only signaling: escaped descendant PID 300 remains absent from the signaled set. |
+| 6 — positive control + stop glob + local STOP; rc128 uncertain | `scripts/magistrate_watchdog.py:343`, `:369`, `:378` | `tests/test_magistrate_watchdog.py:202`, `:216`, `:227` | Treat nonzero positive-control rc as clear at `:372`: the rc128 assertion fails. |
+| 7 — canonical cwd; plan-pin change before first real arm | `scripts/magistrate_watchdog.py:53`, `:1137`; `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:9` | `tests/test_magistrate_watchdog.py:441` | Change the spawn cwd at `:1137` from `CANONICAL_REPO`: the exact-cwd assertion fails. |
+| 8 — heartbeat before email; cooperative last email; forced/usage pending; once per transition | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:2`, `:5`, `:6`; `scripts/magistrate_watchdog.py:594`, `:653` | `tests/test_magistrate_watchdog.py:371`, `:379`, `:476` | Remove the same-state guard at `scripts/magistrate_watchdog.py:604`: `test_one_event_per_transition` observes two events. |
+| 9 — usage 15/30/60/120/120 + activation jitter; never in span; new plan preempts | `scripts/magistrate_watchdog.py:72`, `:695`, `:755` | `tests/test_magistrate_watchdog.py:344`, `:364` | Change the fourth ladder element at `:72` from 7200: the exact observed ladder fails. |
+| 10 — email/install/no reply; first resident adopts and stands down the ruled interactive tree | `scripts/install_magistrate_watchdog.sh:60`, `:185`, `:188`; `scripts/magistrate_watchdog.py:1199` | `tests/test_magistrate_watchdog.py:466` | Remove `O_EXCL` from the adoption claim at installer `:188`: the exclusive-claim assertion fails. |
+| 11 — arming outside charter; email-then-arm; Ed's NO overrides | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:10` | `tests/test_magistrate_watchdog.py:466` | Delete “Ed's NO always overrides” at prompt `:10`: the prompt contract assertion fails. |
+
+## Deviations and flags
+
+- No adopted file-15 proposition was intentionally changed.
+- `lead_ruling` (nonblocking): file 15 defines the usage ladder but is silent on generic-error delay. Per the task's tie-break rule, implementation uses file 09's 2/5/15/30/60-minute generic ladder rather than file 03's 15/30/60-minute cap or file 04's alternate table.
+- `environment` (nonblocking): the launch argv defaults to `--permission-mode auto` and deliberately omits `--permission-prompts none`. Claude 2.1.260 help establishes both flags, but only a no-TTY launch bench can determine whether the latter is required.
+- `environment` (nonblocking): this sandbox cannot provide installed launchd evidence. Render/lint and injected resident tests are the strongest permitted evidence here.
+- `environment` (nonblocking): the real dry-run census found this active implementation session and therefore held. No session process was started by the rehearsal.
+
+## Owed to the magistrate
+
+1. Before install, execute the documented temporary-LaunchAgent, no-TTY `-p` bench. Pin heartbeat-before-email, stream-json completion, `auto` prompt behavior, post-exit empty production census, and whether `--permission-prompts none` is needed. If that flag is needed, edit only `SESSION_ARGV_AFTER_PROMPT`.
+2. Bench the installer's ancestor selection from the actual Terminal-hosted magistrate and prove the seeded PID/start token names the ruled owning root and that the resident adopts it without a second launch.
+3. Run the built-artifact gauntlet/cold gate, send Ed the install notice with exact local/remote switch instructions, then follow file-15 row 10. This implementation session performed none of those external/install actions.
+4. Before the first real window is armed, land and verify the measurement-checkout plan pin and install the night agents from that checkout. Re-arm after any relevant HEAD move.
+
+---
+
+## Magistrate bench rulings and edits (2026-09-03 21:05 PDT)
+
+- F1: generic-error backoff `GENERIC_BACKOFF_S = (120, 300, 900, 1800, 3600)` ACCEPTED (file 15 was silent; file 09's ladder adopted).
+- Lead note 1: the two `git ls-remote` probe timeouts raised from 2 s to 10 s (`scripts/magistrate_watchdog.py` remote-stop probe and positive control); fail-closed direction unchanged.
+- F2 / lead note 3: spawn argv gains `--permission-prompts none` (under launchd nobody can answer a prompt; anything that would prompt is denied rather than hung) and the allowed-tool list gains `Agent` (the current name of the subagent tool; `Task` retained for older builds), `SendMessage`, `ListAgents`, `TaskCreate`, `TaskUpdate`, `TaskList`. The bench rehearsal (first `-p` launch from launchd) is the proof of this argv; it is the single line the magistrate changes if the rehearsal shows otherwise.
+- Lead note 2: outside a plan span the census is not consulted — this is file 15 row 3 as ruled; an unowned interactive session does not block a daytime relaunch. No change.
+- Tests after edits: `tests.test_magistrate_watchdog` 27 OK; `py_compile` OK.

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joulewise.magistrate</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>@@REPO@@/scripts/magistrate_watchdog.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>@@REPO@@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@@PATH@@</string>
+    <key>MAGISTRATE_SESSION_BIN</key>
+    <string>@@SESSION_BIN@@</string>
+    <key>MAGISTRATE_WATCHDOG_CUSTODY_ROOT</key>
+    <string>@@CUSTODY_ROOT@@</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>@@CUSTODY_ROOT@@/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>@@CUSTODY_ROOT@@/launchd.err</string>
+</dict>
+</plist>
