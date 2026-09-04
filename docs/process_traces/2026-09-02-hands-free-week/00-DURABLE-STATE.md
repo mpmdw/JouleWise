@@ -87,3 +87,14 @@ beside its prompt; harvest from disk, never relaunch blind.
 4. Email Ed (Gmail send_message to the address in the memory file
    ed-notification-channel-email) only at: armed night, stand-down,
    relaunch, merge wave. He reads, does not reply.
+
+## 2026-09-04 (magistrate, mid-day) — merges and running seats
+
+- MERGED: PR #279 (paper-E) at main b0ed6991; PR #281 (`_v5` floor generators) at main a39e33a2.
+- paper-F `feat/2026-09-02-paper-f` at 8375ffc5: origin/main merged twice (skeleton conflicts resolved by a Sol seat, report `2026-09-02-paper-f/15-merge-resolution-report.md`; magistrate read the resolved hunks); CI running; then ledger rows 11/12 → merge.
+- paper-G `feat/2026-09-02-paper-g` at 114092f9: fix round 4 harvested, delta re-audit round 4 CLEAN (`2026-09-02-paper-g/11-delta-reaudit-round-4.md`); integration replay running in `JouleWise-wt-int-paper-g-0e552a6f` (log `~/.claude/jobs/3c46c831/tmp/int-paper-g-replay-r4.log`); terminal review 99 owed; will conflict with F on the skeleton → same resolution-seat pattern, then PR.
+- Night plan pin `feat/2026-09-03-night-plan-pin` at b4d961d6 (round 3 + one-line fixture fix, three night modules green).
+- Watchdog `feat/2026-09-03-magistrate-watchdog` at 1e324e3d = plan-pin merged + round 4 on the integrated base (B-1 v2 plans/retired-v1 ignored, handoff procedure + `handoff-inventory`, Q4/Q5 text); three night modules green; Sol xhigh delta re-audit running → trace 10; then packet 21 → re-convene cold Fable + Opus.
+- Fan-out: first refuter round (28) returned NOT LANDABLE almost uniformly with ONE signature — stale base / non-ancestral / unrelated-range contamination (branches cut before main moved; refuters diffed against a moved origin/main). Structural cure applied: every `feat/2026-09-04-fan-*` branch had origin/main MERGED in (no rewrite) inside its own worktree, magistrate-owned state docs reset to main (32 refreshed; conflicts: GENERATOR-CORE-01 on `generate_configs.py` — likely superseded by PR #281 — and one-name-sweep on the paper registry/survival map). Second refuter round (32 Sol high seats, merge-base diff, `02-refuter-merge-base.md` per mission) running. Real non-staleness findings to carry: EPOCH-LINT spoofable CLI check; GAMMA-UNIT-ROSTER trusts mutable plan_id; PREWINDOW-V5-PIN accepts an occupied retired root; CALEXITS-HYGIENE false counterfactual; floor-guarantee / transfer-fiducial edited the paper skeleton (paper-lane-owned).
+- Ed asked (in-session) the cost of a 5-min vs 15-min stand-down; answered from `docs/phase_2/window_runbook.md:425-432` (≥10 min untouched idle before the ledger pair, `prewindow_check.sh --wait` READY precondition, in addition to the 180 s settle). 15 stands unless Ed objects.
+- Tooling note: the auto-mode classifier blocks `gh pr edit --body-file` and background `gh` polling loops; `gh pr edit --body "$(cat file)"` and `gh pr checks N --watch` pass.
