@@ -68,18 +68,18 @@
     {
       "id": "V3",
       "kind": "test",
-      "cmd": "python3 - <<'PY'\nimport subprocess\nimport sys\nimport types\n\nsource = subprocess.run(\n    [\"git\", \"show\", \"HEAD:joulewise/campaign_provenance.py\"],\n    check=True,\n    capture_output=True,\n    text=True,\n).stdout\nmodule = types.ModuleType(\"campaign_provenance_counterfactual\")\nsys.modules[module.__name__] = module\nexec(compile(source, \"HEAD:joulewise/campaign_provenance.py\", \"exec\"), module.__dict__)\nf1 = b'{\"\\\\ue000\": 1, \"\\\\ud83d'\nf2 = b'{\"a\": 1e+1000'\nobserved = (module.parse_campaign_log_bytes(f1), module.parse_campaign_log_bytes(f2))\nexpected_old_failures = ((None, \"invalid\"), ([], \"torn_prefix\"))\nif observed != expected_old_failures:\n    raise SystemExit(f\"unexpected counterfactual behavior: {observed!r}\")\nprint(\"counterfactual HEAD parser reproduces F1 false refusal and F2 over-acceptance\")\nPY",
+      "cmd": "python3 - <<'PY'\nimport subprocess\nimport sys\nimport types\n\nsource = subprocess.run(\n    [\"git\", \"show\", \"b0ed6991c11f3a515ad293760c6dfc031adda8e1:joulewise/campaign_provenance.py\"],\n    check=True,\n    capture_output=True,\n    text=True,\n).stdout\nmodule = types.ModuleType(\"campaign_provenance_counterfactual\")\nsys.modules[module.__name__] = module\nexec(compile(source, \"b0ed6991c11f3a515ad293760c6dfc031adda8e1:joulewise/campaign_provenance.py\", \"exec\"), module.__dict__)\nf1 = b'{\"\\\\ue000\": 1, \"\\\\ud83d'\nf2 = b'{\"a\": 1e+1000'\nobserved = (module.parse_campaign_log_bytes(f1), module.parse_campaign_log_bytes(f2))\nexpected_old_failures = ((None, \"invalid\"), ([], \"torn_prefix\"))\nif observed != expected_old_failures:\n    raise SystemExit(f\"unexpected counterfactual behavior: {observed!r}\")\nprint(\"counterfactual merge-base parser reproduces F1 false refusal and F2 over-acceptance\")\nPY",
       "cwd": ".",
       "observed": {
         "result": "pass",
         "exit_code": 0,
         "tail": [
-          "counterfactual HEAD parser reproduces F1 false refusal and F2 over-acceptance"
+          "counterfactual merge-base parser reproduces F1 false refusal and F2 over-acceptance"
         ]
       },
       "expected": {
         "exit_code": 0,
-        "tail_regex": "counterfactual HEAD parser reproduces F1 false refusal and F2 over-acceptance"
+        "tail_regex": "counterfactual merge-base parser reproduces F1 false refusal and F2 over-acceptance"
       }
     },
     {
