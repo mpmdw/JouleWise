@@ -377,6 +377,11 @@ a claim above depends on them; the full suite was not run.
 | `tests.test_issue_dg071_dg075_statistics` | 29 OK |
 | `tests.test_calibration_exits.RefusalInventoryTests` | 16 OK |
 | `tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_logical_producer_delay_preserves_exact_evidence_bytes` | 1 OK |
+| Whole-module confirmation run (pytest, `R7F_CORPUS_ROOT` pointed at a nonexistent path so the ~8-minute corpus replay skips rather than silently passing): `test_paper_round7_artifacts`, `test_receipt_histsem`, `test_coldgate_receipt`, `test_coldgate_charter_v3`, `test_midcampaign_cure_generation_docs`, `test_quiet_guard_process`, `test_prewindow_check` | 144 passed, 3 skipped, 223 subtests passed, 40 m 55 s, exit 0 |
+
+The last row supersedes the class-scoped rows above for the seven modules it
+covers: it runs each module whole, so a sibling test displaced or broken by a
+landing could not hide behind a narrow class selection.
 
 Direct probes (not tests) run against the landed code and the real artifacts:
 the two digest recomputations in CB-1 and CB-4; the corpus enumeration in CB-3;
