@@ -12,15 +12,16 @@ silently discard it.
 | term | first-use home | build or gloss |
 |---|---|---|
 | Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
-| powermetrics | §1 | macOS's built-in power sampler. |
+| powermetrics | §1 | macOS `powermetrics` is the power sampler used here. |
 | MLX | §1 | Apple's on-device inference framework used to run the models. |
 | cell / power-measurement boundary | §1 | A cell groups runs sharing one phase, workload, model, hardware, software, and boundary defining the measured power. |
-| resolution bound / detection floor / cell floor | §1 | One largest allowed false phase-energy difference: “detection floor” is another name for it, and “cell floor” is the artifact term for its final value after the Section 4 safeguards. |
-| \(U_{\rm point}\) / \(U_{\rm corner}\) | §1 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly; shared movement instead uses \(U_{\rm cmp,shared}/U_{\rm cmp,point}\). |
+| resolution bound / detection floor / cell floor | §1 | The resolution bound is the largest allowed false phase-energy difference before safeguards; “detection floor” is the advisor's term for that bound, and “cell floor” is the artifact term for the final gate value after the Section 4 safeguards. |
+| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | §1 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement instead uses \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
 | member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
 | timing-error sign / shared sign / local sign | §1 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
 | reasoning disabled | §1 | Qwen3's optional chain-of-thought output is switched off. |
 | declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
+| mint | §2 | The analysis run that issues the paper's fixed results. |
 | frozen | §2 | Fixed and fingerprinted before collection. |
 | signal, fit, range, trace-coverage, and completeness checks | §2 | Signal rises above rest; the fit beats a no-pulse model; shifts stay in range; both trace margins exist; and required pulses, fingerprints, and binding fields are present. |
 | shared search-work limits | §2 | Caps on the number of search rectangles and the elapsed search time for one capture. |

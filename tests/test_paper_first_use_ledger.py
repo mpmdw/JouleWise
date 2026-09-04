@@ -50,18 +50,19 @@ EXTRA_ALTERNATIVES: dict[str, tuple[str, ...]] = {
 # must occur no later than the paragraph or table row containing the term's
 # first use. This binds the definition itself, not merely its section heading.
 GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
-    "powermetrics": ("power sampler used here",),
+    "powermetrics": ("macOS powermetrics is the power sampler used here",),
     "Apple M3 Max / 128 GB unified memory": (
         "measures one Apple M3 Max",
         "128 GB of unified memory",
     ),
     "detection floor": (
         "largest false phase-energy difference",
-        "also called the detection floor",
-        "artifacts call the cell floor",
+        "the detection floor in the advisor's terminology",
+        "the artifacts call the final gate value after those safeguards the cell floor",
     ),
-    r"\(U_{\rm point}\) / \(U_{\rm corner}\)": (
+    r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
         "component bound calculated at the recorded edges",
+        "largest result retained",
         "shared movement uses a different numerator",
     ),
     "A/B/B/A block": ("four runs in the order A, B, B, A",),
@@ -74,6 +75,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "pins in the calibration ledger's session record",
         "expected digest from the in-code ISSUED_ACCEPTANCE_REGISTRY",
     ),
+    "mint": ("the analysis run that issues the paper's fixed results",),
     "frozen": ("fixed and fingerprinted before collection",),
     "signal, fit, range, trace-coverage, and completeness checks / shared search-work limits": (
         "signal rises far enough above resting power",
@@ -128,6 +130,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
 
 LEXICON_REQUIRED_TERMS = (
     "| powermetrics | §1 |",
+    "| mint | §2 |",
     "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 |",
     "| entry check | §2 |",
     "| admitted | §2 |",
@@ -580,6 +583,11 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
                 "fixed factor to allow for limited repetition. The\n"
                 "current calculation instead uses the corner-to-point ratios in Section 4.\n",
                 "",
+            ),
+            r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
+                "lower-or-upper edge choice for that component is evaluated jointly and the\n"
+                "largest result retained.",
+                "lower-or-upper edge choice for that component is evaluated jointly.",
             ),
         }
         for term, (cured, reverted) in mutations.items():
