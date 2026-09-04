@@ -18,6 +18,24 @@ independently of the packet.
 | Frozen packet | `docs/process_traces/2026-08-03-t3-doctrine-gate/PACKET.md`, sha256 `1f027d0714f0669a63405c9e245ad2e98f78034bd6608b4130084593e173b616` |
 | Consult record | `docs/process_traces/2026-08-03-t3-doctrine-gate/inputs/charter-consult-record.md` |
 
+## Candidate charter v3 (not operative)
+
+| Field | Value |
+|---|---|
+| File | `docs/process/coldgate_charter_v3_candidate.md` |
+| Version | v3 candidate (packet-input amendment) |
+| sha256 | `9275316e46c6c7bf084e35caa927dae9727dd544dae72656bed22ba82d22b977` |
+| Status | **CANDIDATE — NOT OPERATIVE; AWAITING ED RE-RATIFICATION.** Cold gates continue to use the v2 file and digest in the Operative charter table above. |
+| Change authority | D-170 item 4 and its charter-v3 deferral in `docs/decision_log.md` |
+| Tracked consult brief | `docs/process/coldgate_consult_brief_template.md` |
+
+Promotion requires Ed to re-ratify these exact candidate bytes. After that
+external decision is recorded, the lead replaces the operative charter bytes
+with the candidate bytes, verifies that the digest is unchanged, changes the
+operative table to v3 with the same digest, and moves v2 into History. Until
+all promotion steps occur together, the candidate must not be supplied to a
+cold judge as the operative charter.
+
 ## History
 
 | Version | sha256 | Disposition |
