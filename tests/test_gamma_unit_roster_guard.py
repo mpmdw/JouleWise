@@ -95,6 +95,37 @@ class GammaUnitRosterGuardTests(unittest.TestCase):
                 self.assertIn("identity_unit_roster", refusal.exception.observed)
                 self.assertEqual(pack_bytes(pack), before)
 
+    def test_freeze_plan_id_spoof_cannot_disable_gamma_roster_guard(self) -> None:
+        def spoof_dispatch_key_and_remove_one(
+            tree: dict, units: list[dict]
+        ) -> None:
+            units.pop()
+            tree["plan"]["plan_id"] = "plan-not-d131-gamma"
+            tree["window_identity"]["window_id"] = "plan-not-d131-gamma"
+
+        temporary = tempfile.TemporaryDirectory(prefix="gamma-roster-")
+        self.addCleanup(temporary.cleanup)
+        pack = Path(temporary.name) / GAMMA_PACK.name
+        shutil.copytree(GAMMA_PACK, pack)
+        tree_path = pack / "plan_tree.json"
+        tree = read_json(tree_path)
+        units = tree["arm_attachments"]["identity_pin_projection"]["identity_units"]
+        spoof_dispatch_key_and_remove_one(tree, units)
+        raw = render_json(tree)
+        tree_path.write_bytes(raw)
+        (pack / "plan_tree.sha256").write_text(
+            f"{hashlib.sha256(raw).hexdigest()}  plan_tree.json\n",
+            encoding="ascii",
+        )
+
+        before = pack_bytes(pack)
+        with self.assertRaisesRegex(
+            identity_pins.IdentityPinProjectionError,
+            "ordered D-131 gamma unit roster",
+        ):
+            identity_pins.freeze_projection(pack)
+        self.assertEqual(pack_bytes(pack), before)
+
     def test_arm_authenticates_receipt_roster_against_d131_not_the_pack(self) -> None:
         tree = read_json(GAMMA_PACK / "plan_tree.json")
         projection = tree["arm_attachments"]["identity_pin_projection"]
@@ -104,6 +135,11 @@ class GammaUnitRosterGuardTests(unittest.TestCase):
         malformed_receipt = read_json(GAMMA_PACK / receipt_reference["path"])
         malformed_receipt["receipt_kind"] = "arm_reverification"
         malformed_receipt["identity_units"].pop()
+        spoofed_plan_id = "plan-not-d131-gamma"
+        tree["plan"]["plan_id"] = spoofed_plan_id
+        tree["window_identity"]["window_id"] = spoofed_plan_id
+        malformed_receipt["pack"]["plan_id"] = spoofed_plan_id
+        malformed_receipt["pack"]["window_id"] = spoofed_plan_id
         malformed_receipt["pack"]["reviewed_git_commit"] = "a" * 40
         item = {
             "evidence_id": "u11-arm-reverification",
@@ -161,12 +197,34 @@ class GammaUnitRosterGuardTests(unittest.TestCase):
             self.assertEqual(pseudo_receipt["status"], "PASS")
             self.assertEqual(reasons, [])
 
+    def test_prefill_length_parameterized_gamma_uses_same_guard(self) -> None:
+        tree = read_json(GAMMA_PACK / "plan_tree.json")
+        projection = copy.deepcopy(
+            tree["arm_attachments"]["identity_pin_projection"]
+        )
+        for unit in projection["identity_units"]:
+            unit["identity_unit_id"] = unit["identity_unit_id"].replace(
+                "prefill_p256", "prefill_p512"
+            )
+            arm = unit["identity_unit_id"].split("/", 1)[0]
+            model = "small" if arm == "A" else "large"
+            unit["producer_plan_reference"] = {
+                "plan_id": f"plan-d117-floor-{model}-decode-prefill-p512-v5",
+                "path": f"../d117_floor_{model}_v5/calibration_plan.json",
+            }
+
+        identity_pins.validate_identity_pin_projection(projection)
+        projection["identity_units"].pop()
+        with self.assertRaisesRegex(
+            identity_pins.IdentityPinProjectionError,
+            "ordered D-131 gamma unit roster",
+        ):
+            identity_pins.validate_identity_pin_projection(projection)
+
     def test_current_gamma_projection_and_frozen_receipt_still_validate(self) -> None:
         tree = read_json(GAMMA_PACK / "plan_tree.json")
         projection = tree["arm_attachments"]["identity_pin_projection"]
-        identity_pins.validate_identity_pin_projection(
-            projection, plan_id=tree["plan"]["plan_id"]
-        )
+        identity_pins.validate_identity_pin_projection(projection)
 
         item, pseudo_receipt, reasons = (
             arm_readiness._load_frozen_identity_evidence(GAMMA_PACK, tree)
