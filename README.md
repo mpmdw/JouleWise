@@ -9,73 +9,47 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Status:** the instrument's clock-anchor correction is complete, the
-successor measurement campaign family is frozen, and that work has now
-passed all four of its review gates and been merged to this main branch
-(2026-08-20). A council also ruled how the remaining reserved
-configuration values install: together with the next campaign family,
-whose evidence-freshness clock forces it to be built before any new
-measurement windows run. The readiness re-audit and the plan for that
-next family are in progress; measurement windows that produce the
-paper's results data follow them.
+**Status:** the measurement campaign that will produce the paper's numbers
+is designed, its supporting code is merged, and it has not yet been run. In
+late August the campaign was re-specified around a newer pair of models (the
+Qwen3 1.7B and 8B pair, decisions D-164 through D-166) and the preparation
+work for it merged to this main branch. Since then the project has built the
+machinery to run measurement nights unattended — a driver that refuses to
+start if any other agent process is alive, runs the measurement chain once,
+signs every outcome, and mails a morning summary — and that driver is on
+main (D-169). What remains before real numbers exist: the campaign's frozen
+plans must pass a tokenizer-identity check that is being fixed now, the
+night machinery must be re-armed, and then the pre-registered nights run.
+Nothing on this page is a measured result from that campaign.
 Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
 ## Current activity (refreshed each work block; last: 2026-09-03)
 
-**Just completed (2026-09-01/02): the night driver is on main.** The
-unattended measurement night — the lane Ed asked for first, so the machine
-can run its own quiet-hour experiments with nobody at the keyboard — now
-has its driver merged after the full adversarial cycle: four fix rounds,
-each re-audited by a different model family, and a cold three-family
-review of the fourth. The driver counts running agent processes before it
-starts (and refuses if any are found), starts the measurement chain
-exactly once, records every outcome as a signed file, and mails a morning
-summary through a headless assistant session; a separate 07:00 "dead-man"
-job reports the night even if the driver itself died. Earlier in the
-block: the campaign switched to the newer Qwen3 model pair (a regeneration
-of the frozen plan, not a new experiment), and the paper's headline
-pass/fail rule now requires the timing-aware uncertainty floor to be at
-least TWICE the naive floor, per component, pre-registered before any data
-exists.
+**Now:** the unattended-night machinery has been proven and is temporarily
+switched off while its last two pieces are built. Two rehearsal nights fired
+on their own from the macOS scheduler at 02:56 (2026-09-02 and 09-03), each
+pushed its results to a branch readable from a phone and sent the morning
+summary email with nobody at the keyboard; the second also proved the case
+where the scheduler is installed the morning before a night, so the 07:00
+watchdog correctly noticed the night had not happened yet and stood down. The
+scheduled jobs were then uninstalled, so nothing fires tonight.
 
-**Now (updated 2026-09-03):** two lanes run side by side. The
-unattended-night rehearsals are done: two stub nights have fired on their
-own from the macOS scheduler at 02:56 (09-02 and 09-03), each pushed its
-results to a branch readable from a phone and sent the morning summary
-email with nobody at the keyboard, and the second also proved the
-"installed the morning before" case: its 07:00 watchdog noticed the night
-had not happened yet and stood down with one log line. Five small
-hardening fixes from the reviews landed between the two nights. Next on
-this lane: the first real diagnostic night plan (the G2-a prefill probes,
-no pack), and the email to Ed naming its first armed date before it is
-armed. On the
-paper lane, the freeze/arm-time re-tokenize check (which stops tokenizer
-drift from silently changing what is measured) is on main, and the first
-real trial of it against the actual Qwen tokenizers found a plan-generator
-defect: the decode part of the plan rotates through eight prompt texts, and
-the identity check expected exactly one, so the plan could not be frozen.
-A three-model consult and a cold review settled the fix (the plan declares
-its closed set of eight prompts up front; the freeze refuses any extra,
-missing, or duplicated prompt) and it is being implemented now. The paper's
-second draft grew its threats-to-validity, limitations, and future-work
-sections, and its detector-calibration and workload-slope explanations now
-carry worked numeric examples all the way to the result, each reviewed for
-"could a reader rebuild this" as its own dimension.
-
-**Next:** land the plan-generator fix and re-freeze all three campaign
-plans against the real tokenizers; harvest tomorrow's stand-down rehearsal,
-then email Ed the plan for the first real instrumented night — which
-launches without his hand unless he replies no. That night measures the
-four candidate prompt lengths; a desk day then pins the choice, generates
-the final plan, and re-proves it end-to-end in a throwaway clone; the
-transaction night follows, then about a week of collection and the paper's
-results fill.
+**Next, in this order:** install a supervisor that can stop a working session
+on a deadline (so a session can never overrun the quiet hour a measurement
+needs); pin each night's plan to the dedicated measurement copy of the
+repository, because an ordinary daytime code pull currently moves the
+repository past the commit a plan was pinned to and the safety gate then
+refuses the plan; then arm the first real diagnostic night, which measures
+four candidate prompt lengths and picks one. On the paper lane, a defect in
+the plan generator — the plan rotates through eight prompt texts while the
+identity check expected exactly one — is being fixed so the three campaign
+plans can be frozen against the real tokenizers.
 
 ## Current State
 
-Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete
+The phase framing in this section is historical; the live state is the `_v5` measurement campaign described under Status above. **Phase 2's Mac vertical slice is complete
 and the project has proved its live measurement path on real hardware**
 (2026-07-06). From a
 typed config, one command produces a complete, schema-valid, auditable run
@@ -111,7 +85,8 @@ dense execution, quantization, and reasoning-length variance are five stress
 tests of Q4's single thesis. The harness must instrument all five axes and all
 five have strict-valid L0 smoke-bundle support plus characterization
 commitments, but every study remains floor-gated, capped at L2, and sequenced
-after Window A. See the fuller
+after the `_v5` campaign (the Window A sequencing this sentence used to name
+was retired by D-167). See the fuller
 [Q4 architectural stress-test agenda](PROJECT_STATUS.md#summary)
 in `PROJECT_STATUS.md`.
 
@@ -138,9 +113,11 @@ not retained, so those "passed" results rest on the written close-out
 record until a verdict is re-derived from the retained data. Those
 pre-genesis results are
 diagnostic or rule-establishing evidence, not the live claim path. Claim
-authority can arise only from the prospective alpha, beta, and gamma windows
-under D-117; the separately named Window C characterization night remains Ed
-ruling #1. The a8 retrospective path is closed, and the earlier
+authority arises only from the pre-registered `_v5` transaction nights
+(decisions D-164 through D-167), after the shakedown night passes. The
+alpha, beta, and gamma windows under D-117, and the separately named
+Window C characterization night, were retired with the Qwen2.5 campaign
+they belonged to (D-167); they are history, not a live path. The a8 retrospective path is closed, and the earlier
 222-bundle floor publication is a permanently voided historical record under
 D-078. Use the
 generated state kernel—not this summary—to select the next live or agent-lane
@@ -286,6 +263,10 @@ options and considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
 constraints live in `docs/milestones.md`; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`. Agents never regenerate or deploy the status site:
-sessions that change front-facing state refresh `docs/site/DRIFT.md`, and Ed
-deploys manually (D-068).
+`docs/council_log.md`. The status-site lane is RETIRED (D-136,
+2026-08-12): no session spends effort on Lakebed, capsule packing, or site
+diagnosis, the site workflow runs on manual dispatch only, and what survives
+is a manual-deploy reference in the release checklist. The scripts and
+`site_capsule/` still exist, so nothing is broken; they are simply not a
+workstream. Historically, and superseded: sessions that changed front-facing
+state refreshed `docs/site/DRIFT.md` and Ed deployed manually (D-068).
