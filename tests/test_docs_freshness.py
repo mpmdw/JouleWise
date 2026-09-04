@@ -210,6 +210,53 @@ def _append_decision_index_row(text: str, decision_id: str, status: str) -> str:
     )
 
 
+def _synthetic_open_decision(
+    index_text: str,
+    tasks: dict,
+    installer_id: str = "FIXTURE-INSTALLER-01",
+    carrier_id: str = "FIXTURE-CARRIER-01",
+) -> tuple[str, str, dict]:
+    """A live-shaped `open (installs via ...)` decision built from scratch.
+
+    The installation-limb guards need three things to exist together: an index
+    row whose status names an installing task, that task carrying a
+    `kind: decision` dependency on the row, and some task carrying the pending
+    hard/start one. Borrowing them from whichever real decision happens to be
+    open ties the guards to that decision's lifecycle: D-170 was the borrowed
+    fixture, and closing it on 2026-09-03 silently disarmed four assertions that
+    had been passing for weeks. Synthesizing the fixture instead keeps every
+    guard armed no matter what the live index says, in the same spirit as
+    `_next_unused_decision_id` above.
+
+    Returns the synthetic decision id, the index text carrying its row, and a
+    copy of `tasks` carrying the installer and the carrier.
+    """
+    decision_id = _next_unused_decision_id(index_text)
+    index_text = _append_decision_index_row(
+        index_text, decision_id, f"open (installs via {installer_id})"
+    )
+    tasks = dict(tasks)
+    tasks[installer_id] = {"dependencies": [{
+        "evidence": None,
+        "kind": "decision",
+        "required": "fixture installer close dependency",
+        "scope": "close",
+        "state": "pending",
+        "strength": "hard",
+        "target": decision_id,
+    }]}
+    tasks[carrier_id] = {"dependencies": [{
+        "evidence": None,
+        "kind": "decision",
+        "required": "fixture carrier start dependency",
+        "scope": "start",
+        "state": "pending",
+        "strength": "hard",
+        "target": decision_id,
+    }]}
+    return decision_id, index_text, tasks
+
+
 def _decision_body_ids(text: str) -> set[str]:
     return set(re.findall(r"^## (D-\d{3}[a-z]?):", text, flags=re.MULTILINE))
 
@@ -548,13 +595,21 @@ class DocsFreshnessTests(unittest.TestCase):
         base_tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
         base_index = _read("docs/decision_log.md")
 
-        with self.subTest(mutation="M6c"):
-            adopted = _replace_decision_status(base_index, "D-170", "adopted")
-            # Several rows carry the pending D-170 dependency (installer,
-            # V5-TRANSACTION-01, the S9 rows per ruling B4); the message
-            # names whichever the walk meets first.
-            with self.assertRaisesRegex(AssertionError, r"D-170.*adopted.*pending decision dependency on task"):
-                self._assert_terminal_decisions(base_tasks, adopted)
+        with self.subTest(mutation="M6c terminal status over a pending dependency"):
+            # Synthesized rather than pinned to D-170. This assertion used to
+            # read the live D-170 row, so closing D-170 on 2026-09-03 would have
+            # made it stop firing while still reporting green - the guard would
+            # have been gone and nothing would have said so.
+            fixture_id, fixture_index, fixture_tasks = _synthetic_open_decision(
+                base_index, base_tasks
+            )
+            self._assert_terminal_decisions(fixture_tasks, fixture_index)
+            adopted = _replace_decision_status(fixture_index, fixture_id, "adopted")
+            with self.assertRaisesRegex(
+                AssertionError,
+                rf"{fixture_id}.*adopted.*pending decision dependency on task",
+            ):
+                self._assert_terminal_decisions(fixture_tasks, adopted)
 
         synthetic = _next_unused_decision_id(base_index)
         with self.subTest(mutation=f"{synthetic} adopted without dependency"):
@@ -578,80 +633,85 @@ class DocsFreshnessTests(unittest.TestCase):
             self._assert_terminal_decisions(tasks, proposed)
 
         with self.subTest(mutation="unknown status token"):
-            decided = _replace_decision_status(base_index, "D-170", "decided")
-            with self.assertRaisesRegex(AssertionError, r"D-170.*decided"):
+            unknown_id = _decision_index_rows(base_index)[-1][0]
+            decided = _replace_decision_status(base_index, unknown_id, "decided")
+            with self.assertRaisesRegex(AssertionError, rf"{unknown_id}.*decided"):
                 self._assert_terminal_decisions(base_tasks, decided)
 
     def test_open_decision_counterfactuals_bind_all_installation_limbs(self) -> None:
         base_index = _read("docs/decision_log.md")
         base_tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
 
-        with self.subTest(mutation="M4 named ARM-PACKET-01"):
-            self.assertIn("ARM-PACKET-01", base_tasks)
-            mutated = _replace_decision_status(
-                base_index, "D-170", "open (installs via ARM-PACKET-01)"
-            )
-            missing_named_task = dict(base_tasks)
-            missing_named_task.pop("ARM-PACKET-01")
-            with self.assertRaisesRegex(AssertionError, r"D-170.*limb 1"):
-                self._assert_open_decisions(missing_named_task, mutated)
+        # The fixture is synthesized, not borrowed from whichever decision
+        # happens to be open: D-170 used to play this part, and closing it on
+        # 2026-09-03 disarmed every assertion below at once. See
+        # _synthetic_open_decision.
+        fixture_id, fixture_index, fixture_tasks = _synthetic_open_decision(
+            base_index, base_tasks
+        )
 
-            with self.subTest(mutation="M4 existing named task has no dependency"):
-                with self.assertRaisesRegex(AssertionError, r"D-170.*limb 2"):
-                    self._assert_open_decisions(base_tasks, mutated)
+        with self.subTest(mutation="baseline fixture is well formed"):
+            # If this ever fails, the mutants below prove nothing: they would be
+            # firing on a broken baseline rather than on the mutation.
+            self._assert_open_decisions(fixture_tasks, fixture_index)
 
-        with self.subTest(mutation="only V5 carries D-170 dependency"):
-            # Bench state after the B2 dependency was installed on the
-            # installer row: strip it again and limb 2 must fire.
-            only_v5 = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
-            only_v5["T26-RULING-INSTALL-01"]["dependencies"] = [
-                dependency
-                for dependency in only_v5["T26-RULING-INSTALL-01"]["dependencies"]
-                if dependency.get("target") != "D-170"
-            ]
-            self.assertTrue(
-                any(d.get("target") == "D-170" for d in only_v5["V5-TRANSACTION-01"]["dependencies"])
-            )
-            with self.assertRaisesRegex(AssertionError, r"D-170.*limb 2"):
-                self._assert_open_decisions(only_v5, base_index)
+        with self.subTest(mutation="limb 1 named installing task does not exist"):
+            missing_named_task = dict(fixture_tasks)
+            missing_named_task.pop("FIXTURE-INSTALLER-01")
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 1"):
+                self._assert_open_decisions(missing_named_task, fixture_index)
 
-        with self.subTest(mutation="installer close dependency but no start dependency"):
-            tasks = json.loads(_read("docs/process/state_kernel.json"))["tasks"]
-            tasks["T26-RULING-INSTALL-01"]["dependencies"] = [{
-                "evidence": None,
-                "kind": "decision",
-                "required": "fixture installer dependency",
-                "scope": "close",
-                "state": "pending",
-                "strength": "hard",
-                "target": "D-170",
-            }]
+        with self.subTest(mutation="limb 1 open status names no installing task"):
+            no_installer = _replace_decision_status(fixture_index, fixture_id, "open")
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 1"):
+                self._assert_open_decisions(fixture_tasks, no_installer)
+
+        with self.subTest(mutation="limb 2 named task carries no dependency"):
+            no_dependency = dict(fixture_tasks)
+            no_dependency["FIXTURE-INSTALLER-01"] = {"dependencies": []}
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 2"):
+                self._assert_open_decisions(no_dependency, fixture_index)
+
+        with self.subTest(mutation="limb 3 installer close dependency but no start dependency"):
             # Limb 3 is satisfiable by more than one task (ruling B4: the S9
-            # rows carry the start dependency too), so the mutant strips the
-            # start dependency from EVERY other row, not just V5-TRANSACTION-01.
-            stripped = 0
-            for task_id, task in tasks.items():
-                if task_id == "T26-RULING-INSTALL-01":
-                    continue
-                before = len(task["dependencies"])
-                task["dependencies"] = [
-                    dependency for dependency in task["dependencies"]
-                    if dependency.get("target") != "D-170"
-                ]
-                stripped += before - len(task["dependencies"])
-            self.assertGreaterEqual(stripped, 2)
-            with self.assertRaisesRegex(AssertionError, r"D-170.*limb 3"):
-                self._assert_open_decisions(tasks, base_index)
+            # rows carried the start dependency alongside the transaction row),
+            # so the mutant must remove the start dependency from EVERY task,
+            # not just from one of them.
+            no_start = {
+                task_id: {"dependencies": [
+                    dependency for dependency in task.get("dependencies", [])
+                    if not (dependency.get("target") == fixture_id
+                            and dependency.get("scope") == "start")
+                ]}
+                for task_id, task in fixture_tasks.items()
+            }
+            self.assertTrue(any(
+                dependency.get("target") == fixture_id
+                and dependency.get("scope") == "close"
+                for dependency in no_start["FIXTURE-INSTALLER-01"]["dependencies"]
+            ))
+            with self.assertRaisesRegex(AssertionError, rf"{fixture_id}.*limb 3"):
+                self._assert_open_decisions(no_start, fixture_index)
 
     def test_malformed_decision_index_status_is_not_skipped(self) -> None:
+        # The malformed row is derived from the live index rather than quoted
+        # from one decision's text, so editing any single row cannot silently
+        # turn this guard into a no-op (the replace would stop matching and the
+        # assertion would never fire). The missing space before the closing pipe
+        # is what makes _decision_index_rows skip the row while
+        # _decision_index_row_count still counts it.
         text = _read("docs/decision_log.md")
-        malformed = text.replace(
-            "| D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, "
-            "T-0 liveness bound, and executed-evidence duty | open (installs via "
-            "T26-RULING-INSTALL-01) |",
-            "| D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, "
-            "T-0 liveness bound, and executed-evidence duty | decided|",
+        rows = _decision_index_rows(text)
+        self.assertTrue(rows, "the decision index carries no rows to malform")
+        decision_id, status = rows[-1]
+        malformed = _replace_decision_status(text, decision_id, status.strip())
+        malformed = malformed.replace(
+            f"| {status.strip()} |", f"| {status.strip()}|", 1
         )
+        self.assertEqual(
+            _decision_index_row_count(malformed), _decision_index_row_count(text)
+        )
+        self.assertLess(len(_decision_index_rows(malformed)), len(rows))
         with self.assertRaisesRegex(AssertionError, r"parser skipped"):
             self._assert_index_rows_complete(malformed)
 
