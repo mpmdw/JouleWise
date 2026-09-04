@@ -64,16 +64,17 @@ to §4, beside the
 
 Two time-axis rows show adjacent sampling-record intervals against
 prompt-processing intervals of the same illustrative width. In the upper row,
-sampling records wider than the phase yield two positive overlaps and fall
-below the fixed three-record minimum. In the lower row, a shifted alignment and
-a narrower middle sampling record yield three positive overlaps and meet that
-minimum; the SVG explicitly labels that record widths vary. Every drawn data
-mark is labelled: each sampling record, prompt-processing interval, phase edge,
-positive-overlap segment, count box, rule decision, and time axis. The counts
-illustrate the decision rule, not measured population frequencies; record
-widths and phase-edge positions are not to scale, and the drawing contains no
-measured timing value. It appears in Section 6 beside the printed diagnostic-era
-negative result.
+sampling records about as wide as the phase are misaligned with it: the phase
+straddles one record boundary, yielding two positive overlaps and falling below
+the fixed three-record minimum. In the lower row, a shorter middle sampling
+record lies entirely inside the phase, yielding three positive overlaps and
+meeting that minimum; the SVG explicitly labels that record widths vary. Every
+drawn data mark is labelled: each sampling record, prompt-processing interval,
+phase edge, positive-overlap segment, count box, rule decision, and time axis.
+The counts illustrate the decision rule, not measured population frequencies;
+record widths and phase-edge positions are not to scale, and the drawing
+contains no measured timing value. It appears in Section 6 beside the printed
+diagnostic-era negative result.
 
 ## Captions in the paper
 

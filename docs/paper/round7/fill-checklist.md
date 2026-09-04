@@ -283,6 +283,11 @@ width distribution rather than its range.
 | DX-027 | successor-draft anchor prose, median relative delta | Place only as `[FILL:DX-027]`; use AQ's real `median_pct` field and registered rounding. |
 | DS-34 | line 348, release hold | Until the release checklist issues repository, archive, and digest locators: “Repository and archive locators are omitted: the release checklist has not issued the registered locator set (registry row DS-34).” |
 
+Cross-row census note: `37 + 13 = 50` is a sum across DG-076 and DG-077 that
+must equal the DG-068 population total; DG-069's 13 identifiable phases
+corroborate the second addend. Re-check this equality whenever DG-068, DG-069,
+DG-076, or DG-077 is reissued.
+
 Replace the two explanatory `[[NEEDS-VALUE:...]]` notes only in the working copy:
 
 | Draft site | Exact omission |

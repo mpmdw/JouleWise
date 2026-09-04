@@ -944,13 +944,15 @@ minimum for both sides of the decision.
 ![Figure 5. Phase–record overlap diagram.](figures/fig5_phase_record_overlap.svg)
 
 *Figure 5. Phase–record overlap diagram. Both prompt-processing intervals have
-the same illustrative width. The upper row uses sampling records wider than the
-phase and overlaps two; in the lower row, alignment plus a narrower middle
-sampling record creates three positive overlaps. Every drawn data mark is
-labelled: each sampling record, phase edge, positive-overlap segment, count box,
-decision, and axis. Widths and positions are not to scale; the count labels
-explain the three-record minimum rather than population frequencies, and the
-diagram contains no measured timing value.*
+the same illustrative width. In the upper row, sampling records about as wide
+as the phase are misaligned with it: the phase straddles one record boundary and
+overlaps two records. In the lower row, a shorter middle sampling record lies
+entirely between the phase edges, producing three positive overlaps. Every
+drawn data mark is labelled: each sampling record, prompt-processing interval,
+phase edge, positive-overlap segment, count box, decision, and axis. Widths and
+positions are not to scale; the count labels explain the three-record minimum
+rather than population frequencies, and the diagram contains no measured timing
+value.*
 
 The forcing problem appears in one run whose power trace was retained, meaning
 kept on disk as preserved evidence and never overwritten. Its prompt-processing phase
@@ -959,23 +961,29 @@ run's retained power trace, the 406 sampling records had a record-width median
 of 120.9186 ms. An
 interquartile range (IQR) is the upper edge minus the lower edge of the middle
 half of sorted values; the width IQR was 5.9508 ms. Across the 405 differences
-between consecutive recorded timestamps, record spacing had median 120.9224 ms
-and IQR 5.8949 ms. The program that issued these statistics refuses the trace unless each sampling record's
-interval-end label is identical to its timestamp label, and checks that each
-sampling record begins where the previous one ends within its stated tolerance;
-that enforced equality makes a spacing statistic over consecutive timestamps a
-statistic over consecutive end times. The printed width IQR shows that sampling
-records did not all have the same width, making a record shorter than the phase
-possible; when alignment places that record entirely between the phase edges,
-three sampling records overlap.
+between consecutive unique recorded timestamps, record spacing had median
+120.9224 ms and IQR 5.8949 ms. The program that issued these statistics refuses
+the trace unless each sampling record's interval-end label is identical to its
+timestamp label. It also checks that each sampling record begins within
+0.000001 s of the previous record's end. The [issued statistics
+artifact](round7/dg071-dg075-statistics.md) reports that 100 of 405 boundaries
+have a nonzero gap and that the largest is 0.0000004 s. The enforced endpoint
+equality makes a spacing statistic over consecutive timestamps a statistic over
+consecutive end times.
 
-The 0.121-s phase duration is close to the issued record-width and record-spacing
-medians, but dividing duration by either median cannot reproduce the decision.
-Alignment alone cannot create a third overlap when every sampling record is
-wider than the phase. Three overlaps require the phase to cross both edges of
-one intervening sampling record, so that middle record must be shorter than the
-phase. In this run, exactly two sampling records shared positive time with the
-phase. Two is less than the required three, so the phase was not resolvable.
+The 0.121-s phase is only barely longer than the median-width sampling record,
+and dividing phase duration by either issued median cannot reproduce the
+decision because division discards the phase's position relative to record
+boundaries. Three overlaps require one whole middle sampling record to lie
+between the phase edges: the phase must start before that record and end after
+it. When the phase and middle record have about the same width, only a very
+narrow range of relative positions satisfies both conditions. A middle record
+at the short end of the issued middle-half width spread leaves more room for
+both phase edges to fall outside it, making that full fit easier rather than
+first making it possible. Alignment, not width alone, therefore denies the
+third overlap in most phases. In this run, exactly two sampling records shared
+positive time with the phase. Two is less than the required three, so the phase
+was not resolvable.
 
 The population consists of short prompt-processing phases from the earlier
 1.5-billion-parameter diagnostic configuration during the July

@@ -934,10 +934,10 @@ family and are counted separately.
   17 new keys: `[PREFILL_LENGTH]`, eight independent-corner R columns, four
   comparative R_cm columns, and four absolute R_cm not-applicable columns.
   The count includes the six explicitly labelled renderer metatokens.
-- Registry live marker-site rows: **37**, exactly one for each complete-family
-  draft site, carrying the same 39 semantic slots. PG-02 owns both slots at its
-  interval site; PG-03 is retired. The `[PENDING...]` subset is therefore 34
-  rows for 34 sites and 36 slots. No live site is duplicated and no site-to-row
+- Registry live marker-site rows: **35**, exactly one for each complete-family
+  draft site, carrying the same 37 semantic slots. PG-02 owns both slots at its
+  interval site; PG-03 is retired. The `[PENDING...]` subset is therefore 32
+  rows for 32 sites and 34 slots. No live site is duplicated and no site-to-row
   gap is silently supplied.
 - The current renderer/template vocabulary still spells the pre-`_v5` model
   keys. It is not a fill supplier for renamed keys and must fail closed until a
@@ -950,8 +950,8 @@ Measured marker-row command:
   grep -cE '^\| (DS|PG|DG)-[0-9]+[a-z]? — .*[[]PENDING' docs/paper/results-fill-registry.md
   ```
 
-Result: **34 `[PENDING...]` rows**. Including DS-01, DS-08a, and DS-34 gives
-the complete-family total of 37.
+Result: **32 `[PENDING...]` rows**. Including DS-01, DS-08a, and DS-34 gives
+the complete-family total of 35.
 
 ## Lead double-checks before renderer implementation
 

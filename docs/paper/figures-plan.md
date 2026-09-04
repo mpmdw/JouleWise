@@ -248,11 +248,12 @@ These are drawings, not renderings of artifacts. They live in
 - `docs/paper/figures/fig5_phase_record_overlap.svg` — the positive-time
   overlap test, adjacent sampling-record intervals, and the two-record versus
   three-record sides of the fixed three-record minimum (belongs to Section 6).
-  The prompt-processing interval has the same width in both rows; the lower
-  row combines a shifted alignment with a narrower middle sampling record to
-  produce three overlaps. Its count labels are rule examples rather than
-  measured frequencies; all widths and alignments are illustrative and not to
-  scale.
+  The prompt-processing interval has the same width in both rows. The upper row
+  uses records about that width and misaligns the phase across one boundary to
+  produce two overlaps; the lower row contains a shorter middle record entirely
+  inside the phase to produce three. Its count labels are rule examples rather
+  than measured frequencies; all widths and alignments are illustrative and not
+  to scale.
 
 Rules for this class:
 
