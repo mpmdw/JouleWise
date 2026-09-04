@@ -155,7 +155,11 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         payload = (render_dir / "com.joulewise.magistrate.plist").read_bytes()
         plist = plistlib.loads(payload)
-        self.assertEqual(sys.executable, plist["ProgramArguments"][0])
+        rendered = Path(plist["ProgramArguments"][0])
+        self.assertTrue(rendered.is_absolute(), rendered)
+        # CPython reports the invoked symlink on some platforms and its target on
+        # others; the pin is the same executable either way.
+        self.assertEqual(Path(sys.executable).resolve(), rendered.resolve())
         self.assertNotIn(b"/usr/bin/env", payload)
 
     def test_render_refuses_system_python_without_repository_dependencies(self) -> None:
