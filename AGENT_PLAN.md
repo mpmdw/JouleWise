@@ -7,15 +7,17 @@ as the first research application that validates the harness.
 
 ## Ground Rules For Agents
 
-- At the start of every substantial run, read `RUN_STATE.md` first.
-- For any new/random user task, triage it in `TASK_QUEUE.md` before deciding
-  whether it outranks the current phase work.
-- At the start of each phase or major step, apply
-  `docs/planning_reflection_protocol.md` before implementation.
-- At the end of every substantial run, update `RUN_STATE.md` and add or update a
-  detailed report in `docs/run_reports/`. If advisor-visible state changed (a
-  phase or gate closed, a verdict landed, the schedule moved), refresh
-  `PROJECT_STATUS.md` too.
+- Start every substantial run with Mission M0 in `docs/agent_playbook.md`.
+  Read the generated `RUN_STATE.md` intake/restart region first and follow only
+  an active stop-card pointer when one is present.
+- Read the selected `docs/process/state_kernel.json` task record (or its
+  generated `TASK_QUEUE.md` projection), its authority and acceptance, and the
+  targeted plan before implementation. The kernel is the only editable source
+  for live work selection.
+- At the end of substantial work, update the kernel and run
+  `python3 scripts/gen_state.py`; never hand-edit either generated region. Add
+  or update the detailed report in `docs/run_reports/`. If advisor-visible
+  state changed, refresh `PROJECT_STATUS.md` too.
 - Check `docs/decision_log.md` before re-deciding anything; record new design
   decisions there with options and considerations.
 - Per-item phase status is asserted only in
@@ -42,9 +44,10 @@ report.
 | `PROJECT_STATUS.md` | advisor-facing status/plan/architecture summary (derived; update when advisor-visible state changes) |
 | `docs/phase_N/phase_N_plan.md` | step/slice detail: objectives, design, actions, evidence, fallbacks |
 | `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N, and per-item status (the authority, D-023) |
-| `TASK_QUEUE.md` | what to do next, and why it outranks the rest |
-| `docs/agent_playbook.md` | per-mission execution guides for agents: read-first lists, code-level routes, verification, handoff checklists |
-| `RUN_STATE.md` | current handoff: state, verification, next step |
+| `docs/process/state_kernel.json` | editable live work-selection state: lanes, ranks, dependencies, authority, acceptance, fences, and stop-card pointers |
+| `TASK_QUEUE.md` | generated detailed projection of the kernel, plus manual policy and history outside the generated region |
+| `docs/agent_playbook.md` | Mission M0 intake/close-out procedure and task-specific execution guides |
+| `RUN_STATE.md` | generated intake/restart projection plus hand-authored current facts |
 | `docs/decision_log.md` | design decisions, options, considerations |
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar constraints and phase target dates |
@@ -53,7 +56,8 @@ report.
 | `docs/contracts/adapter_contracts.md` | adapter behavior contracts |
 | `docs/contracts/node_worker_protocol.md` | remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3) |
 
-Superseded (2026-07-15, WO-021; D-043): `docs/process/state_kernel.json` is the sole editable authority for live work selection, while generated `TASK_QUEUE.md` and `RUN_STATE.md` regions are projections; see `docs/specs/c027/doc-008_state_kernel.md` §§3.1, 3.6, and 4.
+The retired `docs/planning_reflection_protocol.md` remains a compatibility
+pointer to these owners; it is not a separate intake or close-out procedure.
 
 ## Canonical Architecture
 
@@ -129,8 +133,9 @@ merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
 `docs/phase_2/phase_2_exit_checklist.md`. Gated-slice specs:
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
-Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
-gated on Phase 1 evidence); code-level specs for the gated slices live in
+Historical mock-first ordering is retained below as phase context; live
+selection comes only from the state kernel and its generated views. Code-level
+specs for the gated slices live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 - [x] 2A Run-bundle writer.
@@ -256,7 +261,7 @@ python3 -m joulewise report runs --output report   # needs the [analysis] extra
 
 Every big run must leave a human-readable handoff note. The report should cover:
 
-- Planning reflection performed at the start of the run.
+- The selected kernel task and any permitted selection override.
 - What changed.
 - What commands were run.
 - What passed or failed.
@@ -264,17 +269,17 @@ Every big run must leave a human-readable handoff note. The report should cover:
 - What the next agent should do first.
 - New or updated decision-log entries and risk-register statuses.
 
-The root `RUN_STATE.md` is the current handoff. Dated reports live in
-`docs/run_reports/`.
+The generated `RUN_STATE.md` intake/restart region is the current handoff.
+Dated reports live in `docs/run_reports/`.
 
 Every new phase also needs an exit checklist or equivalent section that states
-the evidence required to close that phase. See
-`docs/planning_reflection_protocol.md` for the reusable format.
+the evidence required to close that phase. D-023 and Mission M0 own that route.
 
 ## Task Queue Protocol
 
-Random or newly discovered work should be ranked in `TASK_QUEUE.md` before it is
-executed. The queue ranks tasks against:
+Random or newly discovered work is added and ranked in
+`docs/process/state_kernel.json`, then projected by `scripts/gen_state.py`; do
+not hand-edit the Current Queue. Mission M0 owns selection against:
 
 - Current repo state.
 - Recent commits.
@@ -283,4 +288,4 @@ executed. The queue ranks tasks against:
 - Safety risk and implementation dependency order.
 
 If a task is executed immediately, the run report should state why it outranked
-the current top queued task.
+the generated lane head and which permitted override applied.
