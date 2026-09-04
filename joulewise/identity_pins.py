@@ -35,6 +35,35 @@ IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA = (
 )
 IDENTITY_PIN_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
 
+# D-131 clause 2a: the Qwen2.5 gamma pack is a consumer of two named floor
+# producers, with one identity unit per measurement arm and model.  Keep the
+# ruling separate from the generic projection schema: other D-117 pack
+# families have different unit shapes, while this plan identity must never be
+# able to validate itself against a locally altered roster.
+D131_GAMMA_PLAN_ID = "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v3"
+D131_GAMMA_IDENTITY_UNIT_ROSTER = (
+    (
+        "A/decode",
+        "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3",
+        "../d117_floor_qwen25_1p5b_v3/calibration_plan.json",
+    ),
+    (
+        "A/prefill_p256",
+        "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3",
+        "../d117_floor_qwen25_1p5b_v3/calibration_plan.json",
+    ),
+    (
+        "B/decode",
+        "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v3",
+        "../d117_floor_qwen25_7b_v3/calibration_plan.json",
+    ),
+    (
+        "B/prefill_p256",
+        "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v3",
+        "../d117_floor_qwen25_7b_v3/calibration_plan.json",
+    ),
+)
+
 IDENTITY_PIN_PROJECTION_REASON_CODES = frozenset(
     {
         "readiness_identity_artifact_unreadable",
@@ -471,7 +500,43 @@ def _validate_supersedes(value: object, where: str) -> None:
         )
 
 
-def validate_identity_pin_projection(value: object) -> Mapping[str, Any]:
+def validate_d131_gamma_identity_unit_roster(
+    plan_id: object,
+    units: Sequence[Mapping[str, Any]],
+    *,
+    where: str = "identity_units",
+) -> None:
+    """Refuse a D-131 gamma roster that differs from its external ruling."""
+
+    if plan_id != D131_GAMMA_PLAN_ID:
+        return
+    observed = tuple(
+        (
+            unit.get("identity_unit_id"),
+            (
+                unit.get("producer_plan_reference", {}).get("plan_id")
+                if isinstance(unit.get("producer_plan_reference"), Mapping)
+                else None
+            ),
+            (
+                unit.get("producer_plan_reference", {}).get("path")
+                if isinstance(unit.get("producer_plan_reference"), Mapping)
+                else None
+            ),
+        )
+        for unit in units
+    )
+    if observed != D131_GAMMA_IDENTITY_UNIT_ROSTER:
+        raise IdentityPinProjectionError(
+            "readiness_identity_artifact_unreadable",
+            f"{where} differs from the ordered D-131 gamma unit roster",
+            observed={"identity_unit_roster": [list(row) for row in observed]},
+        )
+
+
+def validate_identity_pin_projection(
+    value: object, *, plan_id: object = None
+) -> Mapping[str, Any]:
     projection = _require_exact_keys(value, PROJECTION_FIELDS, "identity_pin_projection")
     if projection["work_order"] != IDENTITY_PIN_PROJECTION_WORK_ORDER:
         raise IdentityPinProjectionError(
@@ -536,6 +601,7 @@ def validate_identity_pin_projection(value: object) -> Mapping[str, Any]:
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable", "identity-unit IDs must be unique"
         )
+    validate_d131_gamma_identity_unit_roster(plan_id, units)
     if projection["state"] != "unprojected":
         receipt = _require_exact_keys(
             projection["projection_receipt"], {"path", "sha256"}, "projection_receipt"
@@ -874,8 +940,15 @@ def _authenticate_committed_freeze(
         committed_attachments = committed_tree_value.get("arm_attachments")
         if not isinstance(committed_attachments, Mapping):
             raise ValueError("committed plan tree has no arm attachments")
+        committed_plan = committed_tree_value.get("plan")
+        committed_plan_id = (
+            committed_plan.get("plan_id")
+            if isinstance(committed_plan, Mapping)
+            else None
+        )
         committed_projection = validate_identity_pin_projection(
-            committed_attachments.get("identity_pin_projection")
+            committed_attachments.get("identity_pin_projection"),
+            plan_id=committed_plan_id,
         )
     except (UnicodeDecodeError, ValueError) as exc:
         raise IdentityPinProjectionError(
@@ -1049,8 +1122,15 @@ def _committed_successor(
             candidate_attachments = candidate_tree.get("arm_attachments")
             if not isinstance(candidate_attachments, Mapping):
                 raise ValueError("plan tree has no arm attachments")
+            candidate_plan = candidate_tree.get("plan")
+            candidate_plan_id = (
+                candidate_plan.get("plan_id")
+                if isinstance(candidate_plan, Mapping)
+                else None
+            )
             candidate_projection = validate_identity_pin_projection(
-                candidate_attachments.get("identity_pin_projection")
+                candidate_attachments.get("identity_pin_projection"),
+                plan_id=candidate_plan_id,
             )
         except (UnicodeDecodeError, ValueError) as exc:
             raise IdentityPinProjectionError(
@@ -1719,7 +1799,11 @@ def _load_pack_projection(
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable", "plan tree arm_attachments are unavailable"
         )
-    projection = validate_identity_pin_projection(attachments.get("identity_pin_projection"))
+    plan = tree.get("plan")
+    plan_id = plan.get("plan_id") if isinstance(plan, Mapping) else None
+    projection = validate_identity_pin_projection(
+        attachments.get("identity_pin_projection"), plan_id=plan_id
+    )
     sidecar_path = pack_root / "plan_tree.sha256"
     try:
         if sidecar_path.is_symlink():
@@ -1757,7 +1841,7 @@ def _load_pack_projection(
             )
         producer = copy.deepcopy(dict(producer_value))
         producer_projection = validate_identity_pin_projection(
-            producer.get("identity_pin_projection")
+            producer.get("identity_pin_projection"), plan_id=plan_id
         )
         if producer_projection != projection:
             raise IdentityPinProjectionError(
@@ -2117,11 +2201,16 @@ def verify_frozen_projection(
         )
     root = Path(pack_root)
     tree, projection, _ = _load_pack_projection(root)
+    plan = tree.get("plan")
+    plan_id = plan.get("plan_id") if isinstance(plan, Mapping) else None
     if projection["state"] != "frozen":
         raise IdentityPinProjectionError(
             "readiness_identity_pinset_frozen_mismatch", "only a frozen projection may verify"
         )
     frozen_receipt, frozen_receipt_raw = _load_frozen_receipt(root, projection)
+    validate_d131_gamma_identity_unit_roster(
+        plan_id, frozen_receipt["identity_units"], where="receipt.identity_units"
+    )
     reasons: list[str] = []
     checks: list[dict[str, Any]] = []
     refusal_observed: dict[str, Any] = {}

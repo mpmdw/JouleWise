@@ -1830,7 +1830,8 @@ def build_tree(
             "identity_units": identity_units,
             "projection_receipt": None,
             "supersedes": [],
-        }
+        },
+        plan_id=PLAN_ID,
     )
     return {
         "schema_version": TREE_SCHEMA,

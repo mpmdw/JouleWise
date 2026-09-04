@@ -36,6 +36,7 @@ from joulewise.identity_pins import (
     _render_json,
     _require_exact_keys as _identity_require_exact_keys,
     _require_lower_sha256 as _identity_require_lower_sha256,
+    validate_d131_gamma_identity_unit_roster,
     validate_identity_pin_projection,
     validate_projection_receipt,
     verify_frozen_projection,
@@ -5619,7 +5620,11 @@ def _load_frozen_identity_evidence(
             else None
         )
         try:
-            projection = validate_identity_pin_projection(raw_projection)
+            plan = tree.get("plan")
+            plan_id = plan.get("plan_id") if isinstance(plan, Mapping) else None
+            projection = validate_identity_pin_projection(
+                raw_projection, plan_id=plan_id
+            )
         except IdentityPinProjectionError as exc:
             raise ArmReadinessError(exc.reason_code, str(exc)) from exc
         if projection["state"] != "frozen" or projection["projection_receipt"] is None:
@@ -5642,6 +5647,14 @@ def _load_frozen_identity_evidence(
         )
         plan = tree.get("plan")
         window = tree.get("window_identity")
+        try:
+            validate_d131_gamma_identity_unit_roster(
+                plan.get("plan_id") if isinstance(plan, Mapping) else None,
+                receipt["identity_units"],
+                where="receipt.identity_units",
+            )
+        except IdentityPinProjectionError as exc:
+            raise ArmReadinessError(exc.reason_code, str(exc)) from exc
         if (
             not isinstance(plan, Mapping)
             or not isinstance(window, Mapping)
@@ -5771,7 +5784,16 @@ def _authenticate_identity_arm_evidence(
         else None
     )
     try:
-        projection = validate_identity_pin_projection(raw_projection)
+        plan = tree.get("plan")
+        plan_id = plan.get("plan_id") if isinstance(plan, Mapping) else None
+        projection = validate_identity_pin_projection(
+            raw_projection, plan_id=plan_id
+        )
+        validate_d131_gamma_identity_unit_roster(
+            plan_id,
+            receipt["identity_units"],
+            where="receipt.identity_units",
+        )
     except IdentityPinProjectionError as exc:
         raise ArmReadinessError(exc.reason_code, str(exc)) from exc
     plan = tree.get("plan")
