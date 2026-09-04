@@ -884,27 +884,12 @@ class CaptureT0StepTests(unittest.TestCase):
     def test_prewindow_runs_prefixes_accept_live_family_and_refuse_stale_family(
         self,
     ) -> None:
-        """The operator gate must name the exact family installed as live.
+        """The executed selector must use the live family, not dead text."""
 
-        A successor-shaped name is insufficient: the retired ``_v2`` names
-        still match the general successor patterns.  The row registry is the
-        live-family authority, so a rollback of the script alone must fail.
-        """
-
-        repository = Path(__file__).resolve().parents[1]
-        source = (repository / "scripts/prewindow_check.sh").read_text(
-            encoding="utf-8"
-        )
-        observed = dict(
-            re.findall(
-                r"^\s*(alpha|beta|gamma)\) WINDOW_RUNS_PREFIX=(\S+) ;;$",
-                source,
-                re.MULTILINE,
-            )
-        )
+        source_repository = Path(__file__).resolve().parents[1]
         registry = json.loads(
             (
-                repository
+                source_repository
                 / "configs/arm_readiness/d117_row_registry_v2.json"
             ).read_text(encoding="utf-8")
         )
@@ -920,11 +905,98 @@ class CaptureT0StepTests(unittest.TestCase):
             "beta": "runs_d117_floor_qwen25_7b_v2",
             "gamma": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2",
         }
+        source = (source_repository / "scripts/prewindow_check.sh").read_text(
+            encoding="utf-8"
+        )
+        unreachable_live_table = "\n".join(
+            (
+                "",
+                "# Counterfactual decoy: valid source text that is never executed.",
+                'case "__unreachable_live_selector_table__" in',
+                *(
+                    f"  {window}) WINDOW_RUNS_PREFIX={prefix} ;;"
+                    for window, prefix in sorted(expected.items())
+                ),
+                "esac",
+                "",
+            )
+        )
 
-        self.assertEqual(observed, expected)
-        for window, stale_prefix in sorted(retired.items()):
-            with self.subTest(window=window):
-                self.assertNotEqual(observed[window], stale_prefix)
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            script = repository / "scripts/prewindow_check.sh"
+            script.parent.mkdir()
+            script.write_text(source + unreachable_live_table, encoding="utf-8")
+
+            fake_bin = repository / "fake-bin"
+            fake_bin.mkdir()
+            commands = {
+                "ps": "exit 0\n",
+                "uptime": (
+                    "printf '%s\\n' "
+                    "'12:00 up 1 day, load averages: 0.10 0.20 0.30'\n"
+                ),
+                "pmset": "printf \"%s\\n\" \"Now drawing from 'AC Power'\"\n",
+                "df": (
+                    "printf '%s\\n' "
+                    "'Filesystem blocks Used Available Capacity Mounted' "
+                    "'/dev/disk 1 1 100 1% /'\n"
+                ),
+            }
+            for name, body in commands.items():
+                command = fake_bin / name
+                command.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+                command.chmod(0o755)
+            environment = {
+                **os.environ,
+                "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+            }
+
+            for window in sorted(expected):
+                live_root = repository / expected[window]
+                live_root.mkdir()
+                (live_root / "occupied").write_text("live", encoding="utf-8")
+                live_occupied = subprocess.run(
+                    ["/bin/bash", str(script), "--window", window],
+                    cwd=repository,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                with self.subTest(window=window, occupied="live"):
+                    self.assertEqual(
+                        live_occupied.returncode,
+                        1,
+                        live_occupied.stdout + live_occupied.stderr,
+                    )
+                    self.assertIn(
+                        f"BLOCK runs roots already exist for window {window}",
+                        re.sub(r"\x1b\[[0-9;]*m", "", live_occupied.stdout),
+                    )
+                    self.assertIn(str(live_root), live_occupied.stdout)
+                    self.assertIn("NOT READY.", live_occupied.stdout)
+
+                shutil.rmtree(live_root)
+                stale_root = repository / retired[window]
+                stale_root.mkdir()
+                (stale_root / "occupied").write_text("stale", encoding="utf-8")
+                stale_only = subprocess.run(
+                    ["/bin/bash", str(script), "--window", window],
+                    cwd=repository,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                with self.subTest(window=window, occupied="retired"):
+                    self.assertEqual(
+                        stale_only.returncode,
+                        0,
+                        stale_only.stdout + stale_only.stderr,
+                    )
+                    self.assertIn("READY.", stale_only.stdout)
+                shutil.rmtree(stale_root)
 
     def test_cli_usage_error_is_a_registered_json_refusal(self) -> None:
         completed = subprocess.run(
