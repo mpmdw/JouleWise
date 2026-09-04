@@ -34,6 +34,7 @@ from joulewise.arm_readiness import (
     verify_receipt,
 )
 from scripts import generate_arm_readiness as arm_readiness_cli
+from tests.git_fixture import init_git_fixture
 from tests.test_arm_readiness_schemas import (
     sample_arm,
     sample_dry_run,
@@ -493,16 +494,9 @@ def make_go_fixture(
             status=predecessor_status,
             plan_path_spelling=predecessor_plan_path_spelling,
         )
-    git(repo, "init", "-q")
+    init_git_fixture(repo, "-q")
     git(repo, "config", "user.email", "tests@joulewise.invalid")
     git(repo, "config", "user.name", "JouleWise tests")
-    # EVIDENCE-AUTHOR-GIT-TEARDOWN-01: detached git maintenance spawned by
-    # fixture commits can outlive the test and race TemporaryDirectory
-    # cleanup under .git (ENOTEMPTY — the #121 mechanism class). Disable it
-    # at creation so nothing races cleanup; prevention over errno tolerance
-    # because no test in this fixture family asserts maintenance behavior.
-    git(repo, "config", "gc.auto", "0")
-    git(repo, "config", "maintenance.auto", "false")
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "pack")
     git(repo, "branch", "-M", "main")
@@ -1293,7 +1287,7 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         predecessor = predecessor_pack_root(wt_txn, pack.name)
         declared_checkout = wt_txn.parent / "declared-measurement-checkout"
         declared_checkout.mkdir()
-        git(declared_checkout, "init", "-q")
+        init_git_fixture(declared_checkout, "-q")
         script = ROOT / "scripts/generate_arm_readiness.py"
         command = [
             sys.executable,

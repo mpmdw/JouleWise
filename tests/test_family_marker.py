@@ -15,6 +15,7 @@ from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import scheduler_gates
+from tests.git_fixture import init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -927,8 +928,8 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
         (repository / registry_relative).write_bytes(
             (ROOT / registry_relative).read_bytes()
         )
+        init_git_fixture(repository, "-q")
         for command in (
-            ("init", "-q"),
             ("config", "user.email", "test@example.invalid"),
             ("config", "user.name", "S1 Finish Round"),
             ("checkout", "-q", "-B", "main"),
@@ -1402,7 +1403,7 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
                 check=True, capture_output=True, text=True,
             ).stdout.strip()
 
-        git("init", "-q")
+        init_git_fixture(repository, "-q")
         git("config", "user.email", "test@example.invalid")
         git("config", "user.name", "S0-O2 cure")
         (repository / "dependency.txt").write_text("stable\n")

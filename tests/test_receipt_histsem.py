@@ -39,6 +39,7 @@ from tests.test_arm_readiness_evidence_author import (
 )
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 from tests.test_arm_readiness_lifecycle import commit_u11_projection
+from tests.git_fixture import init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -654,7 +655,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "repo"
             repository.mkdir()
-            git(repository, "init", "-q")
+            init_git_fixture(repository, "-q")
             git(repository, "config", "user.email", "tests@joulewise.invalid")
             git(repository, "config", "user.name", "JouleWise tests")
             pack = repository / "configs/campaigns/synthetic-pack"
@@ -1007,7 +1008,7 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         repository = Path(temporary.name) / "repository"
         repository.mkdir()
-        git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         git(repository, "config", "user.email", "histsem-sidecars@invalid")
         git(repository, "config", "user.name", "histsem sidecar test")
         scripts = repository / "scripts"
@@ -1698,7 +1699,7 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
         custody = Path(temporary.name) / "custody"
         repository.mkdir()
         custody.mkdir()
-        git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         git(repository, "config", "user.email", "test@example.invalid")
         git(repository, "config", "user.name", "S1 Finish Round")
         (repository / "dependency.txt").write_text("stable\n")
@@ -2067,7 +2068,7 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
         # the plan-tree gate that follows the pre-authoring test.
         (pack / "plan_tree.json").write_bytes(render_json({"arm_attachments": {}}))
         (pack / "producer_contract.json").write_bytes(render_json({"revision": 1}))
-        git(repository, "init", "-q", "-b", "main")
+        init_git_fixture(repository, "-q", "-b", "main")
         git(repository, "config", "user.name", "histsem test")
         git(repository, "config", "user.email", "histsem@invalid")
         git(repository, "add", "-A")

@@ -19,6 +19,8 @@ import unittest
 from unittest import mock
 import warnings
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "issue_dg071_dg075_statistics.py"
@@ -826,7 +828,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             fixture.write_bytes(fixture_raw)
             script = checkout / path
             script.parent.mkdir(parents=True)
-            git(checkout, "init", "--quiet")
+            init_git_fixture(checkout, "--quiet")
             git(checkout, "checkout", "--quiet", "-b", "trunk")
             commit(checkout, "root", date=stamp(0))
             script.write_bytes(script_raw + b"# earlier revision\n")
