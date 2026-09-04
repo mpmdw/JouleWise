@@ -44,25 +44,26 @@ ratio forbids the subtitle. -->
 
 ## 1. Introduction
 
-This paper uses these names. A *power sample* is one start-to-end average; the *physical ambiguity* is that it can cross the dividing time and move energy between two request parts. *Prompt processing*, or *prefill*, reads the input through its first output token; *token generation*, or *decode*, emits later tokens. A *phase edge* is the recorded time between them. A *configuration cell* groups the same work, model, machine, software, and power definition; a *component* is one within-model repeat or four-run between-model calculation. *Commanded graphics-processor pulses* are fixed-duration work with time-stamped commands, and an *uninterrupted collection* is one power recording that never stopped. The *pulse-derived limit* is the largest timing displacement those pulse records allow; matching *edge behavior* means that the power record locates pulse and model-work edges with the same error. A *recorded-edge limit* uses stored times, while a *moved-edge limit* uses every *permitted edge movement*. Their division is an *independent-edge ratio* when runs move separately and a *shared-error ratio* when one error moves across four comparison runs. *Authentication* matches inputs to named source-file contents; *evaluation* requires a nonzero second value, making the ratio *evaluable*. A *twofold boundary contribution* means the moved-edge limit is at least twice the recorded-edge limit. A *decision rule* fixed before collection reports a direction only when the measured difference clears the *largest spurious difference*, the largest false difference the calculation can create, and the *uncertainty range*, the lowest through highest value after known errors, stays on that direction. *Short-input diagnostic records* are earlier non-claim measurements; *overlapping power samples* cross a measured part. *Internal processor-power fields* are macOS-reported processor powers, not wall-outlet power. An *inserted-gap check* places about 500 ms of no work between the parts and compares its time-stamped edges with the power record.
-
 <!-- BUILD NOW — source: results-fill-registry V5-ID-001/002 and V5-WL-001–005; reviewer C4; magistrate R-B2. Physical mechanism, research question, and frozen pins are written now; only measurement-dependent values retain registered omissions. -->
 
 This capstone asks a measurement question before it asks a model-comparison
 question. macOS `powermetrics` is the power sampler used here. A sampling record
 is one sampler output that averages processor power from its recorded
-start time to its recorded end time. A phase edge is the runtime time that
-divides one part of an inference request from the next. The record's integrated energy,
-the time integral \(\int P(t)\,dt\) of power over that record, moves from one
-phase to the other when the edge moves within the record even though the
-request total stays unchanged.
+start time to its recorded end time. An inference request first reads its
+input through production of the first output token; this paper calls that
+prompt processing, or *prefill*. It then emits later output tokens; this is
+token generation, or *decode*. The runtime-recorded time between those parts
+is the phase edge.
 
-Prompt processing reads the prompt through production of the first output
-token; this paper calls it *prefill*. Token generation emits the later output
-tokens; this paper calls it *decode*. Repeating the same request can narrow
-ordinary run-to-run scatter, but it cannot remove a shared boundary
-displacement: if every repeat assigns the same slice of one record to the
-wrong phase, averaging repeats preserves that reassignment.
+One sampling record can begin during prefill and end during decode. It then
+reports one average power for a span that contains both parts, rather than one
+value for each. JouleWise assigns the record by multiplying that average by
+the time on each side of the phase edge. The record's integrated energy is the
+time integral \(\int P(t)\,dt\) over its full span. Moving the edge within the
+same record transfers a slice of that energy from one phase to the other, but
+the request total does not change. Repeating the request can narrow ordinary
+run-to-run scatter; it cannot remove a displacement shared by every repeat,
+because averaging preserves the same transferred slice.
 
 The experiment is deliberately narrow. It measures one Apple M3 Max with
 128 GB of unified memory and one configuration of `powermetrics`. MLX is
@@ -70,40 +71,67 @@ Apple's on-device inference framework used to run the models. The resulting
 bounds do not transfer to another machine,
 software stack, workload, or power sampler.
 
-JouleWise therefore calibrates edge placement inside each measurement window,
-one uninterrupted measurement session, with commanded GPU pulses. It also uses
-a rate-aware clock mapping: rather than assuming the computer's wall clock and
-its never-adjusted monotonic clock advance at exactly the same rate, it places
-each wall-clock reading between the monotonic-clock readings taken immediately
+To measure the edge problem rather than assume its size, JouleWise creates
+edges whose physical times it controls. **Commanded graphics-processor
+pulses** are fixed-duration GPU work with time-stamped start and stop commands,
+recorded inside a measurement window—one uninterrupted measurement session.
+The largest displacement between the commanded times and every edge position
+allowed by the pulse records is the **pulse-derived limit**. Applying that
+limit to inference assumes that the power record locates pulse edges and
+model-work edges with the same error. Because pulses are not inference, a
+later **inserted-gap check** creates about 500 ms of no work between prefill and
+decode and compares the gap's independently time-stamped edges with the power
+record.
+
+Edge placement also depends on clock placement. A rate-aware clock mapping
+does not assume that the computer's wall clock and its never-adjusted
+monotonic clock advance at exactly the same rate. Instead, it places each
+wall-clock reading between the monotonic-clock readings taken immediately
 before and after it. Those are the bracketed readings; the method retains every
 fixed-rate, offset mapping that they and the power-record labels permit. The
-calibration and mapping bound how far an edge may move before phase energy is
-recomputed.
+pulse calibration and clock mapping together bound how far a phase edge may
+move before its energy is recomputed.
 
-A cell is the set of runs with one phase, workload, model, hardware, software,
-and power-measurement boundary. Its **resolution bound**—the **detection
+A **configuration cell**, shortened below to **cell**, is the set of runs with
+one phase, workload, model, hardware, software, and power-measurement boundary.
+Within a cell, a component is one within-model repeat calculation or one
+four-run between-model calculation. The cell's **resolution bound**—the **detection
 floor** in the advisor's terminology—is the largest false phase-energy
 difference allowed by the fixed calculation for that cell before the
 safeguards in Section 4; the artifacts call the final gate value after
 those safeguards the **cell floor**.
-The research question is whether permitted edge movement at least doubles each
-source of false difference. Let \(U_{\mathrm{point}}\) be a component bound calculated
-at the recorded edges and \(U_{\mathrm{corner}}\) its counterpart after every allowed
+
+The research question is whether permitted edge movement—every lower-or-upper
+edge position allowed by that calibration and mapping—at least doubles each
+component's source of false difference. Let \(U_{\mathrm{point}}\) be a component bound calculated
+at the recorded edges; this is the **recorded-edge limit**. Let
+\(U_{\mathrm{corner}}\) be its counterpart after every allowed
 lower-or-upper edge choice for that component is evaluated jointly and the
-largest result retained. The independent-movement quotient is
-\(U_{\mathrm{corner}}/U_{\mathrm{point}}\). Shared movement
-uses a different numerator: one sign moves calibration error together across
-all blocks, one local sign moves the remaining error separately in each block,
-and the resulting quotient is \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). Any required
-quotient below 2 falsifies the claim; equality passes. An A/B/B/A block is four
-runs in the order A, B, B, A. Ordinary \(R\) moves the edges of each run
-(member) of that block independently. A timing-error sign says which direction
-the allowed error moves energy: a shared sign is one choice applied across all
-blocks, while a local sign is chosen separately for each block. Comparative
-\(R_{cm}\) replays those shared and local choices. In plain terms, the question
-is whether uncertainty
-about where the phase starts or ends is at least as large as the ordinary
-variation already present in the repeated measurements.
+largest result retained. This is the **moved-edge limit**. Their quotient,
+\(U_{\mathrm{corner}}/U_{\mathrm{point}}\), is the **independent-edge ratio** because each
+run's edge may move separately. A four-run comparison has an additional
+physical problem: one timing error can
+be common to all four runs. An A/B/B/A block is four runs in the order A, B, B,
+A. A timing-error sign says which direction the allowed error moves energy. A
+shared sign is one choice applied across all blocks, while a local sign is
+chosen separately for each block. Shared movement uses a different numerator:
+one sign moves calibration error together across all blocks, one local sign
+moves the remaining error separately in each block, and the **shared-error
+ratio** is \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). In plain terms, both ratios ask
+whether uncertainty about where a phase starts or ends is at least as large as
+the ordinary variation already present in the repeated measurements.
+
+Before either ratio is compared with 2, **authentication** matches every input
+to its named source-file contents. **Evaluation** then requires a nonzero
+recorded-edge limit, making the ratio evaluable. Any required ratio below 2
+falsifies the claim; equality passes. A ratio of at least 2 means that moving
+the edge adds at least one entire recorded-edge limit to the bound—the
+**twofold boundary contribution** tested here.
+
+That ratio result does not by itself choose between models. The
+**decision rule**, fixed before collection, reports a direction only when the
+measured difference clears its cell floor and the full lowest-to-highest range
+after known errors stays on the direction fixed before collection.
 
 The fixed demonstration compares the small model `qwen3-1p7b`, revision
 `3b1b1768f8f8cf8351c712464f906e86c2b8269e`, with the large model `qwen3-8b`,
@@ -795,7 +823,8 @@ interval, formed by extending both ends of that measurement interval by the
 sum of the recorded deterministic bounds. A deterministic bound is a
 non-random maximum displacement carried in the authenticated block record. An
 **interpolation edge** is a phase window's start or end when it falls between
-two neighboring power samples; the calculation assigns power there from the
+two neighboring power samples; each sample is a sampler record reporting one
+start-to-end average. The calculation assigns power there from the
 straight line joining those samples, moves the start and end through their
 allowed neighboring-sample gaps, and retains the largest resulting energy
 change. The named **deterministic-bound kinds** are that joint interpolation-edge
@@ -1689,21 +1718,22 @@ The reading order tested here is the selected draft's real order: title, the one
 
 | Term | First reader-facing home | Status | Definition or disposition |
 |---|---|---|---|
-| commanded graphics-processor pulses / uninterrupted collection | 1. Introduction | glossed-at-first-use | Fixed-duration graphics-processor work with time-stamped start and stop commands, recorded inside one continuous power recording that was never stopped. |
-| pulse-derived limit / edge behavior | 1. Introduction | glossed-at-first-use | Largest timing displacement allowed by the pulse records; edge behavior asks whether the power record locates pulse and model-work starts and stops with the same timing error. |
+| commanded graphics-processor pulses | 1. Introduction | glossed-at-first-use | Fixed-duration graphics-processor work with time-stamped start and stop commands inside one uninterrupted measurement session. |
+| pulse-derived limit | 1. Introduction | glossed-at-first-use | Largest displacement between the commanded times and every edge position allowed by the pulse records. |
 | component | 1. Introduction | glossed-at-first-use | One separate within-model repeat calculation or between-model four-run calculation. |
-| largest spurious difference / permitted edge movement | 1. Introduction | glossed-at-first-use | Largest false energy difference the fixed calculation can create, followed by every allowed movement of the stored dividing time. |
+| permitted edge movement | 1. Introduction | glossed-at-first-use | Every lower-or-upper edge position allowed by the pulse calibration and clock mapping. |
 | independent-edge ratio / four-run comparison / timing error common to a four-run comparison | 1. Introduction | glossed-at-first-use | Moved-edge limit divided by recorded-edge limit with separate movement per run; the shared version moves one timing error across four comparison runs. |
 | moved-edge limit / recorded-edge limit | 1. Introduction | glossed-at-first-use | The first uses every allowed edge movement; the second uses the stored edge times. |
-| decision rule / uncertainty range / direction fixed before collection | 1. Introduction | glossed-at-first-use | A direction prints only when the measured difference clears the false-difference limit and the lowest-to-highest range after known measurement errors stays on the direction chosen before collection. |
-| short-input diagnostic records / overlapping power samples / internal processor-power fields | 1. Introduction | glossed-at-first-use | Earlier non-claim measurements of brief requests; sampler records crossing the measured part; and processor powers reported by macOS rather than wall-outlet power. |
+| decision rule | 1. Introduction | glossed-at-first-use | A direction prints only when the measured difference clears its cell floor and the lowest-to-highest range after known measurement errors stays on the direction fixed before collection. |
 | twofold boundary contribution | 1. Introduction | glossed-at-first-use | The moved-edge limit is at least twice the recorded-edge limit. |
 | prompt processing / prefill | 1. Introduction | glossed-at-first-use | Prompt work through the first output token; the shorthand follows the physical phrase. |
 | token generation / decode | 1. Introduction | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
+| phase edge | 1. Introduction | glossed-at-first-use | Runtime-recorded time between prompt processing and token generation. |
 | phase boundary | 2. In-window calibration method | glossed-at-first-use | Runtime-recorded time separating prompt processing and token generation. |
 | powermetrics | 1. Introduction | glossed-at-first-use | The macOS power sampler and its start-to-end interval-average record are stated at first use. |
 | Apple M3 Max / 128 GB unified memory | 1. Introduction | glossed-at-first-use | The single measured machine and its memory capacity. |
 | sampling record | 1. Introduction | glossed-at-first-use | One sampler output averaging processor power from its recorded start to its recorded end. |
+| power sample | Adding publication safeguards after the ratio | glossed-at-first-use | A sampler record that reports one start-to-end average; the interpolation calculation uses its neighboring samples. |
 | integrated energy | 1. Introduction | glossed-at-first-use | The time integral of power over a sampling record. |
 | detection floor | 1. Introduction | glossed-at-first-use | The advisor's term for the resolution bound before the safeguards; the artifacts call the final gate value after those safeguards the cell floor. |
 | \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | 1. Introduction | glossed-at-first-use | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement uses the separately defined \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
@@ -1742,7 +1772,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | refused / refuses | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English rejection verbs used consistently for a calculation that cannot authorize evidence. |
 | monotonic clock | 1. Introduction | glossed-at-first-use | A counter that advances but is never corrected to civil time. |
 | straight-line clock mappings / rate-aware model | Bracketed pulse-train algorithm | glossed-at-first-use | The retained linear rate-and-offset mappings and the unequal fixed-rate correction are stated in the same paragraph. |
-| missing / malformed / physical ambiguity / power sample | 1. Introduction | glossed-at-first-use | A power sample is one start-to-end average; the physical ambiguity is that it can cross the dividing time and move energy between request parts. Missing and malformed retain their plain-English meanings. |
+| missing / malformed | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English absent or structurally invalid inputs. |
 | unbounded | Bracketed pulse-train algorithm | glossed-at-first-use | The allowed rate reaches the edge of its search box. |
 | Student-\(t\) | Bracketed pulse-train algorithm | glossed-at-first-use | A small-sample bell curve, wider because spread is estimated from 17 captures. |
 | 99% quantile / \(t_{0.995,16}\) | Bracketed pulse-train algorithm | glossed-at-first-use | Two-sided 99% is tied to the 0.995 one-sided point with 16 degrees of freedom. |
@@ -1753,7 +1783,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | ROUND_HALF_EVEN / nearest microsecond | Bracketed pulse-train algorithm | glossed-at-first-use | Nearest-microsecond rounding with an exact tie going to the even digit. |
 | minimum allowance / operative timing bound / \(B_{\mathrm{fiducial}}\) / \(b\) | Bracketed pulse-train algorithm | glossed-at-first-use | The corpus lower allowance, one-capture pulse-plus-anchor bound, and distinct window bound are separated and numerically worked. |
 | stage / block member | Bracketed pulse-train algorithm | glossed-at-first-use | A back-to-back declared run group and one of its four individual A/B/B/A runs. |
-| members | 1. Introduction | glossed-at-first-use | A member is one run of a block; the four-run order is defined at the same first use. |
+| members | Bracketed pulse-train algorithm | glossed-at-first-use | The four individual runs in an A/B/B/A science block. |
 | A/B/B/A order / block difference | Bracketed pulse-train algorithm | glossed-at-first-use | The four-member order and \((B_1+B_2-A_1-A_2)/2\) contrast are printed together. |
 | curvature | Bracketed pulse-train algorithm | glossed-at-first-use | Drift that bends rather than runs straight. |
 | whole-window allowance / energy family | Bracketed pulse-train algorithm | glossed-at-first-use | A once-added joule allowance for a group reduced under one energy definition. |
@@ -1761,7 +1791,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | Worked current-capture arithmetic | One diagnostic reconstruction | glossed-at-first-use | The bold label introduces a raw-stamp-to-maximal-pulse diagnostic calculation. |
 | onset lag / offset lag / pulse residual | One diagnostic reconstruction | glossed-at-first-use | Observed edge minus its matching commanded edge; the residual is the largest endpoint magnitude before the anchor term. |
 | record clipping / clip a record | 4. How the method bounds a false phase-energy difference | glossed-at-first-use | Keep only record time inside the phase and multiply duration by average power; the joule example is worked. |
-| cell | 1. Introduction | glossed-at-first-use | A configuration cell groups runs sharing work, model, machine, software, and power definition. |
+| configuration cell / cell | 1. Introduction | glossed-at-first-use | A configuration cell groups runs sharing work, model, machine, software, and power definition; the shorter name follows in the defining sentence. |
 | false-difference components / false-difference | Abstract | glossed-at-first-use | The Abstract first builds the false difference as the largest reassignment after every allowed movement of the dividing time. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | 3. Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
@@ -1808,7 +1838,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | local sign | 1. Introduction | glossed-at-first-use | The comparative replay chooses one separately for each block. |
 | local half-width / shared sign | 1. Introduction | glossed-at-first-use | Shared sign is defined in Section 1; the later construction defines the local half-width. |
 | half-width | 3. Instrument characterization | glossed-at-first-use | A timing half-width is half an allowed timing range. |
-| \(R_{cm}\) | 1. Introduction | glossed-at-first-use | Comparative edge-moved ratio with one shared timing-error sign across all blocks and one local sign per block. |
+| \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Comparative edge-moved ratio with one shared timing-error sign across all blocks and one local sign per block. |
 | shared-error ratio | 1. Introduction | glossed-at-first-use | The moved-edge to recorded-edge division when one timing error moves across the four-run comparison. |
 | not_applicable / absolute \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A uniform shared shift cancels when the absolute formula subtracts its cell mean. |
 | two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
@@ -1958,4 +1988,4 @@ The reading order tested here is the selected draft's real order: title, the one
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 265; FAILS: 0.
+a failure. Terms inventoried: 266; FAILS: 0.
