@@ -652,19 +652,47 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             second.with_suffix(".md").read_bytes(),
         )
 
-    def test_producer_commit_is_the_scripts_last_commit_not_head(self) -> None:
-        """Two checkouts at DIFFERENT heads, same script commit: identical bytes.
+    def test_git_commit_uses_the_disclosed_path_query(self) -> None:
+        """Counterfactual: any argv substitution violates the published contract."""
 
-        Counterfactual: a producer recording ``git rev-parse HEAD`` yields two
-        different ``git_commit`` values here (the heads differ) and can never
-        be replayed byte for byte at the commit that contains its artifact.
+        expected_commit = "a" * 40
+        completed = mock.Mock(stdout=f"{expected_commit}\n")
+        with mock.patch.object(
+            ISSUER.subprocess, "run", return_value=completed
+        ) as run:
+            self.assertEqual(ISSUER._git_commit(self.root), expected_commit)
+
+        run.assert_called_once_with(
+            [
+                "git",
+                "log",
+                "-1",
+                "--format=%H",
+                "--",
+                ISSUER.SCRIPT_REPOSITORY_PATH,
+            ],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_producer_commit_on_axis_derived_history_pair(self) -> None:
+        """Exercise the disclosed query on the ruled F2 repository pair.
+
+        Both repositories share root -> add -> L, where L changes the producer
+        to the bytes on disk. Repository A stops at L. Repository B merges L
+        with ``--no-ff``, changes another script, adds an empty commit, and has
+        a later producer change on an unreachable ref. Distinct pinned commit
+        times make the query independent of timestamp tie-breaking.
         """
 
         checkouts = [self.root / "checkout-a", self.root / "checkout-b"]
         fixture_raw = self.bundle.read_bytes()
         script_raw = SCRIPT_PATH.read_bytes()
+        path = ISSUER.SCRIPT_REPOSITORY_PATH
 
-        def git_environment(date: str) -> dict[str, str]:
+        def environment(date: str) -> dict[str, str]:
             return {
                 **os.environ,
                 "GIT_AUTHOR_NAME": "Fixture Author",
@@ -675,86 +703,91 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                 "GIT_COMMITTER_DATE": date,
             }
 
-        def git(checkout: Path, *arguments: str, date: str) -> str:
+        def git(
+            checkout: Path,
+            *arguments: str,
+            date: str = "2000-01-01T00:00:00+00:00",
+        ) -> str:
             completed = subprocess.run(
                 ["git", "-c", "commit.gpgSign=false", *arguments],
                 cwd=checkout,
-                env=git_environment(date),
+                env=environment(date),
                 check=True,
                 capture_output=True,
                 text=True,
             )
             return completed.stdout.strip()
 
-        outputs = []
-        script_commits = []
+        def commit(checkout: Path, message: str, *, date: str) -> str:
+            git(checkout, "add", "-A", date=date)
+            git(
+                checkout,
+                "commit",
+                "--quiet",
+                "--allow-empty",
+                "-m",
+                message,
+                date=date,
+            )
+            return git(checkout, "rev-parse", "HEAD")
+
+        def stamp(second: int) -> str:
+            return f"2000-01-01T00:00:{second:02d}+00:00"
+
+        def sha256_at(checkout: Path, commit_id: str) -> str:
+            blob = subprocess.run(
+                ["git", "show", f"{commit_id}:{path}"],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+            ).stdout
+            return hashlib.sha256(blob).hexdigest()
+
+        outputs: list[bytes] = []
+        producer_commits: list[str] = []
         for index, checkout in enumerate(checkouts):
             fixture = checkout / ISSUER.PINNED_BUNDLE_REPOSITORY_PATH
             fixture.parent.mkdir(parents=True)
             fixture.write_bytes(fixture_raw)
-            script = checkout / ISSUER.SCRIPT_REPOSITORY_PATH
+            script = checkout / path
             script.parent.mkdir(parents=True)
-            script.write_bytes(script_raw)
             init_git_fixture(checkout, "--quiet")
-            # History in each repository: root (empty) -> producer -> a commit
-            # touching an unrelated file -> a later empty commit. The first
-            # three are identical in both repositories (same trees, messages
-            # and pinned dates); the last differs by date so the two HEADs are
-            # different commits. The producer commit is therefore neither the
-            # root, nor HEAD, nor HEAD's parent, nor the last commit of the
-            # history: only a path-scoped lookup finds it (a HEAD, HEAD^ or
-            # unscoped `git log -1` implementation records the wrong commit).
-            git(
-                checkout,
-                "commit",
-                "--quiet",
-                "--allow-empty",
-                "-m",
-                "root",
-                date="2000-01-01T00:00:00+00:00",
-            )
-            git(
-                checkout,
-                "add",
-                ISSUER.SCRIPT_REPOSITORY_PATH,
-                date="2000-01-01T00:00:00+00:00",
-            )
-            git(
-                checkout,
-                "commit",
-                "--quiet",
-                "-m",
-                "producer",
-                date="2000-01-01T00:00:00+00:00",
-            )
-            script_commits.append(
-                git(checkout, "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00")
-            )
-            (checkout / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
-            git(checkout, "add", "unrelated.txt", date="2000-01-01T00:00:00+00:00")
-            git(
-                checkout,
-                "commit",
-                "--quiet",
-                "-m",
-                "unrelated",
-                date="2000-01-01T00:00:00+00:00",
-            )
-            git(
-                checkout,
-                "commit",
-                "--quiet",
-                "--allow-empty",
-                "-m",
-                "later",
-                date=f"2000-01-0{index + 2}T00:00:00+00:00",
-            )
-            head = git(checkout, "rev-parse", "HEAD", date="2000-01-01T00:00:00+00:00")
-            head_parent = git(
-                checkout, "rev-parse", "HEAD^", date="2000-01-01T00:00:00+00:00"
-            )
-            self.assertNotEqual(head, script_commits[-1])
-            self.assertNotEqual(head_parent, script_commits[-1])
+            git(checkout, "checkout", "--quiet", "-b", "trunk")
+            commit(checkout, "root", date=stamp(0))
+            script.write_bytes(script_raw + b"# earlier revision\n")
+            add_commit = commit(checkout, "add producer", date=stamp(1))
+            script.write_bytes(script_raw)
+            producer = commit(checkout, "modify producer", date=stamp(2))
+            producer_commits.append(producer)
+
+            if index == 1:
+                git(checkout, "checkout", "--quiet", "-B", "trunk", add_commit)
+                git(
+                    checkout,
+                    "merge",
+                    "--quiet",
+                    "--no-ff",
+                    "-m",
+                    "merge producer",
+                    producer,
+                    date=stamp(3),
+                )
+                merge_commit = git(checkout, "rev-parse", "HEAD")
+                (checkout / "scripts" / "other.py").write_text(
+                    "x = 1\n", encoding="utf-8"
+                )
+                commit(checkout, "other script", date=stamp(4))
+                empty_commit = commit(checkout, "later", date=stamp(5))
+                git(checkout, "checkout", "--quiet", "-b", "unreachable", producer)
+                script.write_bytes(script_raw + b"# unreachable later revision\n")
+                commit(
+                    checkout,
+                    "unreachable producer change",
+                    date=stamp(6),
+                )
+                git(checkout, "checkout", "--quiet", "trunk")
+
+            head = git(checkout, "rev-parse", "HEAD")
             out = checkout / "issued.json"
             exit_code, stderr, _ = self._run_main(
                 out,
@@ -765,11 +798,78 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             self.assertEqual(exit_code, 0, stderr)
             outputs.append(out.read_bytes())
             payload = json.loads(outputs[-1])
-            self.assertEqual(payload["producer"]["git_commit"], script_commits[-1])
-            self.assertNotEqual(payload["producer"]["git_commit"], head)
-            self.assertNotEqual(payload["producer"]["git_commit"], head_parent)
+            recorded = payload["producer"]["git_commit"]
+            self.assertEqual(recorded, producer)
+            self.assertEqual(
+                sha256_at(checkout, recorded),
+                payload["producer"]["script_sha256"],
+            )
+            self.assertEqual(
+                git(checkout, "rev-list", f"{recorded}..HEAD", "--", path),
+                "",
+            )
+            self.assertNotEqual(add_commit, recorded)
 
-        self.assertEqual(script_commits[0], script_commits[1])
+            dates = git(checkout, "log", "--all", "--format=%aI").splitlines()
+            self.assertEqual(len(dates), len(set(dates)))
+            if index == 0:
+                self.assertEqual(head, recorded)
+            else:
+                merge_parents = git(
+                    checkout, "show", "-s", "--format=%P", merge_commit
+                ).split()
+                self.assertEqual(len(merge_parents), 2)
+                self.assertEqual(merge_parents[1], recorded)
+                self.assertEqual(
+                    git(checkout, "rev-parse", f"{empty_commit}^{{tree}}"),
+                    git(checkout, "rev-parse", f"{empty_commit}^^{{tree}}"),
+                )
+                for depth in ("HEAD", "HEAD^", "HEAD~2", "HEAD~3"):
+                    self.assertNotEqual(git(checkout, "rev-parse", depth), recorded)
+                for candidate in (
+                    git(checkout, "log", "-1", "--format=%H"),
+                    git(
+                        checkout,
+                        "log",
+                        "-1",
+                        "--format=%H",
+                        "--",
+                        "scripts/",
+                    ),
+                    git(
+                        checkout,
+                        "log",
+                        "-1",
+                        "--format=%H",
+                        "--",
+                        "scripts/*.py",
+                    ),
+                    git(
+                        checkout,
+                        "log",
+                        "--first-parent",
+                        "-1",
+                        "--format=%H",
+                        "--",
+                        path,
+                    ),
+                    git(
+                        checkout,
+                        "log",
+                        "--all",
+                        "-1",
+                        "--format=%H",
+                        "--",
+                        path,
+                    ),
+                ):
+                    self.assertNotEqual(candidate, recorded)
+                self.assertNotEqual(
+                    git(checkout, "rev-list", "HEAD..unreachable", "--", path),
+                    "",
+                )
+
+        self.assertEqual(producer_commits[0], producer_commits[1])
         self.assertEqual(outputs[0], outputs[1])
         payload = json.loads(outputs[0])
         self.assertEqual(
@@ -778,6 +878,76 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             "p2015-df-ph-decode-abs-r03/power_trace.csv",
         )
         self.assertFalse(payload["input_bundle"]["path"].startswith("/"))
+
+    def test_producer_commit_when_script_was_only_added(self) -> None:
+        """Counterfactual: a modification-only path query returns no commit."""
+
+        checkout = self.root / "add-only"
+        fixture_raw = self.bundle.read_bytes()
+        fixture = checkout / ISSUER.PINNED_BUNDLE_REPOSITORY_PATH
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(fixture_raw)
+        script = checkout / ISSUER.SCRIPT_REPOSITORY_PATH
+        script.parent.mkdir(parents=True)
+        script.write_bytes(SCRIPT_PATH.read_bytes())
+        environment = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": "Fixture Author",
+            "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00+00:00",
+            "GIT_COMMITTER_NAME": "Fixture Committer",
+            "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00+00:00",
+        }
+
+        def git(*arguments: str) -> str:
+            completed = subprocess.run(
+                ["git", "-c", "commit.gpgSign=false", *arguments],
+                cwd=checkout,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return completed.stdout.strip()
+
+        git("init", "--quiet")
+        git("add", ISSUER.SCRIPT_REPOSITORY_PATH)
+        git("commit", "--quiet", "-m", "add producer")
+        producer = git("rev-parse", "HEAD")
+        self.assertEqual(
+            git(
+                "log",
+                "--diff-filter=A",
+                "-1",
+                "--format=%H",
+                "--",
+                ISSUER.SCRIPT_REPOSITORY_PATH,
+            ),
+            producer,
+        )
+        self.assertEqual(
+            git(
+                "log",
+                "--diff-filter=M",
+                "-1",
+                "--format=%H",
+                "--",
+                ISSUER.SCRIPT_REPOSITORY_PATH,
+            ),
+            "",
+        )
+
+        out = checkout / "issued.json"
+        exit_code, stderr, _ = self._run_main(
+            out,
+            pinned_path=fixture,
+            pinned_sha256=hashlib.sha256(fixture_raw).hexdigest(),
+            repository_root=checkout,
+        )
+        self.assertEqual(exit_code, 0, stderr)
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(payload["producer"]["git_commit"], producer)
 
     def test_retained_bundle_values_of_record(self) -> None:
         """Pin the numbers the paper prints, on the retained bundle itself.

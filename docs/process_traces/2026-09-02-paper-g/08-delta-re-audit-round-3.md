@@ -1,0 +1,21 @@
+# Delta re-audit of fix round 3 at e8f6b7ef (terra xhigh, direct run), verbatim
+
+```json
+{"schema":"claude-codex-report/v1","genre":"review","status":"clean","completion":"complete","summary":"All charged round-3 delta checks pass at e8f6b7ef; verdict: LANDABLE.","workspace":{"base_requested":"b868b965","base_mode":"descendant","head_start":"e8f6b7ef5e783d5ae7e26ab3a1a2855ad320097d","head_end":"e8f6b7ef5e783d5ae7e26ab3a1a2855ad320097d","upstream_end":"e8f6b7ef5e783d5ae7e26ab3a1a2855ad320097d","branch":"feat/2026-09-02-paper-g"},"pathspec":[],"unowned_dirty":[],"verdict":{"decision":"LANDABLE","counts":{"blocker":0,"should_fix":0,"nit":0},"findings":[]},"verification":[{"id":"V1","kind":"inspection","cmd":"git rev-parse HEAD @{upstream} && git status --short --branch","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["e8f6b7ef5e783d5ae7e26ab3a1a2855ad320097d","e8f6b7ef5e783d5ae7e26ab3a1a2855ad320097d","## feat/2026-09-02-paper-g...origin/feat/2026-09-02-paper-g"]},"expected":{"exit_code":0,"tail_regex":"e8f6b7ef5e783d5ae7e26ab3a1a2855ad320097d"}},{"id":"V2","kind":"inspection","cmd":"set -e; audit_tmp=$(mktemp -d \"${TMPDIR:-/tmp}/paper-g-literal-replay.XXXXXX\"); sed -n '771s/^> //p' docs/paper/draft-v2-skeleton.md > \"$audit_tmp/section-4.txt\"; sed -n '26s/^.*\\(Before comparison.*\\)$/\\1/p' docs/paper/round7/retensing-plan.md > \"$audit_tmp/outcome-c.txt\"; sed -n '103p' docs/paper/round7/retensing-plan.md > \"$audit_tmp/h04-c.txt\"; sed -n '395s/^.*\\(Before comparison.*\\)$/\\1/p' docs/paper/round7/retensing-plan.md > \"$audit_tmp/h27-c.txt\"; for form in outcome-c h04-c h27-c; do cmp -s \"$audit_tmp/section-4.txt\" \"$audit_tmp/$form.txt\"; diff -u \"$audit_tmp/section-4.txt\" \"$audit_tmp/$form.txt\"; done","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["section-4/outcome-c/h04-c/h27-c: three byte diffs empty"]},"expected":{"exit_code":0,"tail_regex":"three byte diffs empty"}},{"id":"V3","kind":"test","cmd":"set -e; review_tmp=$(mktemp -d \"${TMPDIR:-/tmp}/paper-g-delta-reaudit.XXXXXX\"); for review_outcome in A B REFUSAL; do review_copy=\"$review_tmp/selected-$review_outcome.md\"; PYTHONDONTWRITEBYTECODE=1 python3 docs/paper/fill-rehearsal/select_outcome_branches.py --source docs/paper/draft-v2-skeleton.md --output \"$review_copy\" --outcome \"$review_outcome\"; PAPER_FIRST_USE_DRAFT=\"$review_copy\" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_paper_first_use_ledger; done","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["selected A: transfer_slots=3, failed_component_slots=0, verdict_slots=4, refusal_reason_slots=1","selected B: transfer_slots=3, failed_component_slots=3, verdict_slots=4, refusal_reason_slots=1","selected REFUSAL: transfer_slots=3, failed_component_slots=0, verdict_slots=1, refusal_reason_slots=4","OK"]},"expected":{"exit_code":0,"tail_regex":"selected (A|B|REFUSAL).*OK"}},{"id":"V4","kind":"lint","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_paper_terms_lint","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}}],"flags":[]}
+```
+
+## Findings
+
+| Check | Result | Evidence |
+|---|---|---|
+| F4 governed form | Pass | §4, Outcome C, H04-C sentence, and H27-C have identical bytes; all three unified diffs were empty. |
+| F1 plain carriers | Pass | Abstract, §7, and §10 each name “before comparison,” “at close-out,” and `[FILL:OR-01]` as the applicable stop’s issued-reason slot. |
+| Retensing confinement | Pass | `33290b8b` delta is limited to Outcome-C/H04-C/H27-C cure text: four replacements plus the H04-C form insertion. |
+| Reader-order first use | Pass | All four changed skeleton lines occur once in selected Refusal reader order; the three reader-facing paragraphs contain 24 changed sentences, covered by the passing selected-draft ledger test. |
+| Prior-signature reconciliation | Closed | `02:F4`, `05:F1`, and `06:F4` share the Refusal-drift signature; its predicate, both stages, and OR-01 reason rendering are now synchronized. |
+
+No blocker, should-fix, or nit findings. **LANDABLE.**
+
+## Residual risk
+
+No repository-wide suite was run, per the preflight rule. Historic `02:F1` is a different, broader first-use finding and was not re-adjudicated beyond the changed-sentence reader-order coverage above.

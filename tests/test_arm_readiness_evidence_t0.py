@@ -37,7 +37,11 @@ from tests.test_arm_readiness_integration import (
     synthetic_identity_verifier,
 )
 from tests.test_identity_pins import declared_identity, synthetic_config
-from tests.test_arm_readiness_lifecycle import git, make_go_fixture
+from tests.test_arm_readiness_lifecycle import (
+    git,
+    make_go_fixture,
+    synthetic_family_publication_verification,
+)
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID, arm_context
 
 
@@ -262,25 +266,39 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
 """,
         encoding="utf-8",
     )
-    if boot_session_override is not None or clock_override is not None:
-        customization = "from joulewise import arm_readiness\n"
-        if boot_session_override is not None:
-            customization += (
-                "arm_readiness._current_boot_session_id = "
-                f"lambda: {boot_session_override!r}\n"
-            )
-        if clock_override is not None:
-            monotonic_ns, utc_now = clock_override
-            customization += (
-                "arm_readiness.time.monotonic_ns = "
-                f"lambda: {monotonic_ns!r}\n"
-                "arm_readiness._utc_now = "
-                f"lambda: {utc_now!r}\n"
-            )
-        (repository / "sitecustomize.py").write_text(
-            customization,
-            encoding="utf-8",
+    customization = (
+        "from joulewise import arm_readiness\n"
+        "arm_readiness.verify_family_publication_marker = lambda *args, **kwargs: {"
+        f"'schema_version': {readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA!r},"
+        "'receipt_kind': 'family_publication_verification',"
+        "'phase': 'pre-arm', 'lane': 'published', 'gate_admissible': True,"
+        "'publication_authorized': True, 'status': 'PASS'}\n"
+    )
+    if boot_session_override is not None:
+        customization += (
+            "arm_readiness._current_boot_session_id = "
+            f"lambda: {boot_session_override!r}\n"
         )
+    if clock_override is not None:
+        monotonic_ns, utc_now = clock_override
+        live_anchor = {
+            "boot_session_id": boot_session_override,
+            "realtime_ns": SYNTHETIC_REALTIME_OFFSET_NS + monotonic_ns,
+            "monotonic_raw_ns": monotonic_ns,
+            "read_skew_ns": 1_000,
+        }
+        customization += (
+            "arm_readiness.time.monotonic_ns = "
+            f"lambda: {monotonic_ns!r}\n"
+            "arm_readiness._utc_now = "
+            f"lambda: {utc_now!r}\n"
+            "arm_readiness._sample_live_clock_anchor = "
+            f"lambda: {live_anchor!r}\n"
+        )
+    (repository / "sitecustomize.py").write_text(
+        customization,
+        encoding="utf-8",
+    )
 
 
 def _load_synthetic_mlx(repository: Path):
@@ -662,6 +680,27 @@ def make_t0_fixture(
     }
     for name, value in captures.items():
         _write_json(input_root / name, value)
+
+    if portable_launch_program:
+        # The portable mode is consumed by the launch-window integration test,
+        # which composes this T-0 stage fragment with make_author_fixture's
+        # independently complete verdict/backup graph before re-authoring all
+        # freeze evidence.  Keep the R1-complete closeout graph for ordinary
+        # T-0 callers, but do not contribute a second pair of backups to that
+        # composition: DOCTRINE_PIN requires exactly two in the final pack.
+        composable_tree = json.loads(tree_path.read_text())
+        composable_tree["stage_graph"] = [
+            stage
+            for stage in composable_tree["stage_graph"]
+            if stage.get("stage_id") not in {"fixture-verdict", "fixture-backup"}
+        ]
+        composable_raw = readiness.render_json(composable_tree)
+        tree_path.write_bytes(composable_raw)
+        (pack / "plan_tree.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                hashlib.sha256(composable_raw).hexdigest(), "plan_tree.json"
+            )
+        )
     return temporary, repository, pack, custody, context, input_root
 
 
@@ -795,6 +834,28 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
 
+    def setUp(self) -> None:
+        publication_patcher = mock.patch.object(
+            readiness,
+            "verify_family_publication_marker",
+            side_effect=synthetic_family_publication_verification,
+        )
+        clock_patcher = mock.patch.object(
+            readiness,
+            "_sample_live_clock_anchor",
+            return_value={
+                "boot_session_id": TEST_BOOT_SESSION_ID,
+                "realtime_ns": SYNTHETIC_REALTIME_OFFSET_NS
+                + SYNTHETIC_MONOTONIC_NS,
+                "monotonic_raw_ns": SYNTHETIC_MONOTONIC_NS,
+                "read_skew_ns": 1_000,
+            },
+        )
+        publication_patcher.start()
+        clock_patcher.start()
+        self.addCleanup(clock_patcher.stop)
+        self.addCleanup(publication_patcher.stop)
+
     def _author_with_r1_age(self, age_ns: int) -> dict[str, object]:
         temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
         self.addCleanup(temporary.cleanup)
@@ -827,6 +888,37 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             ),
         ):
             return author_arm_readiness_evidence_t0(pack, custody)
+
+    def test_portable_launch_stage_fragment_composes_to_exactly_two_backups(
+        self,
+    ) -> None:
+        """The launch integration must not compose two complete closeouts."""
+
+        from tests.test_arm_readiness_evidence_author import make_author_fixture
+
+        temporary, _repository, pack, _custody, _context, _inputs = (
+            make_t0_fixture(portable_launch_program=True)
+        )
+        author_temporary, _author_repository, author_pack, _unused, _arm = (
+            make_author_fixture(pack.name)
+        )
+        self.addCleanup(author_temporary.cleanup)
+        self.addCleanup(temporary.cleanup)
+
+        t0_tree = json.loads((pack / "plan_tree.json").read_text())
+        author_tree = json.loads((author_pack / "plan_tree.json").read_text())
+        composed_stages = [*t0_tree["stage_graph"], *author_tree["stage_graph"]]
+        backup_commands = [
+            command
+            for stage in composed_stages
+            for command in stage.get("launch", {}).get("commands", [])
+            if command.get("command_kind") == "backup"
+        ]
+        self.assertEqual(len(backup_commands), 2)
+        self.assertEqual(
+            sum(stage.get("kind") == "whole_window_verdict" for stage in composed_stages),
+            1,
+        )
 
     def test_issuance_refuses_t0_when_r1_batch_is_stale_by_600s_plus_1ns(
         self,
@@ -2124,15 +2216,15 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 before, {path.name: path.read_bytes() for path in evidence.iterdir()}
             )
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_arm_consumes_volatile_receipts_within_short_horizon(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """Volatile T-0 evidence remains valid just inside its horizon."""
 
         authored_at = 1_000_000_000_000
         short_horizon_ns = 20 * 60 * 1_000_000_000
+        lifecycle = readiness.load_registry(ROOT)[0]["freeze_evidence_lifecycle"]
+        arm_to_consume_budget_ns = lifecycle["arm_policy"][
+            "arm_to_consume_budget_ns"
+        ]
         temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
             now_monotonic_ns=authored_at
         )
@@ -2153,7 +2245,12 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             mock.patch.object(
                 readiness.time,
                 "monotonic_ns",
-                return_value=(authored_at + short_horizon_ns - 1),
+                return_value=(
+                    authored_at
+                    + short_horizon_ns
+                    - arm_to_consume_budget_ns
+                    - 1
+                ),
             ),
         ):
             arm = readiness.generate_arm_receipt(pack, context, custody)
@@ -2215,12 +2312,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             arm_receipt["refusals"],
         )
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_mocked_forbidden_process_evidence_expires_before_arm(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """A forbidden-process observation expires before a later arm."""
 
         self._assert_forbidden_process_evidence_expires_before_arm(
             start_real_process=False
@@ -2229,12 +2322,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     @unittest.skipUnless(
         sys.platform == "darwin", "requires Darwin's real caffeinate process"
     )
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_forbidden_process_started_after_authoring_expires_before_arm(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """A real forbidden process cannot reuse expired evidence."""
 
         self._assert_forbidden_process_evidence_expires_before_arm(
             start_real_process=True
@@ -2863,11 +2952,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             len(identity_receipt["identity_units"][0]["config_inventory"]), 2
         )
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
-    )
     def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
-        """Blocked on fixture R1 schema modernization (A84)."""
+        """The complete synthetic author-to-arm transaction reaches GO."""
 
         self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
             boot_session_id=TEST_BOOT_SESSION_ID,
@@ -2875,11 +2961,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             synthetic_clock=True,
         )
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
-    )
     def test_synthetic_acid_is_hermetic_to_system_timezone(self) -> None:
-        """Blocked on fixture R1 schema modernization (A84)."""
+        """The synthetic transaction is independent of the host timezone."""
 
         previous = os.environ.get("TZ")
         try:
@@ -2899,11 +2982,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             if hasattr(time, "tzset"):
                 time.tzset()
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
-    )
     def test_synthetic_acid_ignores_wall_clock_48_hours_in_future(self) -> None:
-        """Blocked on fixture R1 schema modernization (A84)."""
+        """Monotonic validity is independent of a future wall clock."""
 
         with mock.patch.object(
             t0._readiness,
@@ -2919,11 +2999,8 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     @unittest.skipUnless(
         sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
     )
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
-    )
     def test_acid_real_boot_session_then_real_arm_generator_reaches_go(self) -> None:
-        """Blocked on fixture R1 schema modernization (A84)."""
+        """Darwin's real boot-session identifier reaches the arm generator."""
 
         try:
             boot_session_id = readiness._current_boot_session_id()

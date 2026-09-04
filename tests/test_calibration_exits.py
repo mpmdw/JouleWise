@@ -96,6 +96,7 @@ _NO_RACE_PRE_WRITE = "NO_RACE_PRE_WRITE"
 _TRACE_INCOMPLETE = "TRACE_INCOMPLETE"
 _NO_PACK_CHILD = "NO_PACK_CHILD"
 _LOGICAL_WRITER_TEST_ORIGIN_S = 1_784_490_850.05
+_CLEANUP_RACE_ERRNOS = frozenset({errno.ENOTEMPTY, errno.ENOENT})
 
 
 @dataclass(frozen=True)
@@ -2090,6 +2091,28 @@ class RefusalInventoryTests(unittest.TestCase):
             [case.code for case in cases] + [case.code for case in reversed(cases)],
         )
 
+    def test_default_writer_origin_never_reads_the_ambient_wall_clock(self) -> None:
+        witness = PublicGovernedExitWitnessTests(methodName="runTest")
+        witness.writer_env_overrides = {}
+        state = {
+            "epoch": {
+                "hardware_model": "Mac15,9",
+                "os_build": "25F84",
+            }
+        }
+        with mock.patch.object(
+            time,
+            "time",
+            side_effect=AssertionError("logical writer read ambient wall time"),
+        ) as ambient_wall_time:
+            writer_env = witness._writer_env(state, mode="normal")
+
+        ambient_wall_time.assert_not_called()
+        self.assertEqual(
+            writer_env["JW_FAKE_TIME_ORIGIN"],
+            repr(_LOGICAL_WRITER_TEST_ORIGIN_S),
+        )
+
 
 class CalibrationExitReliabilityTests(unittest.TestCase):
     def _git(self, repo: Path, *args: str, env=None) -> subprocess.CompletedProcess[str]:
@@ -2372,7 +2395,11 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             _classify_pack_cleanup(evidence, raw_cleanup_errno=None),
             _NO_PACK_CHILD,
         )
-        for raised_errno in (errno.ENOTEMPTY, errno.ENOENT):
+        self.assertEqual(
+            _CLEANUP_RACE_ERRNOS,
+            frozenset({errno.ENOTEMPTY, errno.ENOENT}),
+        )
+        for raised_errno in _CLEANUP_RACE_ERRNOS:
             with self.subTest(errno=raised_errno):
                 self.assertEqual(
                     _classify_pack_cleanup(
@@ -2762,7 +2789,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             # lookup as ENOENT; the same teardown race can instead leave a
             # child behind and report ENOTEMPTY.  This holds whether or not the
             # pack child was ever spawned, so it is never skipped.
-            self.assertIn(raw_enotempty.errno, (errno.ENOTEMPTY, errno.ENOENT))
+            self.assertIn(raw_enotempty.errno, _CLEANUP_RACE_ERRNOS)
         elif not pack_evidence.pack_child_absent:
             self.assertTrue(
                 any(
@@ -5701,6 +5728,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         # how long earlier modules took, even though elapsed host time is not
         # part of this suspension-immunity contract.
         origin = _LOGICAL_WRITER_TEST_ORIGIN_S
+        census_pid = os.getpid()
+        census_command = (
+            "Python /fixture/validate_powermetrics_fiducial.py "
+            "--exit-case logical-producer-delay-immunity"
+        )
 
         def capture(delay_s: float | None) -> tuple[bytes, bytes, bytes, bytes]:
             witness = type(self)(methodName="runTest")
@@ -5709,8 +5741,22 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 witness.setUp()
                 setup_complete = True
                 marker = witness.repo / "writer-fixtures" / "producer-delay.json"
+                fake_bin = witness.repo / "fake-bin"
+                fake_bin.mkdir()
+                fake_ps = fake_bin / "ps"
+                fake_ps.write_text(
+                    "#!/usr/bin/env python3\n"
+                    "import os\n"
+                    "print(os.environ['JW_FAKE_PS_OUTPUT'])\n",
+                    encoding="utf-8",
+                )
+                fake_ps.chmod(0o755)
                 witness.writer_env_overrides = {
                     "JW_FAKE_TIME_ORIGIN": repr(origin),
+                    "PATH": os.pathsep.join(
+                        (str(fake_bin), _fresh_cli_env()["PATH"])
+                    ),
+                    "JW_FAKE_PS_OUTPUT": f"{census_pid} {census_command}",
                 }
                 if delay_s is not None:
                     witness.writer_env_overrides.update(
@@ -5736,9 +5782,21 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                         {"delay_s": delay_s, "fence": 4},
                     )
                 self.assertFalse((custody / ".test-sampler-acks.jsonl").exists())
+                events_bytes = (custody / "events.jsonl").read_bytes()
+                census_rows = [
+                    json.loads(line)
+                    for line in events_bytes.splitlines()
+                    if json.loads(line).get("event_type")
+                    == validation_script.SAMPLER_CENSUS_DIAGNOSTIC
+                ]
+                self.assertEqual(
+                    [row["metadata"]["findings"] for row in census_rows],
+                    [[{"pid": census_pid, "command": census_command}]],
+                    "the byte-exactness fixture must select one fixed census case",
+                )
                 return (
                     (custody / "instrument_evidence.json").read_bytes(),
-                    (custody / "events.jsonl").read_bytes(),
+                    events_bytes,
                     (custody / "raw" / "powermetrics.plist").read_bytes(),
                     (custody / "power_trace.csv").read_bytes(),
                 )

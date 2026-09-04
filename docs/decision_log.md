@@ -10873,3 +10873,26 @@ two are best done together with the ruling that re-cuts the packet contents.
 --check` → rc 0 after the retarget, which also confirms the pending hard task
 edges remain acyclic; `python3 -m unittest tests.test_gen_state
 tests.test_docs_freshness` → 65 tests OK.
+
+## D-172: real-entry-point subprocess test for watchdog/installer changes (cold gate on packet 21, 2026-09-04; magistrate-adopted, Ed may veto)
+
+Origin: the magistrate relaunch watchdog failed three fix rounds with one
+signature — unit suite green while the production path was broken — because
+its tests injected every dependency and never ran the real entry point. The
+cold Fable gate on packet 21 (trace
+`docs/process_traces/2026-09-02-hands-free-week/22-coldgate-fable-ruling-packet-21.md`,
+Q-PROC) amended the magistrate's proposal to this text, adopted verbatim:
+
+> Any change to `scripts/magistrate_watchdog.py`,
+> `scripts/install_magistrate_watchdog.sh`, `configs/launchd/*.template`, or
+> `SESSION_ARGV_AFTER_PROMPT` must ship with a green test that runs the real
+> entry point as a subprocess (real argv parsing, service lock, dependency
+> construction; at most the process-table and network seams injected) and
+> with at least one named mutation of the changed lines shown RED under that
+> test.
+
+Scope: prospective, those files only; not a charter amendment. Status:
+adopted by the magistrate on the cold gate's amended text (rule 11: a
+proposed process rule goes before a cold instance — it did); Ed notified by
+email the same day and may veto. Enforcement: the PR ledger row 2 for any such
+change cites the subprocess test and the RED mutation transcript.
