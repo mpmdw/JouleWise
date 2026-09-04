@@ -123,7 +123,6 @@ def fixture_row_registry(pack_name: str) -> bytes:
 
     registry = json.loads((ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes())
     lifecycle = registry["freeze_evidence_lifecycle"]
-    installed = lifecycle["successor_policy"]["successor_pack_ids"]
     fixture_family = fixture_pack_family(pack_name)
     generation = readiness._pack_generation(pack_name)
     fixture_freeze_ordinal = (
@@ -133,35 +132,20 @@ def fixture_row_registry(pack_name: str) -> bytes:
         if generation > 1
         else 1
     )
-    replacements = {
-        f"configs/campaigns/{installed[profile]}/": (
-            f"configs/campaigns/{fixture_family[profile]}/"
-        )
+    successor_policy = lifecycle["successor_policy"]
+    successor_policy["successor_pack_ids"] = fixture_family
+    successor_policy["successor_freeze_receipt_ids"] = {
+        profile: f"freeze-{fixture_freeze_ordinal:04d}"
         for profile in fixture_family
     }
-    rewritten = []
-    for relative in lifecycle["irrelevant_path_allowlist"]:
-        for source, destination in replacements.items():
-            if relative.startswith(source):
-                relative = destination + relative[len(source) :]
-                if relative.endswith(
-                    "/arm_readiness.freeze.receipts/freeze-0004.json"
-                ):
-                    relative = relative.replace(
-                        "freeze-0004.json",
-                        f"freeze-{fixture_freeze_ordinal:04d}.json",
-                    )
-                elif relative.endswith(
-                    "/arm_readiness.freeze.receipts/freeze-0004.json.sha256"
-                ):
-                    relative = relative.replace(
-                        "freeze-0004.json.sha256",
-                        f"freeze-{fixture_freeze_ordinal:04d}.json.sha256",
-                    )
-                break
-        rewritten.append(relative)
-    lifecycle["irrelevant_path_allowlist"] = sorted(rewritten)
-    lifecycle["successor_policy"]["successor_pack_ids"] = fixture_family
+    derived = readiness._r1_derive_irrelevant_paths(
+        successor_pack_ids=successor_policy["successor_pack_ids"],
+        successor_freeze_receipt_ids=successor_policy[
+            "successor_freeze_receipt_ids"
+        ],
+    )
+    assert len(derived) == 112
+    lifecycle["irrelevant_path_allowlist"] = list(derived)
     if generation >= 4:
         lifecycle["successor_policy"][
             "family_publication_first_generation"
@@ -525,6 +509,50 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         )
         patcher.start()
         self.addCleanup(patcher.stop)
+
+    def test_family_member_replay_uses_profile_selected_freeze_receipt_id(
+        self,
+    ) -> None:
+        registry = {
+            "freeze_evidence_lifecycle": {
+                "successor_policy": {
+                    "successor_freeze_receipt_ids": {
+                        "ALPHA": "freeze-0005",
+                        "BETA": "freeze-0004",
+                        "GAMMA": "freeze-0004",
+                    }
+                }
+            }
+        }
+        freeze = {
+            "schema_version": readiness.FREEZE_RECEIPT_V2_SCHEMA,
+            "receipt_id": "freeze-0004",
+            "status": "PASS",
+        }
+        with (
+            mock.patch.object(readiness, "_plan_profile", return_value="ALPHA"),
+            mock.patch.object(readiness, "_plan_tree", return_value=({}, b"{}\n")),
+            mock.patch.object(
+                readiness,
+                "_load_freeze_reference",
+                return_value=(
+                    freeze,
+                    {"path": "arm_readiness.freeze.receipts/freeze-0004.json"},
+                ),
+            ),
+            mock.patch.object(
+                readiness,
+                "_freeze_evidence_for_arm",
+                side_effect=AssertionError("replay continued past freeze identity"),
+            ),
+        ):
+            with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                readiness._family_member(
+                    Path("."), Path("pack"), registry, {}
+                )
+
+        self.assertEqual(caught.exception.check_id, "freeze_not_pass")
+        self.assertIn("freeze-0005", str(caught.exception))
 
     def write_namespace_receipt(self, root: Path, name: str, receipt: dict) -> Path:
         root.mkdir(parents=True, exist_ok=True)

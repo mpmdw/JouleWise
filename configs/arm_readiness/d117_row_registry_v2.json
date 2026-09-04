@@ -513,7 +513,7 @@
         "row_id": "t0.storage_backup_capacity"
       }
     ],
-    "schema_version": "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1",
+    "schema_version": "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v2",
     "successor_policy": {
       "cross_chain_numbering": "joulewise.freeze_chain.monotonic_predecessor_ordinal.v1",
       "family_publication_first_generation": 5,
@@ -529,6 +529,11 @@
         "plan_id",
         "plan_sha256"
       ],
+      "successor_freeze_receipt_ids": {
+        "ALPHA": "freeze-0004",
+        "BETA": "freeze-0004",
+        "GAMMA": "freeze-0004"
+      },
       "successor_pack_ids": {
         "ALPHA": "d117_floor_qwen3-1p7b_v5",
         "BETA": "d117_floor_qwen3-8b_v5",

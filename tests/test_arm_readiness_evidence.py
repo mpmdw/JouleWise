@@ -28,7 +28,7 @@ def git(repository: Path, *args: str) -> str:
 
 def lifecycle_registry(
     *,
-    allowlist: tuple[str, ...] = (),
+    allowlist: tuple[str, ...] | None = None,
     policies: tuple[dict, ...] | None = None,
     pack_generation: int = 2,
 ) -> dict:
@@ -43,10 +43,24 @@ def lifecycle_registry(
             },
         )
     policy_ids = [item["freshness_policy_id"] for item in policies]
+    successor_pack_ids = {
+        "ALPHA": f"d117_floor_qwen25_1p5b_v{pack_generation}",
+        "BETA": f"d117_floor_qwen25_7b_v{pack_generation}",
+        "GAMMA": f"d117_contrast_qwen25_1p5b_vs_7b_v{pack_generation}",
+    }
+    successor_freeze_receipt_ids = {
+        profile: "freeze-0004" for profile in successor_pack_ids
+    }
+    derived_allowlist = readiness._r1_derive_irrelevant_paths(
+        successor_pack_ids=successor_pack_ids,
+        successor_freeze_receipt_ids=successor_freeze_receipt_ids,
+    )
+    if allowlist is not None and not set(allowlist) <= set(derived_allowlist):
+        raise AssertionError("requested fixture paths are outside production derivation")
     return {
         "schema_version": readiness.R1_LIFECYCLE_REGISTRY_SCHEMA,
         "registry_id": "test-r1-lifecycle-v1",
-        "irrelevant_path_allowlist": sorted(allowlist),
+        "irrelevant_path_allowlist": list(derived_allowlist),
         "evidence_policies": sorted(
             (copy.deepcopy(item) for item in policies), key=lambda item: item["kind"]
         ),
@@ -62,11 +76,8 @@ def lifecycle_registry(
             "arm_to_consume_budget_ns": 60_000_000_000,
         },
         "successor_policy": {
-            "successor_pack_ids": {
-                "ALPHA": f"d117_floor_qwen25_1p5b_v{pack_generation}",
-                "BETA": f"d117_floor_qwen25_7b_v{pack_generation}",
-                "GAMMA": f"d117_contrast_qwen25_1p5b_vs_7b_v{pack_generation}",
-            },
+            "successor_pack_ids": successor_pack_ids,
+            "successor_freeze_receipt_ids": successor_freeze_receipt_ids,
             "cross_chain_numbering": "test.freeze-0002.v1",
             "freeze_receipt_v2_predecessor_bindings": [
                 "evidence_set_root",
@@ -91,6 +102,18 @@ def lifecycle_registry(
             for role in sorted(readiness.R1_REFUSAL_ROLES)
         ],
     }
+
+
+def governed_test_path(suffix: str) -> str:
+    allowlist = lifecycle_registry()["irrelevant_path_allowlist"]
+    matches = [
+        path
+        for path in allowlist
+        if "/d117_floor_qwen25_1p5b_v2/" in path and path.endswith(suffix)
+    ]
+    if len(matches) != 1:
+        raise AssertionError(f"expected one production-derived {suffix!r} path")
+    return matches[0]
 
 
 def resolved_r1_row_registry() -> dict:
@@ -129,13 +152,9 @@ def resolved_r1_row_registry() -> dict:
     policy_by_kind = {
         item["kind"]: item["freshness_policy_id"] for item in policies
     }
-    # The registry-LOAD closure check also requires every digest-conditional
-    # code path to appear in the allowlist it governs — the S-1 cure for the
-    # fail-OPEN drift where an empty intersection silently subtracted the path
-    # unconditionally.  A synthetic ROW registry must therefore carry the real
-    # conditional paths, for the same reason it carries the real vocabulary.
+    # The synthetic registry uses the production derivation, including the
+    # digest-conditional path, rather than authoring its own candidate set.
     registry["freeze_evidence_lifecycle"] = lifecycle_registry(
-        allowlist=tuple(sorted(readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)),
         policies=tuple(policies),
     )
     registry["freeze_evidence_lifecycle"]["row_policies"] = [
@@ -273,6 +292,14 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         (repository / "notes.txt").write_text("first\n")
         (repository / "pack").mkdir()
         (repository / "pack/plan_tree.json").write_bytes(plan_tree(frozen=False))
+        governed_source = repository / governed_test_path(
+            "arm_readiness.sources/doctrine-pin.json"
+        )
+        governed_source.parent.mkdir(parents=True)
+        governed_source.write_text("stable governed source\n")
+        governed_plan = repository / governed_test_path("plan_tree.json")
+        governed_plan.parent.mkdir(parents=True, exist_ok=True)
+        governed_plan.write_bytes(plan_tree(frozen=False))
         git(repository, "add", ".")
         git(repository, "commit", "-qm", "derivation")
         return temporary, repository, git(repository, "rev-parse", "HEAD")
@@ -348,8 +375,13 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         temporary, repository, derivation = self.make_repository()
         self.addCleanup(temporary.cleanup)
         source, receipt = content_source_and_receipt(repository, derivation)
-        (repository / "notes.txt").write_text("second\n")
-        git(repository, "add", "notes.txt")
+        lifecycle = lifecycle_registry()
+        irrelevant_path = governed_test_path(
+            "arm_readiness.sources/acceptance-owner.json"
+        )
+        irrelevant = repository / irrelevant_path
+        irrelevant.write_text("new governed output\n")
+        git(repository, "add", irrelevant_path)
         git(repository, "commit", "-qm", "irrelevant")
         head = git(repository, "rev-parse", "HEAD")
 
@@ -357,37 +389,45 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
             repository,
             receipt,
             source,
-            lifecycle_registry(allowlist=("notes.txt",)),
+            lifecycle,
             current_head=head,
             expected_freshness_class="RE_DERIVABLE",
             plan_tree_path="pack/plan_tree.json",
         )
-        self.assertEqual(changed, ("notes.txt",))
+        self.assertEqual(changed, (irrelevant_path,))
+        (repository / "notes.txt").write_text("second\n")
+        git(repository, "add", "notes.txt")
+        git(repository, "commit", "-qm", "relevant")
         with self.assertRaises(readiness.EvidenceLifecycleError) as relevant:
             readiness.validate_r1_evidence_lifecycle(
                 repository,
                 receipt,
                 source,
-                lifecycle_registry(),
-                current_head=head,
+                lifecycle,
+                current_head=git(repository, "rev-parse", "HEAD"),
                 expected_freshness_class="RE_DERIVABLE",
                 plan_tree_path="pack/plan_tree.json",
             )
         self.assertEqual(relevant.exception.role, "DEPENDENCY_CHANGED_SET")
 
-        (repository / "dependency.txt").write_text("changed\n")
-        git(repository, "add", "dependency.txt")
-        git(repository, "commit", "-qm", "dependency change")
-        changed_head = git(repository, "rev-parse", "HEAD")
+        manifest_temporary, manifest_repository, manifest_derivation = (
+            self.make_repository()
+        )
+        self.addCleanup(manifest_temporary.cleanup)
+        dependency = governed_test_path("arm_readiness.sources/doctrine-pin.json")
+        manifest_source, manifest_receipt = content_source_and_receipt(
+            manifest_repository, manifest_derivation, dependency=dependency
+        )
+        (manifest_repository / dependency).write_text("changed governed source\n")
+        git(manifest_repository, "add", dependency)
+        git(manifest_repository, "commit", "-qm", "dependency change")
         with self.assertRaises(readiness.EvidenceLifecycleError) as manifest:
             readiness.validate_r1_evidence_lifecycle(
-                repository,
-                receipt,
-                source,
-                lifecycle_registry(
-                    allowlist=("dependency.txt", "notes.txt")
-                ),
-                current_head=changed_head,
+                manifest_repository,
+                manifest_receipt,
+                manifest_source,
+                lifecycle,
+                current_head=git(manifest_repository, "rev-parse", "HEAD"),
                 expected_freshness_class="RE_DERIVABLE",
                 plan_tree_path="pack/plan_tree.json",
             )
@@ -446,44 +486,49 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
 
         temporary, repository, derivation = self.make_repository()
         self.addCleanup(temporary.cleanup)
+        governed_plan_path = governed_test_path("plan_tree.json")
         source, receipt = content_source_and_receipt(
-            repository, derivation, dependency="pack/plan_tree.json"
+            repository, derivation, dependency=governed_plan_path
         )
-        (repository / "pack/plan_tree.json").write_bytes(plan_tree(frozen=True))
-        git(repository, "add", "pack/plan_tree.json")
+        (repository / governed_plan_path).write_bytes(plan_tree(frozen=True))
+        git(repository, "add", governed_plan_path)
         git(repository, "commit", "-qm", "fill freeze slot")
         frozen_head = git(repository, "rev-parse", "HEAD")
         readiness.validate_r1_evidence_lifecycle(
             repository,
             receipt,
             source,
-            lifecycle_registry(allowlist=("pack/plan_tree.json",)),
+            lifecycle_registry(),
             current_head=frozen_head,
             expected_freshness_class="RE_DERIVABLE",
-            plan_tree_path="pack/plan_tree.json",
+            plan_tree_path=governed_plan_path,
         )
-        (repository / "pack/plan_tree.json").write_bytes(
+        (repository / governed_plan_path).write_bytes(
             plan_tree(frozen=True, marker="one-byte-elsewhere")
         )
-        git(repository, "add", "pack/plan_tree.json")
+        git(repository, "add", governed_plan_path)
         git(repository, "commit", "-qm", "change other plan field")
         with self.assertRaises(readiness.EvidenceLifecycleError) as changed:
             readiness.validate_r1_evidence_lifecycle(
                 repository,
                 receipt,
                 source,
-                lifecycle_registry(allowlist=("pack/plan_tree.json",)),
+                lifecycle_registry(),
                 current_head=git(repository, "rev-parse", "HEAD"),
                 expected_freshness_class="RE_DERIVABLE",
-                plan_tree_path="pack/plan_tree.json",
+                plan_tree_path=governed_plan_path,
             )
         self.assertEqual(changed.exception.role, "DEPENDENCY_MANIFEST")
 
     def test_allowlist_tampering_refuses_before_policy_use(self) -> None:
-        raw = readiness.render_json(lifecycle_registry(allowlist=("notes.txt",)))
+        lifecycle = lifecycle_registry()
+        raw = readiness.render_json(lifecycle)
         digest = hashlib.sha256(raw).hexdigest()
         readiness.authenticate_r1_lifecycle_registry(raw, digest)
-        tampered = raw.replace(b"notes.txt", b"other.txt")
+        governed = governed_test_path("arm_readiness.sources/doctrine-pin.json")
+        tampered = raw.replace(
+            governed.encode("utf-8"), governed.replace("doctrine", "doctrinz").encode("utf-8")
+        )
         with self.assertRaises(readiness.ArmReadinessError) as caught:
             readiness.authenticate_r1_lifecycle_registry(tampered, digest)
         self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
@@ -573,6 +618,15 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         )
         lifecycle["successor_policy"]["successor_pack_ids"]["ALPHA"] = (
             not_installed.name
+        )
+        successor_policy = lifecycle["successor_policy"]
+        lifecycle["irrelevant_path_allowlist"] = list(
+            readiness._r1_derive_irrelevant_paths(
+                successor_pack_ids=successor_policy["successor_pack_ids"],
+                successor_freeze_receipt_ids=successor_policy[
+                    "successor_freeze_receipt_ids"
+                ],
+            )
         )
         self.assertEqual(
             readiness._plan_profile(not_installed, row_registry), "ALPHA"
@@ -697,7 +751,21 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         an EXPLICIT grandfathering refusal.  That is what is asserted here.
         """
 
-        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name)
+        registry_path = repository / readiness.ROW_REGISTRY_RELATIVE_PATH
+        registry_path.parent.mkdir(parents=True)
+        registry_path.write_bytes(
+            (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+        )
+        pack = repository / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        pack.mkdir(parents=True)
+        git(repository, "init", "-q")
+        git(repository, "config", "user.email", "test@example.invalid")
+        git(repository, "config", "user.name", "R1 Test")
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "install lifecycle registry")
         registry, registry_raw, reference = readiness._registry_reference(pack)
         before_digest = hashlib.sha256(registry_raw).hexdigest()
         self.assertEqual(registry["schema_version"], readiness.R1_ROW_REGISTRY_SCHEMA)
@@ -712,7 +780,7 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         self.assertEqual(readiness._plan_profile(pack, registry), "ALPHA")
         self.assertEqual(
             hashlib.sha256(
-                (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+                registry_path.read_bytes()
             ).hexdigest(),
             before_digest,
         )

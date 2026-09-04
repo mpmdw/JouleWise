@@ -487,6 +487,24 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         allowlist = lifecycle["irrelevant_path_allowlist"]
         self.assertEqual(len(allowlist), 112)
         self.assertEqual(allowlist, sorted(set(allowlist)))
+        successor_policy = lifecycle["successor_policy"]
+        self.assertEqual(
+            successor_policy["successor_freeze_receipt_ids"],
+            {
+                "ALPHA": "freeze-0004",
+                "BETA": "freeze-0004",
+                "GAMMA": "freeze-0004",
+            },
+        )
+        self.assertEqual(
+            tuple(allowlist),
+            readiness._r1_derive_irrelevant_paths(
+                successor_pack_ids=successor_policy["successor_pack_ids"],
+                successor_freeze_receipt_ids=successor_policy[
+                    "successor_freeze_receipt_ids"
+                ],
+            ),
+        )
         successor = "configs/arm_readiness/legacy_receipt_histsem_pinset_v5_v1.json"
         # Membership is the ruled 112th entry (D-151 condition 1) and is NOT a
         # licence to subtract: the successor class is digest-conditional
@@ -528,26 +546,61 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             readiness.READINESS_REASON_CODES,
         )
 
-    def test_allowlist_refuses_novel_entry_absent_from_governed_artifact_provenance(
+    def test_allowlist_derivation_is_total_across_id_and_placeholder_state(
         self,
     ) -> None:
         registry, _raw = load_registry(ROOT)
-        mutated = copy.deepcopy(registry)
-        allowlist = mutated["freeze_evidence_lifecycle"][
-            "irrelevant_path_allowlist"
-        ]
-        allowlist.append("configs/arm_readiness/future-confirmation-token.json")
-        allowlist.sort()
+        with self.subTest("fresh registry identity"):
+            fresh = copy.deepcopy(registry)
+            lifecycle = fresh["freeze_evidence_lifecycle"]
+            lifecycle["registry_id"] = "d117-r1-lifecycle-v99-unseen"
+            lifecycle["irrelevant_path_allowlist"].append(
+                "configs/arm_readiness/future-confirmation-token.json"
+            )
+            lifecycle["irrelevant_path_allowlist"].sort()
 
-        with self.assertRaises(ArmReadinessError) as caught:
-            validate_registry(mutated)
+            with self.assertRaises(ArmReadinessError) as caught:
+                validate_registry(fresh)
 
-        self.assertEqual(
-            caught.exception.reason_code, "readiness_row_registry_mismatch"
-        )
-        self.assertIn(
-            "authenticated governed-artifact manifest", str(caught.exception)
-        )
+            self.assertEqual(
+                caught.exception.reason_code, "readiness_row_registry_mismatch"
+            )
+            self.assertIn("ALLOWLIST_NOT_DERIVED", str(caught.exception))
+            self.assertIn("future-confirmation-token.json", str(caught.exception))
+
+        with self.subTest("fully reserved derivation inputs"):
+            reserved = copy.deepcopy(registry["freeze_evidence_lifecycle"])
+            policy = reserved["successor_policy"]
+            policy["successor_pack_ids"] = "ED_RESERVED:successor-pack-ids"
+            policy["successor_freeze_receipt_ids"] = (
+                "ED_RESERVED:successor-freeze-receipt-ids"
+            )
+
+            with self.assertRaises(ArmReadinessError) as caught:
+                readiness.validate_r1_lifecycle_registry(
+                    reserved, require_resolved=False
+                )
+
+            self.assertEqual(
+                caught.exception.reason_code, "readiness_row_registry_mismatch"
+            )
+            self.assertIn("ALLOWLIST_INPUTS_UNRESOLVED", str(caught.exception))
+
+            mixed = copy.deepcopy(reserved)
+            mixed["irrelevant_path_allowlist"] = []
+            mixed["successor_policy"]["successor_freeze_receipt_ids"] = (
+                registry["freeze_evidence_lifecycle"]["successor_policy"][
+                    "successor_freeze_receipt_ids"
+                ]
+            )
+            with self.assertRaises(ArmReadinessError) as mixed_caught:
+                readiness.validate_r1_lifecycle_registry(
+                    mixed, require_resolved=False
+                )
+            self.assertIn(
+                "must both be mapped or both be ED_RESERVED",
+                str(mixed_caught.exception),
+            )
 
     def test_registry_load_closes_conditional_code_paths_against_allowlist(self) -> None:
         registry, _raw = load_registry(ROOT)
@@ -562,7 +615,8 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertEqual(
             caught.exception.reason_code, "readiness_row_registry_mismatch"
         )
-        self.assertIn("absent from the registry allowlist", str(caught.exception))
+        self.assertIn("ALLOWLIST_NOT_DERIVED", str(caught.exception))
+        self.assertIn("not-in-registry.json", str(caught.exception))
 
     def test_archival_v1_registry_is_sha_pinned(self) -> None:
         raw = (ROOT / "configs/arm_readiness/d117_row_registry_v1.json").read_bytes()

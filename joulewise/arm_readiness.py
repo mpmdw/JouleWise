@@ -66,7 +66,7 @@ EXECUTION_EVIDENCE_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_execution_evidence_receipt.v1"
 )
 R1_LIFECYCLE_REGISTRY_SCHEMA = (
-    "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1"
+    "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v2"
 )
 FAMILY_PUBLICATION_MARKER_SCHEMA = "joulewise.d117_family_publication_marker.v1"
 FAMILY_PUBLICATION_VERIFICATION_SCHEMA = (
@@ -627,6 +627,7 @@ _R1_ROW_POLICY_KEYS = {"row_id", "freshness_policy_id"}
 _R1_ARM_POLICY_KEYS = {"capability_horizon_ns", "arm_to_consume_budget_ns"}
 _R1_SUCCESSOR_POLICY_KEYS = {
     "successor_pack_ids",
+    "successor_freeze_receipt_ids",
     "cross_chain_numbering",
     "freeze_receipt_v2_predecessor_bindings",
     "family_publication_marker_schema",
@@ -634,9 +635,18 @@ _R1_SUCCESSOR_POLICY_KEYS = {
 }
 _R1_REFUSAL_ENTRY_KEYS = {"role", "code", "type"}
 _R1_ED_RESERVED_PREFIX = "ED_RESERVED:"
-_R1_ALLOWLIST_PROVENANCE_SCHEMA = "joulewise.r1_irrelevant_path_manifest.v1"
-_R1_ALLOWLIST_PROVENANCE_SHA256 = (
-    "bea2863fd4efcecbbaa8ebfcd2872fd7d8faa890ed252562fe79cdd6bc74f7af"
+_R1_IRRELEVANT_PATH_SPEC = (
+    ("generic_evidence", "arm_readiness.evidence/evidence-{stem}.json"),
+    ("evidence_sidecar", "arm_readiness.evidence/evidence-{stem}.json.sha256"),
+    ("evidence_source", "arm_readiness.sources/{stem}.json"),
+    ("pass_freeze_receipt", "arm_readiness.freeze.receipts/{receipt_id}.json"),
+    (
+        "freeze_sidecar",
+        "arm_readiness.freeze.receipts/{receipt_id}.json.sha256",
+    ),
+    ("plan_tree", "plan_tree.json"),
+    ("plan_tree_sidecar", "plan_tree.sha256"),
+    ("digest_conditional_successor_pinset", None),
 )
 _R1_GOVERNED_PRE_REGISTRATION_EVIDENCE_STEMS = (
     "acceptance-owner",
@@ -663,6 +673,9 @@ R1_LIFECYCLE_REGISTRY_PLACEHOLDER = {
     },
     "successor_policy": {
         "successor_pack_ids": "ED_RESERVED:successor-pack-ids",
+        "successor_freeze_receipt_ids": (
+            "ED_RESERVED:successor-freeze-receipt-ids"
+        ),
         "cross_chain_numbering": "ED_RESERVED:cross-chain-numbering",
         "freeze_receipt_v2_predecessor_bindings": (
             "ED_RESERVED:freeze-receipt-v2-predecessor-bindings"
@@ -1669,50 +1682,108 @@ def _r1_contains_reserved(value: object) -> bool:
     return False
 
 
-def _r1_derived_irrelevant_path_manifest(
-    successor_pack_ids: Mapping[str, str],
-) -> Mapping[str, Any]:
-    """Derive and authenticate the closed pre-registration subtraction set.
+def _r1_derive_irrelevant_paths(
+    *,
+    successor_pack_ids: Mapping[str, str] | str,
+    successor_freeze_receipt_ids: Mapping[str, str] | str,
+) -> tuple[str, ...]:
+    """Derive D-151's total, closed pre-registration subtraction set.
 
-    The derivation starts from the registry's three governed successor outputs,
-    then projects only the independently replayed generic evidence/source pairs,
-    their receipt sidecars, the PASS freeze receipt and sidecar, the plan-tree
-    binding and sidecar, and D-151's digest-conditional successor pinset.  Its
-    digest pin lives in this module, which is outside the subtraction set.  The
-    literal registry allowlist is only a candidate copy of this manifest; it is
-    never an authority from which membership is inferred.
+    Exactly two input states exist: two exact three-profile mappings derive the
+    governed 112 paths, while two ``ED_RESERVED:`` placeholders derive the empty
+    tuple.  A mixed or malformed state is not a third mode and fails closed.
+    The serialized registry allowlist is only a candidate; neither registry
+    identity nor the candidate itself participates in this derivation.
     """
 
-    paths = {RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()}
-    for profile in sorted(_SUCCESSOR_PROFILE_PATTERNS):
-        pack_id = successor_pack_ids[profile]
-        base = f"configs/campaigns/{pack_id}"
-        for stem in _R1_GOVERNED_PRE_REGISTRATION_EVIDENCE_STEMS:
-            paths.update(
-                {
-                    f"{base}/arm_readiness.evidence/evidence-{stem}.json",
-                    f"{base}/arm_readiness.evidence/evidence-{stem}.json.sha256",
-                    f"{base}/arm_readiness.sources/{stem}.json",
-                }
-            )
-        paths.update(
-            {
-                f"{base}/arm_readiness.freeze.receipts/freeze-0004.json",
-                f"{base}/arm_readiness.freeze.receipts/freeze-0004.json.sha256",
-                f"{base}/plan_tree.json",
-                f"{base}/plan_tree.sha256",
-            }
-        )
-    manifest = {
-        "schema_version": _R1_ALLOWLIST_PROVENANCE_SCHEMA,
-        "paths": sorted(paths),
-    }
-    if sha256_bytes(render_json(manifest)) != _R1_ALLOWLIST_PROVENANCE_SHA256:
+    profiles = set(_SUCCESSOR_PROFILE_PATTERNS)
+    pack_ids_reserved = isinstance(successor_pack_ids, str) and (
+        successor_pack_ids.startswith(_R1_ED_RESERVED_PREFIX)
+    )
+    freeze_ids_reserved = isinstance(successor_freeze_receipt_ids, str) and (
+        successor_freeze_receipt_ids.startswith(_R1_ED_RESERVED_PREFIX)
+    )
+    if pack_ids_reserved and freeze_ids_reserved:
+        return ()
+    if pack_ids_reserved or freeze_ids_reserved:
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
-            "R1 derived governed-artifact manifest differs from its code-authenticated digest",
+            "ALLOWLIST_INPUTS_UNRESOLVED: successor pack and freeze-receipt "
+            "inputs must both be mapped or both be ED_RESERVED placeholders",
         )
-    return manifest
+    if not (
+        isinstance(successor_pack_ids, Mapping)
+        and set(successor_pack_ids) == profiles
+        and all(
+            isinstance(pack_id, str)
+            and pack_id
+            and "/" not in pack_id
+            and "\\" not in pack_id
+            for pack_id in successor_pack_ids.values()
+        )
+        and len(set(successor_pack_ids.values())) == len(profiles)
+        and isinstance(successor_freeze_receipt_ids, Mapping)
+        and set(successor_freeze_receipt_ids) == profiles
+        and all(
+            isinstance(receipt_id, str)
+            and _RECEIPT_NAME_RE["freeze"].fullmatch(f"{receipt_id}.json")
+            is not None
+            for receipt_id in successor_freeze_receipt_ids.values()
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "ALLOWLIST_INPUTS_UNRESOLVED: successor pack and freeze-receipt "
+            "inputs must be exact three-profile mappings",
+        )
+
+    family_templates = dict(_R1_IRRELEVANT_PATH_SPEC)
+    expected_families = {
+        "generic_evidence",
+        "evidence_sidecar",
+        "evidence_source",
+        "pass_freeze_receipt",
+        "freeze_sidecar",
+        "plan_tree",
+        "plan_tree_sidecar",
+        "digest_conditional_successor_pinset",
+    }
+    if (
+        len(family_templates) != len(_R1_IRRELEVANT_PATH_SPEC)
+        or set(family_templates) != expected_families
+        or family_templates["digest_conditional_successor_pinset"] is not None
+        or any(
+            not isinstance(template, str) or not template
+            for family, template in family_templates.items()
+            if family != "digest_conditional_successor_pinset"
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "ALLOWLIST_NOT_DERIVED: closed eight-family path specification is invalid",
+        )
+    paths = set(R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
+    for profile in sorted(profiles):
+        pack_id = successor_pack_ids[profile]
+        receipt_id = successor_freeze_receipt_ids[profile]
+        base = f"configs/campaigns/{pack_id}"
+        for stem in _R1_GOVERNED_PRE_REGISTRATION_EVIDENCE_STEMS:
+            for family in (
+                "generic_evidence",
+                "evidence_sidecar",
+                "evidence_source",
+            ):
+                template = family_templates[family]
+                paths.add(f"{base}/{template.format(stem=stem)}")
+        for family in (
+            "pass_freeze_receipt",
+            "freeze_sidecar",
+            "plan_tree",
+            "plan_tree_sidecar",
+        ):
+            template = family_templates[family]
+            paths.add(f"{base}/{template.format(receipt_id=receipt_id)}")
+    return tuple(sorted(paths))
 
 
 def validate_r1_lifecycle_registry(
@@ -1933,33 +2004,23 @@ def validate_r1_lifecycle_registry(
             "R1 successor_policy.family_publication_first_generation is invalid",
         )
     pack_ids = successor_policy["successor_pack_ids"]
-    if not (
-        (isinstance(pack_ids, str) and pack_ids.startswith(_R1_ED_RESERVED_PREFIX))
-        or (
-            isinstance(pack_ids, Mapping)
-            and set(pack_ids) == set(_SUCCESSOR_PROFILE_PATTERNS)
-            and all(
-                isinstance(pack_id, str)
-                and pack_id
-                and "/" not in pack_id
-                and "\\" not in pack_id
-                for pack_id in pack_ids.values()
-            )
-            and len(set(pack_ids.values())) == 3
+    freeze_receipt_ids = successor_policy["successor_freeze_receipt_ids"]
+    derived_paths = _r1_derive_irrelevant_paths(
+        successor_pack_ids=pack_ids,
+        successor_freeze_receipt_ids=freeze_receipt_ids,
+    )
+    if tuple(allowlist) != derived_paths:
+        extra = sorted(set(allowlist) - set(derived_paths))
+        missing = sorted(set(derived_paths) - set(allowlist))
+        token = (
+            "ALLOWLIST_INPUTS_UNRESOLVED"
+            if not derived_paths
+            else "ALLOWLIST_NOT_DERIVED"
         )
-    ):
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
-            "R1 successor pack IDs are invalid",
+            f"{token}: extra={extra!r} missing={missing!r}",
         )
-    if isinstance(pack_ids, Mapping) and registry_id == "d117-r1-lifecycle-v1":
-        derived_manifest = _r1_derived_irrelevant_path_manifest(pack_ids)
-        if allowlist != derived_manifest["paths"]:
-            raise ArmReadinessError(
-                "readiness_row_registry_mismatch",
-                "R1 irrelevant-path allowlist is not exactly the code-authenticated "
-                "governed-artifact manifest",
-            )
     predecessor_bindings = successor_policy[
         "freeze_receipt_v2_predecessor_bindings"
     ]
@@ -10993,17 +11054,29 @@ def validate_family_publication_marker(
             ),
             f"member {index} freeze receipt",
         )
+        receipt_id = freeze["receipt_id"]
+        receipt_match = (
+            _RECEIPT_NAME_RE["freeze"].fullmatch(f"{receipt_id}.json")
+            if isinstance(receipt_id, str)
+            else None
+        )
+        expected_ordinal = (
+            int(receipt_match.group(1)) if receipt_match is not None else None
+        )
         if (
             freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA
-            or freeze["receipt_id"] != "freeze-0004"
-            or freeze["ordinal"] != 4
+            or receipt_match is None
+            or freeze["ordinal"] != expected_ordinal
             or isinstance(freeze["ordinal"], bool)
-            or freeze["path"] != "arm_readiness.freeze.receipts/freeze-0004.json"
+            or freeze["path"]
+            != f"arm_readiness.freeze.receipts/{receipt_id}.json"
             or freeze["sidecar_path"]
-            != "arm_readiness.freeze.receipts/freeze-0004.json.sha256"
+            != f"arm_readiness.freeze.receipts/{receipt_id}.json.sha256"
             or freeze["status"] != "PASS"
         ):
-            raise FamilyPublicationError("freeze_binding_mismatch", "freeze-0004 constants differ")
+            raise FamilyPublicationError(
+                "freeze_binding_mismatch", "family freeze fields are inconsistent"
+            )
         _family_sha(freeze["sha256"], "freeze digest")
         _family_sha(freeze["sidecar_sha256"], "freeze sidecar digest")
     terminal = _family_exact(
@@ -11315,6 +11388,10 @@ def _family_member(
         profile = _plan_profile(root, registry)
     except ArmReadinessError as exc:
         raise FamilyPublicationError("roster_mismatch", str(exc)) from exc
+    lifecycle = registry.get("freeze_evidence_lifecycle", registry)
+    expected_freeze_receipt_id = lifecycle["successor_policy"][
+        "successor_freeze_receipt_ids"
+    ][profile]
     try:
         tree, tree_raw = _plan_tree(root)
     except ArmReadinessError as exc:
@@ -11343,8 +11420,14 @@ def _family_member(
         raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
     if freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA:
         raise FamilyPublicationError("freeze_binding_mismatch", "family freeze must use schema v2")
-    if freeze["receipt_id"] != "freeze-0004" or freeze["status"] != "PASS":
-        raise FamilyPublicationError("freeze_not_pass", "family freeze must be PASS freeze-0004")
+    if (
+        freeze["receipt_id"] != expected_freeze_receipt_id
+        or freeze["status"] != "PASS"
+    ):
+        raise FamilyPublicationError(
+            "freeze_not_pass",
+            f"family freeze must be PASS {expected_freeze_receipt_id}",
+        )
     try:
         _items, receipts = _freeze_evidence_for_arm(
             root,
