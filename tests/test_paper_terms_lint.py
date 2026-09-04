@@ -12,6 +12,8 @@ REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "paper_terms_lint.py"
 REAL_DRAFT = REPO / "docs" / "paper" / "draft-v1.md"
 REAL_PLAN = REPO / "docs" / "paper" / "round7" / "retensing-plan.md"
+REAL_PAPER_ROOT = REPO / "docs" / "paper"
+OWNED_SKELETON = REAL_PAPER_ROOT / "draft-v2-skeleton.md"
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -92,6 +94,42 @@ class FixtureLintTests(unittest.TestCase):
         self.assertIn(("H03", "resolution bound", "glossed"), glossed)
         self.assertIn(("H06", "whole-window gate", "glossed"), glossed)
 
+    def test_one_name_rule_reports_aliases_and_honors_exclusion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "canonical.md").write_text(
+                "A sampling record has a record support and an overlap count.\n",
+                encoding="utf-8",
+            )
+            (root / "aliases.md").write_text(
+                "A sampler record has a support interval.\n"
+                "Its overlapping-record count is also called a two-overlap count.\n",
+                encoding="utf-8",
+            )
+            excluded = root / "excluded.md"
+            excluded.write_text("sampler records\n", encoding="utf-8")
+            result = run_cli(
+                "one-name",
+                "--root",
+                str(root),
+                "--exclude",
+                str(excluded),
+                "--json",
+            )
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["finding_count"], 4)
+        self.assertEqual(
+            [(item["old"], item["canonical"]) for item in payload["findings"]],
+            [
+                ("sampler record", "sampling record"),
+                ("support interval", "record support"),
+                ("overlapping-record count", "overlap count"),
+                ("two-overlap count", "overlap count"),
+            ],
+        )
+
 
 class RealDocumentRegressionTests(unittest.TestCase):
     """Standing contract: the retensing plan stays lint-clean.
@@ -149,6 +187,19 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         payload = json.loads(result.stdout)
         self.assertGreater(payload["finding_count"], 0)
+
+    def test_paper_uses_one_name_per_object(self) -> None:
+        result = run_cli(
+            "one-name",
+            "--root",
+            str(REAL_PAPER_ROOT),
+            "--exclude",
+            str(OWNED_SKELETON),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["finding_count"], 0)
 
 if __name__ == "__main__":
     unittest.main()

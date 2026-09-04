@@ -50363,7 +50363,7 @@
       "slowdown_needed_on_shortest_member": 0.9135119979618251
     }
   ],
-  "standing": "SUPERSEDED AS A RULE by the cold gate of 2026-08-30 (see docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the amended D-166 index row): the binding reading is overlapping-record count >= 5 per small-model member (the count->=8 reading evaluated here is DISCARDED), the ladder is 512/1024/2048/4096, and selection executes via scripts/select_g2a_prefill_length.py over the G2-a record. The rule_readings block below is evidence, not a live rule.",
+  "standing": "SUPERSEDED AS A RULE by the cold gate of 2026-08-30 (see docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the amended D-166 index row): the binding reading is overlap count >= 5 per small-model member (the count->=8 reading evaluated here is DISCARDED), the ladder is 512/1024/2048/4096, and selection executes via scripts/select_g2a_prefill_length.py over the G2-a record. The rule_readings block below is evidence, not a live rule.",
   "transfer_assumption": {
     "multipliers_swept": [
       1.0,

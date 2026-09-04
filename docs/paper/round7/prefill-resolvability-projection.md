@@ -62,14 +62,14 @@ fields. No bundle stores this duration as a field; it exists only as that
 subtraction.
 
 **Powermetrics** is the macOS sampler that supplies the power readings. It does
-not report an instantaneous wattage at a point in time. It reports one **record**
-per sampling interval, and each record covers a stretch of time called its
-**support interval**, written into `power_trace.csv` as the pair
-`interval_start_s` / `interval_end_s`. A record is a rectangle: an average power
-over that stretch.
+not report an instantaneous wattage at a point in time. It reports one
+**sampling record** per sampling interval. Each sampling record has a **record
+support**, the stretch of time written into `power_trace.csv` as the pair
+`interval_start_s` / `interval_end_s`. A sampling record is a rectangle: an
+average power over that stretch.
 
-A record **overlaps** a phase when the record's support and the phase window
-share strictly positive time. The production reducer writes this exactly
+A sampling record **overlaps** a phase when its record support and the phase
+window share strictly positive time. The production reducer writes this exactly
 (`joulewise/reduce.py:196-206`):
 
 ```
@@ -255,7 +255,7 @@ production reducer had already written into `summary_metrics.json`. Across all
 All Qwen2.5-1.5B, one row per prompt length and cell shape. "Fails" counts
 phases with fewer than 3 overlapping records.
 
-| Prompt tokens | Cell shape | Phases | Duration median | Duration IQR | Duration range | Prefill tokens/s | Overlap counts | Smallest margin | Fails |
+| Prompt tokens | Cell shape | Phases | Duration median | Duration IQR | Duration range | Prefill tokens/s | Overlap count | Smallest margin | Fails |
 |---|---|---|---|---|---|---|---|---|---|
 | 128 | single-item | 458 | 0.1308 s | 0.0093 s | 0.1125 – 0.1522 s | 979 | 2 × 410, 3 × 48 | −1 | 410 / 458 |
 | 512 | suite item | 650 | 0.1902 s | 0.0058 s | 0.1801 – 0.2451 s | 2 692 | 2 × 211, 3 × 439 | −1 | 211 / 650 |
@@ -504,8 +504,8 @@ rules that out.
 
 For the pre-registration to bind, the G2 record needs, for every small-model
 member at each candidate length: the prefill phase start and end timestamps, the
-overlapping record count, the `sample_count_margin` field, and the per-record
-support intervals from which both were derived. All four already exist in the
+overlap count, the `sample_count_margin` field, and the record supports from
+which both were derived. All four already exist in the
 bundle format — nothing new has to be built. The selection is then mechanical:
 apply the ruled reading of the margin to the smallest count observed across
 members, and take the shortest length that clears.

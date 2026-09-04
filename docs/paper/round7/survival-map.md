@@ -271,7 +271,7 @@ bundle, state that the retained records tile without a meaningful pause;
 record width and start-to-start spacing describe the same record-period
 distribution apart from endpoint convention, so duration divided by a nominal
 period cannot replace the overlap count. Require a diagram showing the record
-supports, the prefill interval, and the marked two- and three-overlap counts.
+supports, the prefill interval, and the marked overlap counts of two and three.
 Consume `DG-067`–`DG-077`; render `DG-071` and `DG-075` with their exact
 registered omission sentences until their path- and SHA-pinned statistic
 artifacts issue.

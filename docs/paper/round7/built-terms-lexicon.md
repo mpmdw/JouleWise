@@ -240,6 +240,7 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | operative floor | 94 | curated seed | \| **Workload response:** do request and decode energy increase with realized out |
 | os_build | 652 | backticked identifier | The evidence file is marked `valid` only if all of the following hold: every one |
 | outward | 471 | emphasis | The estimator's identity is `powermetrics_native_second_rate_aware_set_membershi |
+| overlap count | 256 | curated seed, emphasis | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
 | P | 450 | emphasis | **Commanded pulses.** A commanded pulse *P* is a pair of stamps, one taken immed |
 | p2015-df-ph-decode-abs-r03 | 256 | backticked identifier | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
 | p256 | 198 | curated seed | The primary family uses two-sided Holm correction at \\(\\alpha=0.05\\) with \\(m=2\\ |
@@ -307,6 +308,7 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | record | 425 | emphasis | **The instrument and its records.** The instrument is macOS `powermetrics`, run  |
 | record energy | 436 | emphasis | - the **record energy** *E_i* = (`cpu_energy` + `gpu_energy` + `ane_energy`) / 1 |
 | record spacing | 256 | emphasis | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
+| record support | 249 | curated seed, emphasis | The rule is mechanical. A *powermetrics* sampling record has a **record support* |
 | refusal | 11 | curated seed, emphasis | Phase-energy measurements can repeat yet still charge energy to the wrong stage  |
 | refused | 47 | backticked identifier, curated seed, emphasis | For each commanded pulse, the detector estimates resting GPU power from samples  |
 | REGION_COVERAGE_RESOLUTION_S | 625 | backticked identifier | - **Procedure.** Start with the single cell [−0.75, 0.75]² on a last-in-first-ou |
@@ -358,7 +360,6 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | Spurious-plateau check on the baseline set | 580 | emphasis | **Spurious-plateau check on the baseline set.** The check is evaluated once, aft |
 | Stamp constraints | 492 | emphasis | **Stamp constraints.** For each stamp *v* (all quantities converted to ns by mul |
 | summary_metrics.json | 410 | backticked identifier | 1. A run bundle at `<runs root>/<run id>/`. `config.json` identifies the conditi |
-| support interval | 249 | curated seed | The rule is mechanical. A *powermetrics* record has a support interval. It count |
 | t | 264 | emphasis | The two contrasts will form one Holm family with alpha = 0.05 and m = 2, a diffe |
 | t_0 | 561 | emphasis | **Anchoring.** With the point anchor *A* (seconds), record *i*'s end time *t_i*  |
 | t_i | 448 | emphasis | **Trace intervals.** After the trace is anchored (A.3.4), each record becomes a  |
@@ -368,7 +369,6 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | The instrument and its records | 425 | emphasis | **The instrument and its records.** The instrument is macOS `powermetrics`, run  |
 | The model | 473 | emphasis | **The model.** Two unknowns: |
 | The model and the objective | 588 | emphasis | 5. **The model and the objective.** For candidate edge shifts (*d_on*, *d_off*)  |
-| The rule is a count | 256 | emphasis | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
 | The search (constrained coordinate descent | 600 | emphasis | 6. **The search (constrained coordinate descent).** The two shifts are searched  |
 | thermal_pressure | 220 | backticked identifier | - After any operator or stage intervention, it waits \\(180\\) s with no experimen |
 | time.monotonic | 421 | backticked identifier | Two conventions hold throughout. All times are in seconds unless marked "ns" (na |
