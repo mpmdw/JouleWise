@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise.reported_phase_energy import (  # noqa: E402
     StopFill,
     build_reported_phase_energy,
+    build_reported_phase_energy_source,
 )
 
 
@@ -24,7 +25,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "source",
         type=Path,
-        help="authenticated joulewise.reported_phase_energy_source.v1 JSON",
+        help=(
+            "authenticated joulewise.reported_phase_energy_source.v1 JSON, or "
+            "source material with --produce-source"
+        ),
+    )
+    parser.add_argument(
+        "--produce-source",
+        action="store_true",
+        help="produce and validate the governed source projection",
     )
     parser.add_argument(
         "--output",
@@ -48,8 +57,12 @@ def _render(artifact: dict) -> bytes:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        artifact = build_reported_phase_energy(_read(args.source))
-        rendered = _render(artifact)
+        document = (
+            build_reported_phase_energy_source(_read(args.source))
+            if args.produce_source
+            else build_reported_phase_energy(_read(args.source))
+        )
+        rendered = _render(document)
         if args.output is None:
             sys.stdout.buffer.write(rendered)
         else:

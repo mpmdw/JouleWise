@@ -21,6 +21,9 @@ from typing import Any
 
 SCHEMA_VERSION = "joulewise.reported_phase_energy.v1"
 SOURCE_SCHEMA_VERSION = "joulewise.reported_phase_energy_source.v1"
+SOURCE_MATERIAL_SCHEMA_VERSION = "joulewise.reported_phase_energy_source_material.v1"
+PROJECTION_SCHEMA_VERSION = "joulewise.reported_phase_energy_projection.v1"
+ISSUANCE_SCHEMA_VERSION = "joulewise.reported_phase_energy_issuance.v1"
 EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
 EXTRACTION_REPORT_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
 G2A_SCHEMA_VERSION = "joulewise.g2a_prefill_selection.v1"
@@ -56,11 +59,14 @@ _TOP_KEYS = {
 }
 _PRODUCER_KEYS = {"implementation", "source_commit", "source_sha256"}
 _INPUT_KEYS = {
+    "source",
     "extraction_spec",
     "extraction_report",
+    "reported_energy_projection",
     "g2a_selection",
     "prompt_pin",
 }
+_SOURCE_REFERENCE_KEYS = {"schema_version", "source_id", "file_sha256"}
 _SPEC_REFERENCE_KEYS = {
     "schema_version",
     "path",
@@ -72,6 +78,7 @@ _REPORT_REFERENCE_KEYS = {
     "file_sha256",
     "consumption_semantics_id",
 }
+_PROJECTION_REFERENCE_KEYS = {"schema_version", "file_sha256"}
 _G2A_REFERENCE_KEYS = {
     "schema_version",
     "file_sha256",
@@ -111,7 +118,7 @@ _PER_TOKEN_KEYS = {
     "observed_token_count",
     "denominator_kind",
     "aggregation_rule",
-    "token_count_source",
+    "token_count_sources",
 }
 _MEMBER_KEYS = {
     "ordinal",
@@ -138,6 +145,41 @@ _DENOMINATOR_KEYS = {
     "tokenize_prompt_token_count",
     "prefill_prompt_token_count",
 }
+_SOURCE_MATERIAL_KEYS = {
+    "schema_version",
+    "campaign_role",
+    "source_commit",
+    "extraction_spec",
+    "extraction_report",
+    "reported_energy_projection",
+    "g2a_selection",
+    "prompt_pin",
+}
+_SOURCE_KEYS = {
+    "schema_version",
+    "source_id",
+    "campaign_role",
+    "producer",
+    "extraction_spec",
+    "extraction_report",
+    "reported_energy_projection",
+    "g2a_selection",
+    "prompt_pin",
+}
+_SOURCE_PRODUCER_KEYS = {"implementation", "source_commit", "source_sha256"}
+_PROJECTION_KEYS = {
+    "schema_version",
+    "campaign_role",
+    "extraction_report_sha256",
+    "reported_energy_cells",
+}
+_ISSUANCE_KEYS = {
+    "schema_version",
+    "authority",
+    "placement_composition_rule",
+    "artifacts",
+}
+_ISSUANCE_ARTIFACT_KEYS = {"campaign_role", "artifact_id", "source_id"}
 
 
 class StopFill(ValueError):
@@ -210,6 +252,12 @@ def _sha256(value: object, where: str) -> str:
     return text
 
 
+def _optional_sha256(value: object, where: str) -> str | None:
+    if value is None:
+        return None
+    return _sha256(value, where)
+
+
 def _nonnegative(value: object, where: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise StopFill(f"{where}_invalid")
@@ -241,6 +289,12 @@ def _reason_list(value: object, where: str) -> list[str]:
             raise StopFill(f"{where}_invalid")
         result.append(text)
     return result
+
+
+def _source_id(source: Mapping[str, Any]) -> str:
+    preimage = dict(source)
+    preimage["source_id"] = ""
+    return "rpes-" + canonical_json_sha256(preimage)
 
 
 def _wrapped_document(
@@ -275,10 +329,115 @@ def _optional_wrapped_document(
     return _wrapped_document(source, key, expected_schema=expected_schema)
 
 
-def _report_artifact_id(report: Mapping[str, Any]) -> str:
-    preimage = dict(report)
-    preimage["artifact_id"] = ""
-    return "dfer-" + canonical_json_sha256(preimage)
+def _validated_source_wrappers(
+    source: Mapping[str, Any],
+) -> tuple[
+    dict[str, Any],
+    str,
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
+    spec, spec_path = _wrapped_document(
+        source, "extraction_spec", expected_schema=EXTRACTION_SPEC_SCHEMA_VERSION
+    )
+    report, _ = _wrapped_document(
+        source, "extraction_report", expected_schema=EXTRACTION_REPORT_SCHEMA_VERSION
+    )
+    projection, _ = _wrapped_document(
+        source, "reported_energy_projection", expected_schema=PROJECTION_SCHEMA_VERSION
+    )
+    g2a, _ = _optional_wrapped_document(
+        source, "g2a_selection", expected_schema=G2A_SCHEMA_VERSION
+    )
+    prompt_pin, _ = _optional_wrapped_document(
+        source, "prompt_pin", expected_schema=PROMPT_PIN_SCHEMA_VERSION
+    )
+
+    # This is the established extraction contract, not a look-alike fixture wire.
+    from joulewise.floor_extraction import validate_d117_mint_consumption_report
+
+    if validate_d117_mint_consumption_report(report):
+        raise StopFill("extraction_report_contract_invalid")
+    if report.get("all_cells_extractable") is not True:
+        raise StopFill("extraction_report_not_issued")
+    projection_row = _exact_keys(
+        projection, _PROJECTION_KEYS, "reported_energy_projection"
+    )
+    if (
+        projection_row["campaign_role"] != source.get("campaign_role")
+        or projection_row["extraction_report_sha256"]
+        != canonical_json_sha256(report)
+    ):
+        raise StopFill("reported_energy_projection_parent_mismatch")
+    cells = projection_row["reported_energy_cells"]
+    if not isinstance(cells, list) or len(cells) != 3:
+        raise StopFill("reported_energy_projection_cell_census_invalid")
+    if (g2a is None) != (prompt_pin is None):
+        raise StopFill("g2a_prompt_pin_pair_incomplete")
+    return spec, spec_path, report, projection, g2a, prompt_pin
+
+
+def build_reported_phase_energy_source(material_bytes: bytes) -> dict[str, Any]:
+    """Produce the governed projection source from an established extraction report."""
+
+    material = _decode_object(material_bytes, "source_material")
+    _exact_keys(material, _SOURCE_MATERIAL_KEYS, "source_material")
+    if material["schema_version"] != SOURCE_MATERIAL_SCHEMA_VERSION:
+        raise StopFill("source_material_schema_mismatch")
+    role = material["campaign_role"]
+    if role not in {"alpha", "beta"}:
+        raise StopFill("campaign_role_invalid")
+    source_commit = _string(material["source_commit"], "source_material.source_commit")
+    if _HEX40.fullmatch(source_commit) is None:
+        raise StopFill("source_commit_invalid")
+    _validated_source_wrappers(material)
+
+    source: dict[str, Any] = {
+        "schema_version": SOURCE_SCHEMA_VERSION,
+        "source_id": "",
+        "campaign_role": role,
+        "producer": {
+            "implementation": "joulewise.reported_phase_energy_source",
+            "source_commit": source_commit,
+            "source_sha256": _source_sha256(),
+        },
+        "extraction_spec": material["extraction_spec"],
+        "extraction_report": material["extraction_report"],
+        "reported_energy_projection": material["reported_energy_projection"],
+        "g2a_selection": material["g2a_selection"],
+        "prompt_pin": material["prompt_pin"],
+    }
+    source["source_id"] = _source_id(source)
+    errors = validate_reported_phase_energy_source(source)
+    if errors:
+        raise StopFill(errors[0])
+    return source
+
+
+def validate_reported_phase_energy_source(source: object) -> list[str]:
+    """Validate a content-addressed source projection and its real report parent."""
+
+    try:
+        root = _exact_keys(source, _SOURCE_KEYS, "source")
+        if root["schema_version"] != SOURCE_SCHEMA_VERSION:
+            raise StopFill("source_schema_mismatch")
+        if root["campaign_role"] not in {"alpha", "beta"}:
+            raise StopFill("campaign_role_invalid")
+        producer = _exact_keys(root["producer"], _SOURCE_PRODUCER_KEYS, "source.producer")
+        if producer["implementation"] != "joulewise.reported_phase_energy_source":
+            raise StopFill("source_producer_implementation_invalid")
+        if _HEX40.fullmatch(str(producer["source_commit"])) is None:
+            raise StopFill("source_commit_invalid")
+        if producer["source_sha256"] != _source_sha256():
+            raise StopFill("source_producer_sha256_mismatch")
+        if root["source_id"] != _source_id(root):
+            raise StopFill("source_id_content_mismatch")
+        _validated_source_wrappers(root)
+    except (StopFill, TypeError, ValueError, OverflowError) as exc:
+        return [str(exc)]
+    return []
 
 
 def _cell_refusal(
@@ -297,16 +456,20 @@ def _cell_refusal(
         if not isinstance(registered, Mapping):
             continue
         row = report_by_id.get(registered.get("bundle_id"), {})
+        def custody(key: str) -> str | None:
+            value = row.get(key)
+            return value if isinstance(value, str) and _HEX64.fullmatch(value) else None
+
         members.append(
             {
                 "ordinal": registered.get("ordinal"),
                 "bundle_id": registered.get("bundle_id"),
                 "config_sha256": registered.get("config_sha256"),
-                "bundle_sha256": row.get("bundle_sha256", "0" * 64),
-                "summary_sha256": row.get("summary_sha256", "0" * 64),
-                "metadata_sha256": row.get("metadata_sha256", "0" * 64),
-                "whole_window_evaluation_basis_sha256": row.get(
-                    "whole_window_evaluation_basis_sha256", "0" * 64
+                "bundle_sha256": custody("bundle_sha256"),
+                "summary_sha256": custody("summary_sha256"),
+                "metadata_sha256": custody("metadata_sha256"),
+                "whole_window_evaluation_basis_sha256": custody(
+                    "whole_window_evaluation_basis_sha256"
                 ),
                 "admitted": False,
                 "reasons": [reason],
@@ -565,7 +728,10 @@ def _build_cell(
         lower_mean = math.fsum(lowers) / EXPECTED_N
         upper_mean = math.fsum(uppers) / EXPECTED_N
         if composition_rule == DEFAULT_COMPOSITION_RULE:
-            if policy["t95_critical_value"] is not None or policy["window_allowance_j"] is not None:
+            if (
+                policy["t95_critical_value"] is not None
+                or policy["window_allowance_j"] is not None
+            ):
                 raise StopFill("default_interval_has_surplus_parameters")
             t95: float | None = None
             standard_deviation: float | None = None
@@ -594,7 +760,7 @@ def _build_cell(
             "window_allowance_j": allowance,
         }
         valid_denominators = [row for row in denominators if row is not None]
-        if len(valid_denominators) == EXPECTED_N and len(denominator_sources) == 1:
+        if len(valid_denominators) == EXPECTED_N:
             numerator = math.fsum(points)
             observed_token_count = sum(row["count"] for row in valid_denominators)
             per_token: dict[str, Any] | None = {
@@ -607,16 +773,12 @@ def _build_cell(
                     else OUTPUT_DENOMINATOR_KIND
                 ),
                 "aggregation_rule": TOKEN_AGGREGATION_RULE,
-                "token_count_source": next(iter(denominator_sources)),
+                "token_count_sources": sorted(denominator_sources),
             }
             refusal_reasons: list[str] = []
         else:
             per_token = None
-            refusal_reasons = [
-                "runtime_token_denominator_ambiguous"
-                if len(valid_denominators) == EXPECTED_N
-                else "runtime_token_denominator_invalid"
-            ]
+            refusal_reasons = ["runtime_token_denominator_invalid"]
         return {
             "cell_id": cell_id,
             "metric": metric,
@@ -638,42 +800,14 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
     """Build one alpha or beta artifact from exact authenticated source bytes."""
 
     source = _decode_object(source_bytes, "source")
-    _exact_keys(
-        source,
-        {
-            "schema_version",
-            "campaign_role",
-            "source_commit",
-            "extraction_spec",
-            "extraction_report",
-            "g2a_selection",
-            "prompt_pin",
-        },
-        "source",
-    )
-    if source["schema_version"] != SOURCE_SCHEMA_VERSION:
-        raise StopFill("source_schema_mismatch")
+    source_errors = validate_reported_phase_energy_source(source)
+    if source_errors:
+        raise StopFill(source_errors[0])
     campaign_role = source["campaign_role"]
-    if campaign_role not in {"alpha", "beta"}:
-        raise StopFill("campaign_role_invalid")
-    source_commit = _string(source["source_commit"], "source.source_commit")
-    if _HEX40.fullmatch(source_commit) is None:
-        raise StopFill("source_commit_invalid")
-
-    spec, spec_path = _wrapped_document(
-        source, "extraction_spec", expected_schema=EXTRACTION_SPEC_SCHEMA_VERSION
+    source_commit = source["producer"]["source_commit"]
+    spec, spec_path, report, projection, g2a, prompt_pin = (
+        _validated_source_wrappers(source)
     )
-    report, _ = _wrapped_document(
-        source, "extraction_report", expected_schema=EXTRACTION_REPORT_SCHEMA_VERSION
-    )
-    g2a, _ = _optional_wrapped_document(
-        source, "g2a_selection", expected_schema=G2A_SCHEMA_VERSION
-    )
-    prompt_pin, _ = _optional_wrapped_document(
-        source, "prompt_pin", expected_schema=PROMPT_PIN_SCHEMA_VERSION
-    )
-    if (g2a is None) != (prompt_pin is None):
-        raise StopFill("g2a_prompt_pin_pair_incomplete")
     selected_prefill_tokens: int | None = None
     if g2a is not None and prompt_pin is not None:
         selected_prefill_tokens = g2a.get("collection_prefill_tokens")
@@ -704,15 +838,11 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
     )
     if canonical_json_sha256(spec.get("cells")) != floor_projection_sha:
         raise StopFill("floor_projection_sha256_mismatch")
-    if report.get("artifact_id") != _report_artifact_id(report):
-        raise StopFill("extraction_report_artifact_id_mismatch")
-    if report.get("campaign_role") != campaign_role or report.get("outcome") != "issued":
-        raise StopFill("extraction_report_identity_or_outcome_mismatch")
     consumption_semantics_id = _string(
         report.get("consumption_semantics_id"),
         "extraction_report.consumption_semantics_id",
     )
-    report_cells = report.get("reported_energy_cells")
+    report_cells = projection.get("reported_energy_cells")
     if not isinstance(report_cells, list):
         raise StopFill("extraction_report_cells_invalid")
     report_by_id: dict[str, Mapping[str, Any]] = {}
@@ -747,6 +877,11 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
             "source_sha256": _source_sha256(),
         },
         "inputs": {
+            "source": {
+                "schema_version": SOURCE_SCHEMA_VERSION,
+                "source_id": source["source_id"],
+                "file_sha256": hashlib.sha256(source_bytes).hexdigest(),
+            },
             "extraction_spec": {
                 "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
                 "path": spec_path,
@@ -757,6 +892,10 @@ def build_reported_phase_energy(source_bytes: bytes) -> dict[str, Any]:
                 "schema_version": EXTRACTION_REPORT_SCHEMA_VERSION,
                 "file_sha256": canonical_json_sha256(report),
                 "consumption_semantics_id": consumption_semantics_id,
+            },
+            "reported_energy_projection": {
+                "schema_version": PROJECTION_SCHEMA_VERSION,
+                "file_sha256": canonical_json_sha256(projection),
             },
             "g2a_selection": None
             if g2a is None
@@ -817,14 +956,17 @@ def _cell_validation_error(cell: object, index: int) -> str | None:
             if member_row["ordinal"] != ordinal:
                 raise StopFill(f"{member_where}.ordinal_invalid")
             ids.append(_string(member_row["bundle_id"], f"{member_where}.bundle_id"))
+            _sha256(member_row["config_sha256"], f"{member_where}.config_sha256")
             for key in (
-                "config_sha256",
                 "bundle_sha256",
                 "summary_sha256",
                 "metadata_sha256",
                 "whole_window_evaluation_basis_sha256",
             ):
-                _sha256(member_row[key], f"{member_where}.{key}")
+                if row["status"] == "issued":
+                    _sha256(member_row[key], f"{member_where}.{key}")
+                else:
+                    _optional_sha256(member_row[key], f"{member_where}.{key}")
             if not isinstance(member_row["admitted"], bool):
                 raise StopFill(f"{member_where}.admitted_invalid")
             member_reasons = _reason_list(member_row["reasons"], f"{member_where}.reasons")
@@ -857,7 +999,12 @@ def _cell_validation_error(cell: object, index: int) -> str | None:
                 elif member_reasons != ["runtime_token_denominator_invalid"]:
                     raise StopFill(f"{member_where}.denominator_refusal_reason_invalid")
             else:
-                if member_row["admitted"] or member_row["energy_j"] is not None or member_row["energy_interval_j"] is not None or member_row["observed_token_denominator"] is not None:
+                if (
+                    member_row["admitted"]
+                    or member_row["energy_j"] is not None
+                    or member_row["energy_interval_j"] is not None
+                    or member_row["observed_token_denominator"] is not None
+                ):
                     raise StopFill(f"{member_where}.refused_payload_not_null")
                 if not member_reasons:
                     raise StopFill(f"{member_where}.refused_reason_missing")
@@ -903,23 +1050,20 @@ def _cell_validation_error(cell: object, index: int) -> str | None:
             allowance = _nonnegative(
                 interval["window_allowance_j"], f"{where}.allowance"
             )
-            if standard_deviation != statistics.stdev(points) or repeatability != t95 * standard_deviation / math.sqrt(EXPECTED_N):
+            if (
+                standard_deviation != statistics.stdev(points)
+                or repeatability
+                != t95 * standard_deviation / math.sqrt(EXPECTED_N)
+            ):
                 raise StopFill(f"{where}.t95_relation_invalid")
             expected_lower = lower_mean - repeatability - allowance
             expected_upper = upper_mean + repeatability + allowance
         if interval["lower_j"] != expected_lower or interval["upper_j"] != expected_upper:
             raise StopFill(f"{where}.interval_relation_invalid")
         if row["per_token"] is None:
-            denominator_sources = {
-                denominator["token_count_source"] for denominator in denominators
-            }
             valid_refusal = (
                 reasons == ["runtime_token_denominator_invalid"]
                 and len(denominators) < EXPECTED_N
-            ) or (
-                reasons == ["runtime_token_denominator_ambiguous"]
-                and len(denominators) == EXPECTED_N
-                and len(denominator_sources) > 1
             )
             if not valid_refusal:
                 raise StopFill(f"{where}.per_token_refusal_invalid")
@@ -929,11 +1073,15 @@ def _cell_validation_error(cell: object, index: int) -> str | None:
                 raise StopFill(f"{where}.per_token_parent_invalid")
             sources = {denominator["token_count_source"] for denominator in denominators}
             kinds = {denominator["kind"] for denominator in denominators}
-            expected_kind = PROMPT_DENOMINATOR_KIND if metric == "phase_energy_j.prefill" else OUTPUT_DENOMINATOR_KIND
+            expected_kind = (
+                PROMPT_DENOMINATOR_KIND
+                if metric == "phase_energy_j.prefill"
+                else OUTPUT_DENOMINATOR_KIND
+            )
             numerator = math.fsum(points)
             denominator_count = sum(denominator["count"] for denominator in denominators)
             if (
-                sources != {per_token["token_count_source"]}
+                per_token["token_count_sources"] != sorted(sources)
                 or kinds != {expected_kind}
                 or per_token["denominator_kind"] != expected_kind
                 or per_token["aggregation_rule"] != TOKEN_AGGREGATION_RULE
@@ -964,15 +1112,44 @@ def validate_reported_phase_energy(artifact: object) -> list[str]:
         if producer["source_sha256"] != _source_sha256():
             raise StopFill("producer_source_sha256_mismatch")
         inputs = _exact_keys(root["inputs"], _INPUT_KEYS, "inputs")
-        spec = _exact_keys(inputs["extraction_spec"], _SPEC_REFERENCE_KEYS, "inputs.extraction_spec")
-        report = _exact_keys(inputs["extraction_report"], _REPORT_REFERENCE_KEYS, "inputs.extraction_report")
-        if spec["schema_version"] != EXTRACTION_SPEC_SCHEMA_VERSION or report["schema_version"] != EXTRACTION_REPORT_SCHEMA_VERSION:
+        source = _exact_keys(inputs["source"], _SOURCE_REFERENCE_KEYS, "inputs.source")
+        spec = _exact_keys(
+            inputs["extraction_spec"],
+            _SPEC_REFERENCE_KEYS,
+            "inputs.extraction_spec",
+        )
+        report = _exact_keys(
+            inputs["extraction_report"],
+            _REPORT_REFERENCE_KEYS,
+            "inputs.extraction_report",
+        )
+        projection = _exact_keys(
+            inputs["reported_energy_projection"],
+            _PROJECTION_REFERENCE_KEYS,
+            "inputs.reported_energy_projection",
+        )
+        if (
+            source["schema_version"] != SOURCE_SCHEMA_VERSION
+            or spec["schema_version"] != EXTRACTION_SPEC_SCHEMA_VERSION
+            or report["schema_version"] != EXTRACTION_REPORT_SCHEMA_VERSION
+            or projection["schema_version"] != PROJECTION_SCHEMA_VERSION
+        ):
             raise StopFill("input_schema_reference_invalid")
+        if not isinstance(source["source_id"], str) or not source["source_id"].startswith("rpes-"):
+            raise StopFill("input_source_id_invalid")
+        _sha256(source["file_sha256"], "inputs.source.file_sha256")
         _string(spec["path"], "inputs.extraction_spec.path")
         _sha256(spec["file_sha256"], "inputs.extraction_spec.file_sha256")
         _sha256(spec["floor_projection_sha256"], "inputs.extraction_spec.floor_projection_sha256")
         _sha256(report["file_sha256"], "inputs.extraction_report.file_sha256")
-        _string(report["consumption_semantics_id"], "inputs.extraction_report.consumption_semantics_id")
+        _sha256(
+            projection["file_sha256"],
+            "inputs.reported_energy_projection.file_sha256",
+        )
+        _string(
+            report["consumption_semantics_id"],
+            "inputs.extraction_report.consumption_semantics_id",
+        )
         g2a = inputs["g2a_selection"]
         pin = inputs["prompt_pin"]
         if (g2a is None) != (pin is None):
@@ -980,7 +1157,10 @@ def validate_reported_phase_energy(artifact: object) -> list[str]:
         if g2a is not None and pin is not None:
             g2a_row = _exact_keys(g2a, _G2A_REFERENCE_KEYS, "inputs.g2a_selection")
             pin_row = _exact_keys(pin, _PROMPT_REFERENCE_KEYS, "inputs.prompt_pin")
-            if g2a_row["schema_version"] != G2A_SCHEMA_VERSION or pin_row["schema_version"] != PROMPT_PIN_SCHEMA_VERSION:
+            if (
+                g2a_row["schema_version"] != G2A_SCHEMA_VERSION
+                or pin_row["schema_version"] != PROMPT_PIN_SCHEMA_VERSION
+            ):
                 raise StopFill("artifact_prompt_schema_invalid")
             _sha256(g2a_row["file_sha256"], "inputs.g2a_selection.file_sha256")
             _sha256(pin_row["file_sha256"], "inputs.prompt_pin.file_sha256")
@@ -1048,6 +1228,111 @@ def _render_number(value: object) -> str:
     return rendered or "0"
 
 
+def validate_reported_phase_energy_issuance(issuance: object) -> list[str]:
+    """Validate the governed role-to-artifact binding used by paper projection."""
+
+    try:
+        root = _exact_keys(issuance, _ISSUANCE_KEYS, "issuance")
+        if (
+            root["schema_version"] != ISSUANCE_SCHEMA_VERSION
+            or root["authority"] != "D-123"
+            or root["placement_composition_rule"] != DEFAULT_COMPOSITION_RULE
+        ):
+            raise StopFill("issuance_contract_mismatch")
+        rows = root["artifacts"]
+        if not isinstance(rows, list) or len(rows) != 2:
+            raise StopFill("issuance_artifact_census_invalid")
+        roles: list[str] = []
+        for index, value in enumerate(rows):
+            row = _exact_keys(value, _ISSUANCE_ARTIFACT_KEYS, f"issuance.artifacts[{index}]")
+            role = row["campaign_role"]
+            if role not in {"alpha", "beta"}:
+                raise StopFill("issuance_campaign_role_invalid")
+            roles.append(role)
+            if not isinstance(row["artifact_id"], str) or not re.fullmatch(
+                r"rpe-[0-9a-f]{64}", row["artifact_id"]
+            ):
+                raise StopFill("issuance_artifact_id_invalid")
+            if not isinstance(row["source_id"], str) or not re.fullmatch(
+                r"rpes-[0-9a-f]{64}", row["source_id"]
+            ):
+                raise StopFill("issuance_source_id_invalid")
+        if set(roles) != {"alpha", "beta"} or len(set(roles)) != 2:
+            raise StopFill("issuance_campaign_role_census_invalid")
+    except (StopFill, TypeError, ValueError, OverflowError) as exc:
+        return [str(exc)]
+    return []
+
+
+def build_reported_phase_energy_issuance(
+    artifacts: Sequence[object], source_bytes_by_role: Mapping[str, bytes]
+) -> dict[str, Any]:
+    """Bind exactly one source-derived artifact per role for current DS placements."""
+
+    if set(source_bytes_by_role) != {"alpha", "beta"}:
+        raise StopFill("issuance_source_role_census_invalid")
+    by_role: dict[str, object] = {}
+    for artifact in artifacts:
+        if not isinstance(artifact, Mapping):
+            raise StopFill("issuance_artifact_invalid")
+        role = artifact.get("campaign_role")
+        if role not in {"alpha", "beta"} or role in by_role:
+            raise StopFill("issuance_artifact_role_census_invalid")
+        by_role[role] = artifact
+    if set(by_role) != {"alpha", "beta"}:
+        raise StopFill("issuance_artifact_role_census_invalid")
+
+    rows: list[dict[str, str]] = []
+    for role in ("alpha", "beta"):
+        raw_source = source_bytes_by_role[role]
+        source = _decode_object(raw_source, f"issuance_source_{role}")
+        source_errors = validate_reported_phase_energy_source(source)
+        if source_errors or source.get("campaign_role") != role:
+            raise StopFill("issuance_source_invalid")
+        expected_artifact = build_reported_phase_energy(raw_source)
+        artifact = by_role[role]
+        if artifact != expected_artifact:
+            raise StopFill("issuance_artifact_source_mismatch")
+        errors = validate_reported_phase_energy(artifact)
+        if errors:
+            raise StopFill(errors[0])
+        g2a = artifact["inputs"]["g2a_selection"]
+        selected_prefill = (
+            g2a["collection_prefill_tokens"] if isinstance(g2a, Mapping) else None
+        )
+        for cell in artifact["cells"]:
+            interval = cell.get("interval")
+            is_current_placement = cell.get("metric") == "phase_energy_j.decode" or (
+                cell.get("metric") == "phase_energy_j.prefill"
+                and selected_prefill is not None
+                and f"prefill-p{selected_prefill}" in str(cell.get("cell_id"))
+            )
+            if (
+                is_current_placement
+                and cell.get("status") == "issued"
+                and isinstance(interval, Mapping)
+                and interval.get("composition_rule") != DEFAULT_COMPOSITION_RULE
+            ):
+                raise StopFill("issuance_composition_rule_not_current")
+        rows.append(
+            {
+                "campaign_role": role,
+                "artifact_id": artifact["artifact_id"],
+                "source_id": source["source_id"],
+            }
+        )
+    issuance = {
+        "schema_version": ISSUANCE_SCHEMA_VERSION,
+        "authority": "D-123",
+        "placement_composition_rule": DEFAULT_COMPOSITION_RULE,
+        "artifacts": rows,
+    }
+    errors = validate_reported_phase_energy_issuance(issuance)
+    if errors:
+        raise StopFill(errors[0])
+    return issuance
+
+
 def _role_tokens(role: str) -> dict[str, str]:
     prefix = "1p7B" if role == "alpha" else "8B"
     return {
@@ -1064,21 +1349,52 @@ def _role_tokens(role: str) -> dict[str, str]:
     }
 
 
-def reported_phase_energy_token_values(artifacts: Sequence[object]) -> dict[str, str]:
-    """Project all 20 registered D-123 tokens, returning STOP_FILL per level."""
+def reported_phase_energy_token_values(
+    artifacts: Sequence[object],
+    *,
+    issuance_manifest_bytes: bytes | None = None,
+    expected_issuance_sha256: str | None = None,
+) -> dict[str, str]:
+    """Project all 20 D-123 tokens only through an expected issuance digest."""
 
-    values: dict[str, str] = {}
-    by_role = {
-        artifact.get("campaign_role"): artifact
-        for artifact in artifacts
-        if isinstance(artifact, Mapping)
-        and artifact.get("campaign_role") in {"alpha", "beta"}
+    values = {
+        token: STOP_FILL
+        for role in ("alpha", "beta")
+        for token in _role_tokens(role).values()
     }
+    try:
+        expected_digest = _sha256(
+            expected_issuance_sha256, "expected_issuance_sha256"
+        )
+        if not isinstance(issuance_manifest_bytes, bytes):
+            raise StopFill("issuance_manifest_bytes_required")
+        if hashlib.sha256(issuance_manifest_bytes).hexdigest() != expected_digest:
+            raise StopFill("issuance_manifest_sha256_mismatch")
+        issuance = _decode_object(issuance_manifest_bytes, "issuance_manifest")
+        errors = validate_reported_phase_energy_issuance(issuance)
+        if errors:
+            raise StopFill(errors[0])
+        issued_by_role = {
+            row["campaign_role"]: row for row in issuance["artifacts"]
+        }
+    except (StopFill, TypeError, ValueError, OverflowError):
+        return values
+
+    candidates: dict[str, list[Mapping[str, Any]]] = {"alpha": [], "beta": []}
+    for artifact in artifacts:
+        if isinstance(artifact, Mapping) and artifact.get("campaign_role") in candidates:
+            candidates[artifact["campaign_role"]].append(artifact)
     for role in ("alpha", "beta"):
         tokens = _role_tokens(role)
-        values.update({token: STOP_FILL for token in tokens.values()})
-        artifact = by_role.get(role)
-        if artifact is None or validate_reported_phase_energy(artifact):
+        if len(candidates[role]) != 1:
+            continue
+        artifact = candidates[role][0]
+        issued = issued_by_role[role]
+        if (
+            validate_reported_phase_energy(artifact)
+            or artifact["artifact_id"] != issued["artifact_id"]
+            or artifact["inputs"]["source"]["source_id"] != issued["source_id"]
+        ):
             continue
         g2a = artifact["inputs"]["g2a_selection"]
         selected = None if g2a is None else g2a["collection_prefill_tokens"]
@@ -1098,7 +1414,13 @@ def reported_phase_energy_token_values(artifacts: Sequence[object]) -> dict[str,
             None,
         )
         for phase, cell in (("prefill", prefill), ("decode", decode)):
-            if not isinstance(cell, Mapping) or cell["status"] != "issued":
+            if (
+                not isinstance(cell, Mapping)
+                or cell["status"] != "issued"
+                or not isinstance(cell.get("interval"), Mapping)
+                or cell["interval"].get("composition_rule")
+                != DEFAULT_COMPOSITION_RULE
+            ):
                 continue
             values[tokens[f"{phase}_mean"]] = _render_number(cell["mean_j_per_request"])
             values[tokens[f"{phase}_lower"]] = _render_number(cell["interval"]["lower_j"])
@@ -1114,13 +1436,20 @@ def reported_phase_energy_token_values(artifacts: Sequence[object]) -> dict[str,
 __all__ = [
     "SCHEMA_VERSION",
     "SOURCE_SCHEMA_VERSION",
+    "SOURCE_MATERIAL_SCHEMA_VERSION",
+    "PROJECTION_SCHEMA_VERSION",
+    "ISSUANCE_SCHEMA_VERSION",
     "DEFAULT_COMPOSITION_RULE",
     "T95_WINDOW_COMPOSITION_RULE",
     "STOP_FILL",
     "StopFill",
+    "build_reported_phase_energy_source",
     "build_reported_phase_energy",
+    "build_reported_phase_energy_issuance",
     "canonical_json_bytes",
     "canonical_json_sha256",
     "reported_phase_energy_token_values",
+    "validate_reported_phase_energy_source",
     "validate_reported_phase_energy",
+    "validate_reported_phase_energy_issuance",
 ]
