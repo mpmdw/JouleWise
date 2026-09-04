@@ -317,7 +317,7 @@ places.
    (`:149`), so one background process exiting normally between inventory and
    reaper aborts the entire handoff, and no retry path is documented. See AD-8.
 5. **Order: every non-root pid first, the interactive root last** — the doc
-   already does this (`:154`) and it is correct, since killing the root first
+   already does this (`docs/process/MAGISTRATE_WATCHDOG.md:151`) and it is correct, since killing the root first
    orphans the remainder out of reach.
 6. **Re-snapshot after TERM, KILL only matching survivors, then re-snapshot
    again.** *Any recorded `(pid, start_time)` still present after KILL is a
@@ -347,11 +347,11 @@ will treat the sentence as complete. Static text that claims to fence a dynamic
 value is worse than no text.
 
 **The rule.** Render `@@FENCED_CHECKOUTS@@` as the sorted union of
-`{CANONICAL_REPO}` (`scripts/magistrate_watchdog.py:52`) and
+`{CANONICAL_REPO}` (`scripts/magistrate_watchdog.py:54`) and
 `{plan.measurement_root}` over every plan the glob returned that is **armed** —
 authored and not yet completed — not merely those whose span is *active*. The
 distinction is load-bearing and the current code does not draw it: `decide`
-computes `active_plans` (`:908`) for the fence, but the prompt's own rule at
+computes `active_plans` (`:910`) for the fence, but the prompt's own rule at
 line 10 forbids moving the checkout after *arming*, and a plan armed for tonight
 is not in span at 14:00. Fencing only active plans would leave the armed
 checkout unfenced for the hours when it is most likely to be moved. If the armed
@@ -375,7 +375,7 @@ launch-blocking signal, and the fence must not be used to paper over it:
   permitted, the prompt lists both.
 
 The watchdog performs **none** of these checks today: `active_plans` is used
-only to pick `min(..., key=t0_epoch_s)` for the stand-down phase (`:919-921`), so
+only to pick `min(..., key=t0_epoch_s)` for the stand-down phase (`:926`), so
 a second, contradictory plan is silently discarded. See AD-11.
 
 ---
@@ -399,7 +399,7 @@ census-only caller. (Clause C-B.)
 
 **AD-2 — a fail-closed limb that can no longer fire.** `load_plans` still
 returns `errors` (`:530-552`) but nothing appends to it after round 4, so the
-hold at `decide:892-894` (`if plan_errors: return Decision("HOLD_UNSAFE", …)`)
+hold at `decide:893-895` (`if plan_errors: return Decision("HOLD_UNSAFE", …)`)
 is dead code, and `tests:177` asserts `errors == []`, pinning the deadness. A
 dead fail-closed limb is worse than an absent one: a reviewer reads it as
 protection. Either repopulate it (per clause C-D) or delete it — never leave it.
@@ -442,7 +442,7 @@ it.
 the kind.** `_is_interactive_claude` (`:654-663`) classifies by command string,
 excluding only `{daemon, bg-pty-host, --bg-pty-host, bg-spare, --bg-spare}`. A
 headless `claude -p` session — which is exactly what this watchdog spawns
-(`SESSION_ARGV_AFTER_PROMPT`, `:78-84`) — classifies as **interactive**. So
+(`SESSION_ARGV_AFTER_PROMPT`, `:78`) — classifies as **interactive**. So
 `handoff-inventory` invoked from inside a watchdog-spawned magistrate would
 accept that session as the twin and nominate its own tree for the kill list. The
 error string at `:707-709` asserts an invariant nothing tests: there is no tty
@@ -452,7 +452,7 @@ expected pid explicitly.
 
 **AD-8 — the reaper's pre-TERM check aborts on benign exits.**
 `changed = {pid: (start, observed.get(pid)) for … if observed.get(pid) != start}`
-then `raise SystemExit(…)` (`docs/process/MAGISTRATE_WATCHDOG.md:146-149`) treats
+then `raise SystemExit(…)` (`docs/process/MAGISTRATE_WATCHDOG.md:149`) treats
 *absent* and *start-time-changed* identically. With ~10 recorded processes, one
 of them exiting normally between inventory and reaper aborts the whole handoff,
 and the doc provides no retry path — leaving the magistrate having already
@@ -463,7 +463,7 @@ success; changed = reuse, skip. (Q4 item 4.)
 contract's own 9-minute drain.** `time.sleep(15)`
 (`docs/process/MAGISTRATE_WATCHDOG.md:157`) applies to the interactive root as
 well, while the same system's cooperative ladder is `STOP_COOPERATIVE_S = 9*60`
-(`scripts/magistrate_watchdog.py:71`) and the relaunch prompt *promises* the
+(`scripts/magistrate_watchdog.py:70`) and the relaunch prompt *promises* the
 session it may "exit within nine minutes of the request"
 (`docs/process/MAGISTRATE_RELAUNCH_PROMPT.md:17`), a window whose stated purpose
 is committing and pushing work (`:16`). The handoff therefore kills a magistrate
@@ -474,8 +474,8 @@ current silence reads as an oversight, and on the evidence it is one.
 
 **AD-10 — the reaper imports `production_census` from whatever checkout happens
 to be cwd.** The heredoc runs `/usr/bin/python3 - "$handoff_file"`
-(`docs/process/MAGISTRATE_WATCHDOG.md:141`) and does
-`from scripts.magistrate_watchdog import production_census` (`:150`), so
+(`docs/process/MAGISTRATE_WATCHDOG.md:119`) and does
+`from scripts.magistrate_watchdog import production_census` (`:128`), so
 resolution is via `sys.path[0] == ''`, i.e. the cwd, which the procedure never
 pins — in a step sequence that explicitly directs installation *from the
 measurement checkout*, making cwd ambiguous between two checkouts at different
@@ -485,8 +485,8 @@ from the watchdog that was installed. Pin an absolute path or `PYTHONPATH`.
 `python3` is otherwise fine.)
 
 **AD-11 — no conflict detection across armed plans.** `active_plans`
-(`:908`) feeds only `min(…, key=t0_epoch_s)` for the stand-down phase
-(`:919-921`). Two plans with overlapping spans, or one `measurement_root` at two
+(`:910`) feeds only `min(…, key=t0_epoch_s)` for the stand-down phase
+(`:926`). Two plans with overlapping spans, or one `measurement_root` at two
 `measurement_head`s, coexist silently and one is arbitrarily chosen. (Q5.)
 
 **AD-12 — the new tests encode two defects as intended behaviour.**
