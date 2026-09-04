@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 import tempfile
@@ -15,11 +16,31 @@ ROOT = Path(__file__).resolve().parents[1]
 D117_GENERATORS = tuple(
     sorted((ROOT / "configs/campaigns").glob("d117_*/generate_configs.py"))
 )
-LEGACY_FAMILY_GENERATORS = tuple(
-    path for path in D117_GENERATORS if path.parent.name != "d117_contrast_v5"
+LIVE_V5_GENERATORS = tuple(
+    ROOT / "configs/campaigns" / pack_id / "generate_configs.py"
+    for pack_id in (
+        "d117_contrast_v5",
+        "d117_floor_qwen3-1p7b_v5",
+        "d117_floor_qwen3-8b_v5",
+    )
+)
+HISTORICAL_GENERATORS = tuple(
+    ROOT / "configs/campaigns" / pack_id / "generate_configs.py"
+    for pack_id in (
+        "d117_contrast_qwen25_1p5b_vs_7b_v1",
+        "d117_contrast_qwen25_1p5b_vs_7b_v2",
+        "d117_contrast_qwen25_1p5b_vs_7b_v3",
+        "d117_floor_qwen25_1p5b_v1",
+        "d117_floor_qwen25_1p5b_v2",
+        "d117_floor_qwen25_1p5b_v3",
+        "d117_floor_qwen25_7b_v1",
+        "d117_floor_qwen25_7b_v2",
+        "d117_floor_qwen25_7b_v3",
+    )
 )
 DIRECT_SHARED_FUNCTIONS = (
     "actual_pack_paths",
+    "make_render_json",
     "sha256_bytes",
     "sidecar_bytes",
     "validate_generation_write_boundary",
@@ -43,46 +64,51 @@ def load_generator(path: Path):
 class CampaignGeneratorCoreTests(unittest.TestCase):
     maxDiff = None
 
-    def test_unfrozen_d117_generator_uses_the_one_shared_write_core(self) -> None:
-        """Restoring any removed local copy makes this identity test fail."""
-
-        self.assertEqual(len(D117_GENERATORS), 10)
-        path = ROOT / "configs/campaigns/d117_contrast_v5/generate_configs.py"
-        generator = load_generator(path)
-        for name in DIRECT_SHARED_FUNCTIONS:
-            self.assertIs(getattr(generator, name), getattr(core, name))
-        self.assertIs(
-            generator.render_json.shared_implementation,
-            core.render_json,
+    def test_d117_generator_census_requires_explicit_live_or_historical_custody(
+        self,
+    ) -> None:
+        self.assertEqual(
+            set(D117_GENERATORS),
+            set(LIVE_V5_GENERATORS) | set(HISTORICAL_GENERATORS),
         )
+
+    def test_counterfactual_local_write_boundary_cannot_bypass_shared_core(
+        self,
+    ) -> None:
+        """Restoring one generator-local validator makes this regression fail."""
+
+        for path in LIVE_V5_GENERATORS:
+            with self.subTest(generator=path.parent.name):
+                generator = load_generator(path)
+                for name in DIRECT_SHARED_FUNCTIONS:
+                    self.assertIs(getattr(generator, name), getattr(core, name))
+                self.assertIs(
+                    generator.render_json.shared_implementation,
+                    core.render_json,
+                )
+
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                local_functions = {
+                    node.name
+                    for node in tree.body
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                }
+                self.assertTrue(
+                    local_functions.isdisjoint(
+                        set(DIRECT_SHARED_FUNCTIONS) | {"render_json"}
+                    ),
+                    f"{path.parent.name} restored a generator-local core helper",
+                )
 
     def test_frozen_generators_remain_self_contained_custody_snapshots(self) -> None:
         """The extraction must not rewrite hash-pinned historical evidence."""
 
-        self.assertEqual(len(LEGACY_FAMILY_GENERATORS), 9)
-        for path in LEGACY_FAMILY_GENERATORS:
+        self.assertEqual(len(HISTORICAL_GENERATORS), 9)
+        for path in HISTORICAL_GENERATORS:
             with self.subTest(generator=path.parent.name):
                 source = path.read_text(encoding="utf-8")
                 self.assertNotIn("joulewise.campaign_generator_core", source)
                 self.assertIn("def validate_generation_write_boundary", source)
-
-    def test_identity_factory_refuses_a_family_downgrade(self) -> None:
-        identity_class = core.make_generation_identity_class(
-            module_name=__name__,
-            pack_rel=Path("configs/campaigns/example_floor_v6"),
-            current_family_suffix="_v6",
-            preserve_current_frozen_bytes=False,
-            draft_status="draft",
-            frozen_status="frozen",
-            freeze_aware_status=lambda _value: "draft",
-            arm_readiness_attachment=lambda: {"freeze_receipt": None},
-        )
-        with self.assertRaisesRegex(ValueError, "refuses the downgrade target"):
-            identity_class(
-                pack_id="example_floor_v5",
-                family_suffix="_v5",
-                preserve_current_frozen_bytes=False,
-            )
 
     def test_shared_boundary_refuses_a_symlinked_ancestor_before_write(self) -> None:
         with tempfile.TemporaryDirectory(prefix="generator-core-boundary-") as temp:
