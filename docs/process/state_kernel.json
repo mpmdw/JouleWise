@@ -1641,11 +1641,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "T26-RULING-INSTALL-01 closed 2026-09-03: D-170's three installing PRs #273, #274 and #275 are merged and the gate-ledger job is live and advisory",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
           "required": "The advisory gate-ledger job exists and is green on its own PR before Ed is asked to make it required",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "T26-RULING-INSTALL-01"
         }
@@ -1666,8 +1669,8 @@
       "lane": "ed_external",
       "priority": "p2_next_slice",
       "rank": 8,
-      "status": "blocked",
-      "status_note": "Lane: ed (GitHub admin action on Ed's account). Registered 2026-09-02 with T26-RULING-INSTALL-01. Batch with the next Ed machine session; nothing else waits on it except the job becoming binding.",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03 per the fresh-Fable docs-vs-truth audit A3: the installing row is closed and the advisory gate-ledger job is live, so the only thing left is Ed's hand on branch protection. Lane: ed (GitHub admin action on Ed's account). Registered 2026-09-02 with T26-RULING-INSTALL-01. Batch with the next Ed machine session; nothing else waits on it except the job becoming binding.",
       "stop_card": null
     },
     "ED-D118-NA-TIER-E2-01": {
@@ -1956,11 +1959,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed (hard-start decision gate and producer-regression evidence rule); the 2026-09-02 cold-gate ruling section B4 applies this dependency to the existing S9-04 row",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -1988,8 +1994,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 109,
-      "status": "blocked",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
     "GENERATOR-CORE-01": {
@@ -2196,11 +2202,14 @@
           "target": "V5-TRANSACTION-01"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed (hard-start decision gate and producer-regression evidence rule); the 2026-09-02 cold-gate ruling section B4 applies this dependency to the existing S9-12 row",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         },
@@ -4626,11 +4635,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -4643,8 +4655,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 121,
-      "status": "blocked",
-      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 01b of the ruled-not-installed sweep). The complete D-157 R-2 admission check must remain inside W-10 rather than narrowing to the m=1 case.",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 01b of the ruled-not-installed sweep). The complete D-157 R-2 admission check must remain inside W-10 rather than narrowing to the m=1 case.",
       "stop_card": null
     },
     "S9-02-W10-SCOPE-P256-M1-01": {
@@ -4667,11 +4679,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -4684,8 +4699,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 122,
-      "status": "blocked",
-      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 02 of the ruled-not-installed sweep). This is a scope correction within D-157 R-1 so W-10 does not repair only the families block.",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 02 of the ruled-not-installed sweep). This is a scope correction within D-157 R-1 so W-10 does not repair only the families block.",
       "stop_card": null
     },
     "S9-03-GAMMA-PREFILL-PROMPT-OWNER-01": {
@@ -4708,11 +4723,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -4725,8 +4743,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 123,
-      "status": "blocked",
-      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 03 of the ruled-not-installed sweep). The prompt cannot remain a candidate in its owning pack while its consumers call the same bytes ratified.",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 03 of the ruled-not-installed sweep). The prompt cannot remain a candidate in its owning pack while its consumers call the same bytes ratified.",
       "stop_card": null
     },
     "S9-05-CAL-SCREEN-FLOOR-RULING-01": {
@@ -4749,11 +4767,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -4766,8 +4787,8 @@
       "lane": "ed_external",
       "priority": "p2_next_slice",
       "rank": 71,
-      "status": "blocked",
-      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 05 of the ruled-not-installed sweep). The magistrate does not decide whether the live 0.009724 metrology value supersedes or violates D-125's 0.010818 floor.",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 05 of the ruled-not-installed sweep). The magistrate does not decide whether the live 0.009724 metrology value supersedes or violates D-125's 0.010818 floor.",
       "stop_card": null
     },
     "S9-06-WINDOW-T0-GO-RECEIPT-GATE-01": {
@@ -4790,11 +4811,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "D-170 item 1's ruling-status semantics is installed, including the hard-start decision gate and producer-regression evidence rule this row uses",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -4807,8 +4831,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 124,
-      "status": "blocked",
-      "status_note": "Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
+      "status": "queued",
+      "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -5285,11 +5309,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 1 installed: test_satisfied_decision_dependency_requires_named_test_regression fails when a satisfied kind:decision dependency carries no producer-regression pointer (PR #273)",
+            "path": "tests/test_gen_state.py"
+          },
           "kind": "decision",
           "required": "the four T26 verdict mechanisms are installed and each is proven by a regression that fails when the ruled value is absent",
           "scope": "close",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         }
@@ -5317,8 +5344,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 17,
-      "status": "partial",
-      "status_note": "Registered 2026-09-02 by the magistrate after a bench sweep found that NONE of the four T26 verdict mechanisms had reached the repo six days after the ruling merged: no `installs via` form in the decision-log How-To, no status-vocabulary or Executed-evidence test in tests/test_docs_freshness.py, no pull_request_template.md or gate-ledger job, and arm_readiness.py still carrying the pre-ruling `<=5 s ... open magistrate item` comment with no 600 s conjunct. The ruling about decided-not-equal-done was itself decided and not done; it is installed under its own item-1 form (D-170 `open (installs via T26-RULING-INSTALL-01)`). In flight 2026-09-02 as three seats on feat/2026-09-02-t26-install (items 1+4, docs/tests), feat/2026-09-02-t26-liveness (item 3, code, full C-028 gauntlet: hardware-adjacent), feat/2026-09-02-t26-gateledger (item 2, CI/template); integration tree before the merge wave. The operation-loop skill section 5 pointer (item 2) lives outside the repo and is a magistrate bench edit. Kernel form per item 1: the `kind: decision` hard-start dependency on D-170 sits on the task the clause GATES (V5-TRANSACTION-01 for item 3), not on this installing row; its satisfied evidence pointer names the regression that fails when the ruled value is absent.",
+      "status": "shelved",
+      "status_note": "RETIRED 2026-09-03 (closed, not abandoned): this row existed to install the four T26 cold-gate verdicts, and all three of its branches have merged - #273 for items 1 and 4 (decision-log status form, Mission M0 line, D-160 pointer, gen_state producer-regression gate, tests/test_gen_state.py and tests/test_docs_freshness.py), #275 for item 2 (tracked pull-request template, advisory gate-ledger CI job, scripts/check_gate_ledger.py, tests/test_check_gate_ledger.py), and #274 for item 3 (the 600 s liveness conjunct in joulewise/arm_readiness.py with its boundary regressions in tests/test_arm_readiness.py and tests/test_arm_readiness_evidence_t0.py). Item 4's packet-input-list amendment was deferred to charter v3 by D-170 itself and now has its own owner row. The kernel has no retired status word, so this is recorded as shelved. Retirement prescribed by the 2026-09-02 fresh-Fable docs-vs-truth audit A3. Prior note follows. Registered 2026-09-02 by the magistrate after a bench sweep found that NONE of the four T26 verdict mechanisms had reached the repo six days after the ruling merged: no `installs via` form in the decision-log How-To, no status-vocabulary or Executed-evidence test in tests/test_docs_freshness.py, no pull_request_template.md or gate-ledger job, and arm_readiness.py still carrying the pre-ruling `<=5 s ... open magistrate item` comment with no 600 s conjunct. The ruling about decided-not-equal-done was itself decided and not done; it is installed under its own item-1 form (D-170 `open (installs via T26-RULING-INSTALL-01)`). In flight 2026-09-02 as three seats on feat/2026-09-02-t26-install (items 1+4, docs/tests), feat/2026-09-02-t26-liveness (item 3, code, full C-028 gauntlet: hardware-adjacent), feat/2026-09-02-t26-gateledger (item 2, CI/template); integration tree before the merge wave. The operation-loop skill section 5 pointer (item 2) lives outside the repo and is a magistrate bench edit. Kernel form per item 1: the `kind: decision` hard-start dependency on D-170 sits on the task the clause GATES (V5-TRANSACTION-01 for item 3), not on this installing row; its satisfied evidence pointer names the regression that fails when the ruled value is absent.",
       "stop_card": null
     },
     "T3-CHAR-PAIR-01": {
@@ -6181,11 +6208,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-170 item 3 installed: test_t0_liveness_bound_refuses_at_600s_plus_1ns fails when the 600 s liveness conjunct is absent (PR #274)",
+            "path": "tests/test_arm_readiness.py"
+          },
           "kind": "decision",
           "required": "Item 3 of the T26 cold gate is installed: the 600 s liveness conjunct evaluates at both the T-0 issuance and the arm site with boundary regressions, so no _v5 transaction consumes a T-0 receipt authored under the struck 5 s/35 s text or under no upper bound at all",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D-170"
         },
