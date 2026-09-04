@@ -115,7 +115,11 @@ if [[ -n "$render_only" ]]; then
 else
   launch_dir="$HOME/Library/LaunchAgents"
 fi
-mkdir -p "$launch_dir" "$custody_root/night"
+mkdir -p "$launch_dir"
+if [[ "$mode" != "--uninstall" ]]; then
+  # Only an install may create custody; uninstall must never touch the plan's custody root.
+  mkdir -p "$custody_root/night"
+fi
 uid="$(id -u)"
 
 render() {
