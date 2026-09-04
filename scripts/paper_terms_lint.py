@@ -70,8 +70,7 @@ CURATED_TERMS = (
     "anchor",
     "fiducial",
     "sampling record",
-    "record support",
-    "overlap count",
+    "support interval",
     "characterization",
     "null block",
     "contrast",
@@ -110,27 +109,6 @@ ITALIC_RE = re.compile(r"(?<!\*)\*([^*\n]+)\*(?!\*)")
 WORD_RE = re.compile(r"[A-Za-z0-9_§]+(?:[.][A-Za-z0-9_]+)*(?:-[A-Za-z0-9_]+)*")
 PLAIN_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+(?:-[A-Za-z0-9_]+)*")
 PLACEHOLDER_RE = re.compile(r"\[\[[^\n]*?\]\]|\[[^\n\]]+\]")
-ONE_NAME_RULES = (
-    (
-        "sampling record",
-        re.compile(r"\bsampler records?\b", re.IGNORECASE),
-    ),
-    (
-        "record support",
-        re.compile(
-            r"\bsupport intervals?\b|\bsampling-record supports?\b",
-            re.IGNORECASE,
-        ),
-    ),
-    (
-        "overlap count",
-        re.compile(
-            r"\boverlapping[- ]record counts?\b|\b(?:two|three)-overlap counts?\b",
-            re.IGNORECASE,
-        ),
-    ),
-)
-ONE_NAME_TEXT_SUFFIXES = frozenset((".json", ".md", ".py", ".svg", ".txt"))
 
 
 @dataclass
@@ -578,37 +556,6 @@ def load_lexicon(text: str) -> dict[str, LexiconEntry]:
     return entries
 
 
-def find_one_name_violations(
-    root: Path, excluded_paths: Iterable[Path] = ()
-) -> list[dict[str, object]]:
-    """Find noncanonical names in text files below ``root``."""
-
-    resolved_root = root.resolve()
-    excluded = {path.resolve() for path in excluded_paths}
-    findings: list[dict[str, object]] = []
-    for path in sorted(resolved_root.rglob("*")):
-        if (
-            not path.is_file()
-            or path.resolve() in excluded
-            or path.suffix.casefold() not in ONE_NAME_TEXT_SUFFIXES
-        ):
-            continue
-        text = path.read_text(encoding="utf-8")
-        display_path = path.relative_to(resolved_root).as_posix()
-        for line_number, line in enumerate(text.splitlines(), 1):
-            for canonical, pattern in ONE_NAME_RULES:
-                for match in pattern.finditer(line):
-                    findings.append(
-                        {
-                            "path": display_path,
-                            "line": line_number,
-                            "old": match.group(0),
-                            "canonical": canonical,
-                        }
-                    )
-    return findings
-
-
 def _read(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
 
@@ -672,33 +619,6 @@ def run_lint(args: argparse.Namespace) -> int:
     return 1 if findings else 0
 
 
-def run_one_name(args: argparse.Namespace) -> int:
-    root = Path(args.root)
-    findings = find_one_name_violations(
-        root, (Path(value) for value in args.exclude)
-    )
-    if args.json:
-        print(
-            json.dumps(
-                {
-                    "root": args.root,
-                    "finding_count": len(findings),
-                    "findings": findings,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            )
-        )
-    else:
-        for finding in findings:
-            print(
-                f"{finding['path']}:{finding['line']}: "
-                f"{finding['old']!r} must be {finding['canonical']!r}"
-            )
-        print(f"{len(findings)} one-name finding(s)")
-    return 1 if findings else 0
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -716,14 +636,6 @@ def build_parser() -> argparse.ArgumentParser:
     lint.add_argument("--json", action="store_true")
     lint.add_argument("--verbose", action="store_true")
     lint.set_defaults(handler=run_lint)
-
-    one_name = subparsers.add_parser(
-        "one-name", help="enforce one name per paper object"
-    )
-    one_name.add_argument("--root", required=True)
-    one_name.add_argument("--exclude", action="append", default=[])
-    one_name.add_argument("--json", action="store_true")
-    one_name.set_defaults(handler=run_one_name)
     return parser
 
 

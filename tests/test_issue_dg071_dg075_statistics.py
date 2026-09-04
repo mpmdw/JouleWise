@@ -315,7 +315,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
             "max_tiling_gap_s": "0.00000100",
             "method": {
                 "population": (
-                    "A sampling record is one contiguous group of CSV rows — "
+                    "A sampler record is one contiguous group of CSV rows — "
                     "consecutive rows in file order — that share one `timestamp_s` "
                     "literal. A literal is the character string exactly as written "
                     "in the file, before any numeric conversion; two literals are "
@@ -325,7 +325,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                     "and `interval_end_s` literals must be identical; a timestamp "
                     "literal that reappears after another group has begun is refused. "
                     "DG-071 uses one interval width, `interval_end_s − "
-                    "interval_start_s`, per sampling record."
+                    "interval_start_s`, per sampler record."
                 ),
                 "arithmetic": (
                     "The timestamp and endpoint literals are parsed directly as exact "
@@ -422,7 +422,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
                     "q3_ms": "101.0001",
                     "q3_s": "0.1010000900",
                     "sample_count": 8,
-                    "statistic": "interval_end_s - interval_start_s per sampling record",
+                    "statistic": "interval_end_s - interval_start_s per sampler record",
                 },
                 "DG-075": {
                     "iqr_ms": "1.0006",
@@ -450,7 +450,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         self.assertEqual(
             markdown_lines[4:9],
             [
-                "- Sampling records: 8",
+                "- Sampler records: 8",
                 "- Rail rows: 24",
                 "- Rails: ane_power, cpu_power, gpu_power",
                 "- Largest tiling gap (s; defined under Method): 0.00000100",
@@ -965,7 +965,7 @@ class Dg071Dg075StatisticsTests(unittest.TestCase):
         self._assert_main_refusal("record_set_empty", "empty.json")
 
     def test_insufficient_unique_timestamps_refusal_reaches_main(self) -> None:
-        """Counterfactual: the CSV contains only one complete sampling record."""
+        """Counterfactual: the CSV contains only one complete sampler record."""
 
         self._write_records([("10", "9", "10")])
         self._assert_main_refusal(

@@ -1,7 +1,51 @@
 # Built-terms lexicon
 
-Generated mechanically from `docs/paper/draft-v1.md` by `scripts/paper_terms_lint.py`.
-Only terms found in the draft appear here; ruled terms absent from the draft remain lint vocabulary.
+The base table was generated mechanically from `docs/paper/draft-v1.md` by
+`scripts/paper_terms_lint.py`. The successor-draft additions below record terms
+built or glossed while curing the first-use ledger; ruled terms absent from
+either draft remain lint vocabulary. `tests/test_paper_first_use_ledger.py`
+binds this hand-maintained successor table so regenerating the base cannot
+silently discard it.
+
+## Successor-draft first-use additions
+
+| term | first-use home | build or gloss |
+|---|---|---|
+| Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
+| powermetrics | §1 | macOS `powermetrics` is the power sampler used here. |
+| MLX | §1 | Apple's on-device inference framework used to run the models. |
+| cell / power-measurement boundary | §1 | A cell groups runs sharing one phase, workload, model, hardware, software, and boundary defining the measured power. |
+| resolution bound / detection floor / cell floor | §1 | The resolution bound is the largest allowed false phase-energy difference before safeguards; “detection floor” is the advisor's term for that bound, and “cell floor” is the artifact term for the final gate value after the Section 4 safeguards. |
+| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | §1 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement instead uses \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
+| member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
+| timing-error sign / shared sign / local sign | §1 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
+| reasoning disabled | §1 | Qwen3's optional chain-of-thought output is switched off. |
+| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
+| mint | §2 | The analysis run that issues the paper's fixed results. |
+| frozen | §2 | Fixed and fingerprinted before collection. |
+| signal, fit, range, trace-coverage, and completeness checks | §2 | Signal rises above rest; the fit beats a no-pulse model; shifts stay in range; both trace margins exist; and required pulses, fingerprints, and binding fields are present. |
+| shared search-work limits | §2 | Caps on the number of search rectangles and the elapsed search time for one capture. |
+| first-record endpoint | §2 | Wall-clock time assigned to the end of the first native power record. |
+| clock-anchor allowances | §2 | Endpoint half-range, observed wall-versus-monotonic span, largest clock resolution, and numeric-rounding pad. |
+| calibration-acceptance rule | §2 | Pre-collection rule deciding whether two capture bounds may bracket one window. |
+| entry check | §2 | The pass/fail checks on recorded machine state that a stage must satisfy before its first run is measured. |
+| reference runs | §2 | Fixed workloads repeated at window opening, midpoint when present, and close to track drift. |
+| admitted | §2 | A stage that passes the entry check is allowed to begin its measured runs. |
+| gross energy | §2 | Processor energy recorded during a run. |
+| idle-subtracted energy | §2 | Gross energy minus mean idle power multiplied by run duration. |
+| null-test blocks | §3 | Identical-condition blocks whose allowed differences should contain zero. |
+| package power | §3 | Summed CPU, GPU, and neural-engine power. |
+| workload level / workload magnitude / per-token conversion | §3 | One fixed output-token count; one fixed identical-condition target size; and the fitted joules per output token. |
+| cadence ratio / sampling flags | §3 | A window's sampling cadence relative to its phase rate; missing or below-minimum values are named sampling refusals. |
+| floor packs / contrast pack | §3 | Floor packs are campaign plans that collect calibration data used to build comparator floors; the contrast pack is the campaign plan that collects model-comparison data. |
+| retired calculation | §3 | The former equal-rate anchor and yes/no rule that compared the corner maximum with a point value multiplied by a fixed limited-repetition factor, superseded by the rate-aware anchor and corner-to-point ratio. |
+| close-out artifact | §4 | Post-campaign artifact that checks every required ratio. |
+| small-sample multiplier | §4 | A factor that widens a result to allow for limited repetition. |
+| energy terms | §4 | The four claim-bearing terms: gross request, idle-subtracted request, gross prompt-processing, and gross token-generation energy. |
+| interpolation edge / deterministic-bound kinds | §4 | A phase-window start or end between samples gets straight-line power; both edges move through their neighboring-sample gaps, and that joint movement is listed beside idle-power drift, clock-anchor movement, and whole-window drift. |
+| measured contrast / custody / Figure 3 | §4 | The figure input is a point estimate plus composed interval; custody means fingerprints still match recorded bytes; the refusal lane, two sequential gates, yes/no arrows, and four outcomes are named. |
+
+## Draft-v1 generated base
 
 | term | first line | how detected | line (first 80 chars) |
 |---|---:|---|---|
@@ -240,7 +284,6 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | operative floor | 94 | curated seed | \| **Workload response:** do request and decode energy increase with realized out |
 | os_build | 652 | backticked identifier | The evidence file is marked `valid` only if all of the following hold: every one |
 | outward | 471 | emphasis | The estimator's identity is `powermetrics_native_second_rate_aware_set_membershi |
-| overlap count | 256 | curated seed, emphasis | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
 | P | 450 | emphasis | **Commanded pulses.** A commanded pulse *P* is a pair of stamps, one taken immed |
 | p2015-df-ph-decode-abs-r03 | 256 | backticked identifier | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
 | p256 | 198 | curated seed | The primary family uses two-sided Holm correction at \\(\\alpha=0.05\\) with \\(m=2\\ |
@@ -308,7 +351,6 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | record | 425 | emphasis | **The instrument and its records.** The instrument is macOS `powermetrics`, run  |
 | record energy | 436 | emphasis | - the **record energy** *E_i* = (`cpu_energy` + `gpu_energy` + `ane_energy`) / 1 |
 | record spacing | 256 | emphasis | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
-| record support | 249 | curated seed, emphasis | The rule is mechanical. A *powermetrics* sampling record has a **record support* |
 | refusal | 11 | curated seed, emphasis | Phase-energy measurements can repeat yet still charge energy to the wrong stage  |
 | refused | 47 | backticked identifier, curated seed, emphasis | For each commanded pulse, the detector estimates resting GPU power from samples  |
 | REGION_COVERAGE_RESOLUTION_S | 625 | backticked identifier | - **Procedure.** Start with the single cell [−0.75, 0.75]² on a last-in-first-ou |
@@ -360,6 +402,7 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | Spurious-plateau check on the baseline set | 580 | emphasis | **Spurious-plateau check on the baseline set.** The check is evaluated once, aft |
 | Stamp constraints | 492 | emphasis | **Stamp constraints.** For each stamp *v* (all quantities converted to ns by mul |
 | summary_metrics.json | 410 | backticked identifier | 1. A run bundle at `<runs root>/<run id>/`. `config.json` identifies the conditi |
+| support interval | 249 | curated seed | The rule is mechanical. A *powermetrics* record has a support interval. It count |
 | t | 264 | emphasis | The two contrasts will form one Holm family with alpha = 0.05 and m = 2, a diffe |
 | t_0 | 561 | emphasis | **Anchoring.** With the point anchor *A* (seconds), record *i*'s end time *t_i*  |
 | t_i | 448 | emphasis | **Trace intervals.** After the trace is anchored (A.3.4), each record becomes a  |
@@ -369,6 +412,7 @@ Only terms found in the draft appear here; ruled terms absent from the draft rem
 | The instrument and its records | 425 | emphasis | **The instrument and its records.** The instrument is macOS `powermetrics`, run  |
 | The model | 473 | emphasis | **The model.** Two unknowns: |
 | The model and the objective | 588 | emphasis | 5. **The model and the objective.** For candidate edge shifts (*d_on*, *d_off*)  |
+| The rule is a count | 256 | emphasis | For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the t |
 | The search (constrained coordinate descent | 600 | emphasis | 6. **The search (constrained coordinate descent).** The two shifts are searched  |
 | thermal_pressure | 220 | backticked identifier | - After any operator or stage intervention, it waits \\(180\\) s with no experimen |
 | time.monotonic | 421 | backticked identifier | Two conventions hold throughout. All times are in seconds unless marked "ns" (na |

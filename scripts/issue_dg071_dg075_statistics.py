@@ -4,7 +4,7 @@
 The governing convention is the ``Addendum 2026-09-02`` at the end of
 ``docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md``.
 
-A sampling record is one contiguous group of CSV rows — consecutive rows in
+A sampler record is one contiguous group of CSV rows — consecutive rows in
 file order — that share one `timestamp_s` literal. A literal is the character
 string exactly as written in the file, before any numeric conversion; two
 literals are equal only when their characters are identical. Every group must
@@ -12,7 +12,7 @@ contain exactly one row for each of `ane_power`, `cpu_power` and `gpu_power`,
 and the three rows' `interval_start_s` and `interval_end_s` literals must be
 identical; a timestamp literal that reappears after another group has begun is
 refused. DG-071 uses one interval width, `interval_end_s − interval_start_s`,
-per sampling record.
+per sampler record.
 
 The timestamp and endpoint literals are parsed directly as exact decimals.
 Widths, spacings, quantiles and IQR never pass through binary floating point.
@@ -154,7 +154,7 @@ class _ParsedRow:
 
 @dataclass(frozen=True)
 class SamplerRecord:
-    """One validated three-rail sampling record."""
+    """One validated three-rail sampler record."""
 
     timestamp_literal: str
     timestamp_s: Decimal
@@ -367,7 +367,7 @@ def _read_records(raw: bytes) -> tuple[list[SamplerRecord], int]:
         groups.append(current_group)
     if not groups:
         raise IssuanceRefused(
-            "record_set_empty", "power_trace.csv has no sampling records"
+            "record_set_empty", "power_trace.csv has no sampler records"
         )
     return [_record_from_group(group) for group in groups], rail_row_count
 
@@ -436,7 +436,7 @@ def _method_disclosure(
 ) -> dict[str, str]:
     return {
         "population": (
-            "A sampling record is one contiguous group of CSV rows — "
+            "A sampler record is one contiguous group of CSV rows — "
             "consecutive rows in file order — that share one `timestamp_s` "
             "literal. A literal is the character string exactly as written "
             "in the file, before any numeric conversion; two literals are "
@@ -446,7 +446,7 @@ def _method_disclosure(
             "and `interval_end_s` literals must be identical; a timestamp "
             "literal that reappears after another group has begun is refused. "
             "DG-071 uses one interval width, `interval_end_s − "
-            "interval_start_s`, per sampling record."
+            "interval_start_s`, per sampler record."
         ),
         "arithmetic": (
             "The timestamp and endpoint literals are parsed directly as exact "
@@ -577,7 +577,7 @@ def build_payload(
         "tiling_gap_nonzero_boundaries": nonzero_tiling_boundaries,
         "statistics": {
             "DG-071": {
-                "statistic": "interval_end_s - interval_start_s per sampling record",
+                "statistic": "interval_end_s - interval_start_s per sampler record",
                 **_describe(widths),
             },
             "DG-075": {
@@ -613,7 +613,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         f"- Input: `{source['path']}`",
         f"- Input SHA-256: `{source['sha256']}`",
-        f"- Sampling records: {payload['sampler_record_count']}",
+        f"- Sampler records: {payload['sampler_record_count']}",
         f"- Rail rows: {payload['rail_row_count']}",
         f"- Rails: {', '.join(payload['rails'])}",
         f"- Largest tiling gap (s; defined under Method): "
@@ -627,7 +627,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "",
         "## Method",
         "",
-        "A sampling record is one contiguous group of CSV rows — consecutive "
+        "A sampler record is one contiguous group of CSV rows — consecutive "
         "rows in file order — that share one `timestamp_s` literal. A literal "
         "is the character string exactly as written in the file, before any "
         "numeric conversion; two literals are equal only when their characters "
@@ -636,7 +636,7 @@ def render_markdown(payload: dict[str, Any]) -> str:
         "`interval_start_s` and `interval_end_s` literals must be identical; "
         "a timestamp literal that reappears after another group has begun is "
         "refused. DG-071 uses one interval width, `interval_end_s − "
-        "interval_start_s`, per sampling record.",
+        "interval_start_s`, per sampler record.",
         "",
         "The timestamp and endpoint literals are parsed directly as exact "
         "decimals. Widths, spacings, quantiles and IQR never pass through "

@@ -2,18 +2,18 @@
 
 - Input: `runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv`
 - Input SHA-256: `6945160964bc8667f4bfcc1ba7b500f81045fce8301ef7aadce45a188d3e06e9`
-- Sampling records: 406
+- Sampler records: 406
 - Rail rows: 1218
 - Rails: ane_power, cpu_power, gpu_power
 - Largest tiling gap (s; defined under Method): 0.0000004
 - Boundaries with a nonzero tiling gap (see Method): 100
 - Producer: `scripts/issue_dg071_dg075_statistics.py`
-- Producer SHA-256: `28c6ec900dda8df2482db3520b0582488bbf53686df25872f31dd0644405a05a`
+- Producer SHA-256: `d657d75fc4bfa36dbfc12249b791a73541ae6e043eb861e4050c297e537f46d9`
 - Producer commit (last commit that changed the producer; defined under Method): `6b6deb2f8f9bbe88b604b18d544856d6ae4e0013`
 
 ## Method
 
-A sampling record is one contiguous group of CSV rows — consecutive rows in file order — that share one `timestamp_s` literal. A literal is the character string exactly as written in the file, before any numeric conversion; two literals are equal only when their characters are identical. Every group must contain exactly one row for each of `ane_power`, `cpu_power` and `gpu_power`, and the three rows' `interval_start_s` and `interval_end_s` literals must be identical; a timestamp literal that reappears after another group has begun is refused. DG-071 uses one interval width, `interval_end_s − interval_start_s`, per sampling record.
+A sampler record is one contiguous group of CSV rows — consecutive rows in file order — that share one `timestamp_s` literal. A literal is the character string exactly as written in the file, before any numeric conversion; two literals are equal only when their characters are identical. Every group must contain exactly one row for each of `ane_power`, `cpu_power` and `gpu_power`, and the three rows' `interval_start_s` and `interval_end_s` literals must be identical; a timestamp literal that reappears after another group has begun is refused. DG-071 uses one interval width, `interval_end_s − interval_start_s`, per sampler record.
 
 The timestamp and endpoint literals are parsed directly as exact decimals. Widths, spacings, quantiles and IQR never pass through binary floating point.
 

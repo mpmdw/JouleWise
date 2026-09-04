@@ -3,7 +3,7 @@
 
 HISTORICAL EVIDENCE — SUPERSEDED AS A RULE (cold gate 2026-08-30). This
 analysis forced the cold-gate ruling that AMENDED D-166: "margin >= 5" is
-now ruled to mean overlap count >= 5 (the count->=8 reading below
+now ruled to mean overlapping-record count >= 5 (the count->=8 reading below
 is DISCARDED), and the ladder is 512/1024/2048/4096 with a split refusal
 branch. See docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the
 amended D-166 index row. The dual-reading evaluation below is retained as
@@ -16,8 +16,8 @@ D-166 R-2.
 
 The script is a reader, not a re-runner.  It walks the retained bundle
 corpora, pulls the prompt-processing ("prefill") phase boundaries out of each
-bundle's ``events.jsonl``, pulls each *powermetrics* sampling record's record
-support out of the same bundle's ``power_trace.csv``, and recomputes the overlap count
+bundle's ``events.jsonl``, pulls each *powermetrics* record's support interval
+out of the same bundle's ``power_trace.csv``, and recomputes the overlap count
 with the identical predicate the production reducer applies
 (``joulewise/reduce.py::_in_window_sample_count``).  Nothing is simulated and
 no bundle is written to.
@@ -718,7 +718,7 @@ def build(corpus_root: Path, repo_root: Path) -> dict[str, Any]:
             "SUPERSEDED AS A RULE by the cold gate of 2026-08-30 (see "
             "docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the "
             "amended D-166 index row): the binding reading is "
-            "overlap count >= 5 per small-model member (the "
+            "overlapping-record count >= 5 per small-model member (the "
             "count->=8 reading evaluated here is DISCARDED), the ladder is "
             "512/1024/2048/4096, and selection executes via "
             "scripts/select_g2a_prefill_length.py over the G2-a record. The "

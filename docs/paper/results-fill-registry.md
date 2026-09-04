@@ -537,13 +537,16 @@ actual artifact path or becomes a registered `[PENDING]` with the diagnostic-era
 no number stands on seat prose. A sweep of all 101 diagnostic numeric value-sites in the
 draft traced 98, left one (DG-097) narrowed to what its source supports, and converted 2.
 The two conversions are the Section 6 resolvability example's width and spacing
-descriptions. Both remain `[PENDING]` markers. Reviewer synthesis C7 requires a
-declared statistic; the round-7 resolvability projection then corrected the old
-mechanism: 328,522 retained records tile with no meaningful gap, so spacing and
-width are the same record-period distribution rather than quantities separated
-by sampler pauses. The old 111.8–112.5 ms observation is the bottom of the cited
-bundle's width distribution, not its range. Rows DG-071 and DG-075 therefore
-register the same proposed summary family without issuing either value.
+descriptions. Reviewer synthesis C7 required a declared statistic; the round-7
+resolvability projection then corrected the old mechanism: 328,522 retained
+records tile with no meaningful gap, so spacing and width are the same
+record-period distribution rather than quantities separated by sampler pauses.
+The old 111.8–112.5 ms observation is the bottom of the cited bundle's width
+distribution, not its range. PR #276 subsequently issued the ratified summary
+family for both rows in `docs/paper/round7/dg071-dg075-statistics.md` (SHA-256
+`041a045e088379ccaf47f8b147efe6c73f17f8f579cd3c1dff3db0143f24927b`) and
+`docs/paper/round7/dg071-dg075-statistics.json` (SHA-256
+`9a4fdddeb8939ce363a93be617352781dba5bfb39bc7a3b1aa8130c9d691c3c7`).
 
 Path abbreviations below are exact:
 
@@ -640,11 +643,11 @@ Path abbreviations below are exact:
 | DG-068 — Section 6 repeated population denominator, line 247 | 50 | same NR#bundle_count | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-069 — Section 6 diagnostic passes, line 247 | 13 | NR#stack_summaries[stack=1.5B].resolvability.identifiable | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-070 — Section 6 concrete prefill duration, line 256 | 0.121034145 s | NR#bundles[bundle=p2015-df-ph-decode-abs-r03].boundary.prefill_duration_s; verify R03E phase_end - phase_start; round 9 decimals | historical a10 / decode-abs-r03 prefill | DERIVE | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
-| DG-071 — Section 6 sampling-record interval width, line 256 | [PENDING] (DIAGNOSTIC-ERA VALUE: sampling-record interval width for p2015-df-ph-decode-abs-r03) | PROPOSED statistic: median with IQR of `interval_end_s - interval_start_s` over every retained record in the cited R03P, with the exact file path and SHA-256 recorded by a ratification artifact. Records tile; the former 111.8–112.5 ms band is only the bottom of this width distribution, not its range. | historical a10 diagnostic / resolvability example | STOP_FILL | RATIFIED-STATISTIC (magistrate 2026-08-31, `docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md`) / VALUE_UNISSUED; no desk-computed value may fill the marker | DRAFT, DF, PROJ, SYN |
+| DG-071 — Section 6 sampling-record interval width, line 256 | n = 406; median 120.9186 ms; IQR 5.9508 ms | `docs/paper/round7/dg071-dg075-statistics.json#statistics.DG-071`, issued with `docs/paper/round7/dg071-dg075-statistics.md`; JSON SHA-256 `9a4fdddeb8939ce363a93be617352781dba5bfb39bc7a3b1aa8130c9d691c3c7`; Markdown SHA-256 `041a045e088379ccaf47f8b147efe6c73f17f8f579cd3c1dff3db0143f24927b`. Median with IQR of `interval_end_s - interval_start_s` over every retained record in R03P; render milliseconds to four decimals exactly as issued. | historical a10 diagnostic / resolvability example | ISSUED | RATIFIED-STATISTIC (magistrate 2026-08-31, `docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md`) / ISSUED_ARTIFACT (PR #276); DIAGNOSTIC_ERA; NON_CLAIM_BEARING | DRAFT, DF, PROJ, SYN |
 | DG-072 — Section 6 overlap count of two, line 256 | two; 2 | NR#bundles[...r03].power.prefill_overlap_sample_count and NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[2] | historical a10 / r03 and population | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-073 — Section 6 three-sample threshold/count, line 256 | three; 3 | NR#bundles[...r03].resolvability.minimum_samples and NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[3] | historical a10 / r03 and population | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-074 — Section 6 rounded duration operand, line 256 | 0.121 | round NR r03 boundary.prefill_duration_s to 3 decimals | historical a10 / decode-abs-r03 prefill | DERIVE | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
-| DG-075 — Section 6 record spacing, line 256 | [PENDING] (DIAGNOSTIC-ERA VALUE: median record spacing for p2015-df-ph-decode-abs-r03) | PROPOSED statistic: median with IQR of differences between consecutive unique `timestamp_s` values over every retained record in the cited R03P, with the exact file path and SHA-256 recorded by a ratification artifact. The records tile with no sampler pause, so this is the same record-period distribution as DG-071 apart from endpoint convention and any merged intervals. | historical a10 diagnostic / resolvability example | STOP_FILL | RATIFIED-STATISTIC (magistrate 2026-08-31, `docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md`) / VALUE_UNISSUED; no desk-computed value may fill the marker | DRAFT, DF, PROJ, SYN |
+| DG-075 — Section 6 record spacing, line 256 | n = 405; median 120.9224 ms; IQR 5.8949 ms | `docs/paper/round7/dg071-dg075-statistics.json#statistics.DG-075`, issued with `docs/paper/round7/dg071-dg075-statistics.md`; JSON SHA-256 `9a4fdddeb8939ce363a93be617352781dba5bfb39bc7a3b1aa8130c9d691c3c7`; Markdown SHA-256 `041a045e088379ccaf47f8b147efe6c73f17f8f579cd3c1dff3db0143f24927b`. Median with IQR of consecutive unique `timestamp_s` differences over R03P; render milliseconds to four decimals exactly as issued. The records tile with no sampler pause, so this is the DG-071 record-period distribution minus the first record, apart from the issued endpoint convention. | historical a10 diagnostic / resolvability example | ISSUED | RATIFIED-STATISTIC (magistrate 2026-08-31, `docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md`) / ISSUED_ARTIFACT (PR #276); DIAGNOSTIC_ERA; NON_CLAIM_BEARING | DRAFT, DF, PROJ, SYN |
 | DG-076 — Section 6 population with two overlaps, line 256 | 37 | NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[2] | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-077 — Section 6 population with three overlaps, line 256 | 13 | NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[3] | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-078 — Section 6 historical ABBA block count, line 268 | Ten | count AB block indices b01 through b10, each with a1,a2,b1,b2 | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
@@ -905,7 +908,7 @@ read-only and the template vocabulary is binding.
 | Gamma prefill contrast | The frozen draft registers both contrast arms and the `_v5` generator names the selected prefill contrast, while the renderer/template remain decode-only | After G2-a resolves `[PREFILL_LENGTH]`, the lead-owned renderer/template train must add the guarded prefill token family for the point estimate, both interval endpoints, claim floor, branch-explicit clearance or shortfall, claim-side bound, floor and direction outcomes, verdict, and D-166's split refusal branch; DS-33, PG-01, PG-02, and PG-04 through PG-08 remain stopped | DRAFT, TPL, AUTH, V5GEN, G2A |
 | D-123 reported means | D-123 authorizes mean cells, while no current extraction/report schema fixes their member basis or output field names | Land and audit the reported-mean schema in the alpha/beta packs and extraction output; prove floor outputs remain byte-identical; then replace `SUPPLIER_UNKNOWN` statuses | AUTH, FX, PLAN |
 | Generic draft table outcomes | Draft Table 3 has generic cells for decode and prompt gate outcomes and verdicts, but the template has no exact tokens for them | Add binding tokens or a machine renderer contract in the lead-owned template train; do not infer strings from variant headings | DRAFT, TPL, CV |
-| DG-071 / DG-075 ratification | The retained bytes support a record-period distribution, but no issued statistic artifact exists | Ratify or replace the proposed median-with-IQR summaries, then issue a path- and SHA-pinned artifact; until both steps occur the rows stay `STOP_FILL` | PROJ, SYN |
+| DG-071 / DG-075 issuance | RESOLVED by PR #276: the ratified record-period statistics issued in `docs/paper/round7/dg071-dg075-statistics.md` and `.json` with the SHA-256 pins recorded in both rows | Keep both values, sample counts, rendering rules, paths, and SHA-256 pins synchronized with the issued artifact; never recompute them from the prose | PROJ, SYN |
 | Characterization outputs | RESOLVED 2026-08-24 as to the field contract: the frozen characterization result specification defines every named token's producing field, and this registry now binds each one. The draft's Section 5 still holds protocol-specification rows rather than claim-bearing result cells, which is by design | Issue an authenticated characterization report; until then every characterization row stays `KEY_FROZEN / VALUE_UNISSUED`. Ratify or replace the two-limb derivation recorded above | DRAFT, TPL, SPEC |
 
 The folded capture-method-era and estimator-provenance preconditions authorize
@@ -931,10 +934,10 @@ family and are counted separately.
   17 new keys: `[PREFILL_LENGTH]`, eight independent-corner R columns, four
   comparative R_cm columns, and four absolute R_cm not-applicable columns.
   The count includes the six explicitly labelled renderer metatokens.
-- Registry live marker-site rows: **37**, exactly one for each complete-family
-  draft site, carrying the same 39 semantic slots. PG-02 owns both slots at its
-  interval site; PG-03 is retired. The `[PENDING...]` subset is therefore 34
-  rows for 34 sites and 36 slots. No live site is duplicated and no site-to-row
+- Registry live marker-site rows: **35**, exactly one for each complete-family
+  draft site, carrying the same 37 semantic slots. PG-02 owns both slots at its
+  interval site; PG-03 is retired. The `[PENDING...]` subset is therefore 32
+  rows for 32 sites and 34 slots. No live site is duplicated and no site-to-row
   gap is silently supplied.
 - The current renderer/template vocabulary still spells the pre-`_v5` model
   keys. It is not a fill supplier for renamed keys and must fail closed until a
@@ -947,8 +950,8 @@ Measured marker-row command:
   grep -cE '^\| (DS|PG|DG)-[0-9]+[a-z]? — .*[[]PENDING' docs/paper/results-fill-registry.md
   ```
 
-Result: **34 `[PENDING...]` rows**. Including DS-01, DS-08a, and DS-34 gives
-the complete-family total of 37.
+Result: **32 `[PENDING...]` rows**. Including DS-01, DS-08a, and DS-34 gives
+the complete-family total of 35.
 
 ## Lead double-checks before renderer implementation
 
@@ -963,8 +966,9 @@ the complete-family total of 37.
 - Regenerate the guarded prefill token family and the missing Table 3 outcome
   tokens only after G2-a; implement D-166's two distinct exhausted-ladder
   refusal renderings verbatim.
-- Ratify or replace DG-071 and DG-075's proposed median-with-IQR statistics and
-  issue their path- and SHA-pinned diagnostic artifact before either fill.
+- Keep DG-071 and DG-075's issued median-with-IQR values bound to the exact
+  Markdown and JSON paths and SHA-256 values quoted in their rows; any reissue
+  must update both rows and their reader-facing placements together.
 - The characterization result schema is frozen; what remains is an issued,
   authenticated characterization report. Ratify or replace the PROPOSED
   two-limb derivation for `[R_C_linearity_limit_J]` and
