@@ -385,7 +385,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "branch": None,
                 "dominance_sentence_licensed": False,
                 "subtitle_licensed": False,
-                "refusal_reason": reason,
+                "refusal_reason": core._closed_refusal_code(reason),
             }
         )
 
@@ -542,7 +542,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             if record["cell_id"] == missing_id
         ]
         self.assertEqual(missing[0]["status"], "refused")
-        self.assertIn("cell census", closeout["refusal_reason"])
+        self.assertEqual(
+            closeout["refusal_reason"], core.CLOSEOUT_INPUT_MALFORMED_SOURCE
+        )
         self.assert_valid_closeout(closeout, manifest, floor, sidecar)
 
     def test_source_hash_mutation_refuses_validation(self) -> None:
@@ -1314,7 +1316,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                     floor_artifact_bytes=floor_bytes,
                     replay_sidecar_bytes=sidecar_bytes,
                 )[0]
-                self.assertIn("cannot align with floor artifact", expected)
+                self.assertEqual(
+                    expected, core.CLOSEOUT_INPUT_MALFORMED_SOURCE
+                )
                 with self.assertRaises(ValueError) as raised:
                     build_d165_dominance_closeout(
                         manifest_bytes,
@@ -1338,13 +1342,13 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "manifest schema",
                 wrong_manifest_schema,
                 floor,
-                "finalized_manifest: schema is not finalized v3",
+                core.CLOSEOUT_INPUT_MALFORMED_SOURCE,
             ),
             (
                 "floor schema",
                 manifest,
                 wrong_floor_schema,
-                "floor_artifact: schema is not detection_floor_artifact.v2",
+                core.CLOSEOUT_INPUT_MALFORMED_SOURCE,
             ),
         )
         for guard, manifest_value, floor_value, expected in cases:
@@ -2093,7 +2097,6 @@ class D165PaperCustodyAdapterTests(unittest.TestCase):
                 set(core.D165_OR01_REASON_SENTENCES),
                 core.D165_CLOSEOUT_REFUSAL_CODES,
             )
-
 
 if __name__ == "__main__":
     unittest.main()

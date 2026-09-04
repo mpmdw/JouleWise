@@ -235,9 +235,9 @@ receipt producers pass their gates, production returns
 `joulewise.campaign_provenance.load_campaign_log_rows` accepts only `log_path`
 and reads its bytes through the authentication input API; it has no
 `raw_bytes` substitution channel. The floor loader's normative wire is
-`joulewise.analysis_engine.inputs.load_floor_artifact(path) ->
-AuthenticatedFloorArtifact`: it must preserve the authenticated capability and
-must not downgrade it to `(Mapping, digest)`.
+`joulewise.inputs.load_floor_artifact(path) -> AuthenticatedFloorArtifact`.
+The returned object is the authenticated capability itself; no public
+`(Mapping, digest)` projection is part of this wire.
 
 The authentication AST guard includes `joulewise/paper_custody.py`, and its
 public-wire test parses all five ref class bodies rather than trusting only the
