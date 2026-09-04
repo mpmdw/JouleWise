@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "2026-09-04 live kernel-row reconciliation",
-    "path": "docs/process_traces/2026-09-04-kernel-rows/01-sol-report.md"
+    "label": "2026-09-04 post-merge kernel oracle reconciliation",
+    "path": "docs/process_traces/2026-09-04-kernel-rows/02-sol-oracle-report.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,

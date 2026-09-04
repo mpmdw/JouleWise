@@ -5113,7 +5113,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-04). Latest report: [2026-09-04 live kernel-row reconciliation](docs/process_traces/2026-09-04-kernel-rows/01-sol-report.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-04). Latest report: [2026-09-04 post-merge kernel oracle reconciliation](docs/process_traces/2026-09-04-kernel-rows/02-sol-oracle-report.md).
 
 ### [ED-EXTERNAL]
 
