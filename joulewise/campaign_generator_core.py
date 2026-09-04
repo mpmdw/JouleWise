@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import Any
 
 
+_generation_write_boundary_observer: (
+    Callable[[Path, tuple[Path, ...]], None] | None
+) = None
+
+
 def render_json(value: Any, transform: Callable[[Any], Any]) -> bytes:
     """Return the canonical bytes used by campaign generator artifacts."""
 
@@ -67,6 +72,7 @@ def validate_generation_write_boundary(
     """
 
     root = output_root.absolute()
+    relative_outputs = tuple(outputs)
 
     def refuse(path: Path, reason: str) -> None:
         destination = path.resolve(strict=False)
@@ -79,7 +85,7 @@ def validate_generation_write_boundary(
     if root.exists() and not root.is_dir():
         refuse(root, "output root is not a real directory")
 
-    for relative in sorted(outputs, key=lambda path: path.as_posix()):
+    for relative in sorted(relative_outputs, key=lambda path: path.as_posix()):
         current = root
         for component in relative.parts[:-1]:
             current = current / component
@@ -92,6 +98,9 @@ def validate_generation_write_boundary(
             refuse(target, "write target is a symlink")
         if target.exists() and not target.is_file():
             refuse(target, "existing write target is not a regular file")
+
+    if _generation_write_boundary_observer is not None:
+        _generation_write_boundary_observer(root, relative_outputs)
 
 
 __all__ = [

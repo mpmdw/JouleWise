@@ -32,6 +32,13 @@ Each producer imports those exact function objects. Scientific pins, campaign
 planning, output inventories, write calls, and generation-identity policy stay
 in the producer.
 
+The write-boundary implementation contains one inert, test-only observer seam.
+When patched, it reports the validated output root and complete relative-path
+inventory after every path has passed validation. The default is `None`, so it
+does not alter production behavior or bytes. This lets the regression observe
+the boundary actually reached by a producer rather than infer use from an
+imported name.
+
 The earlier draft identity-class factory is intentionally omitted. ALPHA and
 BETA share one identity implementation, but GAMMA's current-target lookup and
 default semantics differ. Moving that policy would not be a byte-identical
@@ -71,8 +78,11 @@ the tree. All other emitted bytes must match exactly.
 ## Counterfactual regression
 
 `test_counterfactual_local_write_boundary_cannot_bypass_shared_core` names the
-failure being prevented. Restoring a generator-local
-`validate_generation_write_boundary` (or any other extracted helper), even
-with currently identical behavior, fails both the live producer's function-
-object identity check and its AST local-definition check. This closes the
-copy-paste bypass instead of merely testing one happy-path output.
+failure being prevented. It runs each of ALPHA, BETA, and GAMMA through its
+production generation entry point, records the shared boundary call, and
+requires its validated inventory to equal every file the producer emitted.
+`test_exact_alpha_local_validator_evasion_is_detected` makes a temporary copy
+of ALPHA's source, adds the refuter's same-signature differently named local
+validator, redirects the production call to it, and proves that the behavioral
+contract rejects the mutation. Imported-object identity remains a secondary
+check for the other extracted mechanics; it is not the write-path proof.
