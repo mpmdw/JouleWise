@@ -472,6 +472,30 @@ def _real_mlx_identity_inputs(arm_id: str) -> tuple[dict, dict]:
     return raw_config, metadata
 
 
+def _exact_floor_cells(
+    specifications: tuple[tuple[str, str, float, float], ...],
+) -> list[dict]:
+    absolute_template = (10.0, 10.0, 10.0, 10.0, 20.0)
+    comparative_template = (1.0, -1.0, 2.0, -2.0, 0.0)
+    default_abs_floor = 20.399350577898304
+    default_cmp_floor = 7.212259562716805
+    return [
+        make_cell(
+            cell_id=cell_id,
+            condition=condition,
+            energies=[
+                value * target_abs / default_abs_floor
+                for value in absolute_template
+            ],
+            deltas=[
+                value * target_cmp / default_cmp_floor
+                for value in comparative_template
+            ],
+        )
+        for cell_id, condition, target_abs, target_cmp in specifications
+    ]
+
+
 def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
     manifest_path = (
         ROOT
@@ -515,7 +539,14 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
             replacement_classification="registered",
             inclusion_status="excluded" if diverged else "included",
         )
-    floor_artifact = make_artifact()
+    floor_artifact = make_artifact(
+        _exact_floor_cells(
+            (
+                ("floor-a", "cf-1", 0.8, 1.0),
+                ("floor-b", "cf-2", 0.9, 1.2),
+            )
+        )
+    )
     floor_artifact["artifact_id"] = "df-v3-test"
     self_errors = validate_floor_artifact(floor_artifact)
     if self_errors:
@@ -571,29 +602,30 @@ def _v3_fixture_artifact(*, diverged: bool = False) -> dict:
         ),
         supersession_diverged=diverged,
     )
+    floor_cells = floor_artifact["cells"]
     floor_resolutions = (
         FloorResolution(
             status="exact",
             artifact_id="df-v3-test",
             artifact_sha256=floor_sha256,
-            source_cell_ids=("floor-a",),
+            source_cell_ids=(floor_cells[0]["cell_id"],),
             transport_group_id=None,
             transport_rule_id=None,
-            floor_abs_j=0.8,
-            floor_cmp_j=1.0,
-            floor_gate_j=1.0,
+            floor_abs_j=floor_cells[0]["floor_abs_j"],
+            floor_cmp_j=floor_cells[0]["floor_cmp_j"],
+            floor_gate_j=floor_cells[0]["floor_gate_j"],
             reason_codes=(),
         ),
         FloorResolution(
             status="exact",
             artifact_id="df-v3-test",
             artifact_sha256=floor_sha256,
-            source_cell_ids=("floor-b",),
+            source_cell_ids=(floor_cells[1]["cell_id"],),
             transport_group_id=None,
             transport_rule_id=None,
-            floor_abs_j=0.9,
-            floor_cmp_j=1.2,
-            floor_gate_j=1.2,
+            floor_abs_j=floor_cells[1]["floor_abs_j"],
+            floor_cmp_j=floor_cells[1]["floor_cmp_j"],
+            floor_gate_j=floor_cells[1]["floor_gate_j"],
             reason_codes=(),
         ),
     )
@@ -912,7 +944,18 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     replacement_classification="registered",
                     inclusion_status="included",
                 )
-            floor_artifact = make_artifact()
+            floor_condition_ids = (
+                finalized["contrasts"][0]["condition_a_id"],
+                finalized["contrasts"][0]["condition_b_id"],
+            )
+            floor_artifact = make_artifact(
+                _exact_floor_cells(
+                    (
+                        (floor_condition_ids[0], "cf-1", 0.5, 1.0),
+                        (floor_condition_ids[1], "cf-2", 0.5, 1.0),
+                    )
+                )
+            )
             floor_artifact["artifact_id"] = "synthetic-finalized-edge-floor"
             floor_bytes = (json.dumps(floor_artifact, indent=2) + "\n").encode()
             floor_sha = hashlib.sha256(floor_bytes).hexdigest()
@@ -971,18 +1014,15 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     status="exact",
                     artifact_id=floor_artifact["artifact_id"],
                     artifact_sha256=floor_sha,
-                    source_cell_ids=(condition_id,),
+                    source_cell_ids=(source_cell["cell_id"],),
                     transport_group_id=None,
                     transport_rule_id=None,
-                    floor_abs_j=0.5,
-                    floor_cmp_j=1.0,
-                    floor_gate_j=1.0,
+                    floor_abs_j=source_cell["floor_abs_j"],
+                    floor_cmp_j=source_cell["floor_cmp_j"],
+                    floor_gate_j=source_cell["floor_gate_j"],
                     reason_codes=(),
                 )
-                for condition_id in (
-                    finalized["contrasts"][0]["condition_a_id"],
-                    finalized["contrasts"][0]["condition_b_id"],
-                )
+                for source_cell in floor_artifact["cells"]
             ]
             with (
                 mock.patch(
@@ -1604,11 +1644,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(
             clean["claim_verdicts_id"],
-            "cv-97532d73a9889e34caab780a64435cda3c9d11ea7e708b1234d4c5ad68ce07e0",
+            "cv-613b27cbd03887a15d28991a75e218d9ff2953e79a91df0c179305dfe62c28ec",
         )
         self.assertEqual(
             hashlib.sha256(render_claim_verdicts(clean)).hexdigest(),
-            "5e8e93e8f3106ec7637baebb0b43ee87f1fda2ba74ed61d1b931893d51a73fe7",
+            "9bdb8e1290d18bcdc294507424f6369545240fa0b677e4f8726a5600129fa073",
         )
         arm_by_entry = {
             entry["entry_id"]: entry["arm_id"] for entry in manifest["entries"]
@@ -1626,7 +1666,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertEqual(contrast["estimator"]["name"], "abba_block_arm_mean_difference_t_v1")
         self.assertEqual(contrast["estimator"]["estimate"], 10.0)
         self.assertAlmostEqual(contrast["deterministic_bounds"]["total"], 0.3)
-        self.assertEqual(contrast["floor"]["active_floor_j"], 1.2)
+        self.assertAlmostEqual(contrast["floor"]["active_floor_j"], 1.2)
         self.assertEqual(contrast["floor"]["aggregation"], "max_never_sum")
         self.assertEqual(len(contrast["bundle_blocks"]["included_bundle_ids"]), 40)
         self.assertTrue(

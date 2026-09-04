@@ -9,7 +9,6 @@ caller-supplied numeric value.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import math
@@ -24,7 +23,6 @@ from .analysis_engine.artifact import (
     calculate_claim_verdicts_id,
     validate_claim_verdicts,
 )
-from .analysis_engine.inputs import authenticate_floor_artifact_bytes
 from .claim_side_bound import ClaimSideBoundError, load_claim_side_bound
 
 
@@ -393,85 +391,6 @@ def _reason_text(reasons: Any) -> str | None:
     return "; ".join(reasons)
 
 
-def _authenticated_floor_cells(artifact: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
-    inputs = artifact.get("inputs")
-    link = inputs.get("floor_artifact") if isinstance(inputs, Mapping) else None
-    if not isinstance(link, Mapping):
-        raise ValueError("embedded floor artifact link unavailable")
-    encoded = link.get("embedded_bytes_base64")
-    if not isinstance(encoded, str):
-        raise ValueError("embedded floor artifact bytes unavailable")
-    try:
-        raw = base64.b64decode(encoded, validate=True)
-    except (ValueError, TypeError) as exc:
-        raise ValueError("embedded floor artifact base64 invalid") from exc
-    authenticated = authenticate_floor_artifact_bytes(
-        raw,
-        expected_sha256=link.get("file_sha256"),
-        expected_artifact_id=link.get("artifact_id"),
-    )
-    cells = authenticated.value.get("cells")
-    if not isinstance(cells, list):
-        raise ValueError("embedded floor artifact cells unavailable")
-    by_id = {
-        cell.get("cell_id"): cell
-        for cell in cells
-        if isinstance(cell, Mapping) and isinstance(cell.get("cell_id"), str)
-    }
-    if len(by_id) != len(cells):
-        raise ValueError("embedded floor artifact cell identity mismatch")
-    return by_id
-
-
-def _source_bound_floor(
-    floor: Mapping[str, Any],
-    floor_cells: Mapping[str, Mapping[str, Any]],
-) -> tuple[bool, float | None]:
-    """Return (lineage valid, exact active floor if one issued)."""
-
-    resolutions = floor.get("resolutions")
-    if not isinstance(resolutions, list) or len(resolutions) != 2:
-        return False, None
-    all_exact = True
-    exact_source_ids: list[str] = []
-    for resolution in resolutions:
-        if not isinstance(resolution, Mapping):
-            return False, None
-        status = resolution.get("status")
-        if status == "refused":
-            all_exact = False
-            continue
-        if status != "exact":
-            return False, None
-        source_ids = resolution.get("source_cell_ids")
-        if not isinstance(source_ids, list) or len(source_ids) != 1:
-            return False, None
-        source = floor_cells.get(source_ids[0])
-        if not isinstance(source, Mapping):
-            return False, None
-        eligibility = source.get("eligibility")
-        if (
-            not isinstance(eligibility, Mapping)
-            or eligibility.get("status") != "claim_ready"
-            or eligibility.get("claim_usable") is not True
-            or eligibility.get("reason_codes") != []
-        ):
-            return False, None
-        exact_source_ids.append(source_ids[0])
-        for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
-            if (
-                _finite(resolution.get(key), nonnegative=True) is None
-                or resolution.get(key) != source.get(key)
-            ):
-                return False, None
-    if not all_exact:
-        return True, None
-    if len(set(exact_source_ids)) != 2:
-        return False, None
-    active = _finite(floor.get("active_floor_j"), nonnegative=True)
-    return (active is not None), active
-
-
 def _render_contrast(
     artifact: Mapping[str, Any],
     contrast: Mapping[str, Any] | None,
@@ -479,7 +398,6 @@ def _render_contrast(
     phase: str,
     token_names: tuple[str, ...],
     sidecar_bound: Mapping[str, Any] | None,
-    floor_cells: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, str]:
     result = {token: STOP_FILL for token in token_names}
     if contrast is None:
@@ -519,17 +437,13 @@ def _render_contrast(
         if reasons:
             verdict += f" (issued reasons: {reason_text})"
 
-    lineage_valid, floor_value = _source_bound_floor(floor, floor_cells)
-    if not lineage_valid:
-        if verdict != STOP_FILL:
-            result[token_names[-1]] = verdict
-        return result
     interval = deterministic.get("decision_interval")
     estimate = _finite(estimator.get("estimate"))
     lower = _finite(interval.get("lower")) if isinstance(interval, Mapping) else None
     upper = _finite(interval.get("upper")) if isinstance(interval, Mapping) else None
     if lower is not None and upper is not None and lower > upper:
         lower = upper = None
+    floor_value = _finite(floor.get("active_floor_j"), nonnegative=True)
     bound_value = (
         _finite(sidecar_bound.get("value_j"), nonnegative=True)
         if isinstance(sidecar_bound, Mapping)
@@ -654,6 +568,59 @@ def _row_or_stop(*values: str, labels: tuple[str, ...] = ()) -> str:
     )
 
 
+def _render_result(length: int, tokens: Mapping[str, str]) -> dict[str, Any]:
+    rows = {
+        "DS-28": _row_or_stop(
+            tokens["[S_decode_joint_J]"],
+            tokens["[C_decode_sizing_signed_clearance_J]"],
+            labels=("F+B", "signed clearance"),
+        ),
+        "DS-29": tokens["[B_decode_claim_J]"],
+        "DS-30": tokens["[OUTCOME_decode_floor_gate]"],
+        "DS-31": tokens["[OUTCOME_decode_direction_gate]"],
+        "DS-32": tokens["[VERDICT_decode]"],
+        "DS-33": tokens[f"[F_claim_prefill_p{length}_armwise_max_J]"],
+        "PG-01": tokens[f"[E_prefill_p{length}_contrast_signed_J_per_request]"],
+        "PG-02": _row_or_stop(
+            tokens[f"[E_prefill_p{length}_contrast_lower_J]"],
+            tokens[f"[E_prefill_p{length}_contrast_upper_J]"],
+        ),
+        "PG-04": _row_or_stop(
+            tokens[f"[S_prefill_p{length}_joint_J]"],
+            tokens[f"[C_prefill_p{length}_sizing_signed_clearance_J]"],
+            labels=("F+B", "signed clearance"),
+        ),
+        "PG-05": tokens[f"[B_prefill_p{length}_claim_J]"],
+        "PG-06": tokens[f"[OUTCOME_prefill_p{length}_floor_gate]"],
+        "PG-07": tokens[f"[OUTCOME_prefill_p{length}_direction_gate]"],
+        "PG-08": tokens[f"[VERDICT_prefill_p{length}]"],
+    }
+    placements = {
+        row: {placement: rows[row] for placement in OUTCOME_PLACEMENT_IDS}
+        for row in ("DS-32", "PG-08")
+    }
+    return {
+        "prefill_length": length,
+        "tokens": dict(tokens),
+        "rows": rows,
+        "placements": placements,
+    }
+
+
+def _structured_stop(length: int) -> dict[str, Any]:
+    prefill_names = tuple(
+        token.replace("[PREFILL_LENGTH]", str(length))
+        for token in PREFILL_TOKEN_TEMPLATES
+    )
+    return _render_result(
+        length,
+        {
+            token: STOP_FILL
+            for token in (*DECODE_TOKEN_NAMES, *prefill_names)
+        },
+    )
+
+
 def render_gamma_contract(
     *,
     claim_verdicts_bytes: bytes,
@@ -678,15 +645,18 @@ def render_gamma_contract(
         artifact = _load(claim_verdicts_bytes)
         selection = _load(g2a_selection_bytes)
         prompt_pin = _load(prompt_pin_bytes)
+        length = _validate_selection(selection)
+        _validate_prompt_pin(prompt_pin, g2a_selection_bytes, length)
         if not isinstance(artifact, Mapping):
             raise ValueError("claim verdict is not an object")
         if (
             artifact.get("schema_version") != SCHEMA_VERSION
             or artifact.get("claim_verdicts_id") != expected_claim_verdicts_id
             or calculate_claim_verdicts_id(artifact) != expected_claim_verdicts_id
-            or validate_claim_verdicts(artifact)
         ):
             raise ValueError("claim verdict authentication failed")
+        if validate_claim_verdicts(artifact):
+            return _structured_stop(length)
         sidecar = load_claim_side_bound(
             claim_side_bound_bytes,
             expected_id=expected_claim_side_bound_id,
@@ -696,9 +666,6 @@ def render_gamma_contract(
             row["contrast_id"]: row["claim_side_bound"]
             for row in sidecar["bounds"]
         }
-        floor_cells = _authenticated_floor_cells(artifact)
-        length = _validate_selection(selection)
-        _validate_prompt_pin(prompt_pin, g2a_selection_bytes, length)
         contrast_by_id = {
             contrast.get("contrast_id"): contrast
             for contrast in artifact.get("contrasts", [])
@@ -741,7 +708,6 @@ def render_gamma_contract(
         phase="token-generation",
         token_names=DECODE_TOKEN_NAMES,
         sidecar_bound=sidecar_by_id.get(_DECODE_CONTRAST_ID),
-        floor_cells=floor_cells,
     )
     prefill_tokens = _render_contrast(
         artifact,
@@ -749,48 +715,9 @@ def render_gamma_contract(
         phase="prompt-processing",
         token_names=prefill_names,
         sidecar_bound=sidecar_by_id.get(prefill_id),
-        floor_cells=floor_cells,
     )
     tokens = {**decode_tokens, **prefill_tokens}
-    rows = {
-        "DS-28": _row_or_stop(
-            tokens["[S_decode_joint_J]"],
-            tokens["[C_decode_sizing_signed_clearance_J]"],
-            labels=("F+B", "signed clearance"),
-        ),
-        "DS-29": tokens["[B_decode_claim_J]"],
-        "DS-30": tokens["[OUTCOME_decode_floor_gate]"],
-        "DS-31": tokens["[OUTCOME_decode_direction_gate]"],
-        "DS-32": tokens["[VERDICT_decode]"],
-        "DS-33": tokens[f"[F_claim_prefill_p{length}_armwise_max_J]"],
-        "PG-01": tokens[f"[E_prefill_p{length}_contrast_signed_J_per_request]"],
-        "PG-02": _row_or_stop(
-            tokens[f"[E_prefill_p{length}_contrast_lower_J]"],
-            tokens[f"[E_prefill_p{length}_contrast_upper_J]"],
-        ),
-        "PG-04": _row_or_stop(
-            tokens[f"[S_prefill_p{length}_joint_J]"],
-            tokens[f"[C_prefill_p{length}_sizing_signed_clearance_J]"],
-            labels=("F+B", "signed clearance"),
-        ),
-        "PG-05": tokens[f"[B_prefill_p{length}_claim_J]"],
-        "PG-06": tokens[f"[OUTCOME_prefill_p{length}_floor_gate]"],
-        "PG-07": tokens[f"[OUTCOME_prefill_p{length}_direction_gate]"],
-        "PG-08": tokens[f"[VERDICT_prefill_p{length}]"],
-    }
-    placements = {
-        row: {
-            placement: rows[row]
-            for placement in OUTCOME_PLACEMENT_IDS
-        }
-        for row in ("DS-32", "PG-08")
-    }
-    return {
-        "prefill_length": length,
-        "tokens": tokens,
-        "rows": rows,
-        "placements": placements,
-    }
+    return _render_result(length, tokens)
 
 
 __all__ = [

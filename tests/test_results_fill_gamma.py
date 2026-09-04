@@ -484,6 +484,54 @@ def _mutate_path(value, path):
 
 
 class GammaResultContractTests(unittest.TestCase):
+    def test_gamma_floor_lineage_authorization_rejects_sibling_outcome_mutation(
+        self,
+    ) -> None:
+        clean = _not_estimable_gamma_artifact()
+        sources = _source_bytes(clean)
+        attacked = copy.deepcopy(clean)
+        prefill = next(
+            contrast
+            for contrast in attacked["contrasts"]
+            if contrast["contrast_id"] == PREFILL_ID
+        )
+        floor = prefill["floor"]
+        for resolution in floor["resolutions"]:
+            resolution.update(
+                {"floor_abs_j": 1.7, "floor_cmp_j": 1.6, "floor_gate_j": 1.7}
+            )
+        floor.update(
+            {"floor_abs_j": 1.7, "floor_cmp_j": 1.6, "active_floor_j": 1.7}
+        )
+        for gate in floor["arm_gates"]:
+            gate["floor_gate_j"] = 1.7
+        _with_content_id(attacked)
+
+        errors = validate_claim_verdicts(attacked)
+        self.assertTrue(
+            any("floor_lineage" in error for error in errors),
+            errors,
+        )
+
+        sources["claim_verdicts_bytes"] = render_claim_verdicts(attacked)
+        sources["expected_claim_verdicts_id"] = attacked["claim_verdicts_id"]
+        rendered = render_gamma_contract(**sources)
+        self.assertIsInstance(rendered, dict)
+        prefill_tokens = tuple(
+            token.replace("[PREFILL_LENGTH]", "2048")
+            for token in PREFILL_TOKEN_TEMPLATES
+        )
+        self.assertEqual(
+            {rendered["tokens"][token] for token in prefill_tokens},
+            {STOP_FILL},
+        )
+        for row in ("DS-33", "PG-01", "PG-02", "PG-04", "PG-05", "PG-06", "PG-07", "PG-08"):
+            self.assertEqual(rendered["rows"][row], STOP_FILL)
+        self.assertEqual(
+            set(rendered["placements"]["PG-08"].values()),
+            {STOP_FILL},
+        )
+
     def test_gamma_result_contract_table(self) -> None:
         fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
         expected = fixture["expected"]
@@ -590,7 +638,9 @@ class GammaResultContractTests(unittest.TestCase):
         equivalent_sources["expected_claim_verdicts_id"] = equivalent[
             "claim_verdicts_id"
         ]
-        self.assertEqual(render_gamma_contract(**equivalent_sources), STOP_FILL)
+        equivalent_render = render_gamma_contract(**equivalent_sources)
+        self.assertIsInstance(equivalent_render, dict)
+        self.assertEqual(set(equivalent_render["tokens"].values()), {STOP_FILL})
         wrong_id = copy.deepcopy(supported_artifact)
         wrong_id["contrasts"][0]["contrast_id"] = "wrong"
         _with_content_id(wrong_id)
@@ -599,7 +649,9 @@ class GammaResultContractTests(unittest.TestCase):
         wrong_id_sources["expected_claim_verdicts_id"] = wrong_id[
             "claim_verdicts_id"
         ]
-        self.assertEqual(render_gamma_contract(**wrong_id_sources), STOP_FILL)
+        wrong_id_render = render_gamma_contract(**wrong_id_sources)
+        self.assertIsInstance(wrong_id_render, dict)
+        self.assertEqual(set(wrong_id_render["tokens"].values()), {STOP_FILL})
 
         refused_selection = _source_bytes(supported_artifact)
         selection = json.loads(refused_selection["g2a_selection_bytes"])
@@ -619,6 +671,7 @@ class GammaResultContractTests(unittest.TestCase):
         ).hexdigest()
         self.assertEqual(render_gamma_contract(**refused_selection), STOP_FILL)
 
+        floor_forgery_sources = _source_bytes(supported_artifact)
         floor_forgery = copy.deepcopy(supported_artifact)
         for contrast in floor_forgery["contrasts"]:
             floor = contrast["floor"]
@@ -633,8 +686,19 @@ class GammaResultContractTests(unittest.TestCase):
                 gate["floor_gate_j"] = 1.7
             _reevaluate(contrast)
         _with_content_id(floor_forgery)
-        self.assertEqual(validate_claim_verdicts(floor_forgery), [])
-        forged_render = _render(floor_forgery)
+        self.assertTrue(
+            any(
+                "floor_lineage" in error
+                for error in validate_claim_verdicts(floor_forgery)
+            )
+        )
+        floor_forgery_sources["claim_verdicts_bytes"] = render_claim_verdicts(
+            floor_forgery
+        )
+        floor_forgery_sources["expected_claim_verdicts_id"] = floor_forgery[
+            "claim_verdicts_id"
+        ]
+        forged_render = render_gamma_contract(**floor_forgery_sources)
         self.assertEqual(forged_render["rows"]["DS-28"], STOP_FILL)
         self.assertEqual(forged_render["rows"]["DS-32"], STOP_FILL)
         self.assertEqual(forged_render["rows"]["PG-04"], STOP_FILL)

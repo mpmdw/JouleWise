@@ -992,6 +992,7 @@ def validate_claim_verdicts(
                     )
 
     authenticated_floor_root_ids: set[str] | None = None
+    authenticated_floor_cells: dict[str, Mapping[str, Any]] | None = None
     inputs = value.get("inputs")
     if _exact_keys(inputs, _INPUT_KEYS, "artifact.inputs", errors):
         _validate_input_link(
@@ -1053,6 +1054,10 @@ def validate_claim_verdicts(
                     authenticated_floor_root_ids = set(
                         authenticated_floor.root_ids
                     )
+                    authenticated_floor_cells = {
+                        cell["cell_id"]: cell
+                        for cell in authenticated_floor.value["cells"]
+                    }
         if not _relative_label(inputs["runs_root_label"]):
             errors.append("artifact.inputs.runs_root_label: must be a relative label")
         if not isinstance(inputs["evidence_class"], str) or inputs[
@@ -2220,6 +2225,12 @@ def validate_claim_verdicts(
             if not isinstance(resolutions, list) or not resolutions:
                 errors.append(f"{where}.floor.resolutions: must be a nonempty array")
             else:
+                if v3_floor and len(resolutions) != 2:
+                    errors.append(
+                        f"{where}.floor.resolutions: v3 requires exactly two arm resolutions"
+                    )
+                v3_exact_source_ids: list[str] = []
+                v3_authenticated_gate_values: list[float] = []
                 for resolution_index, resolution in enumerate(resolutions):
                     resolution_where = f"{where}.floor.resolutions[{resolution_index}]"
                     if not _exact_keys_with_optional_group(
@@ -2274,6 +2285,54 @@ def validate_claim_verdicts(
                         errors.append(
                             f"{resolution_where}.source_cell_ids: exact resolution must name exactly one source cell"
                         )
+                    if (
+                        v3_floor
+                        and status == "exact"
+                        and isinstance(source_ids, list)
+                        and len(source_ids) == 1
+                        and isinstance(source_ids[0], str)
+                    ):
+                        # R2-FL-1: claim-side floor copies are never authority.
+                        # Every exact arm resolves through the authenticated
+                        # embedded detection-floor cell at this boundary.
+                        source_cell_id = source_ids[0]
+                        v3_exact_source_ids.append(source_cell_id)
+                        if authenticated_floor_cells is not None:
+                            source_cell = authenticated_floor_cells.get(
+                                source_cell_id
+                            )
+                            if source_cell is None:
+                                errors.append(
+                                    f"{resolution_where}.floor_lineage: source cell "
+                                    f"{source_cell_id!r} is not in the authenticated floor artifact"
+                                )
+                            else:
+                                eligibility = source_cell.get("eligibility")
+                                if not (
+                                    isinstance(eligibility, Mapping)
+                                    and eligibility.get("status") == "claim_ready"
+                                    and eligibility.get("claim_usable") is True
+                                    and eligibility.get("reason_codes") == []
+                                ):
+                                    errors.append(
+                                        f"{resolution_where}.floor_lineage: authenticated "
+                                        "source cell is not claim-ready and claim-usable"
+                                    )
+                                v3_authenticated_gate_values.append(
+                                    float(source_cell["floor_gate_j"])
+                                )
+                                for key_name in (
+                                    "floor_abs_j",
+                                    "floor_cmp_j",
+                                    "floor_gate_j",
+                                ):
+                                    if resolution.get(key_name) != source_cell.get(
+                                        key_name
+                                    ):
+                                        errors.append(
+                                            f"{resolution_where}.floor_lineage.{key_name}: "
+                                            "must exactly match the authenticated source cell"
+                                        )
                     resolution_limit_keys = (
                         set(resolution) & _ATTRIBUTION_FLOOR_KEYS
                     )
@@ -2348,6 +2407,23 @@ def validate_claim_verdicts(
                             errors.append(
                                 f"{resolution_where}.reason_codes: refused resolution must explain refusal"
                             )
+                if v3_floor and len(v3_exact_source_ids) != len(
+                    set(v3_exact_source_ids)
+                ):
+                    errors.append(
+                        f"{where}.floor.resolutions.floor_lineage: exact arm resolutions "
+                        "must name distinct authenticated source cells"
+                    )
+                if (
+                    v3_floor
+                    and len(v3_authenticated_gate_values) == 2
+                    and floor.get("active_floor_j")
+                    != max(v3_authenticated_gate_values)
+                ):
+                    errors.append(
+                        f"{where}.floor.active_floor_j.floor_lineage: must exactly "
+                        "equal the maximum authenticated source-cell gate"
+                    )
 
             if v3_floor:
                 arm_gates = floor["arm_gates"]
@@ -2455,12 +2531,12 @@ def validate_claim_verdicts(
                                     errors.append(
                                         f"{where}.floor.arm_gates[{arm_index}].floor_gate_j: disagrees with resolution"
                                     )
-                            elif not _same_number(
-                                arm_gate.get("floor_gate_j"),
-                                resolution.get("floor_gate_j"),
+                            elif arm_gate.get("floor_gate_j") != resolution.get(
+                                "floor_gate_j"
                             ):
                                 errors.append(
-                                    f"{where}.floor.arm_gates[{arm_index}].floor_gate_j: disagrees with resolution"
+                                    f"{where}.floor.arm_gates[{arm_index}].floor_gate_j.floor_lineage: "
+                                    "must exactly match the authorized resolution"
                                 )
                     if (
                         len(arm_gate_values) == 2
