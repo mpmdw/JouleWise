@@ -17,6 +17,20 @@ lanes, worktrees, evidence paths, the post-03:30 bookkeeping list). #274 is
 MERGED (`b81a2ac5`); the T30 pointer below is superseded. Canonical checkout
 frozen until 03:30 on 2026-09-03 (rehearsal-20260903 armed 02:56).**
 
+**T31 courier addendum (2026-09-03 03:05 PDT, session joulewise-8b) —
+rehearsal-20260903 DELIVERED; the R-7 stand-down case is proven.** Fired from launchd at 02:56: verdict
+`REHEARSAL_ONLY`, chain exit 0, receipt `REFUSED night_refused_agent_present`
+(the acceptable reason), branch `night-results/20260903`, courier email
+`1a066b378497db05`; the 09-02 07:00 dead-man stood down with the ruled single
+log line. Facts in kernel row `NIGHT-REHEARSAL-01`. OPEN: the LaunchAgent
+uninstall was classifier-blocked in the courier session — plists still
+loaded at 33290b8b; the 07:00 dead-man now hits `courier already sent` and
+exits (harmless); the night job refires daily at 02:56 into a rerun refusal
+file. Routed to Ed by email (needs his hand or a permission rule); NOT handed
+to the peer session. Harvest PR #277. Next lane (peer joulewise-60 owns it):
+the first `DIAGNOSTIC_NO_PACK` plan (G2-a) + the stage-1 plan email before it
+is armed.**
+
 **T30 (2026-09-02) — DURABLE PAUSE (Ed: usage window exhausted).** A new
 session resumes from ONE file:
 `docs/process_traces/2026-09-02-decode-identity-set/39-pause-state-2026-09-02.md`

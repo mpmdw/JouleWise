@@ -22,7 +22,7 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-09-02)
+## Current activity (refreshed each work block; last: 2026-09-03)
 
 **Just completed (2026-09-01/02): the night driver is on main.** The
 unattended measurement night — the lane Ed asked for first, so the machine
@@ -40,14 +40,17 @@ pass/fail rule now requires the timing-aware uncertainty floor to be at
 least TWICE the naive floor, per component, pre-registered before any data
 exists.
 
-**Now (updated 2026-09-02):** two lanes run side by side. The
-unattended-night rehearsals continue: the first stub night fired on its own
-from the macOS scheduler at 02:56 this morning, pushed its results to a
-branch readable from a phone, and sent the morning summary email with
-nobody at the keyboard; a second rehearsal is armed for tomorrow night to
-prove the "installed the morning before" case, whose 07:00 watchdog must
-notice the night hasn't happened yet and stand down quietly. Five small
-hardening fixes from the reviews landed between the two nights. On the
+**Now (updated 2026-09-03):** two lanes run side by side. The
+unattended-night rehearsals are done: two stub nights have fired on their
+own from the macOS scheduler at 02:56 (09-02 and 09-03), each pushed its
+results to a branch readable from a phone and sent the morning summary
+email with nobody at the keyboard, and the second also proved the
+"installed the morning before" case: its 07:00 watchdog noticed the night
+had not happened yet and stood down with one log line. Five small
+hardening fixes from the reviews landed between the two nights. Next on
+this lane: the first real diagnostic night plan (the G2-a prefill probes,
+no pack), and the email to Ed naming its first armed date before it is
+armed. On the
 paper lane, the freeze/arm-time re-tokenize check (which stops tokenizer
 drift from silently changing what is measured) is on main, and the first
 real trial of it against the actual Qwen tokenizers found a plan-generator
