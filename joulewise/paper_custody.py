@@ -1,14 +1,13 @@
-"""Authenticated, replayed ingress for values consumed by paper suppliers.
+"""Authenticated, validator-replayed ingress for paper-supplier evidence.
 
-The module deliberately exposes one read operation.  Locator objects carry
-caller pins, but those pins never authorize bytes: Git blobs authorize
-governed files and a Git-authorized custody inventory authorizes generated
-files.  A validator receipt is checked only after a fresh validator replay.
+Callers can name only a closed supply role and a runs root.  The fixed clean
+repository selected by :func:`identity_pins._mint_git_anchor` supplies the
+Git-tracked role map; paths, digests, validators, inventory, and receipt
+locators are all resolved behind this module's public boundary.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import base64
 import binascii
 import hashlib
@@ -19,21 +18,24 @@ import subprocess
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath
-from typing import Literal, overload
+from typing import Callable, Literal, overload
 
 from joulewise.authentication_io import (
-    AuthenticationInputRecord,
     V2AuthenticationInputError,
     V2AuthenticationReadSession,
     V2_AUTHENTICATION_INPUT_CHANGED,
     V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
 )
+from joulewise.identity_pins import IdentityPinProjectionError, _mint_git_anchor
 
 
+_SUPPLY_MAP_PATH = "configs/paper_supply/supply_map.json"
+_SUPPLY_MAP_SCHEMA = "joulewise.paper_supply_map.v1"
 _INVENTORY_SCHEMA = "joulewise.paper_custody_inventory.v1"
 _RECEIPT_SCHEMA = "joulewise.paper_custody_receipt.v1"
 _FIXTURE_SCHEMA = "joulewise.paper_custody_fixture.v1"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
+_SUPPLY_ROLE_RE = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 
 
 PAPER_CUSTODY_REFUSAL_CODES = frozenset(
@@ -41,6 +43,8 @@ PAPER_CUSTODY_REFUSAL_CODES = frozenset(
         "paper_custody_request_invalid",
         "paper_custody_anchor_unavailable",
         "paper_custody_anchor_mismatch",
+        "paper_custody_supply_map_invalid",
+        "paper_custody_role_unregistered",
         "paper_custody_path_refused",
         "paper_custody_input_unreadable",
         "paper_custody_digest_mismatch",
@@ -86,80 +90,33 @@ class InputRole(str, Enum):
 
 
 @dataclass(frozen=True)
-class BoundFile:
-    """A locator and caller pin; never an authorization by itself."""
-
-    path: Path
-    expected_sha256: str
-    role: InputRole
-
-
-@dataclass(frozen=True)
-class ReceiptRef:
-    """Closed locator for the corroborating validator receipt."""
-
-    file: BoundFile
-    schema: str
-    validator: str
-    validator_source_sha256: str
-
-
-@dataclass(frozen=True)
 class ReportedEnergyParentsRef:
-    root: Path
-    inventory: BoundFile
-    extraction_spec: BoundFile
-    extraction_report: BoundFile
-    whole_window_basis: BoundFile
-    g2a_selection: BoundFile
-    prompt_pin: BoundFile
-    receipt: ReceiptRef
+    role: str
+    runs_root: Path
 
 
 @dataclass(frozen=True)
 class D165CloseoutRef:
-    root: Path
-    inventory: BoundFile
-    closeout: BoundFile
-    finalized_manifest: BoundFile
-    floor_artifact: BoundFile
-    replay_sidecar: BoundFile
-    receipt: ReceiptRef
+    role: str
+    runs_root: Path
 
 
 @dataclass(frozen=True)
 class WholeWindowVerdictRef:
-    root: Path
-    inventory: BoundFile
-    campaign_log: BoundFile
-    standalone_verdict: BoundFile
-    prospective_manifest: BoundFile
-    plan: BoundFile
-    receipt: ReceiptRef
+    role: str
+    runs_root: Path
 
 
 @dataclass(frozen=True)
 class ClaimEvidenceRef:
-    root: Path
-    inventory: BoundFile
-    claim_verdicts: BoundFile
-    claim_side_bound: BoundFile
-    finalized_manifest: BoundFile
-    floor_artifact: BoundFile
-    receipt: ReceiptRef
+    role: str
+    runs_root: Path
 
 
 @dataclass(frozen=True)
 class TransferProjectionRef:
-    root: Path
-    inventory: BoundFile
-    result_projection: BoundFile
-    reviewed_capture: BoundFile
-    plan: BoundFile
-    pre_data_receipt: BoundFile
-    pulse_bound_source: BoundFile
-    bundle_inventory: BoundFile
-    receipt: ReceiptRef
+    role: str
+    runs_root: Path
 
 
 @dataclass(frozen=True)
@@ -191,10 +148,16 @@ class _FrozenArray:
     items: tuple[object, ...]
 
 
+def _refuse_verified_construction(*_args: object, **_kwargs: object) -> None:
+    raise PaperCustodyRefusal("paper_custody_request_invalid")
+
+
 @dataclass(frozen=True, init=False)
 class VerifiedReportedEnergyParents:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+
+    __init__ = _refuse_verified_construction
 
 
 @dataclass(frozen=True, init=False)
@@ -202,11 +165,15 @@ class VerifiedD165Closeout:
     evidence: CustodyEvidence
     _payload: _FrozenObject
 
+    __init__ = _refuse_verified_construction
+
 
 @dataclass(frozen=True, init=False)
 class VerifiedWholeWindowVerdict:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+
+    __init__ = _refuse_verified_construction
 
 
 @dataclass(frozen=True, init=False)
@@ -214,11 +181,15 @@ class VerifiedClaimEvidence:
     evidence: CustodyEvidence
     _payload: _FrozenObject
 
+    __init__ = _refuse_verified_construction
+
 
 @dataclass(frozen=True, init=False)
 class VerifiedTransferProjection:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+
+    __init__ = _refuse_verified_construction
 
 
 class PaperCustodyRefusal(RuntimeError):
@@ -266,7 +237,7 @@ _VerifiedFamily = (
 @dataclass(frozen=True)
 class _FamilySpec:
     family: str
-    fields: tuple[tuple[str, InputRole], ...]
+    roles: tuple[InputRole, ...]
     output_type: type
 
 
@@ -274,53 +245,53 @@ _FAMILY_SPECS: dict[type, _FamilySpec] = {
     ReportedEnergyParentsRef: _FamilySpec(
         "reported_energy_parents",
         (
-            ("extraction_spec", InputRole.EXTRACTION_SPEC),
-            ("extraction_report", InputRole.EXTRACTION_REPORT),
-            ("whole_window_basis", InputRole.WHOLE_WINDOW_BASIS),
-            ("g2a_selection", InputRole.G2A_SELECTION),
-            ("prompt_pin", InputRole.PROMPT_PIN),
+            InputRole.EXTRACTION_SPEC,
+            InputRole.EXTRACTION_REPORT,
+            InputRole.WHOLE_WINDOW_BASIS,
+            InputRole.G2A_SELECTION,
+            InputRole.PROMPT_PIN,
         ),
         VerifiedReportedEnergyParents,
     ),
     D165CloseoutRef: _FamilySpec(
         "d165_closeout",
         (
-            ("closeout", InputRole.D165_CLOSEOUT),
-            ("finalized_manifest", InputRole.FINALIZED_MANIFEST),
-            ("floor_artifact", InputRole.FLOOR_ARTIFACT),
-            ("replay_sidecar", InputRole.REPLAY_SIDECAR),
+            InputRole.D165_CLOSEOUT,
+            InputRole.FINALIZED_MANIFEST,
+            InputRole.FLOOR_ARTIFACT,
+            InputRole.REPLAY_SIDECAR,
         ),
         VerifiedD165Closeout,
     ),
     WholeWindowVerdictRef: _FamilySpec(
         "whole_window_verdict",
         (
-            ("campaign_log", InputRole.CAMPAIGN_LOG),
-            ("standalone_verdict", InputRole.STANDALONE_VERDICT),
-            ("prospective_manifest", InputRole.PROSPECTIVE_MANIFEST),
-            ("plan", InputRole.PLAN),
+            InputRole.CAMPAIGN_LOG,
+            InputRole.STANDALONE_VERDICT,
+            InputRole.PROSPECTIVE_MANIFEST,
+            InputRole.PLAN,
         ),
         VerifiedWholeWindowVerdict,
     ),
     ClaimEvidenceRef: _FamilySpec(
         "claim_evidence",
         (
-            ("claim_verdicts", InputRole.CLAIM_VERDICTS),
-            ("claim_side_bound", InputRole.CLAIM_SIDE_BOUND),
-            ("finalized_manifest", InputRole.FINALIZED_MANIFEST),
-            ("floor_artifact", InputRole.FLOOR_ARTIFACT),
+            InputRole.CLAIM_VERDICTS,
+            InputRole.CLAIM_SIDE_BOUND,
+            InputRole.FINALIZED_MANIFEST,
+            InputRole.FLOOR_ARTIFACT,
         ),
         VerifiedClaimEvidence,
     ),
     TransferProjectionRef: _FamilySpec(
         "transfer_projection",
         (
-            ("result_projection", InputRole.TRANSFER_RESULT),
-            ("reviewed_capture", InputRole.REVIEWED_CAPTURE),
-            ("plan", InputRole.PLAN),
-            ("pre_data_receipt", InputRole.PRE_DATA_RECEIPT),
-            ("pulse_bound_source", InputRole.PULSE_BOUND_SOURCE),
-            ("bundle_inventory", InputRole.BUNDLE_INVENTORY),
+            InputRole.TRANSFER_RESULT,
+            InputRole.REVIEWED_CAPTURE,
+            InputRole.PLAN,
+            InputRole.PRE_DATA_RECEIPT,
+            InputRole.PULSE_BOUND_SOURCE,
+            InputRole.BUNDLE_INVENTORY,
         ),
         VerifiedTransferProjection,
     ),
@@ -328,10 +299,33 @@ _FAMILY_SPECS: dict[type, _FamilySpec] = {
 
 
 @dataclass(frozen=True)
+class _BoundFile:
+    base: Literal["repository", "runs_root"]
+    path: Path
+    expected_sha256: str
+    role: InputRole
+    authority: Literal["git_blob", "generated"]
+
+
+@dataclass(frozen=True)
+class _ReceiptRef:
+    file: _BoundFile
+    validator: str
+
+
+@dataclass(frozen=True)
+class _ResolvedSupply:
+    inventory: _BoundFile
+    sources: tuple[_BoundFile, ...]
+    receipt: _ReceiptRef
+
+
+@dataclass(frozen=True)
 class _ReplayState:
     family: str
-    root: Path
-    bindings: tuple[BoundFile, ...]
+    repository: Path
+    runs_root: Path
+    bindings: tuple[_BoundFile, ...]
 
 
 def _sha256(raw: bytes) -> str:
@@ -370,18 +364,96 @@ def _json_object(raw: bytes) -> dict[str, object]:
     return value
 
 
-def _validator_source_sha256(family: str) -> str:
-    if family not in {spec.family for spec in _FAMILY_SPECS.values()}:
-        raise ValueError("unknown paper custody family")
-    source = inspect.getsource(_replay_family).encode("utf-8")
-    return _sha256(family.encode("utf-8") + b"\0" + source)
+def _validator_source_census(
+    family: str,
+) -> tuple[tuple[str, Callable[..., object]], ...]:
+    """Return the closed dispatcher-plus-owner source census for one family."""
 
-
-def _relative_path(binding: BoundFile) -> str:
-    if type(binding) is not BoundFile:
-        raise PaperCustodyRefusal(
-            "paper_custody_request_invalid", input_role=getattr(binding, "role", None)
+    common: tuple[tuple[str, Callable[..., object]], ...] = (
+        ("paper_custody._replay_family", _replay_family),
+        ("paper_custody._validate_fixture_documents", _validate_fixture_documents),
+        (
+            "paper_custody._validate_production_documents",
+            _validate_production_documents,
+        ),
+    )
+    if family == "reported_energy_parents":
+        from joulewise.floor_extraction import (
+            validate_d117_mint_consumption_report,
+            validate_extraction_spec,
         )
+
+        owners = (
+            ("floor_extraction.validate_extraction_spec", validate_extraction_spec),
+            (
+                "floor_extraction.validate_d117_mint_consumption_report",
+                validate_d117_mint_consumption_report,
+            ),
+        )
+    elif family == "d165_closeout":
+        from joulewise.analysis_engine.inputs import authenticate_floor_artifact_bytes
+        from joulewise.analysis_manifest_v3 import (
+            validate_finalized_analysis_manifest_v3,
+        )
+        from joulewise.dominance_closeout import (
+            validate_d165_closeout,
+            validate_d165_paper_sources,
+            validate_d165_replay_sidecar,
+        )
+
+        owners = (
+            (
+                "dominance_closeout.validate_d165_paper_sources",
+                validate_d165_paper_sources,
+            ),
+            (
+                "analysis_manifest_v3.validate_finalized_analysis_manifest_v3",
+                validate_finalized_analysis_manifest_v3,
+            ),
+            (
+                "analysis_engine.inputs.authenticate_floor_artifact_bytes",
+                authenticate_floor_artifact_bytes,
+            ),
+            (
+                "dominance_closeout.validate_d165_replay_sidecar",
+                validate_d165_replay_sidecar,
+            ),
+            ("dominance_closeout.validate_d165_closeout", validate_d165_closeout),
+        )
+    elif family == "whole_window_verdict":
+        from joulewise.whole_window import validate_whole_window_verdict_row
+
+        owners = (
+            (
+                "whole_window.validate_whole_window_verdict_row",
+                validate_whole_window_verdict_row,
+            ),
+        )
+    elif family == "claim_evidence":
+        from joulewise.analysis_engine.artifact import validate_claim_verdicts
+
+        owners = (
+            ("analysis_engine.artifact.validate_claim_verdicts", validate_claim_verdicts),
+        )
+    elif family == "transfer_projection":
+        owners = ()
+    else:
+        raise ValueError("unknown paper custody family")
+    return (*common, *owners)
+
+
+def _validator_source_sha256(family: str) -> str:
+    digest = hashlib.sha256()
+    digest.update(family.encode("utf-8") + b"\0")
+    for member_id, member in _validator_source_census(family):
+        digest.update(member_id.encode("utf-8") + b"\0")
+        digest.update(inspect.getsource(member).encode("utf-8") + b"\0")
+    return digest.hexdigest()
+
+
+def _relative_path(binding: _BoundFile) -> str:
+    if type(binding) is not _BoundFile:
+        raise PaperCustodyRefusal("paper_custody_request_invalid")
     if not isinstance(binding.path, Path):
         raise PaperCustodyRefusal(
             "paper_custody_request_invalid", input_role=binding.role
@@ -397,24 +469,37 @@ def _relative_path(binding: BoundFile) -> str:
         raise PaperCustodyRefusal(
             "paper_custody_path_refused", input_role=binding.role
         )
-    if not isinstance(binding.role, InputRole) or _SHA256_RE.fullmatch(
-        binding.expected_sha256
-    ) is None:
+    if (
+        not isinstance(binding.role, InputRole)
+        or not isinstance(binding.expected_sha256, str)
+        or _SHA256_RE.fullmatch(binding.expected_sha256) is None
+        or binding.base not in {"repository", "runs_root"}
+        or binding.authority not in {"git_blob", "generated"}
+        or (binding.authority == "git_blob" and binding.base != "repository")
+    ):
         raise PaperCustodyRefusal(
-            "paper_custody_request_invalid", input_role=binding.role
+            "paper_custody_supply_map_invalid", input_role=binding.role
         )
     return text
 
 
+def _binding_root(
+    binding: _BoundFile, repository: Path, runs_root: Path
+) -> Path:
+    return repository if binding.base == "repository" else runs_root
+
+
 def _record_tuple(
     session: V2AuthenticationReadSession,
-    root: Path,
-    bindings: tuple[BoundFile, ...],
+    repository: Path,
+    runs_root: Path,
+    bindings: tuple[_BoundFile, ...],
 ) -> tuple[VerifiedDigest, ...]:
     records = session.records
     result: list[VerifiedDigest] = []
     for binding in bindings:
         relative = _relative_path(binding)
+        root = _binding_root(binding, repository, runs_root)
         identity = str((root / relative).resolve(strict=False))
         record = records.get(identity)
         if record is None:
@@ -437,12 +522,13 @@ def _raise(
     role: InputRole | None = None,
     validator_codes: tuple[str, ...] = (),
     session: V2AuthenticationReadSession | None = None,
-    root: Path | None = None,
-    bindings: tuple[BoundFile, ...] = (),
+    repository: Path | None = None,
+    runs_root: Path | None = None,
+    bindings: tuple[_BoundFile, ...] = (),
 ) -> None:
     records = (
-        _record_tuple(session, root, bindings)
-        if session is not None and root is not None
+        _record_tuple(session, repository, runs_root, bindings)
+        if session is not None and repository is not None and runs_root is not None
         else ()
     )
     raise PaperCustodyRefusal(
@@ -453,27 +539,12 @@ def _raise(
     )
 
 
-def _git_root(root: Path) -> Path:
+def _git_blob(
+    repository: Path, head: str, relative: str, role: InputRole | None = None
+) -> bytes:
     try:
         completed = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        raise PaperCustodyRefusal("paper_custody_anchor_unavailable") from exc
-    discovered = Path(completed.stdout.strip()).resolve(strict=True)
-    if discovered != root:
-        raise PaperCustodyRefusal("paper_custody_anchor_mismatch")
-    return discovered
-
-
-def _git_blob(root: Path, relative: str, role: InputRole) -> bytes:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", str(root), "show", f"HEAD:{relative}"],
+            ["git", "-C", str(repository), "show", f"{head}:{relative}"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -485,19 +556,145 @@ def _git_blob(root: Path, relative: str, role: InputRole) -> bytes:
     return completed.stdout
 
 
+def _map_binding(
+    value: object,
+    *,
+    role: InputRole,
+    include_authority: bool,
+) -> _BoundFile:
+    expected_keys = {"base", "expected_sha256", "path"}
+    if include_authority:
+        expected_keys.add("authority")
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise PaperCustodyRefusal(
+            "paper_custody_supply_map_invalid", input_role=role
+        )
+    base = value.get("base")
+    path = value.get("path")
+    digest = value.get("expected_sha256")
+    authority = value.get("authority", "generated")
+    if (
+        base not in {"repository", "runs_root"}
+        or not isinstance(path, str)
+        or not isinstance(digest, str)
+        or not isinstance(authority, str)
+    ):
+        raise PaperCustodyRefusal(
+            "paper_custody_supply_map_invalid", input_role=role
+        )
+    binding = _BoundFile(
+        base=base,
+        path=Path(path),
+        expected_sha256=digest,
+        role=role,
+        authority=authority,
+    )
+    _relative_path(binding)
+    return binding
+
+
+def _load_supply_entry(
+    session: V2AuthenticationReadSession,
+    repository: Path,
+    head: str,
+    supply_role: str,
+    spec: _FamilySpec,
+) -> _ResolvedSupply:
+    raw = _git_blob(repository, head, _SUPPLY_MAP_PATH)
+    try:
+        raw = session.ingest(
+            f"git:{head}:{_SUPPLY_MAP_PATH}",
+            raw,
+            grammar="json",
+            label="paper supply map",
+        )
+        value = _json_object(raw)
+    except (UnicodeError, json.JSONDecodeError, V2AuthenticationInputError, ValueError) as exc:
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid") from exc
+    if set(value) != {"roles", "schema_version"} or value.get(
+        "schema_version"
+    ) != _SUPPLY_MAP_SCHEMA:
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    roles = value.get("roles")
+    if not isinstance(roles, dict) or any(
+        not isinstance(key, str) or _SUPPLY_ROLE_RE.fullmatch(key) is None
+        for key in roles
+    ):
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    entry = roles.get(supply_role)
+    if entry is None:
+        raise PaperCustodyRefusal("paper_custody_role_unregistered")
+    if not isinstance(entry, dict) or set(entry) != {
+        "family",
+        "inputs",
+        "inventory",
+        "receipt",
+        "validator",
+    }:
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    validator = entry.get("validator")
+    if (
+        entry.get("family") != spec.family
+        or validator != f"joulewise.paper_custody.{spec.family}.v1"
+    ):
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    inventory = _map_binding(
+        entry.get("inventory"),
+        role=InputRole.CUSTODY_INVENTORY,
+        include_authority=False,
+    )
+    receipt_file = _map_binding(
+        entry.get("receipt"),
+        role=InputRole.VALIDATOR_RECEIPT,
+        include_authority=False,
+    )
+    rows = entry.get("inputs")
+    if not isinstance(rows, list) or len(rows) != len(spec.roles):
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    sources: list[_BoundFile] = []
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("role"), str):
+            raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+        try:
+            role = InputRole(row["role"])
+        except (TypeError, ValueError) as exc:
+            raise PaperCustodyRefusal("paper_custody_supply_map_invalid") from exc
+        without_role = {key: child for key, child in row.items() if key != "role"}
+        sources.append(
+            _map_binding(without_role, role=role, include_authority=True)
+        )
+    if tuple(binding.role for binding in sources) != spec.roles:
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    bindings = (inventory, *sources, receipt_file)
+    identities = [
+        (binding.base, _relative_path(binding)) for binding in bindings
+    ]
+    if len(set(identities)) != len(identities) or len(
+        {binding.role for binding in bindings}
+    ) != len(bindings):
+        raise PaperCustodyRefusal("paper_custody_evidence_ambiguous")
+    return _ResolvedSupply(
+        inventory=inventory,
+        sources=tuple(sources),
+        receipt=_ReceiptRef(file=receipt_file, validator=validator),
+    )
+
+
 def _read_once(
     session: V2AuthenticationReadSession,
-    root: Path,
-    binding: BoundFile,
+    repository: Path,
+    runs_root: Path,
+    binding: _BoundFile,
     *,
-    bindings: tuple[BoundFile, ...],
+    bindings: tuple[_BoundFile, ...],
 ) -> bytes:
     relative = _relative_path(binding)
+    root = _binding_root(binding, repository, runs_root)
     grammar: Literal["json", "jsonl", "raw"] = (
         "jsonl" if relative.endswith(".jsonl") else "json"
     )
     try:
-        raw = session.read_nofollow_pinned(
+        return session.read_nofollow_pinned(
             root,
             relative,
             expected_sha256=binding.expected_sha256,
@@ -515,10 +712,11 @@ def _read_once(
             code,
             role=binding.role,
             session=session,
-            root=root,
+            repository=repository,
+            runs_root=runs_root,
             bindings=bindings,
         )
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
         code = (
             "paper_custody_input_unreadable"
             if isinstance(exc, FileNotFoundError)
@@ -529,20 +727,24 @@ def _read_once(
                 code,
                 role=binding.role,
                 session=session,
-                root=root,
+                repository=repository,
+                runs_root=runs_root,
                 bindings=bindings,
             )
         except PaperCustodyRefusal as refusal:
             raise refusal from exc
-    return raw
+    raise AssertionError("unreachable paper custody read")
 
 
 def _validate_inventory(
     raw: bytes,
     *,
     family: str,
-    expected: tuple[BoundFile, ...],
-) -> tuple[Literal["production", "test_fixture_non_issuing"], dict[InputRole, dict[str, str]]]:
+    expected: tuple[_BoundFile, ...],
+) -> tuple[
+    Literal["production", "test_fixture_non_issuing"],
+    dict[InputRole, dict[str, str]],
+]:
     try:
         value = _json_object(raw)
     except (UnicodeError, json.JSONDecodeError, ValueError) as exc:
@@ -592,10 +794,9 @@ def _validate_inventory(
             ) from exc
         if (
             role in indexed
-            or not isinstance(row["authority"], str)
-            or row["authority"] not in {"git_blob", "generated"}
-            or not isinstance(row["path"], str)
-            or not isinstance(row["sha256"], str)
+            or row.get("authority") not in {"git_blob", "generated"}
+            or not isinstance(row.get("path"), str)
+            or not isinstance(row.get("sha256"), str)
             or _SHA256_RE.fullmatch(row["sha256"]) is None
         ):
             raise PaperCustodyRefusal(
@@ -610,7 +811,11 @@ def _validate_inventory(
         )
     for role, binding in expected_by_role.items():
         row = indexed[role]
-        if row["path"] != _relative_path(binding):
+        if (
+            row["path"] != _relative_path(binding)
+            or row["sha256"] != binding.expected_sha256
+            or row["authority"] != binding.authority
+        ):
             raise PaperCustodyRefusal(
                 "paper_custody_anchor_mismatch", input_role=role
             )
@@ -619,21 +824,19 @@ def _validate_inventory(
 
 def _validate_receipt(
     raw: bytes,
-    ref: ReceiptRef,
+    ref: _ReceiptRef,
     *,
     family: str,
-    sources: tuple[BoundFile, ...],
+    sources: tuple[_BoundFile, ...],
 ) -> dict[str, object]:
     if (
-        type(ref) is not ReceiptRef
+        type(ref) is not _ReceiptRef
         or ref.file.role is not InputRole.VALIDATOR_RECEIPT
-        or ref.schema != _RECEIPT_SCHEMA
         or ref.validator != f"joulewise.paper_custody.{family}.v1"
-        or not isinstance(ref.validator_source_sha256, str)
-        or _SHA256_RE.fullmatch(ref.validator_source_sha256) is None
     ):
         raise PaperCustodyRefusal(
-            "paper_custody_request_invalid", input_role=InputRole.VALIDATOR_RECEIPT
+            "paper_custody_supply_map_invalid",
+            input_role=InputRole.VALIDATOR_RECEIPT,
         )
     try:
         value = _json_object(raw)
@@ -666,12 +869,11 @@ def _validate_receipt(
     )
     expected_source = _validator_source_sha256(family)
     if (
-        value.get("schema_version") != ref.schema
+        value.get("schema_version") != _RECEIPT_SCHEMA
         or value.get("family") != family
         or value.get("status") != "PASS"
         or value.get("validator") != ref.validator
         or value.get("validator_source_sha256") != expected_source
-        or ref.validator_source_sha256 != expected_source
         or value.get("inputs") != expected_inputs
         or not isinstance(value.get("replay_codes"), list)
         or any(not isinstance(code, str) for code in value["replay_codes"])
@@ -685,7 +887,7 @@ def _validate_receipt(
 
 def _validate_fixture_documents(
     family: str,
-    sources: tuple[BoundFile, ...],
+    sources: tuple[_BoundFile, ...],
     raws: dict[InputRole, bytes],
 ) -> tuple[str, ...]:
     errors: list[str] = []
@@ -707,11 +909,12 @@ def _validate_fixture_documents(
 
 def _validate_production_documents(
     family: str,
-    root: Path,
-    sources: tuple[BoundFile, ...],
+    repository: Path,
+    runs_root: Path,
+    sources: tuple[_BoundFile, ...],
     raws: dict[InputRole, bytes],
 ) -> tuple[str, ...]:
-    """Replay available owning validators; no absent producer is invented."""
+    """Replay every available owning validator; absent producers stay blocked."""
 
     parsed = {role: _json_object(raw) for role, raw in raws.items()}
     if family == "reported_energy_parents":
@@ -729,22 +932,21 @@ def _validate_production_documents(
             ]
         )
     if family == "d165_closeout":
-        from joulewise.d165_dominance_closeout import validate_d165_paper_sources
+        from joulewise.dominance_closeout import validate_d165_paper_sources
 
+        manifest_binding = next(
+            binding
+            for binding in sources
+            if binding.role is InputRole.FINALIZED_MANIFEST
+        )
         return validate_d165_paper_sources(
             closeout=parsed[InputRole.D165_CLOSEOUT],
             finalized_manifest_bytes=raws[InputRole.FINALIZED_MANIFEST],
             finalized_manifest_path=(
-                root
-                / _relative_path(
-                    next(
-                        binding
-                        for binding in sources
-                        if binding.role is InputRole.FINALIZED_MANIFEST
-                    )
-                )
+                _binding_root(manifest_binding, repository, runs_root)
+                / _relative_path(manifest_binding)
             ),
-            custody_root=root,
+            custody_root=runs_root,
             floor_artifact_bytes=raws[InputRole.FLOOR_ARTIFACT],
             replay_sidecar_bytes=raws[InputRole.REPLAY_SIDECAR],
         )
@@ -782,26 +984,30 @@ def _validate_production_documents(
 
         row = parsed[InputRole.STANDALONE_VERDICT]
         bundle_ids = row.get("bundle_ids")
-        referenced = {
-            value for value in bundle_ids if isinstance(value, str)
-        } if isinstance(bundle_ids, list) else set()
-        validation = validate_whole_window_verdict_row(row, root, referenced)
+        referenced = (
+            {value for value in bundle_ids if isinstance(value, str)}
+            if isinstance(bundle_ids, list)
+            else set()
+        )
+        validation = validate_whole_window_verdict_row(row, runs_root, referenced)
         return () if validation.authentic else validation.reasons
-    # The whole-window and transfer producer gates are intentionally absent.
     return ()
 
 
 def _replay_family(
     family: str,
     mode: Literal["production", "test_fixture_non_issuing"],
-    root: Path,
-    sources: tuple[BoundFile, ...],
+    repository: Path,
+    runs_root: Path,
+    sources: tuple[_BoundFile, ...],
     raws: dict[InputRole, bytes],
 ) -> tuple[str, ...]:
     if mode == "test_fixture_non_issuing":
         return _validate_fixture_documents(family, sources, raws)
     try:
-        return _validate_production_documents(family, root, sources, raws)
+        return _validate_production_documents(
+            family, repository, runs_root, sources, raws
+        )
     except (KeyError, TypeError, ValueError) as exc:
         return (type(exc).__name__,)
 
@@ -845,53 +1051,52 @@ def open_paper_input(ref: TransferProjectionRef) -> VerifiedTransferProjection: 
 
 
 def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
-    """Open one of the five closed paper-input families or refuse it."""
+    """Open one closed paper-input role from a caller-named runs root."""
 
+    try:
+        return _open_paper_input(ref)
+    except PaperCustodyRefusal:
+        raise
+    except Exception as exc:
+        raise PaperCustodyRefusal("paper_custody_request_invalid") from exc
+
+
+def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
     spec = _FAMILY_SPECS.get(type(ref))
-    if spec is None or not dataclasses.is_dataclass(ref):
+    if spec is None:
         raise PaperCustodyRefusal("paper_custody_request_invalid")
-    if not isinstance(ref.root, Path):
+    if (
+        not isinstance(ref.role, str)
+        or _SUPPLY_ROLE_RE.fullmatch(ref.role) is None
+        or not isinstance(ref.runs_root, Path)
+    ):
         raise PaperCustodyRefusal("paper_custody_request_invalid")
     try:
-        root = ref.root.resolve(strict=True)
+        runs_root = ref.runs_root.resolve(strict=True)
     except OSError as exc:
+        raise PaperCustodyRefusal("paper_custody_input_unreadable") from exc
+    if not runs_root.is_dir():
+        raise PaperCustodyRefusal("paper_custody_path_refused")
+    try:
+        repository, head = _mint_git_anchor()
+    except IdentityPinProjectionError as exc:
         raise PaperCustodyRefusal("paper_custody_anchor_unavailable") from exc
-    _git_root(root)
-    if type(ref.inventory) is not BoundFile:
-        raise PaperCustodyRefusal("paper_custody_request_invalid")
-    if ref.inventory.role is not InputRole.CUSTODY_INVENTORY:
-        raise PaperCustodyRefusal(
-            "paper_custody_request_invalid", input_role=ref.inventory.role
-        )
-    sources = tuple(getattr(ref, field) for field, _role in spec.fields)
-    for (field, role), binding in zip(spec.fields, sources, strict=True):
-        if type(binding) is not BoundFile or binding.role is not role:
-            raise PaperCustodyRefusal(
-                "paper_custody_request_invalid",
-                input_role=getattr(binding, "role", None),
-            )
-    if type(ref.receipt) is not ReceiptRef or type(ref.receipt.file) is not BoundFile:
-        raise PaperCustodyRefusal("paper_custody_request_invalid")
-    receipt_binding = ref.receipt.file
-    bindings = (ref.inventory, *sources, receipt_binding)
-    paths = [_relative_path(binding) for binding in bindings]
-    roles = [binding.role for binding in bindings]
-    if len(set(paths)) != len(paths) or len(set(roles)) != len(roles):
-        raise PaperCustodyRefusal("paper_custody_evidence_ambiguous")
 
     with V2AuthenticationReadSession() as session:
-        inventory_raw = _read_once(
-            session, root, ref.inventory, bindings=bindings
+        supply = _load_supply_entry(
+            session, repository, head, ref.role, spec
         )
-        inventory_relative = _relative_path(ref.inventory)
-        if _git_blob(root, inventory_relative, ref.inventory.role) != inventory_raw:
-            _raise(
-                "paper_custody_anchor_mismatch",
-                role=ref.inventory.role,
-                session=session,
-                root=root,
-                bindings=bindings,
-            )
+        sources = supply.sources
+        receipt_binding = supply.receipt.file
+        bindings = (supply.inventory, *sources, receipt_binding)
+
+        inventory_raw = _read_once(
+            session,
+            repository,
+            runs_root,
+            supply.inventory,
+            bindings=bindings,
+        )
         mode, inventory = _validate_inventory(
             inventory_raw,
             family=spec.family,
@@ -902,24 +1107,21 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
             InputRole.CUSTODY_INVENTORY: inventory_raw
         }
         for binding in (*sources, receipt_binding):
-            raw = _read_once(session, root, binding, bindings=bindings)
+            raw = _read_once(
+                session,
+                repository,
+                runs_root,
+                binding,
+                bindings=bindings,
+            )
             row = inventory[binding.role]
             if row["sha256"] != _sha256(raw):
                 _raise(
                     "paper_custody_anchor_mismatch",
                     role=binding.role,
                     session=session,
-                    root=root,
-                    bindings=bindings,
-                )
-            if row["authority"] == "git_blob" and _git_blob(
-                root, _relative_path(binding), binding.role
-            ) != raw:
-                _raise(
-                    "paper_custody_anchor_mismatch",
-                    role=binding.role,
-                    session=session,
-                    root=root,
+                    repository=repository,
+                    runs_root=runs_root,
                     bindings=bindings,
                 )
             all_first_raws[binding.role] = raw
@@ -928,17 +1130,20 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
 
         receipt_value = _validate_receipt(
             all_first_raws[InputRole.VALIDATOR_RECEIPT],
-            ref.receipt,
+            supply.receipt,
             family=spec.family,
             sources=sources,
         )
-        validator_codes = _replay_family(spec.family, mode, root, sources, raws)
+        validator_codes = _replay_family(
+            spec.family, mode, repository, runs_root, sources, raws
+        )
         if validator_codes:
             _raise(
                 "paper_custody_validator_refused",
                 validator_codes=validator_codes,
                 session=session,
-                root=root,
+                repository=repository,
+                runs_root=runs_root,
                 bindings=bindings,
             )
         if receipt_value["replay_codes"] != list(validator_codes):
@@ -946,14 +1151,23 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                 "paper_custody_receipt_binding_mismatch",
                 role=InputRole.VALIDATOR_RECEIPT,
                 session=session,
-                root=root,
+                repository=repository,
+                runs_root=runs_root,
                 bindings=bindings,
             )
 
-        _after_validator_replay(_ReplayState(spec.family, root, bindings))
+        _after_validator_replay(
+            _ReplayState(spec.family, repository, runs_root, bindings)
+        )
         for binding in bindings:
             try:
-                reopened = _read_once(session, root, binding, bindings=bindings)
+                reopened = _read_once(
+                    session,
+                    repository,
+                    runs_root,
+                    binding,
+                    bindings=bindings,
+                )
             except PaperCustodyRefusal as exc:
                 if exc.code in {
                     "paper_custody_digest_mismatch",
@@ -965,7 +1179,8 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                         "paper_custody_input_changed",
                         role=binding.role,
                         session=session,
-                        root=root,
+                        repository=repository,
+                        runs_root=runs_root,
                         bindings=bindings,
                     )
                 raise
@@ -974,11 +1189,12 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                     "paper_custody_input_changed",
                     role=binding.role,
                     session=session,
-                    root=root,
+                    repository=repository,
+                    runs_root=runs_root,
                     bindings=bindings,
                 )
 
-        records = _record_tuple(session, root, bindings)
+        records = _record_tuple(session, repository, runs_root, bindings)
         evidence = CustodyEvidence(
             family=spec.family,
             inputs=records,
@@ -996,8 +1212,6 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                 records=records,
             )
         if mode == "production":
-            # No production custody inventory is registered in this fixture-only
-            # landing.  Producers register prospectively in their own missions.
             raise PaperCustodyRefusal(
                 "paper_custody_receipt_unissued",
                 input_role=InputRole.CUSTODY_INVENTORY,
@@ -1013,14 +1227,12 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
 
 
 __all__ = [
-    "BoundFile",
     "ClaimEvidenceRef",
     "CustodyEvidence",
     "D165CloseoutRef",
     "InputRole",
     "PAPER_CUSTODY_REFUSAL_CODES",
     "PaperCustodyRefusal",
-    "ReceiptRef",
     "ReportedEnergyParentsRef",
     "TransferProjectionRef",
     "VerifiedClaimEvidence",

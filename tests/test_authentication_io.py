@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import builtins
 import hashlib
+import inspect
 import shutil
 import tempfile
 import unittest
@@ -436,6 +437,39 @@ def supplier(payload: bytes, values: Mapping[str, object], *args, receipt=None):
                 source, marked_functions={"open_paper_input"}
             ),
             (),
+        )
+
+        tree = ast.parse(source)
+        expected_refs = {
+            "ReportedEnergyParentsRef",
+            "D165CloseoutRef",
+            "WholeWindowVerdictRef",
+            "ClaimEvidenceRef",
+            "TransferProjectionRef",
+        }
+        actual_fields: dict[str, tuple[str, ...]] = {}
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name in expected_refs:
+                actual_fields[node.name] = tuple(
+                    child.target.id
+                    for child in node.body
+                    if isinstance(child, ast.AnnAssign)
+                    and isinstance(child.target, ast.Name)
+                )
+        self.assertEqual(set(actual_fields), expected_refs)
+        self.assertEqual(
+            actual_fields,
+            {name: ("role", "runs_root") for name in expected_refs},
+        )
+        self.assertNotIn('"BoundFile"', source)
+        self.assertNotIn('"ReceiptRef"', source)
+
+    def test_campaign_log_loader_has_no_caller_byte_channel(self) -> None:
+        from joulewise.campaign_provenance import load_campaign_log_rows
+
+        self.assertEqual(
+            tuple(inspect.signature(load_campaign_log_rows).parameters),
+            ("log_path",),
         )
 
     def test_guard_distinguishes_readable_and_output_only_open(self) -> None:

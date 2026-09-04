@@ -49,7 +49,7 @@ from tests.test_mint_floor_artifact_generalized import (
     freeze_mixed_estimator_v2_pinset,
 )
 from joulewise.identity_pins import build_stack_identity, stack_identity_sha256
-from joulewise import d165_dominance_closeout as paper_adapter
+from joulewise import dominance_closeout as paper_adapter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2066,6 +2066,33 @@ class D165PaperCustodyAdapterTests(unittest.TestCase):
                 ))
                 self.assertEqual(self._validate(), (expected,))
                 self.assertIn(expected, paper_adapter.D165_PAPER_VALIDATOR_CODES)
+
+    def test_real_module_reason_enum_and_or01_registry_map_are_bidirectional(
+        self,
+    ) -> None:
+        self.assertEqual(
+            set(core.D165_OR01_REASON_SENTENCES),
+            core.D165_CLOSEOUT_REFUSAL_CODES,
+        )
+        extra = "d165_paper_future_unmapped"
+        with mock.patch.object(
+            core,
+            "D165_CLOSEOUT_REFUSAL_CODES",
+            core.D165_CLOSEOUT_REFUSAL_CODES | {extra},
+        ):
+            self.assertNotEqual(
+                set(core.D165_OR01_REASON_SENTENCES),
+                core.D165_CLOSEOUT_REFUSAL_CODES,
+            )
+        with mock.patch.object(
+            core,
+            "D165_OR01_REASON_SENTENCES",
+            {**core.D165_OR01_REASON_SENTENCES, extra: "future sentence"},
+        ):
+            self.assertNotEqual(
+                set(core.D165_OR01_REASON_SENTENCES),
+                core.D165_CLOSEOUT_REFUSAL_CODES,
+            )
 
 
 if __name__ == "__main__":

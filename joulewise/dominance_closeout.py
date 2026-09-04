@@ -13,7 +13,8 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
-from types import SimpleNamespace
+from pathlib import Path
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 from joulewise.analysis_manifest_v3 import calculate_manifest_id
@@ -26,6 +27,11 @@ from joulewise.detection_floor import (
     registered_common_mode_operative_bound,
 )
 from joulewise.identity_pins import stack_identity_sha256
+from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    authenticate_floor_artifact_bytes,
+)
+from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
 
 REPLAY_SCHEMA_VERSION = "joulewise.d165_dominance_replay.v1"
@@ -47,6 +53,9 @@ CLOSEOUT_INPUT_MALFORMED_RECORDS = (
     "closeout_input_malformed: closeout.independent_ratios"
 )
 CLOSEOUT_INPUT_MALFORMED_ADAPTER = "closeout_input_malformed: replay.block_ids"
+CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS = (
+    "closeout_input_malformed: closeout.comparative_common_mode_ratios"
+)
 COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
 ABSOLUTE_COMMON_MODE_REASON = (
     "the absolute estimator uses deviations from the mean, so a uniform shared "
@@ -166,6 +175,99 @@ _CLOSEOUT_COMMON_KEYS = {
     "refusal_reason",
 }
 
+_D165_PAPER_VALIDATOR_CODE_ORDER = (
+    "d165_paper_finalized_manifest_invalid",
+    "d165_paper_floor_artifact_invalid",
+    "d165_paper_replay_sidecar_invalid",
+    "d165_paper_closeout_invalid",
+)
+D165_PAPER_VALIDATOR_CODES = frozenset(_D165_PAPER_VALIDATOR_CODE_ORDER)
+
+D165_CLOSEOUT_REFUSAL_CODES = frozenset(
+    {
+        DOMINANCE_ZERO_DENOMINATOR_REASON,
+        FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH,
+        CLOSEOUT_INPUT_MALFORMED,
+        CLOSEOUT_INPUT_MALFORMED_SOURCE,
+        CLOSEOUT_INPUT_MALFORMED_RECORDS,
+        CLOSEOUT_INPUT_MALFORMED_ADAPTER,
+        CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS,
+        "cell_not_common_mode",
+        "common_mode_replay_authenticated_operative_bound_invalid",
+        "common_mode_replay_block_count_invalid",
+        "common_mode_replay_input_invalid",
+        "common_mode_replay_window_domain_invalid",
+        "common_mode_replay_zero_point_divergence_out_of_domain",
+        "common_mode_replay_zero_point_membership_invalid",
+        "d165_mint_adapter_input_invalid",
+        "dominance_ratio_nonfinite_or_negative_denominator",
+        "dominance_ratio_nonfinite_or_negative_numerator",
+        "dominance_ratio_nonfinite_result",
+        "finalized_manifest_id_mismatch",
+        "floor_cell_unresolved",
+        "floor_member_census_mismatch",
+        "manifest_lacks_replay_sidecar",
+        "point_floor_parent_nonfinite_or_negative",
+        "replay_sidecar_digest_mismatch",
+        "replay_sidecar_identity_mismatch",
+    }
+)
+
+D165_OR01_REASON_SENTENCES: Mapping[str, str] = MappingProxyType(
+    {
+        CLOSEOUT_INPUT_MALFORMED:
+            "the dominance close-out inputs were malformed",
+        CLOSEOUT_INPUT_MALFORMED_ADAPTER:
+            "the dominance replay block identities were malformed",
+        CLOSEOUT_INPUT_MALFORMED_RECORDS:
+            "the dominance close-out ratio records were malformed",
+        CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS:
+            "the dominance close-out common-mode ratio records were malformed",
+        CLOSEOUT_INPUT_MALFORMED_SOURCE:
+            "the dominance close-out source census or block membership was malformed",
+        DOMINANCE_ZERO_DENOMINATOR_REASON:
+            "a required attribution-dominance ratio could not be evaluated because its repeatability floor was zero",
+        FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH:
+            "the detection-floor source did not match the finalized campaign record",
+        "cell_not_common_mode":
+            "a required comparison lacks its registered common-mode replay",
+        "common_mode_replay_authenticated_operative_bound_invalid":
+            "the common-mode replay lacks its authenticated timing bound",
+        "common_mode_replay_block_count_invalid":
+            "the common-mode replay has an invalid block count",
+        "common_mode_replay_input_invalid":
+            "the common-mode replay inputs were invalid",
+        "common_mode_replay_window_domain_invalid":
+            "a common-mode replay window fell outside the registered domain",
+        "common_mode_replay_zero_point_divergence_out_of_domain":
+            "a common-mode replay zero point fell outside the registered tolerance",
+        "common_mode_replay_zero_point_membership_invalid":
+            "a common-mode replay zero point was absent from its registered sweeps",
+        "d165_mint_adapter_input_invalid":
+            "the dominance replay inputs could not be adapted from the detection-floor record",
+        "dominance_ratio_nonfinite_or_negative_denominator":
+            "a required attribution-dominance denominator was invalid",
+        "dominance_ratio_nonfinite_or_negative_numerator":
+            "a required attribution-dominance numerator was invalid",
+        "dominance_ratio_nonfinite_result":
+            "a required attribution-dominance ratio was not finite",
+        "finalized_manifest_id_mismatch":
+            "the finalized campaign record did not match its content-derived identity",
+        "floor_cell_unresolved":
+            "a required detection-floor cell could not be resolved",
+        "floor_member_census_mismatch":
+            "the replay membership did not match the detection-floor membership",
+        "manifest_lacks_replay_sidecar":
+            "the finalized campaign record lacks the required dominance replay",
+        "point_floor_parent_nonfinite_or_negative":
+            "a required repeatability-floor input was invalid",
+        "replay_sidecar_digest_mismatch":
+            "the dominance replay did not match its registered digest",
+        "replay_sidecar_identity_mismatch":
+            "the dominance replay did not match its registered identity",
+    }
+)
+
 __all__ = [
     "REPLAY_SCHEMA_VERSION",
     "CLOSEOUT_SCHEMA_VERSION",
@@ -180,6 +282,10 @@ __all__ = [
     "CLOSEOUT_INPUT_MALFORMED_SOURCE",
     "CLOSEOUT_INPUT_MALFORMED_RECORDS",
     "CLOSEOUT_INPUT_MALFORMED_ADAPTER",
+    "CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS",
+    "D165_CLOSEOUT_REFUSAL_CODES",
+    "D165_OR01_REASON_SENTENCES",
+    "D165_PAPER_VALIDATOR_CODES",
     "COMMON_MODE_REPLAY_RULE_ID",
     "COMMON_MODE_INPUT_FIELDS",
     "ABSOLUTE_COMMON_MODE_REASON",
@@ -191,7 +297,54 @@ __all__ = [
     "canonical_json_sha256",
     "validate_d165_replay_sidecar",
     "validate_d165_closeout",
+    "validate_d165_paper_sources",
 ]
+
+
+def _paper_json_object(raw: bytes) -> Mapping[str, Any] | None:
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def validate_d165_paper_sources(
+    *,
+    closeout: Mapping[str, Any],
+    finalized_manifest_bytes: bytes,
+    finalized_manifest_path: Path,
+    custody_root: Path,
+    floor_artifact_bytes: bytes,
+    replay_sidecar_bytes: bytes,
+) -> tuple[str, ...]:
+    """Replay D-165's four owners and expose only closed nested codes."""
+
+    codes: list[str] = []
+    manifest = _paper_json_object(finalized_manifest_bytes)
+    if manifest is None or validate_finalized_analysis_manifest_v3(
+        manifest,
+        manifest_path=finalized_manifest_path,
+        custody_root=custody_root,
+    ):
+        codes.append("d165_paper_finalized_manifest_invalid")
+    try:
+        authenticate_floor_artifact_bytes(floor_artifact_bytes)
+    except (AnalysisInputError, TypeError, ValueError):
+        codes.append("d165_paper_floor_artifact_invalid")
+    sidecar = _paper_json_object(replay_sidecar_bytes)
+    if sidecar is None or validate_d165_replay_sidecar(sidecar):
+        codes.append("d165_paper_replay_sidecar_invalid")
+    if validate_d165_closeout(
+        closeout,
+        finalized_manifest_bytes=finalized_manifest_bytes,
+        floor_artifact_bytes=floor_artifact_bytes,
+        replay_sidecar_bytes=replay_sidecar_bytes,
+    ):
+        codes.append("d165_paper_closeout_invalid")
+    return tuple(
+        code for code in _D165_PAPER_VALIDATOR_CODE_ORDER if code in codes
+    )
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -1791,7 +1944,7 @@ def validate_d165_closeout(
         else []
     )
     source_errors: list[str] = []
-    malformed_path = "closeout.independent_ratios"
+    malformed_reason = CLOSEOUT_INPUT_MALFORMED_RECORDS
     try:
         if not isinstance(independent, list) or len(independent) != 8:
             errors.append(
@@ -1830,7 +1983,7 @@ def validate_d165_closeout(
                     "4 comparative"
                 )
 
-        malformed_path = "closeout.comparative_common_mode_ratios"
+        malformed_reason = CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS
         if not isinstance(common, list) or len(common) != 4:
             errors.append(
                 "closeout.comparative_common_mode_ratios: must contain exactly "
@@ -1861,7 +2014,7 @@ def validate_d165_closeout(
             if set(cell_ids) != independent_cell_ids:
                 errors.append("closeout: ordinary and common-mode cell census differs")
 
-        malformed_path = "source.census_or_block_membership"
+        malformed_reason = CLOSEOUT_INPUT_MALFORMED_SOURCE
         source_errors = _source_precondition_errors(
             finalized_manifest,
             floor_artifact,
@@ -1949,7 +2102,7 @@ def validate_d165_closeout(
                             f"[{cell_id!r}]: source result mismatch"
                         )
     except TypeError:
-        source_errors = [f"closeout_input_malformed: {malformed_path}"]
+        source_errors = [malformed_reason]
 
     if len(independent_records) == 8 and len(common_records) == 4:
         if source_errors and value["refusal_reason"] != source_errors[0]:

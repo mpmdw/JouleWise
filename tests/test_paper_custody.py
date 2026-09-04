@@ -14,12 +14,14 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import paper_custody as custody
+from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.identity_pins import IdentityPinProjectionError
 
 
-_FIXTURE_SCHEMA = "joulewise.paper_custody_fixture.v1"
-_FIXTURE_CATALOG = (
-    Path(__file__).parent / "fixtures/paper_custody/family_catalog.json"
-)
+ROOT = Path(__file__).resolve().parents[1]
+SUPPLY_MAP = ROOT / "configs/paper_supply/supply_map.json"
+FIXTURE_CATALOG = ROOT / "tests/fixtures/paper_custody/family_catalog.json"
+FIXTURE_SCHEMA = "joulewise.paper_custody_fixture.v1"
 
 
 def _json_bytes(value: object) -> bytes:
@@ -43,49 +45,49 @@ _FAMILIES = {
     "reported_energy_parents": (
         custody.ReportedEnergyParentsRef,
         (
-            ("extraction_spec", custody.InputRole.EXTRACTION_SPEC, "git_blob"),
-            ("extraction_report", custody.InputRole.EXTRACTION_REPORT, "generated"),
-            ("whole_window_basis", custody.InputRole.WHOLE_WINDOW_BASIS, "generated"),
-            ("g2a_selection", custody.InputRole.G2A_SELECTION, "git_blob"),
-            ("prompt_pin", custody.InputRole.PROMPT_PIN, "git_blob"),
+            custody.InputRole.EXTRACTION_SPEC,
+            custody.InputRole.EXTRACTION_REPORT,
+            custody.InputRole.WHOLE_WINDOW_BASIS,
+            custody.InputRole.G2A_SELECTION,
+            custody.InputRole.PROMPT_PIN,
         ),
     ),
     "d165_closeout": (
         custody.D165CloseoutRef,
         (
-            ("closeout", custody.InputRole.D165_CLOSEOUT, "generated"),
-            ("finalized_manifest", custody.InputRole.FINALIZED_MANIFEST, "generated"),
-            ("floor_artifact", custody.InputRole.FLOOR_ARTIFACT, "generated"),
-            ("replay_sidecar", custody.InputRole.REPLAY_SIDECAR, "generated"),
+            custody.InputRole.D165_CLOSEOUT,
+            custody.InputRole.FINALIZED_MANIFEST,
+            custody.InputRole.FLOOR_ARTIFACT,
+            custody.InputRole.REPLAY_SIDECAR,
         ),
     ),
     "whole_window_verdict": (
         custody.WholeWindowVerdictRef,
         (
-            ("campaign_log", custody.InputRole.CAMPAIGN_LOG, "generated"),
-            ("standalone_verdict", custody.InputRole.STANDALONE_VERDICT, "generated"),
-            ("prospective_manifest", custody.InputRole.PROSPECTIVE_MANIFEST, "generated"),
-            ("plan", custody.InputRole.PLAN, "git_blob"),
+            custody.InputRole.CAMPAIGN_LOG,
+            custody.InputRole.STANDALONE_VERDICT,
+            custody.InputRole.PROSPECTIVE_MANIFEST,
+            custody.InputRole.PLAN,
         ),
     ),
     "claim_evidence": (
         custody.ClaimEvidenceRef,
         (
-            ("claim_verdicts", custody.InputRole.CLAIM_VERDICTS, "generated"),
-            ("claim_side_bound", custody.InputRole.CLAIM_SIDE_BOUND, "generated"),
-            ("finalized_manifest", custody.InputRole.FINALIZED_MANIFEST, "generated"),
-            ("floor_artifact", custody.InputRole.FLOOR_ARTIFACT, "generated"),
+            custody.InputRole.CLAIM_VERDICTS,
+            custody.InputRole.CLAIM_SIDE_BOUND,
+            custody.InputRole.FINALIZED_MANIFEST,
+            custody.InputRole.FLOOR_ARTIFACT,
         ),
     ),
     "transfer_projection": (
         custody.TransferProjectionRef,
         (
-            ("result_projection", custody.InputRole.TRANSFER_RESULT, "generated"),
-            ("reviewed_capture", custody.InputRole.REVIEWED_CAPTURE, "generated"),
-            ("plan", custody.InputRole.PLAN, "git_blob"),
-            ("pre_data_receipt", custody.InputRole.PRE_DATA_RECEIPT, "generated"),
-            ("pulse_bound_source", custody.InputRole.PULSE_BOUND_SOURCE, "git_blob"),
-            ("bundle_inventory", custody.InputRole.BUNDLE_INVENTORY, "generated"),
+            custody.InputRole.TRANSFER_RESULT,
+            custody.InputRole.REVIEWED_CAPTURE,
+            custody.InputRole.PLAN,
+            custody.InputRole.PRE_DATA_RECEIPT,
+            custody.InputRole.PULSE_BOUND_SOURCE,
+            custody.InputRole.BUNDLE_INVENTORY,
         ),
     ),
 }
@@ -93,167 +95,174 @@ _FAMILIES = {
 
 class _FamilyFixture:
     def __init__(self, family: str) -> None:
-        ref_type, fields = _FAMILIES[family]
+        ref_type, roles = _FAMILIES[family]
         self.family = family
-        self.ref_type = ref_type
-        self.fields = fields
+        self.roles = roles
+        self.role = f"fixture.{family}"
         self._temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self._temporary.name)
-        (self.root / "inputs").mkdir()
-        self.bindings: dict[str, custody.BoundFile] = {}
-        inventory_rows: list[dict[str, str]] = []
+        temporary = Path(self._temporary.name)
+        self.runs_root = temporary / "runs"
+        self.anchor_root = temporary / "anchor"
+        self.runs_root.mkdir()
+        self.anchor_root.mkdir()
+
+        supply_map_raw = SUPPLY_MAP.read_bytes()
+        supply_map = json.loads(supply_map_raw)
+        self.entry = supply_map["roles"][self.role]
+        input_by_role = {row["role"]: row for row in self.entry["inputs"]}
+
         receipt_inputs: list[dict[str, str]] = []
-        for field, role, authority in fields:
-            suffix = ".jsonl" if role is custody.InputRole.CAMPAIGN_LOG else ".json"
-            relative = f"inputs/{field}{suffix}"
+        inventory_rows: list[dict[str, str]] = []
+        for role in roles:
+            row = input_by_role[role.value]
             raw = _json_bytes(
                 {
                     "family": family,
                     "marker": "synthetic-no-measurement-value",
                     "role": role.value,
-                    "schema_version": _FIXTURE_SCHEMA,
+                    "schema_version": FIXTURE_SCHEMA,
                 }
             )
-            (self.root / relative).write_bytes(raw)
-            digest = _sha(raw)
-            self.bindings[field] = custody.BoundFile(
-                path=Path(relative), expected_sha256=digest, role=role
+            self._write(row["path"], raw)
+            if _sha(raw) != row["expected_sha256"]:
+                raise AssertionError(f"stale supply-map fixture digest: {role.value}")
+            receipt_inputs.append(
+                {
+                    "path": row["path"],
+                    "role": role.value,
+                    "sha256": row["expected_sha256"],
+                }
             )
             inventory_rows.append(
                 {
-                    "authority": authority,
-                    "path": relative,
+                    "authority": row["authority"],
+                    "path": row["path"],
                     "role": role.value,
-                    "sha256": digest,
+                    "sha256": row["expected_sha256"],
                 }
             )
-            receipt_inputs.append(
-                {"path": relative, "role": role.value, "sha256": digest}
-            )
 
-        validator = f"joulewise.paper_custody.{family}.v1"
-        validator_source_sha256 = custody._validator_source_sha256(family)
-        receipt_value = {
-            "family": family,
-            "inputs": sorted(receipt_inputs, key=lambda row: row["role"]),
-            "replay_codes": [],
-            "schema_version": "joulewise.paper_custody_receipt.v1",
-            "status": "PASS",
-            "validator": validator,
-            "validator_source_sha256": validator_source_sha256,
-        }
-        receipt_relative = "inputs/validator_receipt.json"
-        receipt_raw = _json_bytes(receipt_value)
-        (self.root / receipt_relative).write_bytes(receipt_raw)
-        receipt_file = custody.BoundFile(
-            path=Path(receipt_relative),
-            expected_sha256=_sha(receipt_raw),
-            role=custody.InputRole.VALIDATOR_RECEIPT,
+        validator = self.entry["validator"]
+        receipt_raw = _json_bytes(
+            {
+                "family": family,
+                "inputs": sorted(receipt_inputs, key=lambda row: row["role"]),
+                "replay_codes": [],
+                "schema_version": "joulewise.paper_custody_receipt.v1",
+                "status": "PASS",
+                "validator": validator,
+                "validator_source_sha256": custody._validator_source_sha256(family),
+            }
         )
-        self.receipt = custody.ReceiptRef(
-            file=receipt_file,
-            schema="joulewise.paper_custody_receipt.v1",
-            validator=validator,
-            validator_source_sha256=validator_source_sha256,
-        )
+        receipt = self.entry["receipt"]
+        self._write(receipt["path"], receipt_raw)
+        if _sha(receipt_raw) != receipt["expected_sha256"]:
+            raise AssertionError(f"stale supply-map receipt digest: {family}")
         inventory_rows.append(
             {
                 "authority": "generated",
-                "path": receipt_relative,
+                "path": receipt["path"],
                 "role": custody.InputRole.VALIDATOR_RECEIPT.value,
-                "sha256": _sha(receipt_raw),
+                "sha256": receipt["expected_sha256"],
             }
         )
-        inventory_value = {
-            "family": family,
-            "files": sorted(inventory_rows, key=lambda row: row["role"]),
-            "inventory_id": f"fixture-{family}",
-            "mode": "test_fixture_non_issuing",
-            "schema_version": "joulewise.paper_custody_inventory.v1",
-        }
-        inventory_relative = "inventory.json"
-        inventory_raw = _json_bytes(inventory_value)
-        (self.root / inventory_relative).write_bytes(inventory_raw)
-        self.inventory = custody.BoundFile(
-            path=Path(inventory_relative),
-            expected_sha256=_sha(inventory_raw),
-            role=custody.InputRole.CUSTODY_INVENTORY,
+        inventory_raw = _json_bytes(
+            {
+                "family": family,
+                "files": sorted(inventory_rows, key=lambda row: row["role"]),
+                "inventory_id": f"fixture-{family}",
+                "mode": "test_fixture_non_issuing",
+                "schema_version": "joulewise.paper_custody_inventory.v1",
+            }
         )
-        self.ref = ref_type(
-            root=self.root,
-            inventory=self.inventory,
-            receipt=self.receipt,
-            **self.bindings,
-        )
-        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        inventory = self.entry["inventory"]
+        self._write(inventory["path"], inventory_raw)
+        if _sha(inventory_raw) != inventory["expected_sha256"]:
+            raise AssertionError(f"stale supply-map inventory digest: {family}")
+
+        anchor_map = self.anchor_root / custody._SUPPLY_MAP_PATH
+        anchor_map.parent.mkdir(parents=True)
+        anchor_map.write_bytes(supply_map_raw)
+        subprocess.run(["git", "init", "-q"], cwd=self.anchor_root, check=True)
         subprocess.run(
             ["git", "config", "user.email", "paper-custody@example.invalid"],
-            cwd=self.root,
+            cwd=self.anchor_root,
             check=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "Paper Custody Fixture"],
-            cwd=self.root,
+            cwd=self.anchor_root,
             check=True,
         )
-        subprocess.run(["git", "add", "."], cwd=self.root, check=True)
+        subprocess.run(["git", "add", "."], cwd=self.anchor_root, check=True)
         subprocess.run(
-            ["git", "commit", "-qm", "fixture anchor"], cwd=self.root, check=True
+            ["git", "commit", "-qm", "fixture supply map"],
+            cwd=self.anchor_root,
+            check=True,
         )
+        self.head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.anchor_root,
+            check=True,
+            stdout=subprocess.PIPE,
+            text=True,
+        ).stdout.strip()
+        self._anchor_patch = mock.patch.object(
+            custody,
+            "_mint_git_anchor",
+            return_value=(self.anchor_root, self.head),
+        )
+        self._anchor_patch.start()
+        self.ref = ref_type(role=self.role, runs_root=self.runs_root)
+
+    def _write(self, relative: str, raw: bytes) -> None:
+        path = self.runs_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+
+    def path_for(self, record: custody.VerifiedDigest) -> Path:
+        return self.runs_root / record.relative_path
+
+    def full_reseal(self, record: custody.VerifiedDigest) -> None:
+        path = self.path_for(record)
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["caller_resealed"] = True
+        path.write_bytes(_json_bytes(value))
+        if record.role in {
+            custody.InputRole.CUSTODY_INVENTORY,
+            custody.InputRole.VALIDATOR_RECEIPT,
+        }:
+            return
+
+        actual = _sha(path.read_bytes())
+        receipt_path = self.runs_root / self.entry["receipt"]["path"]
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        next(row for row in receipt["inputs"] if row["role"] == record.role.value)[
+            "sha256"
+        ] = actual
+        receipt_path.write_bytes(_json_bytes(receipt))
+        inventory_path = self.runs_root / self.entry["inventory"]["path"]
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        next(row for row in inventory["files"] if row["role"] == record.role.value)[
+            "sha256"
+        ] = actual
+        next(
+            row
+            for row in inventory["files"]
+            if row["role"] == custody.InputRole.VALIDATOR_RECEIPT.value
+        )["sha256"] = _sha(receipt_path.read_bytes())
+        inventory_path.write_bytes(_json_bytes(inventory))
 
     def close(self) -> None:
+        self._anchor_patch.stop()
         self._temporary.cleanup()
-
-    def replace_binding_digest(self, record: custody.VerifiedDigest) -> None:
-        actual = _sha((self.root / record.relative_path).read_bytes())
-        if record.role is custody.InputRole.CUSTODY_INVENTORY:
-            self.inventory = dataclasses.replace(
-                self.inventory, expected_sha256=actual
-            )
-            self.ref = dataclasses.replace(self.ref, inventory=self.inventory)
-            return
-        if record.role is custody.InputRole.VALIDATOR_RECEIPT:
-            receipt_file = dataclasses.replace(
-                self.receipt.file, expected_sha256=actual
-            )
-            self.receipt = dataclasses.replace(self.receipt, file=receipt_file)
-            self.ref = dataclasses.replace(self.ref, receipt=self.receipt)
-            return
-        for field, role, _authority in self.fields:
-            if role is record.role:
-                binding = dataclasses.replace(
-                    getattr(self.ref, field), expected_sha256=actual
-                )
-                self.ref = dataclasses.replace(self.ref, **{field: binding})
-                receipt_path = self.root / self.receipt.file.path
-                receipt_value = json.loads(receipt_path.read_text(encoding="utf-8"))
-                for row in receipt_value["inputs"]:
-                    if row["role"] == role.value:
-                        row["sha256"] = actual
-                        break
-                else:
-                    raise AssertionError(f"receipt omitted census role {role}")
-                receipt_raw = _json_bytes(receipt_value)
-                receipt_path.write_bytes(receipt_raw)
-                receipt_file = dataclasses.replace(
-                    self.receipt.file, expected_sha256=_sha(receipt_raw)
-                )
-                self.receipt = dataclasses.replace(
-                    self.receipt, file=receipt_file
-                )
-                self.ref = dataclasses.replace(self.ref, receipt=self.receipt)
-                return
-        raise AssertionError(f"unmapped census role {record.role}")
 
 
 class PaperCustodyCensusTests(unittest.TestCase):
-    def test_fixture_catalog_is_complete_and_contains_no_measurement_values(self) -> None:
-        catalog = json.loads(_FIXTURE_CATALOG.read_text(encoding="utf-8"))
-        self.assertEqual(catalog["families"], sorted(_FAMILIES))
-        self.assertEqual(catalog["marker"], "synthetic-no-measurement-value")
-        self.assertEqual(
-            set(catalog), {"families", "marker", "schema_version"}
-        )
+    def _fixture(self, family: str) -> _FamilyFixture:
+        fixture = _FamilyFixture(family)
+        self.addCleanup(fixture.close)
+        return fixture
 
     def _baseline_records(
         self, fixture: _FamilyFixture
@@ -272,87 +281,103 @@ class PaperCustodyCensusTests(unittest.TestCase):
         self.assertEqual(opened.evidence.mode, "test_fixture_non_issuing")
         return opened.evidence.inputs
 
+    def test_supply_map_and_fixture_catalog_cover_exactly_five_families(self) -> None:
+        supply_map = json.loads(SUPPLY_MAP.read_text(encoding="utf-8"))
+        catalog = json.loads(FIXTURE_CATALOG.read_text(encoding="utf-8"))
+        self.assertEqual(supply_map["schema_version"], "joulewise.paper_supply_map.v1")
+        self.assertEqual(
+            set(supply_map["roles"]),
+            {f"fixture.{family}" for family in _FAMILIES},
+        )
+        self.assertEqual(catalog["families"], sorted(_FAMILIES))
+        self.assertEqual(catalog["marker"], "synthetic-no-measurement-value")
+
     def test_every_family_actual_read_census_refuses_all_three_attack_arms(
         self,
     ) -> None:
-        """Raw, caller-resealed, and replay/reopen attacks return no output."""
-
         for family in _FAMILIES:
             with self.subTest(family=family):
-                fixture = _FamilyFixture(family)
-                self.addCleanup(fixture.close)
+                fixture = self._fixture(family)
                 records = self._baseline_records(fixture)
                 expected_roles = {
                     custody.InputRole.CUSTODY_INVENTORY,
                     custody.InputRole.VALIDATOR_RECEIPT,
-                    *(role for _field, role, _authority in fixture.fields),
+                    *fixture.roles,
                 }
                 self.assertEqual({record.role for record in records}, expected_roles)
                 self.assertTrue(all(record.read_count == 2 for record in records))
 
-                for record in records:
-                    path = fixture.root / record.relative_path
-                    original = path.read_bytes()
-                    try:
-                        path.write_bytes(b"!" + original[1:])
-                        with self.assertRaises(custody.PaperCustodyRefusal) as raw:
-                            custody.open_paper_input(fixture.ref)
-                        self.assertEqual(raw.exception.code, "paper_custody_digest_mismatch")
-                        self.assertEqual(raw.exception.rendered_output, ())
-                    finally:
-                        path.write_bytes(original)
-
-                    try:
-                        value = json.loads(original.decode("utf-8"))
-                        if isinstance(value, dict):
-                            value["caller_resealed"] = True
-                            path.write_bytes(_json_bytes(value))
-                        else:
-                            self.fail("paper-custody fixture must be one JSON object")
-                        fixture.replace_binding_digest(record)
-                        with self.assertRaises(custody.PaperCustodyRefusal) as resealed:
-                            custody.open_paper_input(fixture.ref)
-                        self.assertEqual(
-                            resealed.exception.code,
-                            "paper_custody_anchor_mismatch",
-                        )
-                        self.assertEqual(resealed.exception.rendered_output, ())
-                    finally:
-                        path.write_bytes(original)
-                        fixture = _FamilyFixture(family)
-                        self.addCleanup(fixture.close)
-
-                    record = next(
-                        item
-                        for item in self._baseline_records(fixture)
-                        if item.role is record.role
+                for original_record in records:
+                    raw_fixture = self._fixture(family)
+                    raw_record = next(
+                        record
+                        for record in self._baseline_records(raw_fixture)
+                        if record.role is original_record.role
                     )
-                    path = fixture.root / record.relative_path
-                    original = path.read_bytes()
+                    path = raw_fixture.path_for(raw_record)
+                    raw = path.read_bytes()
+                    path.write_bytes(b"!" + raw[1:])
+                    with self.assertRaises(custody.PaperCustodyRefusal) as flipped:
+                        custody.open_paper_input(raw_fixture.ref)
+                    self.assertEqual(
+                        flipped.exception.code, "paper_custody_digest_mismatch"
+                    )
+                    self.assertEqual(flipped.exception.rendered_output, ())
+
+                    sealed_fixture = self._fixture(family)
+                    sealed_record = next(
+                        record
+                        for record in self._baseline_records(sealed_fixture)
+                        if record.role is original_record.role
+                    )
+                    sealed_fixture.full_reseal(sealed_record)
+                    with self.assertRaises(custody.PaperCustodyRefusal) as resealed:
+                        custody.open_paper_input(sealed_fixture.ref)
+                    self.assertEqual(
+                        resealed.exception.code, "paper_custody_digest_mismatch"
+                    )
+                    self.assertEqual(resealed.exception.rendered_output, ())
+
+                    reopened_fixture = self._fixture(family)
+                    reopened_record = next(
+                        record
+                        for record in self._baseline_records(reopened_fixture)
+                        if record.role is original_record.role
+                    )
+                    reopen_path = reopened_fixture.path_for(reopened_record)
+                    reopen_raw = reopen_path.read_bytes()
                     original_hook = custody._after_validator_replay
 
-                    def replace_after_replay(state, *, _path=path, _raw=original):
+                    def replace_after_replay(
+                        state: object,
+                        *,
+                        _path: Path = reopen_path,
+                        _raw: bytes = reopen_raw,
+                    ) -> None:
                         original_hook(state)
                         _path.write_bytes(_raw + b" ")
 
-                    try:
-                        with mock.patch.object(
-                            custody,
-                            "_after_validator_replay",
-                            side_effect=replace_after_replay,
-                        ):
-                            with self.assertRaises(custody.PaperCustodyRefusal) as reopened:
-                                custody.open_paper_input(fixture.ref)
-                        self.assertEqual(
-                            reopened.exception.code,
-                            "paper_custody_input_changed",
-                        )
-                        self.assertEqual(reopened.exception.rendered_output, ())
-                    finally:
-                        path.write_bytes(original)
+                    with mock.patch.object(
+                        custody,
+                        "_after_validator_replay",
+                        side_effect=replace_after_replay,
+                    ):
+                        with self.assertRaises(
+                            custody.PaperCustodyRefusal
+                        ) as reopened:
+                            custody.open_paper_input(reopened_fixture.ref)
+                    self.assertEqual(
+                        reopened.exception.code, "paper_custody_input_changed"
+                    )
+                    self.assertEqual(reopened.exception.rendered_output, ())
 
 
 class PaperCustodyApiTests(unittest.TestCase):
+    def _fixture(self, family: str) -> _FamilyFixture:
+        fixture = _FamilyFixture(family)
+        self.addCleanup(fixture.close)
+        return fixture
+
     def test_five_outputs_are_distinct_frozen_noncontainer_types(self) -> None:
         output_types = (
             custody.VerifiedReportedEnergyParents,
@@ -367,6 +392,96 @@ class PaperCustodyApiTests(unittest.TestCase):
             self.assertTrue(output_type.__dataclass_params__.frozen)
             self.assertFalse(issubclass(output_type, (Mapping, Sequence, bytes)))
 
+    def test_verified_outputs_refuse_empty_public_construction(self) -> None:
+        for output_type in (
+            custody.VerifiedReportedEnergyParents,
+            custody.VerifiedD165Closeout,
+            custody.VerifiedWholeWindowVerdict,
+            custody.VerifiedClaimEvidence,
+            custody.VerifiedTransferProjection,
+        ):
+            with self.subTest(output_type=output_type.__name__):
+                with self.assertRaises(custody.PaperCustodyRefusal) as raised:
+                    output_type()
+                self.assertEqual(
+                    raised.exception.code, "paper_custody_request_invalid"
+                )
+
+    def test_validator_source_digest_census_includes_every_governed_member(
+        self,
+    ) -> None:
+        original_getsource = inspect.getsource
+        for family in _FAMILIES:
+            with self.subTest(family=family):
+                census = custody._validator_source_census(family)
+                self.assertIn("paper_custody._replay_family", dict(census))
+                self.assertIn(
+                    "paper_custody._validate_production_documents", dict(census)
+                )
+                baseline = custody._validator_source_sha256(family)
+                for member_id, member in census:
+                    with self.subTest(family=family, member=member_id), mock.patch.object(
+                        custody.inspect,
+                        "getsource",
+                        side_effect=lambda candidate, _member=member: (
+                            original_getsource(candidate)
+                            + ("\n# mutation\n" if candidate is _member else "")
+                        ),
+                    ):
+                        self.assertNotEqual(
+                            custody._validator_source_sha256(family), baseline
+                        )
+
+    def test_role_lookup_uses_fixed_clean_anchor_and_rejects_unknown_role(self) -> None:
+        fixture = self._fixture("reported_energy_parents")
+        unknown = custody.ReportedEnergyParentsRef(
+            role="fixture.not_registered", runs_root=fixture.runs_root
+        )
+        with self.assertRaises(custody.PaperCustodyRefusal) as unregistered:
+            custody.open_paper_input(unknown)
+        self.assertEqual(
+            unregistered.exception.code, "paper_custody_role_unregistered"
+        )
+
+        with mock.patch.object(
+            custody,
+            "_mint_git_anchor",
+            side_effect=IdentityPinProjectionError(
+                "readiness_identity_environment_dirty", "dirty fixture"
+            ),
+        ):
+            with self.assertRaises(custody.PaperCustodyRefusal) as dirty:
+                custody.open_paper_input(fixture.ref)
+        self.assertEqual(dirty.exception.code, "paper_custody_anchor_unavailable")
+
+    def test_malformed_map_digest_and_nested_session_are_closed_refusals(self) -> None:
+        fixture = self._fixture("reported_energy_parents")
+        supply_map = json.loads(SUPPLY_MAP.read_text(encoding="utf-8"))
+        supply_map["roles"][fixture.role]["inputs"][0]["expected_sha256"] = None
+        with mock.patch.object(custody, "_git_blob", return_value=_json_bytes(supply_map)):
+            with self.assertRaises(custody.PaperCustodyRefusal) as malformed:
+                custody.open_paper_input(fixture.ref)
+        self.assertEqual(
+            malformed.exception.code, "paper_custody_supply_map_invalid"
+        )
+
+        with V2AuthenticationReadSession():
+            with self.assertRaises(custody.PaperCustodyRefusal) as nested:
+                custody.open_paper_input(fixture.ref)
+        self.assertIn(nested.exception.code, custody.PAPER_CUSTODY_REFUSAL_CODES)
+
+    def test_public_boundary_rejects_supplier_authored_value_shapes(self) -> None:
+        for value in ({}, b"{}", object()):
+            with self.subTest(value=type(value).__name__):
+                with self.assertRaises(custody.PaperCustodyRefusal) as raised:
+                    custody.open_paper_input(value)
+                self.assertEqual(
+                    raised.exception.code, "paper_custody_request_invalid"
+                )
+        forged = object.__new__(custody.VerifiedReportedEnergyParents)
+        with self.assertRaises(custody.PaperCustodyRefusal):
+            custody.open_paper_input(forged)
+
     def test_public_read_operation_is_only_open_paper_input(self) -> None:
         public_functions = {
             name
@@ -376,6 +491,8 @@ class PaperCustodyApiTests(unittest.TestCase):
             and not name.startswith("_")
         }
         self.assertEqual(public_functions, {"open_paper_input"})
+        self.assertNotIn("BoundFile", custody.__all__)
+        self.assertNotIn("ReceiptRef", custody.__all__)
 
     def test_refusal_namespace_is_closed_and_nonrendering(self) -> None:
         self.assertIn(

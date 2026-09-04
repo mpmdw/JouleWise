@@ -1,192 +1,259 @@
 # Paper supply custody
 
-Status: normative for `PAPER-CUSTODY-SEAM-01`; D-173 remains provisional
-until the paper-supply cold gate. This is the single normative home for the
-paper custody-read boundary.
+Status: normative for `PAPER-CUSTODY-SEAM-01`. **D-173** is the provisional
+project decision that every paper supplier must obtain claim-bearing evidence
+through one shared custody-read seam; its full decision and veto status are in
+the [decision log](../decision_log.md#d-173-paper-supply-custody--one-custody-read-seam-for-every-claim-bearing-paper-input-magistrate-provisional-2026-09-04).
+This document is D-173's single normative home.
 
 ## Terms
 
-A **paper supplier** is code that turns analysis evidence into a paper fill,
-table row, token, or professor-facing sentence. The **custody seam** is the
-single function that admits evidence to such a supplier:
-`joulewise.paper_custody.open_paper_input(ref)`.
+A **paper supplier** is code that converts analysis evidence into a paper fill,
+table cell, token, or professor-facing sentence. The **custody seam** is
+`joulewise.paper_custody.open_paper_input(ref)`, the only public operation that
+admits evidence to such code.
 
-A **governed file** is a repository file whose authority is the byte-exact
-blob at clean `git:HEAD`. A **generated file** is an output outside that
-governed set. It has authority only through a custody inventory that is itself
-a governed Git blob. An inventory names each file's closed role, relative
-path, SHA-256 digest, and authority class.
+A **family** is one of the five closed kinds of paper evidence listed below. A
+**role** is a lowercase supply-map key, such as
+`fixture.reported_energy_parents`, that selects exactly one registered family
+and its complete input set. A caller may supply that role string and a **runs
+root**, meaning one existing directory under which run-generated evidence is
+stored. The caller may supply nothing else that selects or authenticates input
+bytes.
 
-An **anchor** is that independent Git blob or inventory entry. A **pin** is a
-path or expected digest carried by a caller. A pin makes substitution loud but
-does not authorize content. A **receipt** is a producer record corroborating
-the anchored inputs and one validator replay. A receipt never acts as a
-capability by itself.
+The **supply map** is the Git-tracked JSON file
+`configs/paper_supply/supply_map.json`. It maps each role to its family,
+relative input paths, expected SHA-256 digests, and validator identifier. Each
+entry also names a **custody inventory**, a map-pinned object repeating the
+complete input census, and a **receipt**, a map-pinned producer record that
+corroborates the exact inputs and a fresh validator replay. The map is the
+repository-owned source of every locator and expected digest; a caller cannot
+replace or supplement it.
 
-A **fresh replay** runs the owning validator in the current process over the
-bytes just read. A **reopen** reads every input again after replay. A **family
-ref** is one of the five closed locator types below. A **verified type** is the
-matching frozen, non-container result. **Issuance** means releasing a result
-that may authorize paper text; test fixtures are always non-issuing.
+An **anchor** is the pair `(repository, head)` returned by the fixed-repository,
+clean-tree function `joulewise.identity_pins._mint_git_anchor()`, plus the
+supply-map blob read from that exact commit. The function calls the generalized
+mint's Git-state implementation on its fixed `REPO_ROOT`, requires a 40-digit
+`HEAD`, and runs `git status --porcelain --untracked-files=all`. Any tracked or
+untracked change refuses the anchor. Whether `origin/main` contains `HEAD` is
+recorded by the mint implementation but is not an anchor gate.
 
-## Only public read operation
+The custody inventory and receipt are corroborating structures, not independent
+authority: changing evidence and minting replacements cannot change the
+Git-anchored supply map.
 
-`open_paper_input(ref)` accepts exactly one of these concrete types and returns
-the matching concrete type:
+A **fresh replay** runs the current owning validator code in-process over the
+bytes read in the current call. A **reopen** reads every selected input again
+after replay. A **verified result** is one of the five frozen, non-container
+types that only the seam can construct. **Issuance** means releasing a result
+that may authorize paper text; every fixture role is explicitly non-issuing.
 
-| Family ref | Verified result | Paper use |
+## Closed public wire
+
+`open_paper_input(ref)` accepts exactly one of these frozen reference types.
+Every reference has exactly two fields, in this order: `role: str` and
+`runs_root: pathlib.Path`.
+
+| Reference | Verified result | Meaning |
 |---|---|---|
-| `ReportedEnergyParentsRef` | `VerifiedReportedEnergyParents` | D-123 reported-energy parents |
-| `D165CloseoutRef` | `VerifiedD165Closeout` | D-165 dominance close-out |
-| `WholeWindowVerdictRef` | `VerifiedWholeWindowVerdict` | whole-window verdict row |
-| `ClaimEvidenceRef` | `VerifiedClaimEvidence` | `claim_verdicts.v1` plus `claim_side_bound.v1` |
-| `TransferProjectionRef` | `VerifiedTransferProjection` | transfer-fiducial projection |
+| `ReportedEnergyParentsRef` | `VerifiedReportedEnergyParents` | **D-123**, the ratified decision to preregister and report phase-energy mean cells, together with its governed parents ([decision log](../decision_log.md#d-123-ruling-2-yes--the-signal-size-doctrine--the-overnight-license-ed-2026-08-08)) |
+| `D165CloseoutRef` | `VerifiedD165Closeout` | **D-165**, the adopted falsifier requiring every attribution-dominance ratio to reach the fixed twofold threshold before licensing the headline ([decision log](../decision_log.md#d-165-the-falsifier-magistrate--cold-gate-2026-08-28)) |
+| `WholeWindowVerdictRef` | `VerifiedWholeWindowVerdict` | One authenticated whole-window admission verdict row and its provenance |
+| `ClaimEvidenceRef` | `VerifiedClaimEvidence` | `claim_verdicts.v1`, `claim_side_bound.v1`, and their authenticated parents |
+| `TransferProjectionRef` | `VerifiedTransferProjection` | The diagnostic inserted-gap transfer projection used by **TR-01**, the branch-independent paper fill that states whether the measured transfer supports applying the pulse-derived timing bound ([registry row](../paper/results-fill-registry.md#L920)) |
 
-Raw readers, parsers, replay dispatch, payloads, and verified-object
-construction are private. No supplier entry accepts bytes, a dictionary or
-mapping, an arbitrary sequence, a role string, a receipt, a validation result,
-or a pre-validated object. The verified types are distinct frozen dataclasses
-with private payloads and a frozen custody-evidence census.
+The module exports no path/digest binding class and no receipt reference class.
+It exposes no public reader, parser, replay dispatcher, payload constructor, or
+verified-result constructor. Calling any `Verified*` class directly refuses
+with `paper_custody_request_invalid`; only the private seam factory can create a
+populated instance. A dictionary, mapping, bytes object, arbitrary sequence,
+prevalidated object, or object made with `object.__new__` is never a valid ref.
 
-`BoundFile(path, expected_sha256, role)` is a locator and pin.
-`ReceiptRef(file, schema, validator, validator_source_sha256)` locates the
-corroborating receipt. Neither is authority.
+## Supply-map schema and lookup
 
-## Closed family wires
+The supply map is strict JSON with this exact shape:
 
-Every ref carries one root directory, one governed custody inventory, its
-closed named inputs, and one `ReceiptRef`.
+```text
+{
+  "schema_version": "joulewise.paper_supply_map.v1",
+  "roles": {
+    "<role>": {
+      "family": "<closed family>",
+      "inputs": [
+        {
+          "authority": "git_blob|generated",
+          "base": "repository|runs_root",
+          "expected_sha256": "<64 lowercase hex>",
+          "path": "<relative POSIX path>",
+          "role": "<closed input role>"
+        }
+      ],
+      "inventory": {
+        "base": "repository|runs_root",
+        "expected_sha256": "<64 lowercase hex>",
+        "path": "<relative POSIX path>"
+      },
+      "receipt": {
+        "base": "repository|runs_root",
+        "expected_sha256": "<64 lowercase hex>",
+        "path": "<relative POSIX path>"
+      },
+      "validator": "joulewise.paper_custody.<family>.v1"
+    }
+  }
+}
+```
 
-| Family | Required named inputs |
+Every object has exactly the keys shown. A role key matches
+`[a-z0-9][a-z0-9_.-]*`. Each path is a nonempty relative POSIX path with no
+empty, `.`, `..`, absolute, or backslash component. `git_blob` authority is
+valid only with `base: repository`. Paths and closed input roles are unique
+within an entry. The `inputs` array order must exactly equal the family order
+below; sorting or accepting an extra input is nonconforming.
+
+Lookup is exact and mechanical:
+
+1. Validate the concrete ref type, role grammar, and `Path`-typed runs root;
+   resolve the runs root strictly and require a directory.
+2. Call `_mint_git_anchor()` with no arguments. Do not accept a repository,
+   commit, map path, map bytes, or anchor from the caller.
+3. Start a new `V2AuthenticationReadSession`. Run
+   `git -C <repository> show <head>:configs/paper_supply/supply_map.json`, then
+   pass those exact bytes to the active session as the identity
+   `git:<head>:configs/paper_supply/supply_map.json` with strict JSON grammar.
+4. Look up `roles[ref.role]`; absence is
+   `paper_custody_role_unregistered`. Require the entry's `family` to equal the
+   family fixed by the concrete ref class, its validator to equal
+   `joulewise.paper_custody.<family>.v1`, and its ordered input roles to equal
+   the family census below.
+5. Convert the entry to private bindings. `base: repository` resolves under the
+   fixed anchor repository; `base: runs_root` resolves under the caller's runs
+   root. No public binding, inventory, receipt, path, digest, validator, or
+   source-digest parameter exists.
+
+The fixed map currently registers five synthetic roles only. Their bytes carry
+the marker `synthetic-no-measurement-value`, inventories use
+`mode: test_fixture_non_issuing`, and returned evidence sets
+`issuance_authorized` to false. Producer missions add production roles
+prospectively; fixture consistency never creates production authority.
+
+## Family censuses
+
+**D-117** is the adopted prospective three-window replacement for the retired
+historical remint plan; it defines the present floor/mint parent chain
+([decision log](../decision_log.md#d-117-d-110s-historical-re-mint-order-superseded--prospective-three-window-replacement-option-2-adopted-d-113-readiness-rewired)).
+**G2-a** is the first diagnostic machine evening that probes four registered
+prefill lengths and produces the later selected-length record; it is defined by
+the [live queue row](../../TASK_QUEUE.md#current-queue). These definitions bind
+the reported-energy input names below.
+
+| Family | Ordered input roles |
 |---|---|
-| Reported energy | extraction spec; extraction report; whole-window basis; G2-a selection; prompt pin; validator receipt |
-| D-165 close-out | close-out; finalized manifest; on-disk floor artifact; replay sidecar; validator receipt |
-| Whole window | canonical campaign log; standalone verdict; prospective manifest; plan; validator receipt |
-| Claims | `claim_verdicts.v1`; `claim_side_bound.v1`; finalized manifest; authoritative on-disk floor artifact; validator receipt |
-| Transfer | result projection; reviewed capture; plan; pre-data receipt; pulse-bound source; bundle inventory; result-validation receipt |
+| Reported energy | `extraction_spec`, `extraction_report` (the D-117 mint-consumption report), `whole_window_basis`, `g2a_selection` (the G2-a selection record), `prompt_pin` |
+| D-165 close-out | `d165_closeout`, `finalized_manifest`, `floor_artifact`, `replay_sidecar` |
+| Whole window | `campaign_log`, `standalone_verdict`, `prospective_manifest`, `plan` |
+| Claims | `claim_verdicts`, `claim_side_bound`, `finalized_manifest`, `floor_artifact` |
+| Transfer | `transfer_result`, `reviewed_capture`, `plan`, `pre_data_receipt`, `pulse_bound_source`, `bundle_inventory` |
 
-Paths are root-relative POSIX paths. Absolute paths, empty components,
-traversal components, backslash aliases, duplicate paths, duplicate roles,
-symlinks, and non-regular files refuse. Each JSON or JSONL input is decoded as
-strict UTF-8 with duplicate keys and non-finite numbers refused.
+Every family additionally reads its `custody_inventory` and
+`validator_receipt` locators from the same map entry.
 
-## Authority and read algorithm
+## Read, replay, receipt, and reopen algorithm
 
-For every call, the seam performs these steps in order:
+After role resolution, the seam performs these steps in order inside the one
+fresh `V2AuthenticationReadSession`:
 
-1. Require the ref's root to be exactly the Git worktree root.
-2. Start a new `V2AuthenticationReadSession`; no prior cache can satisfy the
-   call.
-3. Read the custody inventory as a contained regular file without following
-   symlinks. Check the caller pin, then require byte equality to its `git:HEAD`
-   blob.
-4. Read every named file the same way and check its caller pin. For a governed
-   file, also require equality to its Git blob. For a generated file, require
-   equality to the digest reached through the anchored inventory.
-5. Require a canonical, closed receipt with `status: PASS`. It must name the
-   family validator and current validator-source digest and bind every input's
-   role, path, and exact digest.
-6. Replay the owning validators over the bytes read in this call. Validator
-   errors remain nested diagnostics and can never become rendered prose.
-7. Require byte-exact agreement between the receipt and fresh replay.
-8. Reopen every input with the same no-follow read. Any replacement, removal,
-   parse change, or digest change refuses.
-9. Construct the matching verified type privately. Production inventories are
-   registered only by the owning producer mission. A fixture inventory has
-   mode `test_fixture_non_issuing` and sets `issuance_authorized` false.
+1. Read the map-pinned inventory with `read_nofollow_pinned`. The session
+   rejects symlinks, containment escapes, non-regular files, digest mismatch,
+   malformed UTF-8/JSON, duplicate keys, and non-finite numbers before bytes
+   enter seam logic.
+2. Require inventory schema `joulewise.paper_custody_inventory.v1` and exact
+   keys `family`, `files`, `inventory_id`, `mode`, `schema_version`. Each file
+   row has exactly `authority`, `path`, `role`, `sha256` and must equal the
+   corresponding map binding. The rows are exactly the family input roles plus
+   `validator_receipt`; duplicates or omissions refuse.
+3. Read every input and the receipt once through `read_nofollow_pinned` using
+   the map's base, path, and expected digest. Require each read digest to equal
+   the matching inventory row.
+4. Parse the receipt as canonical JSON terminated by one newline. It has exactly
+   `family`, `inputs`, `replay_codes`, `schema_version`, `status`, `validator`,
+   and `validator_source_sha256`. Require schema
+   `joulewise.paper_custody_receipt.v1`, `status: PASS`, the map validator, and
+   an input row `{path, role, sha256}` for every family input sorted by role.
+5. Compute `validator_source_sha256` over the dispatcher and every owning
+   validator. Initialize SHA-256 with `family + NUL`; for each member in the
+   family's closed census, append `member_id + NUL`, then UTF-8
+   `inspect.getsource(member) + NUL`. The common census is `_replay_family`,
+   `_validate_fixture_documents`, and `_validate_production_documents`.
+   Reported energy adds both floor-extraction validators; D-165 adds its paper
+   adapter, manifest, floor, replay-sidecar, and close-out validators; whole
+   window adds its typed row validator; claims add `validate_claim_verdicts`;
+   transfer currently adds no unavailable producer. The receipt digest must
+   equal this result.
+6. Replay the owning validators over the bytes read in step 3. Receipt
+   `replay_codes` must equal the replay result exactly. Nested validator details
+   stay non-renderable.
+7. Call the replay/reopen boundary, then read inventory, every family input, and
+   receipt again through the same session and pins. Removal, replacement,
+   digest change, grammar change, or inode/path substitution refuses as
+   `paper_custody_input_changed`.
+8. Build a frozen read census and privately construct the matching verified
+   result. Production mode still refuses until that family's governed producer
+   is registered. Whole-window positive issuance additionally remains blocked
+   on `WHOLE-WINDOW-STOP-RECEIPT-01`.
 
-Caller updates to a path, digest, content ID, sidecar, or receipt cannot update
-the independent Git or inventory anchor. A caller-authored `PASS` receipt is
-therefore corroboration of nothing and cannot issue a value.
+## Family replay requirements
 
-## Family replay rules
+Reported energy replays `validate_extraction_spec` and
+`validate_d117_mint_consumption_report`. A future production entry must also
+inventory the full ordered `reported_energy_cells[].members` universe and every
+strict-bundle input consumed by the projection.
 
-Reported-energy replay validates the governed extraction spec and D-117 mint
-consumption report. A production registration must additionally inventory the
-exact ordered `reported_energy_cells[].members` universe and every artifact
-strict bundle validation reads. The reported-energy projection is derived by
-the trusted consumer; it is never accepted as source material.
+D-165 replays the finalized-manifest validator, floor authentication,
+`validate_d165_replay_sidecar`, and `validate_d165_closeout`. The adapter and
+the exhaustive professor-facing refusal vocabulary live in the real producer
+module `joulewise/dominance_closeout.py`. Its
+`D165_CLOSEOUT_REFUSAL_CODES` set and `D165_OR01_REASON_SENTENCES` map have
+exactly equal keys, and the test mutation-probes additions on both sides.
 
-D-165 replay validates the finalized manifest, on-disk floor artifact, replay
-sidecar, and close-out. Its adapter returns only four closed nested codes, one
-per owner; validator exception text is not part of the paper refusal
-vocabulary. The full governed stack identity, including
-`tokenizer_json_sha256`, is checked by the owning identity validator.
+Whole-window replay uses `WholeWindowRowValidation`, whose `authentic` field
+distinguishes provenance validity from admission outcome. That typed result is
+not itself issuance; the governed receipt producer remains mandatory.
 
-Whole-window replay uses the typed `WholeWindowRowValidation` result, which
-separates authenticity from an admission failure. That type is not issuance:
-until `WHOLE-WINDOW-STOP-RECEIPT-01` installs its governed producer, this
-family always returns `paper_custody_blocked_pending_receipt` after completing
-the read, anchor, replay, receipt, and reopen checks.
+Claims replay `validate_claim_verdicts` against the finalized manifest. The
+floor file's expected digest comes from the supply map, never from
+`claim_verdicts.inputs.floor_artifact.file_sha256`; any embedded copy is only a
+corroborating byte-for-byte comparison with the map-pinned floor.
 
-Claims replay the canonical claim-verdict validator against the finalized
-manifest. Before a production registration can issue, the embedded floor copy
-must be byte-identical to the anchored on-disk floor, the sidecar must join to
-the reader-computed verdict digest, and each floor resolution must bind the
-full selected arm identity beginning with `condition_family_id`.
+Transfer must eventually recompute the projection from authenticated reviewed
+capture and replay the adopted v1 validator. Until both capture and result
+receipt producers pass their gates, production returns
+`paper_custody_receipt_unissued`; no fixture may issue TR-01 prose.
 
-Transfer replay must recompute the projection from authenticated reviewed
-capture. A production registration remains unavailable until the reviewed
-capture and result-receipt producers pass their separate gates. Fixture
-self-consistency never authorizes TR-01 prose.
+## Lower-boundary closures
 
-## Closed refusal namespace
+`joulewise.campaign_provenance.load_campaign_log_rows` accepts only `log_path`
+and reads its bytes through the authentication input API; it has no
+`raw_bytes` substitution channel. The floor loader's normative wire is
+`joulewise.analysis_engine.inputs.load_floor_artifact(path) ->
+AuthenticatedFloorArtifact`: it must preserve the authenticated capability and
+must not downgrade it to `(Mapping, digest)`.
 
-`PaperCustodyRefusal` carries a code, an optional input role, the
-artifact/cell/token scope, non-renderable nested validator codes, and a
-non-renderable read census. Its rendered output is always empty.
+The authentication AST guard includes `joulewise/paper_custody.py`, and its
+public-wire test parses all five ref class bodies rather than trusting only the
+outer `open_paper_input(ref)` signature. It requires exactly `role` and
+`runs_root` and rejects reintroduction of public binding or receipt types.
 
-| Code | Meaning |
-|---|---|
-| `paper_custody_request_invalid` | ref, role, pin, or closed wire is invalid |
-| `paper_custody_anchor_unavailable` | independent Git or inventory authority cannot be reached |
-| `paper_custody_anchor_mismatch` | caller-consistent bytes disagree with independent authority |
-| `paper_custody_path_refused` | path containment, symlink, or file-kind check failed |
-| `paper_custody_input_unreadable` | a required file cannot be read |
-| `paper_custody_digest_mismatch` | disk bytes disagree with the caller pin |
-| `paper_custody_parse_invalid` | strict JSON or JSONL parsing failed |
-| `paper_custody_receipt_unissued` | the owning production inventory or receipt producer does not exist |
-| `paper_custody_blocked_pending_receipt` | whole-window issuance is still gated |
-| `paper_custody_receipt_invalid` | receipt or inventory schema is invalid |
-| `paper_custody_receipt_binding_mismatch` | receipt differs from anchored inputs or fresh replay |
-| `paper_custody_validator_refused` | an owning validator returned a refusal |
-| `paper_custody_derivation_mismatch` | a producer-only relation does not recompute |
-| `paper_custody_evidence_ambiguous` | roles, paths, rows, or evidence are not unique |
-| `paper_custody_identity_not_v5` | the full registered v5 identity does not match |
-| `paper_custody_input_changed` | any file changed between first read and reopen |
+## Closed refusals and exception translation
 
-Unknown codes collapse to `paper_custody_request_invalid`. Nested validator
-codes and details are diagnostics only and must never enter a fill, row, token,
-sentence, or exception string shown to a renderer.
+Every public-entry failure is `PaperCustodyRefusal` with a code from the closed
+`paper_custody_*` set and empty `rendered_output`. This includes malformed
+primitive types before regex/path operations, Git/subprocess failures, supply
+map failures, JSON/UTF-8 failures, missing files, nested or already-active
+authentication sessions, validator exceptions, replay changes, and private
+construction attempts. `KeyboardInterrupt`, `SystemExit`, and other
+`BaseException` control flow are not converted.
 
-## Bypass closure and guards
-
-Floor-extraction summary and strict JSON helpers must read through the active
-authentication session. Paper modules belong to the authentication-surface
-AST census, which rejects direct readable I/O. A second AST census rejects
-public supplier signatures containing bytes, dictionaries, mappings,
-arbitrary sequences, variadic arguments, receipt parameters, or validation
-result parameters.
-
-The lower compatibility APIs
-`analysis_engine.inputs.load_floor_artifact(path)` and
-`campaign_provenance.load_campaign_log_rows(..., raw_bytes=...)` may not be
-used by a paper supplier. Their legacy raw/degrading forms must be removed or
-made to require a seam-issued capability before any supplier rebase merges.
-
-## Class-ending test
-
-The single census test opens each family, obtains the session's actual read
-census, and attacks every record three ways:
-
-1. Raw mutation keeps the frozen caller pin and must return exactly
-   `paper_custody_digest_mismatch`.
-2. Full caller resealing changes the semantic value and every caller pin while
-   leaving the independent anchor fixed; it must return exactly
-   `paper_custody_anchor_mismatch` for the fixture wire.
-3. Replay-to-reopen replacement changes the file only after validator replay;
-   it must return exactly `paper_custody_input_changed`.
-
-Every arm asserts zero rendered output. The fixture catalog lives only under
-`tests/fixtures/paper_custody/`, declares that it contains no measurement
-value, and cannot yield an issuance-authorized result.
+The read census and nested validator codes are diagnostic metadata only. They
+cannot be interpolated into paper prose. A supplier may render only a verified
+result with `issuance_authorized == true`; all other outcomes stop filling.
