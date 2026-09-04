@@ -12,14 +12,14 @@ GROUPS = ("ABSTRACT", "DISCUSSION", "CONCLUSION")
 BRANCH_LABELS = {
     "A": "**A — every required ratio passes:**",
     "B": "**B — an authenticated, evaluable ratio is below 2:**",
-    "REFUSAL": (
-        "**Refusal — a required ratio is missing, unauthenticated, or has a "
-        "zero denominator:**"
-    ),
+    "REFUSAL": "**Refusal — stopped before comparison or at close-out:**",
 }
 BRANCHES = tuple(BRANCH_LABELS)
 TRANSFER_MARKER = "[FILL:TR-01]"
 FAILED_COMPONENTS_MARKER = "[FILL:OB-01]"
+DECODE_VERDICT_MARKER = "[FILL:DS-32]"
+PREFILL_VERDICT_MARKER = "[FILL:PG-08]"
+REFUSAL_REASON_MARKER = "[FILL:OR-01]"
 
 
 def _select_group(text: str, group: str, outcome: str) -> str:
@@ -71,6 +71,19 @@ def _select_group(text: str, group: str, outcome: str) -> str:
             f"{group} {outcome} must contain {expected_failure_slots} "
             f"{FAILED_COMPONENTS_MARKER} slot(s)"
         )
+    expected_verdict_slots = 0 if outcome == "REFUSAL" else 1
+    for marker in (DECODE_VERDICT_MARKER, PREFILL_VERDICT_MARKER):
+        if rendered_text.count(marker) != expected_verdict_slots:
+            raise ValueError(
+                f"{group} {outcome} must contain {expected_verdict_slots} "
+                f"{marker} slot(s)"
+            )
+    expected_refusal_slots = 1 if outcome == "REFUSAL" else 0
+    if rendered_text.count(REFUSAL_REASON_MARKER) != expected_refusal_slots:
+        raise ValueError(
+            f"{group} {outcome} must contain {expected_refusal_slots} "
+            f"{REFUSAL_REASON_MARKER} slot(s)"
+        )
     return before + rendered_text + "\n\n" + after.lstrip("\n")
 
 
@@ -93,6 +106,17 @@ def main() -> int:
     expected_failure_slots = len(GROUPS) if args.outcome == "B" else 0
     if text.count(FAILED_COMPONENTS_MARKER) != expected_failure_slots:
         raise ValueError("selected draft has the wrong failed-component slot count")
+    # Table 3 retains one governed slot for each verdict in every working copy;
+    # A/B add one paragraph placement per branch group, while Refusal adds none.
+    expected_verdict_slots = 1 + (0 if args.outcome == "REFUSAL" else len(GROUPS))
+    for marker in (DECODE_VERDICT_MARKER, PREFILL_VERDICT_MARKER):
+        if text.count(marker) != expected_verdict_slots:
+            raise ValueError(f"selected draft has the wrong {marker} slot count")
+    # The one Section-4 refusal form remains as the governed reference until
+    # final filling; a selected Refusal adds one carrier in each branch group.
+    expected_refusal_slots = 1 + (len(GROUPS) if args.outcome == "REFUSAL" else 0)
+    if text.count(REFUSAL_REASON_MARKER) != expected_refusal_slots:
+        raise ValueError("selected draft has the wrong refusal-reason slot count")
     try:
         with args.output.open("x", encoding="utf-8") as handle:
             handle.write(text)
@@ -100,7 +124,9 @@ def main() -> int:
         parser.error(f"--output already exists: {args.output}")
     print(
         f"selected {args.outcome}: transfer_slots={len(GROUPS)}, "
-        f"failed_component_slots={expected_failure_slots}"
+        f"failed_component_slots={expected_failure_slots}, "
+        f"verdict_slots={expected_verdict_slots}, "
+        f"refusal_reason_slots={expected_refusal_slots}"
     )
     return 0
 
