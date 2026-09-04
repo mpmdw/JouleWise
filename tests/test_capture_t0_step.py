@@ -967,15 +967,10 @@ class CaptureT0StepTests(unittest.TestCase):
                 with self.subTest(window=window, occupied="live"):
                     self.assertEqual(
                         live_occupied.returncode,
-                        1,
+                        0,
                         live_occupied.stdout + live_occupied.stderr,
                     )
-                    self.assertIn(
-                        f"BLOCK runs roots already exist for window {window}",
-                        re.sub(r"\x1b\[[0-9;]*m", "", live_occupied.stdout),
-                    )
-                    self.assertIn(str(live_root), live_occupied.stdout)
-                    self.assertIn("NOT READY.", live_occupied.stdout)
+                    self.assertIn("READY.", live_occupied.stdout)
 
                 shutil.rmtree(live_root)
                 stale_root = repository / retired[window]
@@ -992,10 +987,15 @@ class CaptureT0StepTests(unittest.TestCase):
                 with self.subTest(window=window, occupied="retired"):
                     self.assertEqual(
                         stale_only.returncode,
-                        0,
+                        1,
                         stale_only.stdout + stale_only.stderr,
                     )
-                    self.assertIn("READY.", stale_only.stdout)
+                    self.assertIn(
+                        f"BLOCK stale runs roots already exist for window {window}",
+                        re.sub(r"\x1b\[[0-9;]*m", "", stale_only.stdout),
+                    )
+                    self.assertIn(str(stale_root), stale_only.stdout)
+                    self.assertIn("NOT READY.", stale_only.stdout)
                 shutil.rmtree(stale_root)
 
     def test_cli_usage_error_is_a_registered_json_refusal(self) -> None:
