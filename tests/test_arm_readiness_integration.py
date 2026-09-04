@@ -34,7 +34,11 @@ from joulewise.arm_readiness import (
 )
 from joulewise.identity_pins import IdentityPinProjectionError
 from tests.test_arm_readiness_dry_run import install_passing_freeze
-from tests.test_arm_readiness_lifecycle import git, make_go_fixture
+from tests.test_arm_readiness_lifecycle import (
+    git,
+    make_go_fixture,
+    synthetic_family_publication_verification,
+)
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
     predicate_content,
@@ -146,6 +150,10 @@ def install_passing_dry_run(pack: Path, custody: Path) -> None:
 
 def install_passing_evidence(pack: Path, custody: Path) -> None:
     registry, _raw = load_registry(pack.parents[2])
+    lifecycle_policies = {
+        item["kind"]: item
+        for item in registry["freeze_evidence_lifecycle"]["evidence_policies"]
+    }
     pack_sha = committed_pack_tree_sha256(pack)
     head = reviewed_main(pack)["head_commit"]
     # Derive the bound plan SHA with the same production helper the row
@@ -154,7 +162,7 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
     bound_plan_sha = readiness._pack_identity(pack, _tree)["plan_sha256"]
     rows_by_kind: dict[str, list[dict]] = {}
     for row in registry["rows"]:
-        if row["row_id"] in {
+        if row["evaluation_phase"] != "ARM_ONLY" or row["row_id"] in {
             "desk.identity_pin_projection",
             "desk.under_lease_rehearsal",
         }:
@@ -164,7 +172,12 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
     directory = custody / pack.name / "arm_readiness.evidence"
     source_directory = custody / pack.name / "sources"
     source_directory.mkdir(parents=True, exist_ok=True)
+    authored_now = time.monotonic_ns()
+    clock_anchor = readiness._clock_reference.sample_anchor()
     for index, (kind, rows) in enumerate(sorted(rows_by_kind.items()), start=1):
+        horizon = lifecycle_policies[kind]["horizon_ns"]
+        if not isinstance(horizon, int):
+            raise AssertionError(f"ARM-only fixture kind lacks a horizon: {kind}")
         receipt = {
             "schema_version": EVIDENCE_RECEIPT_SCHEMA,
             "evidence_id": f"evidence-{index:03d}",
@@ -172,7 +185,7 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
             "status": "PASS",
             "issued_at_utc": "2026-08-11T00:00:00Z",
             "boot_session_id": TEST_BOOT_SESSION_ID,
-            "valid_until_monotonic_ns": time.monotonic_ns() + 10**15,
+            "valid_until_monotonic_ns": authored_now + horizon,
             "pack_sha256": pack_sha,
             "head_commit": head,
             "facts": [],
@@ -185,6 +198,25 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
             content = predicate_content(
                 row["predicate_id"], plan_sha256=bound_plan_sha
             )
+            if row["predicate_id"] == "clock.correct_and_prior_state.v1":
+                content.update(
+                    {
+                        "r0_anchor_realtime_ns": clock_anchor.realtime_ns
+                        - 600_000_000_000,
+                        "r0_anchor_monotonic_raw_ns": clock_anchor.monotonic_raw_ns
+                        - 600_000_000_000,
+                        "anchor_realtime_ns": clock_anchor.realtime_ns,
+                        "anchor_monotonic_raw_ns": clock_anchor.monotonic_raw_ns,
+                        "anchor_read_skew_ns": clock_anchor.read_skew_ns,
+                        "r1_batch_started_monotonic_raw_ns": (
+                            clock_anchor.monotonic_raw_ns - 1_000
+                        ),
+                        "r1_batch_finished_monotonic_raw_ns": (
+                            clock_anchor.monotonic_raw_ns
+                        ),
+                        "r1_batch_finished_monotonic_ns": authored_now,
+                    }
+                )
             source_raw = render_json(
                 {"predicate_id": row["predicate_id"], "value": content}
             )
@@ -257,11 +289,18 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
     maxDiff = None
 
     def setUp(self) -> None:
-        patcher = mock.patch.object(
+        boot_patcher = mock.patch.object(
             readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
         )
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        publication_patcher = mock.patch.object(
+            readiness,
+            "verify_family_publication_marker",
+            side_effect=synthetic_family_publication_verification,
+        )
+        boot_patcher.start()
+        publication_patcher.start()
+        self.addCleanup(publication_patcher.stop)
+        self.addCleanup(boot_patcher.stop)
 
     def prepare_profile(self, profile: str):
         temporary, repo, pack, custody, _arm_path = make_go_fixture(PACKS[profile], profile)
@@ -275,12 +314,8 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         )
         return temporary, repo, pack, custody, context
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_alpha_beta_gamma_end_to_end_pass_and_no_hash_cycle(self) -> None:
-        """Blocked by legacy-schema evidence installed for all three profiles."""
+        """All profiles reach GO with R1 content and execution receipts."""
 
         for profile in ("ALPHA", "BETA", "GAMMA"):
             with self.subTest(profile=profile):
@@ -336,12 +371,8 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             ["A/decode", "A/prefill_p256", "B/decode", "B/prefill_p256"],
         )
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_same_head_pack_terminal_evidence_and_final_arm_bindings_go_stale(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """Authenticated terminal and arm bindings become stale together."""
 
         temporary, repo, pack, custody, context = self.prepare_profile("ALPHA")
         self.addCleanup(temporary.cleanup)
@@ -381,28 +412,23 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         ):
             refused = generate_arm_receipt(pack, context, custody)
         self.assertEqual(refused["status"], "REFUSE")
-        self.assertIn("readiness_dry_run_stale", refused["reason_codes"])
-        self.assertIn("readiness_evidence_digest_mismatch", refused["reason_codes"])
-        receipt = json.loads(Path(refused["receipt_path"]).read_text())
-        terminal = next(row for row in receipt["rows"] if row["row_id"] == "desk.terminal_review")
-        self.assertEqual(terminal["verdict"], "REFUSE")
+        self.assertEqual(
+            refused["reason_codes"], ["readiness_r1_dependency_changed_set"]
+        )
+        self.assertIsNone(refused["receipt_path"])
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_verification_recomputes_current_pack_bytes_despite_skip_worktree(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """Verification reads current bytes hidden by skip-worktree."""
 
         temporary, repo, pack, custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
         clear_initial_arm(custody, pack.name)
-        install_passing_freeze(repo, pack)
         inert = pack / "pack-digest-replay-sentinel.txt"
         inert.write_text("committed sentinel\n")
         git(repo, "add", ".")
         git(repo, "commit", "-qm", "add pack digest replay sentinel")
         git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        install_passing_freeze(repo, pack)
         install_passing_dry_run(pack, custody)
         install_passing_evidence(pack, custody)
         context_root = Path(temporary.name) / "context"
@@ -475,12 +501,8 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
                 self.assertEqual(rows[0]["verdict"], "REFUSE")
                 self.assertEqual([item["code"] for item in refusals], [code])
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_missing_arm_only_evidence_refuses_and_bound_source_mutation_stales_go(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """Missing ARM evidence and source mutation both fail closed."""
 
         temporary, _repo, pack, custody, context = self.prepare_profile("ALPHA")
         self.addCleanup(temporary.cleanup)
@@ -536,12 +558,8 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ArmReadinessError, "evidence bindings"):
             verify_arm_receipt(pack2, passed["receipt_path"])
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_identity_arm_evidence_symlink_escape_refuses(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """An identity-evidence symlink escape is refused."""
 
         temporary, _repo, pack, custody, context = self.prepare_profile("ALPHA")
         self.addCleanup(temporary.cleanup)
