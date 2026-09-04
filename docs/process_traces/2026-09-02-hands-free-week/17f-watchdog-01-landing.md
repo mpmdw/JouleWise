@@ -164,3 +164,11 @@ This addendum does not rewrite the implementation seat's map. It replaces the bi
 | 9b — usage ladder is exactly 15/30/60/120/120 | `scripts/magistrate_watchdog.py:72` | `tests/test_magistrate_watchdog.py:417` | Change the fourth element to `7199`: `test_usage_backoff_ladder_and_activation_jitter` fails against the literal tuple. |
 
 The fixed-fence operational consequence for row 3 is now explicit in `docs/process/MAGISTRATE_WATCHDOG.md`: an orphaned resident supervisor is not adopted during the belt or 07:00 minute (`FENCED`, `adopt=False`), so adoption can wait at most 45 minutes.
+
+---
+
+## Fix round 2 clause-map addendum (2026-09-03 PDT)
+
+File 15 row 6 is amended by the magistrate's ruling on execution-refuter N2: the authoritative emergency-stop glob is the wider `refs/heads/ops/stop*`, not `refs/heads/ops/stop-magistrate*`. The wider glob makes shortened as well as suffixed emergency names fail-safe. This addendum supersedes only the row-6 glob literal; the positive-control, anonymous probe, and local-STOP clauses remain unchanged.
+
+The resident row-4 enforcement path now resolves plans before consulting the cached remote-stop observation. Remote refresh runs on a single daemon thread at no more than five-minute cadence, so an unreachable GitHub probe cannot consume any part of the resident's 10-second deadline-resolution budget. Row 8 now consumes a matching `notice.ack` before the child-exit return, and the resident applies the same clock-uncertainty detector as the launchd tick, irreversibly draining an owned child on monotonic time once uncertainty is observed.

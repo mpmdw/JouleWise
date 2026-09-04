@@ -90,7 +90,6 @@ EXPECTED_IDS = {
     # were already cured on main -- ddb1f633 and a28b55bf -- and the rows simply
     # predated their cures. CALEXITS-EVIDENCE-BYTES-01 stays live: its reported
     # deterministic failure does not reproduce at the bench.)
-    "PREWINDOW-REGEX-01",
     "REGISTRY-ID-NAMING-01",
     "V4-TRANSACTION-01",
     # D-167 replaces the retired Qwen2.5 _v3 windows and the three unstarted
@@ -149,9 +148,9 @@ EXPECTED_IDS = {
     # (WO-RECORDER-GRANT-IDENTITY retired 2026-08-17 by D-139 A1 —
     # in-process adversary ruled out of model; registered limitation stands.)
     "WO-PROOF-RUNNABILITY-REPAIR",
-    "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
+    "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
-    "P2-047A", "P2-048", "P2-050", "TOOL-01",
+    "P2-048", "TOOL-01",
     "CI-003", "DOC-010",
     "DOC-008", "DOC-008-INTAKE", "DOC-008-REFLECTION", "DOC-008-STATUS",
     # audit close-out promotions (2026-07-15): deferred fix-wave orders
@@ -163,8 +162,6 @@ EXPECTED_IDS = {
     "CUSTODY-HARDEN-01",
     # 2026-07-25 attribution-limit adjudication (FLOOR-LABEL-01 completed
     # 2026-07-27 at 3055315 and left the live kernel)
-    "FLOOR-WORKLOAD-SIZING-01",
-    "PHASE-SHARE-ESTIMAND-01",
     # 2026-07-29/30 mint-arc intake (82ca955; kernel rows added by ruling).
     # STACK-ID-BIND-01 completed 2026-07-30 in PR #88 (da83337).
     "MODULARITY-01",
@@ -234,12 +231,12 @@ EXPECTED_IDS = {
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-010", "P2-019", "P2-020",
-    "P2-012", "P2-046B", "P2-047B",
+    "P2-012", "P2-046B",
     # 2026-08-03 t3-drive chain mint: app-up vs app-down characterization
     # pair (NON-CLAIM), rank 7.
     "T3-CHAR-PAIR-01",
     # [ED-EXTERNAL]
-    "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
+    "ED-DATES-01", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
 TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
@@ -263,7 +260,11 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "BRACKET-BINDING-CLI-01",
                 # 2026-08-28 T27 second kernel wave: retired unbuilt by the
                 # threat-model prune ruling R-2 (D-161).
-                "HISTPACK-PROMISOR-NOFETCH-01"}
+                "HISTPACK-PROMISOR-NOFETCH-01",
+                # 2026-09-04 fan-out magistrate-rulings batch.
+                "FLOOR-WORKLOAD-SIZING-01", "P1-008", "P2-027", "P2-035",
+                "P2-047A", "P2-047B", "P2-050",
+                "PHASE-SHARE-ESTIMAND-01", "PREWINDOW-REGEX-01"}
 
 
 def load_kernel():
@@ -276,27 +277,30 @@ def load_fixture(name):
         return json.load(fh)
 
 
-def _adapt_retired_quiet_mac_head(task_ids):
-    """Rewrite frozen selection oracles to the ruled quiet-Mac head.
+def _adapt_retired_lane_heads(task_ids):
+    """Rewrite frozen selection oracles to the current ruled lane heads.
 
     The oracles are hand-written and frozen; P2-015 was retired from the
     kernel on 2026-07-31, and R3 formally retired its former successor
     P2-006 on 2026-08-15. D-167 then retired D117-W-ALPHA and installed
     V5-G2A-PREFILL-PROBE-01 at rank 2 as the dependency-ready quiet-Mac
-    head. Patching here keeps the historical fixtures unchanged.
+    head. The 2026-09-04 fan-out batch replaced P1-008 with ED-DATES-01.
+    Patching here keeps the historical fixtures unchanged.
     """
     for index, task_id in enumerate(task_ids):
         if task_id in ("P2-015", "P2-006", "D117-W-ALPHA"):
             task_ids[index] = "V5-G2A-PREFILL-PROBE-01"
+        elif task_id == "P1-008":
+            task_ids[index] = "ED-DATES-01"
     return task_ids
 
 
-def _adapt_retired_quiet_mac_head_in_scenarios(scenarios):
-    """Apply the ruled quiet-Mac head rewrite to frozen gate scenarios."""
+def _adapt_retired_lane_heads_in_scenarios(scenarios):
+    """Apply current ruled lane-head rewrites to frozen gate scenarios."""
     for scenario in scenarios:
-        _adapt_retired_quiet_mac_head(scenario["expected_selectable_task_ids"])
+        _adapt_retired_lane_heads(scenario["expected_selectable_task_ids"])
         for gate in scenario["active_global_gates"]:
-            _adapt_retired_quiet_mac_head(gate["allowed_task_ids"])
+            _adapt_retired_lane_heads(gate["allowed_task_ids"])
     return scenarios
 
 
@@ -408,10 +412,9 @@ class TestKernelValidity(unittest.TestCase):
             ("id/key mismatch", lambda k: k["tasks"]["P2-016"].update(id="P2-999")),
             ("terminal status", lambda k: k["tasks"]["P2-016"].update(status="done")),
             ("duplicate lane rank", lambda k: k["tasks"]["P2-016"].update(rank=1)),
-            ("blocked without hard start dep", lambda k: k["tasks"]["P1-008"].update(status="blocked")),
-            # P2-035's only hard start edge (P2-015) was satisfied at the
-            # 2026-07-31 retirement; P2-024 now carries the pending edge these
-            # dependency-shaped mutations need.
+            ("blocked without hard start dep", lambda k: k["tasks"]["ED-DATES-01"].update(status="blocked")),
+            # P2-024 carries the pending edge these dependency-shaped
+            # mutations need.
             ("queued with hard start dep", lambda k: k["tasks"]["P2-024"].update(status="queued")),
             ("dangling pending task dep",
              lambda k: k["tasks"]["P2-023"]["dependencies"][1].update(target="NOPE-1")),
@@ -659,8 +662,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # that batch are recorded as `shelved`, which keeps the row live in the
         # kernel and therefore in this set): 129 + 13 = 142; the V5
         # floor-generator counter-review CR-3 row adds one: 142 + 1 = 143.
+        # The 2026-09-04 fan-out ruling batch retires nine rows (including
+        # P2-047B with its retired P2-047A parent), then opens ED-DATES-01:
+        # 143 - 9 + 1 = 135.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 143)
+        self.assertEqual(len(self.tasks), 135)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -739,7 +745,6 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertNotIn("P2-015", self.tasks)
         dependents = {
             "AXI-SE", "P2-010", "P2-024",
-            "P2-035", "P2-047A", "P2-047B",
         }
         for tid in sorted(dependents):
             dep = next(
@@ -789,22 +794,44 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         }
         self.assertEqual(pending_start_events, {"POST-2M-CORPUS"})
 
-    def test_p2_027_has_satisfied_repro_predecessors(self):
-        self.assertEqual(self.tasks["P2-027"]["lane"], "ed_external")
-        deps = {
-            d["target"]: d for d in self.tasks["P2-027"]["dependencies"]
-        }
-        self.assertEqual(set(deps), {"REPRO-001", "REPRO-002"})
-        for dep in deps.values():
-            self.assertEqual(dep["state"], "satisfied")
-            self.assertIsNotNone(dep["evidence"])
-
-    def test_p1_008_is_first_external_record(self):
+    def test_ed_dates_is_narrow_first_external_record(self):
         external = [
             task for task in self.tasks.values() if task["lane"] == "ed_external"
         ]
         self.assertEqual(min(task["rank"] for task in external), 1)
-        self.assertEqual(self.tasks["P1-008"]["rank"], 1)
+        dates = self.tasks["ED-DATES-01"]
+        self.assertEqual(dates["rank"], 1)
+        self.assertEqual(dates["status"], "queued")
+        self.assertEqual(dates["dependencies"], [])
+        combined = " ".join((dates["goal"], dates["acceptance"]["summary"]))
+        self.assertIn("final-report", combined)
+        self.assertIn("colloquium", combined)
+        self.assertNotIn("borrow", combined.lower())
+
+    def test_fanout_ruling_batch_dispositions(self):
+        retired = {
+            "FLOOR-WORKLOAD-SIZING-01", "P1-008", "P2-027", "P2-035",
+            "P2-047A", "P2-047B", "P2-050",
+            "PHASE-SHARE-ESTIMAND-01", "PREWINDOW-REGEX-01",
+        }
+        self.assertTrue(retired.isdisjoint(self.tasks))
+
+        capture = self.tasks["EDQ-L9-3-CAPTURE-01"]
+        regex_dep = next(
+            dep for dep in capture["dependencies"]
+            if dep["target"] == "PREWINDOW-REGEX-01"
+        )
+        self.assertEqual(regex_dep["state"], "satisfied")
+        self.assertIsNotNone(regex_dep["evidence"])
+        self.assertEqual(capture["status"], "queued")
+
+        guard = self.tasks["QUIET-GUARD-01"]
+        self.assertEqual(guard["dependencies"], [])
+        self.assertIn("option-A", guard["status_note"])
+        self.assertTrue(any(
+            "Inactive host installation" in item
+            for item in guard["acceptance"]["evidence"]
+        ))
 
     def test_quiet_mac_all_lead_only_and_v5_g2a_is_queued_lane_head(self):
         # P2-015 (rank 1) retired 2026-07-31; MET-WINDOW-C-01 took rank 1
@@ -813,9 +840,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # transaction at ranks 2/3/4. G2-a is the dependency-ready lane head.
         # The later scored _v6 leg adds one net quiet-Mac row, so 13 becomes
         # 14 after the D-167 replacement; T0-LIVENESS-BOUND-EMPIRICAL-01
-        # (T26 item 3, PHYS-1 limitation, 2026-09-02) makes it 15.
+        # (T26 item 3, PHYS-1 limitation, 2026-09-02) makes it 15; the
+        # 2026-09-04 batch retires P2-047B with its retired harness parent.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 15)
+        self.assertEqual(len(quiet), 14)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)
@@ -906,9 +934,6 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         )
         self.assertEqual(p2_038_dep["state"], "satisfied")
         self.assertIsNotNone(p2_038_dep["evidence"])
-        self.assertEqual(
-            self._hard_start_targets("P2-047B"), {"P2-047A"}
-        )
         for tid in ("P2-048", "CI-003", "DOC-010"):
             self.assertEqual(self.tasks[tid]["status"], "shelved")
 
@@ -956,9 +981,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             "pre_demotion_queue_snapshot"
         ]
         live_coverage = set(tasks)
+        completed_ids = self._completed_queue_ids()
         for source_id, successor_ids in snapshot["documented_id_migrations"].items():
             self.assertTrue(
-                set(successor_ids).issubset(tasks),
+                set(successor_ids).issubset(set(tasks) | completed_ids),
                 f"{source_id} migration successors missing",
             )
             live_coverage.add(source_id)
@@ -984,7 +1010,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # SITE-02 and SPLIT-AP completed 2026-07-16 (PRs #68/#69) and left
         # the live kernel; the parity negative check keeps the still-live
         # recovered rows.
-        for task_id in ("P2-050", "TOOL-01"):
+        for task_id in ("TOOL-01",):
             with self.subTest(negative_removed_task_id=task_id):
                 mutated = copy.deepcopy(self.tasks)
                 mutated.pop(task_id)
@@ -992,15 +1018,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
                     self._assert_pre_demotion_task_record_parity(mutated)
 
     def test_recovered_task_semantics(self):
-        self.assertEqual(
-            self.tasks["P2-050"]["priority"], "p3_hardening_candidates"
-        )
         self.assertEqual(self.tasks["TOOL-01"]["priority"], "p3_tooling")
         self.assertEqual(
             self.tasks["TOOL-01"]["status_note"],
             "lead personal tooling, non-repo",
         )
-        for task_id in ("P2-050", "TOOL-01"):
+        for task_id in ("TOOL-01",):
             self.assertEqual(self.tasks[task_id]["lane"], "agent")
             self.assertEqual(self.tasks[task_id]["status"], "queued")
             self.assertEqual(self.tasks[task_id]["dependencies"], [])
@@ -1063,7 +1086,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         # (2026-07-15); the frozen artifact remains the migration fixture.
         oracle = load_fixture("historical_audit_gate.json")
         oracle["must_suppress_task_ids"].append("FLOOR-BIND-01")
-        _adapt_retired_quiet_mac_head(oracle["must_suppress_task_ids"])
+        _adapt_retired_lane_heads(oracle["must_suppress_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
         selected = gen_state.selectable_task_ids(kernel)
@@ -1073,7 +1096,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
         head_oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
-        _adapt_retired_quiet_mac_head(head_oracle["expected_selectable_task_ids"])
+        _adapt_retired_lane_heads(head_oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
         gate_id = gate_oracle["active_global_gates"][0]["id"]
@@ -1116,13 +1139,13 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
         oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
-        _adapt_retired_quiet_mac_head(oracle["expected_selectable_task_ids"])
+        _adapt_retired_lane_heads(oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
 
     def test_allowlist_lane_matching_and_multi_gate_intersection(self):
         fixture = load_fixture("selection_semantics.json")
-        for scenario in _adapt_retired_quiet_mac_head_in_scenarios(
+        for scenario in _adapt_retired_lane_heads_in_scenarios(
             fixture["scenarios"]
         ):
             with self.subTest(scenario=scenario["name"]):
@@ -1132,7 +1155,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_stop_card_precedes_gates_and_clear_restores_still_active_gate(self):
         fixture = load_fixture("selection_semantics.json")
         lane_oracle = next(
-            scenario for scenario in _adapt_retired_quiet_mac_head_in_scenarios(
+            scenario for scenario in _adapt_retired_lane_heads_in_scenarios(
                 fixture["scenarios"]
             )
             if scenario["name"] == "lane_matching"
@@ -1140,11 +1163,11 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         kernel = self._kernel_with(lane_oracle["active_global_gates"])
         stop_fixture = fixture["stop_card_precedence"]
         card = copy.deepcopy(stop_fixture["active_stop_card"])
-        # Invariant 7 needs an active/blocked stop-card holder. The fixture
-        # names P2-035, which became queued when its P2-015 edge was
-        # satisfied at the 2026-07-31 retirement; P2-024 is still blocked.
+        # Invariant 7 needs an active/blocked stop-card holder. The historical
+        # fixture names retired P2-035; P2-024 is still blocked.
         stopped_task_id = stop_fixture["task_id"]
-        if kernel["tasks"][stopped_task_id]["status"] not in ("active", "blocked"):
+        if (stopped_task_id not in kernel["tasks"] or
+                kernel["tasks"][stopped_task_id]["status"] not in ("active", "blocked")):
             stopped_task_id = "P2-024"
         kernel["active_stop_card"] = card
         kernel["tasks"][stopped_task_id]["stop_card"] = copy.deepcopy(card)
@@ -1229,7 +1252,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             self._assert_oracle(removed, oracle)
 
         widened_gates = copy.deepcopy(oracle["active_global_gates"])
-        widened_gates[0]["allowed_task_ids"] = ["P1-008"]
+        widened_gates[0]["allowed_task_ids"] = ["ED-DATES-01"]
         widened = self._kernel_with(widened_gates)
         with self.assertRaises(AssertionError):
             self._assert_oracle(widened, oracle)
@@ -1273,7 +1296,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         self.assertEqual(
             gen_state.selectable_task_ids(kernel),
             {
-                "P1-008",
+                "ED-DATES-01",
                 "V5-G2A-PREFILL-PROBE-01",
                 "WO-LAUNCH-BINDING",
             },
