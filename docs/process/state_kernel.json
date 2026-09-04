@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged",
-    "path": "docs/run_reports/2026-08-25-t23-t24-session.md"
+    "label": "Fan-out magistrate rulings installed in the state kernel",
+    "path": "docs/process_traces/2026-09-03-kernel-batch/06-fanout-rulings-batch.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1710,6 +1710,45 @@
       "status_note": "Lane: ed (directive amendment). Registered 2026-09-02 with T26-RULING-INSTALL-01. Decision-only; a one-line email answer suffices, the magistrate records it.",
       "stop_card": null
     },
+    "ED-DATES-01": {
+      "acceptance": {
+        "evidence": [
+          "Authoritative final-report date recorded in docs/milestones.md",
+          "Authoritative colloquium date recorded in docs/milestones.md",
+          "Internal cut dates derived from those two external dates"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ED-DATES-01/acceptance",
+          "label": "ED-DATES-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Program-confirmed final-report and colloquium dates are recorded, with internal cut dates derived from them."
+      },
+      "authority": {
+        "label": "2026-09-04 fan-out magistrate ruling for p1-rows",
+        "path": "docs/process_traces/2026-09-03-kernel-batch/06-fanout-rulings-batch.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-09-04 fan-out magistrate ruling for p1-rows",
+            "path": "docs/process_traces/2026-09-03-kernel-batch/06-fanout-rulings-batch.md"
+          },
+          "rule": "This row owns only the final-report and colloquium dates; evaluator acceptance, hardware access, and borrow scheduling remain with their existing owners"
+        }
+      ],
+      "flags": [],
+      "goal": "Obtain the authoritative final-report and colloquium dates, record them in the milestones, and derive the internal cut dates.",
+      "id": "ED-DATES-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 1,
+      "status": "queued",
+      "status_note": "Replaces the mixed P1-008 row; no dates are inferred or invented.",
+      "stop_card": null
+    },
     "ED-HANDS-BATCH-01": {
       "acceptance": {
         "evidence": [
@@ -1760,11 +1799,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PREWINDOW-REGEX-01 merged implementation and discriminating regression",
+            "path": "tests/test_prewindow_check.py"
+          },
           "kind": "task",
           "required": "the tightened check-8 pattern lands before the agent-free capture (ruling S-7(b))",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "PREWINDOW-REGEX-01"
         }
@@ -1777,8 +1819,8 @@
       "lane": "ed_external",
       "priority": "p1_phase_gate",
       "rank": 9,
-      "status": "blocked",
-      "status_note": "Depends on PREWINDOW-REGEX-01 so the tightened check precedes the agent-free capture.",
+      "status": "queued",
+      "status_note": "PREWINDOW-REGEX-01 is complete; the agent-free external capture is now dependency-ready.",
       "stop_card": null
     },
     "EPOCH-LINT-01": {
@@ -1947,37 +1989,6 @@
       "rank": 69,
       "status": "blocked",
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
-      "stop_card": null
-    },
-    "FLOOR-WORKLOAD-SIZING-01": {
-      "acceptance": {
-        "evidence": [
-          "Measured effect-to-floor ratio at candidate workload sizes, from a pilot rather than assumption",
-          "Re-sized configs for the remaining floor stages, with the sizing rationale recorded",
-          "Explicit decision on which queued stages are collected at which sizes"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FLOOR-WORKLOAD-SIZING-01/acceptance",
-          "label": "FLOOR-WORKLOAD-SIZING-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Anchor-attribution error is approximately duration-independent (~1 J regardless of phase size) while effects scale with workload, so lengthening prefill/decode raises effect-to-floor linearly at zero instrument cost."
-      },
-      "authority": {
-        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Re-size the floor/science campaign workloads so measured effects clear the duration-independent attribution floor, and pilot the resulting effect-to-floor ratio before spending quiet-machine nights on ABBA collection at current sizes.",
-      "id": "FLOOR-WORKLOAD-SIZING-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 53,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
     "GAMMA-UNIT-ROSTER-GUARD-01": {
@@ -2841,7 +2852,7 @@
         }
       ],
       "flags": [],
-      "goal": "NVIDIA extension, staged: S1 NVML counter-mechanics appendix + zero-claim capability probe (desk); S2 single-node RTX 3080 Ti instrument-portability study under four hard gates AFTER the Mac claims table closes; S3 split study deferred to the Phase-3 second paper. P1-008's acceptance-bar answers are the reopening trigger.",
+      "goal": "NVIDIA extension, staged: S1 NVML counter-mechanics appendix + zero-claim capability probe (desk); S2 single-node RTX 3080 Ti instrument-portability study under four hard gates AFTER the Mac claims table closes; S3 split study deferred to the Phase-3 second paper. ED-NVIDIA-RATIFY is the reopening trigger.",
       "id": "NVIDIA-PORTABILITY-01",
       "lane": "agent",
       "priority": "p3_research_expansion",
@@ -2990,37 +3001,6 @@
       "priority": "p1_phase_gate",
       "rank": 6,
       "status": "queued",
-      "stop_card": null
-    },
-    "P1-008": {
-      "acceptance": {
-        "evidence": [
-          "Dates + borrow window in docs/milestones.md",
-          "Derived phase targets",
-          "Acceptance-bar notes beside P1-001 scope notes"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P1-008/acceptance",
-          "label": "P1-008 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Colloquium/report dates plus borrow window in docs/milestones.md; phase targets derived; acceptance-bar notes beside the P1-001 scope notes."
-      },
-      "authority": {
-        "label": "Milestones + R-012",
-        "path": "docs/milestones.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).",
-      "id": "P1-008",
-      "lane": "ed_external",
-      "priority": "p1_phase_gate",
-      "rank": 1,
-      "status": "queued",
-      "status_note": "R-012 is the biggest active management risk for an undergrad timeline.",
       "stop_card": null
     },
     "P2-004": {
@@ -3540,111 +3520,6 @@
       "status": "blocked",
       "stop_card": null
     },
-    "P2-027": {
-      "acceptance": {
-        "evidence": [
-          "Published pack",
-          "Documented external re-reduction"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-027/acceptance",
-          "label": "P2-027 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Published pack plus a documented external re-reduction; until then the auditability claim stays L0-scoped."
-      },
-      "authority": {
-        "label": "C-020 + C-027 NEG-9",
-        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "REPRO-001 merged environment locks and publication-pack preparation",
-            "path": "env/README.md"
-          },
-          "kind": "task",
-          "required": "publication-ready environment lock and bundle pack exist",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "REPRO-001"
-        },
-        {
-          "evidence": {
-            "label": "REPRO-002 merged publication-privacy evidence",
-            "path": "docs/run_reports/2026-07-11-repro002-publication-privacy.md"
-          },
-          "kind": "task",
-          "required": "fail-closed privacy audit and transformed public-pack path exist",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "REPRO-002"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Publish a privacy-transformed, integrity-verified three-bundle pack from a clean tagged commit and obtain one documented external re-reduction by an uninvolved party.",
-      "id": "P2-027",
-      "lane": "ed_external",
-      "priority": "p2_next_slice",
-      "rank": 2,
-      "status": "queued",
-      "status_note": "Environment locks, pack preparation, integrity tooling, and fail-closed privacy transformation are merged; publication and external re-reduction remain ED-EXTERNAL.",
-      "stop_card": null
-    },
-    "P2-035": {
-      "acceptance": {
-        "evidence": [
-          "Registry promotion record per docs/research_question_bank.md rules",
-          "G-RQVAR-* harness gaps implemented with tests"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-035/acceptance",
-          "label": "P2-035 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Promotion decided per registry rules; harness gaps closed before promotion."
-      },
-      "authority": {
-        "label": "RQ-ENERGY-VARIANCE candidate design",
-        "path": "docs/specs/rq_energy_variance_design.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
-            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
-          },
-          "kind": "task",
-          "required": "P2-015 detection floors measured",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-015"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "C-004 quarantine",
-            "path": "docs/research_question_bank.md"
-          },
-          "rule": "C-004 quarantine binds; no promotion before floors exist"
-        }
-      ],
-      "flags": [],
-      "goal": "RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).",
-      "id": "P2-035",
-      "lane": "agent",
-      "priority": "p3_research_expansion",
-      "rank": 7,
-      "status": "queued",
-      "stop_card": null
-    },
     "P2-036": {
       "acceptance": {
         "evidence": [
@@ -3752,111 +3627,6 @@
       "status_note": "Part A merged in PR #50; Part B is quiet-machine physical execution.",
       "stop_card": null
     },
-    "P2-047A": {
-      "acceptance": {
-        "evidence": [
-          "Frozen ABBA manifest",
-          "Standard and buffered/minimal-marker paths have identical output policy and hashes",
-          "Analysis refuses unsupported subtraction"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-047A/acceptance",
-          "label": "P2-047A acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A frozen controller-overhead ABBA harness preserves output identity and defaults to instrumented-stack scope rather than unvalidated subtraction."
-      },
-      "authority": {
-        "label": "Hardening adjudication C7",
-        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
-            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
-          },
-          "kind": "task",
-          "required": "Window-A floors exist before overhead design is frozen",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-015"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Hardening adjudication C7",
-            "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
-          },
-          "rule": "Do not subtract controller overhead without a separately justified correction model"
-        }
-      ],
-      "flags": [],
-      "goal": "Freeze the controller capture-overhead ABBA harness comparing the standard event path with a buffered or minimal-marker path under identical outputs and hashes.",
-      "id": "P2-047A",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 32,
-      "status": "queued",
-      "stop_card": null
-    },
-    "P2-047B": {
-      "acceptance": {
-        "evidence": [
-          "Floor-governed quiet-Mac ABBA bundles",
-          "Named overhead verdict",
-          "Instrumented-stack scope or separately justified model"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-047B/acceptance",
-          "label": "P2-047B acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Real floor-governed ABBA execution yields a named overhead verdict with instrumented-stack scope unless a separate subtraction model is justified."
-      },
-      "authority": {
-        "label": "Hardening adjudication C7",
-        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
-            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
-          },
-          "kind": "task",
-          "required": "Window-A floors exist",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-015"
-        },
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "frozen controller-overhead harness exists",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "P2-047A"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Run the frozen controller capture-overhead ABBA on the quiet Mac and record the floor-governed overhead verdict.",
-      "id": "P2-047B",
-      "lane": "quiet_mac",
-      "priority": "p2_next_slice",
-      "rank": 11,
-      "status": "blocked",
-      "stop_card": null
-    },
     "P2-048": {
       "acceptance": {
         "evidence": [
@@ -3904,45 +3674,6 @@
       "rank": 33,
       "status": "shelved",
       "status_note": "Conditional on P1-003 selecting an available meter path.",
-      "stop_card": null
-    },
-    "P2-050": {
-      "acceptance": {
-        "evidence": [
-          "Frozen-legacy claim_eligibility mapper receives its own adjudication",
-          "Semantic cooldown-row verification receives its own adjudication",
-          "Once-per-manifest first-run exemption receives its own adjudication",
-          "Scoped top-up detection and cooldown trace v2 receive their own adjudications"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-050/acceptance",
-          "label": "P2-050 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Each C-028 dissent-record candidate receives its own adjudication before any implementation."
-      },
-      "authority": {
-        "label": "C-028 dissent-record queue candidates",
-        "path": "docs/run_reports/2026-07-11-c028-continuation.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "C-028 dissent-record queue candidates",
-            "path": "docs/run_reports/2026-07-11-c028-continuation.md"
-          },
-          "rule": "Do not implement any candidate before its own recorded adjudication"
-        }
-      ],
-      "flags": [],
-      "goal": "Adjudicate the C-028 dissent-record candidates separately: frozen-legacy claim_eligibility mapper, semantic cooldown-row verification, once-per-manifest first-run exemption, scoped top-up detection, and cooldown trace v2.",
-      "id": "P2-050",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 40,
-      "status": "queued",
       "stop_card": null
     },
     "P3-000": {
@@ -4020,37 +3751,6 @@
       "priority": "p3_research_expansion",
       "rank": 28,
       "status": "blocked",
-      "stop_card": null
-    },
-    "PHASE-SHARE-ESTIMAND-01": {
-      "acceptance": {
-        "evidence": [
-          "Determined whether _corner_composed_anchor_shift_envelope treats the shared interior boundary independently",
-          "Joint envelope over the single boundary-position parameter derived by re-integration sweep (measured-curve arithmetic only)",
-          "Quantified effect on the phase-asymmetry claim envelope versus the independent-box treatment"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PHASE-SHARE-ESTIMAND-01/acceptance",
-          "label": "PHASE-SHARE-ESTIMAND-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Treating each phase's anchor envelope as an independent box double-spends the shared interior boundary and inflates uncertainty on exactly the split/share quantity the Splitwise replication needs."
-      },
-      "authority": {
-        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Investigate the anti-correlated prefill/decode boundary error: energy a shift removes from one phase it adds to the other, so the phase-share estimand has ONE boundary nuisance parameter whose joint envelope is a curve, not a box.",
-      "id": "PHASE-SHARE-ESTIMAND-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 55,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
     },
     "PINSET-GRAMMAR-EXCLUSION-01": {
@@ -4279,36 +3979,6 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row. AMENDED 2026-08-28 in the T27 second kernel wave per D-162 R-1: the diagnostic-family path (Path A) that the corrected live-proof gate declined to build pre-campaign moves into this row's acceptance; PIPELINE-SMOKE-LIVE-01 is re-scoped to G1/G2/G3 and carries no family design.",
       "stop_card": null
     },
-    "PREWINDOW-REGEX-01": {
-      "acceptance": {
-        "evidence": [
-          "Pattern widened with a defect-shaped regression (live claude/codex process detected)",
-          "Landed before the ED-Q-L9-3 fixture capture (sequencing recorded)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PREWINDOW-REGEX-01/acceptance",
-          "label": "PREWINDOW-REGEX-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The dwell-admission check refuses live agent sessions; lands before ED-Q-L9-3's agent-free capture."
-      },
-      "authority": {
-        "label": "Sitting ruling C-6(iii), cold-ratified",
-        "path": "docs/process_traces/2026-08-20-go-session/ready-sitting-ruling.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Widen prewindow_check.sh check-8's agent-process pattern to the codex/claude/t3/mcp-server alternation (B-16; split from WO-CENSUS-SEMANTICS by ruling C-6.iii — a fail-closed tightening of an operator preflight, not census semantics).",
-      "id": "PREWINDOW-REGEX-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 74,
-      "status": "queued",
-      "status_note": "Owning-seat (L9) assent to be solicited at the next council touch (S-7 residual).",
-      "stop_card": null
-    },
     "PREWINDOW-V5-PIN-01": {
       "acceptance": {
         "evidence": [
@@ -4343,44 +4013,35 @@
     "QUIET-GUARD-01": {
       "acceptance": {
         "evidence": [
-          "Commit 1 only: host-wide quiet lease implemented and enforced",
-          "Refuse-at-arm: arming refuses when the host is not quiet (usable by the ordinary guarded-shell window launcher)",
-          "Installed-INACTIVE: no arming path, no production lease, live_promotion=false",
+          "Commit 1 only: host-wide quiet lease and process census implemented and enforced",
+          "Refuse-at-arm works with the ordinary guarded-shell window launcher",
+          "Installed-INACTIVE on Ed's host: no arming path, no production lease, live_promotion=false",
           "Seven focused-audit blockers closed (priv-esc interpreter, validate/install TOCTOU, arbitrary-root initializer, macOS process identity, boot/hostname wedge, decision entry, independently-pinned tests)",
-          "Full gauntlet on the landed commit: independent audit + delta re-audit of every fix round"
+          "Full gauntlet on the landed commit: independent audit and delta re-audit of every fix round",
+          "Inactive host installation and status observed before row closure (magistrate option A)"
         ],
         "pointer": {
           "json_pointer": "/tasks/QUIET-GUARD-01/acceptance",
           "label": "QUIET-GUARD-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The quiet guard lands through the full C-028 gauntlet with the host-wide lease, refuse-at-arm, characterized resident watcher, and all three Ed-required t3 behaviors working end to end."
+        "summary": "The commit-1 quiet guard lands through the full C-028 gauntlet, then is installed inactive and observed on Ed's host before closure."
       },
       "authority": {
-        "label": "Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5",
-        "path": "docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md"
+        "label": "D-114 commit-1 descope and PR #107",
+        "path": "docs/decision_log.md"
       },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "App-up vs app-down characterization verdict before any app-adjacent guarded operation",
-          "scope": "live_promotion",
-          "state": "pending",
-          "strength": "hard",
-          "target": "T3-CHAR-PAIR-01"
-        }
-      ],
+      "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Quiet-guard work order (full gauntlet): host-wide quiet lease, refuse-at-arm, characterized resident watcher; plus Ed requirements recorded 2026-08-03 — t3-armed operation (a t3-launched claude session arms a detached guarded chain, then self-quits and quits t3 with a survivor inventory), t3-relaunch-on-close, and README-banner signaling.",
+      "goal": "Finish the commit-1 quiet guard only: host-wide quiet lease, process census, and mechanical refuse-at-arm for the ordinary guarded-shell launcher; complete the gauntlet and observe an inactive installation on Ed's host.",
       "id": "QUIET-GUARD-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 9,
       "status": "queued",
-      "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
+      "status_note": "D-114 and PR #107 remove the T3-CHAR-PAIR-01 dependency and shelve commits 2-4. Software is merged; closure remains pending on the post-harvest gauntlet and magistrate option-A observation of an installed-INACTIVE host state.",
       "stop_card": null
     },
     "R7F-DX-PROSE-SCAN-01": {
@@ -6771,5 +6432,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-02"
+  "updated": "2026-09-04"
 }
