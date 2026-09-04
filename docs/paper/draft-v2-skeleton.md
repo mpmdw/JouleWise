@@ -71,10 +71,11 @@ Apple's on-device inference framework used to run the models. The resulting
 bounds do not transfer to another machine,
 software stack, workload, or power sampler.
 
-To measure the edge problem rather than assume its size, JouleWise creates
-edges whose physical times it controls. **Commanded graphics-processor
-pulses** are fixed-duration GPU work with time-stamped start and stop commands,
-recorded inside a measurement window—one uninterrupted measurement session.
+To measure the edge problem rather than assume its size, JouleWise records
+command timestamps for GPU pulses whose physical onset is observed in the
+power record. **Commanded graphics-processor pulses** are fixed-duration GPU
+work with time-stamped start and stop commands, recorded inside a measurement
+window—one uninterrupted measurement session.
 The largest displacement between the commanded times and every edge position
 allowed by the pulse records is the **pulse-derived limit**. Applying that
 limit to inference assumes that the power record locates pulse edges and
@@ -84,22 +85,25 @@ decode and compares the gap's independently time-stamped edges with the power
 record.
 
 Edge placement also depends on clock placement. A rate-aware clock mapping
-does not assume that the computer's wall clock and its never-adjusted
-monotonic clock advance at exactly the same rate. Instead, it places each
-wall-clock reading between the monotonic-clock readings taken immediately
-before and after it. Those are the bracketed readings; the method retains every
-fixed-rate, offset mapping that they and the power-record labels permit. The
-pulse calibration and clock mapping together bound how far a phase edge may
-move before its energy is recomputed.
+does not assume that the computer's wall clock and its monotonic clock—a counter
+that advances but is never corrected to civil time—advance at exactly the same
+rate. Instead, it places each wall-clock reading between the monotonic-clock
+readings taken immediately before and after it. Those are the bracketed
+readings; the method retains every fixed-rate, offset mapping that they and the
+power-record labels permit. The pulse calibration and clock mapping together
+bound how far a phase edge may move before its energy is recomputed.
 
 A **configuration cell**, shortened below to **cell**, is the set of runs with
 one phase, workload, model, hardware, software, and power-measurement boundary.
-Within a cell, a component is one within-model repeat calculation or one
-four-run between-model calculation. The cell's **resolution bound**—the **detection
-floor** in the advisor's terminology—is the largest false phase-energy
-difference allowed by the fixed calculation for that cell before the
-safeguards in Section 4; the artifacts call the final gate value after
-those safeguards the **cell floor**.
+Within a cell, repeated measurements of one model's phase energy produce a
+spread after their mean is subtracted. A four-run model comparison produces a
+difference after the phase energies of its two A runs are subtracted from those
+of its two B runs and the result is divided by two. JouleWise bounds each source
+separately; each separately bounded source is a component. The cell's
+**resolution bound**—the **detection floor** in the advisor's terminology—is the
+largest false phase-energy difference allowed by the fixed calculation for
+that cell before the safeguards in Section 4; the artifacts call the final
+gate value after those safeguards the **cell floor**.
 
 The research question is whether permitted edge movement—every lower-or-upper
 edge position allowed by that calibration and mapping—at least doubles each
@@ -115,11 +119,13 @@ be common to all four runs. An A/B/B/A block is four runs in the order A, B, B,
 A. A timing-error sign says which direction the allowed error moves energy. A
 shared sign is one choice applied across all blocks, while a local sign is
 chosen separately for each block. Shared movement uses a different numerator:
-one sign moves calibration error together across all blocks, one local sign
-moves the remaining error separately in each block, and the **shared-error
-ratio** is \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). In plain terms, both ratios ask
-whether uncertainty about where a phase starts or ends is at least as large as
-the ordinary variation already present in the repeated measurements.
+let \(U_{\mathrm{cmp,point}}\) be the four-run comparison's recorded-edge limit, and
+let \(U_{\mathrm{cmp,shared}}\) be its largest limit after one calibration-error sign
+is replayed across all blocks and one local sign is chosen per block. Their
+quotient, the **shared-error ratio**, is
+\(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). In plain terms, both ratios ask whether
+uncertainty about where a phase starts or ends is at least as large as the
+ordinary variation already present in the repeated measurements.
 
 Before either ratio is compared with 2, **authentication** matches every input
 to its named source-file contents. **Evaluation** then requires a nonzero
