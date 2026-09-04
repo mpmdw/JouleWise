@@ -180,28 +180,28 @@ class DispositionKind(Enum):
 class Disposition:
     exit_code: int
     terminal_token: str
-    help_sentence: str
+    help_clause: str
 
 
 DISPOSITIONS: dict[DispositionKind, Disposition] = {
     DispositionKind.AGREEMENT: Disposition(
         exit_code=0,
         terminal_token="R7F COMPARED",
-        help_sentence="0 when every requested comparison completes and agrees.",
+        help_clause="when every requested comparison completes and agrees.",
     ),
     DispositionKind.MISMATCH: Disposition(
         exit_code=2,
         terminal_token="R7F COMPARED",
-        help_sentence=(
-            "2 when a completed comparison, producer integrity check, or "
+        help_clause=(
+            "when a completed comparison, producer integrity check, or "
             "producer execution definitively disagrees."
         ),
     ),
     DispositionKind.REPLAY_INCOMPLETE: Disposition(
         exit_code=3,
         terminal_token="R7F REPLAY INCOMPLETE",
-        help_sentence=(
-            "3 when required input is unavailable and the requested replay "
+        help_clause=(
+            "when required input is unavailable and the requested replay "
             "cannot complete; earlier comparisons remain visible."
         ),
     ),
@@ -1032,7 +1032,9 @@ def _print_tail(
 
 def _exit_code_help() -> str:
     lines = ["Exit codes:"]
-    lines.extend(f"  {row.help_sentence}" for row in DISPOSITIONS.values())
+    lines.extend(
+        f"  {row.exit_code} {row.help_clause}" for row in DISPOSITIONS.values()
+    )
     return "\n".join(lines)
 
 

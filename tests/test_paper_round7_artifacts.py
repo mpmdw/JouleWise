@@ -750,8 +750,144 @@ class TypedArtifactCliTests(unittest.TestCase):
             driver_output.getvalue().splitlines()[-1].startswith("R7F COMPARED ")
         )
 
+    def test_present_raw_digest_drift_is_mismatch_in_producer_and_driver(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-raw-drift-", dir=SCRATCH_PARENT
+        ) as directory:
+            corpus_root = Path(directory)
+            source = corpus_root / EXCURSION.SOURCE_DIRECTORY
+            raw_path = source / "raw" / "powermetrics.plist"
+            raw_path.parent.mkdir(parents=True)
+            events = b'{"event":"retained"}\n'
+            (source / "events.jsonl").write_bytes(events)
+            raw_path.write_bytes(b"drifted raw capture")
+            (source / "instrument_evidence.json").write_text(
+                json.dumps(
+                    {
+                        "artifact_sha256": {
+                            "events.jsonl": hashlib.sha256(events).hexdigest(),
+                            "raw/powermetrics.plist": hashlib.sha256(
+                                b"retained raw capture"
+                            ).hexdigest(),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            producer_stderr = io.StringIO()
+            with (
+                mock.patch.object(EXCURSION, "BACKUP_ROOTS", ()),
+                redirect_stderr(producer_stderr),
+            ):
+                producer_exit = EXCURSION.main(
+                    [
+                        "--repository-root",
+                        str(ROOT),
+                        "--corpus-root",
+                        str(corpus_root),
+                        "--out",
+                        str(corpus_root / "not-written.json"),
+                    ]
+                )
+
+        self.assertEqual(producer_exit, 2, producer_stderr.getvalue())
+        self.assertIn("ARTIFACT INTEGRITY MISMATCH", producer_stderr.getvalue())
+        self.assertIn("raw/powermetrics.plist", producer_stderr.getvalue())
+        producer = subprocess.CompletedProcess(
+            ["stub-excursion"], producer_exit, "", producer_stderr.getvalue()
+        )
+        driver_output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=producer),
+            redirect_stdout(driver_output),
+        ):
+            driver_exit = FENCE.main(["--corpus-root", str(ROOT)])
+
+        self.assertEqual(driver_exit, 2, driver_output.getvalue())
+        self.assertIn("MISMATCH replay XS exit", driver_output.getvalue())
+        self.assertIn("raw/powermetrics.plist", driver_output.getvalue())
+        self.assertTrue(
+            driver_output.getvalue().splitlines()[-1].startswith("R7F COMPARED ")
+        )
+
+    def test_missing_events_is_incomplete_in_producer_and_driver(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="r7f-events-missing-", dir=SCRATCH_PARENT
+        ) as directory:
+            corpus_root = Path(directory)
+            source = corpus_root / EXCURSION.SOURCE_DIRECTORY
+            source.mkdir(parents=True)
+            (source / "instrument_evidence.json").write_text(
+                json.dumps(
+                    {
+                        "artifact_sha256": {
+                            "events.jsonl": hashlib.sha256(b"retained").hexdigest(),
+                            "raw/powermetrics.plist": "0" * 64,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            producer_stderr = io.StringIO()
+            with redirect_stderr(producer_stderr):
+                producer_exit = EXCURSION.main(
+                    [
+                        "--repository-root",
+                        str(ROOT),
+                        "--corpus-root",
+                        str(corpus_root),
+                        "--out",
+                        str(corpus_root / "not-written.json"),
+                    ]
+                )
+
+        self.assertEqual(producer_exit, 3, producer_stderr.getvalue())
+        self.assertIn("events.jsonl is not present", producer_stderr.getvalue())
+        producer = subprocess.CompletedProcess(
+            ["stub-excursion"], producer_exit, "", producer_stderr.getvalue()
+        )
+        driver_output = io.StringIO()
+        with (
+            mock.patch.object(FENCE, "digest_half", return_value=(self.spec, [])),
+            mock.patch.object(FENCE, "_required_corpus_paths", return_value=[]),
+            mock.patch.object(FENCE, "_run_producer", return_value=producer),
+            redirect_stdout(driver_output),
+        ):
+            driver_exit = FENCE.main(["--corpus-root", str(ROOT)])
+
+        self.assertEqual(driver_exit, 3, driver_output.getvalue())
+        self.assertEqual(
+            driver_output.getvalue().splitlines()[-1],
+            "R7F REPLAY INCOMPLETE: source=excursion; "
+            "reason=required_input_unavailable; "
+            f"detail=artifacts unavailable: {source / 'events.jsonl'} is not present",
+        )
+
     def test_disposition_table_drives_finalizer_and_help(self) -> None:
         rendered_help = FENCE._exit_code_help()
+        expected = {
+            FENCE.DispositionKind.AGREEMENT: (
+                0,
+                "R7F COMPARED",
+                "when every requested comparison completes and agrees.",
+            ),
+            FENCE.DispositionKind.MISMATCH: (
+                2,
+                "R7F COMPARED",
+                "when a completed comparison, producer integrity check, or "
+                "producer execution definitively disagrees.",
+            ),
+            FENCE.DispositionKind.REPLAY_INCOMPLETE: (
+                3,
+                "R7F REPLAY INCOMPLETE",
+                "when required input is unavailable and the requested replay "
+                "cannot complete; earlier comparisons remain visible.",
+            ),
+        }
         comparison_by_kind = {
             FENCE.DispositionKind.AGREEMENT: FENCE._comparison("probe", 1, 1),
             FENCE.DispositionKind.MISMATCH: FENCE._comparison("probe", 1, 2),
@@ -761,6 +897,7 @@ class TypedArtifactCliTests(unittest.TestCase):
         }
         for kind, disposition in FENCE.DISPOSITIONS.items():
             with self.subTest(kind=kind.value):
+                expected_code, expected_token, expected_clause = expected[kind]
                 output = io.StringIO()
                 stop = (
                     FENCE.ReplayStop("excursion", "required_input_unavailable", "x")
@@ -775,20 +912,25 @@ class TypedArtifactCliTests(unittest.TestCase):
                         self.spec,
                         stop=stop,
                     )
-                self.assertEqual(exit_code, disposition.exit_code)
+                self.assertEqual(disposition.exit_code, expected_code)
+                self.assertEqual(exit_code, expected_code)
                 self.assertTrue(
                     output.getvalue().splitlines()[-1].startswith(
-                        disposition.terminal_token
+                        expected_token
                     )
                 )
-                self.assertIn(disposition.help_sentence, rendered_help)
+                self.assertIn(
+                    f"  {expected_code} {expected_clause}", rendered_help
+                )
 
         help_output = io.StringIO()
         with self.assertRaises(SystemExit) as raised, redirect_stdout(help_output):
             FENCE.main(["--help"])
         self.assertEqual(raised.exception.code, 0)
-        for disposition in FENCE.DISPOSITIONS.values():
-            self.assertIn(disposition.help_sentence, help_output.getvalue())
+        for expected_code, _expected_token, expected_clause in expected.values():
+            self.assertIn(
+                f"  {expected_code} {expected_clause}", help_output.getvalue()
+            )
 
     def test_silent_producer_exit_three_names_source_and_no_output(self) -> None:
         silent = subprocess.CompletedProcess(["stub-excursion"], 3, "", "")
