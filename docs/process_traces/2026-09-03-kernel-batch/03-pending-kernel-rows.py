@@ -180,7 +180,7 @@ new.append(row(
      "A canonical-checkout pull during the day leaves an armed plan armable - shown by re-running the gate's staleness check after a pull",
      "Landed before any REAL window is armed; rehearsal stubs may run before it",
     ],
-    "In progress 2026-09-03 on local branch feat/2026-09-03-night-plan-pin (worktree /Users/edr/code/JouleWise-wt-planpin, at 2f59e791; NOT pushed to origin as of this batch). Forced by the 2026-09-02 evening re-arm: a fresh audit caught that daytime pulls had moved canonical HEAD past the pinned repo_head, so the gate would have refused night_plan_stale, and the rehearsal-20260903 plan had to be re-pinned and its plists re-rendered at 33290b8b. The run_night.py interlock from the Sol watchdog design was deferred here by the synthesis, because this lane already edits the driver.",
+    "In progress 2026-09-03 on branch feat/2026-09-03-night-plan-pin, PUSHED to origin at 12ec41d2: night plan v2 pins the measurement checkout (measurement_root and measurement_head), the R-6 stale check keys on the measurement HEAD so dev-tree HEAD movement is informational only, the installer checks both pins at install and neither at uninstall, and v1 plans retire fail-closed (Sol xhigh, lead replay 104 OK, two mutation probes kill). Forced by the 2026-09-02 evening re-arm: a fresh audit caught that daytime pulls had moved canonical HEAD past the pinned repo_head, so the gate would have refused night_plan_stale, and the rehearsal-20260903 plan had to be re-pinned and its plists re-rendered at 33290b8b. The run_night.py interlock from the Sol watchdog design was deferred here by the synthesis, because this lane already edits the driver.",
 ))
 
 new.append(row(

@@ -21,6 +21,28 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # 2026-09-03 post-merge kernel batch. Thirteen rows, from four sources:
+    # the decode-identity S3 ruling (d) and the packet-45 cold gate's two
+    # residual nits; the 2026-09-02 code-and-tests audit's ranked five; the two
+    # in-flight unattended-lane rows; and the four rows the 2026-09-02
+    # fresh-Fable docs-vs-truth audit found RULED BUT NEVER REGISTERED (its A7
+    # -- LINEAGE-RELOCATABLE-01, R7F-EXIT3-SEMANTICS-01, PREWINDOW-V5-PIN-01 and
+    # CHARTER-V3-PACKET-INPUTS-01, which it counted as the 3rd-6th
+    # "ruled != installed" instances since T26-RULING-INSTALL-01 was created to
+    # cure exactly that pattern).
+    "LINEAGE-RELOCATABLE-01",
+    "LINEAGE-RESOLVE-RACE-01",
+    "ONE-USE-CONSUMPTION-TEST-01",
+    "RAW-CAPTURE-DIGEST-01",
+    "SILENT-REFUSAL-TESTS-01",
+    "CANONICAL-JSON-ONE-HOME-01",
+    "INSTRUMENT-PATH-PIN-01",
+    "GENERATOR-CORE-01",
+    "WATCHDOG-INSTALL-01",
+    "NIGHT-PLAN-PIN-01",
+    "R7F-EXIT3-SEMANTICS-01",
+    "PREWINDOW-V5-PIN-01",
+    "CHARTER-V3-PACKET-INPUTS-01",
     # 2026-09-02 paper-d fixture-shape cold gate (files 38-42).
     "DG071-PROVENANCE-TEST-01",
     # 2026-08-27 T26 end-of-sprint kernel wave (WAVE-ROWS.md ledger: S5 sweep,
@@ -629,9 +651,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # cold gate (2026-09-02, files 22-25) registers
         # T0-PROBE-CENSUS-RESOURCE-01: 127 + 1 = 128; the paper-d
         # fixture-shape cold gate (2026-09-02, files 38-42) registers
-        # DG071-PROVENANCE-TEST-01: 128 + 1 = 129.
+        # DG071-PROVENANCE-TEST-01: 128 + 1 = 129. The 2026-09-03 post-merge
+        # kernel batch registers thirteen rows and retires none (retirements in
+        # that batch are recorded as `shelved`, which keeps the row live in the
+        # kernel and therefore in this set): 129 + 13 = 142.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 129)
+        self.assertEqual(len(self.tasks), 142)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
