@@ -942,17 +942,14 @@ def authenticate_floor_artifact_bytes(
     )
 
 
-def _load_authenticated_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:
+def load_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:
+    """Load and authenticate a floor without erasing its capability type."""
+
     try:
         raw = Path(path).read_bytes()
     except OSError as exc:
         raise AnalysisInputError(f"cannot read floor artifact {path}: {exc}") from exc
     return authenticate_floor_artifact_bytes(raw)
-
-
-def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
-    authenticated = _load_authenticated_floor_artifact(path)
-    return authenticated.value, authenticated.file_sha256
 
 
 def _source_provenance_admission_problems(
@@ -1227,7 +1224,7 @@ def declared_evidence_roots(
     if evidence_roots is None:
         return None
     try:
-        authenticated = _load_authenticated_floor_artifact(floor_artifact_path)
+        authenticated = load_floor_artifact(floor_artifact_path)
         declared_root_ids = authenticated.root_ids
     except Exception:
         # This pre-authentication read only narrows separation inputs. Preserve
@@ -1627,7 +1624,7 @@ def bind_floor_artifact_evidence(
     if _authenticated_floor is not None:
         authenticated_floor = _authenticated_floor
     elif floor_path.is_file():
-        authenticated_floor = _load_authenticated_floor_artifact(floor_path)
+        authenticated_floor = load_floor_artifact(floor_path)
     else:
         # Preserve the established pure binding seam used by callers that
         # supply an in-memory artifact and a descriptor base directory.  Root
@@ -3096,7 +3093,7 @@ def load_analysis_inputs(
         analysis_manifest_path,
         Path(runs_root),
     )
-    authenticated_floor = _load_authenticated_floor_artifact(
+    authenticated_floor = load_floor_artifact(
         Path(floor_artifact_path)
     )
     if calibration_ledger_snapshot is None:
