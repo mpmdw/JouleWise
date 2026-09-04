@@ -70,6 +70,10 @@ needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
 5. Run `python3 -m unittest discover -s tests`, then compare its result with
    the CI result for the current head (the commit being checked). A red suite
    is itself the mission: stop and fix or report.
+   Record the broader suite as deliberately not run. A landing whose seat
+   skipped discovery is not merge-ready until the lead has run the full suite
+   green at the candidate head; do not spend the seat on a default discovery
+   run that the task cannot use.
 6. Review `docs/risk_register.md` at phase starts, before hardware tasks,
    when a trigger fires, or if >14 days passed since the last run report
    with no break recorded in `docs/milestones.md`.
@@ -482,10 +486,8 @@ Mission M0's default suite command applies only when the task does not issue a
 narrower verification rule. If the task says to edit first, names focused test
 modules, prohibits repository-wide discovery, or makes the seat read-only,
 obey that rule: perform the intake and workspace checks, make the authorized
-edit when applicable, and run only the named checks afterward. Record the
-broader suite as deliberately not run and leave any required merge-wide replay
-to the lead; do not spend the seat on a default discovery run that the task
-cannot use. The watchdog contract review demonstrated the trap: broad discovery
+edit when applicable, and run only the named checks afterward. The watchdog
+contract review demonstrated the trap: broad discovery
 ended in an interrupted calibration test while the focused module completed
 cleanly (`docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`).
 

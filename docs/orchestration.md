@@ -354,8 +354,9 @@ Pointer map only; mechanics stay in their owning files.
 ## Addendum 2026-09-04 — direct seats, replay custody, and cold-gate isolation
 
 This addendum records execution details exposed by the 2026-09-02/03
-hands-free work. It does not supersede D-129: Opus-directed Sol lanes remain the
-standing default. The direct-seat account below is limited to Ed's recorded
+hands-free work. It does not supersede D-129: lieutenant-directed executor lanes
+remain the standing default (model assignments live in D-129, not here). The
+direct-seat account below is limited to Ed's recorded
 2026-09-03 budget regime, while its launch and recovery safeguards
 apply whenever separate authority permits a direct invocation.
 
@@ -364,9 +365,10 @@ apply whenever separate authority permits a direct invocation.
 A *direct seat* is a bounded model invocation started by the lead through the
 runner, without a second model session whose only job is to start and watch it.
 During the specifically recorded 2026-09-03 budget regime, Ed
-directed the lead to start bounded Sol seats directly after fixing their role,
-prompt, authority, and review lens. This was a dated exception to D-129, not a
-repository-wide replacement for its standing Opus-directed default. It avoided
+directed the lead to start bounded executor seats directly after fixing their
+role, prompt, authority, and review lens. This was a dated exception to D-129,
+not a repository-wide replacement for its standing lieutenant-directed
+default. It avoided
 the passive wrapper's cost during that regime while preserving lead review of
 every merge-bound result
 (`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
