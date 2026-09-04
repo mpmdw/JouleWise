@@ -23,9 +23,8 @@ falsely reject a real writer prefix.
 A completed `\ud800\udc00` spelling is ambiguous too: it can come from one
 non-Basic-Multilingual-Plane scalar or from two literal Python surrogate code
 units. Those originals sort differently even though `json.dumps` emits the
-same bytes. The recognizer therefore carries every feasible decoded original
-through the key-order comparison instead of collapsing the spelling through
-`json.loads`.
+same bytes. The recognizer retains each pair as one local two-way choice; it
+never materializes the Cartesian product of choices across a key.
 
 The number problem is different. Python chooses a shortest round-trip decimal
 for each finite floating-point value. Deciding the exact image of that
@@ -68,9 +67,14 @@ Key ordering then uses the first position that is not already fixed:
 
 This is an existential rule: it asks whether *some* canonical completion can
 sort after the previous key. Later characters cannot repair an earlier
-strictly smaller character. When a completed surrogate-pair spelling has more
-than one feasible Python original, every still-orderable alternative is
-retained for the next key rather than choosing one greedily.
+strictly smaller character. Complete keys retain a linear sequence of local
+surrogate-pair choices. For a sequence of keys, the recognizer carries the
+lexicographically least feasible origin at each step: choosing the least
+predecessor can only enlarge the set of later strings that compare greater.
+It finds that least successor by following the sole choice that remains equal
+to the predecessor while remembering the latest greater choice. Runtime and
+storage are therefore linear in the serialized key, including when many
+ambiguous pairs occur.
 
 ## Finite-float superset
 

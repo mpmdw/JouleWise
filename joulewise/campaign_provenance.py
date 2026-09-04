@@ -296,14 +296,81 @@ def _documented_float_superset_prefix(text: str) -> bool:
 
 
 @dataclass(frozen=True)
-class _IncompleteStringPrefix:
-    decoded_alternatives: tuple[str, ...]
-    next_codepoint_maximum: int | None
+class _WriterStringPattern:
+    """Compact Cartesian product of writer-origin string segments."""
+
+    segments: tuple[tuple[str, ...], ...]
 
 
 @dataclass(frozen=True)
 class _CompleteWriterString:
-    decoded_alternatives: tuple[str, ...]
+    pattern: _WriterStringPattern
+
+
+@dataclass(frozen=True)
+class _IncompleteStringPrefix:
+    pattern: _WriterStringPattern
+    next_codepoint_maximum: int | None
+
+
+def _writer_string_minimum(pattern: _WriterStringPattern) -> str:
+    return "".join(options[0] for options in pattern.segments)
+
+
+def _writer_string_maximum(pattern: _WriterStringPattern) -> str:
+    return "".join(options[-1] for options in pattern.segments)
+
+
+def _least_writer_string_above(
+    pattern: _WriterStringPattern, previous: str
+) -> str | None:
+    """Return the least represented string greater than ``previous``.
+
+    The only branching segment is an escaped high/low surrogate pair. Its
+    two origins start with different code points, so at most one branch can
+    remain equal to ``previous`` at each segment. Remembering the latest
+    greater branch while following that equality path is therefore linear in
+    the serialized key, rather than exponential in its ambiguous pairs.
+    """
+
+    equal_choices: list[str] = []
+    previous_index = 0
+    fallback: tuple[int, str] | None = None
+
+    for segment_index, options in enumerate(pattern.segments):
+        equal_option: str | None = None
+        for option in options:
+            relation = 0
+            for offset, character in enumerate(option):
+                comparison_index = previous_index + offset
+                if comparison_index >= len(previous):
+                    relation = 1
+                    break
+                previous_character = previous[comparison_index]
+                if character != previous_character:
+                    relation = 1 if character > previous_character else -1
+                    break
+            if relation > 0:
+                fallback = (segment_index, option)
+                break
+            if relation == 0:
+                equal_option = option
+
+        if equal_option is None:
+            break
+        equal_choices.append(equal_option)
+        previous_index += len(equal_option)
+
+    if fallback is None:
+        return None
+    segment_index, option = fallback
+    return (
+        "".join(equal_choices[:segment_index])
+        + option
+        + "".join(
+            options[0] for options in pattern.segments[segment_index + 1 :]
+        )
+    )
 
 
 def _key_prefix_can_exceed(
@@ -311,77 +378,69 @@ def _key_prefix_can_exceed(
 ) -> bool:
     """Return whether some completion of ``prefix`` can sort after ``previous``."""
 
-    for decoded in prefix.decoded_alternatives:
-        for current_character, previous_character in zip(decoded, previous):
-            if current_character != previous_character:
-                break
-        else:
-            if len(decoded) >= len(previous):
-                # Equality can be broken by extending the unfinished key.
-                return True
-            if prefix.next_codepoint_maximum is None:
-                # The raw prefix ends at a character boundary. Reproducing the
-                # rest of ``previous`` and adding one character is feasible.
-                return True
-            if prefix.next_codepoint_maximum >= ord(previous[len(decoded)]):
-                return True
-            continue
-        if current_character > previous_character:
-            return True
-    return False
+    decoded = _writer_string_maximum(prefix.pattern)
+    for current_character, previous_character in zip(decoded, previous):
+        if current_character != previous_character:
+            return current_character > previous_character
+    if len(decoded) >= len(previous):
+        # Equality can be broken by extending the unfinished key.
+        return True
+    if prefix.next_codepoint_maximum is None:
+        # The raw prefix ends at a character boundary. Reproducing the rest of
+        # ``previous`` and adding one character is feasible.
+        return True
+    return prefix.next_codepoint_maximum >= ord(previous[len(decoded)])
 
 
-def _writer_string_alternatives(token: str) -> tuple[str, ...]:
-    """Decode every Python string that ``json.dumps`` can spell as ``token``.
+def _writer_string_pattern(token: str) -> _WriterStringPattern:
+    """Decode the Python strings ``json.dumps`` can spell as a compact pattern.
 
     A serialized high/low surrogate pair is ambiguous: it can originate from
     one non-BMP scalar or from two literal surrogate code units. Python sorts
-    mapping keys before serialization, so both originals remain live until
-    key-order feasibility has been decided.
+    mapping keys before serialization, so both local choices remain live
+    without materializing their Cartesian product.
     """
 
-    units: list[str] = []
+    segments: list[tuple[str, ...]] = []
+    pending_high_surrogate: int | None = None
     index = 1
+
+    def append_unit(unit: int) -> None:
+        nonlocal pending_high_surrogate
+        if pending_high_surrogate is not None:
+            if _LOW_SURROGATE_RANGE[0] <= unit <= _LOW_SURROGATE_RANGE[1]:
+                separate = chr(pending_high_surrogate) + chr(unit)
+                combined = chr(
+                    _surrogate_pair_codepoint(pending_high_surrogate, unit)
+                )
+                segments.append((separate, combined))
+                pending_high_surrogate = None
+                return
+            segments.append((chr(pending_high_surrogate),))
+            pending_high_surrogate = None
+        if _HIGH_SURROGATE_RANGE[0] <= unit <= _HIGH_SURROGATE_RANGE[1]:
+            pending_high_surrogate = unit
+        else:
+            segments.append((chr(unit),))
+
     while index < len(token) - 1:
         character = token[index]
         if character != "\\":
-            units.append(character)
+            append_unit(ord(character))
             index += 1
             continue
         escape = token[index + 1]
         if escape in _JSON_SIMPLE_ESCAPE_VALUES:
-            units.append(_JSON_SIMPLE_ESCAPE_VALUES[escape])
+            append_unit(ord(_JSON_SIMPLE_ESCAPE_VALUES[escape]))
             index += 2
             continue
         assert escape == "u"
-        units.append(chr(int(token[index + 2 : index + 6], 16)))
+        append_unit(int(token[index + 2 : index + 6], 16))
         index += 6
 
-    alternatives = {""}
-    index = 0
-    while index < len(units):
-        unit = ord(units[index])
-        if (
-            _HIGH_SURROGATE_RANGE[0] <= unit <= _HIGH_SURROGATE_RANGE[1]
-            and index + 1 < len(units)
-            and _LOW_SURROGATE_RANGE[0]
-            <= ord(units[index + 1])
-            <= _LOW_SURROGATE_RANGE[1]
-        ):
-            low = ord(units[index + 1])
-            alternatives = {
-                candidate + suffix
-                for candidate in alternatives
-                for suffix in (
-                    chr(_surrogate_pair_codepoint(unit, low)),
-                    units[index] + units[index + 1],
-                )
-            }
-            index += 2
-            continue
-        alternatives = {candidate + units[index] for candidate in alternatives}
-        index += 1
-    return tuple(sorted(alternatives))
+    if pending_high_surrogate is not None:
+        segments.append((chr(pending_high_surrogate),))
+    return _WriterStringPattern(tuple(segments))
 
 
 def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
@@ -393,21 +452,23 @@ def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
     change an earlier unequal position.
     """
 
-    decoded = {""}
+    segments: list[tuple[str, ...]] = []
     pending_high_surrogate: int | None = None
     index = 1  # opening quote
 
     def flush_pending_high() -> None:
-        nonlocal decoded, pending_high_surrogate
+        nonlocal pending_high_surrogate
         if pending_high_surrogate is not None:
-            decoded = {
-                candidate + chr(pending_high_surrogate) for candidate in decoded
-            }
+            segments.append((chr(pending_high_surrogate),))
             pending_high_surrogate = None
 
     def append_character(character: str) -> None:
-        nonlocal decoded
-        decoded = {candidate + character for candidate in decoded}
+        segments.append((character,))
+
+    def result(maximum: int | None) -> _IncompleteStringPrefix:
+        return _IncompleteStringPrefix(
+            _WriterStringPattern(tuple(segments)), maximum
+        )
 
     while index < len(token):
         character = token[index]
@@ -424,7 +485,7 @@ def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
                 if pending_high_surrogate is not None
                 else _UNICODE_MAX
             )
-            return _IncompleteStringPrefix(tuple(sorted(decoded)), maximum)
+            return result(maximum)
         escape = token[index + 1]
         if escape in _JSON_SIMPLE_ESCAPE_VALUES:
             flush_pending_high()
@@ -438,7 +499,7 @@ def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
                 digits, preceding_high_surrogate=pending_high_surrogate
             )
             assert maximum is not None
-            return _IncompleteStringPrefix(tuple(sorted(decoded)), maximum)
+            return result(maximum)
         unit = int(digits, 16)
         index += 6
         if pending_high_surrogate is not None:
@@ -447,11 +508,7 @@ def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
                     _surrogate_pair_codepoint(pending_high_surrogate, unit)
                 )
                 separate = chr(pending_high_surrogate) + chr(unit)
-                decoded = {
-                    candidate + suffix
-                    for candidate in decoded
-                    for suffix in (combined, separate)
-                }
+                segments.append((separate, combined))
                 pending_high_surrogate = None
                 continue
             flush_pending_high()
@@ -461,13 +518,12 @@ def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
             append_character(chr(unit))
 
     if pending_high_surrogate is not None:
-        return _IncompleteStringPrefix(
-            tuple(sorted(decoded)),
+        return result(
             _surrogate_pair_codepoint(
                 pending_high_surrogate, _LOW_SURROGATE_RANGE[1]
             ),
         )
-    return _IncompleteStringPrefix(tuple(sorted(decoded)), None)
+    return result(None)
 
 
 class _CanonicalWriterPrefixRecognizer:
@@ -500,19 +556,16 @@ class _CanonicalWriterPrefixRecognizer:
         if self.text[self.index] == "}":
             self.index += 1
             return _PREFIX_COMPLETE
-        previous_keys: tuple[str, ...] | None = None
+        previous_key: str | None = None
         while True:
             if self.text[self.index] != '"':
                 return _PREFIX_INVALID
             status, key = self._parse_string()
             if status == _PREFIX_INCOMPLETE:
                 if (
-                    previous_keys is not None
+                    previous_key is not None
                     and isinstance(key, _IncompleteStringPrefix)
-                    and not any(
-                        _key_prefix_can_exceed(key, previous)
-                        for previous in previous_keys
-                    )
+                    and not _key_prefix_can_exceed(key, previous_key)
                 ):
                     return _PREFIX_INVALID
                 return status
@@ -520,15 +573,13 @@ class _CanonicalWriterPrefixRecognizer:
                 key, _CompleteWriterString
             ):
                 return status
-            if previous_keys is None:
-                previous_keys = key.decoded_alternatives
+            if previous_key is None:
+                previous_key = _writer_string_minimum(key.pattern)
             else:
-                previous_keys = tuple(
-                    current
-                    for current in key.decoded_alternatives
-                    if any(previous < current for previous in previous_keys)
+                previous_key = _least_writer_string_above(
+                    key.pattern, previous_key
                 )
-                if not previous_keys:
+                if previous_key is None:
                     return _PREFIX_INVALID
             status = self._expect(": ")
             if status != _PREFIX_COMPLETE:
@@ -638,7 +689,7 @@ class _CanonicalWriterPrefixRecognizer:
                     return _PREFIX_INVALID, None
                 return (
                     _PREFIX_COMPLETE,
-                    _CompleteWriterString(_writer_string_alternatives(token)),
+                    _CompleteWriterString(_writer_string_pattern(token)),
                 )
             if ord(character) < 0x20 or ord(character) >= 0x7F:
                 return _PREFIX_INVALID, None

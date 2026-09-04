@@ -653,6 +653,55 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                         ([], "torn_prefix"),
                     )
 
+    def test_c3_n1_surrogate_ambiguity_is_compact(self) -> None:
+        from joulewise.campaign_provenance import (
+            _decode_incomplete_writer_string,
+            _writer_string_pattern,
+        )
+
+        pair_count = 20
+        key = "\U00010000" * pair_count
+        wire = json.dumps({key: 0}, sort_keys=True).encode("ascii")
+        colon_prefix = wire[: wire.index(b":") + 1]
+        incomplete_key_prefix = colon_prefix[:-2]
+
+        self.assertEqual(len(colon_prefix), 244)
+        self.assertEqual(self._parse(colon_prefix), ([], "torn_prefix"))
+        self.assertEqual(
+            self._parse(incomplete_key_prefix), ([], "torn_prefix")
+        )
+
+        token = colon_prefix[1:-1].decode("ascii")
+        complete = _writer_string_pattern(token)
+        incomplete = _decode_incomplete_writer_string(
+            incomplete_key_prefix[1:].decode("ascii")
+        )
+        self.assertEqual(len(complete.segments), pair_count)
+        self.assertEqual(len(incomplete.pattern.segments), pair_count)
+        self.assertEqual(
+            sum(len(options) for options in complete.segments),
+            pair_count * 2,
+        )
+
+        separate = "\ud800\udc00"
+        scalar = "\U00010000"
+        all_two_pair_origins = (
+            separate + separate,
+            separate + scalar,
+            scalar + separate,
+            scalar + scalar,
+        )
+        duplicate_wire_keys = json.dumps(
+            {origin: index for index, origin in enumerate(all_two_pair_origins)},
+            sort_keys=True,
+        ).encode("ascii")
+        for boundary in range(1, len(duplicate_wire_keys)):
+            with self.subTest(duplicate_wire_boundary=boundary):
+                self.assertEqual(
+                    self._parse(duplicate_wire_keys[:boundary]),
+                    ([], "torn_prefix"),
+                )
+
     def test_c3_f2_registered_number_overacceptance_refuses(self) -> None:
         registered_counterexamples = (
             b'{"a": 0.0000',
