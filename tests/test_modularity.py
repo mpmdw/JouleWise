@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.analysis_manifest import (
+from joulewise.analysis_manifest_v2 import (
     extract_analysis_plan_row,
     validate_analysis_registry,
 )

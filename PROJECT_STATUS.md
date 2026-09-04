@@ -133,7 +133,7 @@ paper wording (falsifiability decision D-165 and close-out decision D-168).
 | Live gates and next work | machine-generated; never copied here | `docs/process/state_kernel.json`, `RUN_STATE.md` |
 | Paper claims and fill slots | pre-written contract; numerical fills await authenticated campaign artifacts | `docs/paper/results-fill-registry.md`, `docs/contracts/claims_ladder.md` |
 | Remote targets and split inference | provisional or planned pending live access and feasibility gates | `docs/phase_2/`, `docs/phase_3/` |
-| Public status site | repository is authoritative; drift is recorded and Ed deploys manually | `docs/site/DRIFT.md` |
+| Public status site | retired from routine agent processes; the retained drift file is reference-only for Ed's optional manual dispatch | `docs/site/DRIFT.md` |
 
 The controller composes adapters for moving data, executing the model, and
 collecting telemetry, then writes self-contained run bundles containing the
@@ -190,5 +190,5 @@ close-out; then the governed results fill. Calendar dates belong in
   `docs/phase_5/` and `docs/contracts/capstone_scope.md`.
 - Historical advisor updates and retired process prose:
   `docs/project_status_history.md`; current process: `docs/orchestration.md`.
-- Front-facing drift: `docs/site/DRIFT.md`. Ed alone regenerates or deploys
-  the public status site.
+- Retired public-site reference: `docs/site/DRIFT.md`. Ed alone chooses whether
+  to dispatch manual regeneration or deployment.
