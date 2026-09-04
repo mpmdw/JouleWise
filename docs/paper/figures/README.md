@@ -62,16 +62,18 @@ to §4, beside the
 
 ## `fig5_phase_record_overlap.svg` — the phase–record overlap rule
 
-Two aligned time-axis rows show the same three tiled sampler-record supports
-against two illustrative prompt-processing intervals. In the upper row, the
-phase shares positive time with two supports and therefore falls below the
-fixed three-record minimum. In the lower row, moving the illustrative phase
-edges makes all three supports share positive time and meets that minimum.
-Every record, phase edge, positive-overlap segment, count, rule decision, and
-time axis is labelled in the SVG. The counts illustrate the decision rule, not
-measured population frequencies; support widths and phase-edge positions are
-not to scale, and the drawing contains no measured timing value. It appears in
-Section 6 beside the printed diagnostic-era negative result.
+Two time-axis rows show adjacent sampling-record intervals against
+prompt-processing intervals of the same illustrative width. In the upper row,
+sampling records wider than the phase yield two positive overlaps and fall
+below the fixed three-record minimum. In the lower row, a shifted alignment and
+a narrower middle sampling record yield three positive overlaps and meet that
+minimum; the SVG explicitly labels that record widths vary. Every drawn data
+mark is labelled: each sampling record, prompt-processing interval, phase edge,
+positive-overlap segment, count box, rule decision, and time axis. The counts
+illustrate the decision rule, not measured population frequencies; record
+widths and phase-edge positions are not to scale, and the drawing contains no
+measured timing value. It appears in Section 6 beside the printed diagnostic-era
+negative result.
 
 ## Captions in the paper
 

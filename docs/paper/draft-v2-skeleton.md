@@ -917,62 +917,80 @@ reader-facing column. -->
 ### Printed negative result: short prompt processing has too few overlapping records
 
 Section 1 introduced a sampling record as one sampler output that averages
-processor power from its recorded start time through its recorded end time.
-We call that start-to-end interval the record's **record support**, and its
-duration is the **record width**. For a prompt-processing phase with start and end times
-\(p_s\) and \(p_e\), and a record support with start and end times \(r_s\) and
-\(r_e\), the record has **positive overlap** with the phase exactly when
+processor power from its recorded start time to its recorded end time. That
+start-to-end span is the sampling record's interval; its duration is the
+**record width**. For a prompt-processing phase with start and end times
+\(p_s\) and \(p_e\), and a sampling record with start and end times \(r_s\) and
+\(r_e\), the sampling record has **positive overlap** with the phase exactly when
 \[
 \min(p_e,r_e)>\max(p_s,r_s).
 \]
-The **overlap count** is the number of record supports that pass this test. A
-support that crosses a phase edge counts because the shared part has positive
-duration; a support that only touches an edge does not. The **resolvability
-rule** accepts a phase-energy calculation only when this count is at least
-three. With fewer than three interval averages, the calculation reports the
-phase as not resolvable instead of assigning an energy from insufficient time
-support.
+The **overlap count**, also called **record support**, is the number of sampling
+records with positive overlap. A sampling record that crosses a phase edge
+counts because the shared part has positive duration; one that only touches an
+edge does not. The overlap count, record support, and the three-record minimum
+are the same test: count the sampling records with positive overlap, and
+calculate phase energy only when the count reaches the minimum. For this use,
+**resolvability** asks only whether record support reaches that minimum. With
+fewer than three overlapping sampling records, the phase prints **not
+resolvable** because its record support is too small, using the label
+`not_resolvable_sample_count`; Section 4 uses the same verdict words for a
+different reason, an estimate that does not clear the cell floor.
 
-Figure 5, the phase–record overlap diagram, names the phase edges, tiled record
-supports, shared portions, overlap count, and three-record rule for both sides
-of the decision.
+Figure 5, the phase–record overlap diagram, names the phase edges, adjacent
+sampling-record intervals, shared portions, overlap count, and three-record
+minimum for both sides of the decision.
 
 ![Figure 5. Phase–record overlap diagram.](figures/fig5_phase_record_overlap.svg)
 
-*Figure 5. Phase–record overlap diagram. The two rows apply the positive-time
-test to illustrative alignments: two supports fail the three-record rule, while
-three supports meet it. Every rectangle, edge, shared portion, count, decision,
-and axis is labelled in the diagram. Support widths and edge positions are not
-to scale; the count labels explain the rule and are not population frequencies,
-and the diagram contains no measured timing value.*
+*Figure 5. Phase–record overlap diagram. Both prompt-processing intervals have
+the same illustrative width. The upper row uses sampling records wider than the
+phase and overlaps two; in the lower row, alignment plus a narrower middle
+sampling record creates three positive overlaps. Every drawn data mark is
+labelled: each sampling record, phase edge, positive-overlap segment, count box,
+decision, and axis. Widths and positions are not to scale; the count labels
+explain the three-record minimum rather than population frequencies, and the
+diagram contains no measured timing value.*
 
-The forcing problem appears in one retained run. Its prompt-processing phase
-lasted 0.121034145 s, rendered as 0.121 s for the comparison below. Across all
-406 sampler records in that run, record width had median 120.9186 ms. An
+The forcing problem appears in one run whose power trace was retained, meaning
+kept on disk as preserved evidence and never overwritten. Its prompt-processing phase
+lasted 0.121034145 s, rendered as 0.121 s for the comparison below. Over that
+run's retained power trace, the 406 sampling records had a record-width median
+of 120.9186 ms. An
 interquartile range (IQR) is the upper edge minus the lower edge of the middle
 half of sorted values; the width IQR was 5.9508 ms. Across the 405 differences
-between consecutive records' recorded end times, record spacing had median
-120.9224 ms and IQR 5.8949 ms. The records have no meaningful between-record
-pause: each support begins where the preceding record ends, apart from an
-**endpoint convention** in which separately rounded time labels can differ in
-their final printed digit. Width and record spacing therefore describe the same
-**record-period distribution**—the collection of durations produced by the
-sampler—apart from that convention.
+between consecutive recorded timestamps, record spacing had median 120.9224 ms
+and IQR 5.8949 ms. The program that issued these statistics refuses the trace unless each sampling record's
+interval-end label is identical to its timestamp label, and checks that each
+sampling record begins where the previous one ends within its stated tolerance;
+that enforced equality makes a spacing statistic over consecutive timestamps a
+statistic over consecutive end times. The printed width IQR shows that sampling
+records did not all have the same width, making a record shorter than the phase
+possible; when alignment places that record entirely between the phase edges,
+three sampling records overlap.
 
 The 0.121-s phase duration is close to the issued record-width and record-spacing
 medians, but dividing duration by either median cannot reproduce the decision.
-Alignment decides whether a support crosses a phase edge. In this run, exactly
-two supports shared positive time with the phase. Two is less than the required
-three, so the phase was not resolvable.
+Alignment alone cannot create a third overlap when every sampling record is
+wider than the phase. Three overlaps require the phase to cross both edges of
+one intervening sampling record, so that middle record must be shorter than the
+phase. In this run, exactly two sampling records shared positive time with the
+phase. Two is less than the required three, so the phase was not resolvable.
 
-Across the retained diagnostic-era population, 37 of 50 short
-prompt-processing phases overlapped two records and the remaining 13 of 50
-overlapped three. Accordingly, 37 failed the rule and 13 passed it. The result supports one
-conclusion: most phases in this retained diagnostic population were too brief,
-relative to the sampler records and their alignment, for the fixed
-phase-energy calculation. It does not show zero prompt-processing energy, make
-a model comparison, or establish a limitation of the prospective demonstration.
-These data are non-claim-bearing. The demonstration responds by using the
+The population consists of short prompt-processing phases from the earlier
+1.5-billion-parameter diagnostic configuration during the July
+two-thousand-twenty-six diagnostic window. Here **diagnostic-era** means
+collected during that earlier diagnostic period, before the fixed before collection
+demonstration. Across this retained diagnostic-era population, 37 of 50 phases
+overlapped two sampling records and the remaining 13 of 50 overlapped three.
+Accordingly, 37 failed the three-record minimum and 13 passed it. The result
+supports one conclusion: most phases in this retained diagnostic population
+were too brief, relative to the sampling-record intervals and their alignment,
+for the fixed phase-energy calculation. The **prospective demonstration** is the
+fixed before collection comparison to be collected later; this result does not show zero
+prompt-processing energy, make a model comparison, or establish a limitation
+of that demonstration. These data are **non-claim-bearing**, meaning no paper
+claim rests on them. The demonstration responds by using the
 prefill length selected by G2-a before collection rather than reusing this
 short diagnostic phase.
 
@@ -1600,7 +1618,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | token generation / decode | 1. Introduction | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
 | phase boundary | 2. In-window calibration method | glossed-at-first-use | Runtime-recorded time separating prompt processing and token generation. |
 | powermetrics | 1. Introduction | glossed-at-first-use | The macOS power sampler and its start-to-end interval-average record are stated at first use. |
-| sampling record | 1. Introduction | glossed-at-first-use | One sampler output averaging processor power from its recorded start through its recorded end. |
+| sampling record | 1. Introduction | glossed-at-first-use | One sampler output averaging processor power from its recorded start to its recorded end. |
 | integrated energy | 1. Introduction | glossed-at-first-use | The time integral of power over a sampling record. |
 | bracketed readings | 1. Introduction | glossed-at-first-use | One wall-clock reading placed between the monotonic-clock readings taken immediately before and after it. |
 | repeatability / repetition / random scatter | 2. In-window calibration method | audience-vocabulary | Ordinary metrology words for between-repeat spread and repeated observation. |
@@ -1721,10 +1739,11 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | third-party provenance / provenance | Every input and every refusal remains visible | glossed-at-first-use | Evidence that would convince someone who does not trust the operator. |
 | freeze receipt / freeze receipts | Every input and every refusal remains visible | glossed-at-first-use | Records fixing plan bytes and the time those bytes were frozen. |
 | hash-bound | Results | glossed-at-first-use | A selection record carrying the digest of the fixed candidate-length selection record. |
-| overlapping record / record support / positive overlap / overlap count | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | The record's start-to-end interval is named first, and the positive-time inequality defines which supports enter the count. |
+| record support / positive overlap / overlap count | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Positive overlap is defined by the positive-time inequality; overlap count and record support both name the number of sampling records that pass it. |
 | interquartile range / IQR | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Upper edge minus lower edge of the middle half of sorted values. |
-| resolvability / resolvability rule | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | A phase-energy calculation requires an overlap count of at least three; a smaller count reports not resolvable. |
-| record width / record-period distribution / endpoint convention | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Support duration; the collection of sampler-produced durations; and the final-digit difference caused by separately rounded endpoint labels. |
+| resolvability / not_resolvable_sample_count | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Here the not-resolvable verdict names record support below the three-record minimum and the printed label identifies that reason; Section 4 uses the same verdict words for failure to clear a cell floor. |
+| record width | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | Record width is the duration of one sampling record's interval. |
+| diagnostic-era / prospective demonstration | Printed negative result: short prompt processing has too few overlapping records | glossed-at-first-use | The earlier diagnostic period precedes the pre-registered comparison that will be collected later. |
 | three-record minimum | 1. Introduction | glossed-at-first-use | A phase must overlap at least three sampler records to be reduced at all. |
 | two-record safety margin / design floor | Why the selected prompt length is not yet stated | glossed-at-first-use | Five overlaps are two above the three-overlap phase minimum; the design floor is stricter than reducer calculability. |
 | count floor | Why the selected prompt length is not yet stated | glossed-at-first-use | The registered minimum record count for a full-strength result. |
@@ -1827,4 +1846,4 @@ The inventory excludes literal field names and reason names inside quoted omissi
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 227; FAILS: 0.
+a failure. Terms inventoried: 228; FAILS: 0.

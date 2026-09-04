@@ -1,97 +1,104 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1020" height="684" viewBox="0 0 1020 684" role="img" aria-labelledby="fig5title fig5desc">
   <title id="fig5title">Phase-record overlap count and the three-record minimum</title>
-  <desc id="fig5desc">A fully labelled schematic with two time-axis rows. Three gray rectangles in each row are tiled sampler-record supports. A blue prompt-processing interval has labelled start and end edges. Dark-blue portions show positive overlap. The upper row overlaps two supports and is not resolvable; the lower row overlaps three and is resolvable. Counts illustrate the rule, while all widths and positions are not to scale and contain no measured timing values.</desc>
+  <desc id="fig5desc">A fully labelled schematic with two time-axis rows. Each prompt-processing interval has the same width. The upper row uses sampling records wider than the phase and overlaps two records. The lower row shifts the phase and makes the middle sampling record narrower than the phase, producing three overlaps. Every data mark has a visible label and an accessible title. Counts illustrate the rule; widths and positions are not to scale and contain no measured timing values.</desc>
 
   <defs>
     <marker id="fig5arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
       <path d="M0,0 L8,4.5 L0,9 z" fill="#333333"/>
     </marker>
-    <marker id="fig5arrowblue" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,0 L8,4.5 L0,9 z" fill="#1769aa"/>
-    </marker>
   </defs>
 
   <rect x="0" y="0" width="1020" height="684" fill="#ffffff"/>
-  <text x="70" y="38" font-family="sans-serif" font-size="20" font-weight="bold" fill="#1b1b1b">Figure 5. Phase–record overlap is a count of shared time intervals</text>
-  <text x="70" y="63" font-family="sans-serif" font-size="13" fill="#555555">Rule schematic: counts illustrate the fixed rule; widths and edge positions are not to scale; no measured timing value is shown.</text>
+  <text x="70" y="38" font-family="sans-serif" font-size="20" font-weight="bold" fill="#1b1b1b">Figure 5. Phase-record overlap is a count of shared time intervals</text>
+  <text x="70" y="63" font-family="sans-serif" font-size="13" fill="#555555">Rule schematic: both phases have equal width; record widths and positions are illustrative; no measured timing value is shown.</text>
 
   <rect x="55" y="88" width="910" height="242" rx="8" fill="#fafafa" stroke="#c7c7c7" stroke-width="1.5"/>
-  <text x="78" y="116" font-family="sans-serif" font-size="16" font-weight="bold" fill="#1b1b1b">Two-support example — below the minimum</text>
+  <text x="78" y="116" font-family="sans-serif" font-size="16" font-weight="bold" fill="#1b1b1b">Two-overlap example — records wider than the phase</text>
 
-  <line x1="120" y1="268" x2="765" y2="268" stroke="#333333" stroke-width="1.8" marker-end="url(#fig5arrow)"/>
-  <text x="445" y="292" font-family="sans-serif" font-size="13" fill="#333333" text-anchor="middle">time axis (illustrative; not to scale)</text>
+  <line id="upper-axis" data-mark="axis" x1="120" y1="268" x2="765" y2="268" stroke="#333333" stroke-width="1.8" marker-end="url(#fig5arrow)">
+    <title>upper time axis</title>
+  </line>
+  <text x="445" y="292" font-family="sans-serif" font-size="13" fill="#333333" text-anchor="middle">upper time axis (illustrative; not to scale)</text>
 
   <g fill="#e6e6e6" stroke="#777777" stroke-width="1.5">
-    <rect x="150" y="176" width="190" height="56"/>
-    <rect x="340" y="176" width="190" height="56"/>
-    <rect x="530" y="176" width="190" height="56"/>
+    <rect id="upper-record-r1" data-mark="record" x="150" y="176" width="190" height="56"><title>upper sampling record R1</title></rect>
+    <rect id="upper-record-r2" data-mark="record" x="340" y="176" width="190" height="56"><title>upper sampling record R2</title></rect>
+    <rect id="upper-record-r3" data-mark="record" x="530" y="176" width="190" height="56"><title>upper sampling record R3</title></rect>
   </g>
   <g font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">
-    <text x="245" y="199">record support R1</text>
-    <text x="245" y="217">sampler average over start–end</text>
-    <text x="435" y="199">record support R2</text>
-    <text x="435" y="217">sampler average over start–end</text>
-    <text x="625" y="199">record support R3</text>
-    <text x="625" y="217">sampler average over start–end</text>
+    <text x="245" y="199">sampling record R1</text>
+    <text x="245" y="217">start-to-end interval</text>
+    <text x="435" y="199">sampling record R2</text>
+    <text x="435" y="217">start-to-end interval</text>
+    <text x="625" y="199">sampling record R3</text>
+    <text x="625" y="217">start-to-end interval</text>
   </g>
-  <text x="435" y="318" font-family="sans-serif" font-size="12.5" fill="#555555" text-anchor="middle">tiled supports: adjacent rectangles share a boundary; there is no drawn pause</text>
+  <text x="435" y="318" font-family="sans-serif" font-size="12.5" fill="#555555" text-anchor="middle">adjacent sampling-record intervals meet at their boundaries</text>
 
-  <rect x="300" y="236" width="185" height="17" fill="#b8d9f0" stroke="#1769aa" stroke-width="1.5"/>
+  <rect id="upper-phase" data-mark="phase" x="300" y="236" width="185" height="17" fill="#b8d9f0" stroke="#1769aa" stroke-width="1.5">
+    <title>upper prompt-processing interval</title>
+  </rect>
   <text x="392.5" y="250" font-family="sans-serif" font-size="11.5" fill="#123d5a" text-anchor="middle">prompt-processing interval</text>
-  <line x1="300" y1="167" x2="300" y2="261" stroke="#1769aa" stroke-width="2.5"/>
-  <line x1="485" y1="167" x2="485" y2="261" stroke="#1769aa" stroke-width="2.5"/>
+  <line id="upper-phase-start" data-mark="phase-edge" x1="300" y1="167" x2="300" y2="261" stroke="#1769aa" stroke-width="2.5"><title>upper phase start edge</title></line>
+  <line id="upper-phase-end" data-mark="phase-edge" x1="485" y1="167" x2="485" y2="261" stroke="#1769aa" stroke-width="2.5"><title>upper phase end edge</title></line>
   <text x="294" y="157" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="end">phase start edge</text>
   <text x="491" y="157" font-family="sans-serif" font-size="12" fill="#1769aa">phase end edge</text>
 
-  <rect x="300" y="176" width="40" height="8" fill="#1769aa"/>
-  <rect x="340" y="176" width="145" height="8" fill="#1769aa"/>
-  <path d="M262,142 L314,142 L320,172" fill="none" stroke="#1769aa" stroke-width="1.6" marker-end="url(#fig5arrowblue)"/>
-  <text x="258" y="139" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="end">blue segment = positive overlap</text>
+  <rect id="upper-overlap-r1" data-mark="positive-overlap" x="300" y="176" width="40" height="8" fill="#1769aa"><title>upper positive overlap with sampling record R1</title></rect>
+  <rect id="upper-overlap-r2" data-mark="positive-overlap" x="340" y="176" width="145" height="8" fill="#1769aa"><title>upper positive overlap with sampling record R2</title></rect>
+  <text x="392.5" y="141" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="middle">blue segments = positive overlaps</text>
 
-  <rect x="785" y="161" width="150" height="100" rx="7" fill="#f7e1e1" stroke="#a33a3a" stroke-width="1.8"/>
+  <rect id="upper-count-box" data-mark="count-box" x="785" y="161" width="150" height="100" rx="7" fill="#f7e1e1" stroke="#a33a3a" stroke-width="1.8">
+    <title>upper overlap count box: 2</title>
+  </rect>
   <text x="860" y="187" font-family="sans-serif" font-size="14" font-weight="bold" fill="#782727" text-anchor="middle">overlap count = 2</text>
   <text x="860" y="210" font-family="sans-serif" font-size="13" fill="#782727" text-anchor="middle">2 &lt; minimum 3</text>
-  <text x="860" y="236" font-family="sans-serif" font-size="14" font-weight="bold" fill="#782727" text-anchor="middle">not resolvable</text>
+  <text id="upper-decision" data-mark="decision" x="860" y="236" font-family="sans-serif" font-size="14" font-weight="bold" fill="#782727" text-anchor="middle">not resolvable<title>upper decision: not resolvable</title></text>
 
   <rect x="55" y="352" width="910" height="242" rx="8" fill="#fafafa" stroke="#c7c7c7" stroke-width="1.5"/>
-  <text x="78" y="380" font-family="sans-serif" font-size="16" font-weight="bold" fill="#1b1b1b">Three-support example — meets the minimum</text>
+  <text x="78" y="380" font-family="sans-serif" font-size="16" font-weight="bold" fill="#1b1b1b">Three-overlap example — alignment plus a narrower record</text>
 
-  <line x1="120" y1="532" x2="765" y2="532" stroke="#333333" stroke-width="1.8" marker-end="url(#fig5arrow)"/>
-  <text x="445" y="556" font-family="sans-serif" font-size="13" fill="#333333" text-anchor="middle">time axis (illustrative; not to scale)</text>
+  <line id="lower-axis" data-mark="axis" x1="120" y1="532" x2="765" y2="532" stroke="#333333" stroke-width="1.8" marker-end="url(#fig5arrow)">
+    <title>lower time axis</title>
+  </line>
+  <text x="445" y="556" font-family="sans-serif" font-size="13" fill="#333333" text-anchor="middle">lower time axis (illustrative; not to scale)</text>
 
   <g fill="#e6e6e6" stroke="#777777" stroke-width="1.5">
-    <rect x="150" y="440" width="190" height="56"/>
-    <rect x="340" y="440" width="190" height="56"/>
-    <rect x="530" y="440" width="190" height="56"/>
+    <rect id="lower-record-r1" data-mark="record" x="150" y="440" width="200" height="56"><title>lower sampling record R1</title></rect>
+    <rect id="lower-record-r2" data-mark="record" x="350" y="440" width="150" height="56"><title>lower sampling record R2, narrower than the phase</title></rect>
+    <rect id="lower-record-r3" data-mark="record" x="500" y="440" width="220" height="56"><title>lower sampling record R3</title></rect>
   </g>
   <g font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">
-    <text x="245" y="463">record support R1</text>
-    <text x="245" y="481">sampler average over start–end</text>
-    <text x="435" y="463">record support R2</text>
-    <text x="435" y="481">sampler average over start–end</text>
-    <text x="625" y="463">record support R3</text>
-    <text x="625" y="481">sampler average over start–end</text>
+    <text x="250" y="463">sampling record R1</text>
+    <text x="250" y="481">start-to-end interval</text>
+    <text x="425" y="463">sampling record R2</text>
+    <text x="425" y="481">narrower than phase</text>
+    <text x="610" y="463">sampling record R3</text>
+    <text x="610" y="481">start-to-end interval</text>
   </g>
-  <text x="435" y="582" font-family="sans-serif" font-size="12.5" fill="#555555" text-anchor="middle">tiled supports: adjacent rectangles share a boundary; there is no drawn pause</text>
+  <text x="435" y="582" font-family="sans-serif" font-size="12.5" fill="#555555" text-anchor="middle">record widths vary: the middle sampling record is narrower than the phase</text>
 
-  <rect x="285" y="500" width="310" height="17" fill="#b8d9f0" stroke="#1769aa" stroke-width="1.5"/>
-  <text x="440" y="514" font-family="sans-serif" font-size="11.5" fill="#123d5a" text-anchor="middle">prompt-processing interval</text>
-  <line x1="285" y1="431" x2="285" y2="525" stroke="#1769aa" stroke-width="2.5"/>
-  <line x1="595" y1="431" x2="595" y2="525" stroke="#1769aa" stroke-width="2.5"/>
-  <text x="279" y="421" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="end">phase start edge</text>
-  <text x="601" y="421" font-family="sans-serif" font-size="12" fill="#1769aa">phase end edge</text>
+  <rect id="lower-phase" data-mark="phase" x="330" y="500" width="185" height="17" fill="#b8d9f0" stroke="#1769aa" stroke-width="1.5">
+    <title>lower prompt-processing interval, same width as upper</title>
+  </rect>
+  <text x="422.5" y="514" font-family="sans-serif" font-size="11.5" fill="#123d5a" text-anchor="middle">prompt-processing interval (same width)</text>
+  <line id="lower-phase-start" data-mark="phase-edge" x1="330" y1="431" x2="330" y2="525" stroke="#1769aa" stroke-width="2.5"><title>lower phase start edge</title></line>
+  <line id="lower-phase-end" data-mark="phase-edge" x1="515" y1="431" x2="515" y2="525" stroke="#1769aa" stroke-width="2.5"><title>lower phase end edge</title></line>
+  <text x="324" y="421" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="end">phase start edge</text>
+  <text x="521" y="421" font-family="sans-serif" font-size="12" fill="#1769aa">phase end edge</text>
 
-  <rect x="285" y="440" width="55" height="8" fill="#1769aa"/>
-  <rect x="340" y="440" width="190" height="8" fill="#1769aa"/>
-  <rect x="530" y="440" width="65" height="8" fill="#1769aa"/>
-  <path d="M262,406 L307,406 L312,436" fill="none" stroke="#1769aa" stroke-width="1.6" marker-end="url(#fig5arrowblue)"/>
-  <text x="258" y="403" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="end">blue segment = positive overlap</text>
+  <rect id="lower-overlap-r1" data-mark="positive-overlap" x="330" y="440" width="20" height="8" fill="#1769aa"><title>lower positive overlap with sampling record R1</title></rect>
+  <rect id="lower-overlap-r2" data-mark="positive-overlap" x="350" y="440" width="150" height="8" fill="#1769aa"><title>lower positive overlap with sampling record R2</title></rect>
+  <rect id="lower-overlap-r3" data-mark="positive-overlap" x="500" y="440" width="15" height="8" fill="#1769aa"><title>lower positive overlap with sampling record R3</title></rect>
+  <text x="422.5" y="405" font-family="sans-serif" font-size="12" fill="#1769aa" text-anchor="middle">blue segments = positive overlaps</text>
 
-  <rect x="785" y="425" width="150" height="100" rx="7" fill="#e1f1e6" stroke="#2f7d43" stroke-width="1.8"/>
+  <rect id="lower-count-box" data-mark="count-box" x="785" y="425" width="150" height="100" rx="7" fill="#e1f1e6" stroke="#2f7d43" stroke-width="1.8">
+    <title>lower overlap count box: 3</title>
+  </rect>
   <text x="860" y="451" font-family="sans-serif" font-size="14" font-weight="bold" fill="#235f33" text-anchor="middle">overlap count = 3</text>
   <text x="860" y="474" font-family="sans-serif" font-size="13" fill="#235f33" text-anchor="middle">meets minimum 3</text>
-  <text x="860" y="500" font-family="sans-serif" font-size="14" font-weight="bold" fill="#235f33" text-anchor="middle">resolvable</text>
+  <text id="lower-decision" data-mark="decision" x="860" y="500" font-family="sans-serif" font-size="14" font-weight="bold" fill="#235f33" text-anchor="middle">resolvable<title>lower decision: resolvable</title></text>
 
   <rect x="70" y="618" width="880" height="40" rx="6" fill="#eef4f8" stroke="#7897ad" stroke-width="1.5"/>
-  <text x="510" y="643" font-family="sans-serif" font-size="14" fill="#243b4a" text-anchor="middle">Fixed decision rule: count record supports that share positive time with the phase; require at least three.</text>
+  <text x="510" y="643" font-family="sans-serif" font-size="14" fill="#243b4a" text-anchor="middle">Fixed test: count sampling records with positive overlap; the three-record minimum decides.</text>
 </svg>
