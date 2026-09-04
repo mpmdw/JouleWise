@@ -36,6 +36,7 @@ silently discard it.
 | package power | §3 | Summed CPU, GPU, and neural-engine power. |
 | workload level / workload magnitude / per-token conversion | §3 | One fixed output-token count; one fixed identical-condition target size; and the fitted joules per output token. |
 | cadence ratio / sampling flags | §3 | A window's sampling cadence relative to its phase rate; missing or below-minimum values are named sampling refusals. |
+| floor packs / contrast pack | §3 | Floor packs are campaign plans that collect calibration data used to build comparator floors; the contrast pack is the campaign plan that collects model-comparison data. |
 | retired calculation | §3 | The former equal-rate anchor and yes/no rule that compared the corner maximum with a point value multiplied by a fixed limited-repetition factor, superseded by the rate-aware anchor and corner-to-point ratio. |
 | close-out artifact | §4 | Post-campaign artifact that checks every required ratio. |
 | small-sample multiplier | §4 | A factor that widens a result to allow for limited repetition. |

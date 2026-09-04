@@ -247,33 +247,13 @@ references—while the machine recovers within the declared settling convention,
 its fixed maximum recovery time? An admitted bundle is a run allowed into the
 calculation because it passed its frozen entry and evidence checks.
 
-This campaign does not collect workload-response or identical-condition
-characterization; the method for them is stated so a later campaign can apply
-the already frozen calculations. **Workload response:** do request and
-token-generation energy increase with realized output length in the registered
-way? A **workload level** is one output-token count fixed before collection.
-Complete every registered workload level; fit whole-request and token-generation
-energy against output length; require the lowest allowed slope to be positive
-and the largest departure from the fitted line to fit both one admitted
-bundle's timing half-width—half its allowed timing range—and an independently
-issued floor for that same cell. The unit is an admitted bundle. The slope and
-residual checks require forty admitted bundles, and the level-completeness check
-requires all five levels. Failure withdraws the affected **per-token
-conversion**, the fitted joules per output token; a response may then be
-reported only at its individual workload levels. **Identical-condition null:**
-does an A/B/B/A comparison manufacture a difference when its two conditions are
-the same? A **workload magnitude** is one target size fixed in the
-identical-condition ladder. At every registered magnitude, form each A/B/B/A
-block's **interval of allowed differences**, its minimum and maximum difference
-over the fixed member-energy endpoint combinations. Every interval must contain
-zero; the **mean interval**, the mean of the lower endpoints through the mean of
-the upper endpoints, and the largest absolute block difference must also fit
-inside the earlier comparator. The unit is an A/B/B/A block. The frozen ladder
-requires all three magnitudes. At each magnitude it requires five test blocks
-when an issued comparator floor for that cell exists and its evidence is
-disjoint; otherwise it requires five blocks to build the comparator and five
-different blocks to test it. A failed block or comparator check withdraws that
-cell's floor from claim use until the floor is re-derived.
+For each of the four characterization questions above, this campaign records
+inputs that a later campaign can use, but it does not apply the already frozen
+calculations or issue a report. The methods remain here so
+that a later campaign can apply those calculations. The same-condition A/B/B/A
+null blocks in the **floor packs**—the campaign plans that collect calibration
+data used to build a comparator floor—are calibration data for that floor, not a
+separate characterization campaign.
 
 For workload response, an independent unit is one separately admitted bundle,
 not one sampler record within it. A workload-response slope is the fitted
@@ -370,10 +350,12 @@ power no greater than one-and-one-tenth times the clean reference, and nominal
 thermal pressure; elapsed recovery time starts when the sustained workload
 ends and stops at that first pass.
 
-| Question | Calculation and fixed comparison | Independent unit, minimum basis, and refusal consequence |
-|---|---|---|
-| **Phase accounting:** do the two phase energies close to request energy and remain separated at their shared boundary? | Compare the sum of the two phase energies with the enclosing request, allowing no positive double count beyond numerical rounding and no negative residual larger than the retained unphased gap can contain. Test whether prompt-processing energy stays inside both a resolution band and an earlier floor band as later output changes; keep the shared session timing term separate from member-local timing; require both bracket captures to lie in their registered band and no claim-bearing admitted member to carry the timing or sampling flags. | The main checks use admitted bundles and require at least twenty-four; the bracket check requires two captures, and the floor-label check requires every floor cell. Failure withdraws or narrows phase-specific claims: affected members become diagnostic, and an accounting failure narrows the result to request-total energy. |
-| **Drift and recovery:** does an allowance contain probes excluded from constructing it, and does the machine settle after sustained work? | Construct the drift allowance from its designated references, then test it only with held-out reference probes; require each probe's deviation to fit within that allowance. Separately measure time from a sustained workload to the first passing cooldown exit and compare it with the fixed settling convention. | Reference roles must be fixed for at least six reference members; containment needs at least three held-out probes, and recovery needs at least three sustained-hold/cooldown pairs. A containment failure re-derives every floor carrying that allowance; a recovery failure raises the settling interval in a successor policy and re-examines windows collected under the old one. |
+| Question | What this campaign records and reports | Calculation and fixed comparison | Independent unit, minimum basis, and refusal consequence |
+|---|---|---|---|
+| **Workload response:** do request and token-generation energy increase with realized output length in the registered way? | The floor packs record phase energies for their planned prompt workloads and their fixed-output workload. Those measurements are inputs only; this campaign does not issue the workload-response characterization report. | A **workload level** is one output-token count fixed before collection. Complete every registered workload level; fit whole-request and token-generation energy against output length; require the lowest allowed slope to be positive and the largest departure from the fitted line to fit both one admitted bundle's timing half-width—half its allowed timing range—and an independently issued floor for that same cell. | The unit is an admitted bundle. The slope and residual checks require forty admitted bundles, and the level-completeness check requires all five levels. Failure withdraws the affected **per-token conversion**, the fitted joules per output token; a response may then be reported only at its individual workload levels. |
+| **Identical-condition null:** does an A/B/B/A comparison manufacture a difference when its two conditions are the same? | The floor packs record same-condition A/B/B/A blocks as calibration data for building the comparator floor. Those blocks are inputs only; this campaign does not issue the identical-condition null characterization report. | A **workload magnitude** is one target size fixed in the identical-condition ladder. At every registered magnitude, form each A/B/B/A block's interval of allowed differences. Every interval must contain zero; the mean interval and largest absolute block difference must also fit inside the earlier comparator. | The unit is an A/B/B/A block. The frozen ladder requires all three magnitudes. At each magnitude it requires five test blocks when an issued comparator floor for that cell exists and its evidence is disjoint; otherwise it requires five blocks to build the comparator and five different blocks to test it. A failed block or comparator check withdraws that cell's floor from claim use until the floor is re-derived. |
+| **Phase accounting:** do the two phase energies close to request energy and remain separated at their shared boundary? | The floor packs and the **contrast pack**—the campaign plan that collects model-comparison data—record prompt-processing and token-generation phase energies. Those measurements are inputs only; this campaign does not issue the phase-accounting characterization report. | Compare the sum of the two phase energies with the enclosing request, allowing no positive double count beyond numerical rounding and no negative residual larger than the retained unphased gap can contain. Test whether prompt-processing energy stays inside both a resolution band and an earlier floor band as later output changes; keep the shared session timing term separate from member-local timing; require both bracket captures to lie in their registered band and no claim-bearing admitted member to carry the timing or sampling flags. | The main checks use admitted bundles and require at least twenty-four; the bracket check requires two captures, and the floor-label check requires every floor cell. Failure withdraws or narrows phase-specific claims: affected members become diagnostic, and an accounting failure narrows the result to request-total energy. |
+| **Drift and recovery:** does an allowance contain probes excluded from constructing it, and does the machine settle after sustained work? | The floor packs and the contrast pack record reference probes at the window opening, interior, and close. Those probes are inputs only; this campaign does not issue the drift-and-recovery characterization report. | Construct the drift allowance from its designated references, then test it only with held-out reference probes; require each probe's deviation to fit within that allowance. Separately measure time from a sustained workload to the first passing cooldown exit and compare it with the fixed settling convention. | Reference roles must be fixed for at least six reference members; containment needs at least three held-out probes, and recovery needs at least three sustained-hold/cooldown pairs. A containment failure re-derives every floor carrying that allowance; a recovery failure raises the settling interval in a successor policy and re-examines windows collected under the old one. |
 
 The workload-response slope has a special exact calculation because choosing a
 lower or upper endpoint independently for forty energies appears to require
@@ -415,10 +397,10 @@ choice. Changing one endpoint changes both quantities and the largest
 residual, so this nonlinear calculation refuses exact enumeration above sixteen
 observations.
 
-The identical-condition result therefore has a deliberately narrow meaning:
-five contained measured blocks establish only the containment drawn above. It
-neither estimates a percentage of a wider population nor supplies an
-independent coverage guarantee. <!-- reviewer C5: containment caveat -->
+If issued, an identical-condition result would have a deliberately narrow
+meaning: five contained measured blocks would establish only the containment
+drawn above. It would neither estimate a percentage of a wider population nor
+supply an independent coverage guarantee. <!-- reviewer C5: containment caveat -->
 
 An authenticated report is one whose expected evidence fingerprints and named
 inputs agree. The workload-response characterization result is omitted: its
@@ -1707,6 +1689,7 @@ The inventory excludes literal field names and reason names inside quoted omissi
 | false-difference components / false-difference | 1. Introduction | built-before | The resolution bound is first constructed as the largest allowed false phase-energy difference for one cell. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | 3. Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
+| floor packs / contrast pack | 3. Instrument characterization | glossed-at-first-use | Floor packs are campaign plans that collect calibration data used to build comparator floors; the contrast pack is the campaign plan that collects model-comparison data. |
 | Workload response | 3. Instrument characterization | glossed-at-first-use | Whether request and token-generation energy increase with realized output length in the registered way. |
 | Identical-condition null | 3. Instrument characterization | glossed-at-first-use | Whether an A/B/B/A comparison manufactures a difference when both conditions are the same. |
 | independent unit | 3. Instrument characterization | glossed-at-first-use | One separately admitted bundle, not one sampler record within it. |
@@ -1895,4 +1878,4 @@ The inventory excludes literal field names and reason names inside quoted omissi
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 250; FAILS: 0.
+a failure. Terms inventoried: 251; FAILS: 0.
