@@ -8458,6 +8458,37 @@ at the #131 merge (2026-08-12).
    Every U11 reason makes readiness REFUSE. No D-117 pack may arm before that
    U8 consumer lands and passes.
 
+**Amendment (2026-09-02, ruling 171a R-7):**
+
+> GAMMA retains exactly four ordered units: `A/decode`, `A/prefill_p<N>`,
+> `B/decode`, `B/prefill_p<N>`, where N is the prefill token length fixed by
+> the G2-a `joulewise.prefill_prompt_pin.v2` record (512 for `_v5`; the
+> `prefill_p256` literals in this clause, in U8, and in the D-165 census example
+> were `_v3`-era values and are superseded by `<N>`). A references the smaller
+> model's producer plan and B the larger's, each using the same model/runtime
+> pins as the shared floor mint. Each unit binds an independently declared,
+> closed set of exact scientific-config identities, digested into
+> `config_set_sha256` as the unit's config-set digest (one member identity: the
+> scientific hash; several: the domain-separated set digest). Within a unit the
+> declared per-manifest member census — computed from the pre-registered
+> rotation rule, never folded from emitted configs — must equal the emitted
+> census at freeze, and members binding one manifest share one identity; a
+> missing, extra, duplicate, drifted, or unauthenticated member refuses. Which
+> manifest a member binds is a realization fact recorded per config. Floor
+> producer and consumer units bind through condition-family transport; their
+> config-set digests are not required to be equal.
+
+For clause 3, raw config bytes and inventory bindings remain authoritative for
+member identity; the declaration compares the projected common profile plus
+the declared set, never a re-typed workload. The digest field is
+`config_set_sha256`: a single member uses its scientific hash, while several
+members use the R-1 domain-separated set digest.
+
+*Addendum 2026-09-02 (Opus counter-review nit 2, trace
+`2026-09-02-decode-identity-set/28`): the set digest above is ruling 171a
+R-5 (unit config-set digest), not R-1; R-1 is "exact identities stay
+exact". The original line stands as written.*
+
 ### D-078 registry amendment — 2026-08-11: identity-pin readiness refusals
 
 The closed readiness-refusal vocabulary gains

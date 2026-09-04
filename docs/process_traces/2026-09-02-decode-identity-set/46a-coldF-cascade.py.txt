@@ -1,0 +1,64 @@
+"""Q4 order probe: the REAL authenticate_launch_lineage body decides which failure is reported
+when several files are gone at once; each stage restores exactly one more hop (by stubbing its
+leaf reader) and leaves every later hop's file nonexistent. The code that surfaces is the
+earliest unresolved hop, which pins the execution order."""
+import pathlib, sys, tempfile, uuid
+from unittest import mock
+sys.path.insert(0, "/Users/edr/code/JouleWise-wt-decode-id")
+from joulewise import arm_readiness as ar
+from joulewise.arm_readiness import LaunchLineageError, render_json, sha256_bytes
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="coldgate45-cascade-")); gone = tmp / "gone"
+BOOT = str(uuid.uuid4()); Z = "0"*64
+cons_path = tmp / "pack-a" / "arm_readiness.consumptions" / "arm-0001.consumed.json"
+arm_ctx = {"bracket_session_id": "b-1"}
+arm_full = {"receipt_id": "arm-0001", "receipt_kind": "arm", "boot_session_id": BOOT, "arm_context": arm_ctx,
+            "reviewed_main": {"head_commit": "a"*40}, "valid_until_monotonic_ns": 10**18,
+            "pack": {"pack_root": str(gone / "pack-a")}}
+pack_full = {"pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1", "window_id": "win-1"}
+manifest_path = tmp / "launch-manifest.json"; manifest_path.write_bytes(b"{}")
+consumption_full = {"boot_session_id": BOOT, "pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1",
+    "window_id": "win-1", "head_commit": "a"*40, "arm_context_sha256": sha256_bytes(render_json(arm_ctx)),
+    "consumed_at_monotonic_ns": 1, "consumption_id": "c-1",
+    "launch_manifest": {"path": str(manifest_path), "sha256": Z},
+    "window_environment": {"path": str(gone / "window.env"), "sha256": Z},
+    "window_chain": {"path": str(gone / "window-chain.zsh"), "sha256": Z},
+    "exec_argv": ["caffeinate", "-is", "/bin/zsh", "x", "y"], "handoff_token_sha256": Z,
+    "arm_receipt": {"path": "arm_readiness.receipts/arm-0001.json", "sha256": Z, "receipt_id": "arm-0001"}}
+consumption_stub = {"arm_receipt": {"path": "arm_readiness.receipts/arm-0001.json", "sha256": Z, "receipt_id": "arm-0001"}}
+def manifest_bytes(wpr):
+    return render_json({"schema_version": ar.LAUNCH_MANIFEST_SCHEMA, "boot_session_id": BOOT, "window_plan_root": str(wpr),
+                        "prewindow_command": ["true"], "launch_command": ["caffeinate", "-is", "/bin/zsh", "x", "y"]})
+start_ref = {"path": str(gone / "c-1.start.json"), "sha256": Z}
+lineage = {"schema_version": ar.LAUNCH_LINEAGE_SCHEMA, "collection_boot_session_id": BOOT, "pack_id": "pack-a",
+    "plan_id": "plan-1", "window_id": "win-1", "bracket_session_id": "b-1",
+    "consumption": {"path": str(cons_path), "sha256": Z}, "start": start_ref,
+    "settle": {"path": str(gone / "c-1.settle.json"), "sha256": Z}, "completion": None}
+def run(stage, patches):
+    with mock.patch.multiple(ar, _coldgate_marker=mock.DEFAULT, create=True, **patches):
+        try:
+            ar.authenticate_launch_lineage(lineage, require_completion=False); print(f"{stage}: NO ERROR")
+        except LaunchLineageError as e:
+            print(f"{stage}: reason_code={e.reason_code!r} :: {str(e)[:90]}")
+ok_cons = dict(_read_v2_consumption=mock.Mock(return_value=(consumption_full, b"", Z, cons_path)))
+ok_arm_only = dict(_read_arm_with_sidecar=mock.Mock(return_value=({"receipt_id": "arm-0001", "receipt_kind": "arm",
+                   "pack": {"pack_root": str(gone/"pack-a")}}, b"", Z)))
+ok_replay = dict(_replay_consumed_arm=mock.Mock(return_value=(arm_full, tmp/"arm.json", tmp/"pack-a", pack_full)))
+ok_manifest_gone_wpr = dict(_read_exact_launch_reference=mock.Mock(return_value=(manifest_path, manifest_bytes(gone/"wpr"))))
+wpr = tmp / "wpr"; wpr.mkdir(); (wpr/"window.env").write_bytes(b""); (wpr/"window-chain.zsh").write_bytes(b"")
+def exact_ref(reference, *, max_bytes, label, expected_path=None, launch_binding_cache=None):
+    if label == "launch manifest": return (manifest_path, manifest_bytes(wpr))
+    return (expected_path, b"")
+ok_manifest_real_wpr = dict(_read_exact_launch_reference=exact_ref, _launch_argv_matches=mock.Mock(return_value=True))
+real_lifecycle = ar._read_lifecycle_receipt
+def start_ok(path, *, expected_kind):
+    if expected_kind == "launch_start":
+        return ({"receipt_kind": "launch_start"}, Z, path)   # digest equals the ref's, so the digest check passes
+    return real_lifecycle(path, expected_kind=expected_kind)
+run("S1 everything gone                              ", {})
+run("S2 +consumption ok; arm-receipt file gone        ", {**ok_cons})
+run("S3 +consumption ok, arm ok; pack root gone       ", {**ok_cons, **ok_arm_only})
+run("S4 +replay ok; manifest gone                     ", {**ok_cons, **ok_replay})
+run("S5 +manifest ok; window plan root gone           ", {**ok_cons, **ok_replay, **ok_manifest_gone_wpr})
+run("S6 +window plan root ok; start receipt gone      ", {**ok_cons, **ok_replay, **ok_manifest_real_wpr})
+run("S7 +start ok; settle receipt gone                ", {**ok_cons, **ok_replay, **ok_manifest_real_wpr, "_read_lifecycle_receipt": start_ok})
+print("bundle path passes require_completion=False? ->", "require_completion=False" in open("/Users/edr/code/JouleWise-wt-decode-id/joulewise/analysis_engine/inputs.py").read().split("def _read_bundle")[1].split("def _enforce_registered")[0])

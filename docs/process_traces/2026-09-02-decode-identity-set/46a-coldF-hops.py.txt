@@ -1,0 +1,96 @@
+"""Q2: execute each missing-file hop against the code at fc52bda6 (== HEAD 04e45f68)."""
+import hashlib, pathlib, sys, tempfile, uuid
+from unittest import mock
+sys.path.insert(0, "/Users/edr/code/JouleWise-wt-decode-id")
+from joulewise import arm_readiness as ar
+from joulewise.arm_readiness import LaunchLineageError, render_json, sha256_bytes
+
+tmp = pathlib.Path(tempfile.mkdtemp(prefix="coldgate45-hops-"))
+gone_root = tmp / "gone"          # never created
+BOOT = str(uuid.uuid4())
+Z = "0" * 64
+
+def probe(name, fn):
+    try:
+        out = fn(); print(f"{name:<44} NO ERROR -> {out!r}"[:200])
+    except LaunchLineageError as e:
+        print(f"{name:<44} reason_code={e.reason_code!r} :: {str(e)[:110]}")
+    except Exception as e:
+        print(f"{name:<44} {type(e).__name__}: {str(e)[:110]}")
+
+print("== A. the five hops named by the packet, each executed on a nonexistent path")
+probe("H1 consumption receipt gone", lambda: ar._read_v2_consumption(
+    gone_root / "pack" / "arm_readiness.consumptions" / "arm-0001.consumed.json"))
+
+# H2 pack root gone: run the REAL _replay_consumed_arm body; only the arm-receipt reader is
+# stubbed so control reaches the pack-root resolve at the `arm["pack"]["pack_root"]` line.
+cons_path = tmp / "pack-a" / "arm_readiness.consumptions" / "arm-0001.consumed.json"
+arm_stub = {"receipt_id": "arm-0001", "receipt_kind": "arm",
+            "pack": {"pack_root": str(gone_root / "pack-a"), "pack_id": "pack-a"}}
+consumption_stub = {"arm_receipt": {"path": "arm_readiness.receipts/arm-0001.json",
+                                    "sha256": Z, "receipt_id": "arm-0001"}}
+def h2():
+    with mock.patch.object(ar, "_read_arm_with_sidecar", return_value=(arm_stub, b"", Z)):
+        return ar._replay_consumed_arm(None, consumption_stub, cons_path,
+            require_current_boot=False, require_unexpired=False, replay_arm_semantics=False)
+probe("H2 pack root gone (real _replay_consumed_arm)", h2)
+
+probe("H3 launch manifest gone", lambda: ar._read_exact_launch_reference(
+    {"path": str(gone_root / "launch-manifest.json"), "sha256": Z},
+    max_bytes=ar._LAUNCH_BINDING_MANIFEST_MAX_BYTES, label="launch manifest"))
+
+# H4 window plan root gone: run the REAL authenticate_launch_lineage body with the three
+# upstream leaf readers stubbed to succeed; the manifest names a nonexistent window_plan_root.
+arm_ctx = {"bracket_session_id": "bracket-1"}
+arm_full = {"receipt_id": "arm-0001", "receipt_kind": "arm", "boot_session_id": BOOT,
+            "arm_context": arm_ctx, "reviewed_main": {"head_commit": "a" * 40},
+            "valid_until_monotonic_ns": 10**18, "pack": {"pack_root": str(tmp / "pack-a")}}
+pack_full = {"pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1", "window_id": "win-1"}
+consumption_full = {
+    "boot_session_id": BOOT, "pack_id": "pack-a", "pack_sha256": Z, "plan_id": "plan-1",
+    "window_id": "win-1", "head_commit": "a" * 40,
+    "arm_context_sha256": sha256_bytes(render_json(arm_ctx)),
+    "consumed_at_monotonic_ns": 1, "consumption_id": "c-1",
+    "launch_manifest": {"path": str(tmp / "launch-manifest.json"), "sha256": Z},
+    "window_environment": {"path": str(gone_root / "window.env"), "sha256": Z},
+    "window_chain": {"path": str(gone_root / "window-chain.zsh"), "sha256": Z},
+    "exec_argv": ["caffeinate", "-is", "/bin/zsh", "x", "y"], "handoff_token_sha256": Z}
+def manifest_bytes(window_plan_root):
+    return render_json({"schema_version": ar.LAUNCH_MANIFEST_SCHEMA, "boot_session_id": BOOT,
+        "window_plan_root": str(window_plan_root),
+        "prewindow_command": ["true"], "launch_command": ["caffeinate", "-is", "/bin/zsh", "x", "y"]})
+lineage_value = {"schema_version": ar.LAUNCH_LINEAGE_SCHEMA, "collection_boot_session_id": BOOT,
+    "pack_id": "pack-a", "plan_id": "plan-1", "window_id": "win-1", "bracket_session_id": "bracket-1",
+    "consumption": {"path": str(cons_path), "sha256": Z},
+    "start": {"path": str(gone_root / "c-1.start.json"), "sha256": Z},
+    "settle": {"path": str(gone_root / "c-1.settle.json"), "sha256": Z}, "completion": None}
+def h4():
+    with mock.patch.object(ar, "_read_v2_consumption", return_value=(consumption_full, b"", Z, cons_path)), \
+         mock.patch.object(ar, "_replay_consumed_arm", return_value=(arm_full, tmp/"arm.json", tmp/"pack-a", pack_full)), \
+         mock.patch.object(ar, "_read_exact_launch_reference",
+                           return_value=(tmp / "launch-manifest.json", manifest_bytes(gone_root / "window-plan"))):
+        return ar.authenticate_launch_lineage(lineage_value, require_completion=False)
+probe("H4 window plan root gone (real authenticate_launch_lineage)", h4)
+
+probe("H5a lifecycle START receipt gone", lambda: ar._read_lifecycle_receipt(
+    gone_root / "c-1.start.json", expected_kind="launch_start"))
+probe("H5b lifecycle SETTLE receipt gone", lambda: ar._read_lifecycle_receipt(
+    gone_root / "c-1.settle.json", expected_kind="launch_settle"))
+probe("H5c lineage stamp omits start (ref None)", lambda: ar._validate_lineage_reference(
+    None, "start", missing_code="launch_lifecycle_incomplete"))
+
+print("== B. files the same path also reads that the packet's five do not name")
+probe("X1 arm receipt gone (real _replay_consumed_arm, no stub)", lambda: ar._replay_consumed_arm(
+    None, consumption_stub, cons_path, require_current_boot=False, require_unexpired=False, replay_arm_semantics=False))
+probe("X2 window.env gone", lambda: ar._read_exact_launch_reference(
+    {"path": str(gone_root / "window.env"), "sha256": Z},
+    max_bytes=ar._LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES, label="window environment",
+    expected_path=gone_root / "window.env"))
+probe("X3 launch-lineage locator gone", lambda: ar._read_launch_lineage_locator(
+    tmp / ar.LAUNCH_LINEAGE_LOCATOR_BASENAME, expected_root=tmp))
+# X4 consumption receipt present but its .sha256 sidecar gone
+cdir = tmp / "pack-b" / "arm_readiness.consumptions"; cdir.mkdir(parents=True)
+(cdir / "arm-0001.consumed.json").write_bytes(b"{}")
+probe("X4 consumption sidecar gone (primary present)", lambda: ar._read_v2_consumption(cdir / "arm-0001.consumed.json"))
+print("== C. reason-code family membership")
+print("LAUNCH_LINEAGE_REASON_CODES =", sorted(ar.LAUNCH_LINEAGE_REASON_CODES))
