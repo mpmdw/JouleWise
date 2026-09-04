@@ -354,17 +354,21 @@ Pointer map only; mechanics stay in their owning files.
 ## Addendum 2026-09-04 — direct seats, replay custody, and cold-gate isolation
 
 This addendum records execution details exposed by the 2026-09-02/03
-hands-free work. It does not change the standing rule that a stream director is
-used when a stream needs continuing judgment.
+hands-free work. It does not supersede D-129: Opus-directed Sol lanes remain the
+standing default. The direct-seat account below is limited to Ed's recorded
+2026-09-03 budget regime, while its launch and recovery safeguards
+apply whenever separate authority permits a direct invocation.
 
 ### Direct model seats
 
 A *direct seat* is a bounded model invocation started by the lead through the
 runner, without a second model session whose only job is to start and watch it.
-After the lead has fixed the role, prompt, authority, and review lens, use the
-direct seat; retain a stream director only when that director will make real
-mid-stream judgments. This avoids paying for an otherwise passive wrapper while
-preserving lead review of every merge-bound result
+During the specifically recorded 2026-09-03 budget regime, Ed
+directed the lead to start bounded Sol seats directly after fixing their role,
+prompt, authority, and review lens. This was a dated exception to D-129, not a
+repository-wide replacement for its standing Opus-directed default. It avoided
+the passive wrapper's cost during that regime while preserving lead review of
+every merge-bound result
 (`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`,
 “2026-09-03 21:05 update”).
 
@@ -426,9 +430,13 @@ and the relaunch cured that defect by separating the seats
 
 A *first-use review* checks that a defined term or code literal is built or
 glossed before a reader must rely on it. For contract edits that add, move, or
-rename such terms, the pre-landing first-use table is mandatory. A behavioral
-clause also needs an executed probe of its first real use; a vocabulary pass or
-an implemented mechanism cannot substitute for that probe
+rename such terms, the pre-landing first-use table is mandatory. D-171's dated
+addendum separates that ratified table rule from the executed-probe proposal:
+the latter remains PROPOSAL PENDING ED and does not bind a behavioral contract
+edit outside a magistrate-commissioned brief. The magistrate may require an
+executed first-real-use probe as evidence for a brief it commissions under its
+own authority; that local requirement must be labelled as such and must not be
+cited as a generally ratified repository rule
 (`docs/process_traces/2026-09-03-kernel-batch/01-lieutenant-report.md`,
 “Item 1 — the D-171 addendum”; `docs/process_traces/2026-09-02-hands-free-week/17k-watchdog-05-refuter-contract.md`,
 finding F4).
