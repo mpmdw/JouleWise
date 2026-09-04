@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Mapping
+from unittest import mock
 
+import joulewise.arm_readiness as readiness
 from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    _read_bundle,
     _realized_identity_matches_config,
     _typed_config,
     realized_scientific_identity,
@@ -161,6 +167,64 @@ def _suite_config(manifest_sha256: str) -> dict[str, Any]:
 
 
 class RealizedIdentityDispatchTests(unittest.TestCase):
+    def test_bundle_reader_maps_second_resolve_vanish_to_named_lineage_refusal(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            runs_root = Path(temporary) / "runs"
+            bundle = runs_root / "bundle-race"
+            bundle.mkdir(parents=True)
+            artifact = Path(temporary) / "launch-manifest.json"
+            artifact.write_bytes(b"launch manifest\n")
+            reference = {
+                "path": str(artifact),
+                "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+            }
+            original_resolve = Path.resolve
+            target_resolves = 0
+
+            def vanish_on_second_resolve(
+                candidate: Path, *args: object, **kwargs: object
+            ) -> Path:
+                nonlocal target_resolves
+                if candidate == artifact and kwargs.get("strict") is True:
+                    target_resolves += 1
+                    if target_resolves == 2:
+                        raise FileNotFoundError(str(candidate))
+                return original_resolve(candidate, *args, **kwargs)
+
+            def authenticate_racing_reference(
+                *_args: object, **_kwargs: object
+            ) -> object:
+                return readiness._read_exact_launch_reference(
+                    reference,
+                    max_bytes=1024,
+                    label="launch manifest",
+                    expected_path=artifact,
+                )
+
+            with mock.patch.object(
+                Path, "resolve", new=vanish_on_second_resolve
+            ), mock.patch(
+                "joulewise.analysis_engine.inputs.authenticate_bundle_launch_lineage",
+                side_effect=authenticate_racing_reference,
+            ):
+                with self.assertRaises(AnalysisInputError) as caught:
+                    _read_bundle(
+                        {"entry_id": "bundle-race"},
+                        bundle,
+                        runs_root,
+                        {},
+                        lambda _path, _strict: (),
+                    )
+        self.assertEqual(target_resolves, 2)
+        self.assertIn("launch_binding_mismatch", str(caught.exception))
+        lineage_cause = caught.exception.__cause__
+        self.assertIsInstance(lineage_cause, readiness.LaunchLineageError)
+        assert isinstance(lineage_cause, readiness.LaunchLineageError)
+        self.assertEqual(lineage_cause.reason_code, "launch_binding_mismatch")
+        self.assertIsInstance(lineage_cause.__cause__, FileNotFoundError)
+
     def test_scalar_path_matches_legacy_for_true_and_false_verdicts(self) -> None:
         config = _scalar_config()
         matching = _metadata_for(config, 512)

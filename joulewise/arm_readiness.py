@@ -9020,10 +9020,18 @@ def _read_exact_launch_reference(
         raise LaunchLineageError(
             "launch_consumption_invalid", f"bound launch artifact is not regular: {path}"
         )
-    if expected_path is not None and resolved != expected_path.resolve(strict=True):
-        raise LaunchLineageError(
-            "launch_binding_mismatch", f"bound launch artifact path changed: {path}"
-        )
+    if expected_path is not None:
+        try:
+            expected_resolved = expected_path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"expected bound launch artifact is unavailable: {expected_path}: {exc}",
+            ) from exc
+        if resolved != expected_resolved:
+            raise LaunchLineageError(
+                "launch_binding_mismatch", f"bound launch artifact path changed: {path}"
+            )
     if sha256_bytes(raw) != reference["sha256"]:
         raise LaunchLineageError(
             "launch_binding_mismatch", f"bound launch artifact bytes changed: {path}"
@@ -10220,9 +10228,18 @@ def authenticate_launch_lineage(
         expected_path=window_root / "window-chain.zsh",
         launch_binding_cache=launch_binding_cache,
     )
+    try:
+        consumed_manifest_path = Path(
+            str(consumption["launch_manifest"]["path"])
+        ).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"consumed launch manifest path is unavailable: {exc}",
+        ) from exc
     manifest_argv = list(manifest["launch_command"])
     if (
-        manifest_path != Path(str(consumption["launch_manifest"]["path"])).resolve(strict=True)
+        manifest_path != consumed_manifest_path
         or manifest["boot_session_id"] != consumption["boot_session_id"]
         or manifest_argv != consumption["exec_argv"]
         or not _launch_argv_matches(

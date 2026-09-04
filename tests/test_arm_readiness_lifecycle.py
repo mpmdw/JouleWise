@@ -748,84 +748,96 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(ArmReadinessError, "arm_readiness.receipts"):
             verify_arm_receipt(pack, wrong_path)
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """Two complete launch callers meet at the real no-clobber write."""
 
-        from tests.test_arm_readiness_dry_run import install_passing_freeze
-        from tests.test_arm_readiness_integration import (
-            clear_initial_arm,
-            install_passing_evidence,
-            synthetic_identity_verifier,
-        )
-        temporary, repo, pack, custody, _arm_path = make_go_fixture()
-        self.addCleanup(temporary.cleanup)
-        clear_initial_arm(custody, pack.name)
-        install_passing_freeze(repo, pack)
-        from joulewise.arm_readiness import generate_arm_receipt, generate_dry_run_receipt
+        from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
-        dry = generate_dry_run_receipt(
-            pack,
-            custody,
-            "race-rehearsal",
-            Path(temporary.name) / "race-synthetic",
+        fixture = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
         )
-        self.assertEqual(dry["status"], "PASS", dry)
-        install_passing_evidence(pack, custody)
-        context = sample_arm(Path(temporary.name) / "context")["arm_context"]
-        with mock.patch(
-            "joulewise.arm_readiness.verify_frozen_projection",
-            side_effect=synthetic_identity_verifier,
-        ):
-            arm_result = generate_arm_receipt(pack, context, custody)
-        self.assertEqual(arm_result["status"], "PASS", arm_result)
-        arm_path = Path(arm_result["receipt_path"])
-        args, exec_argv = self.install_launch_manifest(
-            Path(temporary.name), pack, custody, arm_path
-        )
-        barrier = threading.Barrier(8)
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        launch_inputs = fixture._consumer_inputs()
+        del launch_inputs["handoff_token_sha256"]
+        barrier = threading.Barrier(2)
         outcomes: list[str] = []
+        unexpected: list[BaseException] = []
         lock = threading.Lock()
+        real_exclusive_write = readiness._exclusive_write
+
+        def synchronized_exclusive_write(path: Path, raw: bytes) -> None:
+            if path.name.endswith(".consumed.json"):
+                barrier.wait(timeout=10)
+            real_exclusive_write(path, raw)
 
         def consume() -> None:
-            barrier.wait()
             try:
-                launch_window.launch(args)
+                launch_window.launch(fixture_args)
             except ArmReadinessError as exc:
                 outcome = exc.reason_code
             except readiness.LaunchLineageError as exc:
                 outcome = exc.reason_code
+            except Exception as exc:
+                with lock:
+                    unexpected.append(exc)
+                return
             with lock:
                 outcomes.append(outcome)
+
+        arm_digest = hashlib.sha256(fixture.arm_path.read_bytes()).hexdigest()
+        fixture_args = argparse.Namespace(
+            pack_root=fixture.pack,
+            arm_receipt=fixture.arm_path,
+            arm_readiness_custody_root=fixture.custody,
+            launch_manifest=fixture.manifest_path,
+            lifecycle_event=None,
+            step6_confirmation_table=None,
+            expected_confirmation_digest=None,
+        )
+        verified_arm = {
+            "status": "PASS",
+            "arm_disposition": "GO",
+            "receipt_path": str(fixture.arm_path.resolve()),
+            "receipt_sha256": arm_digest,
+            "pack_sha256": fixture.arm["pack"]["pack_sha256"],
+        }
 
         with mock.patch.object(
             launch_window, "_install_handoff"
         ), mock.patch.object(
+            launch_window, "_assemble_launch_inputs", return_value=launch_inputs
+        ), mock.patch.object(
             readiness,
-            "_attested_launch_artifact_references",
-            return_value=self.launch_artifact_references(args.launch_manifest),
+            "_verify_arm_receipt",
+            return_value=verified_arm,
+        ), mock.patch.object(
+            readiness, "reviewed_main", return_value=fixture.arm["reviewed_main"]
+        ), mock.patch.object(
+            readiness, "_root_policy_refusals", return_value=([], set())
+        ), mock.patch.object(
+            readiness, "_exclusive_write", side_effect=synchronized_exclusive_write
         ), mock.patch.object(
             launch_window,
             "verify_consumed_launch",
-            return_value={"exec_argv": exec_argv},
+            return_value={"exec_argv": fixture.exec_argv},
         ), mock.patch.object(launch_window.os, "execve") as execve:
-            threads = [threading.Thread(target=consume) for _ in range(8)]
+            threads = [threading.Thread(target=consume) for _ in range(2)]
             for thread in threads:
                 thread.start()
             for thread in threads:
                 thread.join(timeout=10)
+            self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(unexpected, [])
         self.assertEqual(execve.call_count, 1)
         self.assertEqual(outcomes.count("launch_consumption_invalid"), 1, outcomes)
-        self.assertEqual(outcomes.count("readiness_record_consumed"), 7, outcomes)
+        self.assertEqual(outcomes.count("readiness_record_consumed"), 1, outcomes)
         self.assertNotIn("readiness_lock_unavailable", outcomes)
         consumption_path = (
-            custody
-            / pack.name
+            fixture.custody
+            / fixture.pack.name
             / "arm_readiness.consumptions"
-            / f"{arm_path.stem}.consumed.json"
+            / f"{fixture.arm_path.stem}.consumed.json"
         )
         consumption = readiness.validate_consumption_receipt(
             readiness.parse_json_bytes(
@@ -838,16 +850,54 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         with mock.patch.object(
             launch_window, "_install_handoff"
         ), mock.patch.object(
+            launch_window, "_assemble_launch_inputs", return_value=launch_inputs
+        ), mock.patch.object(
             readiness,
-            "_attested_launch_artifact_references",
-            return_value=self.launch_artifact_references(args.launch_manifest),
+            "_verify_arm_receipt",
+            return_value=verified_arm,
+        ), mock.patch.object(
+            readiness, "reviewed_main", return_value=fixture.arm["reviewed_main"]
+        ), mock.patch.object(
+            readiness, "_root_policy_refusals", return_value=([], set())
         ):
             with self.assertRaisesRegex(
                 ArmReadinessError, "already consumed"
             ) as replay:
-                launch_window.launch(args)
+                launch_window.launch(fixture_args)
         self.assertEqual(replay.exception.reason_code, "readiness_record_consumed")
         self.assertNotEqual(replay.exception.reason_code, "readiness_lock_unavailable")
+
+    def test_consumed_manifest_second_resolve_vanish_is_lineage_refusal(self) -> None:
+        from tests.test_arm_readiness import LaunchConsumptionV2Tests
+
+        fixture = LaunchConsumptionV2Tests(
+            methodName="test_start_settle_completion_form_one_authenticated_lineage"
+        )
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        _consumption_path, settled = fixture._settle()
+        original_resolve = Path.resolve
+        target = fixture.manifest_path.resolve()
+        target_resolves = 0
+
+        def vanish_on_second_resolve(
+            candidate: Path, *args: object, **kwargs: object
+        ) -> Path:
+            nonlocal target_resolves
+            if candidate == target and kwargs.get("strict") is True:
+                target_resolves += 1
+                if target_resolves == 2:
+                    raise FileNotFoundError(str(candidate))
+            return original_resolve(candidate, *args, **kwargs)
+
+        with mock.patch.object(Path, "resolve", new=vanish_on_second_resolve):
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                readiness.authenticate_launch_lineage(
+                    settled["launch_lineage"], require_completion=False
+                )
+        self.assertEqual(target_resolves, 2)
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertIsInstance(caught.exception.__cause__, FileNotFoundError)
 
     @unittest.skip(
         "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
