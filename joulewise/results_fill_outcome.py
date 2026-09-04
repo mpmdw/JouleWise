@@ -1,17 +1,18 @@
 """Pure, fail-closed renderer for registered Results fills OB-01 and OR-01.
 
-The D-165 close-out is authenticated here by replaying its landed validator
-against the exact three source byte strings.  Before-comparison records are a
-small normalized seam for the successor renderer: its source adapters must set
-``authenticated`` only after authenticating the named whole-window or
-claim-evaluation evidence.  This module performs no file I/O and never derives
-a public reason from a ratio disposition.
+The D-165 close-out is revalidated against its exact three source byte
+strings.  A before-comparison source crosses this pure renderer's trust
+boundary only as exact bytes paired with the owning validator's digest-bound
+result; a caller-authored normalized stop object is not an input channel.
+Every path is gated to the fixed Qwen3 ``_v5`` pair before a fill is emitted.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from joulewise import dominance_closeout
@@ -20,16 +21,53 @@ from joulewise import dominance_closeout
 STOP_FILL = "STOP_FILL"
 OB_01 = "OB-01"
 OR_01 = "OR-01"
+IDENTITY_NOT_V5 = "identity_not_v5"
+STOP_REASON = "_stop_reason"
+SECONDARY_CLOSEOUT_REASON = "_secondary_closeout_reason"
 
 _BEFORE_COMPARISON = "before comparison"
 _AT_CLOSE_OUT = "at close-out"
-_MODEL_NAMES = frozenset({"Qwen3-1.7B", "Qwen3-8B"})
 _VERDICT_NAMES = frozenset({"token-generation", "prompt-processing"})
 _FORBIDDEN_PUBLIC_MARKERS = ("[FILL:", "[PENDING]", "[VALUE]", STOP_FILL)
+_VALIDATORS = {
+    "whole_window_admission": "whole_window_refusal_reasons",
+    "claim_evaluation": "validate_claim_verdicts",
+}
+_V5_IDENTITIES = {
+    (
+        "Qwen3-1.7B-4bit",
+        "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+        "qwen3",
+    ): "Qwen3-1.7B",
+    (
+        "Qwen3-8B-4bit",
+        "545dc4251c05440727734bcd94334791f6ab0192",
+        "qwen3",
+    ): "Qwen3-8B",
+}
 
 
-def _stopped() -> dict[str, str]:
-    return {OB_01: STOP_FILL, OR_01: STOP_FILL}
+@dataclass(frozen=True)
+class BeforeComparisonValidationResult:
+    """Digest-bound result returned by a before-stage owning validator.
+
+    ``result`` is the validator's complete tuple.  For a whole-window source
+    it is the issued refusal-reason tuple; for a claim-verdict source it is
+    the schema-error tuple and must be empty.  The two digests bind that result
+    to the exact stop source and finalized-manifest bytes supplied here.
+    """
+
+    validator: str
+    source_sha256: str
+    finalized_manifest_sha256: str
+    result: tuple[str, ...] = ()
+
+
+def _stopped(reason: str | None = None) -> dict[str, str]:
+    result = {OB_01: STOP_FILL, OR_01: STOP_FILL}
+    if reason is not None:
+        result[STOP_REASON] = reason
+    return result
 
 
 def _safe_public_string(value: object) -> str | None:
@@ -46,6 +84,27 @@ def _english_list(values: Sequence[str]) -> str:
     if len(values) == 2:
         return f"{values[0]} and {values[1]}"
     return ", ".join(values[:-1]) + f", and {values[-1]}"
+
+
+def _decode_json_object_bytes(value: object) -> Mapping[str, Any] | None:
+    if not isinstance(value, bytes):
+        return None
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key: {key}")
+            result[key] = item
+        return result
+
+    try:
+        decoded = json.loads(
+            value.decode("utf-8"), object_pairs_hook=reject_duplicate_keys
+        )
+    except (UnicodeError, ValueError):
+        return None
+    return decoded if isinstance(decoded, Mapping) else None
 
 
 def _authenticated_closeout(
@@ -76,55 +135,115 @@ def _authenticated_closeout(
     return not errors
 
 
-def _before_comparison_parts(stops: object) -> list[str] | None:
-    if not isinstance(stops, Sequence) or isinstance(stops, (str, bytes, bytearray)):
+def _validated_before_payloads(
+    sources: object,
+    results: object,
+    finalized_manifest_bytes: object,
+) -> list[Mapping[str, Any]] | None:
+    if (
+        not isinstance(sources, Sequence)
+        or isinstance(sources, (str, bytes, bytearray))
+        or not isinstance(results, Sequence)
+        or isinstance(results, (str, bytes, bytearray))
+        or len(sources) != len(results)
+    ):
         return None
-    parts: list[str] = []
-    affected: set[tuple[str, str]] = set()
-    for stop in stops:
-        if not isinstance(stop, Mapping) or stop.get("authenticated") is not True:
+    if not isinstance(finalized_manifest_bytes, bytes):
+        return [] if not sources and not results else None
+
+    manifest_sha256 = hashlib.sha256(finalized_manifest_bytes).hexdigest()
+    payloads: list[Mapping[str, Any]] = []
+    for source_bytes, result in zip(sources, results, strict=True):
+        if (
+            not isinstance(source_bytes, bytes)
+            or not isinstance(result, BeforeComparisonValidationResult)
+            or type(result.result) is not tuple
+            or any(not isinstance(item, str) for item in result.result)
+            or not isinstance(result.validator, str)
+            or result.finalized_manifest_sha256 != manifest_sha256
+            or result.source_sha256 != hashlib.sha256(source_bytes).hexdigest()
+        ):
             return None
-        kind = stop.get("kind")
-        reason = _safe_public_string(stop.get("reason"))
-        if reason is None:
+        payload = _decode_json_object_bytes(source_bytes)
+        if payload is None:
+            return None
+        kind = payload.get("kind")
+        if result.validator != _VALIDATORS.get(kind):
             return None
         if kind == "whole_window_admission":
-            if set(stop) != {
-                "authenticated",
-                "kind",
-                "model",
-                "outcome",
-                "reason",
-            }:
+            reason = _safe_public_string(payload.get("reason"))
+            if reason is None or result.result != (reason,):
                 return None
-            model = stop.get("model")
-            if model not in _MODEL_NAMES or stop.get("outcome") != "excluded":
+        elif result.result:
+            return None
+        payloads.append(payload)
+    return payloads
+
+
+def _v5_manifest_model_names(
+    finalized_manifest_bytes: object,
+) -> dict[str, str] | None:
+    manifest = _decode_json_object_bytes(finalized_manifest_bytes)
+    if manifest is None or not isinstance(manifest.get("arms"), list):
+        return None
+
+    identities: set[tuple[str, str, str]] = set()
+    model_by_floor_cell: dict[str, str] = {}
+    for arm in manifest["arms"]:
+        if not isinstance(arm, Mapping):
+            return None
+        floor_cell_id = _safe_public_string(arm.get("floor_cell_id"))
+        stack = arm.get("realized_stack_identity")
+        model = stack.get("model") if isinstance(stack, Mapping) else None
+        if floor_cell_id is None or not isinstance(model, Mapping):
+            return None
+        identity = (model.get("name"), model.get("revision"), model.get("family"))
+        if identity not in _V5_IDENTITIES:
+            return None
+        identities.add(identity)
+        public_name = _V5_IDENTITIES[identity]
+        existing = model_by_floor_cell.get(floor_cell_id)
+        if existing is not None and existing != public_name:
+            return None
+        model_by_floor_cell[floor_cell_id] = public_name
+    if identities != set(_V5_IDENTITIES):
+        return None
+    return model_by_floor_cell
+
+
+def _before_comparison_parts(
+    payloads: Sequence[Mapping[str, Any]], *, public_models: frozenset[str]
+) -> list[str] | None:
+    parts: list[str] = []
+    affected: set[tuple[str, str]] = set()
+    for source in payloads:
+        kind = source.get("kind")
+        reason = _safe_public_string(source.get("reason"))
+        if reason is None or _VALIDATORS.get(kind) is None:
+            return None
+        if kind == "whole_window_admission":
+            if set(source) != {"kind", "model", "outcome", "reason"}:
+                return None
+            model = source.get("model")
+            if model not in public_models or source.get("outcome") != "excluded":
                 return None
             identity = (kind, str(model))
-            part = f"{model} measurement window — {reason}"
-        elif kind == "claim_evaluation":
-            if set(stop) != {
-                "authenticated",
-                "kind",
-                "outcome",
-                "reason",
-                "verdict",
-            }:
-                return None
-            verdict = stop.get("verdict")
-            if verdict not in _VERDICT_NAMES or stop.get("outcome") != "absent":
-                return None
-            identity = (kind, str(verdict))
-            part = (
-                f"{verdict} verdict for the fixed "
-                f"Qwen3-8B-versus-Qwen3-1.7B pair — {reason}"
-            )
+            subject = str(model)
         else:
-            return None
+            if set(source) != {"kind", "outcome", "reason", "verdict"}:
+                return None
+            verdict = source.get("verdict")
+            if verdict not in _VERDICT_NAMES or source.get("outcome") != "absent":
+                return None
+            identity = (str(kind), str(verdict))
+            subject = (
+                f"{verdict} verdict for the fixed "
+                "Qwen3-8B-versus-Qwen3-1.7B pair"
+            )
         if identity in affected:
             return None
         affected.add(identity)
-        parts.append(part)
+        parts.append(f"{subject} — {reason}")
     return parts
 
 
@@ -159,42 +278,9 @@ def _render_ob01(closeout: Mapping[str, Any]) -> str:
     return _english_list(labels) if labels else STOP_FILL
 
 
-def _manifest_model_names(
-    finalized_manifest_bytes: bytes,
-) -> dict[str, str] | None:
-    try:
-        manifest = json.loads(finalized_manifest_bytes.decode("utf-8"))
-    except (UnicodeError, ValueError):
-        return None
-    if not isinstance(manifest, Mapping) or not isinstance(manifest.get("arms"), list):
-        return None
-    result: dict[str, str] = {}
-    for arm in manifest["arms"]:
-        if not isinstance(arm, Mapping):
-            return None
-        floor_cell_id = _safe_public_string(arm.get("floor_cell_id"))
-        stack = arm.get("realized_stack_identity")
-        model = stack.get("model") if isinstance(stack, Mapping) else None
-        model_name = (
-            _safe_public_string(model.get("name"))
-            if isinstance(model, Mapping)
-            else None
-        )
-        if floor_cell_id is None or model_name is None:
-            return None
-        existing = result.get(floor_cell_id)
-        if existing is not None and existing != model_name:
-            return None
-        result[floor_cell_id] = model_name
-    return result
-
-
-def _render_closeout_refusal(
-    closeout: Mapping[str, Any], finalized_manifest_bytes: bytes
-) -> str:
+def _render_closeout_refusal(closeout: Mapping[str, Any]) -> str:
     reason = _safe_public_string(closeout.get("refusal_reason"))
-    model_names = _manifest_model_names(finalized_manifest_bytes)
-    if reason is None or model_names is None:
+    if reason is None:
         return STOP_FILL
     affected: list[str] = []
     for key, common_mode in (
@@ -207,19 +293,14 @@ def _render_closeout_refusal(
         for record in records:
             if not isinstance(record, Mapping):
                 return STOP_FILL
-            if (
-                record.get("status") != "refused"
-                or record.get("refusal_reason") != reason
-            ):
+            if record.get("status") != "refused":
                 continue
             record_label = _record_label(record, common_mode=common_mode)
-            model_name = model_names.get(record.get("cell_id"))
-            if record_label is None or model_name is None:
+            if record_label is None:
                 return STOP_FILL
-            affected.append(f"{model_name} ({record_label})")
-    if not affected:
-        return STOP_FILL
-    return f"{_AT_CLOSE_OUT}: {_english_list(affected)} — {reason}"
+            affected.append(record_label)
+    affected_text = _english_list(affected) if affected else "none recorded"
+    return f"{_AT_CLOSE_OUT}: {reason}; affected: {affected_text}"
 
 
 def render_outcome_fills(
@@ -228,19 +309,18 @@ def render_outcome_fills(
     finalized_manifest_bytes: bytes | None = None,
     floor_artifact_bytes: bytes | None = None,
     replay_sidecar_bytes: bytes | None = None,
-    before_comparison_stops: Sequence[Mapping[str, Any]] = (),
-    precedence: str | None = None,
+    before_comparison_source_bytes: Sequence[bytes] = (),
+    before_comparison_validator_results: Sequence[
+        BeforeComparisonValidationResult
+    ] = (),
 ) -> dict[str, str]:
-    """Return exact OB-01/OR-01 strings, or STOP_FILL for both on bad input.
+    """Return registered OB-01/OR-01 strings, or fail closed.
 
-    ``precedence`` is absent for completed A/B close-outs and must name the
-    sole refusal stage for a refusal.  Supplying evidence from both stages is
-    a conflict and is never resolved here.
+    Before-comparison sources have registered precedence over an authenticated
+    close-out refusal.  In that two-stage case, OR-01 remains byte-exact for
+    the winning stage and the top-level close-out reason is retained under
+    :data:`SECONDARY_CLOSEOUT_REASON` as non-paper metadata.
     """
-
-    before_parts = _before_comparison_parts(before_comparison_stops)
-    if before_parts is None:
-        return _stopped()
 
     authenticated_closeout = False
     if closeout is not None:
@@ -253,28 +333,56 @@ def render_outcome_fills(
         if not authenticated_closeout:
             return _stopped()
 
+    before_payloads = _validated_before_payloads(
+        before_comparison_source_bytes,
+        before_comparison_validator_results,
+        finalized_manifest_bytes,
+    )
+    if before_payloads is None:
+        return _stopped()
+    if not authenticated_closeout and not before_payloads:
+        return _stopped()
+
+    model_by_floor_cell = _v5_manifest_model_names(finalized_manifest_bytes)
+    if model_by_floor_cell is None:
+        return _stopped(IDENTITY_NOT_V5)
+
+    before_parts = _before_comparison_parts(
+        before_payloads,
+        public_models=frozenset(model_by_floor_cell.values()),
+    )
+    if before_parts is None:
+        return _stopped()
     if before_parts:
-        if closeout is not None or precedence != _BEFORE_COMPARISON:
-            return _stopped()
-        return {
+        result = {
             OB_01: STOP_FILL,
             OR_01: f"{_BEFORE_COMPARISON}: " + "; ".join(before_parts),
         }
+        if closeout is not None and closeout.get("branch") is None:
+            secondary_reason = _safe_public_string(closeout.get("refusal_reason"))
+            if secondary_reason is None:
+                return _stopped()
+            result[SECONDARY_CLOSEOUT_REASON] = secondary_reason
+        return result
 
-    if not authenticated_closeout or closeout is None:
-        return _stopped()
-
+    assert closeout is not None
     branch = closeout.get("branch")
     if branch in {"A", "B"}:
-        if precedence is not None:
-            return _stopped()
         return {OB_01: _render_ob01(closeout), OR_01: STOP_FILL}
-    if branch is None and precedence == _AT_CLOSE_OUT:
-        assert finalized_manifest_bytes is not None
-        refusal = _render_closeout_refusal(closeout, finalized_manifest_bytes)
+    if branch is None:
+        refusal = _render_closeout_refusal(closeout)
         if refusal != STOP_FILL:
             return {OB_01: STOP_FILL, OR_01: refusal}
     return _stopped()
 
 
-__all__ = ["STOP_FILL", "OB_01", "OR_01", "render_outcome_fills"]
+__all__ = [
+    "BeforeComparisonValidationResult",
+    "IDENTITY_NOT_V5",
+    "OB_01",
+    "OR_01",
+    "SECONDARY_CLOSEOUT_REASON",
+    "STOP_FILL",
+    "STOP_REASON",
+    "render_outcome_fills",
+]

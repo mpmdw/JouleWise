@@ -1,9 +1,11 @@
 {
-  "before_comparison_stops": [],
+  "before_comparison_sources": [],
   "builder": "branch_b",
   "expected": {
     "OB-01": "synthetic-floor-0-0 absolute, synthetic-floor-0-0 comparative common-mode, synthetic-floor-0-1 comparative common-mode, synthetic-floor-1-0 comparative common-mode, and synthetic-floor-1-1 comparative common-mode",
     "OR-01": "STOP_FILL"
   },
-  "precedence": null
+  "registry_oracles": {
+    "OB-01": "branch_b"
+  }
 }
