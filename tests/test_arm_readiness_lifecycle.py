@@ -518,13 +518,34 @@ def predecessor_pack_root(repo: Path, pack_name: str) -> Path:
     return repo / "configs/campaigns" / predecessor_pack_name(pack_name)
 
 
+def synthetic_family_publication_verification(*_args, **_kwargs) -> dict[str, object]:
+    """Stand in only for the separately tested publication authenticator."""
+
+    return {
+        "schema_version": readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+        "receipt_kind": "family_publication_verification",
+        "phase": "pre-arm",
+        "lane": "published",
+        "gate_admissible": True,
+        "publication_authorized": True,
+        "status": "PASS",
+    }
+
+
 class ArmReadinessLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = mock.patch.object(
+        boot_patcher = mock.patch.object(
             readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
         )
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        publication_patcher = mock.patch.object(
+            readiness,
+            "verify_family_publication_marker",
+            side_effect=synthetic_family_publication_verification,
+        )
+        boot_patcher.start()
+        publication_patcher.start()
+        self.addCleanup(publication_patcher.stop)
+        self.addCleanup(boot_patcher.stop)
 
     def write_namespace_receipt(self, root: Path, name: str, receipt: dict) -> Path:
         root.mkdir(parents=True, exist_ok=True)
@@ -748,12 +769,8 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(ArmReadinessError, "arm_readiness.receipts"):
             verify_arm_receipt(pack, wrong_path)
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """Exactly one concurrent consumer spends the launch capability."""
 
         from tests.test_arm_readiness_dry_run import install_passing_freeze
         from tests.test_arm_readiness_integration import (
@@ -816,7 +833,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             for thread in threads:
                 thread.start()
             for thread in threads:
-                thread.join(timeout=10)
+                thread.join(timeout=30)
+        self.assertFalse(
+            any(thread.is_alive() for thread in threads),
+            "every concurrent consumer must reach a recorded outcome",
+        )
         self.assertEqual(execve.call_count, 1)
         self.assertEqual(outcomes.count("launch_consumption_invalid"), 1, outcomes)
         self.assertEqual(outcomes.count("readiness_record_consumed"), 7, outcomes)
@@ -849,12 +870,8 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.assertEqual(replay.exception.reason_code, "readiness_record_consumed")
         self.assertNotEqual(replay.exception.reason_code, "readiness_lock_unavailable")
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_boot_session_change_voids_verification_and_consumption(self) -> None:
-        """Blocked by legacy-schema evidence installed before ARM generation."""
+        """A stale boot voids both arm verification and consumption."""
 
         from tests.test_arm_readiness_dry_run import install_passing_freeze
         from tests.test_arm_readiness_integration import (
@@ -2919,49 +2936,53 @@ class PostSupersessionLayeringTests(unittest.TestCase):
                 self.assertTrue(rows)
                 self.assertTrue(kinds)
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: _v3 predecessor is absent from _PROFILE_BY_PACK; "
-        "reconstruction is FIXTURE-MODERNIZATION-01's post-mint item"
-    )
     def test_historical_predecessor_resolves_and_still_anchors_the_chain(
         self,
     ) -> None:
-        """Retaining history must not disturb D-139 chain authentication.
+        """A real ``_v5`` receipt authenticates its historical ``_v3`` link.
 
-        STRUCTURAL-BLOCKED: the assertion below -- that the successor's
-        predecessor is an entry of ``_PROFILE_BY_PACK`` -- holds
-        only for the ``_v2``/``_v1`` pairing.  The ruled registry installs the
-        ``_v5`` family, whose predecessor is ``_v3``, and ``_v3`` is neither a
-        historical map entry nor an installed successor.  The `_v3` pack bytes
-        already exist; S-0 cannot add this static code-map entry.
-
-        RULED 2026-08-23 (magistrate): neither retired nor reconstructed now.
-        The property this test names -- that a historical predecessor still
-        anchors the chain across generations -- is real, but reconstructing it
-        needs REAL ``_v5``->``_v3`` receipt chains, which exist only after desk day
-        mints them.  The reconstruction design (replace static map-membership
-        with an authenticated runtime ``_v5``->``_v3`` predecessor proof,
-        supplying a valid synthetic family-publication marker) is assigned to
-        work order FIXTURE-MODERNIZATION-01 as its post-mint item.  This honest
-        structural skip stands until then; do not restate the false
-        map-membership assertion as if it held.
+        The current registry supersedes the kernel row's original ``_v4``
+        wording with the ruled ``_v5`` family.  The proof therefore follows
+        the installed runtime chain and never consults the historical v1
+        profile map.  A schema-valid publication marker is supplied at the
+        same API boundary, even though current policy engages that marker only
+        when the predecessor itself is in the published generation.
         """
 
         temporary, repo, pack, _custody, _arm = make_go_fixture(PACK_NAME, "ALPHA")
         self.addCleanup(temporary.cleanup)
         predecessor = predecessor_pack_root(repo, PACK_NAME)
-        self.assertIn(predecessor.name, readiness._PROFILE_BY_PACK)
-        self.assertEqual(readiness._plan_profile(predecessor), "ALPHA")
+        from tests.test_family_marker import marker
+        from tests.test_arm_readiness_dry_run import install_passing_freeze
+
+        install_passing_freeze(repo, pack, mint_receipt=False)
+
+        marker_value = marker()
+        readiness.validate_family_publication_marker(
+            marker_value, first_generation=5
+        )
+        marker_path = Path(temporary.name) / readiness.FAMILY_PUBLICATION_MARKER_NAME
+        marker_raw = render_json(marker_value)
+        marker_path.write_bytes(marker_raw)
+        marker_path.with_name(f"{marker_path.name}.sha256").write_bytes(
+            gnu_sidecar(hashlib.sha256(marker_raw).hexdigest(), marker_path.name)
+        )
         result = generate_freeze_receipt(
             pack,
             measurement_checkout=repo,
             predecessor_pack_root=predecessor,
+            family_publication_marker=marker_path,
         )
+        self.assertEqual(result["status"], "PASS", result)
         receipt = json.loads(
             Path(result["receipt_path"]).read_text(encoding="utf-8")
         )
         self.assertEqual(receipt["receipt_id"], "freeze-0004")
         self.assertEqual(receipt["predecessor"]["pack_id"], predecessor.name)
+        self.assertEqual(
+            receipt["predecessor"]["pack_sha256"],
+            readiness.committed_pack_tree_sha256(predecessor),
+        )
 
 
 if __name__ == "__main__":
