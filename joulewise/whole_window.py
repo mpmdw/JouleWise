@@ -114,6 +114,14 @@ NEG8_DRIFT_ESTIMATOR_ID = "d054_point_contrast_guard_v1"
 NEG8_DRIFT_MINIMUM_N = 10
 NEG8_REPLICATED_ENDPOINT_N = 3
 NEG8_DRIFT_BOUND_MAX_AGE_S = 86400
+REGISTERED_NEG8_REFERENCE_CORPUS_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "configs"
+    / "campaigns"
+    / "neg8_reference_corpus"
+    / "derivation"
+)
+REGISTERED_NEG8_REFERENCE_CORPUS_FILENAME = "settled_corpus.json"
 NEG8_CLAIM_FAMILY_GROSS = "gross_energy"
 NEG8_CLAIM_FAMILY_IDLE_SUBTRACTED = "idle_subtracted_energy"
 CONDITION_NEG8_DRIFT_BOUND_UNDERIVED = "neg8_drift_bound_underived"
@@ -1541,11 +1549,89 @@ def build_neg8_drift_bound_artifact(
     return {**payload, "derivation_sha256": canonical_sha256(payload)}
 
 
-def validate_neg8_drift_bound_artifact(value: Any) -> bool:
-    """Validate the seal and arithmetic for current or replayable v1 wires.
+def _neg8_corpus_identity_matches_bytes(
+    corpus: Mapping[str, Any], raw: bytes
+) -> bool:
+    """Resolve artifact corpus identity against one external byte string."""
 
-    A sealed pre-freshness v1 wire remains parseable so the evaluator can
-    classify it as stale with the dedicated condition. It is never fresh.
+    if hashlib.sha256(raw).hexdigest() != corpus.get("manifest_sha256"):
+        return False
+    try:
+        from joulewise.determinism_gate import (  # noqa: PLC0415
+            _reject_duplicate_json_pairs,
+        )
+
+        manifest = json.loads(raw, object_pairs_hook=_reject_duplicate_json_pairs)
+    except (UnicodeDecodeError, ValueError):
+        return False
+    if (
+        not isinstance(manifest, Mapping)
+        or set(manifest)
+        != {
+            "schema_version",
+            "corpus_id",
+            "freeze_status",
+            "condition_id",
+            "members",
+        }
+        or manifest.get("schema_version") != NEG8_REFERENCE_CORPUS_SCHEMA
+        or manifest.get("freeze_status") != "settled_reference"
+        or manifest.get("corpus_id") != corpus.get("corpus_id")
+        or manifest.get("condition_id") != corpus.get("condition_id")
+    ):
+        return False
+    members = manifest.get("members")
+    if not isinstance(members, list):
+        return False
+    resolved_ids: list[str] = []
+    for member in members:
+        if (
+            not isinstance(member, Mapping)
+            or set(member) != {"bundle_id", "bundle_path"}
+            or not isinstance(member.get("bundle_id"), str)
+            or not member.get("bundle_id")
+            or not isinstance(member.get("bundle_path"), str)
+            or not member.get("bundle_path")
+        ):
+            return False
+        resolved_ids.append(member["bundle_id"])
+    return resolved_ids == corpus.get("member_ids")
+
+
+def _neg8_corpus_identity_is_authenticated(
+    corpus: Mapping[str, Any], reference_corpus_bytes: bytes | None
+) -> bool:
+    """Authenticate against caller-custodied or repository-registered bytes."""
+
+    if reference_corpus_bytes is not None:
+        return _neg8_corpus_identity_matches_bytes(corpus, reference_corpus_bytes)
+    path = (
+        REGISTERED_NEG8_REFERENCE_CORPUS_DIR
+        / REGISTERED_NEG8_REFERENCE_CORPUS_FILENAME
+    )
+    try:
+        raw = read_authentication_input(
+            path,
+            grammar="json",
+            label="registered NEG-8 settled reference corpus",
+        )
+    except (OSError, UnicodeDecodeError, ValueError):
+        return False
+    return _neg8_corpus_identity_matches_bytes(corpus, raw)
+
+
+def validate_neg8_drift_bound_artifact(
+    value: Any,
+    *,
+    reference_corpus_bytes: bytes | None = None,
+    require_corpus_identity: bool = False,
+) -> bool:
+    """Validate current-v1 arithmetic and optionally its external corpus identity.
+
+    Pure builders may request structural validation alone. File-ingress and
+    claim-verification boundaries require a corpus identity resolved against
+    either caller-custodied exact bytes or a tracked repository manifest; the
+    artifact's self-reported manifest digest is never sufficient there.
     """
 
     base_keys = {
@@ -1561,9 +1647,7 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
         not isinstance(value, Mapping)
         or frozenset(value)
         not in {
-            frozenset(base_keys),
             frozenset(base_keys | {"freshness"}),
-            frozenset(base_keys | {"launch_lineage"}),
             frozenset(base_keys | {"freshness", "launch_lineage"}),
         }
     ):
@@ -1597,25 +1681,16 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
         return False
     try:
         freshness = value.get("freshness")
-        current = isinstance(freshness, Mapping)
+        if not isinstance(freshness, Mapping):
+            return False
         expected = build_neg8_drift_bound_artifact(
             corpus_id=corpus.get("corpus_id"),
             condition_id=corpus.get("condition_id"),
             manifest_sha256=corpus.get("manifest_sha256"),
             scientific_config_sha256=corpus.get("scientific_config_sha256"),
             members=members,
-            derivation_timestamp_s=(
-                freshness.get("derived_at_s") if current else 0.0
-            ),
-            freshness_bindings=(
-                freshness.get("bindings")
-                if current
-                else {
-                    "os_build": "legacy-wire",
-                    "power_supply_identity_sha256": "0" * 64,
-                    "calibration_identity_sha256": "0" * 64,
-                }
-            ),
+            derivation_timestamp_s=freshness.get("derived_at_s"),
+            freshness_bindings=freshness.get("bindings"),
             launch_lineage=(
                 value.get("launch_lineage")
                 if isinstance(value.get("launch_lineage"), Mapping)
@@ -1624,15 +1699,6 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
         )
     except (TypeError, ValueError, statistics.StatisticsError):
         return False
-    if not current:
-        expected.pop("freshness")
-        expected["derivation_sha256"] = canonical_sha256(
-            {
-                key: item
-                for key, item in expected.items()
-                if key != "derivation_sha256"
-            }
-        )
     if isinstance(value.get("launch_lineage"), Mapping):
         try:
             authenticate_launch_lineage(
@@ -1640,9 +1706,15 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
             )
         except LaunchLineageError:
             return False
-    return (
+    structurally_valid = (
         member_ids == [member.get("bundle_id") for member in members]
         and dict(value) == expected
+    )
+    return structurally_valid and (
+        not require_corpus_identity
+        or _neg8_corpus_identity_is_authenticated(
+            corpus, reference_corpus_bytes
+        )
     )
 
 
@@ -1662,7 +1734,13 @@ def load_neg8_drift_bound_artifact(path: str | Path | None) -> dict[str, Any] | 
         value = json.loads(raw, object_pairs_hook=_reject_duplicate_json_pairs)
     except (OSError, UnicodeDecodeError, ValueError):
         return None
-    return dict(value) if validate_neg8_drift_bound_artifact(value) else None
+    return (
+        dict(value)
+        if validate_neg8_drift_bound_artifact(
+            value, require_corpus_identity=True
+        )
+        else None
+    )
 
 
 def _admissible_energy_set(value: Any) -> tuple[float, float, float] | None:
@@ -3611,7 +3689,7 @@ def mint_neg8_drift_bound_artifact(
         raise ValueError(
             "launch_lineage_conflict: NEG-8 reference members do not share one lineage"
         )
-    return build_neg8_drift_bound_artifact(
+    artifact = build_neg8_drift_bound_artifact(
         corpus_id=manifest.get("corpus_id"),
         condition_id=manifest.get("condition_id"),
         manifest_sha256=hashlib.sha256(raw).hexdigest(),
@@ -3625,6 +3703,11 @@ def mint_neg8_drift_bound_artifact(
             else None
         ),
     )
+    if not _neg8_corpus_identity_matches_bytes(
+        artifact["reference_corpus"], raw
+    ):
+        raise ValueError("NEG-8 drift-bound corpus identity did not bind to manifest bytes")
+    return artifact
 
 
 REGISTERED_POLICY_DIR = (
@@ -5352,7 +5435,8 @@ def _validate_row_uncached(
                 if (
                     drift_bound_artifact is not None
                     and not validate_neg8_drift_bound_artifact(
-                        drift_bound_artifact
+                        drift_bound_artifact,
+                        require_corpus_identity=True,
                     )
                 ):
                     reasons.add("whole_window_verdict_provenance_invalid")

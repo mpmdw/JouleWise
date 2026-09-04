@@ -10,11 +10,12 @@ from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+import joulewise.arm_readiness_evidence as evidence_author
 from joulewise.arm_readiness import (
     ASSURANCE,
-    EVIDENCE_RECEIPT_SCHEMA,
     _latest_dry_run,
     _pack_record,
+    committed_pack_tree_sha256,
     generate_dry_run_receipt,
     gnu_sidecar,
     render_json,
@@ -31,69 +32,161 @@ from tests.test_arm_readiness_lifecycle import (
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
     predicate_content,
-    predicate_source_kind,
     sample_dry_run,
 )
 
 
-def install_passing_freeze(repo: Path, pack: Path) -> None:
+def install_passing_freeze(
+    repo: Path, pack: Path, *, mint_receipt: bool = True
+) -> None:
+    repo = repo.resolve(strict=True)
+    pack = pack.resolve(strict=True)
     tree_path = pack / "plan_tree.json"
     tree = json.loads(tree_path.read_text())
+
+    # The two RE_DERIVABLE evidence classes are replayed from committed
+    # dependencies at freeze and again at arm.  Give the synthetic repository
+    # the same dependency surface as production so the fixture exercises that
+    # authentication instead of bypassing it with hand-written facts.
+    for relative in (
+        "joulewise/arm_readiness_evidence.py",
+        "scripts/author_arm_readiness_evidence.py",
+        "docs/phase_2/window_runbook.md",
+        "docs/decision_log.md",
+    ):
+        source = Path(__file__).resolve().parents[1] / relative
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+    for family_pack in evidence_author._PACKS_BY_PROFILE.values():
+        relative = f"configs/campaigns/{family_pack}/plan_tree.json"
+        source = Path(__file__).resolve().parents[1] / relative
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+    tree["arm_attachments"]["launch"] = {
+        "schema_version": "joulewise.fixture_launch.v1"
+    }
+    existing_stages = tree.get("stage_graph")
+    tree["stage_graph"] = (
+        list(existing_stages) if isinstance(existing_stages, list) else []
+    ) + [
+        {
+            "stage_id": "fixture-verdict",
+            "kind": "whole_window_verdict",
+            "launch": {"commands": []},
+        },
+        {
+            "stage_id": "fixture-backup",
+            "kind": "backup",
+            "launch": {
+                "commands": [
+                    {"command_kind": "backup", "command_id": "backup.claim"},
+                    {"command_kind": "backup", "command_id": "backup.bound"},
+                ]
+            },
+        },
+    ]
+    tree["closeout_attachments"] = {
+        "backup_requirements": {"required_successful_backups": 2}
+    }
+    tree_raw = render_json(tree)
+    tree_path.write_bytes(tree_raw)
+    (pack / "plan_tree.sha256").write_bytes(
+        gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json")
+    )
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "R1 fixture authoring dependencies")
+
     registry, _registry_raw, registry_reference = readiness._registry_reference(pack)
+    lifecycle = registry["freeze_evidence_lifecycle"]
     profile = registry_reference["plan_profile"]
     definitions = readiness._profile_rows(registry, profile, phase="freeze")
+    applicable_definitions = [
+        row
+        for row in definitions
+        if readiness.applicability_for_row(
+            row,
+            clock_route="MANUAL",
+            successor_acceptance=not readiness._issued_d079(tree),
+        )
+        == "REQUIRED"
+    ]
     by_kind: dict[str, list[dict]] = {}
-    for row in definitions:
+    for row in applicable_definitions:
         if row["row_id"] == "desk.identity_pin_projection":
             continue
         for kind in row["required_evidence_kinds"]:
             by_kind.setdefault(kind, []).append(row)
     evidence_directory = pack / "arm_readiness.evidence"
     source_directory = pack / "arm_readiness.sources"
+    derivation_commit = reviewed_main(pack)["head_commit"]
+    pack_sha = committed_pack_tree_sha256(pack)
     evidence_directory.mkdir()
     source_directory.mkdir()
-    for index, (kind, rows) in enumerate(sorted(by_kind.items()), start=1):
-        facts = []
+    context = evidence_author._DerivationContext(
+        pack_root=pack,
+        repository=repo,
+        tree=tree,
+        pack_sha256=pack_sha,
+        head_commit=derivation_commit,
+    )
+    policies = {
+        item["kind"]: item for item in lifecycle["evidence_policies"]
+    }
+    plan_relative = (pack / "calibration_plan.json").relative_to(repo).as_posix()
+    plan_artifact = {
+        "path": plan_relative,
+        "sha256": hashlib.sha256((pack / "calibration_plan.json").read_bytes()).hexdigest(),
+    }
+    for kind, rows in sorted(by_kind.items()):
+        facts = {}
         for row in rows:
-            source_relative = f"arm_readiness.sources/{row['row_id']}.json"
             content = predicate_content(row["predicate_id"])
-            source_raw = render_json(
-                {"predicate_id": row["predicate_id"], "value": content}
+            facts[row["predicate_id"]] = content
+        derived = (
+            evidence_author._DERIVERS[kind](context)
+            if kind in {"DOCTRINE_PIN", "PACK_FAMILY"}
+            else evidence_author._DerivedKind(
+                kind,
+                facts,
+                (plan_artifact,),
+                (),
+                {"fixture": "registry-shaped synthetic evidence"},
             )
-            (pack / source_relative).write_bytes(source_raw)
-            facts.append(
-                {
-                    "fact_id": row["predicate_id"],
-                    "value_type": "OBJECT",
-                    "value": content,
-                    "source_kind": predicate_source_kind(kind),
-                    "source_path": source_relative,
-                    "source_sha256": hashlib.sha256(source_raw).hexdigest(),
-                }
-            )
-        evidence = {
-            "schema_version": EVIDENCE_RECEIPT_SCHEMA,
-            "evidence_id": f"freeze-evidence-{index:03d}",
-            "kind": kind,
-            "status": "PASS",
-            "issued_at_utc": "2026-08-11T00:00:00Z",
-            "boot_session_id": TEST_BOOT_SESSION_ID,
-            "valid_until_monotonic_ns": 10**30,
-            "pack_sha256": "0" * 64,
-            "head_commit": "a" * 40,
-            "facts": facts,
-            "checks": [],
-            "reason_codes": [],
-            "assurance": copy.deepcopy(ASSURANCE),
-        }
+        )
+        policy = policies[kind]
+        environment = (
+            {"schema_version": "joulewise.fixture_environment.v1"}
+            if policy["freshness_class"] == "EXECUTION_BOUND"
+            else None
+        )
+        source_raw = evidence_author._r1_fact_source(
+            context, derived, policy, environment
+        )
+        source_path = pack / evidence_author._source_path(kind)
+        source_path.write_bytes(source_raw)
+        evidence = evidence_author._assemble_r1_receipt(
+            context,
+            derived,
+            source_raw,
+            policy,
+            issued_at_utc="2026-08-11T00:00:00Z",
+            boot_session_id=TEST_BOOT_SESSION_ID,
+            now_monotonic_ns=1,
+            environment_fingerprint=environment,
+        )
         raw = render_json(evidence)
-        path = evidence_directory / f"evidence-{index:03d}.json"
+        path = evidence_directory / evidence_author._receipt_name(kind)
         path.write_bytes(raw)
         path.with_name(f"{path.name}.sha256").write_bytes(
             gnu_sidecar(hashlib.sha256(raw).hexdigest(), path.name)
         )
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "freeze evidence")
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    if not mint_receipt:
+        return
 
     evidence_items, evidence_receipts, evidence_refusals = readiness._discover_evidence(
         pack,
@@ -120,10 +213,26 @@ def install_passing_freeze(repo: Path, pack: Path) -> None:
     refusals = evidence_refusals + row_refusals
     if refusals:
         raise AssertionError(refusals)
+    predecessor = predecessor_pack_root(repo, pack.name)
+    predecessor_tree = json.loads((predecessor / "plan_tree.json").read_text())
+    predecessor_reference = predecessor_tree["arm_attachments"]["arm_readiness"][
+        "freeze_receipt"
+    ]
+    predecessor_receipt = json.loads(
+        (predecessor / predecessor_reference["path"]).read_text()
+    )
+    freeze_number = (
+        readiness._freeze_receipt_ordinal(
+            predecessor_receipt["receipt_id"], "fixture predecessor receipt_id"
+        )
+        + 1
+    )
+    freeze_id = f"freeze-{freeze_number:04d}"
+    freeze_name = f"{freeze_id}.json"
     receipt = {
         "schema_version": readiness.FREEZE_RECEIPT_SCHEMA,
         "receipt_kind": "freeze",
-        "receipt_id": "freeze-0001",
+        "receipt_id": freeze_id,
         "status": "PASS",
         "arm_disposition": "NOT_APPLICABLE",
         "issued_at_utc": "2026-08-11T00:00:00Z",
@@ -140,12 +249,12 @@ def install_passing_freeze(repo: Path, pack: Path) -> None:
     digest = hashlib.sha256(raw).hexdigest()
     namespace = pack / "arm_readiness.freeze.receipts"
     namespace.mkdir()
-    (namespace / "freeze-0001.json").write_bytes(raw)
-    (namespace / "freeze-0001.json.sha256").write_bytes(
-        gnu_sidecar(digest, "freeze-0001.json")
+    (namespace / freeze_name).write_bytes(raw)
+    (namespace / f"{freeze_name}.sha256").write_bytes(
+        gnu_sidecar(digest, freeze_name)
     )
     tree["arm_attachments"]["arm_readiness"]["freeze_receipt"] = {
-        "path": "arm_readiness.freeze.receipts/freeze-0001.json",
+        "path": f"arm_readiness.freeze.receipts/{freeze_name}",
         "sha256": digest,
     }
     tree_raw = render_json(tree)
@@ -173,6 +282,24 @@ class ArmReadinessDryRunTests(unittest.TestCase):
         receipt["arm_disposition"] = "GO"
         with self.assertRaises(ValueError):
             validate_dry_run_receipt(receipt)
+
+    def test_passing_freeze_fixture_authors_only_r1_generic_receipts(self) -> None:
+        """The shared fixture must fail if legacy generic evidence returns."""
+
+        temporary, repo, pack, _custody, _arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        install_passing_freeze(repo, pack)
+        schemas = {
+            json.loads(path.read_text(encoding="utf-8"))["schema_version"]
+            for path in (pack / "arm_readiness.evidence").glob("*.json")
+        }
+        self.assertEqual(
+            schemas,
+            {
+                readiness.CONTENT_EVIDENCE_RECEIPT_SCHEMA,
+                readiness.EXECUTION_EVIDENCE_RECEIPT_SCHEMA,
+            },
+        )
 
     def test_pack_comparison_is_fieldwise_and_successor_scoped(self) -> None:
         temporary, _repo, pack, _custody, _arm_path = make_go_fixture()
@@ -458,12 +585,8 @@ class ArmReadinessDryRunTests(unittest.TestCase):
         )
         self.assertIsNone(code)
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_real_under_lease_rehearsal_uses_reservation_and_both_writer_slots(self) -> None:
-        """Blocked by legacy-schema evidence in the synthetic freeze fixture."""
+        """The real rehearsal path accepts the R1-shaped freeze fixture."""
 
         temporary, repo, pack, custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
@@ -512,12 +635,8 @@ class ArmReadinessDryRunTests(unittest.TestCase):
             ],
         )
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_dry_run_becomes_stale_after_later_head_even_when_pack_bytes_do_not_change(self) -> None:
-        """Blocked by legacy-schema evidence in the synthetic freeze fixture."""
+        """A later reviewed head stales a dry run despite stable pack bytes."""
 
         temporary, repo, pack, custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
@@ -541,12 +660,8 @@ class ArmReadinessDryRunTests(unittest.TestCase):
         self.assertIsNotNone(receipt)
         self.assertEqual(code, "readiness_dry_run_stale")
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_dry_run_refuses_a_dirty_or_nonreviewed_checkout(self) -> None:
-        """Blocked by legacy-schema evidence in the synthetic freeze fixture."""
+        """The R1-shaped fixture still refuses dirty or unreviewed state."""
 
         temporary, repo, pack, custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
@@ -568,12 +683,8 @@ class ArmReadinessDryRunTests(unittest.TestCase):
         )
         self.assertEqual(binding["status"], "REFUSE")
 
-    @unittest.skip(
-        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
-        "R1 requires content/execution receipt schemas"
-    )
     def test_dry_run_rehearsal_root_and_id_are_single_use(self) -> None:
-        """Blocked by legacy-schema evidence in the synthetic freeze fixture."""
+        """Rehearsal roots and identifiers remain single-use."""
 
         temporary, repo, pack, custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)

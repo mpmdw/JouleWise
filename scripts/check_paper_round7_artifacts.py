@@ -751,6 +751,79 @@ def check_skeleton_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
     return comparisons
 
 
+def _dx_prose_regions(text: str) -> Iterable[str]:
+    """Yield each standing-sentence region through the next Markdown heading."""
+
+    cursor = 0
+    while True:
+        start = text.find(DX_STANDING_SENTENCE_HEAD, cursor)
+        if start < 0:
+            return
+        remainder = text[start + len(DX_STANDING_SENTENCE_HEAD) :]
+        heading = re.search(r"^#", remainder, re.MULTILINE)
+        end = (
+            start + len(DX_STANDING_SENTENCE_HEAD) + heading.start()
+            if heading is not None
+            else len(text)
+        )
+        yield text[start:end]
+        cursor = end if end > start else start + len(DX_STANDING_SENTENCE_HEAD)
+
+
+def _rendered_literal_pattern(literal: str) -> re.Pattern[str]:
+    # The leading boundary keeps short values such as ``15`` out of signed,
+    # decimal, and larger-number tokens.  The trailing boundary matches the
+    # canonical literal parser: prose punctuation and units may follow, but a
+    # longer alphanumeric, decimal, or percentage token is not the same value.
+    return re.compile(rf"(?<![\w.%+\-−]){re.escape(literal)}(?![\w.%])")
+
+
+def _has_immediately_preceding_marker(
+    region: str, literal_start: int, row_id: str
+) -> bool:
+    prefix = region[:literal_start]
+    marker = re.escape(f"[FILL:{row_id}]")
+    return re.search(rf"{marker}[ \t]*`?$", prefix) is not None
+
+
+def check_prose_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
+    """Refuse unmarked rendered values inside each bounded DX prose region."""
+
+    comparisons: list[Comparison] = []
+    for region in _dx_prose_regions(text):
+        candidates: list[tuple[int, int, str, str]] = []
+        for row_id in _placement_row_ids(spec):
+            marker = spec.rows[row_id].marker
+            for match in _rendered_literal_pattern(marker).finditer(region):
+                candidates.append((match.start(), match.end(), row_id, marker))
+
+        # A short registered value can be a component of another row's longer
+        # registered rendering (DX-020's ``15`` occurs inside DX-023).  The
+        # longest containing rendering owns that prose span.
+        maximal = [
+            candidate
+            for candidate in candidates
+            if not any(
+                other[0] <= candidate[0]
+                and candidate[1] <= other[1]
+                and (other[1] - other[0]) > (candidate[1] - candidate[0])
+                for other in candidates
+            )
+        ]
+        for start, _end, row_id, marker in sorted(maximal):
+            if _has_immediately_preceding_marker(region, start, row_id):
+                continue
+            comparisons.append(
+                Comparison(
+                    f"prose {row_id}",
+                    f"[FILL:{row_id}] immediately before {marker!r}",
+                    marker,
+                    False,
+                )
+            )
+    return comparisons
+
+
 def _placement_row_ids(spec: RegistrySpec) -> tuple[str, ...]:
     return tuple(row_id for row_id in spec.rows if row_id not in IDENTITY_ROWS)
 
@@ -814,6 +887,7 @@ def digest_half(
         comparisons.append(_comparison("successor skeleton", "readable", f"{type(exc).__name__}: {exc}"))
     else:
         comparisons.extend(check_skeleton_literals(skeleton_text, spec))
+        comparisons.extend(check_prose_literals(skeleton_text, spec))
         comparisons.extend(
             comparison
             for comparison in check_placement(skeleton_text, spec)

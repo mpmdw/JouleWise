@@ -1,0 +1,28 @@
+# Fact-and-registry refuter on a7da129e (terra xhigh, direct run), verbatim
+
+```json
+{"schema":"claude-codex-report/v1","genre":"review","status":"findings","completion":"partial","summary":"Registry and selector checks pass, but literal Refusal-predicate identity and authorized-path confinement are falsified; the paper suite hung in a producer subprocess.","workspace":{"base_requested":"33290b8b","base_mode":"exact","head_start":"a7da129e1b55b9db2e8ae32377b49f5643f411af","head_end":"a7da129e1b55b9db2e8ae32377b49f5643f411af","upstream_end":"a7da129e1b55b9db2e8ae32377b49f5643f411af","branch":"detached HEAD"},"pathspec":[],"unowned_dirty":[],"verdict":{"findings":[{"id":"F1","severity":"should_fix","title":"Refusal predicate is not stated identically","evidence":"§4 uses “Refusal applies”; Abstract uses plain-language “planned measurement period”/“required issued result”; §7/§10 use “result stopped”; the procedure splits the close-out condition; H04-C is only a heading. Outcome C and H27-C match each other, but not §4 literally."},{"id":"F2","severity":"blocker","title":"Full base diff includes five unlisted process-trace paths","evidence":"Besides the five named paper paths, git diff 33290b8b includes docs/process_traces/2026-09-02-paper-g/{00-brief,01-seat-G-landing-report,02-refuter-pedagogy,03-sol-fix-round-1-report,04-sol-fix-round-2-report}.md."}]},"verification":[{"id":"V1","kind":"inspection","cmd":"git rev-parse HEAD","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["a7da129e1b55b9db2e8ae32377b49f5643f411af"]},"expected":{"exit_code":0,"tail_regex":"^a7da129e"}},{"id":"V2","kind":"inspection","cmd":"git diff --unified=0 33290b8b -- docs/paper/draft-v2-skeleton.md docs/paper/fill-rehearsal/ docs/paper/round7/retensing-plan.md docs/paper/results-fill-registry.md","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["11 added FILL markers; all map to registry rows with named suppliers; DS-32 and PG-08 remain FILL slots."]},"expected":{"exit_code":0,"tail_regex":"no orphan markers"}},{"id":"V3","kind":"inspection","cmd":"git diff --unified=0 33290b8b -- docs/paper/round7/retensing-plan.md","cwd":".","observed":{"result":"fail","exit_code":0,"tail":["Retensing changed exactly three sentences: Outcome C, H04-C heading, H27-C; literal predicate text differs across carriers."]},"expected":{"exit_code":0,"tail_regex":"identical Refusal predicate"}},{"id":"V4","kind":"smoke","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 docs/paper/fill-rehearsal/select_outcome_branches.py --source docs/paper/draft-v2-skeleton.md --output $TMPDIR/.../selected.md --outcome A|B|REFUSAL","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["A: TR=3 OB=0 verdict=4 OR=1","B: TR=3 OB=3 verdict=4 OR=1","REFUSAL: TR=3 OB=0 verdict=1 OR=4; branch markers=0"]},"expected":{"exit_code":0,"tail_regex":"selected (A|B|REFUSAL)"}},{"id":"V5","kind":"suite","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_paper*'","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["s...s..............s....................................","^CTraceback (most recent call last):","test_paper_round7_artifacts.py:881 test_both_producers_are_byte_identical","check_paper_round7_artifacts.py:842 _run_producer","KeyboardInterrupt"]},"expected":{"exit_code":0,"tail_regex":"OK"}}],"flags":[{"id":"F3","kind":"verification_gap","level":"blocking","text":"The requested suite did not exit after over 150 seconds and was interrupted while subprocess.run waited in test_both_producers_are_byte_identical; no passing suite tail is available.","needs":"Resolve or time-bound the producer subprocess, then rerun the exact suite command."},{"id":"F4","kind":"scope_deviation","level":"nonblocking","text":"This audit made no repository writes; the full reviewed base diff nevertheless contains five paths outside the user-named paper object.","needs":"Lead should confirm those trace files were authorized separately or split them from the seat diff."}]}
+```
+
+## Findings
+
+| Lens | Result | Evidence |
+|---|---|---|
+| Fill registry | Pass | All 11 added markers map to rows with named suppliers; no orphan or supplierless row. DS-32/PG-08 occur solely as `[FILL:...]` slots. |
+| Refusal wording | Fail — F1 | Semantic conditions mostly align, but the carriers are not textually identical; H04-C is only the two-stage heading. |
+| Selector/procedure | Pass | A/B/REFUSAL each produced one selected branch per group, no outcome markers, correct governed-label and slot counts; procedure matches implementation. |
+| Authorized regions | Fail — F2 | Skeleton hunks are confined to the specified regions, but five additional process-trace files are in the full base diff. |
+| Paper suite | Incomplete — F3 | Hung in the round-7 producer replay; no assertion failure observed before interruption. |
+
+- **F2 — blocker:** Separate or explicitly authorize the five `docs/process_traces/2026-09-02-paper-g/` files.
+- **F1 — should_fix:** Use one canonical two-stage predicate (or explicitly relax “identically”) across §4, Abstract, §7, §10, procedure, registry, and retensing carriers.
+
+## Residual risk
+
+The suite tail ended at:
+
+> `s...s..............s....................................`  
+> `^CTraceback (most recent call last):`  
+> `test_paper_round7_artifacts.py:881 test_both_producers_are_byte_identical`  
+> `check_paper_round7_artifacts.py:842 _run_producer`  
+> `KeyboardInterrupt`

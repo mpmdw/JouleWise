@@ -14,6 +14,13 @@ kills, quarantines, and amendments. Single-writer split: update this registry
 for current indexing and cross-references; update the bank only when recording
 new deliberation history.
 
+Capstone planning is current as of 2026-09-04. The compact disposition table
+below joins every canonical row to one of three outcomes: evidence already on
+disk, the next governed collection chain, or cut from the capstone. “On disk”
+never means claim-eligible: all retained measurement data predate the current
+production evidence generation. The dated, row-by-row evidence map is
+`docs/research_question_coverage-2026-09-04.md`.
+
 Column legend:
 
 - `canonical_id`: stable row key for the live index.
@@ -115,6 +122,99 @@ Column legend:
 | APP-CARBON-LABELS | Carbon labels | application idea | killed | none | no carbon label without wall meter and grid assumptions | none-yet | none | hardware | no | Killed as product label; C5-2.9 is the surviving scenario question. |
 | APP-BATTERY-RUNTIME | Battery-runtime estimates without calibration | application idea | killed | none | no battery-runtime estimate without system-level calibration | none-yet | none | hardware | no | Explicitly deferred/killed by the application shortlist. |
 | APP-LOCAL-CLOUD-ROUTING | Local-vs-cloud routing product | application idea | killed | none | no routing product while cloud side is unmeasured | none-yet | none | hardware | no | Killed product form; scenario analysis remains C5-2.9. |
+
+## Capstone Data Disposition — 2026-09-04
+
+This table is a planning join, not a change to the status or claim ceiling in
+the registry table above. A **collection chain** is the ordered set of desk
+checks, diagnostic runs, and production windows required before a governed
+answer can be produced. It is not necessarily one literal evening. The live
+chain follows D-164 through D-171: the Qwen3 pair and workload are fixed; the
+dominance ratios and close-out artifact are pre-registered; the retired
+campaign generations supply no evidence; and unattended-operation decisions
+change execution authority, not scientific eligibility.
+
+| canonical_id | capstone disposition | evidence already on disk or next data required |
+|---|---|---|
+| Q1 | cut | Cut from the capstone; no capstone collection is assigned. |
+| Q2 | cut | Cut from the capstone; no capstone collection is assigned. |
+| Q3 | cut | Cut from the capstone; no capstone collection is assigned. |
+| Q4 | cut | Cut from the capstone; no capstone collection is assigned. |
+| Q5 | cut | Cut from the capstone; no capstone collection is assigned. |
+| Q6 | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-METHOD-FLOOR | on disk, diagnostic only | The retained calibration corpus and the issued desk analyses in `docs/paper/round7/anchor-correction-quantified.*` and `docs/paper/round7/excursion-decomposition.*` answer how the mechanism behaves; they do not populate a claim-bearing `_v5` cell. |
+| C5-1.11 | on disk, partial and diagnostic only | Retained window telemetry supports only the observed Apple Neural Engine dark-state subquestion summarized in the bank; it does not answer general rail-utilization behavior. |
+| C5-1.3 | cut | Cut from the capstone; the separate phase-accounting characterization is not in the `_v5` transaction. |
+| RQ-KV-GROWTH | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-1.5 | on disk, partial and diagnostic only | Retained recovery tails and cap-hit outcomes answer only the observed-case subquestion summarized in the bank; no recovery curve is claim-eligible. |
+| C5-1.10 | on disk, partial and diagnostic only | Retained structured failure and refusal outcomes answer only the observed frontier cases; they do not establish a population frontier. |
+| C5-1.7 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-1.9 | cut | Cut from the capstone; its scored workload is the post-fiducial `_v6` leg, which the fresh audit excludes from this paper. |
+| C5-2.5 | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-POWER-MODE | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-INTELLIGENCE-PER-JOULE | cut | Cut from the capstone and remains killed. |
+| RQ-AUDITABLE-EVIDENCE | on disk, diagnostic only | Strict-valid retained bundles and their evidence chain support the limited reproducibility capability described in `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`; independent public re-reduction remains open. |
+| RQ-QWEN25-SMOKE | on disk, diagnostic only | The named Qwen2.5 observation is recorded in `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`; it is descriptive evidence for that stack and workload only. |
+| RQ-QWEN35-SMOKE | on disk, diagnostic only | The named Qwen3.5 observation is recorded in `docs/run_reports/2026-07-07-flagship-qwen35-122b.md`; it is descriptive evidence for that stack and workload only. |
+| RQ-TWO-MODEL-ACTIVE-NONCLAIM | on disk, diagnostic only | The two smoke reports above answer the row negatively: the observations are confounded and cannot establish active-parameter scaling. |
+| RQ-SHORT-PREFILL-RESOLVABILITY | on disk, diagnostic only | The retained overlap census in `docs/process_traces/2026-08-09-prefill-phase-proof/` supplies DG-067, DG-068, DG-069, DG-076, and DG-077; `docs/paper/round7/dg071-dg075-statistics.*` issues the record-timing inputs. Together they support the printed `not resolvable` result. |
+| RQ-MLX-KV-REPLAY | on disk, diagnostic only | The same-machine replay result is recorded in `docs/run_reports/2026-07-07-resume-merge-session.md`; it supports feasibility only for the named machine and software stack. |
+| RQ-MAC-BASELINES | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-SHAPE-ENERGY | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-1.1 | next collection chain | The governed `_v5` floor and contrast transaction would answer only the fixed Qwen3 8B-versus-1.7B pairwise demonstration. The unresolved D-163 ladder would not be answered. |
+| C5-1.2 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-1.4 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-1.6 | cut | Cut from the capstone; the post-floor shortlist does not assign a capstone window. |
+| C5-1.8 | cut | Cut from the capstone; the post-floor shortlist does not assign a capstone window. |
+| C5-1.12 | cut | Cut from the capstone; the post-floor shortlist does not assign a capstone window. |
+| C5-W.1 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-W.2 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-W.3 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-I.3 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-I.1 | cut | Cut from the capstone; its scored benchmark evidence belongs to the post-fiducial `_v6` leg. |
+| C5-I.2 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-I.4 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-I.5 | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-CONTENT-SENTINEL | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-ENERGY-VARIANCE | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-SESSION-SHAPE | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-ORDER-POSITION | cut | Cut from the capstone; it remains a proposed method check. |
+| RQ-ATTRIBUTION-DOMINANCE | next collection chain | The governed `_v5` alpha and beta floor windows plus gamma contrast, followed by the D-168 close-out, would answer the primary question. G2-a, the desk day, and G2-b precede that claim-bearing transaction; no `_v5` result is on disk. |
+| RQ-CACHE-PREFIX | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-AXI-HYBRID-PAIR | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-EXTERNAL-MARKED-RUNNER | cut | Cut from the capstone; no capstone collection is assigned. |
+| RQ-HUMANEVAL-IMPORT-SMOKE | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.1 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.2 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.3 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.4 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.11 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.6 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.7 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.8 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-2.9 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-3.1 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-3.2 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-3.3 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-3.4 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C5-3.5 | cut | Cut from the capstone; no capstone collection is assigned. |
+| C-023-TELEMETRY-PERTURBATION | cut | Cut from the capstone; no capstone collection is assigned. |
+| C-023-VERSION-DRIFT | cut | Cut from the capstone; no capstone collection is assigned. |
+| C-023-MARKER-JITTER | cut | Cut from the capstone; no capstone collection is assigned. |
+| C-023-OUTPUT-IDENTITY | cut | Cut from the capstone; it remains a future comparison gate. |
+| C-023-IDLE-STATIONARITY | cut | Cut from the capstone; it remains a future sensitivity check. |
+| C-023-QUALITY-EQUIV-QUANT | cut | Cut from the capstone; it remains a future comparison gate. |
+| C-023-COEFF-TRANSPORT | cut | Cut from the capstone; no capstone collection is assigned. |
+| APP-PROMPT-PROFILER | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-BUNDLE-POWER-BUG | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-CI-ENERGY-GATES | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-VENDOR-PRESS-AUDIT | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-MODEL-CARDS | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-TEACHING-INSTRUMENT | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-STANDARDS-CONTRIBUTION | cut | Cut from the capstone; this is an application idea, not a paper question. |
+| APP-CARBON-LABELS | cut | Cut from the capstone and remains killed. |
+| APP-BATTERY-RUNTIME | cut | Cut from the capstone and remains killed. |
+| APP-LOCAL-CLOUD-ROUTING | cut | Cut from the capstone and remains killed. |
 
 ## Attribution Limits
 
