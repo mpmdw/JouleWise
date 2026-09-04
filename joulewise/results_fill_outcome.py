@@ -1,12 +1,14 @@
 """Fail-closed renderer for registered Results fills OB-01 and OR-01.
 
-The D-165 close-out is revalidated against its exact three source byte
-strings.  Before-comparison evidence crosses a path-and-digest boundary: the
-renderer reopens the real whole-window row, its authoritative campaign log,
-and the prospective manifest/plan tree before replaying their owning
-validators.  The current whole-window validator returns one undifferentiated
-refusal tuple for both failed admission and failed provenance, so that lane
-deliberately remains ``STOP_FILL`` until a governed structured receipt exists.
+Both evidence lanes cross path-and-digest boundaries and replay their owning
+validators.  A close-out additionally requires a digest-bound validation
+receipt that binds the close-out and all three source files.  Callers must
+branch on :class:`OutcomeFillRefusal`; only ``OutcomeFillResult.fills`` may be
+substituted into a draft, and those values never contain the ``STOP_FILL``
+token.  Refusal reasons and secondary close-out diagnostics are non-paper
+metadata.  The current whole-window validator remains unable to distinguish
+failed admission from failed provenance, so that lane refuses until a governed
+structured receipt exists.
 """
 
 from __future__ import annotations
@@ -17,10 +19,17 @@ import os
 import re
 import stat
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Any
 
-from joulewise import analysis_manifest_v3, dominance_closeout, whole_window
+from joulewise import (
+    analysis_manifest_v3,
+    dominance_closeout,
+    identity_pins,
+    whole_window,
+)
 from joulewise.campaign_provenance import load_authenticated_campaign_manifest
 
 
@@ -28,23 +37,119 @@ STOP_FILL = "STOP_FILL"
 OB_01 = "OB-01"
 OR_01 = "OR-01"
 IDENTITY_NOT_V5 = "identity_not_v5"
-STOP_REASON = "_stop_reason"
-SECONDARY_CLOSEOUT_REASON = "_secondary_closeout_reason"
+CLOSEOUT_VALIDATION_RECEIPT_SCHEMA = (
+    "joulewise.d165_closeout_validation_receipt.v1"
+)
+CLOSEOUT_VALIDATOR = "joulewise.dominance_closeout.validate_d165_closeout"
+CLOSEOUT_REASON_UNREGISTERED = "closeout_reason_unregistered"
+CLOSEOUT_EVIDENCE_INVALID = "closeout_evidence_invalid"
+CLOSEOUT_PROSE_UNSAFE = "closeout_prose_unsafe"
+EVIDENCE_ABSENT = "evidence_absent"
+BEFORE_COMPARISON_INVALID = "before_comparison_invalid"
+BEFORE_COMPARISON_UNRENDERABLE = "before_comparison_unrenderable"
 
 _AT_CLOSE_OUT = "at close-out"
 _FORBIDDEN_PUBLIC_MARKERS = ("[FILL:", "[PENDING]", "[VALUE]", STOP_FILL)
+_PUBLIC_CELL_ID_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_V5_CLOSEOUT_PINS = {
+    "A": {
+        "model_tag": "qwen3-1p7b",
+        "public_name": "Qwen3-1.7B",
+        "model": {
+            "context_window": 40960,
+            "family": "qwen3",
+            "name": "Qwen3-1.7B-4bit",
+            "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+            "source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+            "weight_format": "mlx",
+        },
+        "tokenizer": {
+            "backend": "mlx",
+            "class": "TokenizerWrapper",
+            "identifier": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+            "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+            "vocab_size": 151936,
+        },
+    },
+    "B": {
+        "model_tag": "qwen3-8b",
+        "public_name": "Qwen3-8B",
+        "model": {
+            "context_window": 40960,
+            "family": "qwen3",
+            "name": "Qwen3-8B-4bit",
+            "revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+            "weight_format": "mlx",
+        },
+        "tokenizer": {
+            "backend": "mlx",
+            "class": "TokenizerWrapper",
+            "identifier": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+            "revision": "545dc4251c05440727734bcd94334791f6ab0192",
+            "vocab_size": 151936,
+        },
+    },
+}
 _V5_IDENTITIES = {
     (
-        "Qwen3-1.7B-4bit",
-        "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
-        "qwen3",
-    ): "Qwen3-1.7B",
-    (
-        "Qwen3-8B-4bit",
-        "545dc4251c05440727734bcd94334791f6ab0192",
-        "qwen3",
-    ): "Qwen3-8B",
+        pin["model"]["name"],
+        pin["model"]["revision"],
+        pin["model"]["family"],
+    ): pin["public_name"]
+    for pin in _V5_CLOSEOUT_PINS.values()
 }
+
+CLOSEOUT_REASON_SENTENCES: Mapping[str, str] = MappingProxyType({
+    dominance_closeout.CLOSEOUT_INPUT_MALFORMED:
+        "the dominance close-out inputs were malformed",
+    dominance_closeout.CLOSEOUT_INPUT_MALFORMED_ADAPTER:
+        "the dominance replay block identities were malformed",
+    dominance_closeout.CLOSEOUT_INPUT_MALFORMED_RECORDS:
+        "the dominance close-out ratio records were malformed",
+    dominance_closeout.CLOSEOUT_INPUT_MALFORMED_SOURCE:
+        "the dominance close-out source census or block membership was malformed",
+    dominance_closeout.DOMINANCE_ZERO_DENOMINATOR_REASON:
+        "a required attribution-dominance ratio could not be evaluated because its repeatability floor was zero",
+    dominance_closeout.FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH:
+        "the detection-floor source did not match the finalized campaign record",
+    "cell_not_common_mode":
+        "a required comparison lacks its registered common-mode replay",
+    "common_mode_replay_authenticated_operative_bound_invalid":
+        "the common-mode replay lacks its authenticated timing bound",
+    "common_mode_replay_block_count_invalid":
+        "the common-mode replay has an invalid block count",
+    "common_mode_replay_input_invalid":
+        "the common-mode replay inputs were invalid",
+    "common_mode_replay_window_domain_invalid":
+        "a common-mode replay window fell outside the registered domain",
+    "common_mode_replay_zero_point_divergence_out_of_domain":
+        "a common-mode replay zero point fell outside the registered tolerance",
+    "common_mode_replay_zero_point_membership_invalid":
+        "a common-mode replay zero point was absent from its registered sweeps",
+    "d165_mint_adapter_input_invalid":
+        "the dominance replay inputs could not be adapted from the detection-floor record",
+    "dominance_ratio_nonfinite_or_negative_denominator":
+        "a required attribution-dominance denominator was invalid",
+    "dominance_ratio_nonfinite_or_negative_numerator":
+        "a required attribution-dominance numerator was invalid",
+    "dominance_ratio_nonfinite_result":
+        "a required attribution-dominance ratio was not finite",
+    "finalized_manifest_id_mismatch":
+        "the finalized campaign record did not match its content-derived identity",
+    "floor_cell_unresolved":
+        "a required detection-floor cell could not be resolved",
+    "floor_member_census_mismatch":
+        "the replay membership did not match the detection-floor membership",
+    "manifest_lacks_replay_sidecar":
+        "the finalized campaign record lacks the required dominance replay",
+    "point_floor_parent_nonfinite_or_negative":
+        "a required repeatability-floor input was invalid",
+    "replay_sidecar_digest_mismatch":
+        "the dominance replay did not match its registered digest",
+    "replay_sidecar_identity_mismatch":
+        "the dominance replay did not match its registered identity",
+})
 _V5_IDENTITY_BY_ARM = {
     "A": next(
         identity
@@ -62,13 +167,63 @@ _BEFORE_ABSENT = "absent"
 _BEFORE_INVALID = "invalid"
 _BEFORE_IDENTITY_NOT_V5 = "identity_not_v5"
 _BEFORE_WHOLE_WINDOW_UNRENDERABLE = "whole_window_unrenderable"
+_CLOSEOUT_ABSENT = "absent"
+_CLOSEOUT_INVALID = "invalid"
+_CLOSEOUT_AUTHENTICATED = "authenticated"
+_CLOSEOUT_RECEIPT_KEYS = {
+    "schema_version",
+    "validator",
+    "status",
+    "closeout_sha256",
+    "source_sha256",
+    "errors",
+}
+_CLOSEOUT_SOURCE_RECEIPT_KEYS = {
+    "finalized_manifest",
+    "floor_artifact",
+    "replay_sidecar",
+}
 
 
-def _stopped(reason: str | None = None) -> dict[str, str]:
-    result = {OB_01: STOP_FILL, OR_01: STOP_FILL}
-    if reason is not None:
-        result[STOP_REASON] = reason
-    return result
+@dataclass(frozen=True)
+class OutcomeFillRefusal:
+    """Out-of-band refusal metadata; never substitute this into paper prose."""
+
+    reason_code: str
+    secondary_closeout_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class OutcomeFillResult:
+    """Authorized fill values; every stopped outcome uses the sibling type."""
+
+    fills: Mapping[str, str]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "fills", MappingProxyType(dict(self.fills)))
+
+
+def _refused(
+    reason_code: str,
+    *,
+    secondary_closeout_reason: str | None = None,
+) -> OutcomeFillRefusal:
+    return OutcomeFillRefusal(
+        reason_code=reason_code,
+        secondary_closeout_reason=secondary_closeout_reason,
+    )
+
+
+def _issued(fills: Mapping[str, str]) -> OutcomeFillResult | OutcomeFillRefusal:
+    copied = dict(fills)
+    if any(
+        key not in {OB_01, OR_01}
+        or _safe_public_string(value) is None
+        or value == STOP_FILL
+        for key, value in copied.items()
+    ):
+        return _refused(CLOSEOUT_PROSE_UNSAFE)
+    return OutcomeFillResult(fills=copied)
 
 
 def _safe_public_string(value: object) -> str | None:
@@ -111,34 +266,6 @@ def _decode_json_object_bytes(value: object) -> Mapping[str, Any] | None:
     except (UnicodeError, ValueError):
         return None
     return decoded if isinstance(decoded, Mapping) else None
-
-
-def _authenticated_closeout(
-    closeout: object,
-    *,
-    finalized_manifest_bytes: object,
-    floor_artifact_bytes: object,
-    replay_sidecar_bytes: object,
-) -> bool:
-    if not isinstance(closeout, Mapping) or not all(
-        isinstance(value, bytes)
-        for value in (
-            finalized_manifest_bytes,
-            floor_artifact_bytes,
-            replay_sidecar_bytes,
-        )
-    ):
-        return False
-    try:
-        errors = dominance_closeout.validate_d165_closeout(
-            closeout,
-            finalized_manifest_bytes=finalized_manifest_bytes,
-            floor_artifact_bytes=floor_artifact_bytes,
-            replay_sidecar_bytes=replay_sidecar_bytes,
-        )
-    except (KeyError, TypeError, ValueError):
-        return False
-    return not errors
 
 
 def _path(value: object) -> Path | None:
@@ -205,6 +332,91 @@ def _read_bound_regular(
     if hashlib.sha256(raw).hexdigest() != expected_sha256:
         return None
     return path, raw
+
+
+def _authenticated_closeout_path(
+    *,
+    closeout_path: object,
+    closeout_sha256: object,
+    finalized_manifest_path: object,
+    finalized_manifest_sha256: object,
+    floor_artifact_path: object,
+    floor_artifact_sha256: object,
+    replay_sidecar_path: object,
+    replay_sidecar_sha256: object,
+    closeout_validation_receipt_path: object,
+    closeout_validation_receipt_sha256: object,
+) -> tuple[str, Mapping[str, Any] | None, bytes | None]:
+    """Open and replay one receipt-bound close-out evidence chain."""
+
+    bindings = (
+        (closeout_path, closeout_sha256),
+        (finalized_manifest_path, finalized_manifest_sha256),
+        (floor_artifact_path, floor_artifact_sha256),
+        (replay_sidecar_path, replay_sidecar_sha256),
+        (
+            closeout_validation_receipt_path,
+            closeout_validation_receipt_sha256,
+        ),
+    )
+    supplied = tuple(value is not None for binding in bindings for value in binding)
+    if not any(supplied):
+        return _CLOSEOUT_ABSENT, None, None
+    if not all(supplied):
+        return _CLOSEOUT_INVALID, None, None
+
+    opened = tuple(
+        _read_bound_regular(path, digest) for path, digest in bindings
+    )
+    if any(source is None for source in opened):
+        return _CLOSEOUT_INVALID, None, None
+    closeout_source, manifest_source, floor_source, sidecar_source, receipt_source = (
+        source for source in opened if source is not None
+    )
+    closeout = _decode_json_object_bytes(closeout_source[1])
+    manifest = _decode_json_object_bytes(manifest_source[1])
+    receipt = _decode_json_object_bytes(receipt_source[1])
+    receipt_sources = (
+        receipt.get("source_sha256") if isinstance(receipt, Mapping) else None
+    )
+    if (
+        closeout is None
+        or manifest is None
+        or receipt is None
+        or set(receipt) != _CLOSEOUT_RECEIPT_KEYS
+        or receipt.get("schema_version") != CLOSEOUT_VALIDATION_RECEIPT_SCHEMA
+        or receipt.get("validator") != CLOSEOUT_VALIDATOR
+        or receipt.get("status") != "PASS"
+        or receipt.get("errors") != []
+        or receipt.get("closeout_sha256") != closeout_sha256
+        or not isinstance(receipt_sources, Mapping)
+        or set(receipt_sources) != _CLOSEOUT_SOURCE_RECEIPT_KEYS
+        or receipt_sources.get("finalized_manifest")
+        != finalized_manifest_sha256
+        or receipt_sources.get("floor_artifact") != floor_artifact_sha256
+        or receipt_sources.get("replay_sidecar") != replay_sidecar_sha256
+    ):
+        return _CLOSEOUT_INVALID, None, None
+    try:
+        errors = dominance_closeout.validate_d165_closeout(
+            closeout,
+            finalized_manifest_bytes=manifest_source[1],
+            floor_artifact_bytes=floor_source[1],
+            replay_sidecar_bytes=sidecar_source[1],
+        )
+    except (KeyError, TypeError, ValueError):
+        return _CLOSEOUT_INVALID, None, None
+    if errors:
+        return _CLOSEOUT_INVALID, None, None
+
+    # Reopen every path after validator replay so a replacement must still
+    # match the out-of-band digest and the receipt that bound it.
+    if any(
+        _read_bound_regular(path, digest) is None
+        for path, digest in bindings
+    ):
+        return _CLOSEOUT_INVALID, None, None
+    return _CLOSEOUT_AUTHENTICATED, closeout, manifest_source[1]
 
 
 def _safe_relative_path(root: Path, value: object) -> Path | None:
@@ -575,26 +787,71 @@ def _v5_manifest_model_names(
     if manifest is None or not isinstance(manifest.get("arms"), list):
         return None
 
-    identities: set[tuple[str, str, str]] = set()
+    seen_arm_labels: list[str] = []
     model_by_floor_cell: dict[str, str] = {}
     for arm in manifest["arms"]:
         if not isinstance(arm, Mapping):
             return None
+        arm_id = arm.get("arm_id")
+        arm_label = (
+            arm_id.rsplit(":", 1)[1]
+            if isinstance(arm_id, str) and ":" in arm_id
+            else None
+        )
+        pin = _V5_CLOSEOUT_PINS.get(arm_label)
         floor_cell_id = _safe_public_string(arm.get("floor_cell_id"))
         stack = arm.get("realized_stack_identity")
         model = stack.get("model") if isinstance(stack, Mapping) else None
-        if floor_cell_id is None or not isinstance(model, Mapping):
+        tokenizer = stack.get("tokenizer") if isinstance(stack, Mapping) else None
+        artifact = stack.get("model_artifact") if isinstance(stack, Mapping) else None
+        floor_stack = arm.get("floor_stack_identity")
+        if (
+            pin is None
+            or floor_cell_id is None
+            or not isinstance(stack, Mapping)
+            or not isinstance(model, Mapping)
+            or not isinstance(tokenizer, Mapping)
+            or not isinstance(artifact, Mapping)
+            or not isinstance(floor_stack, Mapping)
+        ):
             return None
-        identity = (model.get("name"), model.get("revision"), model.get("family"))
-        if identity not in _V5_IDENTITIES:
+        try:
+            identity_pins.stack_identity_sha256(floor_stack)
+        except (TypeError, ValueError):
             return None
-        identities.add(identity)
-        public_name = _V5_IDENTITIES[identity]
+        floor_tokenizer = floor_stack.get("tokenizer_identity")
+        expected_floor_tokenizer = dict(pin["tokenizer"])
+        expected_floor_tokenizer["identifier"] = pin["model"]["name"]
+        artifact_digest = artifact.get("sha256") or artifact.get("folded_sha256")
+        runtime = stack.get("runtime")
+        floor_runtime = floor_stack.get("runtime_version")
+        telemetry = stack.get("telemetry")
+        if (
+            arm.get("model_tag") != pin["model_tag"]
+            or dict(model) != pin["model"]
+            or dict(tokenizer) != pin["tokenizer"]
+            or floor_tokenizer != expected_floor_tokenizer
+            or floor_stack.get("model_artifact_sha256") != artifact_digest
+            or floor_stack.get("quantization") != stack.get("quantization")
+            or not isinstance(runtime, Mapping)
+            or not isinstance(floor_runtime, Mapping)
+            or {
+                "name": runtime.get("name"),
+                "adapter": runtime.get("adapter"),
+                "version": runtime.get("version"),
+            }
+            != dict(floor_runtime)
+            or not isinstance(telemetry, Mapping)
+            or floor_stack.get("telemetry_backend") != telemetry.get("name")
+        ):
+            return None
+        seen_arm_labels.append(str(arm_label))
+        public_name = str(pin["public_name"])
         existing = model_by_floor_cell.get(floor_cell_id)
         if existing is not None and existing != public_name:
             return None
         model_by_floor_cell[floor_cell_id] = public_name
-    if identities != set(_V5_IDENTITIES):
+    if sorted(seen_arm_labels) != ["A", "A", "B", "B"]:
         return None
     return model_by_floor_cell
 
@@ -602,15 +859,19 @@ def _v5_manifest_model_names(
 def _record_label(record: Mapping[str, Any], *, common_mode: bool) -> str | None:
     cell_id = _safe_public_string(record.get("cell_id"))
     component = record.get("component")
-    if cell_id is None or component not in {"absolute", "comparative"}:
+    if (
+        cell_id is None
+        or _PUBLIC_CELL_ID_RE.fullmatch(cell_id) is None
+        or component not in {"absolute", "comparative"}
+    ):
         return None
     suffix = "comparative common-mode" if common_mode else str(component)
     return f"{cell_id} {suffix}"
 
 
-def _render_ob01(closeout: Mapping[str, Any]) -> str:
+def _render_ob01(closeout: Mapping[str, Any]) -> str | None:
     if closeout.get("branch") != "B":
-        return STOP_FILL
+        return None
     labels: list[str] = []
     for key, common_mode in (
         ("independent_ratios", False),
@@ -618,22 +879,25 @@ def _render_ob01(closeout: Mapping[str, Any]) -> str:
     ):
         records = closeout.get(key)
         if not isinstance(records, list):
-            return STOP_FILL
+            return None
         for record in records:
             if not isinstance(record, Mapping):
-                return STOP_FILL
+                return None
             if record.get("passes") is False:
                 label = _record_label(record, common_mode=common_mode)
                 if label is None:
-                    return STOP_FILL
+                    return None
                 labels.append(label)
-    return _english_list(labels) if labels else STOP_FILL
+    return _english_list(labels) if labels else None
 
 
-def _render_closeout_refusal(closeout: Mapping[str, Any]) -> str:
-    reason = _safe_public_string(closeout.get("refusal_reason"))
-    if reason is None:
-        return STOP_FILL
+def _render_closeout_refusal(closeout: Mapping[str, Any]) -> str | None:
+    reason_code = closeout.get("refusal_reason")
+    if not isinstance(reason_code, str):
+        return None
+    reason = CLOSEOUT_REASON_SENTENCES.get(reason_code)
+    if reason is None or _safe_public_string(reason) is None:
+        return None
     affected: list[str] = []
     for key, common_mode in (
         ("independent_ratios", False),
@@ -641,26 +905,32 @@ def _render_closeout_refusal(closeout: Mapping[str, Any]) -> str:
     ):
         records = closeout.get(key)
         if not isinstance(records, list):
-            return STOP_FILL
+            return None
         for record in records:
             if not isinstance(record, Mapping):
-                return STOP_FILL
+                return None
             if record.get("status") != "refused":
                 continue
             record_label = _record_label(record, common_mode=common_mode)
             if record_label is None:
-                return STOP_FILL
+                return None
             affected.append(record_label)
     affected_text = _english_list(affected) if affected else "none recorded"
     return f"{_AT_CLOSE_OUT}: {reason}; affected: {affected_text}"
 
 
 def render_outcome_fills(
-    closeout: Mapping[str, Any] | None,
     *,
-    finalized_manifest_bytes: bytes | None = None,
-    floor_artifact_bytes: bytes | None = None,
-    replay_sidecar_bytes: bytes | None = None,
+    closeout_path: Path | str | None = None,
+    closeout_sha256: str | None = None,
+    finalized_manifest_path: Path | str | None = None,
+    finalized_manifest_sha256: str | None = None,
+    floor_artifact_path: Path | str | None = None,
+    floor_artifact_sha256: str | None = None,
+    replay_sidecar_path: Path | str | None = None,
+    replay_sidecar_sha256: str | None = None,
+    closeout_validation_receipt_path: Path | str | None = None,
+    closeout_validation_receipt_sha256: str | None = None,
     runs_root_path: Path | str | None = None,
     campaign_log_path: Path | str | None = None,
     campaign_log_sha256: str | None = None,
@@ -670,25 +940,35 @@ def render_outcome_fills(
     prospective_manifest_sha256: str | None = None,
     plan_tree_path: Path | str | None = None,
     plan_tree_sha256: str | None = None,
-) -> dict[str, str]:
-    """Return registered OB-01/OR-01 strings, or fail closed.
+) -> OutcomeFillResult | OutcomeFillRefusal:
+    """Return only authorized OB-01/OR-01 strings, with refusal out of band.
 
     Before-comparison sources have registered precedence over an authenticated
     close-out refusal.  Until the whole-window validator exposes the ruled
-    admission/provenance distinction, that winning stage emits ``STOP_FILL``;
-    a later close-out reason remains secondary non-paper metadata.
+    admission/provenance distinction, that winning stage returns a structured
+    refusal; a later close-out reason remains secondary non-paper metadata.
+    The successor must substitute only ``result.fills`` and translate any
+    ``OutcomeFillRefusal`` to stderr plus exit status 2.
     """
 
-    authenticated_closeout = False
-    if closeout is not None:
-        authenticated_closeout = _authenticated_closeout(
-            closeout,
-            finalized_manifest_bytes=finalized_manifest_bytes,
-            floor_artifact_bytes=floor_artifact_bytes,
-            replay_sidecar_bytes=replay_sidecar_bytes,
+    closeout_state, closeout, finalized_manifest_bytes = (
+        _authenticated_closeout_path(
+            closeout_path=closeout_path,
+            closeout_sha256=closeout_sha256,
+            finalized_manifest_path=finalized_manifest_path,
+            finalized_manifest_sha256=finalized_manifest_sha256,
+            floor_artifact_path=floor_artifact_path,
+            floor_artifact_sha256=floor_artifact_sha256,
+            replay_sidecar_path=replay_sidecar_path,
+            replay_sidecar_sha256=replay_sidecar_sha256,
+            closeout_validation_receipt_path=closeout_validation_receipt_path,
+            closeout_validation_receipt_sha256=(
+                closeout_validation_receipt_sha256
+            ),
         )
-        if not authenticated_closeout:
-            return _stopped()
+    )
+    if closeout_state == _CLOSEOUT_INVALID:
+        return _refused(CLOSEOUT_EVIDENCE_INVALID)
 
     before_state = _validated_before_comparison_path(
         runs_root_path=runs_root_path,
@@ -702,41 +982,63 @@ def render_outcome_fills(
         plan_tree_sha256=plan_tree_sha256,
     )
     if before_state == _BEFORE_IDENTITY_NOT_V5:
-        return _stopped(IDENTITY_NOT_V5)
+        return _refused(IDENTITY_NOT_V5)
     if before_state == _BEFORE_INVALID:
-        return _stopped()
+        return _refused(BEFORE_COMPARISON_INVALID)
     if before_state == _BEFORE_WHOLE_WINDOW_UNRENDERABLE:
-        result = _stopped()
+        secondary_reason = None
         if closeout is not None and closeout.get("branch") is None:
-            secondary_reason = _safe_public_string(closeout.get("refusal_reason"))
-            if secondary_reason is None:
-                return _stopped()
-            result[SECONDARY_CLOSEOUT_REASON] = secondary_reason
-        return result
-    if not authenticated_closeout:
-        return _stopped()
+            secondary_reason = closeout.get("refusal_reason")
+            if not isinstance(secondary_reason, str) or not secondary_reason:
+                return _refused(CLOSEOUT_EVIDENCE_INVALID)
+        return _refused(
+            BEFORE_COMPARISON_UNRENDERABLE,
+            secondary_closeout_reason=secondary_reason,
+        )
+    if closeout_state != _CLOSEOUT_AUTHENTICATED:
+        return _refused(EVIDENCE_ABSENT)
 
     model_by_floor_cell = _v5_manifest_model_names(finalized_manifest_bytes)
     if model_by_floor_cell is None:
-        return _stopped(IDENTITY_NOT_V5)
+        return _refused(IDENTITY_NOT_V5)
 
     assert closeout is not None
     branch = closeout.get("branch")
-    if branch in {"A", "B"}:
-        return {OB_01: _render_ob01(closeout), OR_01: STOP_FILL}
+    if branch == "A":
+        return _issued({})
+    if branch == "B":
+        ob01 = _render_ob01(closeout)
+        return _issued({OB_01: ob01}) if ob01 is not None else _refused(
+            CLOSEOUT_PROSE_UNSAFE
+        )
     if branch is None:
         refusal = _render_closeout_refusal(closeout)
-        if refusal != STOP_FILL:
-            return {OB_01: STOP_FILL, OR_01: refusal}
-    return _stopped()
+        if refusal is not None:
+            return _issued({OR_01: refusal})
+        reason = closeout.get("refusal_reason")
+        return _refused(
+            CLOSEOUT_REASON_UNREGISTERED
+            if isinstance(reason, str) and reason
+            else CLOSEOUT_EVIDENCE_INVALID
+        )
+    return _refused(CLOSEOUT_EVIDENCE_INVALID)
 
 
 __all__ = [
+    "BEFORE_COMPARISON_INVALID",
+    "BEFORE_COMPARISON_UNRENDERABLE",
+    "CLOSEOUT_EVIDENCE_INVALID",
+    "CLOSEOUT_PROSE_UNSAFE",
+    "CLOSEOUT_REASON_SENTENCES",
+    "CLOSEOUT_REASON_UNREGISTERED",
+    "CLOSEOUT_VALIDATION_RECEIPT_SCHEMA",
+    "CLOSEOUT_VALIDATOR",
+    "EVIDENCE_ABSENT",
     "IDENTITY_NOT_V5",
     "OB_01",
     "OR_01",
-    "SECONDARY_CLOSEOUT_REASON",
+    "OutcomeFillRefusal",
+    "OutcomeFillResult",
     "STOP_FILL",
-    "STOP_REASON",
     "render_outcome_fills",
 ]

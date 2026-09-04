@@ -9,6 +9,7 @@ import json
 import re
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
@@ -45,6 +46,33 @@ QWEN3 = {
         "public_name": "Qwen3-8B",
         "revision": "545dc4251c05440727734bcd94334791f6ab0192",
     },
+}
+
+EXPECTED_CLOSEOUT_REASON_CODES = {
+    core.DOMINANCE_ZERO_DENOMINATOR_REASON,
+    core.FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH,
+    core.CLOSEOUT_INPUT_MALFORMED,
+    core.CLOSEOUT_INPUT_MALFORMED_SOURCE,
+    core.CLOSEOUT_INPUT_MALFORMED_RECORDS,
+    core.CLOSEOUT_INPUT_MALFORMED_ADAPTER,
+    "cell_not_common_mode",
+    "common_mode_replay_authenticated_operative_bound_invalid",
+    "common_mode_replay_block_count_invalid",
+    "common_mode_replay_input_invalid",
+    "common_mode_replay_window_domain_invalid",
+    "common_mode_replay_zero_point_divergence_out_of_domain",
+    "common_mode_replay_zero_point_membership_invalid",
+    "d165_mint_adapter_input_invalid",
+    "dominance_ratio_nonfinite_or_negative_denominator",
+    "dominance_ratio_nonfinite_or_negative_numerator",
+    "dominance_ratio_nonfinite_result",
+    "finalized_manifest_id_mismatch",
+    "floor_cell_unresolved",
+    "floor_member_census_mismatch",
+    "manifest_lacks_replay_sidecar",
+    "point_floor_parent_nonfinite_or_negative",
+    "replay_sidecar_digest_mismatch",
+    "replay_sidecar_identity_mismatch",
 }
 
 
@@ -158,16 +186,169 @@ def _built_sources(
     return closeout, manifest_bytes, floor_bytes, sidecar_bytes
 
 
-def _render(fixture: dict, *, v5_identity: bool = True) -> dict[str, str]:
+def _renamed_qwen25_sources(builder: str) -> tuple[dict, bytes, bytes, bytes]:
+    """Build Opus's counterfactual: Qwen2.5 bytes with three renamed fields."""
+
+    floor = d165_fixtures.floor_artifact()
+    manifest = d165_fixtures.finalized_manifest()
+    for arm in manifest["arms"]:
+        identity = QWEN3[arm["arm_id"].rsplit(":", 1)[1]]
+        arm["realized_stack_identity"]["model"].update(
+            {
+                "family": identity["family"],
+                "name": identity["name"],
+                "revision": identity["revision"],
+            }
+        )
+    if builder == "branch_b":
+        first = True
+        for cell in floor["cells"]:
+            for component_name, parent_key in (
+                ("absolute", "max_abs_residual_j"),
+                ("comparative", "max_abs_delta_j"),
+            ):
+                if first:
+                    first = False
+                    continue
+                component = cell[component_name]
+                point = core._point_unguarded_floor_from_component(
+                    component, parent_key=parent_key
+                )
+                component["corner_widened_unguarded_floor_j"] = 2.0 * point
+    sidecar = d165_fixtures.replay_sidecar(floor, residual_width_scale=10.0)
+    manifest_bytes, floor_bytes, sidecar_bytes = (
+        d165_fixtures._reseal_test_sources(manifest, floor, sidecar)
+    )
+    closeout = d165_fixtures.build_d165_dominance_closeout(
+        manifest_bytes, floor_bytes, sidecar_bytes
+    )
+    return closeout, manifest_bytes, floor_bytes, sidecar_bytes
+
+
+def _fabricated_cell_sources() -> tuple[dict, bytes, bytes, bytes]:
+    """Build the self-consistent fabricated-41x counterfactual from the review."""
+
+    floor = d165_fixtures.floor_artifact()
+    manifest = d165_fixtures.finalized_manifest()
+    _switch_sources_to_qwen3(manifest, floor)
+    first = True
+    for cell in floor["cells"]:
+        for component_name, parent_key in (
+            ("absolute", "max_abs_residual_j"),
+            ("comparative", "max_abs_delta_j"),
+        ):
+            if first:
+                first = False
+                continue
+            component = cell[component_name]
+            point = core._point_unguarded_floor_from_component(
+                component, parent_key=parent_key
+            )
+            component["corner_widened_unguarded_floor_j"] = 2.0 * point
+    sidecar = d165_fixtures.replay_sidecar(floor, residual_width_scale=10.0)
+    replacements = {
+        cell["cell_id"]: (
+            "Qwen3-8B beats Qwen3-1.7B by 41x (fabricated)-" + str(index)
+        )
+        for index, cell in enumerate(floor["cells"])
+    }
+    for cell in floor["cells"]:
+        cell["cell_id"] = replacements[cell["cell_id"]]
+    for arm in manifest["arms"]:
+        arm["floor_cell_id"] = replacements[arm["floor_cell_id"]]
+    for cell in sidecar["cells"]:
+        cell["cell_id"] = replacements[cell["cell_id"]]
+    manifest_bytes, floor_bytes, sidecar_bytes = (
+        d165_fixtures._reseal_test_sources(manifest, floor, sidecar)
+    )
+    closeout = d165_fixtures.build_d165_dominance_closeout(
+        manifest_bytes, floor_bytes, sidecar_bytes
+    )
+    return closeout, manifest_bytes, floor_bytes, sidecar_bytes
+
+
+def _install_closeout_sources(
+    root: Path,
+    closeout: dict,
+    manifest: bytes,
+    floor: bytes,
+    sidecar: bytes,
+) -> dict:
+    root.mkdir(parents=True, exist_ok=True)
+    raw_by_name = {
+        "closeout": _file_json_bytes(closeout),
+        "finalized_manifest": manifest,
+        "floor_artifact": floor,
+        "replay_sidecar": sidecar,
+    }
+    paths: dict[str, Path] = {}
+    digests: dict[str, str] = {}
+    for name, raw in raw_by_name.items():
+        path = root / f"{name}.json"
+        path.write_bytes(raw)
+        paths[name] = path
+        digests[name] = hashlib.sha256(raw).hexdigest()
+    receipt = {
+        "schema_version": "joulewise.d165_closeout_validation_receipt.v1",
+        "validator": "joulewise.dominance_closeout.validate_d165_closeout",
+        "status": "PASS",
+        "closeout_sha256": digests["closeout"],
+        "source_sha256": {
+            "finalized_manifest": digests["finalized_manifest"],
+            "floor_artifact": digests["floor_artifact"],
+            "replay_sidecar": digests["replay_sidecar"],
+        },
+        "errors": [],
+    }
+    receipt_raw = _file_json_bytes(receipt)
+    receipt_path = root / "closeout_validation_receipt.json"
+    receipt_path.write_bytes(receipt_raw)
+    return {
+        "closeout_path": paths["closeout"],
+        "closeout_sha256": digests["closeout"],
+        "finalized_manifest_path": paths["finalized_manifest"],
+        "finalized_manifest_sha256": digests["finalized_manifest"],
+        "floor_artifact_path": paths["floor_artifact"],
+        "floor_artifact_sha256": digests["floor_artifact"],
+        "replay_sidecar_path": paths["replay_sidecar"],
+        "replay_sidecar_sha256": digests["replay_sidecar"],
+        "closeout_validation_receipt_path": receipt_path,
+        "closeout_validation_receipt_sha256": hashlib.sha256(
+            receipt_raw
+        ).hexdigest(),
+    }
+
+
+def _install_closeout_chain(
+    root: Path,
+    builder: str,
+    *,
+    renamed_qwen25: bool = False,
+    fabricated_cells: bool = False,
+) -> dict:
+    if renamed_qwen25:
+        closeout, manifest, floor, sidecar = _renamed_qwen25_sources(builder)
+    elif fabricated_cells:
+        closeout, manifest, floor, sidecar = _fabricated_cell_sources()
+    else:
+        closeout, manifest, floor, sidecar = _built_sources(builder)
+    if closeout is None:
+        raise AssertionError("close-out fixture builder returned no close-out")
+    return _install_closeout_sources(root, closeout, manifest, floor, sidecar)
+
+
+def _render(fixture: dict, *, v5_identity: bool = True):
     closeout, manifest, floor, sidecar = _built_sources(
         fixture["builder"], v5_identity=v5_identity
     )
-    return renderer.render_outcome_fills(
-        closeout,
-        finalized_manifest_bytes=manifest,
-        floor_artifact_bytes=floor,
-        replay_sidecar_bytes=sidecar,
-    )
+    if closeout is None:
+        return renderer.render_outcome_fills()
+    with tempfile.TemporaryDirectory() as tmp:
+        return renderer.render_outcome_fills(
+            **_install_closeout_sources(
+                Path(tmp), closeout, manifest, floor, sidecar
+            )
+        )
 
 
 def _install_v5_prospective(
@@ -420,8 +601,196 @@ def _fixture(name: str) -> dict:
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
 
 
+def _observed(result) -> tuple[Mapping[str, str], str | None]:
+    if isinstance(result, renderer.OutcomeFillRefusal):
+        return {}, result.reason_code
+    if not isinstance(result, renderer.OutcomeFillResult):
+        raise AssertionError(f"unexpected renderer result: {type(result).__name__}")
+    return result.fills, None
+
+
 class ResultsFillOutcomeTests(unittest.TestCase):
     maxDiff = None
+
+    def test_r4_b1_reason_map_is_closed_and_diagnostics_never_render(self) -> None:
+        self.assertEqual(
+            set(renderer.CLOSEOUT_REASON_SENTENCES),
+            EXPECTED_CLOSEOUT_REASON_CODES,
+        )
+        registry = REGISTRY.read_text(encoding="utf-8")
+        registered = dict(
+            re.findall(
+                r"Reason sentence `([^`]+)`: `([^`\r\n]+)`",
+                registry,
+            )
+        )
+        self.assertEqual(registered, renderer.CLOSEOUT_REASON_SENTENCES)
+        for sentence in registered.values():
+            self.assertNotRegex(sentence, r"\[[0-9]+\]|sidecar\.cells|'.*'")
+        ob_row = next(
+            line for line in registry.splitlines() if line.startswith("| OB-01 ")
+        )
+        or_row = next(
+            line for line in registry.splitlines() if line.startswith("| OR-01 ")
+        )
+        self.assertNotIn("RENDERER_ISSUED", ob_row + or_row)
+        self.assertIn("TOKEN_MISSING", or_row)
+        self.assertIn(
+            "Future acceptance oracle `before_window` (blocked on "
+            "`WHOLE-WINDOW-STOP-RECEIPT-01`)",
+            or_row,
+        )
+        self.assertIn(
+            "Future acceptance oracle `before_verdict` (blocked on "
+            "`CLAIM-NONISSUANCE-RECEIPT-01`)",
+            or_row,
+        )
+        for path in FIXTURES.glob("*.json"):
+            fixture = json.loads(path.read_text(encoding="utf-8"))
+            self.assertNotIn("before_comparison_sources", fixture)
+            self.assertNotIn("before_comparison_case", fixture)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = renderer.render_outcome_fills(
+                **_install_closeout_chain(Path(tmp), "census_refusal")
+            )
+        self.assertIsInstance(result, renderer.OutcomeFillRefusal)
+        self.assertEqual(
+            result.reason_code,
+            renderer.CLOSEOUT_REASON_UNREGISTERED,
+        )
+
+        closeout, manifest, floor, sidecar = _built_sources("branch_b")
+        sidecar_value = json.loads(sidecar)
+        sidecar_value["cells"][1]["cell_id"] = sidecar_value["cells"][0][
+            "cell_id"
+        ]
+        manifest_value = json.loads(manifest)
+        manifest, floor, sidecar = d165_fixtures._reseal_test_sources(
+            manifest_value, json.loads(floor), sidecar_value
+        )
+        closeout = d165_fixtures.build_d165_dominance_closeout(
+            manifest, floor, sidecar
+        )
+        self.assertRegex(closeout["refusal_reason"], r"sidecar\.cells\[1\].*'")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = renderer.render_outcome_fills(
+                **_install_closeout_sources(
+                    Path(tmp), closeout, manifest, floor, sidecar
+                )
+            )
+        self.assertIsInstance(result, renderer.OutcomeFillRefusal)
+        self.assertEqual(
+            result.reason_code,
+            renderer.CLOSEOUT_REASON_UNREGISTERED,
+        )
+
+    def test_r4_s1_renamed_qwen25_manifest_refuses_via_identity_validator(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "joulewise.identity_pins.stack_identity_sha256",
+            wraps=stack_identity_sha256,
+        ) as identity_validator:
+            result = renderer.render_outcome_fills(
+                **_install_closeout_chain(
+                    Path(tmp), "branch_b", renamed_qwen25=True
+                )
+            )
+        self.assertIsInstance(result, renderer.OutcomeFillRefusal)
+        self.assertEqual(result.reason_code, renderer.IDENTITY_NOT_V5)
+        self.assertGreater(identity_validator.call_count, 0)
+
+    def test_r4_s2_closeout_requires_digest_bound_paths_and_replayed_receipt(
+        self,
+    ) -> None:
+        parameters = inspect.signature(renderer.render_outcome_fills).parameters
+        for removed in (
+            "closeout",
+            "finalized_manifest_bytes",
+            "floor_artifact_bytes",
+            "replay_sidecar_bytes",
+        ):
+            self.assertNotIn(removed, parameters)
+        for required in (
+            "closeout_path",
+            "closeout_sha256",
+            "finalized_manifest_path",
+            "finalized_manifest_sha256",
+            "floor_artifact_path",
+            "floor_artifact_sha256",
+            "replay_sidecar_path",
+            "replay_sidecar_sha256",
+            "closeout_validation_receipt_path",
+            "closeout_validation_receipt_sha256",
+        ):
+            self.assertIn(required, parameters)
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "joulewise.dominance_closeout.validate_d165_closeout",
+            wraps=core.validate_d165_closeout,
+        ) as validator:
+            chain = _install_closeout_chain(Path(tmp), "branch_b")
+            result = renderer.render_outcome_fills(**chain)
+            self.assertIsInstance(result, renderer.OutcomeFillResult)
+            self.assertIn(renderer.OB_01, result.fills)
+            validator.assert_called_once()
+            chain["closeout_path"].write_bytes(
+                chain["closeout_path"].read_bytes() + b" "
+            )
+            stopped = renderer.render_outcome_fills(**chain)
+            self.assertIsInstance(stopped, renderer.OutcomeFillRefusal)
+
+        for field, replacement in (
+            ("status", "REFUSE"),
+            ("validator", "caller_named_validator"),
+        ):
+            with (
+                self.subTest(receipt_field=field),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                chain = _install_closeout_chain(Path(tmp), "branch_b")
+                receipt = json.loads(
+                    chain["closeout_validation_receipt_path"].read_text(
+                        encoding="utf-8"
+                    )
+                )
+                receipt[field] = replacement
+                raw = _file_json_bytes(receipt)
+                chain["closeout_validation_receipt_path"].write_bytes(raw)
+                chain["closeout_validation_receipt_sha256"] = hashlib.sha256(
+                    raw
+                ).hexdigest()
+                stopped = renderer.render_outcome_fills(**chain)
+                self.assertIsInstance(stopped, renderer.OutcomeFillRefusal)
+                self.assertEqual(
+                    stopped.reason_code, renderer.CLOSEOUT_EVIDENCE_INVALID
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result = renderer.render_outcome_fills(
+                **_install_closeout_chain(
+                    Path(tmp), "branch_b", fabricated_cells=True
+                )
+            )
+        self.assertIsInstance(result, renderer.OutcomeFillRefusal)
+        self.assertFalse(hasattr(result, "fills"))
+
+    def test_r4_s3_refusal_is_out_of_band_from_fill_values(self) -> None:
+        stopped = renderer.render_outcome_fills()
+        self.assertIsInstance(stopped, renderer.OutcomeFillRefusal)
+        self.assertFalse(hasattr(stopped, "fills"))
+        self.assertNotEqual(stopped.reason_code, renderer.STOP_FILL)
+
+        for builder in ("branch_a", "branch_b", "closeout_refusal"):
+            with self.subTest(builder=builder), tempfile.TemporaryDirectory() as tmp:
+                result = renderer.render_outcome_fills(
+                    **_install_closeout_chain(Path(tmp), builder)
+                )
+                self.assertIsInstance(result, renderer.OutcomeFillResult)
+                self.assertNotIn(renderer.STOP_FILL, result.fills.values())
+                with self.assertRaises(TypeError):
+                    result.fills[renderer.OB_01] = renderer.STOP_FILL
 
     def test_b1_registered_bytes_are_the_independent_acceptance_oracle(self) -> None:
         fixture_paths = sorted(FIXTURES.glob("*.json"))
@@ -440,16 +809,21 @@ class ResultsFillOutcomeTests(unittest.TestCase):
             with self.subTest(fixture=path.stem):
                 for fill_key, oracle_name in fixture["registry_oracles"].items():
                     self.assertEqual(
-                        fixture["expected"][fill_key], _registry_oracle(oracle_name)
+                        fixture["expected"]["fills"].get(
+                            fill_key, renderer.STOP_FILL
+                        ),
+                        _registry_oracle(oracle_name),
                     )
                 rendered = _render(fixture)
+                observed_fills, observed_refusal = _observed(rendered)
+                self.assertEqual(observed_fills, fixture["expected"]["fills"])
                 self.assertEqual(
-                    {key: rendered[key] for key in FILL_KEYS}, fixture["expected"]
+                    observed_refusal, fixture["expected"]["refusal_reason"]
                 )
                 self.assertFalse(
                     any(
                         marker in value
-                        for value in rendered.values()
+                        for value in observed_fills.values()
                         for marker in ("[VALUE]", "[FILL:", "[PENDING]")
                     )
                 )
@@ -459,7 +833,6 @@ class ResultsFillOutcomeTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             chain = _install_before_chain(Path(tmp))
-            expected = {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL}
             with (
                 mock.patch(
                     "joulewise.analysis_manifest_v3."
@@ -471,10 +844,12 @@ class ResultsFillOutcomeTests(unittest.TestCase):
                     wraps=whole_window.whole_window_refusal_reasons,
                 ) as whole_window_validator,
             ):
-                rendered = renderer.render_outcome_fills(
-                    None, **_before_kwargs(chain)
-                )
-            self.assertEqual(rendered, expected)
+                rendered = renderer.render_outcome_fills(**_before_kwargs(chain))
+            self.assertIsInstance(rendered, renderer.OutcomeFillRefusal)
+            self.assertEqual(
+                rendered.reason_code,
+                renderer.BEFORE_COMPARISON_UNRENDERABLE,
+            )
             prospective_validator.assert_called_once()
             self.assertEqual(
                 prospective_validator.call_args.kwargs,
@@ -584,16 +959,16 @@ class ResultsFillOutcomeTests(unittest.TestCase):
                     "joulewise.whole_window.whole_window_refusal_reasons",
                     return_value=("whole_window_neg8_verdict_failed",),
                 ) as validator:
-                    rendered = renderer.render_outcome_fills(
-                        None, **_before_kwargs(chain)
-                    )
-                expected = {
-                    "OB-01": renderer.STOP_FILL,
-                    "OR-01": renderer.STOP_FILL,
-                }
-                if case == "wrong_v5_revision":
-                    expected["_stop_reason"] = renderer.IDENTITY_NOT_V5
-                self.assertEqual(rendered, expected)
+                    rendered = renderer.render_outcome_fills(**_before_kwargs(chain))
+                self.assertIsInstance(rendered, renderer.OutcomeFillRefusal)
+                self.assertEqual(
+                    rendered.reason_code,
+                    (
+                        renderer.IDENTITY_NOT_V5
+                        if case == "wrong_v5_revision"
+                        else renderer.BEFORE_COMPARISON_INVALID
+                    ),
+                )
                 validator.assert_not_called()
 
     def test_f1_caller_result_and_normalized_byte_channels_are_removed(self) -> None:
@@ -609,26 +984,29 @@ class ResultsFillOutcomeTests(unittest.TestCase):
 
         close_fixture = _fixture("closeout_refusal")
         self.assertEqual(
-            _render(close_fixture)["OR-01"], close_fixture["expected"]["OR-01"]
+            _render(close_fixture).fills["OR-01"],
+            close_fixture["expected"]["fills"]["OR-01"],
         )
 
         with tempfile.TemporaryDirectory() as tmp:
-            chain = _install_before_chain(Path(tmp))
+            root = Path(tmp)
+            chain = _install_before_chain(root / "before")
             closeout, manifest, floor, sidecar = _built_sources("closeout_refusal")
+            assert closeout is not None
+            closeout_chain = _install_closeout_sources(
+                root / "closeout", closeout, manifest, floor, sidecar
+            )
             with mock.patch(
                 "joulewise.whole_window.whole_window_refusal_reasons",
                 return_value=("whole_window_neg8_verdict_failed",),
             ):
                 rendered = renderer.render_outcome_fills(
-                    closeout,
-                    finalized_manifest_bytes=manifest,
-                    floor_artifact_bytes=floor,
-                    replay_sidecar_bytes=sidecar,
+                    **closeout_chain,
                     **_before_kwargs(chain),
                 )
-            self.assertEqual(rendered["OR-01"], renderer.STOP_FILL)
+            self.assertIsInstance(rendered, renderer.OutcomeFillRefusal)
             self.assertEqual(
-                rendered["_secondary_closeout_reason"],
+                rendered.secondary_closeout_reason,
                 "dominance_ratio_zero_denominator",
             )
 
@@ -659,22 +1037,28 @@ class ResultsFillOutcomeTests(unittest.TestCase):
                     all(status == "complete" for status in statuses),
                     builder == "source_refusal",
                 )
-                rendered = renderer.render_outcome_fills(
-                    closeout,
-                    finalized_manifest_bytes=manifest,
-                    floor_artifact_bytes=floor,
-                    replay_sidecar_bytes=sidecar,
-                )
-                self.assertEqual(rendered["OR-01"], _registry_oracle(oracle))
+                with tempfile.TemporaryDirectory() as tmp:
+                    rendered = renderer.render_outcome_fills(
+                        **_install_closeout_sources(
+                            Path(tmp), closeout, manifest, floor, sidecar
+                        )
+                    )
+                if builder == "source_refusal":
+                    self.assertEqual(
+                        rendered.fills["OR-01"], _registry_oracle(oracle)
+                    )
+                else:
+                    self.assertIsInstance(rendered, renderer.OutcomeFillRefusal)
+                    self.assertEqual(
+                        rendered.reason_code,
+                        renderer.CLOSEOUT_REASON_UNREGISTERED,
+                    )
 
     def test_f4_v5_identity_gate_precedes_every_fill(self) -> None:
         fixture = _fixture("branch_b")
         rendered = _render(fixture, v5_identity=False)
-        self.assertEqual(
-            {key: rendered[key] for key in FILL_KEYS},
-            {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL},
-        )
-        self.assertEqual(rendered["_stop_reason"], "identity_not_v5")
+        self.assertIsInstance(rendered, renderer.OutcomeFillRefusal)
+        self.assertEqual(rendered.reason_code, "identity_not_v5")
 
         _, manifest, _, _ = _built_sources("branch_a")
         identities = {
@@ -710,50 +1094,66 @@ class ResultsFillOutcomeTests(unittest.TestCase):
             ),
             [],
         )
-        wrong_revision_rendered = renderer.render_outcome_fills(
-            wrong_closeout,
-            finalized_manifest_bytes=wrong_manifest_bytes,
-            floor_artifact_bytes=floor,
-            replay_sidecar_bytes=sidecar,
+        with tempfile.TemporaryDirectory() as tmp:
+            wrong_revision_rendered = renderer.render_outcome_fills(
+                **_install_closeout_sources(
+                    Path(tmp),
+                    wrong_closeout,
+                    wrong_manifest_bytes,
+                    floor,
+                    sidecar,
+                )
+            )
+        self.assertEqual(
+            wrong_revision_rendered.reason_code, "identity_not_v5"
         )
-        self.assertEqual(wrong_revision_rendered["_stop_reason"], "identity_not_v5")
 
     def test_existing_fail_closed_guards_remain_biting(self) -> None:
-        stopped = {"OB-01": renderer.STOP_FILL, "OR-01": renderer.STOP_FILL}
         closeout, manifest, floor, sidecar = _built_sources("branch_a")
+        assert closeout is not None
         incomplete = copy.deepcopy(closeout)
         incomplete["independent_ratios"].pop()
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                incomplete,
-                finalized_manifest_bytes=manifest,
-                floor_artifact_bytes=floor,
-                replay_sidecar_bytes=sidecar,
-            ),
-            stopped,
-            "deleting one A-fixture census entry must flip the entire result",
-        )
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                closeout,
-                finalized_manifest_bytes=manifest,
-                floor_artifact_bytes=floor + b" ",
-                replay_sidecar_bytes=sidecar,
-            ),
-            stopped,
-            "a close-out whose source bytes do not authenticate must stop",
-        )
-        self.assertEqual(
-            renderer.render_outcome_fills(
-                closeout,
-                finalized_manifest_bytes=manifest,
-                floor_artifact_bytes=floor,
-                replay_sidecar_bytes=sidecar,
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            incomplete_result = renderer.render_outcome_fills(
+                **_install_closeout_sources(
+                    root / "incomplete", incomplete, manifest, floor, sidecar
+                )
+            )
+            self.assertIsInstance(
+                incomplete_result, renderer.OutcomeFillRefusal
+            )
+            self.assertEqual(
+                incomplete_result.reason_code,
+                renderer.CLOSEOUT_EVIDENCE_INVALID,
+                "deleting one A-fixture census entry must flip the entire result",
+            )
+
+            source_chain = _install_closeout_sources(
+                root / "source", closeout, manifest, floor, sidecar
+            )
+            source_chain["floor_artifact_path"].write_bytes(floor + b" ")
+            source_result = renderer.render_outcome_fills(**source_chain)
+            self.assertIsInstance(source_result, renderer.OutcomeFillRefusal)
+            self.assertEqual(
+                source_result.reason_code,
+                renderer.CLOSEOUT_EVIDENCE_INVALID,
+                "a close-out whose source bytes do not authenticate must stop",
+            )
+
+            partial_chain = _install_closeout_sources(
+                root / "partial", closeout, manifest, floor, sidecar
+            )
+            partial_result = renderer.render_outcome_fills(
+                **partial_chain,
                 runs_root_path=Path("/unbound-partial-before-input"),
-            ),
-            stopped,
-            "a partial path-and-digest chain must not fall through to close-out",
-        )
+            )
+            self.assertIsInstance(partial_result, renderer.OutcomeFillRefusal)
+            self.assertEqual(
+                partial_result.reason_code,
+                renderer.BEFORE_COMPARISON_INVALID,
+                "a partial before chain must not fall through to close-out",
+            )
 
 
 if __name__ == "__main__":
