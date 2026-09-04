@@ -27,12 +27,13 @@ Already complete:
 
 Still required:
 
-- Supervisor approval and scope confirmation (Step 1; user-deferred
-  2026-07-06, tracked as queue meta row P1-001).
-- Wall-meter decision (Step 3).
-- Network/interconnect plan with physical topology (Step 4).
-- NVIDIA/Orin access evidence (Step 6).
 - Calendar mapping (Step 7).
+
+The original Phase 1 paperwork gates for supervisor scope, the wall-meter
+decision, the network plan, and NVIDIA/Orin access now have disposition
+evidence below. A recorded blocker means that the planning gate is answered;
+it does not turn missing hardware into live validation. Physical acquisition,
+contact, and promotion remain later gates under their owning plans.
 
 Complete since the last revision:
 
@@ -51,14 +52,14 @@ Complete since the last revision:
 
 | Item | Status | Required Evidence | Recorded In |
 |---|---|---|---|
-| Supervisor approval and scope | pending | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | Supervisor section below; `RUN_STATE.md` if scope changes |
+| Supervisor approval and scope | complete by later authority (2026-07-30) | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | Supervisor section below; D-091; `docs/contracts/capstone_scope.md` |
 | Mac telemetry permissions | complete (2026-07-06) | Privileged 5-sample plist captured by the user on the M3 Max (`tests/fixtures/powermetrics_sample.plist`); framing + field names recorded below and pin the 2H parser; D-004 sudoers line installed and verified via `sudo -n`; exercised live by the 2I flagship run | Instrumentation section below |
 | Mac runtime (MLX) | complete (2026-07-06) | Install path decided; install or documented procedure | Instrumentation section below (installed in `.venv`, versions pinned, real generation verified via Slice 2G) |
-| Wall-meter availability | pending | Meter make/model, resolution, export/manual logging method, lab-or-purchased | Wall-meter section below |
-| Network plan | partially checked | Controller tool status recorded; topology, link-speed paths, isolation plan, throughput method still pending | Network section below |
+| Wall-meter decision | complete; acquisition pending (2026-07-30) | The accepted `to-buy` decision and its measurement boundary are recorded; procurement and characterization remain separate later gates | Wall-meter section below; D-092 |
+| Network plan | blocker recorded; physical confirmation pending | Controller tool status, candidate link paths, verification methods, transfer fields, and the missing hardware facts are recorded | Network section below |
 | Hailo feasibility | complete (2026-06-12, desk research) | Toolchain/version check plus one documented compile/runtime attempt or official limitation finding; verdict code | Hailo section below (`unsupported_workload`) |
-| NVIDIA telemetry permissions | pending | SSH access, `nvidia-smi` path, power-query support, sample command output | Instrumentation section below |
-| Orin telemetry permissions | pending | SSH access, selected telemetry source, sample command output, wall-meter fallback | Instrumentation section below |
+| NVIDIA telemetry permissions | pending with recorded blocker | SSH access, `nvidia-smi` path, power-query support, sample command output, or the missing access named explicitly | Instrumentation section below |
+| Orin telemetry permissions | pending with recorded blocker | SSH access, selected telemetry source, sample command output, wall-meter fallback, or the missing access named explicitly | Instrumentation section below |
 | Pi/Hailo telemetry permissions | pending | SSH access, wall-meter path, Hailo runtime verdict | Instrumentation + Hailo sections below |
 | Calendar mapping | pending | Dates in `docs/milestones.md`; phase targets derived | `docs/milestones.md` |
 | Phase 2 readiness | complete (2026-06-12) | Review confirming mock-first Phase 2 can begin without hardware access | Readiness section below |
@@ -79,7 +80,19 @@ Questions to put to the supervisor (one meeting should close this gate):
 - May mock-first Phase 2 implementation proceed before all hardware
   checks complete?
 
-Recorded evidence: none yet. Add dated meeting/email notes here.
+Recorded evidence:
+
+- On 2026-07-30, D-091 recorded the supervisor-ratified change to a
+  metrology-centred capstone: the measurement instrument is the product and
+  model comparisons are demonstration studies.
+- `docs/contracts/capstone_scope.md` is the binding scope record. It identifies
+  the protected minimum deliverables, the split-inference stretch path, the
+  conditions that force cuts, and the claims that are out of scope without
+  stronger evidence.
+
+These dated authorities supersede the empty meeting-note placeholder. They
+record the scope content that P1-001 requested without reconstructing or
+inventing meeting minutes.
 
 Acceptance: must-haves, stretch items, and out-of-scope items written
 down; no Phase 2 work depends on an unstated expectation.
@@ -168,7 +181,13 @@ To record: meter make/model; sample rate or manual logging method;
 precision/resolution; digital export availability; how readings align with
 run timestamps; lab equipment or purchase.
 
-Recorded evidence: none yet.
+Recorded decision (2026-07-30): D-092 answers P1-003 with `to-buy`. The
+external meter is required only for the conditional whole-machine validation
+claim; it cannot validate phase allocation. No meter is currently available,
+so all other claims must stand on the internal instrument characterization.
+Purchase or loan, exact make/model selection, safe fixture qualification,
+timestamp alignment, and characterization remain later execution gates; they
+are not silently treated as complete here.
 
 Acceptance: each target has platform telemetry, wall-meter telemetry, or a
 documented telemetry gap.
@@ -238,6 +257,14 @@ Open items: choose/confirm the 2.5GbE switch or adapters; decide whether
 10GbE is in scope; identify controller/prefill/decode nodes per
 experiment; decide isolation vs direct cabling; install `iperf3` or pin
 the fixed-size transfer procedure.
+
+P1-004 disposition: the Phase 1 planning acceptance permits a documented
+blocker. That blocker is the absent physical hardware assignment: node roles,
+switch or direct-cable choice, adapters, cables, and supported link speeds are
+not yet known. The section already fixes the verification choices and the
+fields every later transfer must record. Actual topology confirmation must be
+opened with the future split-inference hardware work; this record does not
+claim that a link was measured.
 
 Acceptance: all intended link speeds have a concrete hardware path or are
 explicitly unavailable; verification commands known per node; throughput
@@ -342,6 +369,12 @@ id -u
   - [ ] VRAM limit documented (8 GB expected; informs D-016).
   - [ ] Wall-meter comparison path noted.
 
+P1-006 NVIDIA disposition: pending with blocker. No SSH credential or device
+contact is available in the repository evidence, so CUDA, Video Random
+Access Memory (VRAM), and live `nvidia-smi` power sampling cannot be checked.
+The fixture-first implementation is not live evidence; the protocol pins stay
+provisional until the live-promotion checklist is executed on the device.
+
 ### NVIDIA 3080 Ti (borrow)
 
 - Same checks as the 3050, plus:
@@ -361,6 +394,11 @@ id -u
   - [ ] Rail telemetry accessible (sysfs paths or tegrastats output
     captured; actual rail recorded per D-018).
   - [ ] Wall-meter fallback available.
+
+P1-006 Orin disposition: pending with blocker. No SSH credential or device
+contact is available in the repository evidence, so the runtime and the
+INA3221 or `tegrastats` telemetry path cannot be selected from observation.
+No support or measurement claim is made.
 
 ### Raspberry Pi 5 + Hailo-8L
 
