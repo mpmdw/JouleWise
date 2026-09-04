@@ -263,10 +263,6 @@ options and considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
 constraints live in `docs/milestones.md`; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`. The status-site lane is RETIRED (D-136,
-2026-08-12): no session spends effort on Lakebed, capsule packing, or site
-diagnosis, the site workflow runs on manual dispatch only, and what survives
-is a manual-deploy reference in the release checklist. The scripts and
-`site_capsule/` still exist, so nothing is broken; they are simply not a
-workstream. Historically, and superseded: sessions that changed front-facing
-state refreshed `docs/site/DRIFT.md` and Ed deployed manually (D-068).
+`docs/council_log.md`. Agents never regenerate or deploy the status site:
+sessions that change front-facing state refresh `docs/site/DRIFT.md`, and Ed
+deploys manually (D-068).
