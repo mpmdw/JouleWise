@@ -1,7 +1,7 @@
 # Window GAMMA arm readiness — checked human view
 
 Window GAMMA is the prospective Qwen2.5 1.5B-versus-7B contrast night,
-including the prospectively frozen 256-token prefill arm. The authoritative
+including the prospectively frozen 512-token prefill arm. The authoritative
 row set is `configs/arm_readiness/d117_row_registry_v2.json` (the ruled live
 registry; the frozen `_v1`–`_v3` packs pin the archival
 `d117_row_registry_v1.json` coordinate in their immutable plan trees); this
@@ -9,8 +9,9 @@ page is a checked human view of the GAMMA profile. No GAMMA row status is establ
 committed evidence at this checkpoint.
 
 GAMMA's D-131 identity-pin projection must preserve four ordered identity units:
-`A/decode`, `A/prefill_p256`, `B/decode`, and `B/prefill_p256`. That declared
-order is a requirement, not a present pass.
+`A/decode`, `A/prefill_p<N>`, `B/decode`, and `B/prefill_p<N>`. Here N is fixed
+by the G2-a `joulewise.prefill_prompt_pin.v2` record (512 for `_v5`; 256 was
+the `_v3` value). That declared order is a requirement, not a present pass.
 
 At pack freeze, the completed frozen pack pins only the non-authorizing freeze
 receipt's path and SHA-256. It declares the future arm receipt's schema and
