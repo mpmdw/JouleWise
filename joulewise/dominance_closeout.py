@@ -53,11 +53,14 @@ COMMON_MODE_REPLAY_RULE_IDS = (
     LEGACY_COMMON_MODE_REPLAY_RULE_ID,
     COMMON_MODE_REPLAY_RULE_ID,
 )
+# LEGACY v1 BEGIN
+# Retained verbatim solely to validate historical pre-relabel artifacts.
 LEGACY_ABSOLUTE_COMMON_MODE_REASON = (
     "the absolute estimator uses deviations from the mean, so a uniform shared "
     "fiducial shift cancels exactly; the replay is registered only for "
     "comparative ABBA block inputs"
 )
+# LEGACY v1 END
 ABSOLUTE_COMMON_MODE_REASON = (
     "a uniform additive energy offset cancels from absolute residuals; no "
     "absolute common-time replay is implemented; absolute R_cm is not_applicable "
@@ -599,7 +602,11 @@ def replay_common_mode_dominance(
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> dict[str, Any]:
-    """shared-energy-sign / local-corner sensitivity diagnostic; no proven conservatism for common-time motion"""
+    """Replay both shared energy signs and every independent local corner.
+
+    This shared-energy-sign / local-corner sensitivity diagnostic has no
+    proven conservatism for common-time motion.
+    """
 
     if not blocks or len(blocks) > MAX_EXACT_ADMISSIBLE_CORNER_N:
         raise ValueError("common_mode_replay_block_count_invalid")

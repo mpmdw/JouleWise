@@ -439,11 +439,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         )
 
     def test_p2_shared_energy_sign_witness_is_unchanged_under_v2(self) -> None:
-        self.assertEqual(
-            core.replay_common_mode_dominance.__doc__,
-            "shared-energy-sign / local-corner sensitivity diagnostic; no "
-            "proven conservatism for common-time motion",
-        )
+        self.assertIn("shared-energy-sign", core.replay_common_mode_dominance.__doc__)
         bracket = authenticated_bracket(0.05)
         blocks = [
             {
@@ -490,6 +486,26 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         }
         self.assertEqual(reasons, {core.ABSOLUTE_COMMON_MODE_REASON})
         self.assertNotIn("cancels exactly", core.ABSOLUTE_COMMON_MODE_REASON)
+
+    def test_production_builder_emits_v2_rule_and_ratified_absolute_reason(self) -> None:
+        floor = floor_artifact()
+        source = replay_sidecar(floor)
+        built = core.build_d165_replay_sidecar(
+            floor, builder_recomputations(floor, source)
+        )
+        for cell in built["cells"]:
+            with self.subTest(cell_id=cell["cell_id"]):
+                self.assertEqual(
+                    cell["comparative"]["common_mode_replay"]["result"]["rule_id"],
+                    "d165_shared_sign_local_corner_replay.v2",
+                )
+                self.assertEqual(
+                    cell["absolute"]["common_mode"]["reason"],
+                    "a uniform additive energy offset cancels from absolute residuals; no "
+                    "absolute common-time replay is implemented; absolute R_cm is not_applicable "
+                    "because the registered replay is comparative-only, not because absolute "
+                    "timing uncertainty vanishes",
+                )
 
     def test_terra_relabel_all_cells_to_forged_ids_refuses_neither_branch(self) -> None:
         closeout, manifest, floor, sidecar = self.build()

@@ -120,10 +120,12 @@ and fail results is reported component by component and uses null framing
 instead of a dominance headline. A zero point-floor denominator is a named
 refusal, never infinity or NaN.
 
-The registration also defines R_cm, the same ratio under the ruled
-*common-mode* replay. Common-mode means onset and offset edge uncertainty uses
-one shared sign across all ten ABBA blocks, while bundle-local residual signs
-remain independently adversarial. The replay reconstructs the shared and
+The registration also defines R_cm under
+`d165_shared_sign_local_corner_replay.v2`, a shared-energy-sign / local-corner
+sensitivity diagnostic. One additive energy sign is shared across all ten ABBA
+blocks, while bundle-local residual signs remain independently adversarial.
+This has no proven conservatism for common-time motion; passage licenses no
+physical timing-robustness claim. The replay reconstructs the shared and
 local terms from the custodied onset sweep, offset sweep, zero-point contrast,
 four residual half-widths, member-window bounds, operative shared-edge bound,
 member envelope sum, and block delta before the mint path's final
@@ -134,10 +136,11 @@ and every zero point approximately agrees with its block delta under the
 production tolerance. If `R_cm < 2.0`, the dominance sentence is withdrawn.
 
 The component dispositions are explicit. Absolute independent-corner R is
-reportable and participates in the R >= 2 gate. Absolute R_cm is not applicable:
-the absolute estimator operates on deviations from the mean, so a uniform
-shared fiducial shift cancels exactly, while this replay is registered only for
-comparative ABBA inputs. Comparative R_cm is mandatory and retains the `< 2`
+reportable and participates in the R >= 2 gate. Absolute R_cm uses the registered
+rationale (`ABSOLUTE_COMMON_MODE_REASON`): a uniform additive energy offset
+cancels from absolute residuals; no absolute common-time replay is implemented;
+absolute R_cm is not_applicable because the registered replay is comparative-only,
+not because absolute timing uncertainty vanishes. Comparative R_cm is mandatory and retains the `< 2`
 withdrawal. No absolute local-only diagnostic is registered for `_v5`; such a
 quantity is deferred because it requires a distinct versioned name.
 
