@@ -210,3 +210,12 @@ beside its prompt; harvest from disk, never relaunch blind.
 - PRs: #285 wave-2 (merged main; T0 test cure; rows filled at f1600c10; CI watched); #286 paper-J (rows 11/12
   filled; full replay running for row 9); #287 legacy-L1 (opened; rows 9/11/12 pending). AUTH parked at 93d0d91c.
 - Ed emails outstanding: due date/fallback; ensemble vs same-condition; estimand relabel veto (defaults running).
+
+## 2026-09-05 ~08:00 PT — MODEL ROUTING CHANGE (Ed, in chat): astra replaces Sol everywhere
+"keep spamming astra use it instead of sol in all cases now. use sol where you would have used terra. luna max for
+simple tasks. astra high for an equal use in all parts for fable 5.1 with 5.1 deciding final merges."
+→ every NEW seat: `-m gpt-6-astra --effort high` (xhigh on the usual triggers); Sol = mid tier; luna `--effort max`
+= simple tasks (probe running); astra is an equal peer in review/consult/adjudication; Fable merges. Recorded in
+memory (instrument-mix-authority). First astra seats under the rule: paperk-astra (peer review beside Opus),
+packet-paper-supply-2 (D-173 cold-gate packet seal with seam head 84b24686 and 43 Q6 / 02-F4 questions).
+Still-running Sol seats (launched before the rule) finish as is: d174-wire, enclosure-script, fb-v2b.
