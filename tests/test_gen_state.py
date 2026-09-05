@@ -39,7 +39,6 @@ EXPECTED_IDS = {
     "INSTRUMENT-PATH-PIN-01",
     "GENERATOR-CORE-01",
     "WATCHDOG-INSTALL-01",
-    "NIGHT-PLAN-PIN-01",
     "R7F-EXIT3-SEMANTICS-01",
     "PREWINDOW-V5-PIN-01",
     "CHARTER-V3-PACKET-INPUTS-01",
@@ -110,7 +109,6 @@ EXPECTED_IDS = {
     # launch-step realization recheck) and the ruling-171a decode-identity fix
     # replace the retired projection-02 row.
     "V5-LAUNCH-REALIZATION-RECHECK-01",
-    "V5-DECODE-IDENTITY-SET-01",
     # 2026-09-02 bench sweep: the T26 cold-gate verdicts (items 1-4,
     # docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md)
     # were found uninstalled; one installing row plus the two Ed items the
@@ -131,7 +129,6 @@ EXPECTED_IDS = {
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
     # the joint delta re-audit's adjudication item 4 (006-* guard strength).
-    "EPOCH-LINT-01",
     "LINE-AUDIT-GUARD-01",
     # [AGENT]
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
@@ -228,6 +225,21 @@ EXPECTED_IDS = {
     # completed table.)
     "T3-PROV-SCHEMA-01",
     "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
+    # 2026-09-04 post-fan-out paper-supply program. The custody seam is the
+    # active agent head; four supplier/cold-gate rows wait behind it, while
+    # two governed receipt producers are independently queued. The Q-R1-2
+    # composition proposal and doctrine-bearing skill distillation remain
+    # blocked on their named cold gates.
+    "PAPER-CUSTODY-SEAM-01",
+    "D123-REPORTED-MEAN-SUPPLIER-01",
+    "D165-OUTCOME-RENDERER-01",
+    "GAMMA-CLAIM-RENDERER-01",
+    "TRANSFER-RESULT-RENDERER-01",
+    "WHOLE-WINDOW-STOP-RECEIPT-01",
+    "CLAIM-NONISSUANCE-RECEIPT-01",
+    "D173-PAPER-SUPPLY-COLD-GATE-01",
+    "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01",
+    "SKILL-DISTILL-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-010", "P2-019", "P2-020",
@@ -264,7 +276,10 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 # 2026-09-04 fan-out magistrate-rulings batch.
                 "FLOOR-WORKLOAD-SIZING-01", "P1-008", "P2-027", "P2-035",
                 "P2-047A", "P2-047B", "P2-050",
-                "PHASE-SHARE-ESTIMAND-01", "PREWINDOW-REGEX-01"}
+                "PHASE-SHARE-ESTIMAND-01", "PREWINDOW-REGEX-01",
+                # 2026-09-04 merge-wave closures and retirements.
+                "NIGHT-PLAN-PIN-01", "V5-DECODE-IDENTITY-SET-01",
+                "EPOCH-LINT-01"}
 
 
 def load_kernel():
@@ -664,9 +679,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # floor-generator counter-review CR-3 row adds one: 142 + 1 = 143.
         # The 2026-09-04 fan-out ruling batch retires nine rows (including
         # P2-047B with its retired P2-047A parent), then opens ED-DATES-01:
-        # 143 - 9 + 1 = 135.
+        # 143 - 9 + 1 = 135. The landing merge then retires NIGHT-PLAN-PIN-01,
+        # V5-DECODE-IDENTITY-SET-01, and EPOCH-LINT-01 while registering the
+        # custody seam, four suppliers, the D-173 and Q-R1-2 cold gates, two
+        # governed receipt producers, and the held skill distillation:
+        # 135 - 3 + 10 = 142.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 135)
+        self.assertEqual(len(self.tasks), 142)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -868,10 +887,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             },
         )
         # Ruling 171a R-9 (2026-09-02): the three _v5 packs cannot freeze until
-        # decode units carry a declared manifest set.
+        # decode units carry a declared manifest set. PR #278 satisfied that
+        # edge; the remaining pending hard-start edge is G2-a.
         self.assertEqual(
             self._hard_start_targets("V5-DESK-DAY-01"),
-            {"V5-G2A-PREFILL-PROBE-01", "V5-DECODE-IDENTITY-SET-01"},
+            {"V5-G2A-PREFILL-PROBE-01"},
         )
         self.assertEqual(
             self._hard_start_targets("V5-G2B-SHAKEDOWN-01"),
@@ -1104,7 +1124,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             kernel["tasks"][task_id]["lane"]: task_id
             for task_id in head_oracle["expected_selectable_task_ids"]
         }
-        expected_by_lane["agent"] = "NIGHT-REHEARSAL-01"
+        expected_by_lane["agent"] = "PAPER-CUSTODY-SEAM-01"
         self.assertEqual(set(expected_by_lane), set(gen_state.LANES))
 
         restart = rendered.split("## Restart By Machine-State Lane", 1)[1]

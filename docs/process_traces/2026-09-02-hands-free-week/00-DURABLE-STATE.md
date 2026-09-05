@@ -146,3 +146,53 @@ beside its prompt; harvest from disk, never relaunch blind.
 - FAN-OUT: `int/2026-09-04-fan-wave-2` → **PR #285** (32 landings; five Sol contract rounds, two Opus counter-reviews, five seam-fix rounds; bench restorations of the frozen v1 validator and draft-v1; MODULARITY generalisation re-homed in `joulewise/analysis_manifest_v2.py`). Final replay running (`int-fan-wave2-replay-3.log`); CI running; rows 9/11/12 then merge. After merge: kernel rows (Opus F-2 from wave 1: p2-rows retirements, QUIET-GUARD wording, PREWINDOW-REGEX row, P2-027/035/047A/050), README blurb, RUN_STATE T33.
 - SUPPLIERS: all four supplier lanes are blocked on the custody-read seam (`feat/2026-09-04-paper-custody-seam`, PAPER-CUSTODY-SEAM-01): landing → two refuters NOT LANDABLE → fix 1 → delta NOT LANDABLE (inputs.py bypass, shim, D-173 text) → fix 2 RUNNING (bounded; a repeat routes to a consult). D-173 (proposed/provisional) text synced to addendum 16 (role + runs root; git-tracked supply map). Rulings 06 + addenda 07–10, 15, 16 on `feat/2026-09-04-paper-i-scout`. Supplier branches at their last heads: d123 (fix 2, delta NOT LANDABLE third occurrence → seam), d165 (fix 3, delta NOT LANDABLE third → seam), gamma (fix 2, delta NOT LANDABLE third → seam), transfer (fix 3 committed; B1 → seam). Each re-lands on the seam after it passes; then one paper-supply cold gate (D-173) before any merges.
 - WATCHDOG: merged; install waits for the quiet point (custody seam + wave 2 settle), then handoff → first launchd activation → REHEARSAL_STUB night. Window tonight ~02:56 PT.
+
+## 2026-09-04 ~19:30 PT — astra peer audits landed; consult convened; scope-freeze pending
+
+- Three gpt-6-astra peer audits archived at docs/process_traces/2026-09-04-peer-audit/ (01 full base, 02 claim spine,
+  03 paper vs code); 04 = magistrate bench verification (all four executable witnesses reproduce on f4c812b4);
+  05 = three-seat consult questions Q1–Q7. Ed emailed (thread "astra peer audits are in").
+- Running: Sol xhigh physics consult → 10-consult-sol-physics.md (wt-consult-sol); Opus contract consult →
+  11-consult-opus-contract.md (wt-consult-opus, Agent); blind Fable → 12-consult-blind-fable.md (wt-consult-fable);
+  legacy-L1 cure seat → 20-legacy-l1-cure-report.md on feat/2026-09-04-legacy-l1 (wt-legacy-l1).
+- Next after consult: magistrate synthesis (13), estimand + D-165 relabel rulings → cold Fable gate (claim-bearing),
+  paper-K seat (03-F4 methods-vs-code corrections, null-vs-model wording, F+B metadata) after paper-J merges,
+  Q4 floor-prompt regeneration decision, Q6 scope freeze ruling (skill-distill second convening PARKED until Q6).
+- Kernel rows merged to main (branch head 064b0dbc; merge landed with the next push). AUTH round 3 running with the registry file in scope (report 15).
+- Still running: custody fix 4, paper-J fix 1, wave-2 replay-3 (PR #285 rows 9/11/12 pending).
+
+## 2026-09-04 ~22:30 PT — consult complete; astra mirrors the magistrate; cures in flight
+
+- Consult seats archived: 10 Sol physics, 11 Opus contract, 12 blind Fable. Draft ruling 13 on main (cfdb24ac).
+  Ed (in chat): "when astra gets back … assess its work … have it mirror your tasks and you two discuss final
+  moves" → assessment given in chat; astra peer-magistrate seat running → 14 (wt-astra-peer). Then 15 (magistrate
+  reply), 16 (astra final), 17 (final ruling) → cold Fable gate. PARKED lanes launch no new rounds until 17.
+- Custody seam: fix 4 f2d35b4f, delta 4 LANDABLE (10). F1 = token recoverable by private introspection →
+  outside D-161 ordinary-operator threat; cure = narrow contract lines 53-56/75-81, no code round. F2 = census
+  regression is a string count → test debt, recorded. Peer-audit 02-F4 width recomputation: factor the mint's
+  reconstruction (1–2 days) — packet question, not a round. Seal the paper-supply packet AFTER 17 (D-173 amendments).
+- FB-PLANNING-METADATA-01 (wt-fb-metadata): seat landed keys, but detection_floor.py:3353 compares the artifact's
+  object to the canonical emitter by exact equality (also :3845, :4115, analysis_engine/artifact.py:494) → every
+  previously issued floor object would fail validation. HELD, not merged; needs SINGLE_COUNT_DISCIPLINE_ID .v2
+  with a version-aware validator + adapter_contracts.md amendment = cold-gate item in 17.
+- ESTIMAND-ENCLOSURE-01 (wt-estimand-enclosure) still running; its blast-radius report decides field vs script.
+- Legacy L1: rounds 1+2 on feat/2026-09-04-legacy-l1 (a379b5af), execution refuter running → PR.
+- Paper-J: PR #286 open (rows 9/11/12 pending). Wave-2 PR #285 replay-3 still running. AUTH round 3 running
+  (last round; PARK after).
+
+## 2026-09-05 ~02:00 PT — final ruling 17 written; cold-gate packet sealing; paper-K launched
+
+- Peer discussion closed (14 astra plan, 15 reply, 16 astra final). FINAL ruling 17 on main (e323f1aa) with the
+  decision-log addendum texts (D-078, D-083, D-165, D-166, scope-freeze rule, D-161 line). NOT ratified until the
+  cold Fable gate rules: packet seat → 40-coldgate-packet-ruling-17.md (wt-packet-ruling-17); then convene cold
+  Fable (doctrine-free worktree, foreground-only charge) + Opus refuter; then decision-log edits + email Ed.
+- Ed emailed (thread "three questions only you can answer"): due date / fallback acceptability; same-condition vs
+  ensemble prompt question (default prompt-0 contrast); estimand relabel veto. Defaults proceed if silent.
+- Seats running: paper-K (wt-paper-k, off paper-J head + 17 staged; provisional under 17); wave-2 T0 test cure
+  (wt-int-fan-wave2; test-only; fanout/31); legacy-L1 delta 3 (24); AUTH round 3 (last; PARK after);
+  paper-J full replay (~/.claude/jobs/3c46c831/tmp/paperj-replay.log) for PR #286 row 9.
+- Held branches: feat/2026-09-04-estimand-enclosure (accepted conditionally in 17 Q1; needs inside-one-record
+  oracle + delta), feat/2026-09-04-fb-metadata (re-brief to 17 Q3 shape after the gate).
+- Wave-2 #285: replay-3 5116 tests, 2 failures diagnosed (fanout/30): node-worker = environmental pre-existing
+  (ledger wording in 30); T0 real-boot = test defect, cure seat running; row 9 fills with the re-run tail.
+- Internal cuts adopted: readiness proven by 6 Sep or fallback; last acquisition night 8 Sep; freeze 9 Sep.
