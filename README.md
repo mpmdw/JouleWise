@@ -12,11 +12,12 @@ result when a required gate or piece of evidence fails.
 **Status:** Three independent peer audits found that the draft overstated what the
 instrument can establish about physical phase energy, so the paper now describes the
 measurement honestly as energy assigned to inference phases from interval-average
-power records, with its sensitivity to allowed timing changes. Work is frozen to that
-methods and diagnostic paper. Because the scheduled comparison measurements are
-unlikely to run before the deadline, a fallback version of the paper that does not
-depend on them is being written and reviewed now, section by section, while the
-overnight measurement machinery is handed to an unattended watchdog. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+power records, with its sensitivity to allowed timing changes. Because the scheduled
+comparison measurements did not run before the deadline, the fallback version of the
+paper that does not depend on them is written, has passed three review rounds
+(fact, pedagogy, and a second-model counter-review), and is in its final merge checks;
+everything that presumed the unperformed comparison lives in a separate prospective
+protocol document. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
 That file's generated state-kernel view owns current work selection.
 
 ## Current State

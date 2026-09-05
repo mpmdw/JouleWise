@@ -415,3 +415,18 @@ THEN, in order:
   docs/process_traces/2026-09-05-d166-prompt0/06. Replay re-runs after the cure.
 - F+B (#292): head 9d854b4d (fixture re-anchor via repin lane; seam reader classified as pass-through
   carrier, report 53); CI green → row 11 filled; replay (row 9) running; then terminal review → merge.
+
+## 2026-09-05 ~09:30 PDT — paper-M PR #293 open; paper-L and F+B on final heads
+
+- Paper-M PR #293 (base feat/2026-09-05-paper-l → retarget to main after #290): final head 5e262164;
+  rows 1–8/10/12 filled; terminal review 99 LANDABLE pending rows 9 (replay running, log
+  paperm-replay2.log) and 11 (CI). Round 3 hand-edited the pinned enclosure SVG; magistrate restored the
+  script's exact output and closed B4 by defining the artwork label in the A1 caption; lint regression
+  updated. Lesson recorded: gate every chain on the unittest exit code, never on the grep pipeline
+  (two commits went out on a red lint this way).
+- Paper-L PR #290: final head 3f391094 (D-166 fixture fix + Opus S1 singleton coverage test); replay
+  (paperl-replay4.log) and CI running; then row 12 + merge; then retarget #293 to main.
+- F+B PR #292: head 9d854b4d; CI green (row 11); replay (fb-replay2.log) running; then row 9, terminal
+  review, merge.
+- After #290/#293/#292 merge: D-165 relabel wording cure against the merged draft → census GREEN → PR.
+  Then the watchdog install handoff (steps 1/3/4/5) when no seat is running.
