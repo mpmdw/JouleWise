@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="410" viewBox="0 0 1000 410" role="img"><title>Figure A3. Block endpoint enumeration</title><rect width="100%" height="100%" fill="white"/>
+<g font-family="sans-serif" fill="#20252b">
+<text x="30" y="32" font-size="20">Figure A3. SYNTHETIC: form block intervals, then enumerate their corners</text>
+<text x="30" y="64" font-size="15">Member limits → δ lower = (B1L + B2L − A1U − A2U)/2; δ upper reverses limits.</text>
+<rect x="50" y="112" width="260" height="140" fill="#f0f3f6" stroke="#58616c"/>
+<text x="70" y="144" font-size="16">Inputs: n = 2 block intervals</text>
+<text x="70" y="175" font-size="15">δ1 ∈ [−1, 1] J; δ2 ∈ [1, 3] J</text>
+<text x="70" y="209" font-size="15">Four choices = 2², not 2⁸</text>
+<line x1="315" y1="181" x2="365" y2="181" stroke="#58616c" stroke-width="2"/>
+<rect x="370" y="100" width="330" height="178" fill="#eef6fc" stroke="#58616c"/>
+<text x="390" y="128" font-size="16">Corners → complete bound (J)</text>
+<text x="390" y="159" font-size="15">(−1, 1) → 22.007438</text>
+<text x="390" y="188" font-size="15">(−1, 3) → 45.014875  MAXIMUM</text>
+<text x="390" y="217" font-size="15">(  1, 1) →   1.000000</text>
+<text x="390" y="246" font-size="15">(  1, 3) → 24.007438</text>
+<line x1="707" y1="181" x2="750" y2="181" stroke="#58616c" stroke-width="2"/>
+<text x="760" y="150" font-size="16">At every corner:</text>
+<text x="760" y="180" font-size="15">mean, SD, largest |δ|</text>
+<text x="760" y="210" font-size="15">t = 12.706; √(1+1/2)</text>
+<text x="30" y="321" font-size="15">The formula is convex: absolute linear means + a norm of centered differences; maxima preserve convexity.</text>
+<text x="30" y="350" font-size="15">A box point is a weighted average of corners, so no interior value exceeds their largest bound.</text>
+<text x="30" y="380" font-size="15">n &gt; 16 refuses exact enumeration. This two-block example is diagnostic only, below the five-unit publication minimum.</text>
+</g></svg>

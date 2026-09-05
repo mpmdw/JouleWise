@@ -19,6 +19,8 @@ DRAFT = Path(
 LEXICON = REPO / "docs" / "paper" / "round7" / "built-terms-lexicon.md"
 REAL_PRE_CURE_FIXTURE = REPO / "tests" / "fixtures" / "paper_first_use_pre_cure.md"
 REAL_PRE_CURE_SHA256 = "04e78ec457bb4005ad4e135bad8894f29b4f6c0b45325b7c38874d5c1745ce89"
+PROTOCOL = REPO / "docs/paper/protocol/prospective-comparison-protocol.md"
+LEDGER = REPO / "docs/paper/protocol/first-use-audit-ledger.md"
 LEDGER_HEADING = "## First-use audit ledger"
 TABLE_HEADER = "| Term | First reader-facing home | Status | Definition or disposition |"
 STATUSES = frozenset(
@@ -61,6 +63,9 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     ),
     "commanded graphics-processor pulses": ("work with time-stamped start and stop commands",),
     "powermetrics": ("macOS powermetrics is the power sampler used here",),
+    "sampler": ("macOS powermetrics is the power sampler used here",),
+    "sampling record": ("reports average power between recorded start and end times",),
+    "token": ("a piece of generated text",),
     "Apple M3 Max / 128 GB unified memory": (
         "measures one Apple M3 Max",
         "128 GB of unified memory",
@@ -80,10 +85,10 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "registered timing domain—the edge movements fixed before collection",
     ),
     "local half-width / shared sign": (
-        "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
+        "a shared sign is one choice applied across all blocks",
     ),
     "floor packs / contrast pack": (
-        "floor packs—the campaign plans that collect calibration data used to build a comparator floor",
+        "floor packs are the campaign plans that collect calibration data used to build a comparator floor",
     ),
     "energy-allowance sign": (
         "says which direction a nonnegative block-level allowance moves assigned energy",
@@ -122,17 +127,12 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "package power": ("summed CPU, GPU, and neural-engine power",),
     "workload-response slope": ("fitted change in energy per output token",),
     "workload level": ("one output-token count fixed before collection",),
-    "workload magnitude": ("one target size fixed in the identical-condition ladder",),
+    "workload magnitude": ("one target size in the null test",),
     "per-token conversion": ("fitted joules per output token",),
     "sampling flags / cadence ratio": (
         "sampling cadence cannot be recorded or does not stay above a fixed multiple of the phase rate",
         "SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0",
         "REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0",
-    ),
-    "retired calculation": (
-        "equal-rate clock anchor",
-        "point-only value was multiplied by a fixed factor to allow for limited repetition",
-        "current calculation instead uses the corner-to-point ratios",
     ),
     r"small-sample multiplier / \(g(n)\)": ("factor that widens a result to allow for limited repetition",),
     "close-out artifact": ("checks every required ratio",),
@@ -141,12 +141,27 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "its interpolation-bound term is zero",
         "timing uncertainty enters through separately recomputed boundary envelopes",
     ),
-    "Figure 3": (
+    "Figure P1": (
         "separates evidence refusal from the two claim gates",
         "four possible outcomes are refusal, not resolvable, direction unresolved, and a directional claim",
     ),
     "custody": ("each named input's fingerprint still matches its recorded bytes",),
+    "best-fit lag": ("fitted edge time minus its matching command time",),
+    "GPU / fitted onsets and offsets": (
+        "gpu (graphics-processor)",
+        "switch-on and switch-off times selected by matching predicted interval-average power",
+    ),
+    "allowed region": ("contains every edge pair surviving the fit's discrepancy limit",),
     "measured contrast": ("point estimate and composed uncertainty interval",),
+}
+
+# Historical pre-cure regression retains its own removed-term definition.
+LEGACY_GLOSS_REQUIREMENTS = {
+    "retired calculation": (
+        "equal-rate clock anchor",
+        "point-only value was multiplied by a fixed factor to allow for limited repetition",
+        "current calculation instead uses the corner-to-point ratios",
+    ),
 }
 
 SENTENCE_GLOSS_TERMS = frozenset({
@@ -155,6 +170,10 @@ SENTENCE_GLOSS_TERMS = frozenset({
     "timing envelope",
     "total standard error",
     "commanded graphics-processor pulses",
+    "powermetrics",
+    "sampler",
+    "sampling record",
+    "token",
 })
 
 LEXICON_REQUIRED_TERMS = (
@@ -375,11 +394,13 @@ def _plain_for_gloss_check(text: str) -> str:
     return text.replace("**", "").replace("`", "").casefold()
 
 
-def _gloss_failures(rows: list[LedgerRow], body_lines: list[str]) -> list[str]:
+def _gloss_failures(rows: list[LedgerRow], body_lines: list[str], *, include_legacy: bool = False) -> list[str]:
     rows_by_term = {row.term: row for row in rows}
     blocks = _search_blocks(body_lines)
     failures: list[str] = []
-    for row_term, required_phrases in GLOSS_REQUIREMENTS.items():
+    requirements = {**GLOSS_REQUIREMENTS, **{key: value for key, value in
+                    LEGACY_GLOSS_REQUIREMENTS.items() if include_legacy or key in rows_by_term}}
+    for row_term, required_phrases in requirements.items():
         row = rows_by_term.get(row_term)
         if row is None:
             failures.append(f"{row_term}: required ledger row is missing")
@@ -417,8 +438,19 @@ def _gloss_failures(rows: list[LedgerRow], body_lines: list[str]) -> list[str]:
     return failures
 
 
+def _audit_text(text: str) -> str:
+    """Audit the article then its supplement, with a separately stored ledger.
+
+    Historical fixtures with an embedded ledger keep their original read order.
+    Missing or malformed external files raise instead of silently dropping terms.
+    """
+    if LEDGER_HEADING in text:
+        return text
+    return text + "\n" + PROTOCOL.read_text(encoding="utf-8") + "\n" + LEDGER.read_text(encoding="utf-8")
+
+
 def _parse_ledger(text: str) -> tuple[list[LedgerRow], list[str]]:
-    lines = text.splitlines()
+    lines = _audit_text(text).splitlines()
     try:
         ledger_line = lines.index(LEDGER_HEADING)
     except ValueError as error:
@@ -453,7 +485,7 @@ def _section_for_line(body_lines: list[str], line_index: int) -> str | None:
 class PaperFirstUseLedgerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.text = DRAFT.read_text(encoding="utf-8")
+        cls.text = _audit_text(DRAFT.read_text(encoding="utf-8"))
         cls.rows, raw_body_lines = _parse_ledger(cls.text)
         cls.body_lines = _strip_comments_preserving_lines(
             "\n".join(raw_body_lines)
@@ -487,6 +519,26 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
         row_count, fail_count = map(int, count_sentences[0])
         self.assertEqual(row_count, len(self.rows))
         self.assertEqual(fail_count, len(failures))
+
+        # A lexical home alone must not certify a different technical sense.
+        by_term = {row.term: row for row in self.rows}
+        senses = {
+            "not resolvable": ("Record support in two historical model stacks", "insufficient record support"),
+            "measurement interval": ("Benchmark and metrology lineage", "Analyzer reporting duration"),
+            "statistical measurement interval": ("Directional comparison", "repeat standard error"),
+            "decision interval": ("Directional comparison", "sum of authenticated deterministic bounds"),
+            "deterministic bound": ("Adding publication safeguards after the ratio", "non-random maximum displacement"),
+            "model/stack": ("Record support in two historical model stacks", "Qwen inference populations"),
+            "The clock model": ("A.3 Formal calibration algorithms", "Appendix A.3.3"),
+        }
+        for term, (home, meaning) in senses.items():
+            with self.subTest(semantic_term=term):
+                self.assertEqual(by_term[term].home, home)
+                self.assertIn(meaning, by_term[term].disposition)
+        self.assertIn("Section 3 constructs", by_term["local half-width / shared sign"].disposition)
+        self.assertIn("Protocol P.3", by_term["resolvability / not_resolvable_sample_count"].disposition)
+        self.assertIn("prompt processing and token generation are this paper’s two phases",
+                      " ".join(self.body_lines).casefold())
 
     def test_first_occurrence_is_in_exact_home_section(self) -> None:
         known_homes = {
@@ -525,8 +577,10 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
                 row = LedgerRow(term, "Example", "glossed-at-first-use", definition)
                 timely = [f"The {label} {definition}."]
                 late = [f"The {label} is used here. Later: {definition}."]
-                self.assertNotIn(term, "\n".join(_gloss_failures([row], timely)))
-                self.assertIn(term, "\n".join(_gloss_failures([row], late)))
+                self.assertFalse(any(f.startswith(f"{term}:")
+                                     for f in _gloss_failures([row], timely)))
+                self.assertTrue(any(f.startswith(f"{term}:")
+                                    for f in _gloss_failures([row], late)))
 
     def test_successor_lexicon_is_regeneration_protected(self) -> None:
         text = LEXICON.read_text(encoding="utf-8")
@@ -618,7 +672,7 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
         body_lines = _strip_comments_preserving_lines(
             "\n".join(raw_body_lines)
         ).splitlines()
-        failures = _gloss_failures(rows, body_lines)
+        failures = _gloss_failures(rows, body_lines, include_legacy=True)
         joined = "\n".join(failures)
         self.assertIn("package power", joined)
         self.assertIn("retired calculation", joined)
@@ -626,20 +680,16 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
         self.assertGreaterEqual(len(failures), 8)
 
     def test_gloss_checks_bite_when_cures_are_removed(self) -> None:
-        text = DEFAULT_DRAFT.read_text(encoding="utf-8")
+        text = _audit_text(DEFAULT_DRAFT.read_text(encoding="utf-8"))
         mutations = {
             "package power": (
                 "its duration times its largest recorded **package power**—the summed CPU, GPU,\n"
                 "and neural-engine power—bounds what may be missing.",
                 "its duration times its largest recorded package power bounds what may be missing.",
             ),
-            "retired calculation": (
-                "That calculation used an equal-rate clock anchor and a yes/no rule that\n"
-                "called a cell attribution-limited when its exact moved-edge limit\n"
-                "exceeded its point-only value after that point-only value was multiplied by a\n"
-                "fixed factor to allow for limited repetition. The\n"
-                "current calculation instead uses the corner-to-point ratios in Section 4.\n",
-                "",
+            "best-fit lag": (
+                "A **best-fit lag** is fitted edge time minus its matching command time.",
+                "A **best-fit lag** describes an edge.",
             ),
             r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
                 "lower-or-upper edge choice for that component is evaluated jointly and the\n"

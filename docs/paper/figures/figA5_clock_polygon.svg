@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="500" viewBox="0 0 1000 500" role="img"><title>Figure A5. Clock constraint intersection</title><rect width="100%" height="100%" fill="white"/>
+<g font-family="sans-serif" fill="#20252b">
+<text x="30" y="32" font-size="20">Figure A5. SYNTHETIC clock constraints after eliminating the offset</text>
+<text x="30" y="60" font-size="15">Coordinates: x = (β − 1) × 10⁶ ppm; y = (A − Aref) in milliseconds. Aref is an arbitrary origin.</text>
+<line x1="110" y1="385" x2="110" y2="125" stroke="#eceff2" stroke-width="2"/>
+<text x="105" y="407" font-size="13">0</text>
+<line x1="200" y1="385" x2="200" y2="125" stroke="#eceff2" stroke-width="2"/>
+<text x="195" y="407" font-size="13">1</text>
+<line x1="290" y1="385" x2="290" y2="125" stroke="#eceff2" stroke-width="2"/>
+<text x="285" y="407" font-size="13">2</text>
+<line x1="380" y1="385" x2="380" y2="125" stroke="#eceff2" stroke-width="2"/>
+<text x="375" y="407" font-size="13">3</text>
+<line x1="470" y1="385" x2="470" y2="125" stroke="#eceff2" stroke-width="2"/>
+<text x="465" y="407" font-size="13">4</text>
+<line x1="110" y1="385" x2="470" y2="385" stroke="#eceff2" stroke-width="2"/>
+<text x="86" y="389" font-size="13">0</text>
+<line x1="110" y1="320" x2="470" y2="320" stroke="#eceff2" stroke-width="2"/>
+<text x="86" y="324" font-size="13">1</text>
+<line x1="110" y1="255" x2="470" y2="255" stroke="#eceff2" stroke-width="2"/>
+<text x="86" y="259" font-size="13">2</text>
+<line x1="110" y1="190" x2="470" y2="190" stroke="#eceff2" stroke-width="2"/>
+<text x="86" y="194" font-size="13">3</text>
+<line x1="110" y1="125" x2="470" y2="125" stroke="#eceff2" stroke-width="2"/>
+<text x="86" y="129" font-size="13">4</text>
+<polygon points="110,320 110,255 290,125 380,125" fill="#c4def3" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="110" y1="320" x2="380" y2="125" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="110" y1="255" x2="290" y2="125" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="110" y1="385" x2="488.0" y2="385" stroke="#58616c" stroke-width="2"/>
+<line x1="110" y1="385" x2="110" y2="112.0" stroke="#58616c" stroke-width="2"/>
+<text x="180" y="436" font-size="15">Rate departure x (ppm)</text>
+<text x="45" y="102" font-size="15">Anchor y (ms)</text>
+<text x="545" y="125" font-size="15">Rows: 0 ≤ x ≤ 4; 0 ≤ y ≤ 4</text>
+<text x="545" y="162" font-size="15">and 1 ≤ y − x ≤ 2.</text>
+<text x="545" y="199" font-size="15">Blue lines: y = x + 1 and y = x + 2.</text>
+<text x="545" y="236" font-size="15">Shaded polygon: intersection of every row.</text>
+<text x="545" y="273" font-size="15">Vertices: (0,1), (0,2), (2,4), (3,4).</text>
+<text x="545" y="310" font-size="15">Projections: x ∈ [0,3]; y ∈ [1,4].</text>
+<text x="545" y="347" font-size="15">Add y − x ≥ 3: empty set → refuse.</text>
+<text x="545" y="384" font-size="15">This drawing is illustrative, not the retained capture.</text>
+<text x="30" y="479" font-size="15">The real solver uses all native labels and five stamp brackets; Table A3 and its sidecar identify those inputs.</text>
+</g></svg>

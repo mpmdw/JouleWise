@@ -10,7 +10,7 @@
 
   <rect x="0" y="0" width="1200" height="620" fill="#ffffff"/>
 
-  <text x="80" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1b1b1b">Figure 2. One measurement window: calibration bracket, admission gate, reference runs, and counterbalanced science stages</text>
+  <text x="80" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1b1b1b">Figure A2. One measurement window: calibration bracket, admission gate, reference runs, and counterbalanced science stages</text>
   <text x="80" y="54" font-family="sans-serif" font-size="13" fill="#555555">Schematic diagram. Stage widths are illustrative and not to scale; this figure contains no measured data.</text>
 
   <!-- session time arrow -->
@@ -154,8 +154,8 @@
     <text x="700" y="394">the A-versus-B difference.</text>
 
     <text x="700" y="424">Curvature &#8212; drift that speeds up or slows down &#8212; does</text>
-    <text x="700" y="443">not cancel this way. It is bounded by the whole-window</text>
-    <text x="700" y="462">drift allowance, tracked by the reference runs above.</text>
+    <text x="700" y="443">not cancel this way. References sample selected times;</text>
+    <text x="700" y="462">their allowance cannot bound any rise and fall between.</text>
 
     <text x="700" y="492">The block difference is (B1 + B2 &#8722; A1 &#8722; A2) / 2, so a</text>
     <text x="700" y="511">positive value means condition B used more energy.</text>
