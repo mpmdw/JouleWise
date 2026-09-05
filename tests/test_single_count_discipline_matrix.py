@@ -506,8 +506,8 @@ class DisciplineMutationTests(unittest.TestCase):
         original=Path.read_text
         def stale(path,*a,**kw):
             text=original(path,*a,**kw)
-            return text.replace('attribution_floor_plus_claim_side_bound.v2','attribution_floor_plus_claim_side_bound.v1') if str(path).endswith('docs/site/adapter_contracts.html') else text
-        killed('restore stale HTML',[mock.patch.object(Path,'read_text',stale)],SingleCountCensusTests().test_generated_contract_keeps_the_canonical_v2_object)
+            return text.replace('attribution_floor_plus_claim_side_bound.v2','attribution_floor_plus_claim_side_bound.v1') if str(path).endswith('docs/contracts/adapter_contracts.md') else text
+        killed('restore stale contract markdown',[mock.patch.object(Path,'read_text',stale)],SingleCountCensusTests().test_generated_contract_keeps_the_canonical_v2_object)
         self.assertEqual(len(killed_labels), 12)
 
 
