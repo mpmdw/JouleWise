@@ -83,3 +83,35 @@ not cite internal decision-log identifiers, registry row keys, campaign
 codenames, or window labels. Each caption must identify the drawing as schematic,
 state that any shown values or widths are illustrative or not to scale, and state
 that no measured data or numeric threshold is encoded by the layout.
+
+
+## Paper-M round 1 (2026-09-05)
+
+The article uses SVG sources directly. Figure 1 now draws the full-height
+0.010 s × 30 W allocation slice (0.30 J); Figure 3 is used only in the
+prospective protocol and includes Holm. Figure 4 and Figure A2 carry their
+correct embedded numbers, and A2 describes references as sampled evidence,
+not a bound on arbitrary between-reference excursions. Existing PNG exports
+under `png/` are historical exports and are not suppliers for this draft.
+
+`reproduce_worked_examples.py` produces `worked-examples.json` and
+`pulse-table.md` from the pinned synthetic fixture and retained historical
+sources. `build_mechanism_figures.py` regenerates the eight corrected/new SVGs,
+including synthetic A3–A5 and historical pulse-fit A6. Run both from the
+repository root:
+
+```bash
+python3 -B docs/paper/figures/reproduce_worked_examples.py --corpus-root /Users/edr/code/JouleWise --output-dir /tmp/paper-m-worked-replay
+python3 -B docs/paper/figures/build_mechanism_figures.py
+```
+
+Compare the temporary replay JSON and Markdown with the registered parents
+before refreshing them. The native-label fields use the raw plist's
+whole-second metadata, not the parser's interpolated `timestamp_s`. The
+sidecar retains all 1665 label constraints, clock and command stamps, local
+pulse-9 predictions/losses, both overlap examples with zero-overlap neighbors,
+and all eight synthetic sign cases with the member-envelope integrals.
+
+Visual QA: all eight revised/new SVGs were rasterized locally with the
+installed `sharp` renderer and inspected at native size on 2026-09-05.
+The main historical excursion SVG and the P1 enclosure SVG remain byte-identical.

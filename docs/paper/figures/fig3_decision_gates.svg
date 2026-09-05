@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640" role="img" aria-labelledby="fig3title fig3desc">
   <title id="fig3title">The two separate claim gates and the four possible outcomes</title>
-  <desc id="fig3desc">Schematic decision flow. A measured contrast, carrying a point estimate and a composed uncertainty interval, meets two gates in turn. Gate one asks whether the magnitude exceeds the cell floor; failing it gives the outcome not resolvable. Gate two asks whether the whole uncertainty interval points one way; failing it gives the outcome direction unresolved. Passing both gives a directional claim. A separate side inlet, taken when any admission or custody check fails, gives the outcome refused without reaching either gate. No measured data is shown.</desc>
+  <desc id="fig3desc">Schematic decision flow. A measured contrast, carrying a point estimate and a composed uncertainty interval, meets two gates in turn. Gate one asks whether the magnitude exceeds the cell floor; failing it gives the outcome not resolvable. Gate two asks whether both intervals point the registered way and the Holm-adjusted test passes; failing it gives the outcome direction unresolved. Passing both gives a directional claim. A separate side inlet, taken when any admission or custody check fails, gives the outcome refused without reaching either gate. No measured data is shown.</desc>
 
   <defs>
     <marker id="f3aEnd" markerWidth="10" markerHeight="10" refX="9" refY="4.5" orient="auto" markerUnits="userSpaceOnUse">
@@ -25,7 +25,7 @@
   <rect x="720" y="100" width="240" height="80" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.5"/>
   <text x="840" y="130" font-family="sans-serif" font-size="14.5" font-weight="bold" fill="#1b1b1b" text-anchor="middle">refused</text>
   <text x="840" y="152" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">this evidence produces</text>
-  <text x="840" y="170" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">no result of any kind</text>
+  <text x="840" y="170" font-family="sans-serif" font-size="11.5" fill="#333333" text-anchor="middle">no authorized comparison result</text>
 
   <!-- separator -->
   <line x1="40" y1="205" x2="960" y2="205" stroke="#e2e2e2" stroke-width="1.5"/>
@@ -52,8 +52,8 @@
   <!-- gate 2 -->
   <rect x="490" y="235" width="200" height="110" rx="6" fill="#ffffff" stroke="#444444" stroke-width="2.5"/>
   <text x="590" y="262" font-family="sans-serif" font-size="12" font-weight="bold" fill="#777777" text-anchor="middle" letter-spacing="1.2">Gate 2</text>
-  <text x="590" y="290" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">does the whole uncertainty</text>
-  <text x="590" y="310" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">interval point one way?</text>
+  <text x="590" y="290" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">do both intervals point the</text>
+  <text x="590" y="310" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">registered way AND Holm pass?</text>
 
   <line x1="690" y1="290" x2="728" y2="290" stroke="#333333" stroke-width="2" marker-end="url(#f3aEnd)"/>
   <text x="709" y="280" font-family="sans-serif" font-size="12" fill="#333333" text-anchor="middle">yes</text>
@@ -81,7 +81,7 @@
   <rect x="480" y="440" width="220" height="100" fill="#ffffff" stroke="#666666" stroke-width="2"/>
   <text x="590" y="468" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1b1b1b" text-anchor="middle">direction unresolved</text>
   <text x="590" y="490" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">the floor clears, but the</text>
-  <text x="590" y="508" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">interval does not settle direction,</text>
+  <text x="590" y="508" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">interval or Holm does not pass,</text>
   <text x="590" y="526" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">so no claim is made</text>
 
   <!-- side annotation -->

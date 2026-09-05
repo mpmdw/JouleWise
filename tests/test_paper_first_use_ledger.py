@@ -19,6 +19,8 @@ DRAFT = Path(
 LEXICON = REPO / "docs" / "paper" / "round7" / "built-terms-lexicon.md"
 REAL_PRE_CURE_FIXTURE = REPO / "tests" / "fixtures" / "paper_first_use_pre_cure.md"
 REAL_PRE_CURE_SHA256 = "04e78ec457bb4005ad4e135bad8894f29b4f6c0b45325b7c38874d5c1745ce89"
+PROTOCOL = REPO / "docs/paper/protocol/prospective-comparison-protocol.md"
+LEDGER = REPO / "docs/paper/protocol/first-use-audit-ledger.md"
 LEDGER_HEADING = "## First-use audit ledger"
 TABLE_HEADER = "| Term | First reader-facing home | Status | Definition or disposition |"
 STATUSES = frozenset(
@@ -429,8 +431,19 @@ def _gloss_failures(rows: list[LedgerRow], body_lines: list[str], *, include_leg
     return failures
 
 
+def _audit_text(text: str) -> str:
+    """Audit the article then its supplement, with a separately stored ledger.
+
+    Historical fixtures with an embedded ledger keep their original read order.
+    Missing or malformed external files raise instead of silently dropping terms.
+    """
+    if LEDGER_HEADING in text:
+        return text
+    return text + "\n" + PROTOCOL.read_text(encoding="utf-8") + "\n" + LEDGER.read_text(encoding="utf-8")
+
+
 def _parse_ledger(text: str) -> tuple[list[LedgerRow], list[str]]:
-    lines = text.splitlines()
+    lines = _audit_text(text).splitlines()
     try:
         ledger_line = lines.index(LEDGER_HEADING)
     except ValueError as error:
@@ -465,7 +478,7 @@ def _section_for_line(body_lines: list[str], line_index: int) -> str | None:
 class PaperFirstUseLedgerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.text = DRAFT.read_text(encoding="utf-8")
+        cls.text = _audit_text(DRAFT.read_text(encoding="utf-8"))
         cls.rows, raw_body_lines = _parse_ledger(cls.text)
         cls.body_lines = _strip_comments_preserving_lines(
             "\n".join(raw_body_lines)
@@ -638,7 +651,7 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
         self.assertGreaterEqual(len(failures), 8)
 
     def test_gloss_checks_bite_when_cures_are_removed(self) -> None:
-        text = DEFAULT_DRAFT.read_text(encoding="utf-8")
+        text = _audit_text(DEFAULT_DRAFT.read_text(encoding="utf-8"))
         mutations = {
             "package power": (
                 "its duration times its largest recorded **package power**—the summed CPU, GPU,\n"

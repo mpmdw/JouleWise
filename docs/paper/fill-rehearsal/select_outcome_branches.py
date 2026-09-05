@@ -45,7 +45,15 @@ def _check_abstract_word_budget(text: str) -> int:
 def validate_methods_draft(text: str) -> int:
     if "OUTCOME-BRANCH" in text:
         raise ValueError("empirical outcome branches are retired under D-174")
-    visible = _reader_facing_text(text).split("## First-use audit ledger", 1)[0]
+    visible = _reader_facing_text(text)
+    if "## First-use audit ledger" in visible:
+        raise ValueError("editorial ledger belongs in the separate audit appendix")
+    if visible.count("(protocol/prospective-comparison-protocol.md)") != 1:
+        raise ValueError("article must cite the prospective protocol exactly once")
+    for moved in ("## 3. Instrument characterization", "Two directional comparisons—",
+                  "### Measured admission rules", "Under D-173,", "revision\n`3b1b1768"):
+        if moved in visible:
+            raise ValueError("prospective comparison material returned to the article")
     if "[FILL:" in visible:
         raise ValueError("reader-facing result fill remains")
     if re.search(r"\[FILL:(?:DS-|PG-|OB-|OR-|R_|V5-)", text):

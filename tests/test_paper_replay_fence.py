@@ -18,6 +18,7 @@ distinction rather than treating absence as agreement.
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -26,14 +27,15 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 FENCE_PATH = ROOT / "scripts" / "check_paper_replay_fence.py"
-DRAFT = ROOT / "docs" / "paper" / "draft-v1.md"
+DRAFT = ROOT / "docs" / "paper" / "draft-v2-skeleton.md"
 
 FENCE_SPEC = importlib.util.spec_from_file_location("check_paper_replay_fence", FENCE_PATH)
 assert FENCE_SPEC is not None and FENCE_SPEC.loader is not None
 FENCE = importlib.util.module_from_spec(FENCE_SPEC)
 FENCE_SPEC.loader.exec_module(FENCE)
 
-CORPUS = ROOT / FENCE.SOURCE_DIRECTORY
+CORPUS_ROOT = Path(os.environ.get("R7F_CORPUS_ROOT", ROOT))
+CORPUS = CORPUS_ROOT / FENCE.SOURCE_DIRECTORY
 CORPUS_PRESENT = (CORPUS / "instrument_evidence.json").is_file() and (
     CORPUS / "raw" / "powermetrics.plist"
 ).is_file()
@@ -73,6 +75,16 @@ class DraftLiteralExtractionTests(unittest.TestCase):
             "monotonic_resolution_s",
         }
         self.assertEqual(set(self.literals), expected)
+
+    def test_historical_heading_and_duplicate_fail_closed(self) -> None:
+        self.assertIn("*Worked historical-capture arithmetic.*", self.text)
+        legacy = self.text.replace("*Worked historical-capture arithmetic.*",
+                                   "**Worked current-capture arithmetic.**")
+        self.assertEqual(FENCE.extract_draft_literals(legacy), self.literals)
+        for suffix in ("*Worked historical-capture arithmetic.* duplicate",
+                       "**Worked current-capture arithmetic.** duplicate"):
+            with self.subTest(suffix=suffix), self.assertRaises(FENCE.FenceError):
+                FENCE.extract_draft_literals(self.text + "\n" + suffix)
 
     def test_five_stamp_rows_in_solver_order(self) -> None:
         sys.path.insert(0, str(ROOT))
@@ -144,7 +156,7 @@ class ReplayAgainstPrimaryArtifactsTests(unittest.TestCase):
 
     def test_every_fenced_value_replays(self) -> None:
         literals = FENCE.extract_draft_literals(DRAFT.read_text(encoding="utf-8"))
-        derived = FENCE.derive_from_artifacts(ROOT, ROOT)
+        derived = FENCE.derive_from_artifacts(ROOT, CORPUS_ROOT)
         rows = FENCE.compare(literals, derived)
         mismatches = [row for row in rows if not row["match"]]
         self.assertEqual(mismatches, [], f"{len(mismatches)} of {len(rows)} values disagree")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay fence for the two Section 2 worked examples in ``docs/paper/draft-v1.md``.
+"""Replay fence for the two Section 2 worked examples in ``docs/paper/draft-v2-skeleton.md``.
 
 WHAT THIS GUARDS.  Section 2 of the draft carries two worked examples that
 quote numbers from one retained diagnostic capture, member
@@ -131,9 +131,14 @@ def extract_draft_literals(draft_text: str) -> dict[str, Any]:
 
     literals: dict[str, Any] = {}
 
-    arithmetic = _paragraph(
-        draft_text, "**Worked current-capture arithmetic.**", "worked-arithmetic paragraph"
-    )
+    # Historical submission and the frozen v1 prose are both supported, but
+    # exactly one heading across both forms is required.
+    heading = _search(
+        r"(?m)^([*]{1,2}Worked (?:historical|current)-capture arithmetic\.[*]{1,2}) ",
+        draft_text,
+        "worked-arithmetic heading",
+    ).group(1)
+    arithmetic = _paragraph(draft_text, heading, "worked-arithmetic paragraph")
 
     literals["pulse_count"] = _number(
         _search(r"reports all \\\(([0-9{},]+)\\\) pulses detected", arithmetic, "pulse count")
@@ -553,7 +558,7 @@ def main(argv: list[str] | None = None) -> int:
 
     repository_root = args.repository_root.resolve()
     corpus_root = (args.corpus_root or repository_root).resolve()
-    draft = args.draft or repository_root / "docs" / "paper" / "draft-v1.md"
+    draft = args.draft or repository_root / "docs" / "paper" / "draft-v2-skeleton.md"
 
     try:
         literals = extract_draft_literals(draft.read_text(encoding="utf-8"))

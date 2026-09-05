@@ -15,6 +15,7 @@ SCRIPT = REPO / "scripts" / "paper_terms_lint.py"
 REAL_DRAFT = REPO / "docs" / "paper" / "draft-v1.md"
 REAL_PLAN = REPO / "docs" / "paper" / "round7" / "retensing-plan.md"
 SUCCESSOR_DRAFT = REPO / "docs" / "paper" / "draft-v2-skeleton.md"
+PROTOCOL = REPO / "docs/paper/protocol/prospective-comparison-protocol.md"
 FILL_REGISTRY = REPO / "docs" / "paper" / "results-fill-registry.md"
 
 
@@ -200,6 +201,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
 
     def test_fallback_preserves_ratified_paper_k_rulings(self) -> None:
         draft = SUCCESSOR_DRAFT.read_text(encoding="utf-8")
+        combined = draft + "\n" + PROTOCOL.read_text(encoding="utf-8")
         registry = FILL_REGISTRY.read_text(encoding="utf-8")
 
         self.assertIn(
@@ -256,7 +258,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
             "nor sufficient for acceptance",
         ):
             with self.subTest(required=required):
-                self.assertIn(required, draft)
+                self.assertIn(required, combined)
 
         self.assertNotIn("d165_shared_sign_local_corner_replay.v1", registry)
         self.assertIn(
@@ -390,6 +392,88 @@ class RealDocumentRegressionTests(unittest.TestCase):
         svg = REPO / "docs/paper/figures/figA_partial_record_enclosure.svg"
         self.assertEqual(hashlib.sha256(svg.read_bytes()).hexdigest(), p1["figure"]["sha256"])
 
+    def test_round_one_derivations_and_suppliers_are_complete(self) -> None:
+        import importlib.util
+        import math
+        import statistics
+        from joulewise.analysis_engine.distributions import two_sided_student_t_p_value
+        path = REPO / "docs/paper/figures/reproduce_worked_examples.py"
+        spec = importlib.util.spec_from_file_location("paper_worked_examples", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        sidecar = REPO / "docs/paper/figures/worked-examples.json"
+        payload = json.loads(sidecar.read_text())
+        self.assertEqual(json.loads(json.dumps(module.synthetic())), payload["synthetic"])
+        registry = FILL_REGISTRY.read_text()
+        self.assertIn(hashlib.sha256(sidecar.read_bytes()).hexdigest(), registry)
+        self.assertIn(hashlib.sha256(path.read_bytes()).hexdigest(), registry)
+        for key in [f"SYN-{i:02d}" for i in range(2, 9)] + [f"DG-{i}" for i in range(129, 135)]:
+            rows = [r for r in registry.splitlines() if r.startswith("| " + key + " —")]
+            self.assertEqual(len(rows), 1, key)
+            self.assertEqual(rows[0].split("|")[5].strip(), "DERIVE", key)
+        sy = payload["synthetic"]
+        self.assertEqual(sy["composition_absolute"]["corner_widened_unguarded_floor_j"], 1.6656)
+        self.assertEqual(sy["composition_comparative"]["corner_widened_unguarded_floor_j"], 1.7656)
+        self.assertAlmostEqual(max(sy[k]["corner_widened_guarded_floor_j"] + .4 for k in
+                                  ("composition_absolute", "composition_comparative")), 3.0484)
+        self.assertEqual(max(sy["cases"], key=lambda r: r["bound"])["signs"], [1, -1, 1])
+        for block in sy["blocks"]:
+            self.assertEqual(math.fsum(.5*v for v in block["member_integrals"]),
+                             block["envelope_integral_sum"])
+        deltas = [5.0,7.6,5.5,4.2,4.7,6.8,5.5,3.6,3.9,3.2]
+        t = statistics.mean(deltas)/(statistics.stdev(deltas)/math.sqrt(10))
+        self.assertAlmostEqual(two_sided_student_t_p_value(t, 9), 1.28854294284577e-6, places=18)
+        c = 1.5/2.262
+        geometry = [10-c]*5 + [10+c]*5
+        se = statistics.stdev(geometry)/math.sqrt(10)
+        self.assertAlmostEqual(2.262*se, .5)
+        self.assertAlmostEqual(10/se, 45.24)
+        self.assertLess(two_sided_student_t_p_value(10/se, 9), .025)
+        h = payload["historical"]
+        self.assertEqual(len(h["native_constraints"]), 1665)
+        self.assertTrue(all(r["native_end_label_s"].is_integer() for r in h["native_constraints"]))
+        self.assertEqual(h["native_constraints"][0]["q_ns"], 0)
+        self.assertEqual(h["native_constraints"][1]["q_ns"], 118530666)
+        for geom, count in zip(h["geometry"], (2, 3)):
+            from decimal import Decimal
+            phase = Decimal(geom["start"]), Decimal(geom["end"])
+            overlaps = [max(Decimal(0), min(phase[1], Decimal(r["end"])) -
+                            max(phase[0], Decimal(r["start"]))) for r in geom["records"]]
+            self.assertEqual(overlaps, [Decimal(r["overlap"]) for r in geom["records"]])
+            self.assertEqual(sum(v > 0 for v in overlaps), count)
+            self.assertEqual(overlaps[0], 0)
+            self.assertEqual(overlaps[-1], 0)
+        draft = SUCCESSOR_DRAFT.read_text()
+        for row in h["local_records"]:
+            printed = (f"| {row['index']} | {row['native_end_label']:.0f} | "
+                       f"{row['start_s']-1784757381:.9f} | {row['end_s']-1784757381:.9f} | "
+                       f"{row['gpu_w']:.8f} | {row['predicted_w']:.8f} | {row['loss']:.6f} |")
+            self.assertIn(printed, draft)
+
+    def test_prospective_sections_and_editorial_ledger_are_outside_article(self) -> None:
+        draft, protocol = SUCCESSOR_DRAFT.read_text(), PROTOCOL.read_text()
+        self.assertIn("Status: PROSPECTIVE / UNPERFORMED.", protocol)
+        self.assertEqual(draft.count("(protocol/prospective-comparison-protocol.md)"), 1)
+        self.assertNotIn("## First-use audit ledger", draft)
+        for moved in ("Two directional comparisons—", "### Measured admission rules",
+                      "Under D-173,", "The registered minimum basis is forty",
+                      "revision\n`3b1b1768", "Fourth, the prospective design"):
+            self.assertIn(moved, protocol)
+            self.assertNotIn(moved, draft)
+        for cure in ("constant clock rate between stamps remains an unverified assumption",
+                     "without assuming independence", "Linear growth reduces a large discrepancy",
+                     "three is a chosen cutoff, not proof of adequate", "unrounded standard deviation"):
+            self.assertIn(cure, draft)
+        self.assertNotIn("the adjusted test passes, so the example supports", protocol)
+        self.assertIn("pass the sign check; Holm must pass", protocol)
+        self.assertIn("five block differences equal 10−c and five equal 10+c", protocol)
+        figure = (REPO / "docs/paper/figures/fig1_boundary_attribution.svg").read_text()
+        self.assertIn("0.010 s × 30 W", figure)
+        self.assertNotIn("wrong phase", figure)
+        gate = (REPO / "docs/paper/figures/fig3_decision_gates.svg").read_text()
+        self.assertIn("Holm pass?", gate)
+        self.assertIn("no authorized comparison result", gate)
+
     def test_references_close_existing_citations_and_availability_is_restricted(self) -> None:
         draft = SUCCESSOR_DRAFT.read_text()
         related = draft.split("## 8. Related work\n")[1].split("## 9.")[0]
@@ -402,9 +486,15 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertNotIn("[REF NEEDED]", refs)
         availability = draft.split("## 9. Evidence and code availability\n")[1].split("## 10.")[0]
         for phrase in ("No public submission", "not been released as a complete public reproduction",
-                       "cannot\nreplace unavailable primary bytes", "open_paper_input(ref)",
-                       "Correct points with coherently wrong widths cannot count as"):
+                       "cannot\nreplace unavailable primary bytes"):
             self.assertIn(phrase, availability)
+        protocol = PROTOCOL.read_text()
+        for phrase in ("open_paper_input(ref)",
+                       "Correct points with coherently wrong widths cannot count as"):
+            self.assertIn(phrase, protocol)
+            self.assertNotIn(phrase, availability)
+        self.assertIn("ten named members", availability)
+        self.assertIn("forty of `runs_window_c_20260726/`", availability)
 
 
 if __name__ == "__main__":

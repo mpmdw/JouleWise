@@ -56,6 +56,10 @@ class SelectorGuardTests(unittest.TestCase):
         self.assertLessEqual(SELECTOR.validate_methods_draft(source), 250)
         mutations = (
             source + "\n<!-- OUTCOME-BRANCH:A:START -->",
+            source + "\n## First-use audit ledger\n",
+            source.replace("(protocol/prospective-comparison-protocol.md)", "(missing.md)"),
+            source + "\n[protocol](protocol/prospective-comparison-protocol.md)",
+            source + "\n### Measured admission rules\n",
             source.replace("## 6. Historical", "[FILL:PG-08]\n## 6. Historical"),
             source + "\n<!-- [FILL:DS-32] -->",
             source.replace("49 of 59 fitted offsets", "50 of 59 fitted offsets", 1),
