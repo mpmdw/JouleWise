@@ -13,7 +13,8 @@ rule token is a candidate even alongside v2; neither a filename nor nearby v2
 authority exempts it. Frozen draft-v1 is included; process traces are outside
 the consumer roots. Binary files are enumerated but contain no active text.
 
-Whitespace is folded, including across prose lines. Python string constants
+Hyphens, whitespace, and case are folded, including across prose lines.
+Python string constants
 are decoded with ast so adjacent literals cannot hide a retired phrase.
 """
 
@@ -107,17 +108,18 @@ def occurrences(path: str, source: str) -> list[tuple[int, str, bool]]:
                 for index in range(start, end):
                     if raw[index] != "\n":
                         raw[index] = " "
-    # Keep source line attribution while folding arbitrary whitespace.
+    # Keep source line attribution while folding hyphens and whitespace.
     fragments.append(("".join(raw), 1, None))
     found = []
     for fragment, first_line, literal_lines in fragments:
-        words = list(re.finditer(r"\S+", fragment))
+        words = list(re.finditer(r"[^\s-]+", fragment))
         normalized = " ".join(word.group().lower() for word in words)
         positions = []
         for word in words:
             positions.extend([word.start()] * (len(word.group()) + 1))
         for phrase in RETIRED:
-            for match in re.finditer(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)",
+            normalized_phrase = " ".join(phrase.lower().replace("-", " ").split())
+            for match in re.finditer(r"(?<!\w)" + re.escape(normalized_phrase) + r"(?!\w)",
                                      normalized):
                 start = positions[match.start()]
                 end = positions[match.end() - 1]
@@ -197,16 +199,44 @@ class D165RationaleCensusTests(unittest.TestCase):
         entries = json.loads(ALLOWLIST.read_text(encoding="utf-8"))
         allowlist_keys(entries, self.found)
 
-    def test_physical_timing_variants_survive_wrapping_and_python_literals(self) -> None:
-        for phrase in RETIRED[5:-1]:
-            words = phrase.split()
-            for path, source in (
-                ("docs/paper/example.md", "\n".join(words).upper()),
-                ("joulewise/example.py", "x = (" + "\n".join(
-                    repr(word + " ") for word in words) + ")"),
-            ):
-                with self.subTest(path=path, phrase=phrase):
-                    self.assertIn((1, phrase, False), occurrences(path, source))
+    def test_all_retired_variants_survive_wrapping_and_python_literals(self) -> None:
+        for phrase in RETIRED:
+            words = phrase.replace("-", " ").split()
+            for separator in (" ", "-", "\n", "-\n", " - "):
+                variant = separator.join(words).upper()
+                for path, source in (
+                    ("docs/paper/example.md", variant),
+                    ("joulewise/example.py", "x = (" + "\n".join(
+                        repr((word + separator).upper()) for word in words) + ")"),
+                ):
+                    with self.subTest(path=path, phrase=phrase, separator=separator):
+                        self.assertIn((1, phrase, False), occurrences(path, source))
+
+    def test_hyphenated_module_docstring_evaded_old_scanner(self) -> None:
+        source = '''"""D-165 attribution-dominance arithmetic and artifact validation.
+
+The ordinary ratio compares a corner-widened attribution bound with the
+point-only repeatability floor.  The comparative common-mode replay keeps one
+shared timing-error sign across all A/B/B/A blocks while each block keeps its
+own local sign.  This module is the sole production home of those predicates.
+"""'''
+        fragment = ast.parse(source).body[0].value.value
+        old_normalized = " ".join(word.group().lower()
+                                  for word in re.finditer(r"\S+", fragment))
+        old_hits = [phrase for phrase in RETIRED if re.search(
+            r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", old_normalized)]
+        self.assertEqual(old_hits, [])
+        found = occurrences("joulewise/dominance_closeout.py", source)
+        self.assertEqual(found, [(1, "shared timing error", False)])
+        self.assertEqual(active_occurrences([
+            ("joulewise/dominance_closeout.py", *hit) for hit in found
+        ], set()), ["joulewise/dominance_closeout.py:1: shared timing error"])
+
+    def test_separator_folding_preserves_line_and_marker_boundaries(self) -> None:
+        source = "heading\nLEGACY v1: SHARED-TIMING-ERROR\n\nshared timing-\nerror"
+        self.assertEqual(occurrences("example.md", source), [
+            (2, "shared timing error", True), (4, "shared timing error", False),
+        ])
 
     def test_bare_v1_authority_is_active_even_beside_v2(self) -> None:
         v1 = RETIRED[-1]

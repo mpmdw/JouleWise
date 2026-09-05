@@ -1,9 +1,11 @@
 """D-165 attribution-dominance arithmetic and artifact validation.
 
 The ordinary ratio compares a corner-widened attribution bound with the
-point-only repeatability floor.  The comparative common-mode replay keeps one
-shared timing-error sign across all A/B/B/A blocks while each block keeps its
-own local sign.  This module is the sole production home of those predicates.
+point-only repeatability floor. The comparative replay tries both signs of an
+additive energy change shared across all A/B/B/A blocks and every combination
+of independent local signs. It does not replay the same timing shift in every
+block or prove that its limit covers the effect of such a shift. This module
+is the sole production home of those predicates.
 """
 
 from __future__ import annotations

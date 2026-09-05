@@ -61,19 +61,19 @@
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 262,
+    "line": 264,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 277,
+    "line": 281,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 293,
+    "line": 297,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
@@ -193,38 +193,50 @@
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 167,
+    "line": 169,
     "phrase": "d165_shared_sign_local_corner_replay.v1",
     "reason": "LEGACY_COMMON_MODE_REPLAY_RULE_ID is the preserved historical compatibility constant; active COMMON_MODE_REPLAY_RULE_ID is separately v2."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 176,
+    "line": 178,
     "phrase": "cancels exactly",
     "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 176,
+    "line": 178,
     "phrase": "shared fiducial shift",
     "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 176,
+    "line": 178,
     "phrase": "uniform shared fiducial shift cancels",
     "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 182,
+    "line": 184,
     "phrase": "common-time",
     "reason": "Decoded ABSOLUTE_COMMON_MODE_REASON string begins here and explicitly denies an implemented absolute common-time replay."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 874,
+    "line": 876,
     "phrase": "common-time",
     "reason": "Replay docstring begins here and explicitly denies proven conservatism for common-time motion."
+  },
+  {
+    "path": "docs/paper/results-fill-registry.md",
+    "line": 273,
+    "phrase": "common-time",
+    "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
+  },
+  {
+    "path": "docs/paper/results-fill-registry.md",
+    "line": 289,
+    "phrase": "common-time",
+    "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   }
 ]

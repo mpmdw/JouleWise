@@ -455,6 +455,24 @@ runbook by hand.
 
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
+- **D165-CLOSEOUT-ERA-01 — H2, DEFERRED, [AGENT] (2026-09-05):**
+  Register only; implementation is fenced by the D-174 submission scope
+  freeze until submission or Ed lifts the freeze in writing. Opus S3 in
+  [the D-165 recheck](docs/process_traces/2026-09-05-d165-relabel/16-recheck-opus.md)
+  records era-blind validation: `validate_d165_paper_sources` (reviewed
+  `joulewise/dominance_closeout.py:464-465`) accepts any registered sidecar
+  era, and `validate_d165_closeout` has no close-out era field. The recorded
+  probe gives `validate_d165_replay_sidecar(v1_shaped_sidecar) == []`.
+  This remains below blocker because rebuild is stopped for this submission,
+  all eight R_cm registry rows are `RETIRED_FALLBACK` with no submission
+  placement, and the sidecar bytes are digest-sealed, so the era remains
+  recoverable. Cure after the fence clears: record the sidecar's declared era
+  in the close-out and refuse an era mismatch in close-out and paper-source
+  validation. Acceptance: matching v2 close-out/sidecar passes, a mismatched
+  pair is refused, and preserved historical v1 bytes remain readable under
+  their original meaning. No validator change or rebuild is authorized by
+  this deferred item.
+
 - **SOL-FAST-TIER (updated 2026-08-09, Ed — supersedes the 2026-08-08 fast
   default):** DEFAULT tier is the norm; pass `CODEX_SERVICE_TIER=default`
   per call to override the wrappers' legacy fast default. Fast is reserved
