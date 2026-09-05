@@ -364,6 +364,71 @@ class RealizedIdentityDispatchTests(unittest.TestCase):
 
 
 class FrozenConsumerIdentitySetTests(unittest.TestCase):
+    def _generate_two_manifest_decode_pack(
+        self, fixture: d117_fixture.D117ContrastV5PackTests, root: Path
+    ) -> Path:
+        """Exercise a declared identity set without restoring prompt rotation.
+
+        Ordinary D-166 repeats have one scientific identity per model arm.
+        This synthetic pack gives the second half a separately named manifest
+        of the same prompt zero. The real generator propagates both bindings
+        through config inventories, manifests, and plan hashes before freeze.
+        """
+
+        generator = fixture.generator
+        original_manifest = generator.decode_suite_manifest
+        original_relpath = generator.decode_suite_relpath
+        original_config = generator.config_for
+        original_declaration = generator.decode_declared_suite_manifest_set
+
+        def manifest(arm: str, prompt_index: int) -> dict[str, Any]:
+            # Use an otherwise unused manifest slot only in this fixture.
+            if prompt_index != 1:
+                return original_manifest(arm, prompt_index)
+            value = original_manifest(arm, 0)
+            value["suite_id"] += "-identity-set-fixture"
+            return value
+
+        def relpath(arm: str, prompt_index: int) -> Path:
+            if prompt_index != 1:
+                return original_relpath(arm, prompt_index)
+            return original_relpath(arm, 0).with_name(
+                "02_identity_set_fixture_prompt_zero.json"
+            )
+
+        def second_binding(arm: str) -> dict[str, str]:
+            return {
+                "suite_manifest_ref": (
+                    generator.active_generation().pack_rel / relpath(arm, 1)
+                ).as_posix(),
+                "suite_manifest_sha256": suite_manifest_sha256(manifest(arm, 1)),
+            }
+
+        def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
+            value = original_config(run, plan_sha256)
+            if run["measurement_arm"] == "decode" and run["block_index"] > 5:
+                value["workload_profile"].update(second_binding(run["arm"]))
+            return value
+
+        def declaration(arm: str) -> list[dict[str, Any]]:
+            members = original_declaration(arm)
+            self.assertEqual(len(members), 1)
+            self.assertEqual(members[0]["declared_member_count"], 20)
+            return [
+                {**members[0], "declared_member_count": 10},
+                {**second_binding(arm), "declared_member_count": 10},
+            ]
+
+        with (
+            mock.patch.object(generator, "decode_suite_manifest", new=manifest),
+            mock.patch.object(generator, "decode_suite_relpath", new=relpath),
+            mock.patch.object(generator, "config_for", new=config_for),
+            mock.patch.object(
+                generator, "decode_declared_suite_manifest_set", new=declaration
+            ),
+        ):
+            return fixture.generate_pack(root)
+
     def _generated_frozen_gate_pack(
         self, root: Path
     ) -> tuple[d117_fixture.D117ContrastV5PackTests, Path]:
@@ -371,7 +436,7 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
         fixture.setUp()
         fixture.init_fixture_git(root)
         fixture.configure(fixture.write_prefill_pin(root))
-        pack = fixture.generate_pack(root)
+        pack = self._generate_two_manifest_decode_pack(fixture, root)
         fixture.commit_fixture(root, "generated unprojected v5 pack")
         fixture.freeze_identity_fixture(root, pack)
 
@@ -1092,6 +1157,30 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
             }
             self.assertTrue(evidence_identities.issubset(declared))
             self.assertEqual(len(evidence_identities), 2)
+            self.assertEqual(evidence_identities, declared)
+
+            # The two identities differ in real, authenticated suite bindings,
+            # while D-166's prompt, token IDs, output policy, and tags agree.
+            common_identities = []
+            manifests = []
+            for row in evidence:
+                identity = identity_pins.scientific_config_identity(row.raw_config)
+                assert identity is not None
+                workload = identity["workload_profile"]
+                manifest_path = root / workload.pop("suite_manifest_ref")
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                self.assertEqual(
+                    suite_manifest_sha256(manifest),
+                    workload.pop("suite_manifest_sha256"),
+                )
+                common_identities.append(identity)
+                manifests.append(manifest)
+            self.assertEqual(common_identities[0], common_identities[1])
+            self.assertNotEqual(
+                manifests[0].pop("suite_id"), manifests[1].pop("suite_id")
+            )
+            self.assertEqual(manifests[0], manifests[1])
+            self.assertEqual(manifests[0]["source_manifest"]["subset_id"], "sky_color")
 
             request = floor_request_for_evidence(*case)
 
