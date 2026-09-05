@@ -86,8 +86,8 @@
 
   <!-- side annotation -->
   <g font-family="sans-serif" font-size="12.5" fill="#333333">
-    <text x="40" y="572">The cell floor is the largest apparent effect this instrument produces on this kind of measurement when nothing has actually changed, after the safeguards of Section 4.</text>
-    <text x="40" y="592">The floor and the interval are checked as separate gates. Their sum is only a sizing disclosure — a planning disclosure — and is never</text>
-    <text x="40" y="612">used as a single acceptance threshold; the uncertainty interval is never compared with that sum.</text>
+    <text x="40" y="572">The cell floor is the registered operational resolution guard for assigned-energy differences.</text>
+    <text x="40" y="592">The floor and interval remain separate gates. F+B is floor plus deterministic widening: a non-gating planning diagnostic,</text>
+    <text x="40" y="612">neither necessary nor sufficient for acceptance; the uncertainty interval is never compared with that sum.</text>
   </g>
 </svg>

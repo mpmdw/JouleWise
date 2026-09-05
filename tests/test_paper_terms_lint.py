@@ -12,6 +12,8 @@ REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "paper_terms_lint.py"
 REAL_DRAFT = REPO / "docs" / "paper" / "draft-v1.md"
 REAL_PLAN = REPO / "docs" / "paper" / "round7" / "retensing-plan.md"
+SUCCESSOR_DRAFT = REPO / "docs" / "paper" / "draft-v2-skeleton.md"
+FILL_REGISTRY = REPO / "docs" / "paper" / "results-fill-registry.md"
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -149,6 +151,84 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         payload = json.loads(result.stdout)
         self.assertGreater(payload["finding_count"], 0)
+
+    def test_successor_carries_provisional_paper_k_rulings(self) -> None:
+        draft = SUCCESSOR_DRAFT.read_text(encoding="utf-8")
+        registry = FILL_REGISTRY.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "# JouleWise: Timing Sensitivity of Phase-Energy Assignments on Apple Silicon",
+            draft,
+        )
+        self.assertGreaterEqual(draft.count("[FILL:"), 1)
+        self.assertNotIn("[FILL:TR-01]", draft)
+        self.assertEqual(
+            draft.count(
+                "Transfer of the pulse-derived timing allowance to inference was not tested."
+            ),
+            9,
+        )
+        for retired in (
+            "largest false",
+            "same timing error moved together",
+            "uniform shared shift cancels",
+            "straight line joining those samples",
+            "claim-bearing **energy terms**",
+            "2.776445",
+            "4.808944",
+            "95/95",
+            "BUILD AFTER CAMPAIGN AND TRANSFER FIDUCIAL",
+            "the headline remains conditional on it",
+            "the floor packs set A = B",
+        ):
+            with self.subTest(retired=retired):
+                self.assertNotIn(retired, draft)
+
+        for required in (
+            "registered timing domain—the edge movements fixed before collection",
+            "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
+            "An A/B/B/A block is four runs in the order A, B, B, A.",
+            "The measurand is energy assigned to each phase by\n"
+            "**interval-overlap allocation**: each sampling record's energy is divided",
+            "Its \\(\\pm10\\)-ms two-edge timing\n"
+            "envelope is [8.8, 9.2] J, while allowing each record's energy to sit anywhere\n"
+            "inside its own interval gives the nonnegative partial-record enclosure\n"
+            "[8, 10] J: the eight records lying wholly inside contribute 8 J, and the two\n"
+            "records the window only partly covers contribute between 0 and 1 J each.",
+            "Both ratios\nmeasure enlargement under specified perturbation sets; they do not estimate\n"
+            "how often or how strongly those errors occur.",
+            "For native interval-average records, the reducer integrates constant reported power\n"
+            "over the overlap duration; its interpolation-bound term is zero. Timing\n"
+            "uncertainty enters through separately recomputed boundary envelopes.",
+            "Using the\ncode's fixed three-decimal lookup-table convention, \\(t_{.975,4}=2.776\\)",
+            "We apply Holm at nominal family-wise level 0.05 to two\n"
+            "model-based tests; error control depends on their distributional and dependence\n"
+            "assumptions.",
+            "The comparison supports this fixed prompt and makes no prompt-population\n"
+            "generality claim.",
+            "\\(F+B\\) is only a non-gating planning diagnostic, neither necessary\n"
+            "nor sufficient for acceptance",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, draft)
+
+        self.assertNotIn("d165_shared_sign_local_corner_replay.v1", registry)
+        self.assertIn(
+            "The protocol-first title fixed before collection is **JouleWise: Timing\n"
+            "Sensitivity of Phase-Energy Assignments on Apple Silicon**.",
+            registry,
+        )
+        self.assertEqual(
+            draft.count(
+                "registered timing domain—the edge movements fixed before collection"
+            ),
+            3,
+        )
+        self.assertGreaterEqual(
+            registry.count("d165_shared_sign_local_corner_replay.v2"),
+            5,
+        )
+        self.assertIn("| LIMITATION | WITHDRAWN 2026-09-04", registry)
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,12 @@ BRANCH_LABELS = {
     "REFUSAL": "**Refusal — stopped before comparison or at close-out:**",
 }
 BRANCHES = tuple(BRANCH_LABELS)
-TRANSFER_MARKER = "[FILL:TR-01]"
+TRANSFER_LIMITATION_SENTENCE = (
+    "Transfer of the pulse-derived timing allowance to inference was not tested."
+)
+# Backward-compatible name for the adjacent rehearsal test; this is now fixed
+# prose rather than a fill marker.
+TRANSFER_MARKER = TRANSFER_LIMITATION_SENTENCE
 FAILED_COMPONENTS_MARKER = "[FILL:OB-01]"
 DECODE_VERDICT_MARKER = "[FILL:DS-32]"
 PREFILL_VERDICT_MARKER = "[FILL:PG-08]"
@@ -92,9 +97,9 @@ def _select_group(text: str, group: str, outcome: str) -> str:
         else:
             raise ValueError(f"{group} {outcome} contains a non-quoted content line")
     rendered_text = "\n".join(rendered).strip()
-    if rendered_text.count(TRANSFER_MARKER) != 1:
+    if rendered_text.count(TRANSFER_LIMITATION_SENTENCE) != 1:
         raise ValueError(
-            f"{group} {outcome} must contain exactly one {TRANSFER_MARKER} slot"
+            f"{group} {outcome} must contain exactly one fixed transfer limitation"
         )
     expected_failure_slots = 1 if outcome == "B" else 0
     if rendered_text.count(FAILED_COMPONENTS_MARKER) != expected_failure_slots:
@@ -150,8 +155,8 @@ def main() -> int:
     if "<!-- OUTCOME-BRANCHES:" in text or "<!-- OUTCOME-BRANCH:" in text:
         raise ValueError("an outcome branch marker remains after selection")
     reader_text = _reader_facing_text(text)
-    if reader_text.count(TRANSFER_MARKER) != len(GROUPS):
-        raise ValueError("selected draft lost a branch-independent transfer-result slot")
+    if reader_text.count(TRANSFER_LIMITATION_SENTENCE) != len(GROUPS):
+        raise ValueError("selected draft lost a branch-independent transfer limitation")
     expected_failure_slots = len(GROUPS) if args.outcome == "B" else 0
     if reader_text.count(FAILED_COMPONENTS_MARKER) != expected_failure_slots:
         raise ValueError("selected draft has the wrong failed-component slot count")
@@ -173,7 +178,7 @@ def main() -> int:
     except FileExistsError:
         parser.error(f"--output already exists: {args.output}")
     print(
-        f"selected {args.outcome}: transfer_slots={len(GROUPS)}, "
+        f"selected {args.outcome}: transfer_limitations={len(GROUPS)}, "
         f"failed_component_slots={expected_failure_slots}, "
         f"verdict_slots={expected_verdict_slots}, "
         f"refusal_reason_slots={expected_refusal_slots}, "
