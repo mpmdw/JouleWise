@@ -39,9 +39,6 @@ EXPECTED_IDS = {
     "INSTRUMENT-PATH-PIN-01",
     "GENERATOR-CORE-01",
     "WATCHDOG-INSTALL-01",
-    "NIGHT-PLAN-PIN-01",
-    "R7F-EXIT3-SEMANTICS-01",
-    "PREWINDOW-V5-PIN-01",
     "CHARTER-V3-PACKET-INPUTS-01",
     # 2026-09-02 paper-d fixture-shape cold gate (files 38-42).
     "DG071-PROVENANCE-TEST-01",
@@ -110,7 +107,6 @@ EXPECTED_IDS = {
     # launch-step realization recheck) and the ruling-171a decode-identity fix
     # replace the retired projection-02 row.
     "V5-LAUNCH-REALIZATION-RECHECK-01",
-    "V5-DECODE-IDENTITY-SET-01",
     # 2026-09-02 bench sweep: the T26 cold-gate verdicts (items 1-4,
     # docs/process_traces/2026-08-27-t26/process-proposals/COLD-GATE-RULING.md)
     # were found uninstalled; one installing row plus the two Ed items the
@@ -131,7 +127,6 @@ EXPECTED_IDS = {
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
     # the joint delta re-audit's adjudication item 4 (006-* guard strength).
-    "EPOCH-LINT-01",
     "LINE-AUDIT-GUARD-01",
     # [AGENT]
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
@@ -158,13 +153,14 @@ EXPECTED_IDS = {
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
     # D-078 confirmation-round-9 follow-up
     "FLOOR-BIND-01",
-    # C-045 screen+budget gauntlet deferrals (2026-07-25)
-    "CUSTODY-HARDEN-01",
+    # C-045 screen+budget gauntlet deferrals (2026-07-25).
+    # CUSTODY-HARDEN-01 closed in PR #285 and left the live kernel.
     # 2026-07-25 attribution-limit adjudication (FLOOR-LABEL-01 completed
     # 2026-07-27 at 3055315 and left the live kernel)
     # 2026-07-29/30 mint-arc intake (82ca955; kernel rows added by ruling).
     # STACK-ID-BIND-01 completed 2026-07-30 in PR #88 (da83337).
-    "MODULARITY-01",
+    # MODULARITY-01 v2 closed in PR #285; its residuals remain preserved in
+    # the D-174-shelved MODULARITY-FOLLOWUPS-01 row below.
     # 2026-07-30 cold-gate intake fold (D-088; PR #88 merge session).
     # COOLDOWN-JOIN-GAUNTLET-01 + QA-10A/QA-10B closed 2026-08-02 with
     # commit 3 (PR #93) and retired to the completed table.
@@ -202,7 +198,7 @@ EXPECTED_IDS = {
     # 2026-09-01 D-169 stage-1 split (MAGISTRATE-RULING-UNATTENDED-STAGE1,
     # cold gate coldgate-e10): night gate, night driver, launchd rehearsal
     "NIGHT-REHEARSAL-01",
-    "FIXTURE-MODERNIZATION-01",
+    # FIXTURE-MODERNIZATION-01 closed in PR #285.
     # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
     # to the shared driver at E-2, closed T22: H4 driver + 4s nominal cure,
     # both exclusive shards green at 42df510.)
@@ -228,6 +224,31 @@ EXPECTED_IDS = {
     # completed table.)
     "T3-PROV-SCHEMA-01",
     "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
+    # 2026-09-04 post-fan-out paper-supply program. The custody seam is the
+    # active agent head; four supplier/cold-gate rows wait behind it, while
+    # two governed receipt producers are independently queued. The Q-R1-2
+    # composition proposal and doctrine-bearing skill distillation remain
+    # blocked on their named cold gates.
+    "PAPER-CUSTODY-SEAM-01",
+    "D123-REPORTED-MEAN-SUPPLIER-01",
+    "D165-OUTCOME-RENDERER-01",
+    "GAMMA-CLAIM-RENDERER-01",
+    "TRANSFER-RESULT-RENDERER-01",
+    "WHOLE-WINDOW-STOP-RECEIPT-01",
+    "CLAIM-NONISSUANCE-RECEIPT-01",
+    "D173-PAPER-SUPPLY-COLD-GATE-01",
+    "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01",
+    "SKILL-DISTILL-01",
+    # Ruling 43 ratified ruling 17 as amended and opened six paper lanes.
+    "DECISION-LOG-RATIFY",
+    "ESTIMAND-ENCLOSURE-01",
+    "FB-PLANNING-METADATA-01",
+    "D165-RELABEL-01",
+    "D166-PROMPT0-01",
+    "PAPER-K",
+    # PR #285 closed MODULARITY-01 v2; the non-submission residue is retained
+    # as a D-174-shelved successor record.
+    "MODULARITY-FOLLOWUPS-01",
     # [QUIET-MAC]
     "MET-WINDOW-C-01",
     "P2-010", "P2-019", "P2-020",
@@ -264,7 +285,17 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 # 2026-09-04 fan-out magistrate-rulings batch.
                 "FLOOR-WORKLOAD-SIZING-01", "P1-008", "P2-027", "P2-035",
                 "P2-047A", "P2-047B", "P2-050",
-                "PHASE-SHARE-ESTIMAND-01", "PREWINDOW-REGEX-01"}
+                "PHASE-SHARE-ESTIMAND-01", "PREWINDOW-REGEX-01",
+                # 2026-09-04 merge-wave closures and retirements.
+                "NIGHT-PLAN-PIN-01", "V5-DECODE-IDENTITY-SET-01",
+                "EPOCH-LINT-01",
+                # PR #285 terminal lanes. DOCS-VS-TRUTH and ONE-NAME-SWEEP
+                # were fan-out seats rather than live kernel IDs, but their
+                # terminal records belong in the completed table.
+                "CUSTODY-HARDEN-01", "FIXTURE-MODERNIZATION-01",
+                "DOCS-VS-TRUTH", "ONE-NAME-SWEEP",
+                "R7F-EXIT3-SEMANTICS-01", "MODULARITY-01",
+                "PREWINDOW-V5-PIN-01"}
 
 
 def load_kernel():
@@ -664,9 +695,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # floor-generator counter-review CR-3 row adds one: 142 + 1 = 143.
         # The 2026-09-04 fan-out ruling batch retires nine rows (including
         # P2-047B with its retired P2-047A parent), then opens ED-DATES-01:
-        # 143 - 9 + 1 = 135.
+        # 143 - 9 + 1 = 135. The landing merge then retires NIGHT-PLAN-PIN-01,
+        # V5-DECODE-IDENTITY-SET-01, and EPOCH-LINT-01 while registering the
+        # custody seam, four suppliers, the D-173 and Q-R1-2 cold gates, two
+        # governed receipt producers, and the held skill distillation:
+        # 135 - 3 + 10 = 142. PR #285 then closes five of those live kernel
+        # rows; ruling 43 opens six paper lanes and preserves modularity
+        # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 135)
+        self.assertEqual(len(self.tasks), 144)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -682,6 +719,75 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         completed = completed.split("## Shelved Follow-Ups With Triggers", 1)[0]
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
+
+    def test_ruling_43_paper_lanes_and_d174_scope_freeze(self):
+        active = {
+            "DECISION-LOG-RATIFY",
+            "ESTIMAND-ENCLOSURE-01",
+            "FB-PLANNING-METADATA-01",
+            "D165-RELABEL-01",
+            "D166-PROMPT0-01",
+            "PAPER-K",
+        }
+        self.assertEqual(
+            {tid for tid in active if self.tasks[tid]["status"] == "active"},
+            active,
+        )
+        self.assertIn(
+            "exactly one DERIVE registry row",
+            " ".join(self.tasks["ESTIMAND-ENCLOSURE-01"]["acceptance"]["evidence"]),
+        )
+        self.assertIn(
+            "all ten exact-equality object sites",
+            " ".join(self.tasks["FB-PLANNING-METADATA-01"]["acceptance"]["evidence"]),
+        )
+        self.assertIn(
+            "eight independent and four comparative ratios",
+            " ".join(self.tasks["D165-RELABEL-01"]["acceptance"]["evidence"]),
+        )
+        prompt_acceptance = " ".join(
+            self.tasks["D166-PROMPT0-01"]["acceptance"]["evidence"]
+        )
+        self.assertIn("dependency census", prompt_acceptance)
+        self.assertIn("expected_pack_paths", prompt_acceptance)
+        self.assertIn("D-138 successor-generation", prompt_acceptance)
+        self.assertIn(
+            "D-174",
+            " ".join(self.tasks["DECISION-LOG-RATIFY"]["acceptance"]["evidence"]),
+        )
+        self.assertIn(
+            "source-to-estimand table",
+            " ".join(self.tasks["PAPER-K"]["acceptance"]["evidence"]),
+        )
+
+        parked = {
+            "WHOLE-WINDOW-STOP-RECEIPT-01",
+            "CLAIM-NONISSUANCE-RECEIPT-01",
+            "AUTHENTICATOR-ALLOWLIST-GUARD-01",
+            "SKILL-DISTILL-01",
+            "LINEAGE-RELOCATABLE-01",
+            "MODULARITY-FOLLOWUPS-01",
+            "TRANSFER-FIDUCIAL-01",
+        }
+        for tid in parked:
+            with self.subTest(parked=tid):
+                self.assertEqual(self.tasks[tid]["status"], "shelved")
+                self.assertIn("D-174 scope freeze", self.tasks[tid]["status_note"])
+        self.assertIn(
+            "93d0d91c",
+            self.tasks["AUTHENTICATOR-ALLOWLIST-GUARD-01"]["status_note"],
+        )
+        self.assertIn(
+            "cold gate affirmed",
+            self.tasks["LINEAGE-RELOCATABLE-01"]["status_note"],
+        )
+
+        with open(os.path.join(ROOT, "RUN_STATE.md"), encoding="utf-8") as fh:
+            run_state = fh.read()
+        self.assertIn("**T33 (2026-09-05)", run_state)
+        self.assertIn("PR #286 is Paper-J with its row-9 full replay pending", run_state)
+        self.assertIn("PR #287 is", run_state)
+        self.assertIn("18:00 PT on 9 September", run_state)
 
     def test_stop_card_cleared_and_no_global_gate_live(self):
         # Earlier audit, T3, and readiness-council gates are cleared; their
@@ -868,10 +974,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             },
         )
         # Ruling 171a R-9 (2026-09-02): the three _v5 packs cannot freeze until
-        # decode units carry a declared manifest set.
+        # decode units carry a declared manifest set. PR #278 satisfied that
+        # edge; the remaining pending hard-start edge is G2-a.
         self.assertEqual(
             self._hard_start_targets("V5-DESK-DAY-01"),
-            {"V5-G2A-PREFILL-PROBE-01", "V5-DECODE-IDENTITY-SET-01"},
+            {"V5-G2A-PREFILL-PROBE-01"},
         )
         self.assertEqual(
             self._hard_start_targets("V5-G2B-SHAKEDOWN-01"),
@@ -1104,7 +1211,6 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             kernel["tasks"][task_id]["lane"]: task_id
             for task_id in head_oracle["expected_selectable_task_ids"]
         }
-        expected_by_lane["agent"] = "NIGHT-REHEARSAL-01"
         self.assertEqual(set(expected_by_lane), set(gen_state.LANES))
 
         restart = rendered.split("## Restart By Machine-State Lane", 1)[1]
@@ -1115,18 +1221,26 @@ class TestWorkSelectionFidelity(unittest.TestCase):
                     f"### {gen_state.LANE_LABEL[gen_state.LANES[index + 1]]}", 1
                 )[0]
             entries = [line for line in section.splitlines() if line.startswith("- ")]
-            self.assertEqual(len(entries), 1, lane)
-            task_id = expected_by_lane[lane]
-            task = kernel["tasks"][task_id]
-            if task["status"] == "active":
-                self.assertTrue(
-                    entries[0].startswith(
-                        f"- CONTINUE — {gen_state.LANE_PREFIX[lane]}{task['rank']} `{task_id}`:"
-                    ),
-                    entries[0],
-                )
-                self.assertNotIn("excluded by:", entries[0])
+            active = sorted(
+                (task for task in kernel["tasks"].values()
+                 if task["lane"] == lane and task["status"] == "active"),
+                key=lambda task: (task["rank"], task["id"]),
+            )
+            if active:
+                self.assertEqual(len(entries), len(active), lane)
+                for entry, task in zip(entries, active):
+                    self.assertTrue(
+                        entry.startswith(
+                            f"- CONTINUE — {gen_state.LANE_PREFIX[lane]}{task['rank']} "
+                            f"`{task['id']}`:"
+                        ),
+                        entry,
+                    )
+                    self.assertNotIn("excluded by:", entry)
             else:
+                self.assertEqual(len(entries), 1, lane)
+                task_id = expected_by_lane[lane]
+                task = kernel["tasks"][task_id]
                 self.assertTrue(
                     entries[0].startswith(
                         f"- GATED — {gen_state.LANE_PREFIX[lane]}{task['rank']} `{task_id}` "
@@ -1134,7 +1248,8 @@ class TestWorkSelectionFidelity(unittest.TestCase):
                     entries[0],
                 )
                 self.assertIn(f"(excluded by: {gate_id})", entries[0])
-            self.assertNotIn("READY", entries[0])
+            for entry in entries:
+                self.assertNotIn("READY", entry)
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")

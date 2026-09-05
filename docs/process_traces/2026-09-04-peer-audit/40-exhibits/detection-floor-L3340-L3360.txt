@@ -1,0 +1,21 @@
+        for key in ("unguarded_floor_j", "guard_factor", "guarded_floor_j"):
+            if not _close(diagnostic.get(key), expected_diagnostic[key]):
+                errors.append(
+                    f"{where}.point_floor_diagnostic.{key}: does not match point-only floor"
+                )
+    if record.get("single_count_discipline") != (
+        attribution_single_count_discipline()
+    ):
+        errors.append(
+            f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+        )
+
+
+def _validate_bound_terms(terms, where, errors) -> None:
+    if not isinstance(terms, Mapping) or set(terms) != set(_BOUND_TERMS):
+        errors.append(f"{where}: bound_terms must contain exactly {sorted(_BOUND_TERMS)}")
+        return
+    for term in _BOUND_TERMS:
+        entry = terms[term]
+        if not _check_keys(entry, {"applicability", "maximum"}, f"{where}.{term}", errors):
+            continue

@@ -81,7 +81,6 @@ from joulewise.detection_floor import (
     COMMON_MODE_ESTIMATOR_ID,
     CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
-    FLOOR_METRIC_CATALOG,
     FloorEstimate,
     MAX_EXACT_ADMISSIBLE_CORNER_N,
     METHOD_ID,
@@ -674,7 +673,7 @@ def governed_cell_metric(metric: object, window_class: object) -> tuple[str, str
     """Validate a cell's metric/window pairing before touching evidence.
 
     Fails loudly (T0.6, audit P1.4): only exact
-    :data:`FLOOR_METRIC_CATALOG` pairs are governed; a phase cell naming a
+    The checksum-authenticated detection-floor registry governs the pairs; a phase cell naming a
     request metric (or a request cell naming a phase metric) is a process
     error, as is the legacy ``throughput_tokens_s`` field in any position.
     """

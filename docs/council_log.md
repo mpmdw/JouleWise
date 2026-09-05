@@ -3926,3 +3926,34 @@ errors on three consecutive triggers (73a realized-prefill `.lower()` claim,
 COUNTERFACTUAL input and the PRODUCTION call site, never a property of
 today's artifact — a cure the magistrate cannot show killing the mutation on
 paper is not a cure.
+
+## T30 (2026-09-02) — three cold gates close documentation and process claims
+
+A *cold gate* is a fresh-context adjudication over a mechanically assembled
+evidence packet, paired with an independent contract-focused refuter. This
+block records the three gates that were missing from the session ledger; their
+full evidence and dissent remain in the linked trace directories.
+
+- **Round-7 numeric rendering:** the gate rejected a site-by-site coercion
+  patch and adopted one typed resolver at the artifact boundary. Its dated
+  addendum narrowed the original impossible acceptance scan so geometry-only
+  floating-point conversions remain permitted. Record:
+  `docs/process_traces/2026-09-02-coldgate-dx-t26a/`.
+- **Unavailable-corpus wording:** both seats chose documentation of the actual
+  three raise sites, with the contract refuter's wording adopted because it
+  distinguishes a missing directory, a present artifact whose fingerprint no
+  longer matches, and comparison loss inside one replay half. Behavior changes
+  were deferred to the registered follow-up rather than smuggled into a
+  docstring correction. Record:
+  `docs/process_traces/2026-09-02-coldgate-r7f-unavailable/`.
+- **Process rules:** the gate amended and adopted a clause-to-assertion map for
+  delegated ruling installs and an artifact-pair exhibit for cross-artifact
+  equality claims. The bridge contract and focused freshness tests now carry
+  the first rule; D-170 records the executed-evidence ownership and the
+  remaining charter work. Record:
+  `docs/process_traces/2026-09-02-process-rules/`.
+
+The shared result is a custody rule, not a new scientific claim: prose about
+what code or evidence does must name the producing site or executed artifact,
+and a reviewer must be able to state the one-site counterfactual that would
+make the cited assertion fail.

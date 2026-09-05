@@ -88,6 +88,35 @@ _PREFIX_INCOMPLETE = "incomplete"
 _PREFIX_INVALID = "invalid"
 _JSON_SIMPLE_ESCAPES = frozenset('"\\bfnrt')
 _JSON_LOWER_HEX = frozenset("0123456789abcdef")
+_JSON_SIMPLE_ESCAPE_VALUES = {
+    '"': '"',
+    "\\": "\\",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
+_JSON_UNICODE_ESCAPE_RANGES = (
+    (0x00, 0x07),
+    (0x0B, 0x0B),
+    (0x0E, 0x1F),
+    (0x7F, 0xFFFF),
+)
+_HIGH_SURROGATE_RANGE = (0xD800, 0xDBFF)
+_LOW_SURROGATE_RANGE = (0xDC00, 0xDFFF)
+_UNICODE_MAX = 0x10FFFF
+
+# D-105 deliberately specifies a decidable superset rather than the image of
+# CPython's shortest-representation algorithm.  These are the observable
+# structural bounds of json.dumps float spellings: fixed notation covers
+# decimal exponents -4 through 15, while scientific notation has one normalized
+# coefficient digit and a signed exponent padded to at least two and at most
+# three digits.  The superset does not try to decide which digit sequences are
+# shortest round trips.
+_FLOAT_FIXED_MIN_EXPONENT = -4
+_FLOAT_FIXED_MAX_EXPONENT = 15
+_FLOAT_EXPONENT_MAX_DIGITS = 3
 
 
 def _writer_emits_unicode_escape(codepoint: int) -> bool:
@@ -100,18 +129,75 @@ def _writer_emits_unicode_escape(codepoint: int) -> bool:
 
 
 def _unicode_escape_prefix_can_complete(digits: str) -> bool:
+    return _unicode_escape_prefix_max_codepoint(digits) is not None
+
+
+def _interval_maximum(
+    low: int, high: int, ranges: Sequence[tuple[int, int]]
+) -> int | None:
+    candidates = [
+        min(high, range_high)
+        for range_low, range_high in ranges
+        if low <= range_high and high >= range_low
+    ]
+    return max(candidates) if candidates else None
+
+
+def _surrogate_pair_codepoint(high: int, low: int) -> int:
+    return (
+        0x10000
+        + ((high - _HIGH_SURROGATE_RANGE[0]) << 10)
+        + (low - _LOW_SURROGATE_RANGE[0])
+    )
+
+
+def _unicode_escape_prefix_max_codepoint(
+    digits: str, *, preceding_high_surrogate: int | None = None
+) -> int | None:
+    """Return the greatest scalar possible after an unfinished ``\\u``.
+
+    The hexadecimal prefix defines a closed code-unit interval.  A high
+    surrogate can begin a second escape, so its interval is lifted through the
+    surrogate-pair arithmetic before key-order feasibility is decided.
+    """
+
     remaining = 4 - len(digits)
     low = int(digits + ("0" * remaining), 16)
     high = int(digits + ("f" * remaining), 16)
-    return any(
-        low <= range_high and high >= range_low
-        for range_low, range_high in (
-            (0x00, 0x07),
-            (0x0B, 0x0B),
-            (0x0E, 0x1F),
-            (0x7F, 0xFFFF),
-        )
+    emitted_maximum = _interval_maximum(
+        low, high, _JSON_UNICODE_ESCAPE_RANGES
     )
+    if preceding_high_surrogate is not None:
+        low_surrogate_maximum = _interval_maximum(
+            low, high, (_LOW_SURROGATE_RANGE,)
+        )
+        paired_maximum = (
+            _surrogate_pair_codepoint(
+                preceding_high_surrogate, low_surrogate_maximum
+            )
+            if low_surrogate_maximum is not None
+            else None
+        )
+        candidates = [preceding_high_surrogate]
+        if paired_maximum is not None:
+            candidates.append(paired_maximum)
+        return max(candidates)
+    high_surrogate_maximum = _interval_maximum(
+        low, high, (_HIGH_SURROGATE_RANGE,)
+    )
+    paired_maximum = (
+        _surrogate_pair_codepoint(
+            high_surrogate_maximum, _LOW_SURROGATE_RANGE[1]
+        )
+        if high_surrogate_maximum is not None
+        else None
+    )
+    candidates = [
+        candidate
+        for candidate in (emitted_maximum, paired_maximum)
+        if candidate is not None
+    ]
+    return max(candidates) if candidates else None
 
 
 def _canonical_number(text: str) -> bool:
@@ -126,68 +212,318 @@ def _canonical_number(text: str) -> bool:
     )
 
 
-def _python_number_prefix(text: str) -> bool:
-    """Recognize an unfinished number in the grammar emitted by json.dumps."""
-
-    index = 0
-    if text.startswith("-"):
-        index = 1
-        if index == len(text):
-            return True
-    if index == len(text) or not text[index].isdigit():
-        return False
-    if text[index] == "0":
-        index += 1
-        if index < len(text) and text[index].isdigit():
-            return False
-    else:
-        while index < len(text) and text[index].isdigit():
-            index += 1
-    if index == len(text):
-        return text == "-0"
-    if text[index] == ".":
-        index += 1
-        if index == len(text):
-            return True
-        decimal_start = index
-        while index < len(text) and text[index].isdigit():
-            index += 1
-        if index == decimal_start:
-            return False
-        if index == len(text):
-            # A non-canonical finite decimal can still be a prefix of a
-            # longer shortest-round-trip float spelling.
-            return True
-    if index == len(text) or text[index] != "e":
-        return False
-    index += 1
-    if index == len(text):
+def _scientific_exponent_can_complete(sign: str, digits: str) -> bool:
+    if not digits:
         return True
-    if text[index] not in "+-":
+    if not digits.isdigit() or len(digits) > _FLOAT_EXPONENT_MAX_DIGITS:
         return False
-    index += 1
-    if index == len(text):
-        return True
-    exponent_start = index
-    while index < len(text) and text[index].isdigit():
-        index += 1
-    if index != len(text):
-        return False
-    exponent = text[exponent_start:index]
-    if len(exponent) < 2:
-        return True
-    if exponent.startswith("0"):
-        return False
+    if len(digits) == 1:
+        # A positive zero prefix can reach only +00..+09, all inside the
+        # fixed-notation window.  Every other one-digit prefix can reach an
+        # admitted two-digit exponent.
+        return sign == "-" or digits != "0"
+    if digits[0] == "0":
+        return sign == "-" and int(digits) >= -_FLOAT_FIXED_MIN_EXPONENT + 1
+    # A two-digit value still inside the fixed window can extend to three
+    # digits; every other nonzero-leading two- or three-digit value is a
+    # complete superset exponent.
     return True
 
 
-def _key_prefix_can_exceed(prefix: str, previous: str) -> bool:
+def _scientific_coefficient(coefficient: str) -> bool:
+    if not coefficient or coefficient[0] not in "123456789":
+        return False
+    if len(coefficient) == 1:
+        return True
+    if coefficient[1:2] != ".":
+        return False
+    fraction = coefficient[2:]
+    return bool(fraction) and fraction.isdigit() and not fraction.endswith("0")
+
+
+def _documented_float_superset_prefix(text: str) -> bool:
+    """Recognize a complete spelling or prefix in D-105's float superset.
+
+    The language preserves the writer's fixed/scientific notation boundary,
+    normalized scientific coefficient, and exponent padding.  Coefficient
+    digits remain a superset of the shortest-round-trip image by design.
+    """
+
+    unsigned = text[1:] if text.startswith("-") else text
+    if not unsigned:
+        return text == "-"
+    if unsigned[0] not in "0123456789":
+        return False
+
+    if "e" in unsigned:
+        if unsigned.count("e") != 1:
+            return False
+        coefficient, exponent = unsigned.split("e", 1)
+        if not _scientific_coefficient(coefficient):
+            return False
+        if not exponent:
+            return True
+        if exponent[0] not in "+-":
+            return False
+        return _scientific_exponent_can_complete(exponent[0], exponent[1:])
+
+    if unsigned.startswith("0"):
+        if unsigned == "0":
+            return True
+        if not unsigned.startswith("0."):
+            return False
+        fraction = unsigned[2:]
+        if not fraction:
+            return True
+        if not fraction.isdigit():
+            return False
+        first_nonzero = next(
+            (index for index, digit in enumerate(fraction, start=1) if digit != "0"),
+            None,
+        )
+        if first_nonzero is None:
+            return len(fraction) <= -_FLOAT_FIXED_MIN_EXPONENT - 1
+        return first_nonzero <= -_FLOAT_FIXED_MIN_EXPONENT
+
+    integer, dot, fraction = unsigned.partition(".")
+    if not integer.isdigit() or integer[0] == "0":
+        return False
+    if not dot:
+        return True
+    if len(integer) > _FLOAT_FIXED_MAX_EXPONENT + 1:
+        return False
+    return not fraction or fraction.isdigit()
+
+
+@dataclass(frozen=True)
+class _WriterStringPattern:
+    """Compact Cartesian product of writer-origin string segments."""
+
+    segments: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class _CompleteWriterString:
+    pattern: _WriterStringPattern
+
+
+@dataclass(frozen=True)
+class _IncompleteStringPrefix:
+    pattern: _WriterStringPattern
+    next_codepoint_maximum: int | None
+
+
+def _writer_string_minimum(pattern: _WriterStringPattern) -> str:
+    return "".join(options[0] for options in pattern.segments)
+
+
+def _writer_string_maximum(pattern: _WriterStringPattern) -> str:
+    return "".join(options[-1] for options in pattern.segments)
+
+
+def _least_writer_string_above(
+    pattern: _WriterStringPattern, previous: str
+) -> str | None:
+    """Return the least represented string greater than ``previous``.
+
+    The only branching segment is an escaped high/low surrogate pair. Its
+    two origins start with different code points, so at most one branch can
+    remain equal to ``previous`` at each segment. Remembering the latest
+    greater branch while following that equality path is therefore linear in
+    the serialized key, rather than exponential in its ambiguous pairs.
+    """
+
+    equal_choices: list[str] = []
+    previous_index = 0
+    fallback: tuple[int, str] | None = None
+
+    for segment_index, options in enumerate(pattern.segments):
+        equal_option: str | None = None
+        for option in options:
+            relation = 0
+            for offset, character in enumerate(option):
+                comparison_index = previous_index + offset
+                if comparison_index >= len(previous):
+                    relation = 1
+                    break
+                previous_character = previous[comparison_index]
+                if character != previous_character:
+                    relation = 1 if character > previous_character else -1
+                    break
+            if relation > 0:
+                fallback = (segment_index, option)
+                break
+            if relation == 0:
+                equal_option = option
+
+        if equal_option is None:
+            break
+        equal_choices.append(equal_option)
+        previous_index += len(equal_option)
+
+    if fallback is None:
+        return None
+    segment_index, option = fallback
+    return (
+        "".join(equal_choices[:segment_index])
+        + option
+        + "".join(
+            options[0] for options in pattern.segments[segment_index + 1 :]
+        )
+    )
+
+
+def _key_prefix_can_exceed(
+    prefix: _IncompleteStringPrefix, previous: str
+) -> bool:
     """Return whether some completion of ``prefix`` can sort after ``previous``."""
 
-    for current_character, previous_character in zip(prefix, previous):
+    decoded = _writer_string_maximum(prefix.pattern)
+    for current_character, previous_character in zip(decoded, previous):
         if current_character != previous_character:
             return current_character > previous_character
-    return True
+    if len(decoded) >= len(previous):
+        # Equality can be broken by extending the unfinished key.
+        return True
+    if prefix.next_codepoint_maximum is None:
+        # The raw prefix ends at a character boundary. Reproducing the rest of
+        # ``previous`` and adding one character is feasible.
+        return True
+    return prefix.next_codepoint_maximum >= ord(previous[len(decoded)])
+
+
+def _writer_string_pattern(token: str) -> _WriterStringPattern:
+    """Decode the Python strings ``json.dumps`` can spell as a compact pattern.
+
+    A serialized high/low surrogate pair is ambiguous: it can originate from
+    one non-BMP scalar or from two literal surrogate code units. Python sorts
+    mapping keys before serialization, so both local choices remain live
+    without materializing their Cartesian product.
+    """
+
+    segments: list[tuple[str, ...]] = []
+    pending_high_surrogate: int | None = None
+    index = 1
+
+    def append_unit(unit: int) -> None:
+        nonlocal pending_high_surrogate
+        if pending_high_surrogate is not None:
+            if _LOW_SURROGATE_RANGE[0] <= unit <= _LOW_SURROGATE_RANGE[1]:
+                separate = chr(pending_high_surrogate) + chr(unit)
+                combined = chr(
+                    _surrogate_pair_codepoint(pending_high_surrogate, unit)
+                )
+                segments.append((separate, combined))
+                pending_high_surrogate = None
+                return
+            segments.append((chr(pending_high_surrogate),))
+            pending_high_surrogate = None
+        if _HIGH_SURROGATE_RANGE[0] <= unit <= _HIGH_SURROGATE_RANGE[1]:
+            pending_high_surrogate = unit
+        else:
+            segments.append((chr(unit),))
+
+    while index < len(token) - 1:
+        character = token[index]
+        if character != "\\":
+            append_unit(ord(character))
+            index += 1
+            continue
+        escape = token[index + 1]
+        if escape in _JSON_SIMPLE_ESCAPE_VALUES:
+            append_unit(ord(_JSON_SIMPLE_ESCAPE_VALUES[escape]))
+            index += 2
+            continue
+        assert escape == "u"
+        append_unit(int(token[index + 2 : index + 6], 16))
+        index += 6
+
+    if pending_high_surrogate is not None:
+        segments.append((chr(pending_high_surrogate),))
+    return _WriterStringPattern(tuple(segments))
+
+
+def _decode_incomplete_writer_string(token: str) -> _IncompleteStringPrefix:
+    """Decode the fixed part of a validated unfinished writer string.
+
+    The return value separates fixed decoded characters from the greatest
+    feasible code point at the first unfinished escape.  This is sufficient
+    for an exact existential lexicographic comparison: later characters cannot
+    change an earlier unequal position.
+    """
+
+    segments: list[tuple[str, ...]] = []
+    pending_high_surrogate: int | None = None
+    index = 1  # opening quote
+
+    def flush_pending_high() -> None:
+        nonlocal pending_high_surrogate
+        if pending_high_surrogate is not None:
+            segments.append((chr(pending_high_surrogate),))
+            pending_high_surrogate = None
+
+    def append_character(character: str) -> None:
+        segments.append((character,))
+
+    def result(maximum: int | None) -> _IncompleteStringPrefix:
+        return _IncompleteStringPrefix(
+            _WriterStringPattern(tuple(segments)), maximum
+        )
+
+    while index < len(token):
+        character = token[index]
+        if character != "\\":
+            flush_pending_high()
+            append_character(character)
+            index += 1
+            continue
+        if index + 1 == len(token):
+            maximum = (
+                _surrogate_pair_codepoint(
+                    pending_high_surrogate, _LOW_SURROGATE_RANGE[1]
+                )
+                if pending_high_surrogate is not None
+                else _UNICODE_MAX
+            )
+            return result(maximum)
+        escape = token[index + 1]
+        if escape in _JSON_SIMPLE_ESCAPE_VALUES:
+            flush_pending_high()
+            append_character(_JSON_SIMPLE_ESCAPE_VALUES[escape])
+            index += 2
+            continue
+        assert escape == "u"
+        digits = token[index + 2 : index + 6]
+        if len(digits) < 4:
+            maximum = _unicode_escape_prefix_max_codepoint(
+                digits, preceding_high_surrogate=pending_high_surrogate
+            )
+            assert maximum is not None
+            return result(maximum)
+        unit = int(digits, 16)
+        index += 6
+        if pending_high_surrogate is not None:
+            if _LOW_SURROGATE_RANGE[0] <= unit <= _LOW_SURROGATE_RANGE[1]:
+                combined = chr(
+                    _surrogate_pair_codepoint(pending_high_surrogate, unit)
+                )
+                separate = chr(pending_high_surrogate) + chr(unit)
+                segments.append((separate, combined))
+                pending_high_surrogate = None
+                continue
+            flush_pending_high()
+        if _HIGH_SURROGATE_RANGE[0] <= unit <= _HIGH_SURROGATE_RANGE[1]:
+            pending_high_surrogate = unit
+        else:
+            append_character(chr(unit))
+
+    if pending_high_surrogate is not None:
+        return result(
+            _surrogate_pair_codepoint(
+                pending_high_surrogate, _LOW_SURROGATE_RANGE[1]
+            ),
+        )
+    return result(None)
 
 
 class _CanonicalWriterPrefixRecognizer:
@@ -228,16 +564,23 @@ class _CanonicalWriterPrefixRecognizer:
             if status == _PREFIX_INCOMPLETE:
                 if (
                     previous_key is not None
-                    and key is not None
+                    and isinstance(key, _IncompleteStringPrefix)
                     and not _key_prefix_can_exceed(key, previous_key)
                 ):
                     return _PREFIX_INVALID
                 return status
-            if status != _PREFIX_COMPLETE or key is None:
+            if status != _PREFIX_COMPLETE or not isinstance(
+                key, _CompleteWriterString
+            ):
                 return status
-            if previous_key is not None and key <= previous_key:
-                return _PREFIX_INVALID
-            previous_key = key
+            if previous_key is None:
+                previous_key = _writer_string_minimum(key.pattern)
+            else:
+                previous_key = _least_writer_string_above(
+                    key.pattern, previous_key
+                )
+                if previous_key is None:
+                    return _PREFIX_INVALID
             status = self._expect(": ")
             if status != _PREFIX_COMPLETE:
                 return status
@@ -321,19 +664,16 @@ class _CanonicalWriterPrefixRecognizer:
             return _PREFIX_COMPLETE
         return (
             _PREFIX_INCOMPLETE
-            if _python_number_prefix(token)
+            if _documented_float_superset_prefix(token)
             else _PREFIX_INVALID
         )
 
-    def _parse_string(self) -> tuple[str, str | None]:
+    def _parse_string(
+        self,
+    ) -> tuple[
+        str, _CompleteWriterString | _IncompleteStringPrefix | None
+    ]:
         start = self.index
-
-        def decoded_prefix(end: int) -> str | None:
-            try:
-                value = json.loads(self.text[start:end] + '"')
-            except json.JSONDecodeError:
-                return None
-            return value if isinstance(value, str) else None
 
         self.index += 1
         while self.index < len(self.text):
@@ -347,16 +687,21 @@ class _CanonicalWriterPrefixRecognizer:
                     return _PREFIX_INVALID, None
                 if not isinstance(value, str) or json.dumps(value) != token:
                     return _PREFIX_INVALID, None
-                return _PREFIX_COMPLETE, value
+                return (
+                    _PREFIX_COMPLETE,
+                    _CompleteWriterString(_writer_string_pattern(token)),
+                )
             if ord(character) < 0x20 or ord(character) >= 0x7F:
                 return _PREFIX_INVALID, None
             if character != "\\":
                 self.index += 1
                 continue
-            escape_start = self.index
             self.index += 1
             if self.index == len(self.text):
-                return _PREFIX_INCOMPLETE, decoded_prefix(escape_start)
+                return (
+                    _PREFIX_INCOMPLETE,
+                    _decode_incomplete_writer_string(self.text[start:self.index]),
+                )
             escape = self.text[self.index]
             if escape in _JSON_SIMPLE_ESCAPES:
                 self.index += 1
@@ -376,13 +721,21 @@ class _CanonicalWriterPrefixRecognizer:
                 if self.index < len(self.text):
                     return _PREFIX_INVALID, None
                 return (
-                    (_PREFIX_INCOMPLETE, decoded_prefix(escape_start))
+                    (
+                        _PREFIX_INCOMPLETE,
+                        _decode_incomplete_writer_string(
+                            self.text[start:self.index]
+                        ),
+                    )
                     if _unicode_escape_prefix_can_complete(digits)
                     else (_PREFIX_INVALID, None)
                 )
             if not _writer_emits_unicode_escape(int(digits, 16)):
                 return _PREFIX_INVALID, None
-        return _PREFIX_INCOMPLETE, decoded_prefix(self.index)
+        return (
+            _PREFIX_INCOMPLETE,
+            _decode_incomplete_writer_string(self.text[start:self.index]),
+        )
 
 
 def _canonical_unterminated_mapping(segment: bytes) -> dict[str, Any] | None:

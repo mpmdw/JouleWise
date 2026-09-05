@@ -4299,6 +4299,11 @@ def resolve_floor(
         eligibility = cell.get("eligibility")
         reasons: list[str] = []
         if cell_id not in effective_bound_ids:
+            # ``artifact_schema_invalid`` includes failure of the artifact's
+            # externally re-derived evidence binding, not only malformed JSON.
+            # A cell excluded here disagrees with the source bundles that its
+            # own calibration records name, so the claim artifact as a whole
+            # is invalid even when its internal shape is well formed.
             reasons.append("artifact_schema_invalid")
         if not isinstance(eligibility, Mapping) or eligibility.get("status") != "claim_ready":
             reasons.append("cell_not_claim_ready")
@@ -4477,6 +4482,8 @@ def resolve_floor(
         cell_id not in effective_bound_ids
         for cell_id in group.get("source_cell_ids", ())
     ):
+        # Same public diagnostic as the exact-cell branch above: transport
+        # membership is part of the externally verified artifact contract.
         refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
     limit_metadata_present = any(
         key in group

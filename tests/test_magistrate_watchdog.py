@@ -21,6 +21,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 from joulewise.night_plan_writer import (
     night_plan_json_bytes,
     night_plan_mapping,
@@ -1573,7 +1575,7 @@ class ContractTests(WatchdogTestCase):
                 text=True,
             )
 
-        git("init", "-b", "main")
+        init_git_fixture(checkout, "-b", "main")
         pinned = (
             "scripts/magistrate_watchdog.py",
             "scripts/install_magistrate_watchdog.sh",

@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Fan-out magistrate rulings installed in the state kernel",
-    "path": "docs/process_traces/2026-09-03-kernel-batch/06-fanout-rulings-batch.md"
+    "label": "2026-09-05 D-174 decision-to-kernel wiring",
+    "path": "docs/process_traces/2026-09-05-post-merge-docs/02-d174-wiring-report.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -55,7 +55,6 @@
           "WO-012's owned D-062 lint queue-row obligation is implemented and covered",
           "WO-014 has a realized-token discriminating test",
           "WO-017 has a default no-handoff regression assertion",
-          "WO-020 has a recorded standalone bridge-checker decision",
           "WO-040 has authored-instruction absolute-path coverage plus a genuine pristine-clone test"
         ],
         "pointer": {
@@ -63,7 +62,7 @@
           "label": "AUD-FOLLOWUPS acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The ULTRA comparison audit's five accepted small follow-ups close with discriminating tests or an explicit recorded decision, without creating a ceremony-dispositions task."
+        "summary": "The ULTRA comparison audit's retained small follow-ups close with discriminating tests, without creating a ceremony-dispositions task or the standalone bridge gate removed by the wave-2 integration ruling."
       },
       "authority": {
         "label": "Comprehensive-audit close-out and accepted-residue list",
@@ -81,13 +80,13 @@
         }
       ],
       "flags": [],
-      "goal": "Close the ULTRA comparison audit's accepted small residue in one bounded agent task: WO-012's owned D-062 lint queue row, WO-014 realized-token discrimination, WO-017 default no-handoff regression, WO-020 standalone bridge-checker decision, and WO-040 authored-instruction absolute-path plus genuine pristine-clone coverage.",
+      "goal": "Close the ULTRA comparison audit's retained small residue in one bounded agent task: WO-012's owned D-062 lint queue row, WO-014 realized-token discrimination, WO-017 default no-handoff regression, and WO-040 authored-instruction absolute-path plus genuine pristine-clone coverage.",
       "id": "AUD-FOLLOWUPS",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
       "rank": 42,
       "status": "queued",
-      "status_note": "Accepted small residue only; audit ceremony dispositions remain in the report.",
+      "status_note": "Accepted small residue only; audit ceremony dispositions remain in the report. The 2026-09-04 wave-2 integration ruling removed WO-020's standalone bridge gate because its required D-060 decision does not exist; the other follow-ups remain.",
       "stop_card": null
     },
     "AUD-WO-033": {
@@ -440,22 +439,32 @@
     "AUTHENTICATOR-ALLOWLIST-GUARD-01": {
       "acceptance": {
         "evidence": [
-          "The allowlist test derives the forbidden set from the registered authenticator roles or classes (the R1 family/type/role registry), so every authenticator path is barred without being named",
-          "A regression introduces an authenticator class under a new name and proves the guard refuses it in the allowlist",
-          "The two currently named substrings remain barred"
+          "Registry .v2 derives a positive exact set from the governed eight-family artifact set across registry ids",
+          "The successor-freeze receipt-id map is exact-key and the derivation is total across both governed states",
+          "The red/green regression and all three mutation kills pass before any post-freeze merge"
         ],
         "pointer": {
           "json_pointer": "/tasks/AUTHENTICATOR-ALLOWLIST-GUARD-01/acceptance",
           "label": "AUTHENTICATOR-ALLOWLIST-GUARD-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The allowlist guard derives the authenticator set from the registry of authenticator roles, not from a literal list of names."
+        "summary": "The branch implementation remains preserved but cannot merge during the submission scope freeze."
       },
       "authority": {
-        "label": "S9-09 (the fixed-point allowlist principle is enforced by two literal substrings); standing rule is D-151 clause 7",
-        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+        "label": "Ruling 17 scope-freeze disposition, ratified as amended by ruling 43",
+        "path": "docs/process_traces/2026-09-04-peer-audit/17-magistrate-final-ruling.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-174 is installed before this shelved successor can be reconsidered after the submission scope freeze expires or Ed lifts it in writing",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-174"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -467,13 +476,13 @@
         }
       ],
       "flags": [],
-      "goal": "Enforce D-151 clause 7's standing rule structurally: 'no authenticator path ever enters any allowlist, in any transaction; a proposal to add one is a V-1(vi) tripwire event' is enforced today by tests/test_arm_readiness_schemas.py barring exactly two named substrings (d117_step6_confirmation, family_publication), so a new authenticator class under any other name passes both checks and lands in the allowlist unnoticed, which is precisely what the rule was written to prevent.",
+      "goal": "Preserve the completed authenticator allowlist-guard branch for possible post-submission landing.",
       "id": "AUTHENTICATOR-ALLOWLIST-GUARD-01",
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 110,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-09 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint).",
+      "status": "shelved",
+      "status_note": "D-174 scope freeze; implementation landed at 93d0d91c on feat/2026-09-04-fan-AUTHENTICATOR-ALLOWLIST-GUARD-01, with no pull request.",
       "stop_card": null
     },
     "AXI-SB-ADAPTER": {
@@ -975,6 +984,37 @@
       "status": "shelved",
       "stop_card": null
     },
+    "CLAIM-NONISSUANCE-RECEIPT-01": {
+      "acceptance": {
+        "evidence": [
+          "A governed producer issues an authenticated claim-nonissuance artifact rather than inferring nonissuance from a missing claim-verdict file",
+          "The artifact binds the exact claim role, absent issuance, reason, producer identity, and source digests",
+          "OR-01 and DS-32 or PG-08 render only after the paper-custody seam replays and verifies that artifact"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLAIM-NONISSUANCE-RECEIPT-01/acceptance",
+          "label": "CLAIM-NONISSUANCE-RECEIPT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A governed nonissuance artifact authorizes registered verdict-absent prose without treating file absence as evidence."
+      },
+      "authority": {
+        "label": "D-173 paper-supply custody and the Paper-I R4-F1 nonissuance ruling",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Build the governed claim-nonissuance receipt needed before registered verdict-absent prose can issue through the D-165 outcome renderer.",
+      "id": "CLAIM-NONISSUANCE-RECEIPT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 145,
+      "status": "shelved",
+      "status_note": "D-174 scope freeze",
+      "stop_card": null
+    },
     "COLDGATE-HANDOFF-01": {
       "acceptance": {
         "evidence": [
@@ -998,10 +1038,10 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-05 F3 consult standing operational constraint",
-            "path": "docs/process_traces/2026-08-05-cgv-f3-consult/SYNTHESIS.md"
+            "label": "2026-09-04 wave-2 integration ruling, R4-F4",
+            "path": "docs/process_traces/2026-09-04-fanout/01-magistrate-rulings.md"
           },
-          "rule": "Until this row lands, no validator PASS may be used to convene a cold judge"
+          "rule": "No validator PASS may be used to convene a cold judge until Ed ratifies the registry amendment and a lead-owned concrete-launcher check passes"
         }
       ],
       "flags": [],
@@ -1138,38 +1178,6 @@
       "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) from the draft docs/process_traces/2026-08-27-t26/bracket-binding/consumption-session-identity-param-01.md (written on #223 from #217's split verdict F3). Should-fix; touches joulewise/whole_window.py. Priority p2_next_slice and lane agent per the draft.",
       "stop_card": null
     },
-    "CUSTODY-HARDEN-01": {
-      "acceptance": {
-        "evidence": [
-          "Reduce-layer environment/CPU claim barriers derive mockness from the custody-bound config, with metadata/summary-label early returns removed",
-          "Drift-bound artifact corpus identities resolve against repo-registered or custody-bound bytes (seal no longer self-certifying)",
-          "Dead pre-addendum no-freshness accommodation removed or pinned as intentional forward-compatibility",
-          "artifact_schema_invalid evidence-binding mislabel renamed or documented at emission site"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CUSTODY-HARDEN-01/acceptance",
-          "label": "CUSTODY-HARDEN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Close the PR #85 gauntlet's deferred custody-hardening seams: config-derived mockness reaches the reduce-layer barriers, the drift-bound seal stops being self-certifying, and two diagnostic nits are resolved."
-      },
-      "authority": {
-        "label": "C-045 gauntlet deferrals (council log; detail in docs/run_reports/2026-07-24-screen-budget-gauntlet.md)",
-        "path": "docs/council_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Custody hardening follow-on from the screen+budget gauntlet: reduce-layer label-trust removal (G2A), drift-bound seal authentication (A3-r2), dead no-freshness accommodation disposition, artifact_schema_invalid mislabel.",
-      "id": "CUSTODY-HARDEN-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 50,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25 from PR #85 gauntlet deferrals; triangle-agreement enforcement (merged) already raises these seams to three-file forgery cost.",
-      "stop_card": null
-    },
     "D080-TRIGGER-01": {
       "acceptance": {
         "evidence": [
@@ -1246,6 +1254,57 @@
       "rank": 20,
       "status": "queued",
       "status_note": "Registered at the T26 FIX bench as the B3 D-110 reconciliation follow-up; the magistrate or Ed must record which side of the known inconsistency is stale.",
+      "stop_card": null
+    },
+    "D123-REPORTED-MEAN-SUPPLIER-01": {
+      "acceptance": {
+        "evidence": [
+          "The supplier re-lands on PAPER-CUSTODY-SEAM-01 and accepts only its verified reported-energy parents",
+          "The generator-frozen ordered 50-member universe, ratio-of-sums denominators, three refusal scopes, and registered composition-rule id are enforced",
+          "The reported-energy projection is derived inside the trusted consumer from authenticated member bytes; no caller document, bytes, digest, or local reader remains",
+          "A delta re-audit and Opus counter-review pass before the paper-supply cold gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D123-REPORTED-MEAN-SUPPLIER-01/acceptance",
+          "label": "D123-REPORTED-MEAN-SUPPLIER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The D-123 reported-mean supplier re-lands on the shared custody seam with fixed-universe arithmetic, exact refusal scopes, and no caller-controlled value ingress."
+      },
+      "authority": {
+        "label": "2026-09-04 Paper-I R1 and Q-R1-5 replacement, routed to the shared custody seam",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the provisional D-173 paper-supply cold gate passes before this supplier merges",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D173-PAPER-SUPPLY-COLD-GATE-PASS"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared custody-read seam lands and supplies verified reported-energy parents",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PAPER-CUSTODY-SEAM-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-land the D-123 reported-phase-energy supplier on the shared paper-custody seam, preserving the ruled fixed-universe arithmetic and exact refusal behavior while deleting caller-controlled source material.",
+      "id": "D123-REPORTED-MEAN-SUPPLIER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 140,
+      "status": "blocked",
+      "status_note": "The supplier branch reached a third same-signature custody failure and is blocked on PAPER-CUSTODY-SEAM-01. It re-lands on that seam, receives its own delta and Opus review, and cannot merge before the D-173 paper-supply cold gate.",
       "stop_card": null
     },
     "D144-SEATPASS-FOLLOWUPS": {
@@ -1338,6 +1397,212 @@
       "rank": 72,
       "status": "blocked",
       "status_note": "This is the post-campaign consumer of the close-out for the dominance-sentence fill. It starts only after both the sidecar emitter and successor renderer exist; fixture proof does not move the live fill before the final G3 check.",
+      "stop_card": null
+    },
+    "D165-OUTCOME-RENDERER-01": {
+      "acceptance": {
+        "evidence": [
+          "The renderer re-lands on PAPER-CUSTODY-SEAM-01 and keeps the before-comparison stage ahead of close-out",
+          "The closed reason-code map, supply-map-pinned v5 identity, affected-component rules, and OB-01 or OR-01 registered rendering bytes are enforced",
+          "Whole-window stops and claim nonissuance remain structured STOP_FILL until their governed receipt rows close",
+          "A delta re-audit and Opus counter-review pass before the paper-supply cold gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-OUTCOME-RENDERER-01/acceptance",
+          "label": "D165-OUTCOME-RENDERER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The D-165 outcome renderer uses only seam-verified inputs, preserves ruled stage order, and emits registered professor-facing reasons without internal diagnostics."
+      },
+      "authority": {
+        "label": "2026-09-04 Paper-I R4 and addenda, routed to the shared custody seam",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the provisional D-173 paper-supply cold gate passes before this renderer merges",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D173-PAPER-SUPPLY-COLD-GATE-PASS"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared custody-read seam lands and supplies verified D-165 and whole-window inputs",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PAPER-CUSTODY-SEAM-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-land the D-165 outcome renderer on the shared paper-custody seam with before-comparison-first precedence, closed public reasons, and supply-map-pinned v5 identity.",
+      "id": "D165-OUTCOME-RENDERER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 141,
+      "status": "blocked",
+      "status_note": "The renderer branch reached the same caller-authority custody failure and is blocked on PAPER-CUSTODY-SEAM-01. WHOLE-WINDOW-STOP-RECEIPT-01 and CLAIM-NONISSUANCE-RECEIPT-01 remain separate queued producers.",
+      "stop_card": null
+    },
+    "D165-RELABEL-01": {
+      "acceptance": {
+        "evidence": [
+          "The successor rule id is d165_shared_sign_local_corner_replay.v2",
+          "The physical common-time and absolute-cancellation rationales are replaced by shared-energy-sign and local-corner sensitivity language",
+          "The eight independent and four comparative ratios, thresholds, census, arithmetic, and branch restrictions remain unchanged, and no submission-time rebuild occurs"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-RELABEL-01/acceptance",
+          "label": "D165-RELABEL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "D-165 is relabelled as a shared-energy-sign and local-corner sensitivity diagnostic without changing values or claiming physical common-time robustness."
+      },
+      "authority": {
+        "label": "Ruling 43 ratification and post-gate seat state",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.",
+      "id": "D165-RELABEL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 152,
+      "status": "active",
+      "status_note": "In flight on feat/2026-09-05-d165-relabel; Ed's estimand-relabel veto question remains outstanding while the ruled default proceeds.",
+      "stop_card": null
+    },
+    "D166-PROMPT0-01": {
+      "acceptance": {
+        "evidence": [
+          "A dependency census is recorded in the supersession record before collection",
+          "The census covers every artifact whose identity, digest, or custody pin derives from decode prompt selection, including contrast configs, suite manifests, identities, projections, custody pins, expected_pack_paths pack-level objects, and the D-138 successor-generation requirement",
+          "Both model arms use prompt 0, affected artifacts are regenerated with explicit supersession, and the required clone proof reruns while floor packs and the G2-a prefill pin remain unchanged"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D166-PROMPT0-01/acceptance",
+          "label": "D166-PROMPT0-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fixed prompt-0 contrast is installed prospectively only after a complete dependency census, regeneration, supersession, and clone proof."
+      },
+      "authority": {
+        "label": "Ruling 43 ratification and post-gate seat state",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.",
+      "id": "D166-PROMPT0-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 153,
+      "status": "active",
+      "status_note": "In flight on feat/2026-09-05-d166-prompt0; census first. Ed's ensemble-versus-same-condition question remains outstanding while prompt 0 is the ruled default.",
+      "stop_card": null
+    },
+    "D173-PAPER-SUPPLY-COLD-GATE-01": {
+      "acceptance": {
+        "evidence": [
+          "The cold gate reads D-173, the final shared-seam landing, and all four reviewed supplier re-landings",
+          "It verifies role-plus-runs-root-only ingress, repository-named paths and digests, fresh validator replay, corroborative receipts, closed refusal codes, and zero output on the three-arm anti-fabrication census",
+          "The ruling is recorded before any supplier merges and preserves Ed's veto authority"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D173-PAPER-SUPPLY-COLD-GATE-01/acceptance",
+          "label": "D173-PAPER-SUPPLY-COLD-GATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cold instance accepts or amends the provisional D-173 seam and all four reviewed supplier re-landings before any supplier merge."
+      },
+      "authority": {
+        "label": "D-173 provisional paper-supply custody decision and required pre-merge cold gate",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "all four supplier re-landings have completed their delta re-audits and Opus counter-reviews",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "FOUR-PAPER-SUPPLIER-LANDINGS-REVIEWED"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the final paper-custody seam landing and its anti-fabrication census are ready for judgment",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PAPER-CUSTODY-SEAM-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Convene the D-173 paper-supply cold gate over the final custody seam and four reviewed supplier re-landings before any supplier merges.",
+      "id": "D173-PAPER-SUPPLY-COLD-GATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 146,
+      "status": "blocked",
+      "status_note": "D-173 is proposed and provisional. The gate waits on the seam plus four reviewed re-landings; Ed has been notified and may veto.",
+      "stop_card": null
+    },
+    "DECISION-LOG-RATIFY": {
+      "acceptance": {
+        "evidence": [
+          "D-078, D-083, D-165, and D-166 carry the exact ratified addenda from ruling 43",
+          "New D-174 includes the selected-content definition, the claim-bearing-path exception, the submission-or-written-instruction expiry, and dated-addendum-only amendment rule",
+          "D-161 carries the closed legacy publication-route rule without weakening its physics and evidence carve-out"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DECISION-LOG-RATIFY/acceptance",
+          "label": "DECISION-LOG-RATIFY acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The decision log installs every ruling-43 amendment, including the D-174 submission scope freeze, without changing the ratified text."
+      },
+      "authority": {
+        "label": "Ruling 43 ratification and post-gate seat state",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "the ratified D-174 submission scope freeze is fully installed in the decision log and generated work-selection projections",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-174"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Install the ruling-43 addenda for D-078, D-083, D-165, D-166, and D-161 plus the new D-174 submission scope freeze in the decision log.",
+      "id": "DECISION-LOG-RATIFY",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 149,
+      "status": "active",
+      "status_note": "In flight on feat/2026-09-05-decision-log-ratify after ruling 43 ratified ruling 17 as amended.",
       "stop_card": null
     },
     "DG071-PROVENANCE-TEST-01": {
@@ -1823,82 +2088,66 @@
       "status_note": "PREWINDOW-REGEX-01 is complete; the agent-free external capture is now dependency-ready.",
       "stop_card": null
     },
-    "EPOCH-LINT-01": {
+    "ESTIMAND-ENCLOSURE-01": {
       "acceptance": {
         "evidence": [
-          "The lint runs over the S-0 runsheet at a named executing head, reports findings in all three dependency kinds, and exits nonzero on any finding",
-          "Replayed against the pre-cure heads it reproduces BOTH motivating cases: the F0-F3 fixation family (kinds i and ii) and the joint-audit B1 join drift (kind iii)",
-          "The check is wired into the runsheet-revision procedure so no future revision is ratified without a clean run, and its clean run is transcript evidence"
+          "A pinned desk script produces the appendix enclosure figure and exactly one DERIVE registry row from authenticated inputs",
+          "Every source record is counted exactly once",
+          "Negative and unsupported domains refuse, and no reducer field or frozen-bound composition is introduced"
         ],
         "pointer": {
-          "json_pointer": "/tasks/EPOCH-LINT-01/acceptance",
-          "label": "EPOCH-LINT-01 acceptance",
+          "json_pointer": "/tasks/ESTIMAND-ENCLOSURE-01/acceptance",
+          "label": "ESTIMAND-ENCLOSURE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Runsheet revisions are mechanically checked for non-existent symbols, missing contract-required CLI inputs, and stale line coordinates before they are ratified."
+        "summary": "A pinned desk script reports the nonnegative partial-record enclosure as a diagnostic without changing stored summaries or any frozen bound."
       },
       "authority": {
-        "label": "D-153 sweep magistrate synthesis R-5 (epoch-lint work order, adopted from the Opus seat's generalization)",
-        "path": "docs/process_traces/2026-08-24-d153-sweep/03-MAGISTRATE-SYNTHESIS.md"
+        "label": "Ruling 43 ratification and post-gate seat state",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
       },
       "dependencies": [],
       "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-153 sweep synthesis R-5",
-            "path": "docs/process_traces/2026-08-24-d153-sweep/03-MAGISTRATE-SYNTHESIS.md"
-          },
-          "rule": "Lint only: the checker reports and refuses, it never edits a runsheet - a finding is cured by the ordinary revision path with its own authority"
-        }
-      ],
+      "fences": [],
       "flags": [],
-      "goal": "Build the mechanical epoch lint that synthesis R-5 orders: a checker run over a runsheet revision that validates the three dependency kinds the $TRANS producer/consumer sweep cannot see - (i) SYMBOL EXISTENCE at the executing head (every test method, class, constant or function a step greps for or names must exist in the git object at the commit that step runs against, not merely somewhere in the repository), (ii) CONTRACT-REQUIRED CLI INPUTS at every invocation (every consumer call site supplies every argument its authenticator requires - the F3 class, where a digest-conditional path is reachable but no --expected-confirmation-digest or table path is passed), and (iii) FILE LINE COORDINATES (every cited line range still names the whole symbol it claims at the head the citing step reads). Runs at every future runsheet revision.",
-      "id": "EPOCH-LINT-01",
+      "goal": "Replace the rejected reducer-field approach with the pinned desk script for the paper's partial-record enclosure diagnostic.",
+      "id": "ESTIMAND-ENCLOSURE-01",
       "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 96,
-      "status": "queued",
-      "status_note": "Registered by synthesis R-5; explicitly NOT blocking the D-153 cure PRs (#187/#188, merged). TWO independent motivating cases, both recorded here. (1) The F0-F3 fixation family, seat reports 01-opus-contract-lens-seat.md and 02-sol-semantic-seat.md: F1's byte-pin probe greps a test method that exists at the executing head under NEITHER the greped name nor its real name, and F3 classifies every post-3.8 consumer invocation as omitting an input its authenticator requires - including the structurally unsatisfiable freeze case (3e), whose supply line landed as PR #188. (2) The joint delta re-audit's B1, recorded at docs/process_traces/2026-08-24-d153-sweep/05-joint-delta-re-audit.md: six scripts/generate_arm_readiness.py line citations in PR #187 - one of them EXECUTED, the 1.1 immutable-line-audit spec - went stale the moment PR #188's +6 lines landed. B1 was invisible to BOTH single-stream refuters BY CONSTRUCTION, since neither seat could see the other stream's head; and the 0.3 AST anchor map stayed 15 of 15 through it, so anchor-green is not evidence that raw line ranges are current.",
+      "priority": "p1_phase_gate",
+      "rank": 150,
+      "status": "active",
+      "status_note": "In flight on feat/2026-09-04-estimand-enclosure after ruling 43 rejected the reducer field and selected the desk-script shape.",
       "stop_card": null
     },
-    "FIXTURE-MODERNIZATION-01": {
+    "FB-PLANNING-METADATA-01": {
       "acceptance": {
         "evidence": [
-          "make_go_fixture authors R1 content/execution receipt schemas and the 14 STRUCTURAL-BLOCKED tests flip green with their skips removed",
-          "An end-to-end regression proves a stale boot voids evidence on the arm path (S1D-2: net coverage is zero until this lands)",
-          "POST-MINT: test_historical_predecessor_resolves_and_still_anchors_the_chain reconstructed as an authenticated _v4->_v3 predecessor proof"
+          "SINGLE_COUNT_DISCIPLINE_ID migrates to a .v2 rule with version-aware consumers while legacy objects retain exact bytes and historical meaning",
+          "The migration covers all ten exact-equality object sites, the key in four of seventeen fill-rehearsal JSON objects, and the df-ph-decode-floor-mint1.json and docs/site/adapter_contracts.html consumers",
+          "Both roles remain mandatory, planning_sizing_formula is non-gating, max(F,h+B) uses strict inequalities at both boundaries, and asymmetric intervals use actual endpoints"
         ],
         "pointer": {
-          "json_pointer": "/tasks/FIXTURE-MODERNIZATION-01/acceptance",
-          "label": "FIXTURE-MODERNIZATION-01 acceptance",
+          "json_pointer": "/tasks/FB-PLANNING-METADATA-01/acceptance",
+          "label": "FB-PLANNING-METADATA-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The fixture-schema blocked class is cured, the boot-voiding end-to-end property is proven, and the historical-pairing property is proven on real chains; non-gating for S-0."
+        "summary": "Versioned planning metadata preserves both mandatory gates while making F+B explicitly non-gating and migration-safe."
       },
       "authority": {
-        "label": "S-1 fix-round magistrate rulings + delta re-audit S1D-2/S1D-3",
-        "path": "docs/process_traces/2026-08-22-t20/s1-candidate/s1-fixround-packet.md"
+        "label": "Ruling 43 ratification and post-gate seat state",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
       },
       "dependencies": [],
       "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Standing frozen-surface hazard",
-            "path": "RUN_STATE.md"
-          },
-          "rule": "The four r6-pinned estimator sources stay byte-identical; every WRITE_SCOPE authorization checks that list first"
-        }
-      ],
+      "fences": [],
       "flags": [],
-      "goal": "Modernize the arm-readiness test fixtures so make_go_fixture authors R1 content/execution receipt schemas instead of legacy generic freeze evidence, unblocking the 14 STRUCTURAL-BLOCKED tests stopping at joulewise/arm_readiness.py:5330; add the S1D-2 end-to-end boot-voiding regression; reconstruct the historical-predecessor test on real post-mint _v4->_v3 receipt chains.",
-      "id": "FIXTURE-MODERNIZATION-01",
+      "goal": "Migrate the F+B planning metadata to a version-aware .v2 rule across the complete exact-equality and paper-consumer census.",
+      "id": "FB-PLANNING-METADATA-01",
       "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 84,
-      "status": "queued",
-      "status_note": "Registered when the S0-BLOCKED theory was disproven by measurement (0/17/4); the 21-test flip addendum was struck from S-0 acceptance at the same ruling. The post-mint item unblocks only after S-0 mints the _v4 generation.",
+      "priority": "p1_phase_gate",
+      "rank": 151,
+      "status": "active",
+      "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
     "FLOOR-BIND-01": {
@@ -1989,6 +2238,57 @@
       "rank": 69,
       "status": "blocked",
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
+      "stop_card": null
+    },
+    "GAMMA-CLAIM-RENDERER-01": {
+      "acceptance": {
+        "evidence": [
+          "The renderer re-lands on PAPER-CUSTODY-SEAM-01 and receives verified claim_verdicts.v1, claim_side_bound.v1, finalized-manifest, and on-disk floor objects",
+          "The sidecar joins the reader-computed claim-verdict digest and each exact floor resolution binds the full source-cell identity before any token or prose is exposed",
+          "The symmetric prefill token family, signed clearance, and structured refusal behavior match the registered DS-28 through DS-33 and PG-01 through PG-08 surfaces",
+          "A delta re-audit and Opus counter-review pass before the paper-supply cold gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GAMMA-CLAIM-RENDERER-01/acceptance",
+          "label": "GAMMA-CLAIM-RENDERER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The gamma renderer exposes only seam-verified claims, bounds, floors, and full source-cell identities to the registered paper surfaces."
+      },
+      "authority": {
+        "label": "2026-09-04 Paper-I R2 and floor-lineage addenda, routed to the shared custody seam",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the provisional D-173 paper-supply cold gate passes before this renderer merges",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D173-PAPER-SUPPLY-COLD-GATE-PASS"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared custody-read seam lands and supplies verified claim and floor inputs",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PAPER-CUSTODY-SEAM-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-land the gamma claim renderer on the shared paper-custody seam, preserving the v1 plus sidecar contract and full source-cell floor-lineage authorization.",
+      "id": "GAMMA-CLAIM-RENDERER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 142,
+      "status": "blocked",
+      "status_note": "The gamma branch reached the same caller-controlled custody signature and is blocked on PAPER-CUSTODY-SEAM-01. The floor artifact must come from the supply-map-pinned on-disk object, never the embedded self-reference.",
       "stop_card": null
     },
     "GAMMA-UNIT-ROSTER-GUARD-01": {
@@ -2353,32 +2653,33 @@
     "LINEAGE-RELOCATABLE-01": {
       "acceptance": {
         "evidence": [
-          "A consult (three seats per the standing rule) has ruled how each absolute hop is re-rooted or replaced, or has ruled that it is not worth doing",
-          "The contract paragraph stating today's limitation at the lineage layer, landed on the decode-identity branch, is cited as the starting statement of the problem",
-          "No gate semantics change without its own cold gate: S3 (d) was ruled precisely because nothing is lost mechanically today"
+          "An explicit non-authoritative relocation carrier preserves immutable issued artifact bytes",
+          "Relocation is accepted only for explicitly supplied post-hoc analysis; live launch and campaign replay remain absolute-path and refuse relocation",
+          "The moved-source regression and tamper, committed-pack-change, repository-relative-move, swapped-chain, traversal, and symbolic-link refusal legs pass",
+          "A cold gate accepts the same-byte and same-pack NR-3 proof before the landing merges"
         ],
         "pointer": {
           "json_pointer": "/tasks/LINEAGE-RELOCATABLE-01/acceptance",
           "label": "LINEAGE-RELOCATABLE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "A ruled design for authenticating a launch lineage from a relocated checkout exists, with the consult that produced it on record."
+        "summary": "The ruled relocation carrier and refusal legs are implemented, and the NR-3 same-byte/same-pack proof passes a cold gate before merge."
       },
       "authority": {
-        "label": "decode-identity file 32, S3 ruled (d): a relocatable lineage is a new ruling and a design lane, and the kernel row goes in the post-merge kernel batch",
-        "path": "docs/process_traces/2026-09-03-kernel-batch/02-evidence-index.md"
+        "label": "2026-09-04 magistrate ruling NR-1 through NR-3 for LINEAGE-RELOCATABLE-01",
+        "path": "docs/process_traces/2026-09-04-fanout/01-magistrate-rulings.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Design a relocatable launch lineage so an evidence bundle can be authenticated from a clone. Today every hop of the lineage layer resolves by machine-absolute path - the consumption receipt, the launch manifest, the window root and the lifecycle receipts - so re-rooting the pack root alone buys nothing. This is a design lane with its own consult, not a should-fix on any implementation branch.",
+      "goal": "Land the non-authoritative post-hoc relocation carrier and moved-source refusal coverage only after the NR-3 same-byte and same-pack proof passes a cold gate.",
       "id": "LINEAGE-RELOCATABLE-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
       "rank": 126,
-      "status": "queued",
-      "status_note": "Registered 2026-09-03 in the post-merge kernel batch, as ruling S3 (d) of the decode-identity synthesis directed. The ruling records that clone-reproducibility needs re-rooting across arm_readiness authentication as a whole, and that the gate cannot be reached with a missing pack root in production, so nothing is broken today - the label reached through the direct seam is the honest one. This is one of the four ruled-not-installed rows the 2026-09-02 fresh-Fable docs-vs-truth audit found (its A7).",
+      "status": "shelved",
+      "status_note": "D-174 scope freeze; the cold gate affirmed the unmerged landing at b420a45a, recorded on feat/2026-09-04-packet-lineage at 7dccd546.",
       "stop_card": null
     },
     "LINEAGE-RESOLVE-RACE-01": {
@@ -2622,75 +2923,35 @@
       "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); the night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/). 2026-08-05: condition (a) is satisfied by merged PR #100. Condition (b) preparation is complete and its verification blocker is resolved: the B1 disposition is lead-ruled 30/2/6 and deterministic bootstrap is implemented on impl/ledger-bootstrap, under audit. Condition (c) is in flight on impl/validator-rootpins. The row remains hard-blocked on the still-pending D-110 (b)+(c) completion gate.",
       "stop_card": null
     },
-    "MODULARITY-01": {
+    "MODULARITY-FOLLOWUPS-01": {
       "acceptance": {
         "evidence": [
-          "Campaign generator is a parameterized function over a campaign-spec artifact (model, N, size profiles, block pattern, suite ref, run-ID prefix); a model swap touches one spec file and MODEL_TAG/PLAN_ID/run-ID prefixes derive from it with no parallel literal edits",
-          "Analysis-side closed sets (condition pairs, calibration scopes, phase-metric list) are declared in hash-bound registry artifacts and validated against those declarations, replacing the code-side literals at analysis_manifest.py:29-30,542-549 and detection_floor.py:87,89-95",
-          "Recorded-but-deferred residue dispositioned or re-queued: powermetrics references outside the adapter boundary, external-dataset ingestion, chat-template/thinking-mode seam, ABBA arity welded into three sites"
+          "Powermetrics references outside the adapter boundary receive a bounded disposition",
+          "External-dataset ingestion and the chat-template and thinking-mode seam receive bounded owners or explicit deferral",
+          "The A/B/B/A arity welded into three sites is removed only under prospective review without changing frozen claim pins"
         ],
         "pointer": {
-          "json_pointer": "/tasks/MODULARITY-01/acceptance",
-          "label": "MODULARITY-01 acceptance",
+          "json_pointer": "/tasks/MODULARITY-FOLLOWUPS-01/acceptance",
+          "label": "MODULARITY-FOLLOWUPS-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "Close the campaign-authoring modularity gap: campaign-spec-driven generation and registry-declared closed sets make every experiment axis swappable by config, per Ed's modularity directive."
+        "summary": "The residual modularity work remains recorded without competing with the submission paper."
       },
       "authority": {
-        "label": "2026-07-29 modularity survey (Ed directive + per-axis grades)",
-        "path": "docs/run_reports/2026-07-29-modularity-survey.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-078 provenance amendment + D-079 operative-floor pins (hard literals are lead-verified, never parameterized)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Modularity applies to the harness, never to frozen claim pins: ratified hard literals (six-decimal pre-registration floor pins, lead-verified digests) stay anti-modular on purpose and must not be parameterized."
-        }
-      ],
-      "flags": [],
-      "goal": "Close the campaign-authoring modularity gap surveyed 2026-07-29: parameterize the campaign generator over a campaign-spec artifact and replace code-side literal assertions (analysis-manifest condition pairs, calibration scopes, phase-metric list) with registry-declared hash-validated sets.",
-      "id": "MODULARITY-01",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 56,
-      "status": "queued",
-      "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
-      "stop_card": null
-    },
-    "NIGHT-PLAN-PIN-01": {
-      "acceptance": {
-        "evidence": [
-          "Plans pin the measurement checkout of record, not the canonical checkout",
-          "The night agent installer renders its plists from the measurement checkout",
-          "A canonical-checkout pull during the day leaves an armed plan armable - shown by re-running the gate's staleness check after a pull",
-          "Landed before any REAL window is armed; rehearsal stubs may run before it"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/NIGHT-PLAN-PIN-01/acceptance",
-          "label": "NIGHT-PLAN-PIN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Night plans are pinned to the measurement checkout and the agents are installed from it, so a canonical-checkout pull cannot stale a pinned plan."
-      },
-      "authority": {
-        "label": "Watchdog cold gate synthesis 2026-09-03 row 7 (Fable Q6 split): the plan-pin change MUST land before the first REAL window is armed, may follow the watchdog install for rehearsal stubs, and needs a re-arm after any HEAD move",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md"
+        "label": "Ruling 17 scope-freeze disposition, ratified as amended by ruling 43",
+        "path": "docs/process_traces/2026-09-04-peer-audit/17-magistrate-final-ruling.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Pin night plans to the measurement checkout and install the night agents from it, so an ordinary daytime pull of the canonical checkout can no longer move HEAD past a pinned repo_head and make the gate refuse a plan as stale.",
-      "id": "NIGHT-PLAN-PIN-01",
+      "goal": "Resume the deferred modularity residue only after the submission scope freeze expires or Ed lifts it in writing.",
+      "id": "MODULARITY-FOLLOWUPS-01",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 135,
-      "status": "partial",
-      "status_note": "In progress 2026-09-03 on branch feat/2026-09-03-night-plan-pin, PUSHED to origin at 12ec41d2: night plan v2 pins the measurement checkout (measurement_root and measurement_head), the R-6 stale check keys on the measurement HEAD so dev-tree HEAD movement is informational only, the installer checks both pins at install and neither at uninstall, and v1 plans retire fail-closed (Sol xhigh, lead replay 104 OK, two mutation probes kill). Forced by the 2026-09-02 evening re-arm: a fresh audit caught that daytime pulls had moved canonical HEAD past the pinned repo_head, so the gate would have refused night_plan_stale, and the rehearsal-20260903 plan had to be re-pinned and its plists re-rendered at 33290b8b. The run_night.py interlock from the Sol watchdog design was deferred here by the synthesis, because this lane already edits the driver.",
+      "priority": "p3_hardening_candidates",
+      "rank": 56,
+      "status": "shelved",
+      "status_note": "D-174 scope freeze",
       "stop_card": null
     },
     "NIGHT-REHEARSAL-01": {
@@ -2700,18 +2961,19 @@
           "A REHEARSAL_STUB result on a night-results branch produced by a launchd-started driver (not a shell-started one), with verdict REHEARSAL_ONLY",
           "The courier email for that rehearsal is in Ed's inbox (message id recorded)",
           "The stage-1 plan email (first armed date; launches without Ed's hand unless he replies NO) is sent before install_night_agent.sh arms a DIAGNOSTIC_NO_PACK plan",
-          "A rehearsal with the agents installed the MORNING BEFORE the armed night, so the pre-night 07:00 dead-man firing is observed standing down without writing anything but a log line (coldgate-d1 R-7 amendment)"
+          "A rehearsal with the agents installed the MORNING BEFORE the armed night, so the pre-night 07:00 dead-man firing is observed standing down without writing anything but a log line (coldgate-d1 R-7 amendment)",
+          "After WATCHDOG-INSTALL-01, one fresh REHEARSAL_STUB night fires through the night driver's own courier before any real plan is armed"
         ],
         "pointer": {
           "json_pointer": "/tasks/NIGHT-REHEARSAL-01/acceptance",
           "label": "NIGHT-REHEARSAL-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The unattended path has fired once from launchd with a delivered email, and Ed has been told the first armed date and that NO overrides."
+        "summary": "The installed watchdog is followed by a fresh REHEARSAL_STUB night through the night driver's courier before any real plan is armed, then the first diagnostic-plan email precedes arming."
       },
       "authority": {
-        "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
-        "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+        "label": "2026-09-04 durable state: post-watchdog REHEARSAL_STUB night through the night-driver courier before any real plan",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
       },
       "dependencies": [
         {
@@ -2737,6 +2999,15 @@
           "state": "satisfied",
           "strength": "hard",
           "target": "NIGHT-GATE-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the merged watchdog is installed from canonical main and its first activation produces notice.ack",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "WATCHDOG-INSTALL-01"
         }
       ],
       "fallback": null,
@@ -2764,13 +3035,13 @@
         }
       ],
       "flags": [],
-      "goal": "Prove the stage-1 machinery end to end before the first live night: bench cold-start measurement sets COURIER_DEADLINE_S; at least one REHEARSAL_STUB night fires FROM the installed LaunchAgent, pushes its results branch, and delivers the courier email; the stage-1 plan email naming the first armed date is SENT to Ed before arming.",
+      "goal": "After the watchdog install handoff, run one fresh REHEARSAL_STUB night through the installed LaunchAgent and night-driver courier before any real plan, then send the stage-1 email before the first diagnostic plan is armed.",
       "id": "NIGHT-REHEARSAL-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 88,
-      "status": "active",
-      "status_note": "Stage 2 of the unattended lane. Driver and gate are on main (PRs 264, 265). HARVEST 2026-09-02: acceptance items 2 and 3 MET — plan rehearsal-20260902 fired from the installed LaunchAgent at 02:56, verdict REHEARSAL_ONLY, chain exit 0, receipt REFUSED night_refused_agent_present (the planted refusal: agent sessions deliberately left running), results branch night-results/20260902 (b5353d7) on origin, courier email delivered (Gmail message id 1a0618d143537010). First censuses.jsonl record: a single hit, the pre-existing zsh PR-watcher (pid 17991); the driver did NOT see its own --courier-bin claude argv — bench prediction confirmed (BSD pgrep excludes its ancestors). LaunchAgent uninstalled the same morning at the armed commit 8856f87a; dead-man firing stopped. Two courier-side findings for the refinement list: (1) courier.json named by the handback is absent from the custody root; (2) the installer's `command -v claude` preflight fails under the courier session's minimal PATH — uninstall needed ~/.local/bin prepended (adjacent to Opus 143 B1/B2). HARVEST 2026-09-03: the coldgate-d1 R-7 'installed the morning before' stand-down rehearsal DELIVERED and items 2-3 met a second time — plan rehearsal-20260903 (RE-ARMED 20:16 on 09-02 at 33290b8b after a fresh audit caught that daytime pulls had moved canonical HEAD past the pinned repo_head) fired from the installed LaunchAgent at 02:56, verdict REHEARSAL_ONLY, chain exit 0, driver exit 3 (EXIT_REFUSED, consistent with the receipt), receipt REFUSED night_refused_agent_present (the acceptable reason: two standing-loop claude sessions and their codex mcp-server children alive), results branch night-results/20260903 (8e82016) on origin, courier email delivered (Gmail message id 1a066b378497db05), Ed did not reply NO on the arming thread (1a061921aaa01cbd). R-7 observable MET verbatim: night.log line 1 '2026-09-02T07:00:01 dead-man fired before the night's completion epoch 1788430560; standing down', dead-man exit 0, launchd.deadman.out/err empty, no other writes. Item 1 was already met (cold_start.json in docs/process_traces/2026-09-01-unattended/). UNINSTALL NOT DONE: the courier session's install_night_agent.sh --uninstall (launchctl bootout + plist rm) was BLOCKED by the Claude Code auto-mode classifier, not worked around; both plists remain loaded at the re-arm commit, and the re-armed dead-man registration (runs=0) fires 07:00 on 09-03 AFTER the completion epoch, where run_night.py dead_man() logs 'dead-man skipped: courier already sent' and exits — harmless, one log line per day until the uninstall is run by hand at 33290b8b (routed to Ed by email, not to the peer session; the night job also refires daily at 02:56 into a rerun refusal file). Next: item 4 — build the first DIAGNOSTIC_NO_PACK (G2-a, V5-G2A-PREFILL-PROBE-01) night plan, then the stage-1 plan email naming its first armed date BEFORE it is armed. Next (prior wording, kept for the refinement list): Next: the 'installed the morning before' stand-down rehearsal (coldgate-d1 R-7 amendment), then the stage-1 plan email to Ed before any DIAGNOSTIC_NO_PACK plan is armed. Stage-2 refinement list: 143 B1/B2/B3/A1 + the minimal-PATH uninstall preflight LANDED via PR #268 (merge 67032576; gate: Sol seat killed mid-verification -> lead harvest commit e8101154 -> independent Opus audit, 1 blocker: unpinned clock in the new B2 test, red on any UTC runner -> bench fix round 030a1532 -> delta re-audit CONFIRMED-CLEAN -> CI green 18/18). Still open: night-scoped night/<YYYYMMDD>/ dir (Opus S4); per-block body digests instead of line-number pins for the G2-a chain fence; courier.json custody artifact (design item); two non-gating audit nits — relative PATH entry robustness in the rendered plist, and no substitution log line when the substitute itself fails is_file/X_OK. ADDED 2026-09-03: the fifth acceptance row ruled by the coldgate-d1 R-7 amendment was missing from this row and is now present; it is already MET by the rehearsal-20260903 record quoted above (night.log line 1, dead-man exit 0, launchd deadman out and err empty, no other writes). UNINSTALL NOW DONE, superseding the UNINSTALL NOT DONE paragraph above: the night LaunchAgents were uninstalled on 2026-09-03 at the pinned HEAD 33290b8b and launchctl list shows none, verified at the bench this session; the canonical checkout was pulled to origin/main afterwards and the freeze is over. The courier's harvest merged as PR #277. Item 4 - the first DIAGNOSTIC_NO_PACK plan and the stage-1 plan email before it is armed - remains the only open acceptance row.",
+      "status": "blocked",
+      "status_note": "The 2026-09-02 and 2026-09-03 rehearsal evidence, dead-man observation, courier deliveries, and PR #277 harvest remain complete. The next required rehearsal is the post-PR-#284 watchdog rehearsal: it waits on WATCHDOG-INSTALL-01, then must run through the night driver's own courier before any real plan; the first DIAGNOSTIC_NO_PACK plan email remains due before that plan is armed.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -3753,6 +4024,78 @@
       "status": "blocked",
       "stop_card": null
     },
+    "PAPER-CUSTODY-SEAM-01": {
+      "acceptance": {
+        "evidence": [
+          "open_paper_input accepts only a role name and runs root over five closed input families; all raw readers and verified-object constructors are private",
+          "A git-tracked supply map read through V2AuthenticationReadSession under the clean-tree anchor names every path and expected digest",
+          "Owning validators replay on exact disk bytes, receipts corroborate but never authorize, and files reopen without following symbolic links before a frozen verified object issues",
+          "The auto-census covers raw mutation, full caller resealing, and replay-to-reopen replacement for every family with exact paper_custody refusal codes and zero rendered output",
+          "The lower floor-loader and campaign-log raw-byte bypasses plus supplier signature and authentication-surface guards are closed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PAPER-CUSTODY-SEAM-01/acceptance",
+          "label": "PAPER-CUSTODY-SEAM-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "One non-bypassable custody seam supplies five concrete verified paper-input families from repository-named evidence and fresh validator replay."
+      },
+      "authority": {
+        "label": "D-173 provisional paper-supply custody rule, synchronized to Paper-I ruling 15 and addendum 16",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-173 pre-merge cold-gate requirement",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "This fixture-only seam may unblock supplier re-landings, but no supplier merges before D173-PAPER-SUPPLY-COLD-GATE-01 passes"
+        }
+      ],
+      "flags": [],
+      "goal": "Finish the shared paper-custody read seam that wraps the existing authentication session, derives all bindings from a clean-Git supply map, replays validators, and returns only family-specific frozen verified objects.",
+      "id": "PAPER-CUSTODY-SEAM-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 139,
+      "status": "active",
+      "status_note": "In progress on feat/2026-09-04-paper-custody-seam. Landing and two refuters were followed by fix round 1, a residual delta, and bounded fix round 2; a repeated signature routes back to a consult. All four supplier lanes wait on this seam.",
+      "stop_card": null
+    },
+    "PAPER-K": {
+      "acceptance": {
+        "evidence": [
+          "The paper consistently names interval-overlap-assigned energy and its conditional timing sensitivity without claiming an unconditional physical phase-energy bound",
+          "D-165, F+B planning metadata, and TR-01 use the ratified semantics; TR-01 is a fixed limitation and not a submission predicate",
+          "The source-to-estimand table distinguishes same-model repeats, same-model null A/B/B/A blocks, and the two-model science contrast, and the methods text matches the current implementation and statistical assumptions"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PAPER-K/acceptance",
+          "label": "PAPER-K acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The methods paper incorporates the peer-audit corrections, ratified semantic relabels, honest source-to-estimand mapping, and qualified statistical claims."
+      },
+      "authority": {
+        "label": "Ruling 43 ratification and post-gate Paper-K seat",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.",
+      "id": "PAPER-K",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 154,
+      "status": "active",
+      "status_note": "Fix round 1 is in flight on feat/2026-09-04-paper-k after the first delta found late-built terms and a stale transfer note.",
+      "stop_card": null
+    },
     "PINSET-GRAMMAR-EXCLUSION-01": {
       "acceptance": {
         "evidence": [
@@ -3852,11 +4195,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #278 merged V5-DECODE-IDENTITY-SET-01 at bb4930d1",
+            "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+          },
           "kind": "task",
           "required": "G2 waits on the freeze of the three _v5 packs, which the decode-identity set owns; G1's desk pieces do not wait",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "V5-DECODE-IDENTITY-SET-01"
         }
@@ -3900,7 +4246,7 @@
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 13,
-      "status": "blocked",
+      "status": "queued",
       "status_note": "DEPENDENCY REPAIRED 2026-09-03 (fresh-Fable docs-vs-truth audit A5): this row was blocked on a ghost. Its pending hard-start dependency named the event V5-QWEN3-PACK-GENERATED-S15, a row that no longer exists in the kernel - it was retired after #241 merged on 2026-08-30 - so the dependency could never be satisfied mechanically and the row could never become selectable. The true remaining precondition is the freeze of the three _v5 packs, owned by V5-DECODE-IDENTITY-SET-01, so the dependency now names that row. The goal's stale reference to the regenerated _v4 manifest is corrected to the _v5 pack manifest. The acceptance text still carries _v4 wording in two places; that is a substantive edit to a claim-path gate's acceptance and is left for the magistrate. Prior note follows. Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 fences fall with it (magistrate ruling 2026-08-28 on this wave: G2 runs under Ed's T27 live-window authorization as scoped by D-162 G2; the D-158 R-3 diagnostic license is not carried over). D-164 moves the real pack to the _v5 Qwen3 pack, so G2 now starts only after the S15 generator delivers it (event dependency), and the shakedown runsheet is re-cut from PR #225's phases to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
       "stop_card": null
     },
@@ -3979,35 +4325,47 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row. AMENDED 2026-08-28 in the T27 second kernel wave per D-162 R-1: the diagnostic-family path (Path A) that the corrected live-proof gate declined to build pre-campaign moves into this row's acceptance; PIPELINE-SMOKE-LIVE-01 is re-scoped to G1/G2/G3 and carries no family design.",
       "stop_card": null
     },
-    "PREWINDOW-V5-PIN-01": {
+    "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01": {
       "acceptance": {
         "evidence": [
-          "The runs-root prefix pin names the live family, not _v2",
-          "A regression covers both directions: a live-family root passes, a stale-family root refuses",
-          "The change is a retarget only - no new admission lane and no gate-semantics change"
+          "The gate compares composed_member_envelope_mean.v1 with the proposed composed_member_envelope_mean_t95_window.v1 rule on the registered fixed 50-member universe",
+          "It rules the t95 plus one authenticated-window-allowance composition before any _v5 collection consumes that rule",
+          "The adopted rule id and exact pre-collection scope are recorded without issuing a value"
         ],
         "pointer": {
-          "json_pointer": "/tasks/PREWINDOW-V5-PIN-01/acceptance",
-          "label": "PREWINDOW-V5-PIN-01 acceptance",
+          "json_pointer": "/tasks/Q-R1-2-COMPOSITION-RULE-COLD-GATE-01/acceptance",
+          "label": "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The prewindow check pins the live campaign family, and a window of that family passes it while a stale-family root is refused."
+        "summary": "A cold gate rules the proposed t95 plus authenticated-window interval-composition rule before any _v5 collection can consume it."
       },
       "authority": {
-        "label": "Unattended stage-1 ruling R-12: the prewindow check's window pin gets a separate small pull request that retargets it",
-        "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+        "label": "2026-09-04 Paper-I Q-R1-2 proposal preserved for a pre-collection cold gate",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the D-123 implementation exposes both registered composition rules behind the rule id for review",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D123-COMPOSITION-RULES-IMPLEMENTED"
+        }
+      ],
       "fallback": null,
       "fences": [],
-      "flags": [],
-      "goal": "Retarget the prewindow check's window pin from the retired campaign family to the live one. The script still pins its runs-root prefix to the _v2 campaign packs, so it is checking the wrong family for every window the live campaign will run.",
-      "id": "PREWINDOW-V5-PIN-01",
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Convene the Q-R1-2 cold gate on the proposed t95 plus one authenticated-window interval-composition rule before collection.",
+      "id": "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 137,
-      "status": "queued",
-      "status_note": "Registered 2026-09-03. Ruled by R-12 of the unattended stage-1 ruling and never given an owner; PREWINDOW-REGEX-01 covers only the regex, not the family pin. Verified still true at this head: scripts/prewindow_check.sh:51 reads that the governed family is the _v2 campaign packs. One of the four ruled-not-installed instances in the 2026-09-02 fresh-Fable docs-vs-truth audit (its A7). Registered as a separate row rather than folded into PREWINDOW-REGEX-01 so the two debts stay separately visible.",
+      "rank": 147,
+      "status": "blocked",
+      "status_note": "The default composed-member-envelope mean rule may be implemented now. The t95 plus window variant remains proposed and cannot govern _v5 collection until this cold gate rules it.",
       "stop_card": null
     },
     "QUIET-GUARD-01": {
@@ -4028,8 +4386,8 @@
         "summary": "The commit-1 quiet guard lands through the full C-028 gauntlet, then is installed inactive and observed on Ed's host before closure."
       },
       "authority": {
-        "label": "D-114 commit-1 descope and PR #107",
-        "path": "docs/decision_log.md"
+        "label": "2026-09-04 magistrate option A for QUIET-GUARD-01, preserving the D-114 commit-1 descope",
+        "path": "docs/process_traces/2026-09-04-fanout/01-magistrate-rulings.md"
       },
       "dependencies": [],
       "fallback": null,
@@ -4040,8 +4398,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 9,
-      "status": "queued",
-      "status_note": "D-114 and PR #107 remove the T3-CHAR-PAIR-01 dependency and shelve commits 2-4. Software is merged; closure remains pending on the post-harvest gauntlet and magistrate option-A observation of an installed-INACTIVE host state.",
+      "status": "partial",
+      "status_note": "D-114 and PR #107 remove the T3-CHAR-PAIR-01 dependency and shelve commits 2-4. The residual repair is carried by fan-out PR #285; closure remains pending that landing plus magistrate option-A observation of an installed-INACTIVE state on Ed's host.",
       "stop_card": null
     },
     "R7F-DX-PROSE-SCAN-01": {
@@ -4088,36 +4446,6 @@
       "rank": 120,
       "status": "queued",
       "status_note": "Registered at the bench 2026-09-02 per the dx/t26-a cold gate §A2; fill stage — schedule before the first DX fill batch.",
-      "stop_card": null
-    },
-    "R7F-EXIT3-SEMANTICS-01": {
-      "acceptance": {
-        "evidence": [
-          "The ruled semantics are stated in one place that the driver and its readers share",
-          "A regression fails if the exit code and the recorded disposition disagree"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/R7F-EXIT3-SEMANTICS-01/acceptance",
-          "label": "R7F-EXIT3-SEMANTICS-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The exit-3 semantics are written down as ruled, and the code and its documentation agree."
-      },
-      "authority": {
-        "label": "Cold gate r7f-unavailable 2026-09-02: the ruling registers this as a follow-up kernel row",
-        "path": "docs/process_traces/2026-09-02-coldgate-r7f-unavailable/MAGISTRATE-RULING-r7f-unavailable.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Settle the exit-3 semantics the r7f-unavailable cold gate left as a follow-up, and record the answer where the driver and its readers can both see it.",
-      "id": "R7F-EXIT3-SEMANTICS-01",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 136,
-      "status": "queued",
-      "status_note": "Registered 2026-09-03. This row was promised by the r7f-unavailable ruling (its follow-up paragraph) and by the dx-registry magistrate notes, and never created - the batch that was to carry it never ran after #272 merged. It is one of the four ruled-not-installed instances the 2026-09-02 fresh-Fable docs-vs-truth audit counted (its A7), which is the same failure pattern T26-RULING-INSTALL-01 was created to cure. Scope the exact question from the ruling text before starting; this row records the debt, it does not restate the ruling.",
       "stop_card": null
     },
     "RAW-CAPTURE-DIGEST-01": {
@@ -4618,6 +4946,49 @@
       "rank": 130,
       "status": "queued",
       "status_note": "Registered 2026-09-03. RECORDED DISCREPANCY IN THE SOURCE: section 5 item 2 says six silent refusals in the section 2.2 SILENT rows, but section 2.2 carries ONE row verdicted SILENT (M6), three marked narrow set silent that each flipped to COVERED on a wider module set (M4, M9, M13), and one row never filled in (M8). Section 2.3 states it plainly - nine of the ten sampled refusals have a real counterfactual test, and one sampled refusal is unguarded (M6) - and separately names four refusals that are silent only against the module a developer would reach for first, which is a coverage-cost finding rather than an absence of coverage. This row is scoped to what sections 2.2 and 2.3 support; the six is carried as an open reconciliation, not as a work item count. See docs/process_traces/2026-09-03-kernel-batch/02-evidence-index.md source D.",
+      "stop_card": null
+    },
+    "SKILL-DISTILL-01": {
+      "acceptance": {
+        "evidence": [
+          "A cold gate reviews the doctrine-bearing distillation against the source traces and current process rules",
+          "Only the cold-gate-accepted distillation lands; rejected or over-broad doctrine remains out",
+          "The final accepted text preserves the one-hop bridge and authority boundaries"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SKILL-DISTILL-01/acceptance",
+          "label": "SKILL-DISTILL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The held doctrine-bearing skill distillation lands only after a cold gate accepts its final text and boundaries."
+      },
+      "authority": {
+        "label": "2026-09-04 fan-out magistrate ruling: skill-distill is held for a cold gate",
+        "path": "docs/process_traces/2026-09-04-fanout/01-magistrate-rulings.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "a cold instance accepts the doctrine-bearing skill distillation at its final head",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "SKILL-DISTILL-COLD-GATE-RULING"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Hold the fan-out skill distillation until a cold gate reviews and accepts its doctrine-bearing text.",
+      "id": "SKILL-DISTILL-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 148,
+      "status": "shelved",
+      "status_note": "D-174 scope freeze",
       "stop_card": null
     },
     "SUPERSESSION-CHAINED-RECOVERY-01": {
@@ -5419,8 +5790,68 @@
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
       "rank": 12,
+      "status": "shelved",
+      "status_note": "D-174 scope freeze",
+      "stop_card": null
+    },
+    "TRANSFER-RESULT-RENDERER-01": {
+      "acceptance": {
+        "evidence": [
+          "The renderer re-lands on PAPER-CUSTODY-SEAM-01 and accepts only its verified transfer projection family",
+          "The complete projection is recomputed from authenticated capture, plan, pulse-bound source, bundle inventory, and governed receipts",
+          "All nine TR-01 sites are byte-identical, six-decimal seconds, and begin with Diagnostic only",
+          "A delta re-audit and Opus counter-review pass before the paper-supply cold gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TRANSFER-RESULT-RENDERER-01/acceptance",
+          "label": "TRANSFER-RESULT-RENDERER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The transfer-result renderer emits only a seam-verified, recomputed diagnostic projection at all nine registered TR-01 sites."
+      },
+      "authority": {
+        "label": "2026-09-04 Paper-I R3 and custody-seam ruling, preserving the separate capture-producer gate",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the provisional D-173 paper-supply cold gate passes before this renderer merges",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D173-PAPER-SUPPLY-COLD-GATE-PASS"
+        },
+        {
+          "evidence": null,
+          "kind": "artifact",
+          "required": "the reviewed transfer capture and governed result-receipt producer exist before any TR-01 value issues",
+          "scope": "live_promotion",
+          "state": "pending",
+          "strength": "hard",
+          "target": "TRANSFER-CAPTURE-AND-RESULT-RECEIPT"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared custody-read seam lands and supplies a verified transfer-projection family",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PAPER-CUSTODY-SEAM-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-land the transfer-fiducial result renderer on the shared paper-custody seam while preserving the separate reviewed-capture and result-receipt gate.",
+      "id": "TRANSFER-RESULT-RENDERER-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 143,
       "status": "blocked",
-      "status_note": "Reconciled by D-167 from the historical _v4 dependency to the live _v5 chain. It runs in the first post-campaign diagnostic window after the final nightly G3 pass. PR #239 remains held; no held code is promoted by this kernel change.",
+      "status_note": "The renderer branch is blocked on PAPER-CUSTODY-SEAM-01. It remains fixture-only and refuses paper output until the separately gated capture and result-receipt producers exist.",
       "stop_card": null
     },
     "UNATTENDED-LAUNCH-01": {
@@ -5518,52 +5949,6 @@
       "status_note": "RETIRED BY SUPERSESSION 2026-09-03, on the magistrate's direction and per the 2026-09-02 fresh-Fable docs-vs-truth audit A4. D-164 rules that the _v4 family is never collected - the production campaign runs the _v5 Qwen3 pair - and D-167 installs V5-TRANSACTION-01 as the live successor, using the same supersession pattern D-167 applied to the retired window-council gate. The row was showing as PARTIAL and READY in the agent lane, so a resuming session could have picked up and resumed a transaction that will never run. Its S-0 clone-proof record is KEPT AS HISTORY below and in docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md, because that proof is what earned the instrument its executability evidence; nothing in it is voided by this retirement. Recorded as a dated addendum on D-167 in the decision log, not as a silent kernel edit. Historical note follows. S-0 CLONE PROOF COMPLETE (2026-08-25): estate 10 ran END TO END with zero failures at BASE f125ae70 (runsheet r6 head), CI run 32915894409 green, fifth _v4 mint, clone mint head 9a6f8880. Executed: the scripted band 1.1-3.7 with three real MLX U11 freezes; 3.8 marker build with the S0-O2 deferral disclosed and candidate verify PASS; Ed's step-6 YES over hC adbd116d7dcaa3dd5b0d6f1e5c9127282232b29ea74b03b9c6b8077ec9da36bc; 3.9 all three packs ARMED and verified with the C+hC pair, clean-arm residue empty, eleven-kind census PASS; 3.10 local green in the clone (published half deferred BY DESIGN); 4 probe battery ALL GREEN including the six r6 re-derived probes and the post-fixation shape-preserving re-mint byte pin; 4.10 fixation equal to the mint-time record; magistrate 5 acceptance read ALL BOXES PASS. Record: docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md. Ten estates were cut; estates 1-9 each terminated on a real instrument defect now cured on main (S0-O2 marker build, S0-O3 successor-digest siting, the confirmation-supply family, D-154 pack_root, the anchor remaps, probe reachability), with estate 6 STRUCK under the D-153 sweep synthesis, estate 7 STRUCK as instrument failure under D-154 R-4 (its positive results retained as executability evidence, never claim custody), and estate 9's probe-block failures dispositioned ordinary-defect - every struck estate's custody preserved READ-ONLY. REMAINING SCOPE IS THE REAL TRANSACTION ONLY: Ed's D-150(1) live permission prompts and the D-150a reboot; a quiet machine window; the real commit-freeze window close; the published-green half that 3.10 deferred, at the real published head; and post-window fixation ordering per D-153. Retained verbatim: BIG per D-144, and the magistrate's own reading of the transaction transcript remains the final verification gate.",
       "stop_card": null
     },
-    "V5-DECODE-IDENTITY-SET-01": {
-      "acceptance": {
-        "evidence": [
-          "The generated GAMMA pack freezes and verify_frozen_projection passes (the ruled red test turns green)",
-          "A decode member re-pointed to an unlisted manifest, a census count off by one, a declaration re-typed from workload_for, and a drifted member tag each REFUSE with a named reason",
-          "A single-identity unit's config_set_sha256 is byte-identical to a committed v3 receipt value",
-          "The dominance-criterion registration digest pinned in the pack, closeout, and night-gate tests is unchanged",
-          "All three _v5 packs are re-frozen and verified by a live P-8 runbook re-run"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/V5-DECODE-IDENTITY-SET-01/acceptance",
-          "label": "V5-DECODE-IDENTITY-SET-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The current _v5 generator's packs freeze and verify against the real tokenizers with every exact identity intact, and every ruled counterfactual refuses."
-      },
-      "authority": {
-        "label": "Ruling 171a decode-unit identity under prompt rotation",
-        "path": "docs/process_traces/2026-09-02-projection-02/171a-RULING-decode-identity.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "PR #269 merged 2026-09-02 (e4f52e34)",
-            "path": "docs/process_traces/2026-09-02-projection-02/pr269-gate-record.md"
-          },
-          "kind": "task",
-          "required": "the fix branches from the projection-02 merge head so the realization rows and the decode-set declaration land in one freeze",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "V5-PREFILL-REALIZED-PROJECTION-02"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Make generated _v5 decode units freezable without weakening any exact identity: the generator declares each decode unit's closed manifest set from the pre-registered prompt-rotation rule (never folded from emitted configs), freeze compares declaration to emission fail-closed (extra, missing, duplicate, or unauthenticated member refuses), one scientific identity per manifest class, and the unit config_set_sha256 becomes the identity hash for a single-identity unit (byte-identical to every committed receipt) or SHA256 over the sorted distinct member hashes under the domain string joulewise.identity_unit_config_set.v1; the analysis gate admits a non-empty subset of the frozen unit's declared set. The dominance-criterion registration digest 1c0a4a11 must not move.",
-      "id": "V5-DECODE-IDENTITY-SET-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 3,
-      "status": "partial",
-      "status_note": "Defect found at the bench 2026-09-02 while running the P-8 throwaway freeze against the real Qwen tokenizers (PR #269 post-merge obligation): A/decode and B/decode hold 20 configs rotating over 8 prompt manifests, so freeze_projection refuses at the declaration check (declaration re-typed from workload_for with a hardcoded decode prompt) and again at the one-identity-per-unit check; prefill_p512 units freeze. Three-seat consult 171 (Sol, Opus, blind Fable) -> ruling 171a R-1..R-10 -> cold gate (cold Fable 182 + Opus contract refuter 183) affirmed. Sol xhigh implementation seat in flight on fix/2026-09-02-decode-identity-set off e4f52e34: red generated-pack test first, then the cure; refuters with distinct lenses and a different-model delta re-audit follow. Closure = live P-8 runbook re-run freezing and verifying all three _v5 packs, after which the night lane may name the first pack-bound night. D-131 cl.2/cl.3 amendment text (R-7) is owed to the decision log at the bench.",
-      "stop_card": null
-    },
     "V5-DESK-DAY-01": {
       "acceptance": {
         "evidence": [
@@ -5598,11 +5983,14 @@
           "target": "D165-CLOSEOUT-CORE-01"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #278 merged V5-DECODE-IDENTITY-SET-01 at bb4930d1",
+            "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+          },
           "kind": "task",
           "required": "the three _v5 packs cannot be generated and frozen until decode units carry a declared manifest set (ruling 171a R-9 closure = live P-8 re-run)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "V5-DECODE-IDENTITY-SET-01"
         },
@@ -6162,34 +6550,74 @@
     "WATCHDOG-INSTALL-01": {
       "acceptance": {
         "evidence": [
-          "Timings as ruled: cooperative request at t0 minus 25 min, SIGTERM at t0 minus 16, SIGKILL at t0 minus 15, then a census verification, enforced at 10 s or finer resolution",
-          "Census scope as ruled: the exact production agent_census imported from the night gate, empty inside a plan span, with the span extended while the chain has started and not exited",
-          "Kill primitive as ruled: walk the process tree from the recorded session pid until stable and terminate every descendant; unowned census hits are reported as holds and never killed",
-          "Kill switch as ruled: the remote stop branch checked with a positive control on main so a network failure never reads as cleared, a glob so a typo is not silent, plus the local stop file",
-          "The install notice is emailed, then the install proceeds without waiting for a reply, per the delegation"
+          "All background seats are harvested and stopped before the Terminal-hosted handoff begins",
+          "The install checklist runs from canonical main after the live STEP0_OK digest check",
+          "The watchdog LaunchAgent activates and notice.ack records the first activation",
+          "Ed receives the installation notice; no real plan is armed during this handoff"
         ],
         "pointer": {
           "json_pointer": "/tasks/WATCHDOG-INSTALL-01/acceptance",
           "label": "WATCHDOG-INSTALL-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The watchdog is installed and Ed has been emailed the install notice, with every one of the eleven adopted rulings realized in the code that was installed."
+        "summary": "The merged watchdog is installed from canonical main at the quiet handoff point, activates once, records notice.ack, and sends Ed the install notice."
       },
       "authority": {
-        "label": "Watchdog cold gate synthesis 2026-09-03 (cold Fable file 14 and Opus refuter file 12, no blockers): eleven adopted rulings with the seat that decided each",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/15-watchdog-gate-synthesis.md"
+        "label": "2026-09-04 durable state: watchdog merged as PR #284, STEP0_OK live, install handoff pending the quiet point",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the in-flight paper-custody and fan-out seats are harvested and stopped so the Terminal-hosted install can take the quiet handoff",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ACTIVE-SEATS-HARVESTED-FOR-WATCHDOG-HANDOFF"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Hand off from the merged PR #284 implementation to the Terminal-hosted install: stop active seats, install from canonical main, observe the first LaunchAgent activation and notice.ack, and notify Ed.",
+      "id": "WATCHDOG-INSTALL-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 134,
+      "status": "blocked",
+      "status_note": "Implementation is DONE on main via PR #284 at c74c7e6a and the canonical STEP0_OK digest check passed live. Only the quiet-point install handoff remains; it starts after the in-flight custody-seam and fan-out seats are harvested and stopped, and it does not arm a real plan.",
+      "stop_card": null
+    },
+    "WHOLE-WINDOW-STOP-RECEIPT-01": {
+      "acceptance": {
+        "evidence": [
+          "The whole-window validator returns a typed result that distinguishes authentic admission failure from provenance or structure failure",
+          "A governed producer issues a receipt binding the canonical log row, standalone verdict, prospective manifest, plan tree, runs root, and validator replay",
+          "The paper-custody seam releases a verified whole-window stop only when writer-exact row bytes occur exactly once and receipt plus replay agree"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WHOLE-WINDOW-STOP-RECEIPT-01/acceptance",
+          "label": "WHOLE-WINDOW-STOP-RECEIPT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A typed authenticity/admission result and governed receipt authorize genuine whole-window stops without admitting provenance failures."
+      },
+      "authority": {
+        "label": "D-173 paper-supply custody and the Paper-I Q-C-4 whole-window ruling",
+        "path": "docs/decision_log.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Build and install the relaunch watchdog: a user-level launchd supervisor that owns the stand-down deadline and the force path, spawns each magistrate activation as a single-turn headless session, verifies the agent census before a window span, walks the process tree to terminate descendants rather than trusting the process group, honours a remote stop branch and a local stop file, and emails Ed at each launch and stand-down.",
-      "id": "WATCHDOG-INSTALL-01",
+      "goal": "Build the typed whole-window authenticity/admission validator result and governed stop receipt required by the D-165 paper path.",
+      "id": "WHOLE-WINDOW-STOP-RECEIPT-01",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 134,
-      "status": "partial",
-      "status_note": "In progress 2026-09-03 on local branch feat/2026-09-03-magistrate-watchdog (worktree /Users/edr/code/JouleWise-wt-watchdog-build, at 46eaf18c; NOT pushed to origin as of this batch). Design consult files 02-04 and 09-10, cold gate packet 11 with exhibits 11a and 11b, Opus refutation 12, cold Fable ruling 14, synthesis 15, build brief 16, all under docs/process_traces/2026-09-02-hands-free-week/. Authorized by D-171 item 4. The first stand-down after install kills the magistrate's own session tree including the Terminal-hosted interactive twin, which the synthesis records as the only reason the census can never be empty today. Arming nights is explicitly OUTSIDE this row's charter (synthesis row 11).",
+      "priority": "p2_next_slice",
+      "rank": 144,
+      "status": "shelved",
+      "status_note": "D-174 scope freeze",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
@@ -6432,5 +6860,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-04"
+  "updated": "2026-09-05"
 }

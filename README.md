@@ -9,43 +9,15 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Status:** the measurement campaign that will produce the paper's numbers
-is designed, its supporting code is merged, and it has not yet been run. In
-late August the campaign was re-specified around a newer pair of models (the
-Qwen3 1.7B and 8B pair, decisions D-164 through D-166) and the preparation
-work for it merged to this main branch. Since then the project has built the
-machinery to run measurement nights unattended — a driver that refuses to
-start if any other agent process is alive, runs the measurement chain once,
-signs every outcome, and mails a morning summary — and that driver is on
-main (D-169). What remains before real numbers exist: the campaign's frozen
-plans must pass a tokenizer-identity check that is being fixed now, the
-night machinery must be re-armed, and then the pre-registered nights run.
-Nothing on this page is a measured result from that campaign.
-Live state, gates, and work selection are owned by
-[`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
-(`docs/process/state_kernel.json`); this summary does not duplicate them.
-
-## Current activity (refreshed each work block; last: 2026-09-03)
-
-**Now:** the unattended-night machinery has been proven and is temporarily
-switched off while its last two pieces are built. Two rehearsal nights fired
-on their own from the macOS scheduler at 02:56 (2026-09-02 and 09-03), each
-pushed its results to a branch readable from a phone and sent the morning
-summary email with nobody at the keyboard; the second also proved the case
-where the scheduler is installed the morning before a night, so the 07:00
-watchdog correctly noticed the night had not happened yet and stood down. The
-scheduled jobs were then uninstalled, so nothing fires tonight.
-
-**Next, in this order:** install a supervisor that can stop a working session
-on a deadline (so a session can never overrun the quiet hour a measurement
-needs); pin each night's plan to the dedicated measurement copy of the
-repository, because an ordinary daytime code pull currently moves the
-repository past the commit a plan was pinned to and the safety gate then
-refuses the plan; then arm the first real diagnostic night, which measures
-four candidate prompt lengths and picks one. On the paper lane, a defect in
-the plan generator — the plan rotates through eight prompt texts while the
-identity check expected exactly one — is being fixed so the three campaign
-plans can be frozen against the real tokenizers.
+**Status:** This week, three independent peer audits found that the draft
+overstated what the instrument can establish about physical phase energy. The
+paper now describes the measurement honestly as energy assigned to inference
+phases from interval-average power records, together with its sensitivity to
+allowed timing changes. The old route that could reproduce voided legacy
+results is closed, and work is frozen to the methods and diagnostic paper;
+next come the remaining paper corrections, readiness checks, and scheduled
+measurements. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+That file's generated state-kernel view owns current work selection.
 
 ## Current State
 
@@ -78,7 +50,7 @@ measured idle baseline; it is not used to rank devices or configurations. In
 Q4, the fixed term is estimated from the gross-energy workload sweep and is
 not set equal to measured idle energy. The advisor-review rationale and full
 basis/boundary rule are recorded in
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md#measurement-methodology-highlights).
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
 Under D-070, static batching, speculative decoding / native MTP, MoE versus
 dense execution, quantization, and reasoning-length variance are five stress
@@ -87,8 +59,7 @@ five have strict-valid L0 smoke-bundle support plus characterization
 commitments, but every study remains floor-gated, capped at L2, and sequenced
 after the `_v5` campaign (the Window A sequencing this sentence used to name
 was retired by D-167). See the fuller
-[Q4 architectural stress-test agenda](PROJECT_STATUS.md#summary)
-in `PROJECT_STATUS.md`.
+[Q4 architectural stress-test agenda](PROJECT_STATUS.md).
 
 D-075 now folds a ranked extension-axis evaluation into that same agenda
 without proliferating theses: DSpark/DFlash break-even and control riders,
@@ -248,21 +219,21 @@ See `AGENT_PLAN.md` for the phase index; each phase has a detailed plan and
 an evidence-based exit checklist under `docs/phase_N/` — the exit checklist
 is the per-item status authority (D-023). See `RUN_STATE.md` before starting
 substantial work; its generated state-kernel region is the current
-work-selection view. Future phase starts should use
-`docs/planning_reflection_protocol.md` to audit whether each step has evidence
-and acceptance criteria before implementation begins.
+work-selection view. Mission M0 in `docs/agent_playbook.md` owns intake and
+close-out; it routes the selected `docs/process/state_kernel.json` task to its
+authority, acceptance criteria, plan, and phase checklist.
 
 **Agents executing "the next step" start with `docs/agent_playbook.md`** —
 self-contained, ordered mission guides (read-first lists, code-level routes,
 verification commands, handoff checklists) for every remaining step of the
 project.
 
-Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
-handoffs, recent commits, and active phase gates. Design decisions (with the
-options and considerations behind them) live in `docs/decision_log.md`; risks,
+Use the state kernel to add and rank new tasks; `TASK_QUEUE.md` is its generated
+detailed projection plus dated history. Design decisions (with the options and
+considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
 constraints live in `docs/milestones.md`; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`. Agents never regenerate or deploy the status site:
-sessions that change front-facing state refresh `docs/site/DRIFT.md`, and Ed
-deploys manually (D-068).
+`docs/council_log.md`. Under D-136, agents do not refresh, regenerate, or
+deploy the status site. `docs/site/DRIFT.md` is a retained reference only; if
+Ed chooses the manual workflow dispatch, Ed deploys the resulting snapshot.

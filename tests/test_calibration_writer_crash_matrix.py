@@ -40,6 +40,7 @@ from tests.owned_process_runner import (
     owned_process_group_survivors,
     spawn_spinning_descendant_for_guard_test,
 )
+from tests.git_fixture import init_git_fixture
 from tests.test_calibration_exits import _install_fake_writer_dependencies
 
 # Stall deadline for the shared sampler-ack driver: how long the parent waits
@@ -346,7 +347,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
+        init_git_fixture(cls.repo, "-q")
         subprocess.run(
             ["git", "config", "user.email", "tests@joulewise.invalid"],
             cwd=cls.repo,

@@ -21,6 +21,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = REPO_ROOT / "scripts" / "bridge"
@@ -118,7 +120,7 @@ class BridgeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.repo = Path(self.temporary.name)
-        self.git("init", "-q")
+        init_git_fixture(self.repo, "-q")
         self.git("config", "user.name", "Bridge Test")
         self.git("config", "user.email", "bridge@example.invalid")
         (self.repo / "tracked.txt").write_text("base\n", encoding="utf-8")
@@ -1471,6 +1473,13 @@ class BridgeDocumentationDriftTests(unittest.TestCase):
         ".claude/skills/codex/SKILL.md",
         ".agents/skills/claude-consult/SKILL.md",
     }
+    REQUIRED_SNIPPET_IDS = {
+        "scope_authority",
+        "quiet_mac",
+        "no_bypass",
+        "one_hop",
+        "envelope_failure",
+    }
     WIRE_DETAIL_GROUPS = {
         "prompt header fields": (
             {
@@ -1573,6 +1582,9 @@ class BridgeDocumentationDriftTests(unittest.TestCase):
             set(manifest["consumers"]),
             self.EXPECTED_SURFACES - {".agents/skills/claude-consult/SKILL.md"},
         )
+        for snippet_ids in manifest["consumers"].values():
+            self.assertEqual(set(snippet_ids), self.REQUIRED_SNIPPET_IDS)
+            self.assertEqual(len(snippet_ids), len(self.REQUIRED_SNIPPET_IDS))
         for surface in self.EXPECTED_SURFACES:
             self.assertIn(f"`{surface}`", contract)
         self.assertIn(
@@ -1585,13 +1597,7 @@ class BridgeDocumentationDriftTests(unittest.TestCase):
         snippets = manifest["snippets"]
         self.assertEqual(
             set(snippets),
-            {
-                "scope_authority",
-                "quiet_mac",
-                "no_bypass",
-                "one_hop",
-                "envelope_failure",
-            },
+            self.REQUIRED_SNIPPET_IDS,
         )
         for relative_path, snippet_ids in manifest["consumers"].items():
             raw = (REPO_ROOT / relative_path).read_bytes()
@@ -1649,7 +1655,6 @@ Delegated responses use a five-part record:
             any("return envelope fields" in violation for violation in violations),
             violations,
         )
-
 
 if __name__ == "__main__":
     unittest.main()
