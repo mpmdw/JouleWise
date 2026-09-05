@@ -402,3 +402,16 @@ THEN, in order:
 - D-165 relabel: merging origin/main had real conflicts (registry SUPPLIER_PENDING wording vs relabel text;
   dominance_closeout constants); Opus lieutenant resolving in JouleWise-wt-d165-relabel; report 13.
   The old d165-renderer worktree merge was aborted (lane superseded).
+
+## 2026-09-05 (later) — paper-M fix round 2 complete at 4be34bc4; paper-L blocked on a D-166 regression
+
+- Paper-M: round 2 (report 06, 30/31) + round 2b (report 07, B2 with the source-backed Qwen2.5-1.5B /
+  7B arms; the magistrate's '1.7B' label was wrong and astra caught it) landed at 4be34bc4. Running:
+  fresh astra delta (08) + Opus re-check (09). Then apex → PR.
+- Paper-L (#290): replay at a3bbd9b3 failed 6 FrozenConsumerIdentitySetTests (A/decode inventory has one
+  distinct config) + node-worker. Cause: the branch carries the D-166 prompt-zero generator change to
+  configs/campaigns/d117_contrast_v5/generate_configs.py; main passes. Seat `paperl-d166fix` (astra
+  xhigh) diagnosing generator-vs-fixture in JouleWise-wt-paper-l (main merged → 3d3b4ba2); report
+  docs/process_traces/2026-09-05-d166-prompt0/06. Replay re-runs after the cure.
+- F+B (#292): head 9d854b4d (fixture re-anchor via repin lane; seam reader classified as pass-through
+  carrier, report 53); CI green → row 11 filled; replay (row 9) running; then terminal review → merge.
