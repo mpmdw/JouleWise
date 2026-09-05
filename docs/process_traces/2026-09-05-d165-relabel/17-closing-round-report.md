@@ -241,3 +241,7 @@ hardware validation. The applied diff is not acceptance-ready while V1 is red.
 - F2 NEEDS_SCOPE: DEFERRED — wording nits N2–N5 touch docs/paper/draft-v2-skeleton.md, round7/fill-checklist.md
   and the d117 campaign pack; none is a retired-term use (census GREEN without them) and D-174 fences them.
 - F3: S3 registered as D165-CLOSEOUT-ERA-01 in TASK_QUEUE.md (H2, fenced).
+- Post-commit note: the docstring edit to joulewise/dominance_closeout.py moved the d165_closeout validator-source
+  digest, so the custody fixture envelope was re-anchored once more through tests/fixtures/paper_custody/repin.py
+  (d165_closeout role only; test_paper_custody 29 OK, test_paper_rendering 3 OK). Any edit to that module,
+  comments included, requires this step.
