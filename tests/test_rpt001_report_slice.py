@@ -592,7 +592,7 @@ class TestRpt001Artifacts(unittest.TestCase):
         generated = (
             REPO / "docs/report_src/generated/rpt001_vertical_slice.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("Controlled/internal full regeneration", generated)
+        self.assertIn("VOIDED historical pipeline demonstration", generated)
         self.assertNotIn("privacy-approved evidence-handoff pack is available", generated)
 
     def test_authored_regeneration_instructions_have_no_workstation_absolute_path(self):
