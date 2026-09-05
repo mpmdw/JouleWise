@@ -309,3 +309,15 @@ THEN, in order:
 - Paper-side one-row cure queued: draft-v2-skeleton.md ~:1738 ledger phrase "timing error common to" (D-165
   census survivor) → next paper round (with #290 or after).
 - Install notice emailed to Ed 21:05 PDT (thread "INSTALL NOTICE — magistrate watchdog goes live tonight").
+
+## 2026-09-05 ~05:40 PDT — READINESS CUT RULED: FALLBACK; handoff blocked on PR #291 (Ed's word)
+- docs/process_traces/2026-09-05-readiness/01 (astra) + 02 (ruling): SELECT FALLBACK — the submission is the
+  methods/diagnostic paper. Paper-M seat (astra xhigh, wt-paper-m, stacked on paper-L) writes it: single outcome,
+  fig4 edge excursions → Figure 2, record-support result, labelled synthetic arithmetic, References/Availability.
+- Handoff: the watchdog/installer identification does not recognise the Claude Code background-host session; PR
+  #291 amends it (CI green); merge requires Ed's word or a fresh cold gate. Terminal-hosted attempt stalled and
+  was killed; Codex app bridge needs the task opened in the ChatGPT app. Ed emailed twice (install notice; #291
+  ask + fallback ruling). Steps 1–2 of the handoff are done (v1 trees retired; my background tasks stopped
+  then re-armed as watchers — stop them again before step 3).
+- F+B: structural round landed (accessor + census + matrix, 495 tests), delta 44 LANDABLE; Opus counter-review
+  running → apex → PR. Seam #289 CI green, replay running. Paper-K #288 replay running. Paper-L #290 ready.
