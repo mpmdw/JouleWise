@@ -111,10 +111,12 @@ while cursor > 1:
         )
         return result.stdout.strip()
     command = field("command")
-    claude = re.search(r"(?:^|[/\s])claude(?:\s|$)", command, re.IGNORECASE)
+    claude = re.search(r"(?:^|[/\s])claude(?:/versions/\d+\.\d+\.\d+)?(?:\s|$)", command, re.IGNORECASE)
     suffix = command[claude.end():] if claude is not None else ""
+    tokens = suffix.casefold().split()
+    role = tokens[0] if tokens else ""
     headless = re.search(r"(?:^|\s)(?:-p|--print(?:\s|=|$))", suffix)
-    if claude is not None and headless is None:
+    if claude is not None and headless is None and role not in {"daemon", "bg-pty-host", "--bg-pty-host", "bg-spare", "--bg-spare"}:
         candidates.append((cursor, " ".join(field("lstart").split())))
     parent = field("ppid")
     try:
