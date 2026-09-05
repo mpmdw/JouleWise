@@ -5,6 +5,7 @@ import dataclasses
 import datetime as dt
 import fnmatch
 import io
+import inspect
 import json
 import os
 import re
@@ -1205,6 +1206,96 @@ class BackoffAndEventTests(WatchdogTestCase):
         self.assertIsNone(supervisor)
         self.assertEqual(state["state"], "BACKOFF")
         self.assertEqual(self.harness.spawn_calls, [])
+
+
+class ClaudeHostIdentificationTests(unittest.TestCase):
+    CHILD = "/Users/edr/.local/share/claude/versions/2.1.259 --session-id … --fork-session --resume …"
+    PARENT = "…/ClaudeCode.app/Contents/MacOS/claude --bg-pty-host …"
+    OLD_REGEX = r"(?:^|[/\s])claude(?:\s|$)"
+    NEW_REGEX = r"(?:^|[/\s])claude(?:/versions/\d+\.\d+\.\d+)?(?:\s|$)"
+
+    def _installer_source(self) -> str:
+        return (
+            Path(__file__).resolve().parents[1]
+            / "scripts/install_magistrate_watchdog.sh"
+        ).read_text(encoding="utf-8")
+
+    def _installer_candidate(self, commands: list[str], source: str | None = None) -> int | None:
+        # Execute only the real ancestry/adoption block, with a synthetic ps.
+        # Stop before the version probe; no shell, agent, or launchctl runs.
+        source = self._installer_source() if source is None else source
+        block = "binary = sys.argv[1]\n" + source.split(
+            "binary = sys.argv[1]\n", 1
+        )[1].split("\nversion = subprocess.run(", 1)[0]
+
+        def ps(argv, **kwargs):
+            self.assertEqual(argv[0], "/bin/ps")
+            pid = int(argv[2])
+            index = pid - 100
+            fields = {
+                "command=": commands[index],
+                "lstart=": f"start-{pid}",
+                "ppid=": str(pid + 1 if index + 1 < len(commands) else 1),
+            }
+            return subprocess.CompletedProcess(argv, 0, fields[argv[4]], "")
+
+        namespace = {
+            "os": mock.Mock(getppid=lambda: 100),
+            "sys": mock.Mock(argv=["fixture", "unused-session-binary"]),
+            "subprocess": mock.Mock(run=ps),
+            "re": re,
+        }
+        try:
+            exec(compile(block, "<installer-adoption>", "exec"), namespace)
+        except SystemExit as error:
+            self.assertIn("must be run by the current magistrate session", str(error))
+            return None
+        return namespace["pid"]
+
+    def _assert_bench(self, installer_source: str | None = None) -> None:
+        self.assertTrue(wd._is_interactive_claude(self.CHILD))
+        self.assertFalse(wd._is_interactive_claude(self.PARENT))
+        self.assertTrue(wd._is_bg_pty_host(self.PARENT))
+        rows = [
+            wd.ProcessInfo(900, 100, "caller", "python handoff-inventory"),
+            wd.ProcessInfo(100, 101, "child", self.CHILD),
+            wd.ProcessInfo(101, 1, "parent", self.PARENT),
+        ]
+        inventory = wd.handoff_inventory(rows, 900)
+        self.assertEqual(inventory["interactive_pid"], 100)
+        self.assertEqual([row["pid"] for row in inventory["owned"]], [100])
+        self.assertEqual(self._installer_candidate([self.CHILD, self.PARENT], installer_source), 100)
+
+    def test_bench_versioned_child_is_interactive_parent_is_not(self) -> None:
+        self._assert_bench()
+
+    def test_plain_and_versioned_claude_preserve_exclusions(self) -> None:
+        for binary in ("claude", "/Users/edr/.local/bin/claude", "/Users/edr/.local/share/claude/versions/2.1.260"):
+            for suffix in ("", " --session-id … --fork-session --resume …"):
+                with self.subTest(binary=binary, suffix=suffix):
+                    self.assertTrue(wd._is_interactive_claude(binary + suffix))
+                    self.assertEqual(self._installer_candidate([binary + suffix]), 100)
+            for suffix in (" -p …", " --print …", " --print=…", " daemon", " bg-pty-host …", " --bg-pty-host …", " bg-spare …", " --bg-spare …"):
+                with self.subTest(binary=binary, suffix=suffix):
+                    self.assertFalse(wd._is_interactive_claude(binary + suffix))
+                    self.assertIsNone(self._installer_candidate([binary + suffix]))
+        for command in ("notclaude --resume …", "/claude/versions/2.1.260-extra --resume …", "/claude/versions/2.1.260/helper --resume …"):
+            with self.subTest(command=command):
+                self.assertFalse(wd._is_interactive_claude(command))
+                self.assertIsNone(self._installer_candidate([command]))
+
+    def test_regex_revert_mutations_fail_bench_case(self) -> None:
+        source = inspect.getsource(wd._claude_command_suffix)
+        self.assertEqual(source.count(self.NEW_REGEX), 1)
+        namespace = {"re": re}
+        exec(source.replace(self.NEW_REGEX, self.OLD_REGEX), namespace)
+        with mock.patch.object(wd, "_claude_command_suffix", namespace["_claude_command_suffix"]):
+            with self.assertRaises(AssertionError):
+                self._assert_bench()
+        source = self._installer_source()
+        self.assertEqual(source.count(self.NEW_REGEX), 1)
+        with self.assertRaises(AssertionError):
+            self._assert_bench(source.replace(self.NEW_REGEX, self.OLD_REGEX))
 
 
 class ContractTests(WatchdogTestCase):

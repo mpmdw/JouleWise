@@ -115,8 +115,10 @@ that the present report has completed split execution.
 
 ## Remaining limits on related-work claims
 
-The source survey does not erase the report's evidence limits. Current report
-results remain legacy L1 observations from exact named stacks, not a completed
+The source survey does not erase the report's evidence limits. The retained
+historical corpus is **VOIDED permanently for claim use** under the
+[root README void disposition](../../../README.md#current-state) and supplies
+no current report results or observations; the report has not completed a
 split-inference campaign. Per-rail boundaries are not automatically
 wall-equivalent, one physical unit cannot support hardware-class
 generalization, and cross-runtime comparisons remain deployable-stack

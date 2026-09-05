@@ -1,13 +1,12 @@
 # Appendix A: Reproducibility
 
-Every number in the results chapter derives from six pinned legacy bundles via
-committed, versioned artifacts:
+The legacy energy corpus is permanently voided. The report retains only its
+input identity and explicit void artifacts:
 
 - Input pinning: `analysis/rpt001-v2/input_manifest.json` (experiment
   manifest hashes + per-bundle tree digests).
-- Sealed dataset: `analysis/rpt001-v2/dataset.csv` (one row per bundle).
-- Aggregates: `analysis/rpt001-v2/aggregates.json` (verbatim
-  `aggregate_experiment()` output, Student-t fields preserved for audit).
+- Void dataset placeholder: `analysis/rpt001-v2/dataset.csv`.
+- Void aggregate placeholder: `analysis/rpt001-v2/aggregates.json`.
 - Output hashes: `analysis/rpt001-v2/artifact_manifest.json`.
 
 ## Source-only assembly and check
@@ -22,20 +21,20 @@ This command uses tracked report and analysis sources, compares the committed
 generated projection, and validates the full report assembly in memory. It
 does not require the private bundles or an existing untracked build product.
 
-## Controlled/internal full evidence re-derivation
+## Controlled/internal full input authentication
 
-Full evidence re-derivation is controlled/internal. It requires controlled
-access to the internal six-bundle corpus (~110 MB, not in Git):
+The full route requires controlled access to the internal six-bundle corpus
+(~110 MB, not in Git) so it can authenticate the pinned inputs:
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline \
   --runs-root runs
 ```
 
-The corpus is not supplied by a pristine clone, and the transformed public
-projection described below is not a strict-valid, independently re-reducible
-substitute. Accordingly, the full command is not claimed as external full
-reproducibility.
+After authentication, the route emits only the void placeholders and voided
+claims-index row; it does not extract, aggregate, or reproduce measurements.
+The corpus is not supplied by a pristine clone, so the full command is not
+claimed as external full reproducibility.
 
 ## Publication privacy boundary (REPRO-002)
 
