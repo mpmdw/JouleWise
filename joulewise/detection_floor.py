@@ -346,11 +346,18 @@ def validate_floor_metric_window_class(
 
 
 def attribution_single_count_discipline() -> dict[str, object]:
-    """Return the D-078 clause-11 non-removable two-role composition rule."""
+    """Return the D-078 clause-11 two-role planning metadata."""
 
     return {
         "rule_id": SINGLE_COUNT_DISCIPLINE_ID,
+        "planning_sizing_formula": "floor_j + claim_side_bound_j",
+        "gating": False,
+        "note": (
+            "The implemented decision rule uses separate |estimate| > floor "
+            "and widened-interval zero-exclusion gates."
+        ),
         "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "deprecated_alias_of": "planning_sizing_formula",
         "floor_role": "calibration_false_effect_bound",
         "claim_side_bound_role": "claim_measurement_uncertainty_bound",
         "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,

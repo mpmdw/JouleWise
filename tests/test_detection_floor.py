@@ -2138,6 +2138,29 @@ def make_cross_window_cell(**overrides):
 
 
 class TestArtifactEmitValidate(unittest.TestCase):
+    def test_single_count_discipline_labels_sum_as_non_gating_planning_formula(self):
+        discipline = attribution_single_count_discipline()
+
+        self.assertEqual(
+            discipline["planning_sizing_formula"],
+            "floor_j + claim_side_bound_j",
+        )
+        self.assertIs(discipline["gating"], False)
+        self.assertEqual(
+            discipline["note"],
+            "The implemented decision rule uses separate |estimate| > floor "
+            "and widened-interval zero-exclusion gates.",
+        )
+        self.assertEqual(
+            discipline["effective_clearable_effect_formula"],
+            discipline["planning_sizing_formula"],
+        )
+        self.assertEqual(
+            discipline["deprecated_alias_of"],
+            "planning_sizing_formula",
+        )
+        self.assertIs(discipline["both_terms_required"], True)
+
     def test_floor_metric_catalog_is_exact_and_governs_artifact_cells(self):
         expected_pairs = (
             ("gross_energy_j", "request"),

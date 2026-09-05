@@ -404,6 +404,23 @@ class ClaimOutcomeTests(unittest.TestCase):
         )
         self.assertEqual(equivalent["outcome"], "equivalent")
 
+    def test_planning_sum_is_not_an_additive_claim_gate(self):
+        floor_j = 5.0
+        claim_side_bound_j = 4.0
+        estimate = 6.0
+
+        self.assertLess(estimate, floor_j + claim_side_bound_j)
+        result = evaluation(
+            estimate=estimate,
+            metrology_aware_ci95={"lower": 5.9, "upper": 6.1},
+            decision_interval={"lower": 1.9, "upper": 10.1},
+            floor_gate_j=floor_j,
+            hypothesized_direction="positive",
+        )
+
+        self.assertEqual(result["outcome"], "direction_supported")
+        self.assertTrue(result["claim_ready_for_l2_l3"])
+
     def test_significant_negative_does_not_satisfy_positive_registration(self):
         result = evaluation(
             estimate=-2.0,
