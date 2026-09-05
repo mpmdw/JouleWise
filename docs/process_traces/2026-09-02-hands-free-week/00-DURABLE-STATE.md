@@ -389,3 +389,10 @@ THEN, in order:
   both relocation tests OK, discipline matrix 12 OK, dependence sheet 29 OK. Running: Opus non-author
   delta (report 52). Next: CI on head → rows 9/11/12 → merge.
 - Paper-L (#290): replay running on a3bbd9b3 (started before the seam merge; docs-only branch, accepted).
+
+## 2026-09-05 ~12:30 PDT — D-165 relabel branch integrated with main
+
+- feat/2026-09-05-d165-relabel: origin/main merged by the Opus lieutenant (cd71a5d0; report 13), fixture
+  custody envelope re-anchored with the contract's repin lane (magistrate bench). Census RED only on 13
+  draft lines that paper-K/L/M own. SEQUENCING: the relabel PR waits until paper-M merges; then merge main
+  again and a seat cures the remaining D-165 wording in the current draft (census GREEN) → Opus re-check → PR.
