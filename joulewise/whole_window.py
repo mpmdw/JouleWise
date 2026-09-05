@@ -71,6 +71,25 @@ from joulewise.salvage_dangler import (
     validate_salvage_exclusion_payload,
 )
 
+
+_WHOLE_WINDOW_ADMISSION_OUTCOME_REASONS = frozenset(
+    {
+        "adapter_continuity_failed",
+        "cpu_admission_core_failed",
+        "whole_window_neg8_verdict_failed",
+    }
+)
+
+
+@dataclass(frozen=True)
+class WholeWindowRowValidation:
+    """Typed separation of authentic rows from their admission outcome."""
+
+    authentic: bool
+    admitted: bool
+    status: str | None
+    reasons: tuple[str, ...]
+
 WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 WHOLE_WINDOW_PROVENANCE_SCHEMA = (
@@ -5111,6 +5130,44 @@ def _validate_row(
     return result
 
 
+def validate_whole_window_verdict_row(
+    row: Mapping[str, Any],
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    *,
+    consumption_session: AuthenticatedConsumptionSession | None = None,
+) -> WholeWindowRowValidation:
+    """Replay one row and type authenticity separately from admission.
+
+    This validator is necessary but not sufficient for paper issuance.  The
+    custody seam remains blocked until the governed receipt producer binds the
+    result of this replay.
+    """
+
+    ok, reasons = _validate_row(
+        row,
+        Path(runs_root),
+        set(referenced_bundle_ids),
+        consumption_session=consumption_session,
+    )
+    status_value = row.get("status")
+    status = status_value if isinstance(status_value, str) else None
+    authentic = bool(
+        ok
+        or (
+            status in {"passed", "failed"}
+            and bool(reasons)
+            and set(reasons).issubset(_WHOLE_WINDOW_ADMISSION_OUTCOME_REASONS)
+        )
+    )
+    return WholeWindowRowValidation(
+        authentic=authentic,
+        admitted=bool(ok and status == "passed"),
+        status=status,
+        reasons=tuple(reasons),
+    )
+
+
 def _validate_row_uncached(
     row: Mapping[str, Any],
     runs_root: Path,
@@ -6019,6 +6076,7 @@ __all__ = [
     "NEG8_POINT_DRIFT_ESTIMAND",
     "CustodyTelemetryIdentity",
     "WholeWindowDriftAllowanceResult",
+    "WholeWindowRowValidation",
     "NEG8_POINT_DRIFT_CONDITION_CODES",
     "NEG8_REFERENCE_CORPUS_SCHEMA",
     "NEG8_WHOLE_WINDOW_ALLOWANCE_TERM",
@@ -6061,6 +6119,7 @@ __all__ = [
     "validate_occurrence_supersession_entry",
     "validated_supersession_entries",
     "validate_neg8_drift_bound_artifact",
+    "validate_whole_window_verdict_row",
     "whole_window_refusal_reasons",
     "whole_window_drift_allowances",
 ]

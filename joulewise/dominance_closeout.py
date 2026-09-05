@@ -13,7 +13,8 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
-from types import SimpleNamespace
+from pathlib import Path
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 from joulewise.analysis_manifest_v3 import calculate_manifest_id
@@ -26,6 +27,11 @@ from joulewise.detection_floor import (
     registered_common_mode_operative_bound,
 )
 from joulewise.identity_pins import stack_identity_sha256
+from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    authenticate_floor_artifact_bytes,
+)
+from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
 
 REPLAY_SCHEMA_VERSION = "joulewise.d165_dominance_replay.v1"
@@ -37,16 +43,127 @@ DOMINANCE_RATIO_ID = "attribution_dominance_ratio.v1"
 COMMON_MODE_RATIO_ID = "attribution_dominance_ratio_common_mode.v1"
 DOMINANCE_THRESHOLD = 2.0
 DOMINANCE_COMPARISON = "greater_than_or_equal"
-DOMINANCE_ZERO_DENOMINATOR_REASON = "dominance_ratio_zero_denominator"
-FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH = "floor_artifact_source_hash_mismatch"
-CLOSEOUT_INPUT_MALFORMED = "closeout_input_malformed"
-CLOSEOUT_INPUT_MALFORMED_SOURCE = (
-    "closeout_input_malformed: source.census_or_block_membership"
+D165_CLOSEOUT_REFUSAL_ENUMERATION: Mapping[str, str] = MappingProxyType(
+    {
+        "CELL_NOT_COMMON_MODE": "cell_not_common_mode",
+        "CLOSEOUT_INPUT_MALFORMED": "closeout_input_malformed",
+        "CLOSEOUT_INPUT_MALFORMED_ADAPTER":
+            "closeout_input_malformed: replay.block_ids",
+        "CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS":
+            "closeout_input_malformed: closeout.comparative_common_mode_ratios",
+        "CLOSEOUT_INPUT_MALFORMED_RECORDS":
+            "closeout_input_malformed: closeout.independent_ratios",
+        "CLOSEOUT_INPUT_MALFORMED_SOURCE":
+            "closeout_input_malformed: source.census_or_block_membership",
+        "COMMON_MODE_REPLAY_AUTHENTICATED_OPERATIVE_BOUND_INVALID":
+            "common_mode_replay_authenticated_operative_bound_invalid",
+        "COMMON_MODE_REPLAY_BLOCK_COUNT_INVALID":
+            "common_mode_replay_block_count_invalid",
+        "COMMON_MODE_REPLAY_INPUT_INVALID": "common_mode_replay_input_invalid",
+        "COMMON_MODE_REPLAY_WINDOW_DOMAIN_INVALID":
+            "common_mode_replay_window_domain_invalid",
+        "COMMON_MODE_REPLAY_ZERO_POINT_DIVERGENCE_OUT_OF_DOMAIN":
+            "common_mode_replay_zero_point_divergence_out_of_domain",
+        "COMMON_MODE_REPLAY_ZERO_POINT_MEMBERSHIP_INVALID":
+            "common_mode_replay_zero_point_membership_invalid",
+        "D165_MINT_ADAPTER_INPUT_INVALID": "d165_mint_adapter_input_invalid",
+        "DOMINANCE_RATIO_NONFINITE_OR_NEGATIVE_DENOMINATOR":
+            "dominance_ratio_nonfinite_or_negative_denominator",
+        "DOMINANCE_RATIO_NONFINITE_OR_NEGATIVE_NUMERATOR":
+            "dominance_ratio_nonfinite_or_negative_numerator",
+        "DOMINANCE_RATIO_NONFINITE_RESULT": "dominance_ratio_nonfinite_result",
+        "DOMINANCE_RATIO_ZERO_DENOMINATOR": "dominance_ratio_zero_denominator",
+        "FINALIZED_MANIFEST_ID_MISMATCH": "finalized_manifest_id_mismatch",
+        "FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH":
+            "floor_artifact_source_hash_mismatch",
+        "FLOOR_CELL_UNRESOLVED": "floor_cell_unresolved",
+        "FLOOR_MEMBER_CENSUS_MISMATCH": "floor_member_census_mismatch",
+        "MANIFEST_LACKS_REPLAY_SIDECAR": "manifest_lacks_replay_sidecar",
+        "POINT_FLOOR_PARENT_NONFINITE_OR_NEGATIVE":
+            "point_floor_parent_nonfinite_or_negative",
+        "REPLAY_SIDECAR_DIGEST_MISMATCH": "replay_sidecar_digest_mismatch",
+        "REPLAY_SIDECAR_IDENTITY_MISMATCH": "replay_sidecar_identity_mismatch",
+    }
 )
-CLOSEOUT_INPUT_MALFORMED_RECORDS = (
-    "closeout_input_malformed: closeout.independent_ratios"
+
+DOMINANCE_ZERO_DENOMINATOR_REASON = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "DOMINANCE_RATIO_ZERO_DENOMINATOR"
+]
+FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH"
+]
+CLOSEOUT_INPUT_MALFORMED = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "CLOSEOUT_INPUT_MALFORMED"
+]
+CLOSEOUT_INPUT_MALFORMED_SOURCE = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "CLOSEOUT_INPUT_MALFORMED_SOURCE"
+]
+CLOSEOUT_INPUT_MALFORMED_RECORDS = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "CLOSEOUT_INPUT_MALFORMED_RECORDS"
+]
+CLOSEOUT_INPUT_MALFORMED_ADAPTER = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "CLOSEOUT_INPUT_MALFORMED_ADAPTER"
+]
+CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS = (
+    D165_CLOSEOUT_REFUSAL_ENUMERATION[
+        "CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS"
+    ]
 )
-CLOSEOUT_INPUT_MALFORMED_ADAPTER = "closeout_input_malformed: replay.block_ids"
+
+_CELL_NOT_COMMON_MODE = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "CELL_NOT_COMMON_MODE"
+]
+_COMMON_MODE_OPERATIVE_BOUND_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "COMMON_MODE_REPLAY_AUTHENTICATED_OPERATIVE_BOUND_INVALID"
+]
+_COMMON_MODE_BLOCK_COUNT_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "COMMON_MODE_REPLAY_BLOCK_COUNT_INVALID"
+]
+_COMMON_MODE_INPUT_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "COMMON_MODE_REPLAY_INPUT_INVALID"
+]
+_COMMON_MODE_WINDOW_DOMAIN_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "COMMON_MODE_REPLAY_WINDOW_DOMAIN_INVALID"
+]
+_COMMON_MODE_ZERO_POINT_DIVERGENCE = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "COMMON_MODE_REPLAY_ZERO_POINT_DIVERGENCE_OUT_OF_DOMAIN"
+]
+_COMMON_MODE_ZERO_POINT_MEMBERSHIP = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "COMMON_MODE_REPLAY_ZERO_POINT_MEMBERSHIP_INVALID"
+]
+_D165_MINT_ADAPTER_INPUT_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "D165_MINT_ADAPTER_INPUT_INVALID"
+]
+_DOMINANCE_DENOMINATOR_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "DOMINANCE_RATIO_NONFINITE_OR_NEGATIVE_DENOMINATOR"
+]
+_DOMINANCE_NUMERATOR_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "DOMINANCE_RATIO_NONFINITE_OR_NEGATIVE_NUMERATOR"
+]
+_DOMINANCE_RESULT_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "DOMINANCE_RATIO_NONFINITE_RESULT"
+]
+_FINALIZED_MANIFEST_ID_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "FINALIZED_MANIFEST_ID_MISMATCH"
+]
+_FLOOR_CELL_UNRESOLVED = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "FLOOR_CELL_UNRESOLVED"
+]
+_FLOOR_MEMBER_CENSUS_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "FLOOR_MEMBER_CENSUS_MISMATCH"
+]
+_MANIFEST_LACKS_REPLAY_SIDECAR = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "MANIFEST_LACKS_REPLAY_SIDECAR"
+]
+_POINT_FLOOR_PARENT_INVALID = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "POINT_FLOOR_PARENT_NONFINITE_OR_NEGATIVE"
+]
+_REPLAY_SIDECAR_DIGEST_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "REPLAY_SIDECAR_DIGEST_MISMATCH"
+]
+_REPLAY_SIDECAR_IDENTITY_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
+    "REPLAY_SIDECAR_IDENTITY_MISMATCH"
+]
 COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
 ABSOLUTE_COMMON_MODE_REASON = (
     "the absolute estimator uses deviations from the mean, so a uniform shared "
@@ -166,6 +283,105 @@ _CLOSEOUT_COMMON_KEYS = {
     "refusal_reason",
 }
 
+_D165_PAPER_VALIDATOR_CODE_ORDER = (
+    "d165_paper_finalized_manifest_invalid",
+    "d165_paper_floor_artifact_invalid",
+    "d165_paper_replay_sidecar_invalid",
+    "d165_paper_closeout_invalid",
+)
+D165_PAPER_VALIDATOR_CODES = frozenset(_D165_PAPER_VALIDATOR_CODE_ORDER)
+
+D165_CLOSEOUT_REFUSAL_CODES = frozenset(
+    D165_CLOSEOUT_REFUSAL_ENUMERATION.values()
+)
+
+D165_OR01_REASON_SENTENCES: Mapping[str, str] = MappingProxyType(
+    {
+        CLOSEOUT_INPUT_MALFORMED:
+            "the dominance close-out inputs were malformed",
+        CLOSEOUT_INPUT_MALFORMED_ADAPTER:
+            "the dominance replay block identities were malformed",
+        CLOSEOUT_INPUT_MALFORMED_RECORDS:
+            "the dominance close-out ratio records were malformed",
+        CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS:
+            "the dominance close-out common-mode ratio records were malformed",
+        CLOSEOUT_INPUT_MALFORMED_SOURCE:
+            "the dominance close-out source census or block membership was malformed",
+        DOMINANCE_ZERO_DENOMINATOR_REASON:
+            "a required attribution-dominance ratio could not be evaluated because its repeatability floor was zero",
+        FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH:
+            "the detection-floor source did not match the finalized campaign record",
+        _CELL_NOT_COMMON_MODE:
+            "a required comparison lacks its registered common-mode replay",
+        _COMMON_MODE_OPERATIVE_BOUND_INVALID:
+            "the common-mode replay lacks its authenticated timing bound",
+        _COMMON_MODE_BLOCK_COUNT_INVALID:
+            "the common-mode replay has an invalid block count",
+        _COMMON_MODE_INPUT_INVALID:
+            "the common-mode replay inputs were invalid",
+        _COMMON_MODE_WINDOW_DOMAIN_INVALID:
+            "a common-mode replay window fell outside the registered domain",
+        _COMMON_MODE_ZERO_POINT_DIVERGENCE:
+            "a common-mode replay zero point fell outside the registered tolerance",
+        _COMMON_MODE_ZERO_POINT_MEMBERSHIP:
+            "a common-mode replay zero point was absent from its registered sweeps",
+        _D165_MINT_ADAPTER_INPUT_INVALID:
+            "the dominance replay inputs could not be adapted from the detection-floor record",
+        _DOMINANCE_DENOMINATOR_INVALID:
+            "a required attribution-dominance denominator was invalid",
+        _DOMINANCE_NUMERATOR_INVALID:
+            "a required attribution-dominance numerator was invalid",
+        _DOMINANCE_RESULT_INVALID:
+            "a required attribution-dominance ratio was not finite",
+        _FINALIZED_MANIFEST_ID_MISMATCH:
+            "the finalized campaign record did not match its content-derived identity",
+        _FLOOR_CELL_UNRESOLVED:
+            "a required detection-floor cell could not be resolved",
+        _FLOOR_MEMBER_CENSUS_MISMATCH:
+            "the replay membership did not match the detection-floor membership",
+        _MANIFEST_LACKS_REPLAY_SIDECAR:
+            "the finalized campaign record lacks the required dominance replay",
+        _POINT_FLOOR_PARENT_INVALID:
+            "a required repeatability-floor input was invalid",
+        _REPLAY_SIDECAR_DIGEST_MISMATCH:
+            "the dominance replay did not match its registered digest",
+        _REPLAY_SIDECAR_IDENTITY_MISMATCH:
+            "the dominance replay did not match its registered identity",
+    }
+)
+
+
+def _closed_refusal_code(
+    reason: object,
+    *,
+    fallback: str = CLOSEOUT_INPUT_MALFORMED_SOURCE,
+) -> str:
+    """Return one registered professor-facing code for any producer stop."""
+
+    if isinstance(reason, str):
+        if reason in D165_CLOSEOUT_REFUSAL_CODES:
+            return reason
+        prefixed = tuple(
+            code
+            for code in D165_CLOSEOUT_REFUSAL_CODES
+            if reason.startswith(f"{code}:")
+        )
+        if prefixed:
+            return max(prefixed, key=len)
+    return fallback
+
+
+def _independent_refusal_code(*, point: float, corner: float) -> str:
+    """Classify the operands, independently of exception-message wording."""
+
+    if not math.isfinite(corner) or corner < 0.0:
+        return _DOMINANCE_NUMERATOR_INVALID
+    if not math.isfinite(point) or point < 0.0:
+        return _DOMINANCE_DENOMINATOR_INVALID
+    if point == 0.0:
+        return DOMINANCE_ZERO_DENOMINATOR_REASON
+    return _DOMINANCE_RESULT_INVALID
+
 __all__ = [
     "REPLAY_SCHEMA_VERSION",
     "CLOSEOUT_SCHEMA_VERSION",
@@ -180,6 +396,11 @@ __all__ = [
     "CLOSEOUT_INPUT_MALFORMED_SOURCE",
     "CLOSEOUT_INPUT_MALFORMED_RECORDS",
     "CLOSEOUT_INPUT_MALFORMED_ADAPTER",
+    "CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS",
+    "D165_CLOSEOUT_REFUSAL_ENUMERATION",
+    "D165_CLOSEOUT_REFUSAL_CODES",
+    "D165_OR01_REASON_SENTENCES",
+    "D165_PAPER_VALIDATOR_CODES",
     "COMMON_MODE_REPLAY_RULE_ID",
     "COMMON_MODE_INPUT_FIELDS",
     "ABSOLUTE_COMMON_MODE_REASON",
@@ -191,7 +412,54 @@ __all__ = [
     "canonical_json_sha256",
     "validate_d165_replay_sidecar",
     "validate_d165_closeout",
+    "validate_d165_paper_sources",
 ]
+
+
+def _paper_json_object(raw: bytes) -> Mapping[str, Any] | None:
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, Mapping) else None
+
+
+def validate_d165_paper_sources(
+    *,
+    closeout: Mapping[str, Any],
+    finalized_manifest_bytes: bytes,
+    finalized_manifest_path: Path,
+    custody_root: Path,
+    floor_artifact_bytes: bytes,
+    replay_sidecar_bytes: bytes,
+) -> tuple[str, ...]:
+    """Replay D-165's four owners and expose only closed nested codes."""
+
+    codes: list[str] = []
+    manifest = _paper_json_object(finalized_manifest_bytes)
+    if manifest is None or validate_finalized_analysis_manifest_v3(
+        manifest,
+        manifest_path=finalized_manifest_path,
+        custody_root=custody_root,
+    ):
+        codes.append("d165_paper_finalized_manifest_invalid")
+    try:
+        authenticate_floor_artifact_bytes(floor_artifact_bytes)
+    except (AnalysisInputError, TypeError, ValueError):
+        codes.append("d165_paper_floor_artifact_invalid")
+    sidecar = _paper_json_object(replay_sidecar_bytes)
+    if sidecar is None or validate_d165_replay_sidecar(sidecar):
+        codes.append("d165_paper_replay_sidecar_invalid")
+    if validate_d165_closeout(
+        closeout,
+        finalized_manifest_bytes=finalized_manifest_bytes,
+        floor_artifact_bytes=floor_artifact_bytes,
+        replay_sidecar_bytes=replay_sidecar_bytes,
+    ):
+        codes.append("d165_paper_closeout_invalid")
+    return tuple(
+        code for code in _D165_PAPER_VALIDATOR_CODE_ORDER if code in codes
+    )
 
 
 def _canonical_json_bytes(value: object) -> bytes:
@@ -238,14 +506,14 @@ def dominance_ratio(
     numerator = float(corner_widened_unguarded_floor_j)
     denominator = float(point_unguarded_floor_j)
     if not math.isfinite(numerator) or numerator < 0.0:
-        raise ValueError("dominance_ratio_nonfinite_or_negative_numerator")
+        raise ValueError(_DOMINANCE_NUMERATOR_INVALID)
     if not math.isfinite(denominator) or denominator < 0.0:
-        raise ValueError("dominance_ratio_nonfinite_or_negative_denominator")
+        raise ValueError(_DOMINANCE_DENOMINATOR_INVALID)
     if denominator == 0.0:
         raise ValueError(DOMINANCE_ZERO_DENOMINATOR_REASON)
     ratio = numerator / denominator
     if not math.isfinite(ratio):
-        raise ValueError("dominance_ratio_nonfinite_result")
+        raise ValueError(_DOMINANCE_RESULT_INVALID)
     return {
         "ratio": ratio,
         "threshold": DOMINANCE_THRESHOLD,
@@ -286,7 +554,7 @@ def split_common_mode_block_width(
 ) -> dict[str, float]:
     """Return the shared and block-local widths before their lossy final sum."""
 
-    reason = "common_mode_replay_input_invalid"
+    reason = _COMMON_MODE_INPUT_INVALID
     delta = _finite_number(delta_j, reason)
     onset = _finite_values(onset_sweep_j, reason)
     offset = _finite_values(offset_sweep_j, reason)
@@ -362,7 +630,7 @@ def d165_replay_blocks_from_mint_inputs(
     the positioned A/B/B/A map from the authenticated extraction spec.
     """
 
-    reason = "d165_mint_adapter_input_invalid"
+    reason = _D165_MINT_ADAPTER_INPUT_INVALID
     try:
         invalid = (
             isinstance(block_ids, (str, bytes))
@@ -591,20 +859,18 @@ def replay_common_mode_dominance(
     """Replay comparative R_cm from authenticated, pre-mint block inputs."""
 
     if not blocks or len(blocks) > MAX_EXACT_ADMISSIBLE_CORNER_N:
-        raise ValueError("common_mode_replay_block_count_invalid")
+        raise ValueError(_COMMON_MODE_BLOCK_COUNT_INVALID)
     if isinstance(shared_edge_bound_s, bool) or not isinstance(
         shared_edge_bound_s, (int, float)
     ):
-        raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
+        raise ValueError(_COMMON_MODE_OPERATIVE_BOUND_INVALID)
     bound = float(shared_edge_bound_s)
     try:
         authenticated_bound = registered_common_mode_operative_bound(
             calibration_bracket
         )
     except CommonModeEstimatorRefusal as exc:
-        raise ValueError(
-            "common_mode_replay_authenticated_operative_bound_invalid"
-        ) from exc
+        raise ValueError(_COMMON_MODE_OPERATIVE_BOUND_INVALID) from exc
     if (
         not math.isfinite(bound)
         or bound <= 0.0
@@ -615,7 +881,7 @@ def replay_common_mode_dominance(
             abs_tol=1e-12,
         )
     ):
-        raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
+        raise ValueError(_COMMON_MODE_OPERATIVE_BOUND_INVALID)
 
     # Local import prevents a module cycle: governed extraction imports the
     # shared split above, while replay reuses extraction's exact window-domain
@@ -628,7 +894,7 @@ def replay_common_mode_dominance(
     splits: list[tuple[float, float]] = []
     for block in blocks:
         if not isinstance(block, Mapping):
-            raise ValueError("common_mode_replay_input_invalid")
+            raise ValueError(_COMMON_MODE_INPUT_INVALID)
         windows = block.get("member_window_bounds_s")
         if (
             not isinstance(windows, list)
@@ -642,7 +908,7 @@ def replay_common_mode_dominance(
                 for window in windows
             )
         ):
-            raise ValueError("common_mode_replay_window_domain_invalid")
+            raise ValueError(_COMMON_MODE_WINDOW_DOMAIN_INVALID)
         try:
             split = split_common_mode_block_width(
                 delta_j=block["delta_j"],
@@ -657,26 +923,24 @@ def replay_common_mode_dominance(
                 ],
             )
             delta = _finite_number(
-                block["delta_j"], "common_mode_replay_input_invalid"
+                block["delta_j"], _COMMON_MODE_INPUT_INVALID
             )
             zero_point = _finite_number(
                 block["zero_point_contrast_j"],
-                "common_mode_replay_input_invalid",
+                _COMMON_MODE_INPUT_INVALID,
             )
             onset = _finite_values(
-                block["onset_sweep_j"], "common_mode_replay_input_invalid"
+                block["onset_sweep_j"], _COMMON_MODE_INPUT_INVALID
             )
             offset = _finite_values(
-                block["offset_sweep_j"], "common_mode_replay_input_invalid"
+                block["offset_sweep_j"], _COMMON_MODE_INPUT_INVALID
             )
         except (KeyError, TypeError) as exc:
-            raise ValueError("common_mode_replay_input_invalid") from exc
+            raise ValueError(_COMMON_MODE_INPUT_INVALID) from exc
         if zero_point not in onset or zero_point not in offset:
-            raise ValueError("common_mode_replay_zero_point_membership_invalid")
+            raise ValueError(_COMMON_MODE_ZERO_POINT_MEMBERSHIP)
         if not math.isclose(zero_point, delta, rel_tol=1e-9, abs_tol=1e-12):
-            raise ValueError(
-                "common_mode_replay_zero_point_divergence_out_of_domain"
-            )
+            raise ValueError(_COMMON_MODE_ZERO_POINT_DIVERGENCE)
         deltas.append(delta)
         splits.append((split["shared_width_j"], split["local_width_j"]))
 
@@ -750,7 +1014,7 @@ def _build_independent_record(
             corner_widened_unguarded_floor_j=corner,
             point_unguarded_floor_j=point,
         )
-    except ValueError as exc:
+    except ValueError:
         return {
             "status": "refused",
             "ratio_id": DOMINANCE_RATIO_ID,
@@ -760,7 +1024,9 @@ def _build_independent_record(
             "threshold": DOMINANCE_THRESHOLD,
             "comparison": DOMINANCE_COMPARISON,
             "passes": None,
-            "refusal_reason": str(exc),
+            "refusal_reason": _closed_refusal_code(
+                _independent_refusal_code(point=point, corner=corner)
+            ),
         }
     return {
         "status": "complete",
@@ -781,9 +1047,9 @@ def _point_unguarded_floor_from_component(
         parent = component[parent_key]
         prediction = component["prediction_component_j"]
     except KeyError as exc:
-        raise ValueError(f"point_floor_parent_missing:{exc.args[0]}") from exc
+        raise ValueError(CLOSEOUT_INPUT_MALFORMED_SOURCE) from exc
     if not _is_finite_nonnegative(parent) or not _is_finite_nonnegative(prediction):
-        raise ValueError("point_floor_parent_nonfinite_or_negative")
+        raise ValueError(_POINT_FLOOR_PARENT_INVALID)
     estimate = SimpleNamespace(
         max_abs_deviation_j=float(parent),
         prediction_component_j=float(prediction),
@@ -815,6 +1081,10 @@ def _validate_independent_record(
         point_unguarded_floor_j=point,
         corner_widened_unguarded_floor_j=corner,
     )
+    if value["status"] == "refused" and value["refusal_reason"] not in (
+        D165_CLOSEOUT_REFUSAL_CODES
+    ):
+        errors.append(f"{where}.refusal_reason: not in closed refusal enumeration")
     if dict(value) != expected:
         errors.append(f"{where}: does not match dominance_ratio")
 
@@ -1163,7 +1433,7 @@ def _refused_closeout_common_record(cell_id: str, reason: str) -> dict[str, Any]
         "threshold": DOMINANCE_THRESHOLD,
         "comparison": DOMINANCE_COMPARISON,
         "passes": None,
-        "refusal_reason": reason,
+        "refusal_reason": _closed_refusal_code(reason),
     }
 
 
@@ -1219,10 +1489,10 @@ def _validate_closeout_common_record(
             )
         ):
             errors.append(f"{where}: refused records must use null result fields")
-        if not isinstance(value["refusal_reason"], str) or not value[
-            "refusal_reason"
-        ]:
-            errors.append(f"{where}.refusal_reason: must name the refusal")
+        if value["refusal_reason"] not in D165_CLOSEOUT_REFUSAL_CODES:
+            errors.append(
+                f"{where}.refusal_reason: not in closed refusal enumeration"
+            )
     else:
         errors.append(f"{where}.status: invalid")
     if value["ratio_id"] != COMMON_MODE_RATIO_ID:
@@ -1367,7 +1637,7 @@ def _sidecar_floor_alignment_errors(
                     f"replay_sidecar.cells[{cell_id!r}].{component}.independent: "
                     "source mismatch"
                 )
-    return errors
+    return [_closed_refusal_code(error) for error in errors]
 
 
 def _manifest_replay_sidecar_attachment_errors(
@@ -1388,27 +1658,27 @@ def _manifest_replay_sidecar_attachment_errors(
     if not isinstance(attachment, Mapping) or set(attachment) != (
         _REPLAY_SIDECAR_ATTACHMENT_KEYS
     ):
-        return ["manifest_lacks_replay_sidecar"]
+        return [_MANIFEST_LACKS_REPLAY_SIDECAR]
     if not isinstance(attachment["path"], str) or not attachment["path"]:
-        return ["manifest_lacks_replay_sidecar"]
+        return [_MANIFEST_LACKS_REPLAY_SIDECAR]
     if not isinstance(attachment["sha256"], str) or _SHA256_RE.fullmatch(
         attachment["sha256"]
     ) is None:
-        return ["replay_sidecar_digest_mismatch"]
+        return [_REPLAY_SIDECAR_DIGEST_MISMATCH]
     if not isinstance(attachment["schema_version"], str) or not isinstance(
         attachment["sidecar_id"], str
     ):
-        return ["replay_sidecar_identity_mismatch"]
+        return [_REPLAY_SIDECAR_IDENTITY_MISMATCH]
     if replay_sidecar_bytes is not None and (
         not isinstance(replay_sidecar_bytes, bytes)
         or attachment["sha256"] != _raw_sha256(replay_sidecar_bytes)
     ):
-        return ["replay_sidecar_digest_mismatch"]
+        return [_REPLAY_SIDECAR_DIGEST_MISMATCH]
     if not isinstance(replay_sidecar, Mapping) or (
         attachment["sidecar_id"] != replay_sidecar.get("sidecar_id")
         or attachment["schema_version"] != replay_sidecar.get("schema_version")
     ):
-        return ["replay_sidecar_identity_mismatch"]
+        return [_REPLAY_SIDECAR_IDENTITY_MISMATCH]
     return []
 
 
@@ -1453,7 +1723,7 @@ def _floor_member_census_error(
     for cell_id, sidecar_cell in sidecar_cells.items():
         comparative = sidecar_cell.get("comparative")
         if not isinstance(comparative, Mapping):
-            return "floor_member_census_mismatch"
+            return _FLOOR_MEMBER_CENSUS_MISMATCH
         if comparative.get("estimator") == "default":
             continue
         try:
@@ -1462,7 +1732,7 @@ def _floor_member_census_error(
             floor_blocks = floor_comparative["blocks"]
             n_blocks = floor_comparative["n_blocks"]
         except (KeyError, TypeError):
-            return "floor_member_census_mismatch"
+            return _FLOOR_MEMBER_CENSUS_MISMATCH
         if (
             not isinstance(sidecar_blocks, list)
             or not isinstance(floor_blocks, list)
@@ -1471,7 +1741,7 @@ def _floor_member_census_error(
             or len(sidecar_blocks) != n_blocks
             or len(floor_blocks) != n_blocks
         ):
-            return "floor_member_census_mismatch"
+            return _FLOOR_MEMBER_CENSUS_MISMATCH
 
         def by_id(rows: Sequence[object]) -> dict[str, Mapping[str, Any]] | None:
             result: dict[str, Mapping[str, Any]] = {}
@@ -1495,16 +1765,16 @@ def _floor_member_census_error(
             or floor_by_id is None
             or set(sidecar_by_id) != set(floor_by_id)
         ):
-            return "floor_member_census_mismatch"
+            return _FLOOR_MEMBER_CENSUS_MISMATCH
         for block_id, sidecar_block in sidecar_by_id.items():
             floor_block = floor_by_id[block_id]
             floor_members = floor_block.get("members")
             if not isinstance(floor_members, list):
-                return "floor_member_census_mismatch"
+                return _FLOOR_MEMBER_CENSUS_MISMATCH
             positioned: dict[str, str] = {}
             for member in floor_members:
                 if not isinstance(member, Mapping):
-                    return "floor_member_census_mismatch"
+                    return _FLOOR_MEMBER_CENSUS_MISMATCH
                 position = member.get("position")
                 bundle_id = member.get("bundle_id")
                 if (
@@ -1513,7 +1783,7 @@ def _floor_member_census_error(
                     or not isinstance(bundle_id, str)
                     or not bundle_id
                 ):
-                    return "floor_member_census_mismatch"
+                    return _FLOOR_MEMBER_CENSUS_MISMATCH
                 positioned[str(position)] = bundle_id
             sidecar_members = sidecar_block.get("members")
             if (
@@ -1522,7 +1792,7 @@ def _floor_member_census_error(
                 or dict(sidecar_members) != positioned
                 or not _close(sidecar_block.get("delta_j"), floor_block.get("delta_j"))
             ):
-                return "floor_member_census_mismatch"
+                return _FLOOR_MEMBER_CENSUS_MISMATCH
     return None
 
 
@@ -1561,10 +1831,10 @@ def _contrast_floor_binding_error(
                 return CLOSEOUT_INPUT_MALFORMED
             floor_cell_id = arm.get("floor_cell_id")
             if not isinstance(floor_cell_id, str) or not floor_cell_id:
-                return "floor_cell_unresolved"
+                return _FLOOR_CELL_UNRESOLVED
             floor_cell = floor_cells.get(floor_cell_id)
             if floor_cell is None:
-                return "floor_cell_unresolved"
+                return _FLOOR_CELL_UNRESOLVED
             key = floor_cell.get("key")
             eligibility = floor_cell.get("eligibility")
             source_regime = floor_cell.get("source_regime")
@@ -1573,7 +1843,7 @@ def _contrast_floor_binding_error(
                     arm["floor_stack_identity"]
                 )
             except (KeyError, TypeError, ValueError):
-                return "floor_cell_unresolved"
+                return _FLOOR_CELL_UNRESOLVED
             if (
                 not isinstance(key, Mapping)
                 or key.get("condition_family_id")
@@ -1586,7 +1856,7 @@ def _contrast_floor_binding_error(
                 or source_regime.get("stack_identity_sha256")
                 != expected_stack_sha
             ):
-                return "floor_cell_unresolved"
+                return _FLOOR_CELL_UNRESOLVED
             sidecar_cell = sidecar_cells.get(floor_cell_id)
             comparative = (
                 sidecar_cell.get("comparative")
@@ -1598,7 +1868,7 @@ def _contrast_floor_binding_error(
                 or comparative.get("estimator") != "common_mode"
                 or not isinstance(comparative.get("common_mode_replay"), Mapping)
             ):
-                return "cell_not_common_mode"
+                return _CELL_NOT_COMMON_MODE
     return None
 
 
@@ -1624,7 +1894,7 @@ def _source_precondition_errors(
             except (TypeError, ValueError):
                 expected_manifest_id = None
             if finalized_manifest.get("manifest_id") != expected_manifest_id:
-                errors.append("finalized_manifest_id_mismatch")
+                errors.append(_FINALIZED_MANIFEST_ID_MISMATCH)
         if (
             finalized_manifest.get("schema_version")
             != FINALIZED_MANIFEST_SCHEMA_VERSION
@@ -1673,7 +1943,7 @@ def _source_precondition_errors(
         )
         if census_error is not None:
             errors.append(census_error)
-    return errors
+    return [_closed_refusal_code(error) for error in errors]
 
 
 def _expected_global_fields(
@@ -1687,7 +1957,14 @@ def _expected_global_fields(
         if record.get("status") == "refused"
     ]
     if source_errors or refused:
-        reason = str(source_errors[0]) if source_errors else refused[0]
+        reason = _closed_refusal_code(
+            source_errors[0] if source_errors else refused[0],
+            fallback=(
+                CLOSEOUT_INPUT_MALFORMED_SOURCE
+                if source_errors
+                else CLOSEOUT_INPUT_MALFORMED
+            ),
+        )
         return {
             "all_independent_pass": None,
             "all_required_common_mode_pass": None,
@@ -1791,7 +2068,7 @@ def validate_d165_closeout(
         else []
     )
     source_errors: list[str] = []
-    malformed_path = "closeout.independent_ratios"
+    malformed_reason = CLOSEOUT_INPUT_MALFORMED_RECORDS
     try:
         if not isinstance(independent, list) or len(independent) != 8:
             errors.append(
@@ -1830,7 +2107,7 @@ def validate_d165_closeout(
                     "4 comparative"
                 )
 
-        malformed_path = "closeout.comparative_common_mode_ratios"
+        malformed_reason = CLOSEOUT_INPUT_MALFORMED_COMPARATIVE_RECORDS
         if not isinstance(common, list) or len(common) != 4:
             errors.append(
                 "closeout.comparative_common_mode_ratios: must contain exactly "
@@ -1861,7 +2138,7 @@ def validate_d165_closeout(
             if set(cell_ids) != independent_cell_ids:
                 errors.append("closeout: ordinary and common-mode cell census differs")
 
-        malformed_path = "source.census_or_block_membership"
+        malformed_reason = CLOSEOUT_INPUT_MALFORMED_SOURCE
         source_errors = _source_precondition_errors(
             finalized_manifest,
             floor_artifact,
@@ -1949,7 +2226,7 @@ def validate_d165_closeout(
                             f"[{cell_id!r}]: source result mismatch"
                         )
     except TypeError:
-        source_errors = [f"closeout_input_malformed: {malformed_path}"]
+        source_errors = [malformed_reason]
 
     if len(independent_records) == 8 and len(common_records) == 4:
         if source_errors and value["refusal_reason"] != source_errors[0]:

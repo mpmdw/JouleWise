@@ -1,0 +1,311 @@
+{
+  "pending_roles": {
+    "production.reported_energy_parents.qwen3-1p7b.v5": {
+      "authority": "git_blob",
+      "base": "repository",
+      "family": "reported_energy_parents",
+      "input_role": "extraction_spec",
+      "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json",
+      "status": "pending_desk_day"
+    }
+  },
+  "roles": {
+    "fixture.claim_evidence": {
+      "family": "claim_evidence",
+      "inputs": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "7669956645455e7adf9be58014b6540ad2bf22e11390fee6060e337bd7798e53",
+          "path": "claim_evidence/inputs/claim_verdicts.json",
+          "role": "claim_verdicts"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "f25c1af5d108b8b99c2ef69c3f4adf620c46f960cd28e646bfe371d85510a179",
+          "path": "claim_evidence/inputs/claim_side_bound.json",
+          "role": "claim_side_bound"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "0efd2f7af7b44304dff64a173559cf8c156323ad12929b29c96e00a383ea807f",
+          "path": "claim_evidence/inputs/finalized_manifest.json",
+          "role": "finalized_manifest"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "532d33e21b6a61fe40fbb97732004733bb6514dc78720e3721bfe62650978b45",
+          "path": "claim_evidence/inputs/floor_artifact.json",
+          "role": "floor_artifact"
+        }
+      ],
+      "inventory": {
+        "base": "runs_root",
+        "expected_sha256": "37a75570ad222ebab5cd50d4a93f274669f508dbe27750900bef9f128653b249",
+        "path": "claim_evidence/inventory.json"
+      },
+      "issuance_gate_id": null,
+      "mode": "test_fixture_non_issuing",
+      "receipt": {
+        "base": "runs_root",
+        "expected_sha256": "27f8150aa7834402610686e93bed7b679d8cdc5169c04e920e84ad576a5a4c54",
+        "path": "claim_evidence/inputs/validator_receipt.json"
+      },
+      "source_census": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "bf300b3d71fbe0ec806257c78208b3afd1e8832e71d1ee8736a2de5cf14ee6df",
+          "path": "claim_evidence/sources/member.json"
+        }
+      ],
+      "subjects": [],
+      "validator": "joulewise.paper_custody.claim_evidence.v1"
+    },
+    "fixture.d165_closeout": {
+      "family": "d165_closeout",
+      "inputs": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "5becc2c3f594db53a583445c956edd2d203a9deebb2eab71b32c44a114d5a197",
+          "path": "d165_closeout/inputs/d165_closeout.json",
+          "role": "d165_closeout"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "570d836db261657aad6cc396807088bb96b59481c9074b988b9d9db8bcfafa6b",
+          "path": "d165_closeout/inputs/finalized_manifest.json",
+          "role": "finalized_manifest"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "4474eb8124743577efa26c416b6055cb36f24572667fd3e88c8f38e2cfba53d6",
+          "path": "d165_closeout/inputs/floor_artifact.json",
+          "role": "floor_artifact"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "363d4ece47ab3255df944f5cfb7f8aac0f9af87e9f84cd66c7a8daaa9bf53010",
+          "path": "d165_closeout/inputs/replay_sidecar.json",
+          "role": "replay_sidecar"
+        }
+      ],
+      "inventory": {
+        "base": "runs_root",
+        "expected_sha256": "c6db071efd46dcae24fdf7bce9ff417729445735ebc94082a3091078ce6519cc",
+        "path": "d165_closeout/inventory.json"
+      },
+      "issuance_gate_id": null,
+      "mode": "test_fixture_non_issuing",
+      "receipt": {
+        "base": "runs_root",
+        "expected_sha256": "00b1bb9550b5b3296ab6ce94ee30ee6909e13770f931a180144c1a1ad9dc2378",
+        "path": "d165_closeout/inputs/validator_receipt.json"
+      },
+      "source_census": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "dd407197f4f30fd85d1abd431bf0d08fb9f4476a8449ae89686149283479a415",
+          "path": "d165_closeout/sources/member.json"
+        }
+      ],
+      "subjects": [],
+      "validator": "joulewise.paper_custody.d165_closeout.v1"
+    },
+    "fixture.reported_energy_parents": {
+      "family": "reported_energy_parents",
+      "inputs": [
+        {
+          "authority": "git_blob",
+          "base": "repository",
+          "expected_sha256": "4f21e26ceb332ba2b5ae5a6c389bcda4364c860323cc34d9949fc41e1864200b",
+          "path": "tests/fixtures/paper_custody/extraction_spec.json",
+          "role": "extraction_spec"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "9a963913353061b0720ff85b255a20f98107896faadfb3f557abd0fb5655438d",
+          "path": "reported_energy_parents/inputs/extraction_report.json",
+          "role": "extraction_report"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "73614c7b2ebd20dca2f1cab55d2ff229213be48fe3e73b3598d426d3da49c735",
+          "path": "reported_energy_parents/inputs/whole_window_basis.json",
+          "role": "whole_window_basis"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "5bd6b52d2bcd5990f27fcf79856213341d25256f6a68a0054ebf66ff7ff03daa",
+          "path": "reported_energy_parents/inputs/g2a_selection.json",
+          "role": "g2a_selection"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "725c7ac1db29f67d07e4d4f0de713f4819dcc65ae51c08c13c3952fcb8bb5395",
+          "path": "reported_energy_parents/inputs/prompt_pin.json",
+          "role": "prompt_pin"
+        }
+      ],
+      "inventory": {
+        "base": "runs_root",
+        "expected_sha256": "321bcb592b9bf800072c906707926dddf8c206befdecc798fe2b78effac29f33",
+        "path": "reported_energy_parents/inventory.json"
+      },
+      "issuance_gate_id": null,
+      "mode": "test_fixture_non_issuing",
+      "receipt": {
+        "base": "runs_root",
+        "expected_sha256": "c76d635466573e2c15977b9b5e45d5efe5953835494826c153c83ac9075e5b28",
+        "path": "reported_energy_parents/inputs/validator_receipt.json"
+      },
+      "source_census": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "c155ab979402b861ec370537f9f8b94eb1b69ed99fe62e88c1665c36102c38cf",
+          "path": "reported_energy_parents/sources/member.json"
+        }
+      ],
+      "subjects": [],
+      "validator": "joulewise.paper_custody.reported_energy_parents.v1"
+    },
+    "fixture.transfer_projection": {
+      "family": "transfer_projection",
+      "inputs": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "e5bfd1c8a08855a13d80f5deea68ee6491c9bc73f2c81b59f17355b9e82e0f0e",
+          "path": "transfer_projection/inputs/transfer_result.json",
+          "role": "transfer_result"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "adb8bb7347dbbb555ca7d00726fbde8722626fd40164b486b9e4964d32a41a5e",
+          "path": "transfer_projection/inputs/reviewed_capture.json",
+          "role": "reviewed_capture"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "90a830cec21d89f263aaa833b83c46da6ecc09cf7dc30901070443e09479e63d",
+          "path": "transfer_projection/inputs/plan.json",
+          "role": "plan"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "364fa3f2d07890f8b19be2274ca895c3e319483156dee46a4b27fc18cb201fc8",
+          "path": "transfer_projection/inputs/pre_data_receipt.json",
+          "role": "pre_data_receipt"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "d26f1693bb19c7b5d1300b8cfc187f6af21c167e713b6a2a8b189ad0607939b0",
+          "path": "transfer_projection/inputs/pulse_bound_source.json",
+          "role": "pulse_bound_source"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "2626af33d4598b382fcfe0954b3383e2f47232610b5d1d09edeab09ad7672320",
+          "path": "transfer_projection/inputs/bundle_inventory.json",
+          "role": "bundle_inventory"
+        }
+      ],
+      "inventory": {
+        "base": "runs_root",
+        "expected_sha256": "5d449ad21344d3dead581ac49ed59d78335eb3944d6dfe03571c61e1a29463a4",
+        "path": "transfer_projection/inventory.json"
+      },
+      "issuance_gate_id": null,
+      "mode": "test_fixture_non_issuing",
+      "receipt": {
+        "base": "runs_root",
+        "expected_sha256": "4b9ff4dea0f2f68d43a1f60da68652d64bfd3fbf9fd5ac7d24985b5792779a57",
+        "path": "transfer_projection/inputs/validator_receipt.json"
+      },
+      "source_census": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "325dd2e21b03927691c4590db96eebb2383d3b60653235689d927b730f6a764f",
+          "path": "transfer_projection/sources/member.json"
+        }
+      ],
+      "subjects": [],
+      "validator": "joulewise.paper_custody.transfer_projection.v1"
+    },
+    "fixture.whole_window_verdict": {
+      "family": "whole_window_verdict",
+      "inputs": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "f2399c537c768da40bae52f3b5849a866578624caff39d55a0e7b8189b739ef0",
+          "path": "whole_window_verdict/inputs/campaign_log.jsonl",
+          "role": "campaign_log"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "df19624668cad5538c92979e97c7e69801c73b53baad46dc70c3bb4649d1d1f8",
+          "path": "whole_window_verdict/inputs/standalone_verdict.json",
+          "role": "standalone_verdict"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "581b678a0e5346524a078bdbc430948e8eb002781eabc8cd8a798c16806d6c05",
+          "path": "whole_window_verdict/inputs/prospective_manifest.json",
+          "role": "prospective_manifest"
+        },
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "82ed8cbca80a2c58a81d9e754f4d656e05622dd32d4ea8e499334600cff80e00",
+          "path": "whole_window_verdict/inputs/plan.json",
+          "role": "plan"
+        }
+      ],
+      "inventory": {
+        "base": "runs_root",
+        "expected_sha256": "10b946224cb69708418e1c4c34008f2bb92e31224a24f75e13e3e37c7b8b7d93",
+        "path": "whole_window_verdict/inventory.json"
+      },
+      "issuance_gate_id": null,
+      "mode": "test_fixture_non_issuing",
+      "receipt": {
+        "base": "runs_root",
+        "expected_sha256": "d2257ef42b330422d53f8b34f20278121b097ce7a7486bd206640b3c559fecd4",
+        "path": "whole_window_verdict/inputs/validator_receipt.json"
+      },
+      "source_census": [
+        {
+          "authority": "generated",
+          "base": "runs_root",
+          "expected_sha256": "1d166ff4b08e3c2a99d6264bad03c36365a6d0c70716fe980f0d858b221ed239",
+          "path": "whole_window_verdict/sources/member.json"
+        }
+      ],
+      "subjects": [],
+      "validator": "joulewise.paper_custody.whole_window_verdict.v1"
+    }
+  },
+  "schema_version": "joulewise.paper_supply_map.v2"
+}

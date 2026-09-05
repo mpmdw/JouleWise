@@ -20,3 +20,12 @@ Residual carried: draft line ~1738 (ledger vocabulary "timing error common to") 
 found by the D-165 census; it is a paper-side one-row cure queued for the next paper round.
 
 Verdict: LANDABLE, stacked on paper-K (#288). Full-suite replay on the merged head before merge.
+
+## Addendum 2026-09-05 — post-review commits through 3f391094 (magistrate, this session)
+
+Read and bench-verified: the merges of origin/main (paper-K, seam, F+B context), the D-166 identity-set
+regression diagnosis (astra chose to keep the intended singleton A/decode identity and repair the synthetic
+fixture; report 06), the Opus delta (report 07: option (b) confirmed, S1 coverage loss), and the singleton
+production-path test (report 08). At my bench: FrozenConsumerIdentitySetTests 14 OK, test_analysis_inputs 20
+OK, test_d117_contrast_v5_pack 44 OK. CI green at 3f391094; full replay recorded in file 07. Merge candidate:
+3f391094 plus this record. Verdict: LANDABLE.

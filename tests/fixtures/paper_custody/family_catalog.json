@@ -1,0 +1,11 @@
+{
+  "families": [
+    "claim_evidence",
+    "d165_closeout",
+    "reported_energy_parents",
+    "transfer_projection",
+    "whole_window_verdict"
+  ],
+  "marker": "synthetic-no-measurement-value",
+  "schema_version": "joulewise.paper_custody_fixture_catalog.v1"
+}

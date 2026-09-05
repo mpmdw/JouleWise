@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise.detection_floor import (
+    SINGLE_COUNT_DISCIPLINE_ID_V1,
     STACK_IDENTITY_DOMAIN,
     attribution_single_count_discipline,
     canonical_domain_sha256,
@@ -1486,12 +1487,115 @@ class ConstructionTests(unittest.TestCase):
         artifact = make_artifact()
         statement = mint.render_single_count_statement(artifact)
         canonical = attribution_single_count_discipline()
-        self.assertIn(canonical["statement"], statement)
-        self.assertIn(canonical["effective_clearable_effect_formula"], statement)
+        self.assertIn(canonical["note"], statement)
+        self.assertIn(canonical["planning_sizing_expression"], statement)
 
-        artifact["cells"][0]["single_count_discipline"]["statement"] = "tampered"
+        artifact["cells"][0]["single_count_discipline"]["note"] = "tampered"
         with self.assertRaisesRegex(mint.MintError, "not canonical"):
             mint.render_single_count_statement(artifact)
+
+    def test_frozen_v1_carriers_keep_bytes_and_render_through_v1_branch(self) -> None:
+        expected_hashes = {
+            "df-ph-decode-floor-mint1.json": (
+                "559ab5ede19e5aba4110fca2177773458ac93d3248d3f7d143cc86d2071188a8"
+            ),
+            "docs/paper/fill-rehearsal/dominance-reproduced-alpha-extraction.json": (
+                "5bd4d748d7ec7477f72b31c23aa47090737aaae2ca335c2f4b9a58e4a9575755"
+            ),
+            "docs/paper/fill-rehearsal/dominance-reproduced-alpha-floor.json": (
+                "ecea77fcbe16e7b36f42cccc8174d70e27656d414f2928de6791445e48f228c9"
+            ),
+            "docs/paper/fill-rehearsal/dominance-reproduced-beta-extraction.json": (
+                "06f9b63d020098f0d67bb2dd48e9442d36f7922a494b70463439e865e877a066"
+            ),
+            "docs/paper/fill-rehearsal/dominance-reproduced-beta-floor.json": (
+                "da611926e4a4eda3207b1f5a92c2cf204aa1c769f5e65aeec1a97cb0031b90c1"
+            ),
+        }
+        legacy = attribution_single_count_discipline(
+            SINGLE_COUNT_DISCIPLINE_ID_V1
+        )
+        for relative_path, expected_hash in expected_hashes.items():
+            with self.subTest(path=relative_path):
+                path = REPO_ROOT / relative_path
+                raw = path.read_bytes()
+                self.assertEqual(hashlib.sha256(raw).hexdigest(), expected_hash)
+                statement = mint.render_single_count_statement(json.loads(raw))
+                self.assertIn(legacy["statement"], statement)
+                self.assertIn(
+                    legacy["effective_clearable_effect_formula"], statement
+                )
+
+    def test_single_count_statement_refuses_mixed_versions(self) -> None:
+        for path in (
+            ("cells", 0),
+            ("cells", 0, "comparative"),
+            ("transport_groups", 0),
+            (),
+        ):
+            artifact = make_artifact()
+            carrier = artifact
+            for key in path:
+                carrier = carrier[key]
+            carrier["single_count_discipline"] = (
+                attribution_single_count_discipline(SINGLE_COUNT_DISCIPLINE_ID_V1)
+            )
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
+                floor = Path(tmp) / "floor.json"
+                statement = Path(tmp) / "single-count.txt"
+                with self.assertRaisesRegex(mint.MintError, "mixes.*rule versions"):
+                    mint.render_single_count_statement(artifact)
+                with self.assertRaisesRegex(mint.MintError, "mixes.*rule versions"):
+                    mint.write_outputs_exclusive(artifact, floor, statement)
+                self.assertFalse(floor.exists())
+                self.assertFalse(statement.exists())
+
+    def test_localized_malformed_discipline_refuses_before_output(self) -> None:
+        missing = object()
+        paths = (
+            ("cells", 0),
+            ("cells", 0, "comparative"),
+            ("transport_groups", 0),
+        )
+        for rule_id in (SINGLE_COUNT_DISCIPLINE_ID_V1, None):
+            canonical = (
+                attribution_single_count_discipline(rule_id)
+                if rule_id is not None
+                else attribution_single_count_discipline()
+            )
+            baseline = make_artifact()
+            for path in paths:
+                carrier = baseline
+                for key in path:
+                    carrier = carrier[key]
+                carrier["single_count_discipline"] = copy.deepcopy(canonical)
+            self.assertEqual(validate_floor_artifact(baseline), [])
+            self.assertTrue(mint.render_single_count_statement(baseline))
+            for path in paths:
+                for bad in (None, [], "bad", {}, missing):
+                    for operation in ("render", "write"):
+                        with self.subTest(
+                            rule_id=canonical["rule_id"], path=path,
+                            bad="missing" if bad is missing else bad,
+                            operation=operation,
+                        ), tempfile.TemporaryDirectory() as tmp:
+                            artifact = copy.deepcopy(baseline)
+                            carrier = artifact
+                            for key in path:
+                                carrier = carrier[key]
+                            if bad is missing:
+                                del carrier["single_count_discipline"]
+                            else:
+                                carrier["single_count_discipline"] = bad
+                            floor = Path(tmp) / "floor.json"
+                            statement = Path(tmp) / "single-count.txt"
+                            with self.assertRaisesRegex(mint.MintError, "not canonical"):
+                                if operation == "render":
+                                    mint.render_single_count_statement(artifact)
+                                else:
+                                    mint.write_outputs_exclusive(artifact, floor, statement)
+                            self.assertFalse(floor.exists())
+                            self.assertFalse(statement.exists())
 
     def test_exclusive_outputs_refuse_overwrite(self) -> None:
         artifact = make_artifact()

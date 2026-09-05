@@ -21,6 +21,8 @@ from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from joulewise.authentication_io import read_authentication_input
+
 
 SCHEMA_VERSION = "joulewise.analysis_manifest.v3"
 PROSPECTIVE_SCHEMA_VERSION = "joulewise.analysis_manifest.v3.prospective"
@@ -64,6 +66,14 @@ RUN_ID_RE = re.compile(
 )
 POSITION_ORDER = ("A1", "B1", "B2", "A2")
 POSITION_ARMS = {"A1": "A", "B1": "B", "B2": "B", "A2": "A"}
+
+
+def _read_manifest_input(path: Path, *, label: str) -> bytes:
+    suffix = Path(path).suffix.lower()
+    grammar = (
+        "jsonl" if suffix == ".jsonl" else "json" if suffix == ".json" else "raw"
+    )
+    return read_authentication_input(path, grammar=grammar, label=label)
 
 ARM_FREEZE: Mapping[str, Mapping[str, Any]] = {
     "A": {
@@ -414,7 +424,7 @@ def _exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -
 
 def _read_object(path: Path) -> tuple[Mapping[str, Any], bytes]:
     try:
-        raw = path.read_bytes()
+        raw = _read_manifest_input(path, label="analysis manifest object")
         value = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise AnalysisManifestV3Error(f"cannot read JSON object {path}: {exc}") from exc
@@ -558,7 +568,9 @@ def build_analysis_manifest_v3(campaign_dir: Path) -> dict[str, Any]:
         if not isinstance(config, str):
             raise AnalysisManifestV3Error(f"{run_id}: config path is invalid")
         try:
-            config_raw = (campaign_dir / config).read_bytes()
+            config_raw = _read_manifest_input(
+                campaign_dir / config, label=f"analysis manifest config {config}"
+            )
         except OSError as exc:
             raise AnalysisManifestV3Error(f"cannot read config {config}: {exc}") from exc
         entry_id = f"entry-{run_id}"
@@ -663,7 +675,7 @@ def _validate_file_ref(
     if manifest_dir is not None and isinstance(path_text, str):
         path = manifest_dir / path_text
         try:
-            raw = path.read_bytes()
+            raw = _read_manifest_input(path, label=where)
         except OSError as exc:
             errors.append(f"{where}.path: cannot read source: {exc}")
         else:
@@ -808,7 +820,10 @@ def validate_analysis_manifest_v3(
                         )
                     if manifest_dir is not None:
                         try:
-                            raw = (manifest_dir / ref["path"]).read_bytes()
+                            raw = _read_manifest_input(
+                                manifest_dir / ref["path"],
+                                label=f"condition family {index}",
+                            )
                         except OSError as exc:
                             errors.append(
                                 f"manifest.source.condition_families[{index}].path: {exc}"
@@ -927,7 +942,9 @@ def validate_analysis_manifest_v3(
             errors.append(f"{where}.config: must be a safe relative path")
         elif manifest_dir is not None:
             try:
-                raw = (manifest_dir / config).read_bytes()
+                raw = _read_manifest_input(
+                    manifest_dir / config, label=f"manifest entry {entry_id} config"
+                )
             except OSError as exc:
                 errors.append(f"{where}.config: cannot read: {exc}")
             else:
@@ -1434,7 +1451,7 @@ def _strict_json_bytes(raw: bytes, label: str) -> Mapping[str, Any]:
 
 def _read_strict_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]:
     try:
-        raw = Path(path).read_bytes()
+        raw = _read_manifest_input(Path(path), label=label)
     except OSError as exc:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_input_unreadable", f"{label}: {exc}"
@@ -1783,7 +1800,7 @@ def _validate_file_binding(
         )
         return None
     try:
-        raw = path.read_bytes()
+        raw = _read_manifest_input(path, label=where)
         parsed = _strict_json_bytes(raw, where)
     except (OSError, AnalysisManifestFinalizationError) as exc:
         _refusal(
@@ -2871,7 +2888,7 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
         )
 
     try:
-        tree_raw = Path(plan_tree_path).read_bytes()
+        tree_raw = _read_manifest_input(Path(plan_tree_path), label="plan tree")
         tree = _strict_json_bytes(tree_raw, "plan tree")
     except (OSError, AnalysisManifestFinalizationError) as exc:
         _refusal(
@@ -2905,7 +2922,9 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                     "plan tree analysis-manifest path is unsafe or missing",
                 )
             else:
-                raw = manifest_path.read_bytes()
+                raw = _read_manifest_input(
+                    manifest_path, label="plan-tree prospective pin"
+                )
                 try:
                     parsed = _strict_json_bytes(raw, "plan-tree prospective pin")
                 except AnalysisManifestFinalizationError:
@@ -3078,7 +3097,11 @@ def _verify_basis_members(
             ("summary_metrics.json", "summary_sha256"),
         ):
             path = _safe_relative_file(Path(runs_root), f"{bundle_path}/{filename}")
-            if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != occurrence.get(key):
+            if path is None or hashlib.sha256(
+                _read_manifest_input(
+                    path, label=f"evaluation-basis {bundle_id}/{filename}"
+                )
+            ).hexdigest() != occurrence.get(key):
                 raise AnalysisManifestFinalizationError(
                     "analysis_finalization_attachment_invalid",
                     f"evaluation-basis bytes for {bundle_id!r}/{filename} do not match",
@@ -3098,7 +3121,10 @@ def _verify_basis_members(
             from joulewise.schemas import BenchmarkConfig
 
             source = _strict_json_bytes(
-                source_path.read_bytes(), f"frozen config for {bundle_id}"
+                _read_manifest_input(
+                    source_path, label=f"frozen config for {bundle_id}"
+                ),
+                f"frozen config for {bundle_id}",
             )
             normalized = (
                 json.dumps(
@@ -3113,7 +3139,9 @@ def _verify_basis_members(
                 "analysis_finalization_member_cover_mismatch",
                 f"frozen config for {bundle_id!r} cannot derive bundle bytes: {exc}",
             ) from exc
-        if hashlib.sha256(bundle.read_bytes()).hexdigest() != hashlib.sha256(
+        if hashlib.sha256(
+            _read_manifest_input(bundle, label=f"bundle config for {bundle_id}")
+        ).hexdigest() != hashlib.sha256(
             normalized
         ).hexdigest():
             raise AnalysisManifestFinalizationError(
@@ -3181,8 +3209,18 @@ def _derive_arms_and_entries(
                         f"authenticated bundle path is missing for {member['run_id']}",
                     )
                 try:
-                    raw_config = json.loads((bundle / "config.json").read_bytes())
-                    metadata = json.loads((bundle / "metadata.json").read_bytes())
+                    raw_config = json.loads(
+                        _read_manifest_input(
+                            bundle / "config.json",
+                            label=f"realized config for {member['run_id']}",
+                        )
+                    )
+                    metadata = json.loads(
+                        _read_manifest_input(
+                            bundle / "metadata.json",
+                            label=f"realized metadata for {member['run_id']}",
+                        )
+                    )
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                     raise AnalysisManifestFinalizationError(
                         "analysis_finalization_attachment_invalid",
@@ -3300,11 +3338,17 @@ def _floor_consumer_contexts(
                     continue
                 bundle = bundle_paths[member["run_id"]]
                 raw_config = _strict_json_bytes(
-                    (bundle / "config.json").read_bytes(),
+                    _read_manifest_input(
+                        bundle / "config.json",
+                        label=f"floor selector config for {member['run_id']}",
+                    ),
                     f"floor selector config for {member['run_id']}",
                 )
                 metadata = _strict_json_bytes(
-                    (bundle / "metadata.json").read_bytes(),
+                    _read_manifest_input(
+                        bundle / "metadata.json",
+                        label=f"floor selector metadata for {member['run_id']}",
+                    ),
                     f"floor selector metadata for {member['run_id']}",
                 )
                 hardware = raw_config.get("hardware_target")
@@ -3559,7 +3603,7 @@ def _authenticate_finalization_inputs(
     ledger_path, ledger_relative = _path_under_root(
         calibration_ledger_path, custody_input, "calibration ledger"
     )
-    ledger_raw = ledger_path.read_bytes()
+    ledger_raw = _read_manifest_input(ledger_path, label="calibration ledger")
     if schemas.get("calibration_ledger") != _LEDGER_SCHEMA:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_invalid",
@@ -3690,11 +3734,13 @@ def _authenticate_finalization_inputs(
             + ", ".join(verdict_reasons),
         )
     try:
+        campaign_raw = _read_manifest_input(
+            resolved_runs / "campaign_log.jsonl",
+            label="whole-window campaign log",
+        )
         campaign_rows = [
             _strict_json_bytes(line.encode("utf-8"), "campaign-log verdict")
-            for line in (resolved_runs / "campaign_log.jsonl")
-            .read_text(encoding="utf-8")
-            .splitlines()
+            for line in campaign_raw.decode("utf-8").splitlines()
             if line.strip()
         ]
     except (OSError, UnicodeDecodeError, AnalysisManifestFinalizationError) as exc:
@@ -4055,7 +4101,7 @@ def finalize_prospective_analysis_manifest_v3(
         aggregate_floor_artifact_path=aggregate_floor_artifact_path,
         dominance_replay_sidecar_path=dominance_replay_sidecar_path,
     )
-    tree_raw = tree_path.read_bytes()
+    tree_raw = _read_manifest_input(tree_path, label="finalized plan tree")
     manifest = _build_finalized_manifest(
         prospective,
         prospective_relative=prospective_relative,
@@ -4129,8 +4175,10 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
             "prospective/plan-tree lineage path is unsafe or missing",
         )
         return tuple(refusals)
-    prospective_raw = prospective_path.read_bytes()
-    tree_raw = tree_path.read_bytes()
+    prospective_raw = _read_manifest_input(
+        prospective_path, label="finalized prospective lineage"
+    )
+    tree_raw = _read_manifest_input(tree_path, label="finalized plan-tree lineage")
     try:
         prospective = _strict_json_bytes(
             prospective_raw, "finalized prospective lineage"
@@ -4314,7 +4362,8 @@ def _validate_finalized_analysis_manifest_v3_unchecked(
         return tuple(refusals)
     try:
         bracket = _strict_json_bytes(
-            bracket_path.read_bytes(), "finalized bracket lineage"
+            _read_manifest_input(bracket_path, label="finalized bracket lineage"),
+            "finalized bracket lineage",
         )
         if not isinstance(bracket, Mapping) or not isinstance(
             bracket.get("runs_root"), str

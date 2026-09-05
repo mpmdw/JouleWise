@@ -66,6 +66,7 @@ from joulewise.analysis_engine.sensitivity import (
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    SINGLE_COUNT_DISCIPLINE_ID_V1,
     STACK_IDENTITY_DOMAIN,
     attribution_single_count_discipline,
     canonical_domain_sha256,
@@ -404,6 +405,53 @@ class ClaimOutcomeTests(unittest.TestCase):
         )
         self.assertEqual(equivalent["outcome"], "equivalent")
 
+    def test_planning_sum_is_not_an_additive_claim_gate(self):
+        floor_j = 5.0
+        claim_side_bound_j = 4.0
+        estimate = 6.0
+
+        self.assertLess(estimate, floor_j + claim_side_bound_j)
+        result = evaluation(
+            estimate=estimate,
+            metrology_aware_ci95={"lower": 5.9, "upper": 6.1},
+            decision_interval={"lower": 1.9, "upper": 10.1},
+            floor_gate_j=floor_j,
+            hypothesized_direction="positive",
+        )
+
+        self.assertEqual(result["outcome"], "direction_supported")
+        self.assertTrue(result["claim_ready_for_l2_l3"])
+
+    def test_claim_consumer_accepts_and_preserves_v1_discipline(self):
+        legacy = attribution_single_count_discipline(
+            SINGLE_COUNT_DISCIPLINE_ID_V1
+        )
+        result = evaluate_claim(
+            estimate=6.0,
+            metrology_aware_ci95={"lower": 5.9, "upper": 6.1},
+            decision_interval={"lower": 1.9, "upper": 10.1},
+            floor_gate_j=5.0,
+            adjusted_rejected=True,
+            floor_metadata={
+                "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
+                "floor_source": ATTRIBUTION_FLOOR_SOURCE,
+                "point_floor_diagnostics": {
+                    "label": "repeatability_diagnostic",
+                    "published_claim_floor": False,
+                    "unguarded_floor_j": 0.1,
+                    "guard_factor": 1.0,
+                    "guarded_floor_j": 0.1,
+                },
+                "single_count_discipline": legacy,
+            },
+        )
+
+        self.assertEqual(result["outcome"], "direction_supported")
+        self.assertEqual(
+            result["floor_limit"]["single_count_discipline"],
+            legacy,
+        )
+
     def test_significant_negative_does_not_satisfy_positive_registration(self):
         result = evaluation(
             estimate=-2.0,
@@ -600,10 +648,44 @@ class ClaimOutcomeTests(unittest.TestCase):
             discipline,
         )
         self.assertEqual(
-            discipline["effective_clearable_effect_formula"],
+            discipline["planning_sizing_expression"],
             "floor_j + claim_side_bound_j",
         )
         self.assertEqual(published_contrast["deterministic_bounds"]["total"], 0.25)
+
+        legacy_published = copy.deepcopy(published)
+        legacy = attribution_single_count_discipline(
+            SINGLE_COUNT_DISCIPLINE_ID_V1
+        )
+
+        def replace_discipline(value):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key == "single_count_discipline":
+                        value[key] = copy.deepcopy(legacy)
+                    else:
+                        replace_discipline(child)
+            elif isinstance(value, list):
+                for child in value:
+                    replace_discipline(child)
+
+        replace_discipline(legacy_published)
+        legacy_published["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            legacy_published
+        )
+        self.assertEqual(validate_claim_verdicts(legacy_published), [])
+
+        mixed = copy.deepcopy(legacy_published)
+        mixed["contrasts"][0]["floor"]["resolutions"][0][
+            "single_count_discipline"
+        ] = attribution_single_count_discipline()
+        mixed["claim_verdicts_id"] = calculate_claim_verdicts_id(mixed)
+        self.assertTrue(
+            any(
+                "single_count_discipline rule versions must not be mixed" in error
+                for error in validate_claim_verdicts(mixed)
+            )
+        )
 
     def test_normative_four_j_interpolation_counterexample_fails_closed(self):
         estimate = estimate_paired_blocks(
@@ -1192,6 +1274,118 @@ class InputSeamTests(unittest.TestCase):
         }
         artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
         self.assertEqual(validate_claim_verdicts(artifact), [])
+
+    def test_combined_floor_refuses_mixed_single_count_versions(self):
+        diagnostic = {
+            "label": "repeatability_diagnostic",
+            "published_claim_floor": False,
+            "unguarded_floor_j": 0.4,
+            "guard_factor": 1.5,
+            "guarded_floor_j": 0.6,
+        }
+
+        def resolution(cell_id, discipline, diagnostics=diagnostic):
+            return FloorResolution(
+                status="exact",
+                artifact_id="df",
+                artifact_sha256=HEX,
+                source_cell_ids=(cell_id,),
+                transport_group_id=None,
+                transport_rule_id="direct",
+                floor_abs_j=0.5,
+                floor_cmp_j=1.0,
+                floor_gate_j=1.0,
+                reason_codes=(),
+                floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                point_floor_diagnostics=diagnostics,
+                single_count_discipline=discipline,
+            )
+
+        legacy = attribution_single_count_discipline(
+            SINGLE_COUNT_DISCIPLINE_ID_V1
+        )
+        current = attribution_single_count_discipline()
+        for discipline in (legacy, current):
+            combined = _combined_floor(
+                (resolution("C1", discipline), resolution("C2", discipline))
+            )
+            self.assertEqual(combined["status"], "resolved")
+            self.assertEqual(combined["single_count_discipline"], discipline)
+            for row in combined["resolutions"]:
+                self.assertEqual(row["single_count_discipline"], discipline)
+
+        for diagnostics in (diagnostic, None):
+            with self.subTest(diagnostics=diagnostics), self.assertRaisesRegex(
+                AnalysisInputError,
+                "mix single-count discipline rule versions",
+            ):
+                _combined_floor(
+                    (
+                        resolution("C1", current, diagnostics),
+                        resolution("C2", legacy, diagnostics),
+                    )
+                )
+
+    def test_combined_floor_refuses_discipline_version_body_mismatches(self):
+        legacy = attribution_single_count_discipline(SINGLE_COUNT_DISCIPLINE_ID_V1)
+        current = attribution_single_count_discipline()
+        for body, declared in ((legacy, current), (current, legacy)):
+            malformed = {**body, "rule_id": declared["rule_id"]}
+            with self.subTest(declared_version=declared["rule_id"]):
+                resolution = FloorResolution(
+                    status="exact",
+                    artifact_id="df",
+                    artifact_sha256=HEX,
+                    source_cell_ids=("C1",),
+                    transport_group_id=None,
+                    transport_rule_id="direct",
+                    floor_abs_j=0.5,
+                    floor_cmp_j=1.0,
+                    floor_gate_j=1.0,
+                    reason_codes=(),
+                    floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                    floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                    point_floor_diagnostics={},
+                    single_count_discipline=malformed,
+                )
+                with self.assertRaisesRegex(
+                    AnalysisInputError,
+                    "^floor_resolution_single_count_discipline_invalid:",
+                ):
+                    _combined_floor((resolution,))
+
+    def test_combined_floor_validates_metadata_before_filtering_resolutions(self):
+        current = attribution_single_count_discipline()
+        malformed_objects = (
+            {**current, "rule_id": "unknown.v3"},
+            {**current, "gating": True},
+            {**current, "both_terms_required": False},
+            {**current, "extra": "unrecognized"},
+            {},
+            "not an object",
+        )
+        for status in ("exact", "transported", "refused"):
+            for discipline in malformed_objects:
+                with self.subTest(status=status, discipline=discipline):
+                    resolution = FloorResolution(
+                        status=status,
+                        artifact_id="df",
+                        artifact_sha256=HEX,
+                        source_cell_ids=("C1",),
+                        transport_group_id=None,
+                        transport_rule_id="direct",
+                        floor_abs_j=0.5,
+                        floor_cmp_j=1.0,
+                        floor_gate_j=1.0,
+                        reason_codes=(),
+                        single_count_discipline=discipline,
+                    )
+                    with self.assertRaisesRegex(
+                        AnalysisInputError,
+                        "^floor_resolution_single_count_discipline_invalid:",
+                    ):
+                        _combined_floor((resolution,))
 
     def test_multi_source_exact_resolution_is_rejected_at_both_boundaries(self):
         diagnostic_c1 = {
@@ -1950,6 +2144,50 @@ class InputSeamTests(unittest.TestCase):
             resolution.floor_gate_j,
             max(resolution.floor_abs_j, resolution.floor_cmp_j),
         )
+        legacy_artifact = make_artifact(
+            [
+                make_cell(
+                    energies=[0.0] * 5,
+                    deltas=[0.0] * 5,
+                    absolute_half_widths=[0.5] * 5,
+                    comparative_half_widths=[0.5] * 5,
+                )
+            ]
+        )
+        legacy_artifact["calibration_scope"] = "window_a"
+        legacy = attribution_single_count_discipline(
+            SINGLE_COUNT_DISCIPLINE_ID_V1
+        )
+
+        def replace_discipline(value):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key == "single_count_discipline":
+                        value[key] = copy.deepcopy(legacy)
+                    else:
+                        replace_discipline(child)
+            elif isinstance(value, list):
+                for child in value:
+                    replace_discipline(child)
+
+        replace_discipline(legacy_artifact)
+        legacy_transported = resolve_floor(legacy_artifact, HEX, request)
+        self.assertEqual(legacy_transported.status, "transported")
+        self.assertEqual(legacy_transported.single_count_discipline, legacy)
+
+        exact_key = legacy_artifact["cells"][0]["key"]
+        exact_request = FloorRequest(
+            backend=request.backend,
+            metric=request.metric,
+            window_class=request.window_class,
+            condition_family_id=exact_key["condition_family_id"],
+            condition_family_sha256=exact_key["condition_family_sha256"],
+            stack_identity_sha256=request.stack_identity_sha256,
+            consumer_stress=request.consumer_stress,
+        )
+        legacy_exact = resolve_floor(legacy_artifact, HEX, exact_request)
+        self.assertEqual(legacy_exact.status, "exact")
+        self.assertEqual(legacy_exact.single_count_discipline, legacy)
         harder = copy.deepcopy(dict(request.consumer_stress))
         harder["p95_sample_gap_s_max"] = 999.0
         refused = resolve_floor(

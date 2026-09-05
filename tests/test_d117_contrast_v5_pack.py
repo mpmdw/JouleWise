@@ -1036,6 +1036,28 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 },
             )
             self.assertTrue(all(indices == {0} for indices in resolved.values()))
+            for arm in ("A", "B"):
+                configs = [
+                    self.generator.config_for(run, "a" * 64)
+                    for run in runs
+                    if run["measurement_arm"] == "decode" and run["arm"] == arm
+                ]
+                self.assertEqual(len(configs), 20)
+                self.assertEqual(len({config["run_id"] for config in configs}), 20)
+                self.assertEqual(
+                    len({
+                        identity_pins.scientific_config_identity_sha256(config)
+                        for config in configs
+                    }),
+                    1,
+                )
+                self.assertEqual(
+                    [
+                        member["declared_member_count"]
+                        for member in self.generator.decode_declared_suite_manifest_set(arm)
+                    ],
+                    [20],
+                )
 
     def test_decode_assignment_supersession_names_cycle_rule(self) -> None:
         record = self.generator.load_decode_prompt_assignment_supersession()

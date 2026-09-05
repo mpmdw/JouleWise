@@ -42,6 +42,7 @@ from joulewise.whole_window import (
     canonical_sha256,
     launch_lineage_refusal_reasons,
     mint_neg8_drift_bound_artifact,
+    validate_whole_window_verdict_row,
     whole_window_refusal_reasons,
 )
 from joulewise.campaign_provenance import (
@@ -1380,6 +1381,39 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
                     calibration_bracket=bracket,
                     drift_bound_artifact={"launch_lineage": other_lineage},
                 )
+
+
+class PaperCustodyWholeWindowValidationTests(unittest.TestCase):
+    def test_typed_row_validation_separates_authentic_failure_from_provenance(self) -> None:
+        cases = (
+            (True, (), "passed", True, True),
+            (
+                False,
+                ("whole_window_neg8_verdict_failed",),
+                "failed",
+                True,
+                False,
+            ),
+            (
+                False,
+                ("whole_window_verdict_provenance_invalid",),
+                "failed",
+                False,
+                False,
+            ),
+        )
+        for ok, reasons, status, authentic, admitted in cases:
+            with self.subTest(reasons=reasons), patch(
+                "joulewise.whole_window._validate_row",
+                return_value=(ok, reasons),
+            ):
+                result = validate_whole_window_verdict_row(
+                    {"status": status}, Path("."), set()
+                )
+            self.assertEqual(result.authentic, authentic)
+            self.assertEqual(result.admitted, admitted)
+            self.assertEqual(result.status, status)
+            self.assertEqual(result.reasons, reasons)
 
 
 if __name__ == "__main__":
