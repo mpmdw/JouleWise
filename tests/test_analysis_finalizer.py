@@ -374,19 +374,31 @@ def install_synthetic_finalization_fixture(
         ),
         "calibration_identity_sha256": "9" * 64,
     }
+    registered_corpus_path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "campaigns"
+        / "neg8_reference_corpus"
+        / "derivation"
+        / "settled_corpus.json"
+    )
+    registered_corpus_raw = registered_corpus_path.read_bytes()
+    registered_corpus = json.loads(registered_corpus_raw)
     drift = build_neg8_drift_bound_artifact(
-        corpus_id="synthetic-neg8-reference-corpus",
-        condition_id="synthetic-neg8",
-        manifest_sha256="7" * 64,
+        corpus_id=registered_corpus["corpus_id"],
+        condition_id=registered_corpus["condition_id"],
+        manifest_sha256=hashlib.sha256(registered_corpus_raw).hexdigest(),
         scientific_config_sha256="8" * 64,
         members=[
             {
-                "bundle_id": f"synthetic-neg8-reference-{index}",
+                "bundle_id": corpus_member["bundle_id"],
                 "point_gross_j": 8.0 + index / 1000.0,
                 "point_idle_subtracted_j": 7.0 + index / 1000.0,
                 "bundle_evidence_sha256": f"{index:x}" * 64,
             }
-            for index in range(1, 11)
+            for index, corpus_member in enumerate(
+                registered_corpus["members"], start=1
+            )
         ],
         derivation_timestamp_s=time.time(),
         freshness_bindings=freshness,
@@ -592,6 +604,34 @@ def _make_sliced_one_block_verdict(fixture: dict) -> None:
 
 
 class AnalysisFinalizerTests(unittest.TestCase):
+    def test_fixture_drift_bound_binds_registered_corpus_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            verdict = json.loads(fixture["verdict_path"].read_text())
+            reference = verdict["idle_admission_core"]["neg8_bracket"][
+                "drift_bound_artifact"
+            ]["reference_corpus"]
+            corpus_path = (
+                Path(__file__).resolve().parents[1]
+                / "configs"
+                / "campaigns"
+                / "neg8_reference_corpus"
+                / "derivation"
+                / "settled_corpus.json"
+            )
+            corpus_raw = corpus_path.read_bytes()
+            corpus = json.loads(corpus_raw)
+
+        self.assertEqual(reference["corpus_id"], corpus["corpus_id"])
+        self.assertEqual(reference["condition_id"], corpus["condition_id"])
+        self.assertEqual(
+            reference["manifest_sha256"], hashlib.sha256(corpus_raw).hexdigest()
+        )
+        self.assertEqual(
+            reference["member_ids"],
+            [member["bundle_id"] for member in corpus["members"]],
+        )
+
     def test_sliced_verdict_missing_floor_refuses_member_cover_before_output(self) -> None:
         """Pin `_authenticate_finalization_inputs` (analysis_manifest_v3.py:3339).
 

@@ -14,7 +14,7 @@ bench texts, and the magistrate's delta disposition, in gauntlet order.
 | Refute, execution lens | terra (212); brief states no `EFFORT:` | 05, 06 | — (brief says "DETACHED at the head of branch `feat/2026-09-02-t26-liveness`"; names no sha) | no `VERDICT:` line in the report; envelope `"status": "findings"`, `"completion": "complete"` |
 | Refute, physics / causality lens | sol (213); brief states no `EFFORT:` | 07, 08 | no single head sha named; brief says "head = Sol 194 landing + one magistrate fixture commit over main 6075389a" | no `VERDICT:` line in the report; envelope `"status": "findings"`, `"completion": "complete"` |
 | Fix round 1 | sol xhigh (224) | 09, 10 | "@ e40e7502" | envelope `"status": "clean"`, `"completion": "complete"` |
-| Bench texts (drafted, **NOT YET APPLIED** — applied after `feat/2026-09-02-t26-install` merges) | magistrate (bench) | 11, 12 | — | — |
+| Bench texts (**APPLIED** after `feat/2026-09-02-t26-install` merged as PR #273) | magistrate (bench) | 11, 12 | PR #273 merge recorded in the D-170 dated addendum | installed |
 | Delta re-audit 1 | terra xhigh (229) | 13, 14 | "@ fea89b72" | `VERDICT: BLOCKER 1` |
 | Magistrate disposition on terra 229 | magistrate | 15 | fea89b72 | — (disposition record; see the file) |
 | Bench | magistrate (bench) | commit `4cf4346f` (below) | — | — |

@@ -33,7 +33,18 @@ draft in place.
   same commit that places the markers. The literals-only tail is separate
   from RF's 43 comparisons and is not sufficient before a fill batch.
   R7F also censes all 16 non-identity DX placements once the mandatory standing sentence appears and prints `R7F PLACED n/16` immediately before its `COMPARED` tail.
-  Prose placement (a rendered literal without its marker inside the DX region) is not covered by R7F until kernel row `R7F-DX-PROSE-SCAN-01` closes.
+  When the DX rows are placed, R7F scans the diagnostic-value (DX) prose
+  region, from the mandatory standing sentence to the next Markdown heading.
+  The mandatory standing sentence is:
+
+  > “The following are diagnostic-era instrument statistics — a desk
+  > re-derivation (XS over XD; AS over AQ) over retained captures whose energy
+  > values D-078 voids for claim use; they characterise the timing calibration
+  > of the instrument and are not evidence for any `_v5` result.”
+
+  R7F reports
+  `MISMATCH prose DX-nnn` when a registered rendered value appears there
+  without its own immediately preceding `[FILL:DX-nnn]` marker.
 - **STOP_FILL:** no insertion when a required artifact, field, identity pin,
   replay, branch predicate, or registered rendering is absent or malformed.
 - **`[PREFILL_LENGTH]`:** the G2-a selection record's

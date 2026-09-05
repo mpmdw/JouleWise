@@ -18,8 +18,9 @@ class PrewindowCheckTests(unittest.TestCase):
     def test_check_8_refuses_agent_processes_missed_by_old_pattern(self) -> None:
         process_lines = (
             "edr 101 0.0 0.0 0 0 ?? S 0:00.00 claude daemon",
-            "edr 102 0.0 0.0 0 0 ?? S 0:00.00 codex mcp-server",
-            "edr 103 0.0 0.0 0 0 ?? S 0:00.00 mcp-server",
+            "edr 102 0.0 0.0 0 0 ?? S 0:00.00 codex app-server",
+            "edr 103 0.0 0.0 0 0 ?? S 0:00.00 t3 worker",
+            "edr 104 0.0 0.0 0 0 ?? S 0:00.00 mcp-server",
         )
         old_pattern = re.compile(
             r"codex exec|codex-run|run_campaign|window-chain"
@@ -68,7 +69,7 @@ class PrewindowCheckTests(unittest.TestCase):
             completed.returncode, 1, completed.stdout + completed.stderr
         )
         self.assertIn(
-            "3 agent/measurement process(es) already running",
+            "4 agent/measurement process(es) already running",
             completed.stdout,
         )
         self.assertIn("NOT READY.", completed.stdout)

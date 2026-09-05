@@ -12,6 +12,7 @@ from pathlib import Path
 
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
+from tests.git_fixture import init_git_fixture
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -27,7 +28,7 @@ def _git_head(root: Path) -> str:
 
 def _init_repo(root: Path) -> str:
     root.mkdir()
-    subprocess.run(["/usr/bin/git", "init", "-q", str(root)], check=True)
+    init_git_fixture(root, "-q")
     marker = root / "marker.txt"
     marker.write_text("initial\n", encoding="utf-8")
     subprocess.run(["/usr/bin/git", "-C", str(root), "add", marker.name], check=True)

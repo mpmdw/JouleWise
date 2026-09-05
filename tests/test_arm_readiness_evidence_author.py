@@ -150,6 +150,7 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "tests/test_arm_readiness_lifecycle.py",
         "tests/test_arm_readiness_schemas.py",
         "tests/test_arm_readiness_integration.py",
+        "tests/git_fixture.py",
         "tests/test_mint_floor_artifact.py",
         "tests/test_mint_floor_artifact_generalized.py",
     ):

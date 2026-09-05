@@ -30,6 +30,7 @@ from joulewise.analysis_manifest_v3 import (
 from joulewise.aggregate import student_t_critical_95
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.schemas import BenchmarkConfig
+from tests.git_fixture import init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -353,14 +354,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
         ).stdout.strip()
 
     def init_fixture_git(self, root: Path) -> None:
-        self.git(root, "init", "-q")
-        for key, value in (
-            ("maintenance.auto", "false"),
-            ("gc.auto", "0"),
-            ("maintenance.autoDetach", "false"),
-            ("gc.autoDetach", "false"),
-        ):
-            self.git(root, "config", "--local", key, value)
+        init_git_fixture(root, "-q")
         self.git(root, "config", "user.name", "D117 v5 Test")
         self.git(root, "config", "user.email", "d117-v5-test@example.invalid")
 

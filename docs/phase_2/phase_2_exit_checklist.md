@@ -1,7 +1,8 @@
 # Phase 2 Exit Checklist
 
-Phase 2 is complete only when every required item below has evidence, per
-`docs/planning_reflection_protocol.md`. Conditional items close either with
+Phase 2 is complete only when every required item below has evidence, under
+D-023. Mission M0 in `docs/agent_playbook.md` routes substantial work from its
+selected kernel row to this checklist. Conditional items close either with
 their primary evidence or with a documented blocker that names what access
 was missing (the target then ends the phase `pending`, never silently
 skipped).

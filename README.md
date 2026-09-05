@@ -78,7 +78,7 @@ measured idle baseline; it is not used to rank devices or configurations. In
 Q4, the fixed term is estimated from the gross-energy workload sweep and is
 not set equal to measured idle energy. The advisor-review rationale and full
 basis/boundary rule are recorded in
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md#measurement-methodology-highlights).
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
 Under D-070, static batching, speculative decoding / native MTP, MoE versus
 dense execution, quantization, and reasoning-length variance are five stress
@@ -87,8 +87,7 @@ five have strict-valid L0 smoke-bundle support plus characterization
 commitments, but every study remains floor-gated, capped at L2, and sequenced
 after the `_v5` campaign (the Window A sequencing this sentence used to name
 was retired by D-167). See the fuller
-[Q4 architectural stress-test agenda](PROJECT_STATUS.md#summary)
-in `PROJECT_STATUS.md`.
+[Q4 architectural stress-test agenda](PROJECT_STATUS.md).
 
 D-075 now folds a ranked extension-axis evaluation into that same agenda
 without proliferating theses: DSpark/DFlash break-even and control riders,
@@ -248,21 +247,21 @@ See `AGENT_PLAN.md` for the phase index; each phase has a detailed plan and
 an evidence-based exit checklist under `docs/phase_N/` — the exit checklist
 is the per-item status authority (D-023). See `RUN_STATE.md` before starting
 substantial work; its generated state-kernel region is the current
-work-selection view. Future phase starts should use
-`docs/planning_reflection_protocol.md` to audit whether each step has evidence
-and acceptance criteria before implementation begins.
+work-selection view. Mission M0 in `docs/agent_playbook.md` owns intake and
+close-out; it routes the selected `docs/process/state_kernel.json` task to its
+authority, acceptance criteria, plan, and phase checklist.
 
 **Agents executing "the next step" start with `docs/agent_playbook.md`** —
 self-contained, ordered mission guides (read-first lists, code-level routes,
 verification commands, handoff checklists) for every remaining step of the
 project.
 
-Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
-handoffs, recent commits, and active phase gates. Design decisions (with the
-options and considerations behind them) live in `docs/decision_log.md`; risks,
+Use the state kernel to add and rank new tasks; `TASK_QUEUE.md` is its generated
+detailed projection plus dated history. Design decisions (with the options and
+considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
 constraints live in `docs/milestones.md`; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`. Agents never regenerate or deploy the status site:
-sessions that change front-facing state refresh `docs/site/DRIFT.md`, and Ed
-deploys manually (D-068).
+`docs/council_log.md`. Under D-136, agents do not refresh, regenerate, or
+deploy the status site. `docs/site/DRIFT.md` is a retained reference only; if
+Ed chooses the manual workflow dispatch, Ed deploys the resulting snapshot.
