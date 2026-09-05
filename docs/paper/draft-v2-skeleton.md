@@ -43,8 +43,9 @@ is one sampler output that averages processor power from its recorded
 start time to its recorded end time. An inference request first reads its
 input through production of the first output token; this paper calls that
 prompt processing, or *prefill*. It then emits later output tokens; this is
-token generation, or *decode*. The runtime-recorded time between those parts
-is the **phase boundary**.
+token generation, or *decode*. Prompt processing and token generation are
+this paper’s two phases. The runtime-recorded time between them is the
+**phase boundary**.
 
 One sampling record can begin during prefill and end during decode. It then
 reports one average power for a span that contains both parts, rather than one
@@ -327,6 +328,8 @@ standard deviation is again 1.581139 J; therefore
 \(U_{\mathrm{cmp,point}}=\max(4,2+4.808173)=6.808173\) J. These values
 demonstrate the formulas and are not campaign evidence (registry SYN-03).
 
+### Moving edges and enumerating endpoints
+
 Each admitted repeat energy has lower and upper values obtained by moving its
 phase boundaries through the permitted timing domain. For the absolute
 component, enumerate the \(2^n\) lower/upper choices for the n repeat energies.
@@ -385,6 +388,8 @@ Here, **authenticated** means that each named input carries its expected
 SHA-256 fingerprint and the inputs its record names agree with the files on
 disk. A missing fingerprint, a mismatch, or a required input that cannot be
 checked is unauthenticated and cannot select a ratio outcome.
+
+### Combining shared movements and local widths
 
 The comparative \(R_{cm}\) diagnostic first derives a block-level energy
 allowance from shared start and end movements within each A/B/B/A block. This
@@ -541,7 +546,7 @@ The largest case uses (s,e₁,e₂)=(+1,−1,+1), giving differences
 Using the rounded ten-decimal inputs alone gives about 8.8304376433 J;
 the two final digits differ because the registered fixture is unrounded.
 
-![Figure A4. Shared block shifts, scalar allowances, local widths, signs and maximum.](figures/figA5_shared_signs.svg)
+![Figure A4. Shared block shifts, scalar allowances, local widths, signs and maximum.](figures/figA4_shared_signs.svg)
 
 *Figure A4. Synthetic shared-sign calculation. The two boxes show each block’s
 point difference, shared energy allowance and local half-width in joules.
@@ -560,7 +565,7 @@ ratios; no new component floor is published here.
 A missing clock stamp, a malformed native record, a failed calibration predicate,
 or a mismatched source fingerprint stops the corresponding reconstruction and
 records its reason. This behavior is *fail-closed*: the program supplies no
-replacement value. The retained historical sources in Section 4 have
+replacement value. The retained historical sources below have
 separate diagnostic authority; passing their checks does not authorize a new
 model comparison.
 
@@ -675,7 +680,8 @@ a value below a cell floor; here they mean only insufficient record support.
 The Qwen2.5-1.5B-Instruct-4bit (1.5B) population consists of short
 prompt-processing phases in 50 bundles: 10 from `runs_window_a10_20260725`
 and 40 from `runs_window_c_20260726` (DG-140–142). Across this retained
-population, 37 of 50 phases overlapped two sampling records and the remaining 13 of 50 overlapped three. Accordingly, 37 failed
+population, 37 of 50 phases overlapped two sampling records and the remaining
+13 of 50 overlapped three. Accordingly, in this 1.5B population, 37 failed
 the three-record minimum (`not_resolvable_sample_count`) and 13 passed
 (`identifiable`). This describes the retained population; it does not estimate the failure rate on future requests, show
 zero prompt-processing energy, or supply a model comparison.
@@ -683,10 +689,16 @@ zero prompt-processing energy, or supply a model comparison.
 The same artifact also retains the Qwen2.5-7B-Instruct-4bit (7B) stack from
 `runs_window_7bfloor_20260729`: all 50 prompt-processing phases were
 identifiable under the record-support rule. Of these, 33 overlapped three
-records and 17 overlapped four (registry DG-135–139). Record identifiability
-depended on which model/stack was used in these retained populations: two records per bundle failed the count discipline for the 1.5B
-stack; three passed for its remaining bundles, and three or four passed for
-7B. This comparison does not isolate a causal effect of model size or imply
+records and 17 overlapped four (registry DG-135–139). Median prefill duration
+was 0.2815 s for 7B versus 0.1365 s for 1.5B (DG-143–144), compared with the
+120.9-ms median record width (the duration of a sampling record’s interval)
+in the retained a10 sample described below (DG-071). The longer 7B phases
+leave more room for a whole middle record;
+duration alone does not establish the overlap count. Record identifiability
+depended on the model/stack in these retained populations. Phases with only
+two overlapping records failed the three-record minimum: 37 of the 50 1.5B
+phases and none of the 50 7B phases, which overlapped three or four records each.
+This comparison does not isolate a causal effect of model size or imply
 that short requests always fail the minimum.
 
 Figure 3, the phase–record overlap diagram, names the phase boundaries, adjacent
@@ -736,10 +748,11 @@ narrow range of relative positions satisfies both conditions. A middle record
 at the short end of the issued middle-half width spread leaves more room for
 both phase boundaries to fall outside it, making that full fit easier rather than
 first making it possible. Alignment, not width alone, therefore denies the
-third overlap in most phases of the Qwen2.5-1.5B-Instruct-4bit population. In r03,
+third overlap in most phases of the Qwen2.5-1.5B-Instruct-4bit population.
+In the 1.5B run r03,
 relative to epoch 1784978933 s, the phase [0.267684,0.3887181]
 overlaps records [0.1945653,0.3210495] and [0.3210495,0.434475] for
-0.0533655 and 0.0676686 s: two records fail the three-record cutoff.
+0.0533655 and 0.0676686 s: this phase fails the three-record minimum.
 The adjacent records have zero overlap. The same retained absolute campaign’s
 r08 provides a three-overlap case: relative to epoch 1784981672 s, its phase is
 [0.671041,0.807431]. The middle record lies wholly inside it. All endpoints below
@@ -825,7 +838,7 @@ Third, the reported joules come from internal CPU, GPU, and neural-engine
 counter channels, with no external gain check. CPU, GPU, and neural-engine
 power share the same start-to-end averaging window, so the same phase boundaries
 clip all three channels before their energies are summed; no separate timing
-bound for the CPU or neural-engine channel is issued. <!-- Reviewer D8; the channel-window answer is fixed by the Section 2 record definition. -->
+bound for the CPU or neural-engine channel is issued. <!-- Reviewer D8; the channel-window answer is fixed by the Section 1 record definition. -->
 An external power meter—a separate instrument measuring the machine's physical
 input on the wall side of its power supply—could test whether the counter's
 whole-request totals track physical energy over controlled loads. Without that
@@ -894,7 +907,8 @@ are retained under project custody outside Git. **Custody** means that
 each named input's fingerprint still matches its recorded bytes. The calibration source is
 `runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/`;
 the Qwen2.5-1.5B-Instruct-4bit record-support population comprises
-ten named members of `runs_window_a10_20260725/` and forty of `runs_window_c_20260726/` (DG-140–142). Qwen2.5-7B-Instruct-4bit contributes
+10 named members of `runs_window_a10_20260725/` and
+40 of `runs_window_c_20260726/` (DG-140–142). Qwen2.5-7B-Instruct-4bit contributes
 50 members of `runs_window_7bfloor_20260729/` (DG-135/139).
 Both populations are enumerated with per-file fingerprints in
 `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`.
@@ -919,10 +933,10 @@ within-record allocations. In the historical Qwen2.5-1.5B-Instruct-4bit
 (1.5B) population, 37 of 50 phases crossed two records and failed the
 three-record minimum; 13 crossed three and passed. Qwen2.5-7B-Instruct-4bit
 (7B) passed in all 50 phases: 33 crossed three records and 17 crossed four.
-Record identifiability depended on the model/stack: two records per bundle
-failed the count discipline for the 1.5B stack; three passed for its remaining
-bundles, and three or four passed for 7B. The synthetic partial-record
-enclosure and two-block fixture make the distinct calculations explicit and
+Record identifiability depended on the model/stack. Phases with only two
+overlapping records failed the three-record minimum: 37 of the 50 1.5B
+phases and none of the 50 7B phases, which overlapped three or four records each.
+The synthetic partial-record enclosure and two-block fixture make the distinct calculations explicit and
 reproducible. The result is a methods/diagnostic contribution on one machine
 across retained measurement windows; it supports no new model-energy
 comparison, empirical phase-energy dominance, or future-error coverage.
@@ -1036,7 +1050,7 @@ The five stamps S_pre, S_parse, S_start, S_stop, S_post are recorded in that ord
 
 The estimator's identity is `powermetrics_native_second_rate_aware_set_membership_v1`. Its output is the wall-clock time of the **end of record 0**, called the **anchor** and written *A*, together with a bound on how wrong *A* can be. The design principle is *set membership*: rather than estimating *A* and attaching a statistical error, the estimator writes down every constraint the evidence imposes and computes the exact set of (*A*, rate) values consistent with all of them. The reported interval is that set's extent in *A*; the point value is its midpoint. Arithmetic is exact rational (Python `Fraction`); only the final outputs are converted to binary64. Every *limit* and *bound* is rounded *outward* (a lower limit toward −∞, an upper limit or a bound toward +∞) to the nearest binary64 in that direction; the point anchor (the midpoint) is converted with ordinary round-to-nearest.
 
-**The model.** Search for anchor A, offset α, and rate β; eliminate α, then solve for A and β. The offset and rate are:
+**The clock model.** Search for anchor A, offset α, and rate β; eliminate α, then solve for A and β. The offset and rate are:
 
 - *β*, the rate of the wall clock relative to the monotonic clock (dimensionless; 1 means the two clocks tick at the same speed);
 - *α*, the wall time (ns) at the monotonic instant *m_0* = *mb*(S_pre) · 10⁹, i.e. at the first monotonic read of the pre-spawn stamp.
@@ -1295,7 +1309,7 @@ the five clock stamps, and the two command stamps are retained in
 `clock_stamps`, `command_on`, and `command_off` (registry DG-133).
 The complete set, not these first two rows alone, gives the reported anchor.
 
-![Figure A5. Synthetic clock-constraint polygon with axes, lines, intersection and projections.](figures/figA4_clock_polygon.svg)
+![Figure A5. Synthetic clock-constraint polygon with axes, lines, intersection and projections.](figures/figA5_clock_polygon.svg)
 
 *Figure A5. Synthetic clock-constraint intersection. The horizontal axis
 is clock-rate departure in parts per million; the vertical axis is anchor
@@ -1398,8 +1412,6 @@ A matching refusal is a reproduced result, not a failed replication. Given ident
 
 ### A.6 Synthetic partial-record enclosure
 
-The artwork's P1 label identifies this partial-record example.
-
 <!-- [FILL:PE-01] SYNTHETIC appendix placement; no measured value is issued. -->
 ![Figure A1: synthetic records, fixed window, point, timing envelope, and nonnegative enclosure.](figures/figA_partial_record_enclosure.svg)
 
@@ -1426,11 +1438,23 @@ intervals; the enclosure is never composed into any bound.
 
 The adjacent `figA_partial_record_enclosure.json` records every input,
 the four timing corners, unrounded computed outputs, and SHA-256 fingerprints
-of the generating script and SVG. From the repository root, regenerate both
-files with:
+of the numerical producer and displayed SVG. The presentation step below
+replaces the producer’s internal example label in the two SVG titles; it
+leaves all geometry and numerical inputs unchanged. From the repository root,
+regenerate both files with:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -c 'from pathlib import Path; from scripts.paper.partial_record_enclosure import write_synthetic_p1_figure; p = Path("docs/paper/figures/figA_partial_record_enclosure"); write_synthetic_p1_figure(p.with_suffix(".svg"), p.with_suffix(".json"))'
+PYTHONDONTWRITEBYTECODE=1 python3 - <<'PYFIG'
+import hashlib, json
+from pathlib import Path
+from scripts.paper.partial_record_enclosure import derive_synthetic_p1, synthetic_p1_svg
+p = Path("docs/paper/figures/figA_partial_record_enclosure")
+data = derive_synthetic_p1()
+svg = synthetic_p1_svg(data).replace(data["label"], "SYNTHETIC")
+data["figure"] = {"sha256": hashlib.sha256(svg.encode("utf-8")).hexdigest()}
+p.with_suffix(".svg").write_text(svg, encoding="utf-8")
+p.with_suffix(".json").write_text(json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+PYFIG
 ```
 
 ### A.7 Measurement-window schematic

@@ -346,7 +346,7 @@ direction gate. That composition example is not a campaign input.
 A directional result then faces two different checks. The magnitude check
 requires the absolute point estimate to exceed \(F_{\mathrm{cell}}\); failure
 means **not resolvable**—the estimate does not clear the cell floor—not zero.
-The direction check requires the measurement interval, formed from the repeat
+The direction check requires the statistical measurement interval, formed from the repeat
 standard error already defined for this gross phase-energy path, and the
 decision interval, formed by extending both ends by the sum of the recorded
 deterministic bounds. A deterministic bound is a

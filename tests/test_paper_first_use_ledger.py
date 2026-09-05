@@ -520,6 +520,26 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
         self.assertEqual(row_count, len(self.rows))
         self.assertEqual(fail_count, len(failures))
 
+        # A lexical home alone must not certify a different technical sense.
+        by_term = {row.term: row for row in self.rows}
+        senses = {
+            "not resolvable": ("Record support in two historical model stacks", "insufficient record support"),
+            "measurement interval": ("Benchmark and metrology lineage", "Analyzer reporting duration"),
+            "statistical measurement interval": ("Directional comparison", "repeat standard error"),
+            "decision interval": ("Directional comparison", "sum of authenticated deterministic bounds"),
+            "deterministic bound": ("Adding publication safeguards after the ratio", "non-random maximum displacement"),
+            "model/stack": ("Record support in two historical model stacks", "Qwen inference populations"),
+            "The clock model": ("A.3 Formal calibration algorithms", "Appendix A.3.3"),
+        }
+        for term, (home, meaning) in senses.items():
+            with self.subTest(semantic_term=term):
+                self.assertEqual(by_term[term].home, home)
+                self.assertIn(meaning, by_term[term].disposition)
+        self.assertIn("Section 3 constructs", by_term["local half-width / shared sign"].disposition)
+        self.assertIn("Protocol P.3", by_term["resolvability / not_resolvable_sample_count"].disposition)
+        self.assertIn("prompt processing and token generation are this paper’s two phases",
+                      " ".join(self.body_lines).casefold())
+
     def test_first_occurrence_is_in_exact_home_section(self) -> None:
         known_homes = {
             match.group(2)

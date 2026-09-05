@@ -418,8 +418,26 @@ class RealDocumentRegressionTests(unittest.TestCase):
             self.assertIn("33 crossed three records and 17 crossed four", section)
         conclusion = draft.split("## 8. Conclusion", 1)[1].split("## 9. References", 1)[0]
         self.assertIn("Record identifiability depended on the model/stack", conclusion)
-        self.assertIn("two records per bundle failed the count discipline for the 1.5B stack", conclusion)
-        self.assertIn("three or four passed for 7B", conclusion)
+        self.assertNotIn("count discipline", draft)
+        self.assertIn("Phases with only two overlapping records failed the three-record minimum", conclusion)
+        self.assertIn("37 of the 50 1.5B phases and none of the 50 7B phases", conclusion)
+        self.assertIn("which overlapped three or four records each", conclusion)
+        self.assertIn("Accordingly, in this 1.5B population, 37 failed", draft)
+        self.assertIn("In the 1.5B run r03", draft)
+        import statistics
+        for stack, row_id in (("7B", "DG-143"), ("1.5B", "DG-144")):
+            median = statistics.median(r["boundary"]["prefill_duration_s"]
+                                       for r in payload["bundles"] if r["stack"] == stack)
+            summary = next(s for s in payload["stack_summaries"] if s["stack"] == stack)
+            self.assertEqual(median, summary["prefill_duration_s"]["median"])
+            row = next(r for r in registry.splitlines() if r.startswith(f"| {row_id} —"))
+            for token in (locator, digest, f'stack="{stack}"', str(median),
+                          f"{median:.4f} s", "EXTRACT", "NON_CLAIM_BEARING"):
+                self.assertIn(token, row)
+            self.assertIn(f"{median:.4f} s", draft)
+        self.assertIn("120.9-ms median record width", draft)
+        self.assertIn("DG-135–144", registry.split("## Submission disposition", 1)[1].split("Historical registry", 1)[0])
+        self.assertIn("and DG-102–144. Active DX", registry)
 
     def test_synthetic_source_maps_reproduce_printed_arithmetic(self) -> None:
         import itertools
@@ -468,6 +486,11 @@ class RealDocumentRegressionTests(unittest.TestCase):
             self.assertAlmostEqual(actual, expected)
         svg = REPO / "docs/paper/figures/figA_partial_record_enclosure.svg"
         self.assertEqual(hashlib.sha256(svg.read_bytes()).hexdigest(), p1["figure"]["sha256"])
+        from scripts.paper.partial_record_enclosure import derive_synthetic_p1, synthetic_p1_svg
+        regenerated = derive_synthetic_p1()
+        self.assertEqual({k: v for k, v in p1.items() if k != "figure"}, regenerated)
+        self.assertEqual(svg.read_text(), synthetic_p1_svg(regenerated).replace(regenerated["label"], "SYNTHETIC"))
+        self.assertNotIn("P1", svg.read_text())
 
     def test_round_one_derivations_and_suppliers_are_complete(self) -> None:
         import importlib.util
@@ -570,8 +593,8 @@ class RealDocumentRegressionTests(unittest.TestCase):
                        "Correct points with coherently wrong widths cannot count as"):
             self.assertIn(phrase, protocol)
             self.assertNotIn(phrase, availability)
-        self.assertIn("ten named members", availability)
-        self.assertIn("forty of `runs_window_c_20260726/`", availability)
+        self.assertIn("10 named members", availability)
+        self.assertIn("40 of `runs_window_c_20260726/`", availability)
 
     def test_post_cut_structure_figures_and_protocol_subjects(self) -> None:
         draft, protocol = SUCCESSOR_DRAFT.read_text(), PROTOCOL.read_text()
@@ -601,6 +624,14 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertNotIn("**close-out artifact**", draft)
         self.assertNotIn("### Adding publication safeguards", draft)
         self.assertIn("### Adding publication safeguards", protocol)
+        self.assertNotIn("The artwork's P1 label", draft)
+        self.assertIn("### Moving edges and enumerating endpoints", draft)
+        self.assertIn("### Combining shared movements and local widths", draft)
+        self.assertNotIn("historical sources in Section 4", draft)
+        self.assertIn("Section 1 record definition", draft)
+        for label, filename in (("A4", "figA4_shared_signs.svg"),
+                                ("A5", "figA5_clock_polygon.svg")):
+            self.assertRegex(draft, rf"!\[Figure {label}[^\]]*\]\(figures/{filename}\)")
         self.assertNotIn("synthetic P1", draft)
         self.assertNotIn("SYNTHETIC P1", draft)
         self.assertNotIn("**Gross energy**", draft)
