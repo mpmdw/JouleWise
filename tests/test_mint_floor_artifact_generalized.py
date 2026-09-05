@@ -1291,7 +1291,7 @@ SYNTHETIC_COMPONENT_SHA256S = (
 # acceptance-independent component and CLI component pins were rechecked and
 # remain unchanged at that r6 issuance. Pins also move with a reviewed
 # component-contract change: first instance 2026-09-05, PR #292 v2
-# single-count discipline object (ruling 50). SYNTHETIC_COMPONENT_SHA256S
+# planning-sizing metadata object (ruling 50). SYNTHETIC_COMPONENT_SHA256S
 # and CLI_COMPONENT_SHA256S move for that object alone;
 # SYNTHETIC_PRODUCER_PIN_SHA256S and SYNTHETIC_PRODUCER_SET_SHA256 move
 # because they embed those component hashes. The r6 acceptance fields stay
