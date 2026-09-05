@@ -321,3 +321,71 @@ THEN, in order:
   then re-armed as watchers — stop them again before step 3).
 - F+B: structural round landed (accessor + census + matrix, 495 tests), delta 44 LANDABLE; Opus counter-review
   running → apex → PR. Seam #289 CI green, replay running. Paper-K #288 replay running. Paper-L #290 ready.
+
+## 2026-09-05 ~06:00 PDT — paper-M landed; F+B PR #292; handoff after the paper-M refuters
+- PR #291 MERGED (Ed: standing merge permission, in chat). Step 0 OK on main 5c61deae; the amended inventory
+  recognises this session (dry-run: interactive_pid 4453, 19 owned, 0 unclassified). Handoff steps 1/3/4/5 run
+  right after the paper-M refuters return (this session is reaped by design; the relaunched magistrate resumes
+  from this file's RELAUNCH RESUME PLAN + the lane lines below).
+- Paper-M (fallback submission) landed at 6145e832 on feat/2026-09-05-paper-m (stacked on paper-L): single
+  METHODS_DIAGNOSTIC outcome; Figure 2 = fig4 edge excursions; record-support result; SYN-01/PE-01 illustrations;
+  228 registry rows RETIRED_FALLBACK; References 21 (no REF NEEDED); Availability written; ledger 260/0.
+  Blind astra refuters (02-refuter-fact.md, 02-refuter-pedagogy.md) running in detached worktrees; next: fix
+  round → deltas → Opus counter-review → apex → PR (base feat/2026-09-05-paper-l until L merges).
+- F+B: PR #292 opened (apex 99 LANDABLE); rows 9/11/12 pending replay + CI. Known main defect: scripts/build_site.py
+  fails since 731a0a74 removed the ADVISOR-PAGE-END marker from PROJECT_STATUS.md (site lane retired, D-136).
+- Replays for #288 (paper-K) and #289 (seam) still running (~/.claude/jobs/3c46c831/tmp/{paperk,seam}-replay.log).
+
+## 2026-09-05 ~07:10 PDT — paper-M refuters returned; fix round 1 running; handoff waits for the seats
+
+- Paper-M blind refuters landed on feat/2026-09-05-paper-m at fde18861
+  (docs/process_traces/2026-09-05-paper-m/02-refuter-fact.md, 02-refuter-pedagogy.md). Fact: F1 blocker
+  (unregistered five-unit synthetic regression example), F2 population locator, F3 replay-fence extractor
+  heading, F4 nit. Pedagogy: NOT LANDABLE — F1–F6 blockers including the structural cut of every section that
+  presumes the unperformed comparison campaign; F7–F25 should-fix; F26 nit.
+- Magistrate triage: all findings accepted, including the cut. Cut material moves to a new prospective-protocol
+  document under docs/paper/protocol/ that the article cites once; registry rows are re-pointed, never deleted.
+- Fix round 1 seat `paperm-fix1` (astra xhigh) running in /Users/edr/code/JouleWise-wt-paper-m; report at
+  docs/process_traces/2026-09-05-paper-m/03-fix-round-1-report.md; the seat does not commit.
+- After fix round 1: commit, one fresh astra delta (closure + consequences) → Opus counter-review → apex read →
+  PR against feat/2026-09-05-paper-l (retarget to main once #288 and #290 merge).
+- Watchdog install handoff (steps 1/3/4/5) runs from this session as soon as `paperm-fix1` and `fb-ci` finish,
+  because the reaper terminates every process in this session's tree, seats included. Relaunched magistrate:
+  resume from RELAUNCH RESUME PLAN + this delta.
+- Open PRs: #288 paper-K (CI re-running after the ledger commit; merge when green), #289 seam (replay running for
+  row 9; gate-ledger fails until row 9 is filled), #292 F+B (CI fix seat `fb-ci` running), #290 paper-L (retarget
+  after #288).
+
+## 2026-09-05 ~08:10 PDT — paper-K merged (#288 → 6b224521); paper-L retargeted; F+B fix round 2
+
+- PR #288 (paper-K) merged at 6b224521 with the full 12-row ledger. PR #290 (paper-L) retargeted to main;
+  origin/main merged into feat/2026-09-05-paper-l at a3bbd9b3; its full replay is running (row 9), then CI
+  on the final head (row 11) and the terminal review (row 12).
+- PR #289 (seam): row 9 = docs/process_traces/2026-09-04-paper-custody/18-full-replay-f13e3a44.md (one
+  load-sensitive node-worker failure reproduced on main), row 12 = e61b0db5; row 11 waits on CI.
+- PR #292 (F+B): the sheet is regenerated (c8ab5efb). The two relocation errors are golden mint-fixture pins
+  in tests/test_mint_floor_artifact_generalized.py that still hash v1 discipline bytes; fix round 2 seat
+  `fb-ci2` (astra high) performs the file's own fixture-review step with the independent oracle and adds one
+  regression; report 49. Then rows 9/11/12.
+- Paper-M fix round 1 (`paperm-fix1`) still running on feat/2026-09-05-paper-m (stacked on paper-L before
+  the main merge; rebase or merge paper-L into it after the seat returns, before the delta).
+
+## 2026-09-05 ~09:05 PDT — seam PR #289 merged
+
+- PR #289 (custody seam, rounds 5+6, D-173 as amended) merged to main with the full ledger (row 9 =
+  file 18 replay record, rows 11/12 = e61b0db5). REFUSAL-CARRIER-01 remains queued behind readiness.
+- F+B (#292): ruling 50 authorized the mint-fixture review under five conditions; seat `fb-ci3` (astra
+  high) executing it; report 51.
+
+## 2026-09-05 ~10:20 PDT — paper-M fix round 1 landed (d243c776); F+B fixture review landed (e1690f20)
+
+- Paper-M: all 30 refuter findings cured by `paperm-fix1`; campaign-presuming sections now live in
+  docs/paper/protocol/prospective-comparison-protocol.md (558 lines) and the editorial ledger in
+  docs/paper/protocol/first-use-audit-ledger.md; article 1421 lines; bench: first-use ledger 11 OK, terms
+  lint 12 OK, selector 5 OK, replay fence 10 OK + checker 43 compared / 0 mismatches. paper-L (with main)
+  merged in. Running: fresh astra xhigh delta (report 04) and Opus counter-review (report 05). Next: fix
+  round 2 if needed → apex read → PR #? against main (after #290 merges) with the 12-row ledger.
+- F+B (#292): fixture review landed at e1690f20 under ruling 50 (report 51); magistrate bench: mint 83 OK,
+  both relocation tests OK, discipline matrix 12 OK, dependence sheet 29 OK. Running: Opus non-author
+  delta (report 52). Next: CI on head → rows 9/11/12 → merge.
+- Paper-L (#290): replay running on a3bbd9b3 (started before the seam merge; docs-only branch, accepted).
