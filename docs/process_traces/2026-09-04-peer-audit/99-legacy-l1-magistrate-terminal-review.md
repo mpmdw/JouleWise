@@ -21,3 +21,20 @@ retired label and "primary basis" across analysis/rpt001-v2, figures/rpt001-v2, 
 docs/phase_4: none.
 
 Verdict: LANDABLE. Full-suite replay tail to be appended below before merge.
+
+## Full-suite replay (row 9)
+
+Unpiped `python3 -m unittest discover -s tests` on the merged head 38c02888 (log: magistrate job dir,
+legacy-replay.log; machine load 7–10 throughout), exact tail:
+
+    Ran 5120 tests in 6823.442s
+    FAILED (failures=2, skipped=109)
+
+1. tests.test_node_worker_subprocess…test_real_client_worker_artifact_contract_over_localhost — ENVIRONMENTAL /
+   PRE-EXISTING TEST SENSITIVITY (diagnosed in docs/process_traces/2026-09-04-fanout/30; same disposition as PRs
+   #285 and #286): test-only 15 s fake-vLLM prepare budget under load; identical bytes on main; Linux CI green.
+2. tests.test_launch_window.ProductionArmRelocationLaunchTests.test_real_minted_v4_launch_accepts_relocation_and_refuses_content_change
+   — real-launcher test that returned exit 1 under the same load; re-run alone on canonical main (Ran 1 test in
+   141.231s, OK) and alone on this branch's head (tail recorded above this section's commit) — passes in
+   isolation; the branch touches no launcher, plan, or arm code (scripts/build_capstone.py, make_figures.py,
+   claims_lint.py, report sources, tests only).
