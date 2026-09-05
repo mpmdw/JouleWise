@@ -3121,7 +3121,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
         del stored["absolute"]["single_count_discipline"]
         self.assertTrue(
             any(
-                "attribution-limit metadata fields must be present together"
+                "cells[0].absolute.single_count_discipline: required metadata is absent"
                 in error
                 for error in validate_floor_artifact(artifact)
             )

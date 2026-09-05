@@ -1281,6 +1281,10 @@ def _pre_admit_legacy_report(path: Path, label: str) -> None:
     value, _raw = _strict_json_file(path, label)
     if not isinstance(value, Mapping):
         raise MintError(f"{label} must contain a JSON object")
+    try:
+        detection_floor.read_single_count_profile(value, profile="extraction", where=label)
+    except detection_floor.SingleCountDisciplineError as exc:
+        raise MintError(str(exc)) from exc
     errors = validate_admitted_report_vocabulary(value)
     if errors:
         raise MintError(f"{label} refused admitted vocabulary: {errors[0]}")
@@ -2362,6 +2366,13 @@ def _v2_gate_postcollection(
     producer_inputs: V2ProducerInputs,
     ledger_snapshot: Any,
 ) -> V2CellRecomputation:
+    for component in (cell_inputs.absolute, cell_inputs.comparative):
+        try:
+            detection_floor.read_single_count_profile(
+                component.report, profile="extraction", where="extraction report"
+            )
+        except detection_floor.SingleCountDisciplineError as exc:
+            raise MintError(str(exc)) from exc
     post = cell_pins["postcollection"]
     if (
         producer_inputs.authenticated_pre_observation is not None

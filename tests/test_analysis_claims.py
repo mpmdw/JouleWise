@@ -682,7 +682,7 @@ class ClaimOutcomeTests(unittest.TestCase):
         mixed["claim_verdicts_id"] = calculate_claim_verdicts_id(mixed)
         self.assertTrue(
             any(
-                "mixed rule versions are forbidden" in error
+                "single_count_discipline rule versions must not be mixed" in error
                 for error in validate_claim_verdicts(mixed)
             )
         )

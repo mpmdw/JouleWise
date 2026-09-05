@@ -17,7 +17,9 @@ from typing import Any
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
-    attribution_single_count_discipline_is_canonical,
+    SingleCountDisciplineError,
+    read_single_count_discipline,
+    check_single_count_cohort,
 )
 from joulewise.analysis_manifest_v3 import (
     AnalysisManifestV3Error,
@@ -487,12 +489,42 @@ def _validate_attribution_floor_metadata(
         f"{where}.point_floor_diagnostics",
         errors,
     )
-    if not attribution_single_count_discipline_is_canonical(
-        value.get("single_count_discipline")
-    ):
-        errors.append(
-            f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+    try:
+        read_single_count_discipline(value, where=where, required=True)
+    except SingleCountDisciplineError as exc:
+        errors.append(str(exc))
+
+
+def _validate_claim_discipline_cohort(
+    contrast: Mapping[str, Any], where: str, errors: list[str]
+) -> None:
+    """Admit all known carriers before status/schema filters can hide one."""
+
+    floor = contrast.get("floor")
+    if not isinstance(floor, Mapping):
+        return  # The owning floor schema reports this malformed container.
+    carriers = [(floor, f"{where}.floor")]
+    resolutions = floor.get("resolutions")
+    if isinstance(resolutions, list):
+        carriers.extend(
+            (value, f"{where}.floor.resolutions[{index}]")
+            for index, value in enumerate(resolutions)
         )
+    evaluation = contrast.get("claim_evaluation")
+    if isinstance(evaluation, Mapping) and evaluation.get("floor_limit") is not None:
+        carriers.append(
+            (evaluation["floor_limit"], f"{where}.claim_evaluation.floor_limit")
+        )
+    views = []
+    for carrier, location in carriers:
+        try:
+            views.append(read_single_count_discipline(carrier, where=location))
+        except SingleCountDisciplineError as exc:
+            errors.append(str(exc))
+    try:
+        check_single_count_cohort(views, where=where)
+    except SingleCountDisciplineError as exc:
+        errors.append(str(exc))
 
 
 def _finite_json(value: Any, where: str, errors: list[str]) -> None:
@@ -709,15 +741,19 @@ def _validate_cross_field_claim_semantics(
 
     reasons = evaluation.get("reason_codes")
     if isinstance(reasons, list):
-        floor_metadata = (
-            {
-                key: floor[key]
-                for key in _ATTRIBUTION_FLOOR_KEYS
-            }
-            if set(floor) & _ATTRIBUTION_FLOOR_KEYS
-            == _ATTRIBUTION_FLOOR_KEYS
-            else None
-        )
+        floor_metadata = None
+        try:
+            discipline = read_single_count_discipline(floor, where=f"{where}.floor")
+        except SingleCountDisciplineError as exc:
+            errors.append(str(exc))
+        else:
+            if discipline is not None:
+                floor_metadata = {
+                    "floor_source": floor.get("floor_source"),
+                    "floor_limit_class": floor.get("floor_limit_class"),
+                    "point_floor_diagnostics": floor.get("point_floor_diagnostics"),
+                    "single_count_discipline": discipline.copy_wire(),
+                }
         try:
             recomputed = evaluate_claim(
                 estimate=float(estimate) if _number(estimate) else None,
@@ -771,7 +807,7 @@ def _validate_cross_field_claim_semantics(
                     else ()
                 ),
             ):
-                if evaluation.get(key) != recomputed[key]:
+                if evaluation.get(key) != recomputed.get(key):
                     errors.append(
                         f"{where}.claim_evaluation.{key}: disagrees with stored evaluator inputs"
                     )
@@ -1659,6 +1695,8 @@ def validate_claim_verdicts(
     contrast_by_id: dict[str, Mapping[str, Any]] = {}
     for index, contrast in enumerate(contrasts):
         where = f"artifact.contrasts[{index}]"
+        if isinstance(contrast, Mapping):
+            _validate_claim_discipline_cohort(contrast, where, errors)
         if not _exact_keys(contrast, _CONTRAST_KEYS, where, errors):
             continue
         contrast_id = contrast["contrast_id"]
@@ -2510,23 +2548,6 @@ def validate_claim_verdicts(
                         f"{where}.floor",
                         errors,
                     )
-                    floor_discipline = floor.get("single_count_discipline")
-                    floor_rule_id = (
-                        floor_discipline.get("rule_id")
-                        if isinstance(floor_discipline, Mapping)
-                        else None
-                    )
-                    if any(
-                        not isinstance(
-                            resolution.get("single_count_discipline"), Mapping
-                        )
-                        or resolution["single_count_discipline"].get("rule_id")
-                        != floor_rule_id
-                        for _, resolution in limited_resolutions
-                    ):
-                        errors.append(
-                            f"{where}.floor.single_count_discipline: mixed rule versions are forbidden"
-                        )
                     diagnostics_by_source: dict[
                         str, list[tuple[int, Any]]
                     ] = {}
@@ -2609,7 +2630,6 @@ def validate_claim_verdicts(
                         "floor_source",
                         "floor_limit_class",
                         "point_floor_diagnostics",
-                        "single_count_discipline",
                     ):
                         if evaluation_floor_limit.get(key) != floor.get(key):
                             errors.append(

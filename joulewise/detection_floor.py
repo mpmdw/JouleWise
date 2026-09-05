@@ -81,6 +81,12 @@ __all__ = [
     "admissible_set_uncertainty_dominates_point_floor",
     "attribution_single_count_discipline",
     "attribution_single_count_discipline_is_canonical",
+    "SingleCountDisciplineError",
+    "DisciplineV1",
+    "DisciplineV2",
+    "read_single_count_discipline",
+    "read_single_count_profile",
+    "check_single_count_cohort",
     "absolute_false_effect_floor",
     "comparative_false_effect_floor",
     "two_shared_edge_common_mode_registration",
@@ -400,16 +406,139 @@ def attribution_single_count_discipline(
 def attribution_single_count_discipline_is_canonical(value: object) -> bool:
     """Whether ``value`` is exactly one supported versioned wire object."""
 
+    try:
+        read_single_count_discipline(
+            {"single_count_discipline": value}, where="discipline", required=True
+        )
+    except SingleCountDisciplineError:
+        return False
+    return True
+
+
+class SingleCountDisciplineError(ValueError):
+    """Local admission failure; callers translate into their own error family."""
+
+    def __init__(self, message: str, *, mixed_versions: bool = False):
+        super().__init__(message)
+        self.mixed_versions = mixed_versions
+
+
+@dataclass(frozen=True)
+class DisciplineV1:
+    """Detached, immutable canonical wire atoms, in their original key order."""
+
+    rule_id: str
+    _items: tuple[tuple[str, str | bool], ...]
+
+    def copy_wire(self) -> dict[str, str | bool]:
+        return dict(self._items)
+
+
+@dataclass(frozen=True)
+class DisciplineV2(DisciplineV1):
+    """The prospective sizing version; never an additional acceptance gate."""
+
+
+_DISCIPLINE_ABSENT = object()
+
+
+def read_single_count_discipline(
+    carrier: object, *, where: str, required: bool = False
+) -> DisciplineV1 | DisciplineV2 | None:
+    """Admit one carrier before filtering, copying, comparing, or hashing IDs."""
+
+    context = f"{where}.single_count_discipline"
+    if not isinstance(carrier, Mapping):
+        raise SingleCountDisciplineError(f"{context}: carrier must be an object")
+    required = (
+        required
+        or carrier.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+        or carrier.get("floor_source") == ATTRIBUTION_FLOOR_SOURCE
+    )
+    value = carrier.get("single_count_discipline", _DISCIPLINE_ABSENT)
+    if value is _DISCIPLINE_ABSENT:
+        if required:
+            raise SingleCountDisciplineError(f"{context}: required metadata is absent")
+        return None
     if not isinstance(value, Mapping):
-        return False
+        raise SingleCountDisciplineError(f"{context}: must be an object")
     rule_id = value.get("rule_id")
+    # In particular, [] and {} must fail here, before any set/dict lookup.
     if not isinstance(rule_id, str):
-        return False
+        raise SingleCountDisciplineError(f"{context}.rule_id: must be a string")
     try:
         expected = attribution_single_count_discipline(rule_id)
-    except ValueError:
-        return False
-    return dict(value) == expected
+    except ValueError as exc:
+        raise SingleCountDisciplineError(f"{context}: {exc}") from exc
+    if set(value) != set(expected) or any(
+        type(value[key]) is not type(atom) or value[key] != atom
+        for key, atom in expected.items()
+    ):
+        raise SingleCountDisciplineError(
+            f"{context}: must preserve the clause-11 composition rule for {rule_id}"
+        )
+    view_type = DisciplineV1 if rule_id == SINGLE_COUNT_DISCIPLINE_ID_V1 else DisciplineV2
+    return view_type(rule_id, tuple(value.items()))
+
+
+def check_single_count_cohort(
+    views: Sequence[DisciplineV1 | DisciplineV2 | None], *, where: str
+) -> None:
+    """Compare admitted IDs only, including refused and diagnostic carriers."""
+
+    if len({view.rule_id for view in views if view is not None}) > 1:
+        raise SingleCountDisciplineError(
+            f"{where}: single_count_discipline rule versions must not be mixed",
+            mixed_versions=True,
+        )
+
+
+def read_single_count_profile(
+    carrier: object, *, profile: str, where: str
+) -> tuple[DisciplineV1 | DisciplineV2, ...]:
+    """Enumerate the floor or extraction schema, without recursive discovery."""
+
+    views = []
+
+    def admit(value: object, location: str):
+        view = read_single_count_discipline(value, where=location)
+        if view is not None:
+            views.append(view)
+        return view
+
+    if profile not in ("floor", "extraction"):
+        raise ValueError(f"unknown discipline carrier profile: {profile!r}")
+    root_view = admit(carrier, where)
+    labelled_cell_ids = set()
+    names = ("cells", "transport_groups") if profile == "floor" else ("cells",)
+    for name in names:
+        containers = carrier.get(name, [])
+        if not isinstance(containers, list):
+            raise SingleCountDisciplineError(
+                f"{where}.{name}: single_count_discipline carriers must be an array"
+            )
+        for index, container in enumerate(containers):
+            location = f"{where}.{name}[{index}]"
+            parent_view = admit(container, location)
+            if profile == "floor":
+                cell_id = container.get("cell_id")
+                if name == "cells" and parent_view is not None and isinstance(cell_id, str):
+                    labelled_cell_ids.add(cell_id)
+                source_ids = container.get("source_cell_ids")
+                if name == "transport_groups" and parent_view is None and isinstance(source_ids, list):
+                    if any(isinstance(source, str) and source in labelled_cell_ids for source in source_ids):
+                        read_single_count_discipline(container, where=location, required=True)
+            if profile == "floor" and name == "cells":
+                for component in ("absolute", "comparative"):
+                    record = container.get(component)
+                    if record is not None:
+                        child_view = admit(record, f"{location}.{component}")
+                        if child_view is not None and parent_view is None:
+                            read_single_count_discipline(container, where=location, required=True)
+    if profile == "extraction" and views and root_view is None:
+        read_single_count_discipline(carrier, where=where, required=True)
+    check_single_count_cohort(views, where=where)
+    return tuple(views)
 
 
 def canonical_domain_sha256(domain: str, value: Mapping) -> str:
@@ -3393,12 +3522,6 @@ def _validate_attribution_limit_metadata(
                 errors.append(
                     f"{where}.point_floor_diagnostic.{key}: does not match point-only floor"
                 )
-    if not attribution_single_count_discipline_is_canonical(
-        record.get("single_count_discipline")
-    ):
-        errors.append(
-            f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
-        )
 
 
 def _validate_bound_terms(terms, where, errors) -> None:
@@ -3882,20 +4005,6 @@ def _validate_cell(
                 errors.append(
                     f"{where}.point_floor_diagnostics: must match labelled components"
                 )
-            cell_discipline = cell.get("single_count_discipline")
-            if not attribution_single_count_discipline_is_canonical(
-                cell_discipline
-            ):
-                errors.append(
-                    f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
-                )
-            elif any(
-                record.get("single_count_discipline") != cell_discipline
-                for record in limited_records
-            ):
-                errors.append(
-                    f"{where}.single_count_discipline: must match every labelled component version"
-                )
     elif present_limit_keys:
         errors.append(
             f"{where}: attribution-limit cell metadata is forbidden without a labelled component"
@@ -4160,20 +4269,6 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
                 errors.append(
                     f"{where}.point_floor_diagnostics: must preserve source diagnostics"
                 )
-            group_discipline = group.get("single_count_discipline")
-            if not attribution_single_count_discipline_is_canonical(
-                group_discipline
-            ):
-                errors.append(
-                    f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
-                )
-            elif any(
-                cell.get("single_count_discipline") != group_discipline
-                for cell in limited_sources
-            ):
-                errors.append(
-                    f"{where}.single_count_discipline: must match every labelled source-cell version"
-                )
     elif present_limit_keys:
         errors.append(
             f"{where}: attribution-limit group metadata is forbidden without a labelled source"
@@ -4241,6 +4336,12 @@ def validate_floor_artifact(
             for path in forbidden_paths
         ]
     errors: list = []
+    try:
+        read_single_count_profile(value, profile="floor", where="artifact")
+    except SingleCountDisciplineError as exc:
+        errors.append(str(exc))
+        return errors
+
     if not _check_keys(value, _TOP_KEYS, "artifact", errors):
         return errors
     if value["schema_version"] != SCHEMA_VERSION:
@@ -4312,26 +4413,6 @@ def validate_floor_artifact(
             if group_id in group_ids:
                 errors.append(f"{where}: duplicate transport_group_id {group_id!r}")
             group_ids.add(group_id)
-    discipline_ids = {
-        discipline.get("rule_id")
-        for container in [
-            *(
-                record
-                for cell in cells
-                if isinstance(cell, Mapping)
-                for record in (cell.get("absolute"), cell.get("comparative"))
-                if isinstance(record, Mapping)
-            ),
-            *(cell for cell in cells if isinstance(cell, Mapping)),
-            *(group for group in groups if isinstance(group, Mapping)),
-        ]
-        for discipline in (container.get("single_count_discipline"),)
-        if isinstance(discipline, Mapping)
-    }
-    if len(discipline_ids) > 1:
-        errors.append(
-            "artifact: single_count_discipline rule versions must not be mixed"
-        )
     for i, cell in enumerate(cells):
         if isinstance(cell, Mapping) and cell.get("transport_group_id") not in group_ids:
             errors.append(f"cells[{i}]: transport_group_id references no transport group")

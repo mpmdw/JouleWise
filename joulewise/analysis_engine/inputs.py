@@ -54,7 +54,8 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     TRANSPORT_RULE_ID,
-    attribution_single_count_discipline_is_canonical,
+    SingleCountDisciplineError,
+    read_single_count_discipline,
     canonical_domain_sha256,
     complete_bundle_sha256,
     transport_refusal_reasons,
@@ -4324,7 +4325,11 @@ def resolve_floor(
         limit_class = cell.get("floor_limit_class")
         floor_source = cell.get("floor_source")
         point_diagnostics = cell.get("point_floor_diagnostics")
-        single_count = cell.get("single_count_discipline")
+        single_count = None
+        try:
+            single_count = read_single_count_discipline(cell, where="selected cell")
+        except SingleCountDisciplineError:
+            reasons.append("artifact_schema_invalid")
         limit_metadata_present = any(
             key in cell
             for key in (
@@ -4338,7 +4343,7 @@ def resolve_floor(
             limit_class == ATTRIBUTION_LIMIT_CLASS
             and floor_source == ATTRIBUTION_FLOOR_SOURCE
             and isinstance(point_diagnostics, Mapping)
-            and attribution_single_count_discipline_is_canonical(single_count)
+            and single_count is not None
         )
         if limit_metadata_present and not attribution_limited:
             reasons.append("artifact_schema_invalid")
@@ -4378,7 +4383,7 @@ def resolve_floor(
                 else None
             ),
             single_count_discipline=(
-                copy.deepcopy(dict(single_count))
+                single_count.copy_wire()
                 if attribution_limited
                 else None
             ),
@@ -4467,13 +4472,16 @@ def resolve_floor(
             "single_count_discipline",
         )
     )
+    single_count = None
+    try:
+        single_count = read_single_count_discipline(group, where="selected group")
+    except SingleCountDisciplineError:
+        refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
     attribution_limited = (
         group.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
         and group.get("floor_source") == ATTRIBUTION_FLOOR_SOURCE
         and isinstance(group.get("point_floor_diagnostics"), Mapping)
-        and attribution_single_count_discipline_is_canonical(
-            group.get("single_count_discipline")
-        )
+        and single_count is not None
     )
     if limit_metadata_present and not attribution_limited:
         refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
@@ -4517,11 +4525,23 @@ def resolve_floor(
             else None
         ),
         single_count_discipline=(
-            copy.deepcopy(dict(group["single_count_discipline"]))
+            single_count.copy_wire()
             if attribution_limited
             else None
         ),
     )
+
+
+def read_floor_resolution_discipline(resolution: FloorResolution):
+    """Adapt the dataclass default; JSON null has already failed byte admission."""
+
+    carrier = {
+        "floor_source": resolution.floor_source,
+        "floor_limit_class": resolution.floor_limit_class,
+    }
+    if resolution.single_count_discipline is not None:
+        carrier["single_count_discipline"] = resolution.single_count_discipline
+    return read_single_count_discipline(carrier, where="floor resolution")
 
 
 def unavailable_floor_resolution(

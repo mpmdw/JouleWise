@@ -36,8 +36,9 @@ from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     absolute_false_effect_floor,
     abba_delta,
-    attribution_single_count_discipline,
-    attribution_single_count_discipline_is_canonical,
+    SingleCountDisciplineError,
+    DisciplineV2,
+    read_single_count_profile,
     build_absolute_record,
     build_comparative_record,
     build_floor_artifact,
@@ -557,6 +558,7 @@ def _target_spec_cell(
 def _target_report_cell(
     report: Mapping[str, Any], cell_id: str, kind: str
 ) -> Mapping[str, Any]:
+    _read_mint_disciplines(report, profile="extraction")
     matches = [
         cell
         for cell in report.get("cells", [])
@@ -1508,6 +1510,8 @@ def mint_authenticated_artifact(
 ) -> dict[str, Any]:
     """Run the gate, then construct and validate the one governed artifact."""
 
+    for component in (absolute, comparative):
+        _read_mint_disciplines(component.report, profile="extraction")
     pre_registration_gate(
         plan=plan,
         plan_sha256=plan_sha256,
@@ -1911,51 +1915,29 @@ def bind_floor_artifact_evidence(
     return result
 
 
+def _read_mint_disciplines(carrier, *, profile):
+    try:
+        return read_single_count_profile(carrier, profile=profile, where="artifact")
+    except SingleCountDisciplineError as exc:
+        if exc.mixed_versions:
+            raise MintError(f"artifact mixes single-count discipline rule versions: {exc}") from exc
+        raise MintError(f"artifact single-count discipline is not canonical: {exc}") from exc
+
+
 def render_single_count_statement(artifact: Mapping[str, Any]) -> str:
     """Render the convenience prose only from the canonical artifact object."""
 
-    carried: list[Any] = []
-
-    def collect(container: Mapping[str, Any]) -> None:
-        # Preserve malformed values for validation. A valid sibling must not
-        # hide a corrupt (or missing, when labelled) discipline before writing.
-        if (
-            "single_count_discipline" in container
-            or container.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
-            or container.get("floor_source") == ATTRIBUTION_FLOOR_SOURCE
-        ):
-            carried.append(container.get("single_count_discipline"))
-
-    collect(artifact)
-    for name in ("cells", "transport_groups"):
-        containers = artifact.get(name, [])
-        if not isinstance(containers, list):
-            raise MintError(f"artifact {name} must be an array")
-        for container in containers:
-            if not isinstance(container, Mapping):
-                raise MintError(f"artifact {name} entry must be an object")
-            collect(container)
-            if name == "cells":
-                for component in ("absolute", "comparative"):
-                    record = container.get(component)
-                    if record is not None:
-                        if not isinstance(record, Mapping):
-                            raise MintError(
-                                f"artifact cell {component} must be an object"
-                            )
-                        collect(record)
-    if not carried:
+    profile = (
+        "extraction"
+        if isinstance(artifact, Mapping) and artifact.get("schema_version") == EXTRACTION_SCHEMA_VERSION
+        else "floor"
+    )
+    views = _read_mint_disciplines(artifact, profile=profile)
+    if not views:
         raise MintError("artifact does not carry a single-count discipline object")
-    if any(
-        not attribution_single_count_discipline_is_canonical(value)
-        for value in carried
-    ):
-        raise MintError("artifact single-count discipline is not canonical")
-    rule_ids = {value["rule_id"] for value in carried}
-    if len(rule_ids) != 1:
-        raise MintError("artifact mixes single-count discipline rule versions")
-    expected = attribution_single_count_discipline(next(iter(rule_ids)))
-    if expected["rule_id"].endswith(".v2"):
+    view = views[0]
+    expected = view.copy_wire()
+    if isinstance(view, DisciplineV2):
         return (
             f"{expected['note']} "
             f"Planning sizing expression: {expected['planning_sizing_expression']}; "
