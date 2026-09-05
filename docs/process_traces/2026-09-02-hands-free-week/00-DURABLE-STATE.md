@@ -355,3 +355,17 @@ THEN, in order:
 - Open PRs: #288 paper-K (CI re-running after the ledger commit; merge when green), #289 seam (replay running for
   row 9; gate-ledger fails until row 9 is filled), #292 F+B (CI fix seat `fb-ci` running), #290 paper-L (retarget
   after #288).
+
+## 2026-09-05 ~08:10 PDT — paper-K merged (#288 → 6b224521); paper-L retargeted; F+B fix round 2
+
+- PR #288 (paper-K) merged at 6b224521 with the full 12-row ledger. PR #290 (paper-L) retargeted to main;
+  origin/main merged into feat/2026-09-05-paper-l at a3bbd9b3; its full replay is running (row 9), then CI
+  on the final head (row 11) and the terminal review (row 12).
+- PR #289 (seam): row 9 = docs/process_traces/2026-09-04-paper-custody/18-full-replay-f13e3a44.md (one
+  load-sensitive node-worker failure reproduced on main), row 12 = e61b0db5; row 11 waits on CI.
+- PR #292 (F+B): the sheet is regenerated (c8ab5efb). The two relocation errors are golden mint-fixture pins
+  in tests/test_mint_floor_artifact_generalized.py that still hash v1 discipline bytes; fix round 2 seat
+  `fb-ci2` (astra high) performs the file's own fixture-review step with the independent oracle and adds one
+  regression; report 49. Then rows 9/11/12.
+- Paper-M fix round 1 (`paperm-fix1`) still running on feat/2026-09-05-paper-m (stacked on paper-L before
+  the main merge; rebase or merge paper-L into it after the seat returns, before the delta).
