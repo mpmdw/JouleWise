@@ -438,3 +438,12 @@ THEN, in order:
   (after paper-M), D-166 prompt-0 (carried inside paper-L #290).
 - Paper-M #293: checker reconciliation (report 11) bench: fast paper tests OK; round-7 module running to
   paperm-r7-bench.log; then commit → replay → CI → retarget/merge after #290.
+
+## 2026-09-05 ~11:05 PDT — paper-L PR #290 merged (ef496742); paper-M retargeted to main
+
+- Paper-L merged with the full ledger (replay record 07, terminal-review addendum, CI 98036c0e). The D-166
+  prompt-zero generator and its identity-set fixture fix + singleton coverage test are on main.
+- Paper-M PR #293 now targets main; origin/main merged into the branch (integration tree); replay
+  (paperm-replay4.log) and CI re-run on that head; rows 9/11 then merge.
+- Next after #293: D-165 relabel wording cure against the merged draft → census GREEN → Opus → PR; then
+  the watchdog install handoff (steps 1/3/4/5) once no seat or replay is running.
