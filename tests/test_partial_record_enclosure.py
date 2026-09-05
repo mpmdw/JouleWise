@@ -2,19 +2,107 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import math
+import re
+import shutil
+import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from joulewise.bundle_read import TracePoint, Window
 from scripts.paper import partial_record_enclosure as enclosure
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+STRICT_SEED_BUNDLE = (
+    REPO_ROOT / "tests/fixtures/d117_v2_production/strict_seed_bundle"
+)
 
 
 class PartialRecordEnclosureTests(unittest.TestCase):
+    def assert_cli_refusal(self, bundle: Path, reason: str) -> None:
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with (
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+            mock.patch.object(
+                enclosure, "enclose_phase", wraps=enclosure.enclose_phase
+            ) as derive_phase,
+        ):
+            self.assertEqual(enclosure.main([str(bundle)]), 2)
+        self.assertEqual(stdout.getvalue(), "", "refusal must emit no enclosure")
+        refusal = json.loads(stderr.getvalue())
+        self.assertEqual(set(refusal), {"status", "reason", "detail"})
+        self.assertEqual(refusal["status"], "refused")
+        self.assertEqual(refusal["reason"], reason)
+        derive_phase.assert_not_called()
+
+    def test_registry_pins_current_script_bytes(self) -> None:
+        registry = (REPO_ROOT / "docs/paper/results-fill-registry.md").read_text(
+            encoding="utf-8"
+        )
+        rows = [line for line in registry.splitlines() if line.startswith("| PE-01 — ")]
+        self.assertEqual(len(rows), 1)
+        supplier = rows[0].split("|")[3].strip()
+        pin = re.search(
+            r"`scripts/paper/partial_record_enclosure\.py`, "
+            r"SHA-256 `([0-9a-f]{64})`, ([0-9,]+) B",
+            supplier,
+        )
+        self.assertIsNotNone(pin, "PE-01 must pin its producer in the supplier cell")
+        assert pin is not None
+        script = (REPO_ROOT / "scripts/paper/partial_record_enclosure.py").read_bytes()
+        self.assertEqual(pin.group(1), hashlib.sha256(script).hexdigest())
+        self.assertEqual(int(pin.group(2).replace(",", "")), len(script))
+
+    def test_strict_validation_tamper_refuses_without_enclosure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "bundle"
+            shutil.copytree(STRICT_SEED_BUNDLE, bundle)
+            summary_path = bundle / "summary_metrics.json"
+            summary = json.loads(summary_path.read_bytes())
+            summary["phase_energy_j"]["decode"] += 1.0
+            summary_path.write_text(json.dumps(summary), encoding="utf-8")
+            self.assert_cli_refusal(bundle, "bundle_strict_validation_failed")
+
+    def test_bundle_digest_drift_refuses_without_enclosure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bundle = Path(directory) / "bundle"
+            shutil.copytree(STRICT_SEED_BUNDLE, bundle)
+            census = enclosure._bundle_sha256_census
+
+            def drift_before_census(path: Path) -> list[dict]:
+                # Change real bytes after strict validation, preserving JSON
+                # meaning so only the authentication digest can catch drift.
+                summary_path = path / "summary_metrics.json"
+                summary_path.write_bytes(summary_path.read_bytes() + b"\n")
+                return census(path)
+
+            with mock.patch.object(
+                enclosure, "_bundle_sha256_census", side_effect=drift_before_census
+            ):
+                self.assert_cli_refusal(bundle, "v2_authentication_input_changed")
+
+    def test_phase_summary_window_mismatch_refuses_without_enclosure(self) -> None:
+        load_contributions = enclosure._load_contributions
+
+        def omit_decode_window(reader):
+            # Inject inconsistent window interpretation at the consumer seam;
+            # the real strict validator still authenticates the clean fixture.
+            contributions = load_contributions(reader)
+            del contributions["decode"]
+            return contributions
+
+        with mock.patch.object(
+            enclosure, "_load_contributions", side_effect=omit_decode_window
+        ):
+            self.assert_cli_refusal(STRICT_SEED_BUNDLE, "phase_summary_window_mismatch")
+
     @staticmethod
     def interval_curve(
         *, start_s: float, count: int, power_w: float

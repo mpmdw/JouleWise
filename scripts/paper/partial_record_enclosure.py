@@ -2,11 +2,11 @@
 """Derive a desk-only partial-record enclosure from one run bundle.
 
 The phase windows are fixed by the authenticated bundle; this command has no
-window-selection argument and never composes its diagnostic into a floor,
-uncertainty term, or claim bound.  It uses the reducer's shared trace/window
+window-selection argument and never composes its diagnostic into any bound.
+It uses the reducer's shared trace/window
 read path (`joulewise/bundle_read.py:352` and `joulewise/bundle_read.py:576`)
 and recomputes each point with the reducer's own integration function
-(`joulewise/reduce.py:157`).
+(`joulewise/reduce.py:167`).
 
 Usage:
     python3 scripts/paper/partial_record_enclosure.py RUN_BUNDLE
@@ -231,6 +231,8 @@ def _derive_bundle_authenticated(bundle: Path) -> dict[str, dict[str, Any]]:
             for curve, _windows in groups:
                 _validate_interval_curve(curve)
     except BundleReadError as exc:
+        # BundleReadError exposes no structured reason attribute; retain the
+        # nonfinite-power classification from its current diagnostic text.
         detail = str(exc)
         if "power_w" in detail and "finite" in detail:
             reason = "nonfinite_reported_power"

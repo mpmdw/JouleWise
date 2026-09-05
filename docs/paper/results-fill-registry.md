@@ -40,7 +40,8 @@ Fill-rule vocabulary is closed:
 Freeze labels distinguish a frozen key or derivation from an issued value.
 `KEY_FROZEN / VALUE_UNISSUED` means the vocabulary is fixed but no result may
 be inserted. `SUPPLIER_UNKNOWN` identifies a missing field contract, not a
-license to infer one.
+license to infer one. `FIXED_WINDOW_ONLY` restricts the enclosure diagnostic to
+the recorded phase windows of its authenticated input bundle.
 
 Capture-method and estimator provenance are independent fill preconditions:
 
@@ -91,6 +92,9 @@ Every row cites one or more of these defining sources:
   conservative claim language; D-122 supersedes decode-only gamma; D-123 owns
   the reported-mean cells; D-124 owns the candidate contrast estimator and its
   transfer-assumption disclosure.
+- `PE-GATE` — `docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`
+  and `docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`,
+  Q-17-1: the ratified pinned desk-script enclosure and its appendix DERIVE row.
 - `PLAN` —
   `docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`, which names
   alpha and beta as four-cell floor producers and gamma as the prospective
@@ -909,17 +913,18 @@ be inferred from the ratio outcome.
 
 ### Successor-skeleton outcome-branch slots
 
-These rows govern nonnumeric semantic placements added to
-`draft-v2-skeleton.md`; they are outside the frozen-draft marker census above.
-Each repeated marker shares one result across the Abstract, Section 7, and
-Section 10. No row authorizes prose to be inferred at the desk.
+These rows govern successor-skeleton outcome placements and the prospective
+appendix enclosure placement; they are outside the frozen-draft marker census
+above. Each repeated outcome marker shares one result across the Abstract,
+Section 7, and Section 10 of `draft-v2-skeleton.md`. PE-01 has no draft marker
+yet. No row authorizes prose to be inferred at the desk.
 
 | Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
 |---|---|---|---|---|---|---|
 | OB-01 — Outcome-B failed-component list in the Abstract, Section 7, and Section 10 | `[FILL:OB-01]` | Authenticated `joulewise.d165_dominance_closeout.v1`: conservatively render every record with `passes` false from `independent_ratios[].{cell_id,component,passes}` and `comparative_common_mode_ratios[].{cell_id,component,passes}`; no professor-facing list renderer exists yet | alpha and beta / all required absolute, comparative, and comparative shared-error components | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; TOKEN_MISSING; never render from an unauthenticated or incomplete close-out | DRAFT, D165 |
 | TR-01 — Branch-independent inserted-gap result in the Abstract, Section 7, and Section 10 | `[FILL:TR-01]` | Accepted `TRANSFER-FIDUCIAL-01` evidence record: render whether the largest fitted inserted-gap edge residual supported applying the session's pulse-derived timing bound to inference; the task has a named evidence supplier but no issued schema field or professor-facing result token | post-campaign inserted-gap diagnostic / all three outcome branches | STOP_FILL | SUPPLIER_NAMED / VALUE_UNISSUED; TOKEN_MISSING; no branch selection may remove this placement | DRAFT, AUTH |
 | OR-01 — Refusal stop stage and issued reason in the Section-4 form and the Abstract, Section 7, and Section 10 Refusal paragraphs | `[FILL:OR-01]` | Before comparison: the authenticated window-admission outcome for the affected model or the authenticated claim-evaluation outcome for the affected token-generation (`DS-32`) or prompt-processing (`PG-08`) verdict. At close-out: authenticated `joulewise.d165_dominance_closeout.v1`. At every placement, render exactly one stage label (`before comparison` or `at close-out`) plus the reason issued by that governing evidence; name each affected model or verdict; include a Qwen-pair verdict only when its absence is the stop reason; never infer a reason from ratio disposition | fixed Qwen3 pair / two-stage refusal | STOP_FILL | SUPPLIERS_NAMED / VALUE_UNISSUED; TOKEN_MISSING; refuse on absent, unauthenticated, conflicting, or multi-stage-without-precedence inputs | DRAFT, AUTH, D165 |
-| PE-01 — Appendix partial-record enclosure figure and sentence | Prospective appendix enclosure figure and its accompanying fixed-window sentence; no draft marker yet | `scripts/paper/partial_record_enclosure.py` over each strict-valid authenticated run bundle, consuming its recorded phase windows and emitting the per-phase point, enclosure endpoints, straddling-record diagnostics, fixed-window scope, and bundle SHA-256 census; refuse point-supported, nonfinite-power, negative-power, or strict-invalid inputs; never compose the diagnostic into a floor, uncertainty term, or claim bound | selected claim-generation bundle / each recorded phase | DERIVE | SUPPLIER_NAMED / VALUE_UNISSUED; APPENDIX_ONLY; FIXED_WINDOW_ONLY; NON_CLAIM_BOUND | AUTH |
+| PE-01 — Appendix partial-record enclosure figure and sentence | `[FILL:PE-01]` | `scripts/paper/partial_record_enclosure.py`, SHA-256 `9d2b95a88067e0371d6287e1c332023d6dde72bfa2ea146ac0e782b807c529a0`, 10,761 B over each strict-valid authenticated run bundle, consuming its recorded phase windows and emitting the per-phase point, enclosure endpoints, straddling-record diagnostics, fixed-window scope, and bundle SHA-256 census; refuse point-supported, nonfinite-power, negative-power, or strict-invalid inputs; the diagnostic of allocation ambiguity at the registered window is reported, never composed into any bound | selected claim-generation bundle / each recorded phase | DERIVE | SUPPLIER_NAMED / VALUE_UNISSUED; TOKEN_MISSING; APPENDIX_ONLY_REGISTRY_BOUND; NON_CLAIM_BEARING; FIXED_WINDOW_ONLY | PE-GATE |
 
 ## Authority discrepancies and non-token gaps
 
