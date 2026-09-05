@@ -27,3 +27,17 @@ tests.test_paper_terms_lint 3 OK (delta 05 V1/V2 and bench, this session). Full-
 head is recorded below when it lands.
 
 Verdict: LANDABLE.
+
+## Full-suite replay (row 9)
+
+Unpiped `python3 -m unittest discover -s tests` on the merged head 4ea033ec (log: magistrate job dir,
+paperj-replay.log), exact tail:
+
+    Ran 4992 tests in 6498.601s
+    FAILED (failures=1, skipped=125)
+
+The single failure is tests.test_node_worker_subprocess…test_real_client_worker_artifact_contract_over_localhost:
+ENVIRONMENTAL / PRE-EXISTING TEST SENSITIVITY (diagnosed in docs/process_traces/2026-09-04-fanout/30 and
+dispositioned in 32 for PR #285): the test-only 15 s fake-vLLM prepare budget under concurrent Mac load
+(load average 7–10 during this replay); identical bytes on main; Linux CI green on this head; production
+budget 900 s. Paper-J touches docs/paper and one test fixture string only.
