@@ -14,7 +14,7 @@ from typing import Any
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
-    attribution_single_count_discipline,
+    attribution_single_count_discipline_is_canonical,
 )
 from joulewise.calibration_ledger import REFUSAL_TAXONOMY
 
@@ -300,8 +300,9 @@ def evaluate_claim(
             or not isinstance(
                 floor_metadata.get("point_floor_diagnostics"), Mapping
             )
-            or floor_metadata.get("single_count_discipline")
-            != attribution_single_count_discipline()
+            or not attribution_single_count_discipline_is_canonical(
+                floor_metadata.get("single_count_discipline")
+            )
         ):
             reasons.add("floor_artifact_invalid")
         else:
@@ -312,7 +313,9 @@ def evaluate_claim(
                 "point_floor_diagnostics": dict(
                     floor_metadata["point_floor_diagnostics"]
                 ),
-                "single_count_discipline": attribution_single_count_discipline(),
+                "single_count_discipline": dict(
+                    floor_metadata["single_count_discipline"]
+                ),
             }
 
     if numeric_estimate is None or metrology_interval is None or decision is None:

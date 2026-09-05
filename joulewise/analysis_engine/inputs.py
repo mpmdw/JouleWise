@@ -54,7 +54,7 @@ from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
     TRANSPORT_RULE_ID,
-    attribution_single_count_discipline,
+    attribution_single_count_discipline_is_canonical,
     canonical_domain_sha256,
     complete_bundle_sha256,
     transport_refusal_reasons,
@@ -4333,7 +4333,7 @@ def resolve_floor(
             limit_class == ATTRIBUTION_LIMIT_CLASS
             and floor_source == ATTRIBUTION_FLOOR_SOURCE
             and isinstance(point_diagnostics, Mapping)
-            and single_count == attribution_single_count_discipline()
+            and attribution_single_count_discipline_is_canonical(single_count)
         )
         if limit_metadata_present and not attribution_limited:
             reasons.append("artifact_schema_invalid")
@@ -4373,7 +4373,7 @@ def resolve_floor(
                 else None
             ),
             single_count_discipline=(
-                attribution_single_count_discipline()
+                copy.deepcopy(dict(single_count))
                 if attribution_limited
                 else None
             ),
@@ -4464,8 +4464,9 @@ def resolve_floor(
         group.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
         and group.get("floor_source") == ATTRIBUTION_FLOOR_SOURCE
         and isinstance(group.get("point_floor_diagnostics"), Mapping)
-        and group.get("single_count_discipline")
-        == attribution_single_count_discipline()
+        and attribution_single_count_discipline_is_canonical(
+            group.get("single_count_discipline")
+        )
     )
     if limit_metadata_present and not attribution_limited:
         refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
@@ -4509,7 +4510,7 @@ def resolve_floor(
             else None
         ),
         single_count_discipline=(
-            attribution_single_count_discipline()
+            copy.deepcopy(dict(group["single_count_discipline"]))
             if attribution_limited
             else None
         ),

@@ -12,7 +12,7 @@ from typing import Any, Callable, Mapping, Sequence
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
-    attribution_single_count_discipline,
+    attribution_single_count_discipline_is_canonical,
 )
 from joulewise.analysis_manifest_v3 import (
     AnalysisManifestV3Error,
@@ -238,6 +238,25 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
     floor_gate = max((value.floor_gate_j for value in usable if value.floor_gate_j is not None), default=None)
     if not all_usable:
         floor_abs = floor_cmp = floor_gate = None
+    limited = [
+        value
+        for value in usable
+        if value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
+        and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
+        and isinstance(value.point_floor_diagnostics, Mapping)
+        and attribution_single_count_discipline_is_canonical(
+            value.single_count_discipline
+        )
+    ]
+    discipline_ids = {
+        value.single_count_discipline["rule_id"]
+        for value in limited
+        if value.single_count_discipline is not None
+    }
+    if len(discipline_ids) > 1:
+        raise AnalysisInputError(
+            "floor resolutions mix single-count discipline rule versions"
+        )
     resolution_rows = []
     for value in resolutions:
         row = {
@@ -254,8 +273,9 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
             value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
             and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
             and isinstance(value.point_floor_diagnostics, Mapping)
-            and value.single_count_discipline
-            == attribution_single_count_discipline()
+            and attribution_single_count_discipline_is_canonical(
+                value.single_count_discipline
+            )
         ):
             row.update(
                 {
@@ -264,8 +284,8 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
                     "point_floor_diagnostics": copy.deepcopy(
                         dict(value.point_floor_diagnostics)
                     ),
-                    "single_count_discipline": (
-                        attribution_single_count_discipline()
+                    "single_count_discipline": copy.deepcopy(
+                        dict(value.single_count_discipline or {})
                     ),
                 }
             )
@@ -285,15 +305,6 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
         ),
         "resolutions": resolution_rows,
     }
-    limited = [
-        value
-        for value in usable
-        if value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
-        and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
-        and isinstance(value.point_floor_diagnostics, Mapping)
-        and value.single_count_discipline
-        == attribution_single_count_discipline()
-    ]
     if all_usable and limited:
         diagnostics: dict[str, Any] = {}
         for value in limited:
@@ -310,8 +321,8 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
                 "floor_source": ATTRIBUTION_FLOOR_SOURCE,
                 "floor_limit_class": ATTRIBUTION_LIMIT_CLASS,
                 "point_floor_diagnostics": diagnostics,
-                "single_count_discipline": (
-                    attribution_single_count_discipline()
+                "single_count_discipline": copy.deepcopy(
+                    dict(limited[0].single_count_discipline or {})
                 ),
             }
         )

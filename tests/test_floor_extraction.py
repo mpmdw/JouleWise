@@ -2427,6 +2427,14 @@ class ComparativeCellExtractionTests(_PermissiveStrictValidatorMixin, unittest.T
             row["single_count_discipline"],
             attribution_single_count_discipline(),
         )
+        self.assertEqual(
+            row["single_count_discipline"]["rule_id"],
+            "attribution_floor_plus_claim_side_bound.v2",
+        )
+        self.assertEqual(
+            row["single_count_discipline"]["planning_sizing_expression"],
+            "floor_j + claim_side_bound_j",
+        )
 
     def test_delta_sign_and_magnitude_use_frozen_abba_formula(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

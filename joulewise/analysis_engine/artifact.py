@@ -17,7 +17,7 @@ from typing import Any
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
-    attribution_single_count_discipline,
+    attribution_single_count_discipline_is_canonical,
 )
 from joulewise.analysis_manifest_v3 import (
     AnalysisManifestV3Error,
@@ -487,8 +487,8 @@ def _validate_attribution_floor_metadata(
         f"{where}.point_floor_diagnostics",
         errors,
     )
-    if value.get("single_count_discipline") != (
-        attribution_single_count_discipline()
+    if not attribution_single_count_discipline_is_canonical(
+        value.get("single_count_discipline")
     ):
         errors.append(
             f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
@@ -2510,6 +2510,23 @@ def validate_claim_verdicts(
                         f"{where}.floor",
                         errors,
                     )
+                    floor_discipline = floor.get("single_count_discipline")
+                    floor_rule_id = (
+                        floor_discipline.get("rule_id")
+                        if isinstance(floor_discipline, Mapping)
+                        else None
+                    )
+                    if any(
+                        not isinstance(
+                            resolution.get("single_count_discipline"), Mapping
+                        )
+                        or resolution["single_count_discipline"].get("rule_id")
+                        != floor_rule_id
+                        for _, resolution in limited_resolutions
+                    ):
+                        errors.append(
+                            f"{where}.floor.single_count_discipline: mixed rule versions are forbidden"
+                        )
                     diagnostics_by_source: dict[
                         str, list[tuple[int, Any]]
                     ] = {}

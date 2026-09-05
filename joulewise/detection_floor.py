@@ -62,6 +62,7 @@ __all__ = [
     "ATTRIBUTION_LIMIT_CLASS",
     "ATTRIBUTION_FLOOR_SOURCE",
     "SINGLE_COUNT_DISCIPLINE_ID",
+    "SINGLE_COUNT_DISCIPLINE_ID_V1",
     "COMMON_MODE_ESTIMATOR_ID",
     "COMMON_MODE_ESTIMATOR_VERSION",
     "COMMON_MODE_PARAMETER_SHA256",
@@ -74,6 +75,7 @@ __all__ = [
     "small_sample_guard_factor",
     "admissible_set_uncertainty_dominates_point_floor",
     "attribution_single_count_discipline",
+    "attribution_single_count_discipline_is_canonical",
     "absolute_false_effect_floor",
     "comparative_false_effect_floor",
     "two_shared_edge_common_mode_registration",
@@ -110,7 +112,8 @@ GUARD_MINIMUM_N = 5
 MAX_EXACT_ADMISSIBLE_CORNER_N = 16
 ATTRIBUTION_LIMIT_CLASS = "attribution_limited"
 ATTRIBUTION_FLOOR_SOURCE = "E_clock_anchor_shift_bound_j"
-SINGLE_COUNT_DISCIPLINE_ID = "attribution_floor_plus_claim_side_bound.v1"
+SINGLE_COUNT_DISCIPLINE_ID_V1 = "attribution_floor_plus_claim_side_bound.v1"
+SINGLE_COUNT_DISCIPLINE_ID = "attribution_floor_plus_claim_side_bound.v2"
 COMMON_MODE_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
 COMMON_MODE_ESTIMATOR_VERSION = "v1"
 COMMON_MODE_REFUSAL_CODES = (
@@ -345,29 +348,62 @@ def validate_floor_metric_window_class(
     return metric, str(window_class)
 
 
-def attribution_single_count_discipline() -> dict[str, object]:
-    """Return the D-078 clause-11 two-role planning metadata."""
+def attribution_single_count_discipline(
+    rule_id: str = SINGLE_COUNT_DISCIPLINE_ID,
+) -> dict[str, object]:
+    """Return the exact canonical object for a supported rule version."""
 
+    if rule_id == SINGLE_COUNT_DISCIPLINE_ID_V1:
+        # Frozen historical wire object. Do not add, remove, or rename keys.
+        return {
+            "rule_id": SINGLE_COUNT_DISCIPLINE_ID_V1,
+            "effective_clearable_effect_formula": (
+                "floor_j + claim_side_bound_j"
+            ),
+            "floor_role": "calibration_false_effect_bound",
+            "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+            "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,
+            "both_terms_required": True,
+            "apparent_double_count_removal_forbidden": True,
+            "statement": (
+                "effective clearable effect = floor + claim-side bound; "
+                "neither term may be removed as an apparent double count"
+            ),
+        }
+    if rule_id != SINGLE_COUNT_DISCIPLINE_ID:
+        raise ValueError(f"unknown single-count discipline rule_id: {rule_id!r}")
     return {
         "rule_id": SINGLE_COUNT_DISCIPLINE_ID,
-        "planning_sizing_formula": "floor_j + claim_side_bound_j",
-        "gating": False,
-        "note": (
-            "The implemented decision rule uses separate |estimate| > floor "
-            "and widened-interval zero-exclusion gates."
-        ),
-        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
-        "deprecated_alias_of": "planning_sizing_formula",
+        "planning_sizing_expression": "floor_j + claim_side_bound_j",
         "floor_role": "calibration_false_effect_bound",
         "claim_side_bound_role": "claim_measurement_uncertainty_bound",
         "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,
         "both_terms_required": True,
         "apparent_double_count_removal_forbidden": True,
-        "statement": (
-            "effective clearable effect = floor + claim-side bound; "
-            "neither term may be removed as an apparent double count"
+        "gating": False,
+        "role": "prospective_sizing_diagnostic",
+        "not_an_acceptance_gate": True,
+        "note": (
+            "The implemented rule is the two gates: |estimate| > F and "
+            "zero-exclusion of both intervals; for symmetric intervals "
+            "|estimate| > max(F, h+B), actual endpoints govern otherwise."
         ),
     }
+
+
+def attribution_single_count_discipline_is_canonical(value: object) -> bool:
+    """Whether ``value`` is exactly one supported versioned wire object."""
+
+    if not isinstance(value, Mapping):
+        return False
+    rule_id = value.get("rule_id")
+    if not isinstance(rule_id, str):
+        return False
+    try:
+        expected = attribution_single_count_discipline(rule_id)
+    except ValueError:
+        return False
+    return dict(value) == expected
 
 
 def canonical_domain_sha256(domain: str, value: Mapping) -> str:
@@ -3349,8 +3385,8 @@ def _validate_attribution_limit_metadata(
                 errors.append(
                     f"{where}.point_floor_diagnostic.{key}: does not match point-only floor"
                 )
-    if record.get("single_count_discipline") != (
-        attribution_single_count_discipline()
+    if not attribution_single_count_discipline_is_canonical(
+        record.get("single_count_discipline")
     ):
         errors.append(
             f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
@@ -3838,11 +3874,19 @@ def _validate_cell(
                 errors.append(
                     f"{where}.point_floor_diagnostics: must match labelled components"
                 )
-            if cell.get("single_count_discipline") != (
-                attribution_single_count_discipline()
+            cell_discipline = cell.get("single_count_discipline")
+            if not attribution_single_count_discipline_is_canonical(
+                cell_discipline
             ):
                 errors.append(
                     f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+                )
+            elif any(
+                record.get("single_count_discipline") != cell_discipline
+                for record in limited_records
+            ):
+                errors.append(
+                    f"{where}.single_count_discipline: must match every labelled component version"
                 )
     elif present_limit_keys:
         errors.append(
@@ -4108,11 +4152,19 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
                 errors.append(
                     f"{where}.point_floor_diagnostics: must preserve source diagnostics"
                 )
-            if group.get("single_count_discipline") != (
-                attribution_single_count_discipline()
+            group_discipline = group.get("single_count_discipline")
+            if not attribution_single_count_discipline_is_canonical(
+                group_discipline
             ):
                 errors.append(
                     f"{where}.single_count_discipline: must preserve the clause-11 composition rule"
+                )
+            elif any(
+                cell.get("single_count_discipline") != group_discipline
+                for cell in limited_sources
+            ):
+                errors.append(
+                    f"{where}.single_count_discipline: must match every labelled source-cell version"
                 )
     elif present_limit_keys:
         errors.append(
@@ -4252,6 +4304,26 @@ def validate_floor_artifact(
             if group_id in group_ids:
                 errors.append(f"{where}: duplicate transport_group_id {group_id!r}")
             group_ids.add(group_id)
+    discipline_ids = {
+        discipline.get("rule_id")
+        for container in [
+            *(
+                record
+                for cell in cells
+                if isinstance(cell, Mapping)
+                for record in (cell.get("absolute"), cell.get("comparative"))
+                if isinstance(record, Mapping)
+            ),
+            *(cell for cell in cells if isinstance(cell, Mapping)),
+            *(group for group in groups if isinstance(group, Mapping)),
+        ]
+        for discipline in (container.get("single_count_discipline"),)
+        if isinstance(discipline, Mapping)
+    }
+    if len(discipline_ids) > 1:
+        errors.append(
+            "artifact: single_count_discipline rule versions must not be mixed"
+        )
     for i, cell in enumerate(cells):
         if isinstance(cell, Mapping) and cell.get("transport_group_id") not in group_ids:
             errors.append(f"cells[{i}]: transport_group_id references no transport group")

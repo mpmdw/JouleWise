@@ -35,6 +35,7 @@ from joulewise.detection_floor import (  # noqa: E402
     absolute_false_effect_floor,
     abba_delta,
     attribution_single_count_discipline,
+    attribution_single_count_discipline_is_canonical,
     build_absolute_record,
     build_comparative_record,
     build_floor_artifact,
@@ -1911,7 +1912,6 @@ def bind_floor_artifact_evidence(
 def render_single_count_statement(artifact: Mapping[str, Any]) -> str:
     """Render the convenience prose only from the canonical artifact object."""
 
-    expected = attribution_single_count_discipline()
     carried: list[Mapping[str, Any]] = []
     for cell in artifact.get("cells", []):
         if isinstance(cell, Mapping) and isinstance(
@@ -1925,8 +1925,23 @@ def render_single_count_statement(artifact: Mapping[str, Any]) -> str:
             carried.append(group["single_count_discipline"])
     if not carried:
         raise MintError("artifact does not carry a single-count discipline object")
-    if any(dict(value) != expected for value in carried):
+    if any(
+        not attribution_single_count_discipline_is_canonical(value)
+        for value in carried
+    ):
         raise MintError("artifact single-count discipline is not canonical")
+    rule_ids = {value["rule_id"] for value in carried}
+    if len(rule_ids) != 1:
+        raise MintError("artifact mixes single-count discipline rule versions")
+    expected = attribution_single_count_discipline(next(iter(rule_ids)))
+    if expected["rule_id"].endswith(".v2"):
+        return (
+            f"{expected['note']} "
+            f"Planning sizing expression: {expected['planning_sizing_expression']}; "
+            f"floor role: {expected['floor_role']}; "
+            f"claim-side role: {expected['claim_side_bound_role']}; "
+            f"claim-side source: {expected['claim_side_bound_source']}.\n"
+        )
     return (
         f"{expected['statement']}. "
         f"Formula: {expected['effective_clearable_effect_formula']}; "
