@@ -489,8 +489,8 @@ class RealDocumentRegressionTests(unittest.TestCase):
         from scripts.paper.partial_record_enclosure import derive_synthetic_p1, synthetic_p1_svg
         regenerated = derive_synthetic_p1()
         self.assertEqual({k: v for k, v in p1.items() if k != "figure"}, regenerated)
-        self.assertEqual(svg.read_text(), synthetic_p1_svg(regenerated).replace(regenerated["label"], "SYNTHETIC"))
-        self.assertNotIn("P1", svg.read_text())
+        self.assertEqual(svg.read_text(), synthetic_p1_svg(regenerated))
+        self.assertIn("SYNTHETIC P1", svg.read_text())
 
     def test_round_one_derivations_and_suppliers_are_complete(self) -> None:
         import importlib.util
