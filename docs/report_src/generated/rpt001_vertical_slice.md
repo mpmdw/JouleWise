@@ -25,3 +25,6 @@ python3 scripts/build_capstone.py --profile rpt001 --offline --check
 
 The regenerated paths under `analysis/rpt001-v2/` and `figures/rpt001-v2/`
 carry only the void disposition and no legacy-corpus measurement values.
+
+The void artifact hashes are recorded in the
+[artifact manifest](../../../analysis/rpt001-v2/artifact_manifest.json).

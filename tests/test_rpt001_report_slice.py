@@ -383,13 +383,13 @@ class TestRpt001Artifacts(unittest.TestCase):
             build_capstone.CHECK_COMMAND,
             "analysis/rpt001-v2/",
             "figures/rpt001-v2/",
+            "../../../analysis/rpt001-v2/artifact_manifest.json",
         ):
             self.assertIn(needed, page)
         for forbidden in (
             RETIRED_LABEL,
             "CLM-RPT001-LEGACY-L1-001",
             "--full",
-            "artifact_manifest.json",
             "Table S1",
             "Table T1",
             "Panel B",
