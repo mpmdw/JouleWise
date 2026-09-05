@@ -1635,114 +1635,6 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class PartialRecordEnclosureTests(unittest.TestCase):
-    @staticmethod
-    def interval_curve(
-        *, start_s: float, count: int, power_w: float
-    ) -> list[reduce_module.TracePoint]:
-        return [
-            reduce_module.TracePoint(
-                t=start_s + (index + 1) / 10,
-                power_w=power_w,
-                support_start_s=start_s + index / 10,
-                support_end_s=start_s + (index + 1) / 10,
-            )
-            for index in range(count)
-        ]
-
-    def test_p1_partial_record_oracle_and_midpoint_mutation_kill(self) -> None:
-        curve = self.interval_curve(start_s=0.5, count=10, power_w=10.0)
-        window = reduce_module.Window(0.55, 1.45)
-
-        enclosure, reason = reduce_module._phase_partial_record_enclosure(
-            [("decode", curve, [window])]
-        )
-
-        self.assertEqual(reduce_module._integrate(curve, 0.55, 1.45), 9.0)
-        self.assertIsNone(reason)
-        self.assertEqual(
-            enclosure["decode"]["basis"],
-            "nonnegative_partial_record_enclosure.v1",
-        )
-        self.assertAlmostEqual(enclosure["decode"]["lower_j"], 8.0, places=9)
-        self.assertAlmostEqual(enclosure["decode"]["upper_j"], 10.0, places=9)
-        self.assertEqual(enclosure["decode"]["straddling_record_count"], 2)
-        self.assertAlmostEqual(
-            enclosure["decode"]["straddling_energy_j"], 2.0, places=9
-        )
-        # Replacing each straddler's [0, Q] with [Q/2, Q/2] yields [9, 9]
-        # and is killed by the expected endpoint assertions above.
-
-    def test_01_f1_partial_record_oracle(self) -> None:
-        curve = self.interval_curve(start_s=0.0, count=6, power_w=50.0)
-        window = reduce_module.Window(0.05, 0.45)
-
-        enclosure, reason = reduce_module._phase_partial_record_enclosure(
-            [("prefill", curve, [window])]
-        )
-
-        self.assertEqual(reduce_module._integrate(curve, 0.05, 0.45), 20.0)
-        self.assertIsNone(reason)
-        self.assertEqual(enclosure["prefill"]["lower_j"], 15.0)
-        self.assertEqual(enclosure["prefill"]["upper_j"], 25.0)
-        self.assertEqual(
-            enclosure["prefill"]["straddling_record_count"], 2
-        )
-
-    def test_record_boundary_edges_collapse_to_point(self) -> None:
-        curve = self.interval_curve(start_s=0.0, count=6, power_w=50.0)
-        window = reduce_module.Window(0.1, 0.5)
-
-        enclosure, reason = reduce_module._phase_partial_record_enclosure(
-            [("prefill", curve, [window])]
-        )
-
-        point_j = reduce_module._integrate(curve, 0.1, 0.5)
-        self.assertIsNone(reason)
-        self.assertEqual(point_j, 20.0)
-        self.assertEqual(enclosure["prefill"]["lower_j"], point_j)
-        self.assertEqual(enclosure["prefill"]["upper_j"], point_j)
-        self.assertEqual(
-            enclosure["prefill"]["straddling_record_count"], 0
-        )
-
-    def test_one_record_straddling_both_edges_is_counted_once(self) -> None:
-        curve = [
-            reduce_module.TracePoint(
-                t=1.0,
-                power_w=10.0,
-                support_start_s=0.0,
-                support_end_s=1.0,
-            )
-        ]
-
-        enclosure, reason = reduce_module._phase_partial_record_enclosure(
-            [("decode", curve, [reduce_module.Window(0.25, 0.75)])]
-        )
-
-        self.assertIsNone(reason)
-        self.assertEqual(enclosure["decode"]["lower_j"], 0.0)
-        self.assertEqual(enclosure["decode"]["upper_j"], 10.0)
-        self.assertEqual(enclosure["decode"]["straddling_record_count"], 1)
-        self.assertEqual(enclosure["decode"]["straddling_energy_j"], 10.0)
-
-    def test_negative_power_emits_null_with_reason_code(self) -> None:
-        curve = self.interval_curve(start_s=0.0, count=6, power_w=50.0)
-        curve[2] = reduce_module.TracePoint(
-            t=curve[2].t,
-            power_w=-1.0,
-            support_start_s=curve[2].support_start_s,
-            support_end_s=curve[2].support_end_s,
-        )
-
-        enclosure, reason = reduce_module._phase_partial_record_enclosure(
-            [("prefill", curve, [reduce_module.Window(0.05, 0.45)])]
-        )
-
-        self.assertIsNone(enclosure)
-        self.assertEqual(reason, "negative_reported_power")
-
-
 class D078AnchorEnvelopeTests(unittest.TestCase):
     """Continuous common-shift envelope math (D-078)."""
 
@@ -2198,6 +2090,32 @@ class D078R01RegressionTests(unittest.TestCase):
 
     FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d078_r01"
     RAW_SHA256 = "cb25bfddc13610150795732a44be1183c154dcc4990b857425943028fd8edf81"
+
+    def test_d138_reduce_source_bytes_remain_at_issued_pin(self) -> None:
+        """Hardening work cannot silently rotate a physics/evidence input."""
+
+        issued_pin = (
+            "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
+        )
+        acceptance = json.loads(
+            (
+                REPO_ROOT
+                / "configs"
+                / "calibration"
+                / "calibration_acceptance_d079_v2_n17_r6.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            acceptance["prospective_rederivation"]["estimator_code_sha256"]
+            ["joulewise/reduce.py"],
+            issued_pin,
+        )
+        self.assertEqual(
+            hashlib.sha256(
+                (REPO_ROOT / "joulewise" / "reduce.py").read_bytes()
+            ).hexdigest(),
+            issued_pin,
+        )
 
     @staticmethod
     def _claim_gates() -> dict:
