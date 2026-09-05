@@ -803,22 +803,19 @@ def parse_campaign_log_bytes(
     return rows, final_segment
 
 
-def load_campaign_log_rows(
-    log_path: Path, *, raw_bytes: bytes | None = None
-) -> list[Mapping[str, Any]] | None:
+def load_campaign_log_rows(log_path: Path) -> list[Mapping[str, Any]] | None:
     """Read object-only JSONL, tolerating exactly one recognized final tear."""
 
-    if raw_bytes is None:
-        try:
-            raw_bytes = read_authentication_input(
-                log_path,
-                grammar="jsonl",
-                label="campaign provenance log",
-            )
-        except FileNotFoundError:
-            return []
-        except OSError:
-            return None
+    try:
+        raw_bytes = read_authentication_input(
+            log_path,
+            grammar="jsonl",
+            label="campaign provenance log",
+        )
+    except FileNotFoundError:
+        return []
+    except OSError:
+        return None
     rows, _final_segment = parse_campaign_log_bytes(raw_bytes)
     return rows
 
