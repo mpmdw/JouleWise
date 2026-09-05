@@ -4,6 +4,8 @@ import os
 import subprocess
 import tempfile
 import unittest
+
+from tests.git_fixture import init_git_fixture
 from pathlib import Path
 
 
@@ -17,7 +19,7 @@ class WindowStatusGuardTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.repository = Path(self.temporary.name) / "repository"
         self.repository.mkdir()
-        self._git("init", "-q")
+        init_git_fixture(self.repository, "-q")
         self._git("config", "user.name", "JouleWise Test")
         self._git("config", "user.email", "joulewise-test@example.invalid")
         (self.repository / "README.md").write_text("initial\n", encoding="utf-8")

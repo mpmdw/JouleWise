@@ -46,13 +46,41 @@ lands in this repo.) Binding role and process changes live in
   recorded two lead designs overturned by an invited peer before
   implementation.
 
+### Current rule-11 topology
+
+Three role names recur in the project record:
+
+- The **magistrate** is the designated lead. It decomposes work, rules on
+  design questions, adjudicates review findings, performs the final contextual
+  review of the exact merge candidate, and retains merge authority. That last
+  review is non-delegable under D-121.
+- A **lieutenant** coordinates bounded implementation or review lanes and
+  assembles their evidence. It does not decide process-policy changes,
+  measurement or funding scope, calendar commitments, irreversible actions,
+  or whether to add or remove a review mechanism. D-080 records the process-
+  policy subset; D-119 records the measurement, scope, and calendar boundary.
+  Those questions return to the magistrate or Ed, according to the owning
+  decision.
+- A **cold gate** is an independent adjudication from a fresh session that has
+  not inherited the working lane's assumptions. The gate receives a
+  mechanically assembled evidence packet and is paired with a distinct
+  contract-focused reviewer. A repeated defect signature after a fix round
+  sends the next spend to a consult and returns the merge question to this
+  gate (D-087/D-088). Proposed process rules and other triggers named by an
+  owning decision use the same route; the magistrate records the disposition
+  and any dissent rather than serving as a reviewing seat.
+
+These roles distribute reading and coordination; they do not transfer final
+verification, hardware operation, scientific scope, or publication authority.
+
 ## The loop, end to end
 
 Every substantial session runs one conductor procedure:
 
-1. **Intake** — read `RUN_STATE.md` (the intake pointer), the task
-   queue, the latest run report; never re-decide anything the decision
-   log settled.
+1. **Intake** — run Mission M0 in `docs/agent_playbook.md`. It begins at the
+   generated `RUN_STATE.md` restart view, selects the kernel or generated queue
+   row, and follows that row's authority and acceptance pointers; never
+   re-decide anything the decision log settled.
 2. **Decompose** — split work into genuinely independent streams
    (disjoint expected diff footprints), one git worktree + branch each;
    assign each stream a review tier by *cost of being wrong*
@@ -69,6 +97,60 @@ Every substantial session runs one conductor procedure:
    round (an independent writer adds edge-case tests) → a
    writer≠reviewer test audit (a fresh instance hunts tautological,
    vacuous, or wrong-expectation tests) → the lead's diff gate.
+
+### One writer per working tree (the two-writer rule)
+
+At most one process may write a working tree at a time. The lead counts as a
+writer: lead bookkeeping, cleanup, formatting, conflict resolution, and
+“small” post-review edits may not overlap a worker that can modify the same
+tree. Parallel writers require separate worktrees/branches and disjoint
+expected diff footprints. Review-only readers may overlap only when their
+tools are guaranteed read-only.
+
+Before taking write ownership, the writer must identify the tree and branch,
+wait for every prior writer to finish or be explicitly stopped, inspect
+`git status --short --branch`, and preserve all pre-existing changes. Before
+lead bookkeeping begins, the lead must declare the tree quiescent. No cleanup
+or generated-file refresh may run over another writer’s uncommitted work.
+
+If overlap is discovered, stop new writes; capture the branch, HEAD, status,
+and diffs for both owners; preserve both versions; and let the lead reconcile
+them. Never resolve an ownership collision by discarding or reverting work by
+inference.
+
+Writer separation and reviewer separation are distinct. The author of a
+change or test may not be its sole fresh reviewer/auditor. Any lead or worker
+content edit after the last fresh review creates a new final-head review
+obligation. Lead-owned live/hardware gates remain lead-owned and are not a
+writer-separation violation.
+
+### Credential-boundary push handoff
+
+“Push green commits promptly” is an outcome, not permission to copy or bypass
+credentials. If the current environment cannot authenticate, it must hand the
+exact reviewed commit to a named authenticated pusher instead of accumulating
+silent local-only state.
+
+The blocked environment must: (1) finish the authorized local checks; (2)
+record the repository, branch, remote, exact commit SHA, clean/dirty status,
+and review/CI state; (3) name the authenticated pusher and an explicit
+ISO-8601 deadline no later than the next dependent session or any claim of
+remote/advisor freshness; and (4) record the handoff in the run report and the
+live queue. If missing remote state makes restart unsafe, create an active stop
+card. Credentials themselves are never transferred.
+
+The authenticated pusher must verify that the received branch resolves to the
+recorded SHA, rerun any environment-bound required gate, push that exact SHA to
+the named remote/ref, and record the remote ref/SHA confirmation. If the SHA
+changes, normal review and final-head rules reapply before push or merge.
+
+Until remote confirmation exists, status must say `LOCAL_ONLY — PUSH PENDING`;
+the project must not claim that GitHub, a PR, a deployment, or an advisor-facing
+snapshot contains the change. A missed deadline becomes an explicit
+`[ED-EXTERNAL]` blocker, not an informal “push when convenient” note.
+
+This procedure does not expand commit, push, merge, or deployment authority.
+
 4. **Lead live gates** — never delegated: the lead runs the real flow
    (real corpus, real CLI, real hardware where present). This layer has
    repeatedly caught blockers no other layer saw, including defects
@@ -100,10 +182,11 @@ Every substantial session runs one conductor procedure:
    primary-deliverable check and §8 shipped-check before the session is
    considered done.
 9. **Post-landing verification and close-out** — landed work gets the
-   matching verification workflow with severity-tiered refuters. Sessions
-   that change front-facing state refresh `docs/site/DRIFT.md`; no agent
-   regenerates or deploys the site. Automation informs and Ed deploys
-   manually, per D-068 and `RUN_STATE.md` end-of-work step 8.
+   matching verification workflow with severity-tiered refuters. D-136 retires
+   the site lane from routine sessions: agents do not refresh, regenerate, or
+   deploy it. The retained `docs/site/DRIFT.md` file is only a reference if Ed
+   chooses the manual workflow dispatch; Ed deploys the site after that manual
+   regeneration.
 10. **Meta-review (the final step)** — event-driven, not calendar-driven:
     when a review layer stops earning its keep, when an intervention
     repeats despite a folded fix, or when the user asks, the loop is
@@ -114,9 +197,11 @@ Every substantial session runs one conductor procedure:
 
 ### Stop cards and paused work
 
-When a session stops with live work in progress, the lead creates or
-updates an `ACTIVE_STOP_CARD` at the top of `RUN_STATE.md`. While active,
-that card is the single restart authority and overrides every lower
+When a session stops with live work in progress, the lead creates or updates
+the rich card under `docs/stop_cards/`, sets the kernel's `active_stop_card`
+pointer and affected task pointers, and regenerates the two views. While
+active, the generated card wrapper is the single restart authority and
+overrides every lower
 "what next" list, queue rank, mission guide, and run-report default.
 
 A stop card must name:
@@ -141,8 +226,9 @@ Use these status terms for paused work:
 | `ADJUDICATED` | Findings have explicit accept/reject/defer disposition and downstream artifacts are updated. |
 
 Before an intentional pause, do the minimal stop sync even if full
-bookkeeping cannot fit: update only `RUN_STATE.md`'s stop card and the
-rank-0 queue row. That is enough to prevent accidental bypass.
+bookkeeping cannot fit: write the stop card, update its pointer and affected
+tasks in `docs/process/state_kernel.json`, and run `python3
+scripts/gen_state.py`. Never hand-edit either generated view.
 
 ## The artifact system (where rigor becomes auditable)
 
@@ -263,7 +349,7 @@ it (docs/reviews/2026-07-13-comprehensive-audit/receipts/
 WO-022-audit-close-spend.json); only a receipted anchor may be used for
 recalibration.
 
-## Topology: how it evolved (an example of the loop improving itself)
+## Historical topology (retained context, not the current role contract)
 
 - **v1 (2026-07-07 AM):** per-stream Fable orchestrator subagents, each
   driving its own Codex thread. Worked, but expensive at the apex tier.

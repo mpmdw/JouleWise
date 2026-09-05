@@ -16,6 +16,7 @@ from typing import Callable
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
 from scripts import magistrate_watchdog as wd
+from tests.git_fixture import init_git_fixture
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +32,7 @@ def _git_head(root: Path) -> str:
 
 def _init_repo(root: Path) -> str:
     root.mkdir(parents=True)
-    subprocess.run(["/usr/bin/git", "init", "-q", str(root)], check=True)
+    init_git_fixture(root, "-q")
     (root / "marker.txt").write_text("initial\n", encoding="utf-8")
     subprocess.run(
         ["/usr/bin/git", "-C", str(root), "add", "marker.txt"], check=True

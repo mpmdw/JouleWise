@@ -53,8 +53,9 @@ the capture directory itself.  The capture is read but never written.
 
 EXIT CODES
     0  the calibration gate held and the data file was written
-    2  the calibration gate failed, or detection did not converge
-    3  the primary artifacts could not be located or failed their hash check
+    2  the calibration gate failed, detection did not converge, or present
+       primary artifact bytes disagreed with their retained digest
+    3  a required primary artifact could not be located
 """
 
 from __future__ import annotations
@@ -92,6 +93,10 @@ MS_DECIMALS = 6
 
 class ArtifactsUnavailable(RuntimeError):
     """The primary custody artifacts are not present on this machine."""
+
+
+class ArtifactIntegrityMismatch(RuntimeError):
+    """Present primary bytes disagree with their retained identity."""
 
 
 class CalibrationGateFailed(RuntimeError):
@@ -132,9 +137,14 @@ def locate_raw_powermetrics(corpus_root: Path, expected_sha256: str) -> bytes:
         if _sha256(raw) == expected_sha256:
             return raw
         seen.append(f"{candidate} (sha256 {_sha256(raw)})")
+    if seen:
+        raise ArtifactIntegrityMismatch(
+            "raw/powermetrics.plist does not match its retained sha256; "
+            f"inspected: {seen}"
+        )
     raise ArtifactsUnavailable(
         "raw/powermetrics.plist matching sha256 "
-        f"{expected_sha256} not found; inspected: {seen or 'no candidate paths existed'}"
+        f"{expected_sha256} not found; no candidate paths existed"
     )
 
 
@@ -165,9 +175,13 @@ def rederive(repository_root: Path, corpus_root: Path) -> dict[str, Any]:
     hashes = evidence["artifact_sha256"]
 
     events_path = directory / "events.jsonl"
+    if not events_path.is_file():
+        raise ArtifactsUnavailable(f"{events_path} is not present")
     events_raw = events_path.read_bytes()
     if _sha256(events_raw) != hashes["events.jsonl"]:
-        raise ArtifactsUnavailable("events.jsonl does not match its retained sha256")
+        raise ArtifactIntegrityMismatch(
+            "events.jsonl does not match its retained sha256"
+        )
     raw = locate_raw_powermetrics(corpus_root, hashes["raw/powermetrics.plist"])
 
     anchor_block = evidence["clock_anchor"]
@@ -800,6 +814,9 @@ def main(argv: list[str] | None = None) -> int:
     except ArtifactsUnavailable as exc:
         print(f"artifacts unavailable: {exc}", file=sys.stderr)
         return 3
+    except ArtifactIntegrityMismatch as exc:
+        print(f"ARTIFACT INTEGRITY MISMATCH: {exc}", file=sys.stderr)
+        return 2
 
     try:
         gate = check_calibration_gate(derived["detection"])

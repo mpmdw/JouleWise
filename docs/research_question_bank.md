@@ -11,6 +11,40 @@ Canonical live index: `docs/research_question_registry.md`. The registry is
 the current index for aliases, status, claim ceilings, owners, and gates; this
 bank remains the historical and deliberative record.
 
+## Current capstone boundary — 2026-09-04
+
+This bank is broader than the capstone. Its older “today,” “after Window A,”
+and tier labels remain deliberation history, not the current paper promise.
+The controlling row-by-row map is
+`docs/research_question_coverage-2026-09-04.md`, derived from the fresh paper
+and research-question audit together with D-164 through D-171.
+
+Evidence already on disk answers only diagnostic, descriptive, or mechanism
+subquestions. None of it is eligible for a production claim. The retained
+set covers `RQ-SHORT-PREFILL-RESOLVABILITY`, the mechanism portion of
+`RQ-METHOD-FLOOR`, the limited evidence-preservation capability
+`RQ-AUDITABLE-EVIDENCE`, partial observed cases for `C5-1.5`, `C5-1.10`, and
+`C5-1.11`, and the four narrow feasibility or smoke rows
+`RQ-QWEN25-SMOKE`, `RQ-QWEN35-SMOKE`,
+`RQ-TWO-MODEL-ACTIVE-NONCLAIM`, and `RQ-MLX-KV-REPLAY`.
+
+The next governed collection chain can answer only two registered capstone
+rows: `RQ-ATTRIBUTION-DOMINANCE`, the primary question, and `C5-1.1` at its
+fixed Qwen3 8B-versus-1.7B pairwise ceiling. That chain is not one literal
+window: G2-a, a desk day, and G2-b precede the claim-bearing `_v5` alpha and
+beta floor windows and gamma contrast, and D-168 close-out follows them.
+The post-campaign transfer fiducial tests a limitation diagnostically but is
+not itself a registry row and cannot support a claim.
+
+Every other bank or registry identifier is cut from the capstone while
+remaining available for later work at its existing status and claim ceiling.
+In particular, the `_v6` scored leg, the unresolved D-163 model ladder, and
+all previously unrouted questions remain outside this paper. D-169 and D-171
+change how eligible windows may be operated without the researcher at the
+keyboard; they do not turn planned work into collected data. D-170 requires
+executed evidence or a code-path proof for artifact-production premises; it
+does not upgrade any research answer.
+
 ## Promoted 2026-07-07 (now Q4-Q6 in PROJECT_STATUS)
 
 - **Q4 Fixed-vs-marginal energy model** — fit

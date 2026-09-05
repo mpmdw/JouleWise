@@ -13,6 +13,7 @@ from unittest import mock
 
 from joulewise import arm_readiness
 from joulewise import scheduler_gates as gates
+from tests.git_fixture import init_git_fixture
 
 
 BOOT_A = "11111111-1111-4111-8111-111111111111"
@@ -572,7 +573,7 @@ class ReviewedMainGateTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.repository = Path(self.temporary.name) / "repository"
         self.repository.mkdir()
-        _run("git", "init", "-q", cwd=self.repository)
+        init_git_fixture(self.repository, "-q")
         _run("git", "config", "user.email", "scheduler@example.invalid", cwd=self.repository)
         _run("git", "config", "user.name", "Scheduler Tests", cwd=self.repository)
         tracked = self.repository / "tracked.txt"

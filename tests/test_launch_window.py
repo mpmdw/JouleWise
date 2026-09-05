@@ -23,6 +23,7 @@ from joulewise import clock_reference
 from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
 from tests import test_arm_readiness as arm_readiness_tests
+from tests.git_fixture import init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1057,7 +1058,7 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         root = Path(launch_fixture.temporary.name)
         repository = root / "repository"
         repository.mkdir()
-        subprocess.run(("git", "-C", str(repository), "init", "-q"), check=True)
+        init_git_fixture(repository, "-q")
         subprocess.run(
             (
                 "git",

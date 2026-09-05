@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -78,6 +79,24 @@ claims_lint = load_script("rpt001_claims_lint", "claims_lint.py")
 
 
 class TestRpt001Artifacts(unittest.TestCase):
+    AUTHORED_REGENERATION_PATHS = (
+        "scripts/build_capstone.py",
+        "docs/report_src/README.md",
+        "docs/report_src/appendices/A_reproducibility.md",
+        "docs/report_src/generated/rpt001_vertical_slice.md",
+        "docs/specs/c027/rpt-001_report_vertical_slice.md",
+    )
+    WORKSTATION_ABSOLUTE_PATH = re.compile(r"(?:/Users/|/home/|[A-Za-z]:\\)")
+
+    def workstation_absolute_path_violations(self, root: Path) -> list[str]:
+        return [
+            relative
+            for relative in self.AUTHORED_REGENERATION_PATHS
+            if self.WORKSTATION_ABSOLUTE_PATH.search(
+                (root / relative).read_text(encoding="utf-8")
+            )
+        ]
+
     def test_1p5b_identifier_is_pinned(self):
         expected = "LEGACY-M3MAX-QWEN25-1P5B-MLX"
         self.assertEqual(make_figures.STACK_IDS["example-mac-mlx-local"], expected)
@@ -230,7 +249,7 @@ class TestRpt001Artifacts(unittest.TestCase):
             (bundle / "outputs").mkdir(parents=True)
             (bundle / "config.json").write_text(json.dumps({
                 "model": {}, "quantization": {}, "hardware_target": {},
-                "workload_profile": {"output_tokens": 2, "prompt_text": "p"},
+                "workload_profile": {"output_tokens": 97, "prompt_text": "p"},
             }))
             (bundle / "metadata.json").write_text(json.dumps({
                 "workload_observed": {"output_token_count": 2}, "device": {},
@@ -567,6 +586,76 @@ class TestRpt001Artifacts(unittest.TestCase):
                 "DRIFT in docs/report_src/generated/rpt001_vertical_slice.md",
                 drifted.stderr,
             )
+
+    def test_default_branch_has_no_evidence_handoff_contract(self):
+        self.assertFalse((REPO / "docs/contracts/evidence_handoff.md").exists())
+        generated = (
+            REPO / "docs/report_src/generated/rpt001_vertical_slice.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Controlled/internal full regeneration", generated)
+        self.assertNotIn("privacy-approved evidence-handoff pack is available", generated)
+
+    def test_authored_regeneration_instructions_have_no_workstation_absolute_path(self):
+        self.assertEqual(self.workstation_absolute_path_violations(REPO), [])
+
+    def test_authored_regeneration_scan_rejects_windows_workstation_absolute_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture_root = Path(tmp)
+            for relative in self.AUTHORED_REGENERATION_PATHS:
+                target = fixture_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((REPO / relative).read_bytes())
+
+            drifted_relative = self.AUTHORED_REGENERATION_PATHS[0]
+            drifted = fixture_root / drifted_relative
+            drifted.write_text(
+                drifted.read_text(encoding="utf-8")
+                + "\nC:\\Users\\example\\private\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                self.workstation_absolute_path_violations(fixture_root),
+                [drifted_relative],
+            )
+
+    def test_source_only_check_passes_in_genuine_pristine_git_clone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / "clone"
+            cloned = subprocess.run(
+                ["git", "clone", "--quiet", "--no-hardlinks", str(REPO), str(clone)],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(cloned.returncode, 0, cloned.stderr)
+            self.assertFalse((clone / "runs").exists())
+            self.assertFalse((clone / "build").exists())
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=clone,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(status.returncode, 0, status.stderr)
+            self.assertEqual(status.stdout, "")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/build_capstone.py",
+                    "--profile", "rpt001",
+                    "--offline",
+                    "--check",
+                ],
+                cwd=clone,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("check OK (no drift)", completed.stdout)
+            self.assertFalse((clone / "runs").exists())
+            self.assertFalse((clone / "build").exists())
 
 
 if __name__ == "__main__":

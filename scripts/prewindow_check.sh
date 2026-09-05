@@ -47,13 +47,13 @@ while [ $# -gt 0 ]; do
 done
 
 case "$WINDOW" in
-  "") WINDOW_RUNS_PREFIX="" ;;
-  # D-138: the governed family is the _v2 campaign packs; the runs-root prefix
+  "") WINDOW_RUNS_PREFIX=""; STALE_WINDOW_RUNS_PREFIX="" ;;
+  # R-12: the governed family is the Qwen3 _v5 campaign packs; the runs-root prefix
   # is runs_<pack_id>, so these track the live pack IDs generation for
-  # generation.  tests/test_capture_t0_step.py pins them against the live map.
-  alpha) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_1p5b_v2 ;;
-  beta) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_7b_v2 ;;
-  gamma) WINDOW_RUNS_PREFIX=runs_d117_contrast_qwen25_1p5b_vs_7b_v2 ;;
+  # generation. The stale prefixes remain explicit refusal inputs.
+  alpha) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen3-1p7b_v5; STALE_WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_1p5b_v2 ;;
+  beta) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen3-8b_v5; STALE_WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_7b_v2 ;;
+  gamma) WINDOW_RUNS_PREFIX=runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5; STALE_WINDOW_RUNS_PREFIX=runs_d117_contrast_qwen25_1p5b_vs_7b_v2 ;;
   *) echo "--window must be alpha, beta, or gamma" >&2; exit 2 ;;
 esac
 
@@ -113,25 +113,24 @@ check_once() {
   echo "        keyboard_backlight.inactivity=never"
   echo "        keyboard_backlight.verification=operator_visual"
 
-  # 6. Target window's measurement-checkout runs roots may be absent or
-  #    materialized-but-empty for the arm-context gate. Any occupied or
-  #    non-directory match makes the chain fail late rather than early.
+  # 6. The live family is admissible; an occupied stale-family runs root is a
+  #    refusal under the PREWINDOW-V5-PIN-01 acceptance contract.
   if [ -n "$WINDOW" ]; then
     local hits=""
     local candidate
     # The suffix glob covers both the exact claim leaf and its _bound peer,
     # plus any explicitly frozen attempt suffix, inside this checkout only.
-    for candidate in "$MEASUREMENT_REPO"/"$WINDOW_RUNS_PREFIX"*; do
+    for candidate in "$MEASUREMENT_REPO"/"$STALE_WINDOW_RUNS_PREFIX"*; do
       [ -e "$candidate" ] || continue
       if [ ! -d "$candidate" ] || [ -n "$(/usr/bin/find "$candidate" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
         hits="${hits}${candidate} "
       fi
     done
     if [ -n "$hits" ]; then
-      bad "runs roots already exist for window ${WINDOW}: $hits"
+      bad "stale runs roots already exist for window ${WINDOW}: $hits"
       blocked=1
     else
-      ok "runs roots absent or empty for window ${WINDOW} under measurement checkout ${MEASUREMENT_REPO}"
+      ok "no occupied stale runs roots for window ${WINDOW} under measurement checkout ${MEASUREMENT_REPO}"
     fi
   fi
 

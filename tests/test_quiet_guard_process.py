@@ -141,7 +141,7 @@ class SnapshotRevalidationTests(unittest.TestCase):
             (Revalidation.UNOBSERVABLE, None),
         )
 
-    def test_every_exact_field_discriminates_pid_reuse(self) -> None:
+    def test_same_start_identity_churn_is_not_pid_reuse(self) -> None:
         expected = identity()
         variants = (
             identity(executable="/tmp/not-t3"),
@@ -159,7 +159,7 @@ class SnapshotRevalidationTests(unittest.TestCase):
                 source = SnapshotProcessSource((changed,))
                 self.assertEqual(
                     revalidate_identity(expected, source, source.inventory())[0],
-                    Revalidation.PID_REUSED,
+                    Revalidation.UNOBSERVABLE,
                 )
 
 

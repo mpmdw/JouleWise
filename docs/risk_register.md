@@ -38,26 +38,25 @@ Conventions:
 | R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | mitigated-in-policy (D-060 RATIFIED 2026-07-10; enforcement = queue discipline + spend guardrails, WO-022/R2, `docs/orchestration.md` §Spend guardrails) |
 | R-019 | Pack-generator check-then-write boundary admits post-validation symlink substitution | 2+ | low | high | registered residual (D-141(i), cold gate 2026-08-18) |
 | R-020 | Freeze loader accepts a hand-authored v1-schema receipt inside a `_v2` pack | 2+ | low | medium | registered residual (D-141(ii), delta-8 ratified 2026-08-18) |
+| R-021 | Unattended-night automation fails while the operator is away | campaign | medium | high | mitigated-in-progress (D-169/D-171; rehearsal evidence in `RUN_STATE.md`) |
+| R-022 | Unknown paper and evaluator dates leave no defensible schedule margin | paper | high until dates are recorded | high | open; `ED-DATES-01` owns the missing inputs |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
 - Phase: 1. Likelihood: medium. Impact: high (wrong deliverable built).
-- Trigger: Phase 2 implementation slices ready to start (2A-2F complete)
-  with P1-001 still open; or any supervisor communication contradicting
-  `AGENT_PLAN.md` scope.
-- Status note (2026-07-05): the first trigger fired 2026-06-12 (2A-2F
-  completed with P1-001 still open). The mitigation is holding as
-  designed - all work since has been hardware-independent and
-  harness-shaped (mock slice, docs, Slice 2N is next and is also
-  ungated) - and the fallback ("continue only mock/local work; hardware
-  purchases/borrows blocked-on-approval") is effectively in force.
-- Mitigation: the queue keeps P1-001 ranked first; all work until approval
-  stays hardware-independent and harness-shaped (valuable under any scope);
-  the Phase 1 exit checklist lists the exact questions to put to the
-  supervisor so one meeting can close the gate.
-- Fallback: if approval stalls past mock-slice completion, continue only
-  mock/local work and mark every hardware purchase or borrow decision
-  blocked-on-approval.
+- Trigger: advisor feedback changes the permitted paper scope, required
+  evidence, or evaluator acceptance bar; or those requirements remain
+  unrecorded when a claim-bearing campaign decision depends on them.
+- Status note: the Mac instrument and the real `powermetrics` evidence path
+  exist. The live uncertainty is no longer whether Slice 2N may start; it is
+  whether the `_v5` campaign and planned paper answer the advisor's required
+  scope. Task `ED-DATES-01` still owns that external acceptance record.
+- Mitigation: keep campaign claims inside the registered question and results-
+  fill contracts; obtain the advisor/calendar answers through `ED-DATES-01` before
+  making a schedule- or scope-dependent promise.
+- Fallback: if the advisor narrows scope, preserve the admitted Mac campaign
+  and remove unsupported extensions. Hardware purchases, borrowing, or new
+  measurement scope remain blocked until explicitly approved.
 - Owner: user.
 
 ## R-002: powermetrics sudo workflow not approved on measurement Mac
@@ -139,7 +138,7 @@ Conventions:
 - Mitigation: all split tooling reaches rehearsed-on-available-hardware state
   before the window (the Phase 3 plan keeps a borrow-window runbook so
   borrow time is execution-only, no debugging); calendar mapping task
-  (P1-008) makes the window a tracked date.
+  (`ED-DATES-01`) makes the window a tracked date.
 - Fallback: GPU->GPU pairing drops to single-GPU prefill/decode phase
   decomposition plus analytical composition; 3050<->Orin and Orin<->Orin
   remain.
@@ -214,26 +213,24 @@ Conventions:
   throughput per D-008's transfer block).
 - Owner: user (hardware), agent (recording).
 
-## R-012: Schedule: five phases vs fixed academic deadlines
+## R-012: Schedule compression against the live campaign and paper
 
-- Phase: all. Likelihood: medium. Impact: high (capstones fail by calendar,
-  not by code).
-- Trigger: any phase exceeding its (to-be-set) calendar budget; colloquium
-  or report dates announced (P1-008) leaving less runway than the plan
-  assumes.
-- Mitigation: P1-008 maps phases to real dates as soon as the user supplies
-  them (`docs/milestones.md` holds the skeleton); every phase defines a
-  hardware-independent floor and a descope ladder so cutting is a decision,
-  not a scramble.
-- Descope ladder (worst-case minimum viable capstone, in cut order):
-  1. Drop live split (3.3) - already stretch.
-  2. Drop 10GbE and one model size.
-  3. Drop heterogeneous replay pairs (keep synthetic transfer + analytical
-     composition).
-  4. Drop Orin/Pi targets (keep Mac + one CUDA).
-  5. Floor: mock harness + Mac vertical slice + homogeneous baselines +
-     synthetic interconnect sweep + analytical split model. This is still a
-     complete, defensible benchmark-plus-study.
+- Phase: campaign and paper. Likelihood: medium. Impact: high (a defensible
+  result can still miss its academic deadline).
+- Trigger: the evaluator dates become known with less runway than the live
+  `_v5` sequence needs, or a prerequisite prevents the next campaign stage
+  from entering its governed machine-state lane.
+- Mitigation: `ED-DATES-01` records the real dates; `docs/milestones.md` shows the
+  live dependency sequence; the state kernel prevents later work from
+  borrowing an unmet gate.
+- Descope ladder for the live paper, in decision-owned order:
+  1. If G2-a cannot support a prefill arm, publish the D-166 refusal and do
+     not lower the selection rule after observing the probes.
+  2. If the registered timing-dominance test fails, withdraw the dominance
+     sentence under D-165 and report only what the admitted component results
+     support.
+  3. Defer remote-hardware, split-inference, and broader stress-test extensions
+     before cutting the governed Mac campaign's evidence and audit trail.
 - Owner: user (dates), agent (floor discipline).
 
 ## R-013: Thermal throttling confounds measurements
@@ -276,12 +273,12 @@ Conventions:
   script; never edit bundles in place (they are evidence).
 - Owner: agent.
 
-## R-016: Measurement-corpus loss (runs/ has no backup path)
+## R-016: Measurement-corpus loss or unavailable backup
 
-- Phase: 2-5. Likelihood: low. Impact: high (the dataset behind every
-  claim is a gitignored directory on one disk; a disk failure or an
-  errant delete erases the evidence the defense rests on, and hardware
-  re-collection needs access windows that may not recur).
+- Phase: campaign and paper. Likelihood: low. Impact: high (the active corpus
+  is gitignored working data; a disk failure, eviction, or errant delete can
+  remove the evidence the defense needs, and hardware re-collection may not
+  fit the remaining access window).
 - Trigger: first real (non-mock) bundle written; any data-affecting
   incident (disk error, iCloud eviction anomaly, accidental delete).
 - Mitigation: before the first real measurement session (gate on 2I data
@@ -311,6 +308,10 @@ Conventions:
   satisfied"). The 2026-07-06 entry above is retained as history.
   Standing caveat: iCloud eviction — re-verify the destination is
   materialized (fresh restore test) before each measurement window.
+- Boundary clarification: this is a sanctioned **backup copy** outside the
+  repository. It does not authorize running the live repository or the active
+  measurement corpus from an iCloud-synchronized directory. R-017 continues
+  to require those working paths to remain local and unsynchronized.
 - Fallback: re-run affected experiments from their configs (the config
   hash separates old/new data cleanly per D-005/D-010); report any
   unrecoverable gap honestly in the exclusion log.
@@ -330,6 +331,8 @@ Conventions:
   `~/Desktop/CapstoneRivoire` husk after relaunching from the new
   path), and any future placement of repo or `runs/` data under an
   iCloud-synced directory - do not.
+- This does not conflict with R-016: R-016 permits a separate iCloud backup
+  copy; R-017 forbids an iCloud-synchronized live checkout or active corpus.
 - Trigger: any `Operation not permitted` on read/readdir inside the repo
   with the iCloud file provider (`bird`) active.
 - History: first incident 2026-06-12 (documented in `RUN_STATE.md`);
@@ -407,3 +410,39 @@ Conventions:
   rather than the receipt schema, and re-verify the family's receipts; no
   published receipt is affected.
 - Owner: agent.
+
+## R-021: Unattended-night automation fails while the operator is away
+
+- Phase: campaign. Likelihood: medium. Impact: high (a quiet-machine window
+  may fail to start, run past its boundary, or fail to leave a trustworthy
+  morning record).
+- Trigger: the scheduler does not fire; the watchdog cannot establish the
+  night's completion; an agent process is present at arm time; the plan points
+  at a different checkout revision; or the results branch and morning notice
+  do not agree.
+- Mitigation: D-169 puts the unattended lane before the transaction. D-171
+  adds the external supervisor and stand-down rule. The retained rehearsal
+  evidence in `RUN_STATE.md` demonstrates scheduler launch, agent-present
+  refusal, results-branch delivery, and morning notice; real collection still
+  waits on the current plan-pin and supervisor gates.
+- Fallback: refuse the night without reusing its arm, preserve the signed
+  outcome, and require a fresh governed plan after the cause is identified.
+  Never convert an unattended failure into an attended or retried claim run by
+  convenience.
+- Owner: lead (plan and evidence), user (the privileged installation step when
+  a ruling requires it).
+
+## R-022: Unknown paper and evaluator dates leave no defensible schedule margin
+
+- Phase: paper. Likelihood: high until dates are recorded. Impact: high.
+- Trigger: `ED-DATES-01` remains open while campaign or paper work is prioritized by
+  an assumed submission, meeting, demonstration, or reproducibility date.
+- Mitigation: `docs/milestones.md` records unknown dates as unknown and keeps
+  the campaign order separate from calendar promises. `ED-DATES-01` obtains the
+  evaluator's required figures, demonstration expectation, reproducibility
+  threshold, and final dates.
+- Fallback: protect the admitted `_v5` evidence chain and use the D-165/D-166
+  withdrawal branches; defer extension claims before weakening metrology or
+  inventing a date.
+- Owner: user (external dates and evaluator requirements), lead (honest
+  schedule and descope once those inputs exist).
