@@ -155,6 +155,71 @@ class DisciplineMatrixTests(unittest.TestCase):
             row["floor"] = copy.deepcopy(golden["cells"][0]["floor"])
         cls.output_core = generalized._fresh_original_core()
 
+    def test_arm_readiness_evidence_derive_mint_trust_run_suite_rejects_v1_fixture_bytes(self):
+        """joulewise/arm_readiness_evidence.py::_derive_mint_trust -> _run_suite.
+
+        Run the production-selected cases through both real functions. Only
+        subprocess transport and committed-file custody are fixture seams;
+        the mint, its hash gate, suite selection, and result refusal stay real.
+        The relocation targets separately cover process and repository custody.
+        """
+        from joulewise import arm_readiness_evidence as evidence
+        from tests import test_mint_floor_artifact_generalized as fixture
+
+        module = "tests.test_mint_floor_artifact_generalized"
+        affected = (module + ".V2PinsetAndMintTests."
+                    "test_v2_assurance_and_git_containment_are_required_provenance")
+        context = SimpleNamespace(repository=ROOT, head_commit="0" * 40,
+                                  pack_sha256="0" * 64)
+        build = generalized._build_v2_artifacts
+        results = []
+        observed_components = []
+
+        def execute(repository, test_ids):
+            self.assertEqual(repository, ROOT)
+            self.assertIn(affected, test_ids)
+            result = unittest.TestResult()
+            unittest.defaultTestLoader.loadTestsFromNames(test_ids).run(result)
+            results.append(result)
+            return evidence._SuiteResult(
+                test_ids=tuple(test_ids), tests_run=result.testsRun,
+                failures=len(result.failures), errors=len(result.errors),
+                skipped=len(result.skipped), expected_failures=0,
+                unexpected_successes=0,
+                executed_files=(evidence._ExecutedFile(
+                    module, "tests/test_mint_floor_artifact_generalized.py", "0" * 64),),
+            )
+
+        def v1_fixture(**kwargs):
+            artifact, components = build(**kwargs)
+            legacy = tuple(versioned(c, VERSIONS[0]) for c in components)
+            observed_components.append((
+                tuple(fixture._fixture_artifact_sha256(c) for c in components),
+                tuple(fixture._fixture_artifact_sha256(c) for c in legacy),
+            ))
+            return versioned(artifact, VERSIONS[0]), legacy
+
+        with mock.patch.object(evidence, "_execute_unittest_suite_subprocess", side_effect=execute), \
+             mock.patch.object(evidence, "_committed_artifact", return_value=({"sha256": "0" * 64}, b"")):
+            positive = evidence._derive_mint_trust(context)
+            self.assertEqual(positive.facts["desk.mint_trust.v1"]["profile_test_status"], "PASS")
+            self.assertTrue(results[-1].wasSuccessful())
+            self.assertEqual(results[-1].testsRun, 3)
+            with mock.patch.object(generalized, "_build_v2_artifacts", side_effect=v1_fixture):
+                with self.assertRaisesRegex(evidence.EvidenceAuthoringError,
+                                            "focused suite refused: failures=0, errors=1"):
+                    evidence._derive_mint_trust(context)
+        self.assertEqual(results[-1].testsRun, 3)
+        self.assertEqual([case.id() for case, _ in results[-1].errors], [affected])
+        self.assertIn("aggregate/component hash mismatch", results[-1].errors[0][1])
+        # The other production-selected cases also build attack fixtures.
+        # Pin the affected baseline among those real builds.
+        self.assertIn((
+            fixture.SYNTHETIC_COMPONENT_SHA256S,
+            ("8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495",
+             "a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70"),
+        ), observed_components)
+
     def test_schema_valid_baselines_preserve_versions_and_prose(self):
         for rule_id in VERSIONS:
             with self.subTest(version=rule_id):

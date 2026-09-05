@@ -1280,8 +1280,8 @@ def synthetic_v2_fixture() -> tuple[
 # Independent golden constants. They are regenerated only by an explicit
 # fixture-review step, never by the mint implementation under test.
 SYNTHETIC_COMPONENT_SHA256S = (
-    "8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495",
-    "a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70",
+    "dae1d43209662a471c1ff1d283f151c4296da58a6456177a9543e6b6061391e7",
+    "c12749ccf1691860c5635c08de5cafce9edf57f1f81604bead7951bc80925b9c",
 )
 # The synthetic producer plans embed the LIVE issued acceptance (identity and
 # both digests), so these frozen pins move with a D-079 issuance. Re-derived
@@ -1289,17 +1289,27 @@ SYNTHETIC_COMPONENT_SHA256S = (
 # (file SHA-256 0227bca3...) with the independent fixture oracle
 # `_fixture_canonical_sha256`, never with the mint code under test. The
 # acceptance-independent component and CLI component pins were rechecked and
-# remain unchanged.
+# remain unchanged at that r6 issuance. Pins also move with a reviewed
+# component-contract change: first instance 2026-09-05, PR #292 v2
+# single-count discipline object (ruling 50). SYNTHETIC_COMPONENT_SHA256S
+# and CLI_COMPONENT_SHA256S move for that object alone;
+# SYNTHETIC_PRODUCER_PIN_SHA256S and SYNTHETIC_PRODUCER_SET_SHA256 move
+# because they embed those component hashes. The r6 acceptance fields stay
+# byte-identical. Artifact pins use `_fixture_artifact_sha256`; producer and
+# producer-set pins use `_fixture_canonical_sha256`. The default-only golden
+# shares SYNTHETIC_COMPONENT_SHA256S; the phase-0 floor pin below changes
+# for the same object and its embedded producer-set hash. Per-constant byte
+# diffs are recorded in 51-fb-v2-ci-fix-3-report.md.
 SYNTHETIC_PRODUCER_PIN_SHA256S = (
-    "1d9bd87ab82f721ea08a013d97630683e665d5afb23455255899ebb8a642d74c",
-    "509e6b38c155897c523320a7061253b115609e70bf4f9b95f8b17d1c96f009d1",
+    "0a9d4d5f0cd046787575876ce9fd53ad01b2ea4097360c4aec5a2fa8b0ad8100",
+    "a15195aabe749c18d55f12612f45d9afc890f490547e10366f3cee95c8cbf09a",
 )
 SYNTHETIC_PRODUCER_SET_SHA256 = (
-    "fe9c031e6fbcec9d1bc771ba2297972469c8a72140596d5655f37559e85c7065"
+    "02fca6e419bc2506a8595987bc0680f8fa86b09b8afce51ccb9ca3ddd1ff8f26"
 )
 CLI_COMPONENT_SHA256S = (
-    "6325b71a5b7826201e1d93a087a1a4e90854fb6edcf5149322bc50de4d272cf6",
-    "258b512b3017d53bd260871eccdc43c1f6d473e58886dd3326c23a5f4e2359ca",
+    "5d0b4bafbb106b3a2f577f642f9fdee7b426e20fdbbf8aeaa6f1b126806fdc03",
+    "7cfc66aeb206ef58db79af3a11021505c7cbc91c19c99e9fee5d2aa1d2cf671f",
 )
 
 
@@ -6259,8 +6269,46 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 project_tree_state="clean",
             )
         self.assertEqual(
-            tuple(generalized._artifact_sha256(row) for row in components),
+            tuple(_fixture_artifact_sha256(row) for row in components),
             SYNTHETIC_COMPONENT_SHA256S,
+        )
+        # Ruling 50: the reviewed component-contract re-pin must not move
+        # any issued acceptance field, including either r6 digest.
+        before = copy.deepcopy(loaded.value["producer_plans"])
+        old_components = (
+            "8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495",
+            "a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70",
+        )
+        old_producers = (
+            "1d9bd87ab82f721ea08a013d97630683e665d5afb23455255899ebb8a642d74c",
+            "509e6b38c155897c523320a7061253b115609e70bf4f9b95f8b17d1c96f009d1",
+        )
+        acceptance_bytes = (
+            b'{"acceptance_id":"d079_calibration_acceptance_v2_n17_r6",'
+            b'"artifact_sha256":"0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",'
+            b'"derivation_rule_id":"joulewise.calibration_acceptance_bound.v2",'
+            b'"derivation_sha256":"18d09aa9d4accb16a8dff770de85cd7e7525bdb0b6e68f1de716e20fb8a9b9f3"}'
+        )
+        for old, new, component_hash, producer_hash, current_hash in zip(
+            before, loaded.value["producer_plans"], old_components,
+            old_producers, SYNTHETIC_PRODUCER_PIN_SHA256S,
+        ):
+            old["component_artifact"]["sha256"] = component_hash
+            self.assertEqual(_fixture_canonical_sha256(old), producer_hash)
+            self.assertEqual(_fixture_canonical_sha256(new), current_hash)
+            for producer in (old, new):
+                self.assertEqual(
+                    json.dumps(producer["calibration_acceptance"], sort_keys=True,
+                               separators=(",", ":"), allow_nan=False).encode(),
+                    acceptance_bytes,
+                )
+        self.assertEqual(
+            _fixture_canonical_sha256(before),
+            "fe9c031e6fbcec9d1bc771ba2297972469c8a72140596d5655f37559e85c7065",
+        )
+        self.assertEqual(
+            _fixture_canonical_sha256(loaded.value["producer_plans"]),
+            SYNTHETIC_PRODUCER_SET_SHA256,
         )
 
     def test_default_authentication_seam_is_byte_identical_to_pinned_core(
@@ -6991,7 +7039,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     file_sha256(
                         StableTemporaryDirectory.path / "floor.json"
                     ),
-                    "9127a51d5f3cb53263c90afd5c63c94d29442a3f9127f11aa25d0498e3c72400",
+                    "9d3c2984fcd719a4f7292668cdb247faee7ac77c53302d84473989cddb22dd8f",
                 )
         finally:
             shutil.rmtree(StableTemporaryDirectory.path, ignore_errors=True)
