@@ -14,10 +14,11 @@ instrument can establish about physical phase energy, so the paper now describes
 measurement honestly as energy assigned to inference phases from interval-average
 power records, with its sensitivity to allowed timing changes. The scheduled comparison
 measurements did not run before the deadline, so the fallback version of the paper that
-does not depend on them has been written and has passed three review rounds (fact,
-pedagogy, and a second-model counter-review); it is in its final full-suite replay before
-merging. Everything that presumed the unperformed comparison now lives in a separate
-prospective protocol document. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+does not depend on them is now merged: it passed three review rounds (fact, pedagogy,
+and a second-model counter-review) and reports both historical model stacks honestly.
+Everything that presumed the unperformed comparison lives in a separate prospective
+protocol document. Next: a wording clean-up of the retired dominance language and the
+hand-over of overnight measurement to an unattended watchdog. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
 That file's generated state-kernel view owns current work selection.
 
 ## Current State

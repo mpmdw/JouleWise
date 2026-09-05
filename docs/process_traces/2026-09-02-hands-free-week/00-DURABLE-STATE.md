@@ -447,3 +447,15 @@ THEN, in order:
   (paperm-replay4.log) and CI re-run on that head; rows 9/11 then merge.
 - Next after #293: D-165 relabel wording cure against the merged draft → census GREEN → Opus → PR; then
   the watchdog install handoff (steps 1/3/4/5) once no seat or replay is running.
+
+## 2026-09-05 ~14:50 PDT — paper-M PR #293 MERGED (b1644210)
+
+- The fallback methods/diagnostic paper is on main: docs/paper/draft-v2-skeleton.md (METHODS_DIAGNOSTIC),
+  docs/paper/protocol/prospective-comparison-protocol.md, docs/paper/protocol/first-use-audit-ledger.md,
+  reconciled round-7 checker, registry rows DG-135–144. Full ledger on the PR; replay record 12;
+  terminal review 99.
+- Remaining before the watchdog handoff: D-165 relabel branch — Opus lieutenant merging main again
+  (report 14) and listing census RED lines; then one astra seat cures the draft/protocol wording (paper
+  lanes closed, the relabel lane owns those lines now) → census GREEN → Opus re-check → PR → merge.
+- Then: watchdog install handoff steps 1/3/4/5 (docs/process/MAGISTRATE_WATCHDOG.md) from this session
+  with no seat or replay running. The relaunched magistrate resumes from RELAUNCH RESUME PLAN + these deltas.
