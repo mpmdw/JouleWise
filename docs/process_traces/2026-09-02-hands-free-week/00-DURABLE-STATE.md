@@ -335,3 +335,23 @@ THEN, in order:
 - F+B: PR #292 opened (apex 99 LANDABLE); rows 9/11/12 pending replay + CI. Known main defect: scripts/build_site.py
   fails since 731a0a74 removed the ADVISOR-PAGE-END marker from PROJECT_STATUS.md (site lane retired, D-136).
 - Replays for #288 (paper-K) and #289 (seam) still running (~/.claude/jobs/3c46c831/tmp/{paperk,seam}-replay.log).
+
+## 2026-09-05 ~07:10 PDT — paper-M refuters returned; fix round 1 running; handoff waits for the seats
+
+- Paper-M blind refuters landed on feat/2026-09-05-paper-m at fde18861
+  (docs/process_traces/2026-09-05-paper-m/02-refuter-fact.md, 02-refuter-pedagogy.md). Fact: F1 blocker
+  (unregistered five-unit synthetic regression example), F2 population locator, F3 replay-fence extractor
+  heading, F4 nit. Pedagogy: NOT LANDABLE — F1–F6 blockers including the structural cut of every section that
+  presumes the unperformed comparison campaign; F7–F25 should-fix; F26 nit.
+- Magistrate triage: all findings accepted, including the cut. Cut material moves to a new prospective-protocol
+  document under docs/paper/protocol/ that the article cites once; registry rows are re-pointed, never deleted.
+- Fix round 1 seat `paperm-fix1` (astra xhigh) running in /Users/edr/code/JouleWise-wt-paper-m; report at
+  docs/process_traces/2026-09-05-paper-m/03-fix-round-1-report.md; the seat does not commit.
+- After fix round 1: commit, one fresh astra delta (closure + consequences) → Opus counter-review → apex read →
+  PR against feat/2026-09-05-paper-l (retarget to main once #288 and #290 merge).
+- Watchdog install handoff (steps 1/3/4/5) runs from this session as soon as `paperm-fix1` and `fb-ci` finish,
+  because the reaper terminates every process in this session's tree, seats included. Relaunched magistrate:
+  resume from RELAUNCH RESUME PLAN + this delta.
+- Open PRs: #288 paper-K (CI re-running after the ledger commit; merge when green), #289 seam (replay running for
+  row 9; gate-ledger fails until row 9 is filled), #292 F+B (CI fix seat `fb-ci` running), #290 paper-L (retarget
+  after #288).
