@@ -124,6 +124,30 @@ PREFILL_EXHAUSTED_LADDER_BRANCH = {
     },
 }
 
+DECODE_PROMPT_ASSIGNMENT_RULE_ID = "d166_fixed_prompt_zero.v1"
+DECODE_PROMPT_ASSIGNMENT_SUPERSEDED_RULE_ID = "d166_block_prompt_cycle.v1"
+DECODE_PROMPT_ASSIGNMENT_RULE = (
+    "prompt_index = 0 for every decode block in both model arms"
+)
+DECODE_PROMPT_ASSIGNMENT_SUPERSESSION_PATH = (
+    REPO_ROOT
+    / GENERATOR_REL
+    / "d166_decode_prompt_assignment_supersession.json"
+)
+DECODE_PROMPT_ASSIGNMENT_AUTHORITY = {
+    "path": (
+        "docs/process_traces/2026-09-04-peer-audit/"
+        "43-magistrate-synthesis-gate-17.md"
+    ),
+    "question": "Q-17-4",
+}
+DECODE_PROMPT_ASSIGNMENT_CENSUS_PATH = (
+    "docs/process_traces/2026-09-05-d166-prompt0/01-dependency-census.md"
+)
+DECODE_PROMPT_ASSIGNMENT_PRECOLLECTION_REQUIREMENT = (
+    "pack generation with this rule precedes collection"
+)
+
 
 DRAFT_STATUS = "unfrozen_draft"
 FROZEN_STATUS = "frozen_by_d134_receipt"
@@ -601,6 +625,64 @@ def _token_ids_sha256(token_ids: list[int]) -> str:
     return prompt_token_ids_sha256(token_ids)
 
 
+def load_decode_prompt_assignment_supersession() -> dict[str, Any]:
+    """Load the prospective Q-17-4 supersession record fail closed."""
+
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError(f"duplicate key {key!r}")
+            result[key] = item
+        return result
+
+    try:
+        value = json.loads(
+            DECODE_PROMPT_ASSIGNMENT_SUPERSESSION_PATH.read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+        )
+    except FileNotFoundError as exc:
+        raise ValueError("decode_prompt_assignment_supersession_missing") from exc
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(
+            f"decode_prompt_assignment_supersession_invalid: {exc}"
+        ) from exc
+    expected = {
+        "schema_version": "joulewise.d166_decode_prompt_assignment_supersession.v1",
+        "superseded_rule_id": DECODE_PROMPT_ASSIGNMENT_SUPERSEDED_RULE_ID,
+        "active_rule_id": DECODE_PROMPT_ASSIGNMENT_RULE_ID,
+        "ratified_authority": DECODE_PROMPT_ASSIGNMENT_AUTHORITY,
+        "dependency_census_path": DECODE_PROMPT_ASSIGNMENT_CENSUS_PATH,
+        "precollection_requirement": (
+            DECODE_PROMPT_ASSIGNMENT_PRECOLLECTION_REQUIREMENT
+        ),
+    }
+    if value != expected:
+        if (
+            isinstance(value, dict)
+            and value.get("active_rule_id") != DECODE_PROMPT_ASSIGNMENT_RULE_ID
+        ):
+            raise ValueError(
+                "decode_prompt_assignment_supersession_active_rule_mismatch"
+            )
+        raise ValueError("decode_prompt_assignment_supersession_invalid")
+    return value
+
+
+def validate_decode_prompt_assignment_rule() -> dict[str, Any]:
+    """Bind the active rule ID to fixed prompt zero before generation writes."""
+
+    supersession = load_decode_prompt_assignment_supersession()
+    if any(decode_prompt_index(block) != 0 for block in range(1, N_BLOCKS + 1)):
+        raise ValueError(
+            "decode_prompt_assignment_rule_mismatch: "
+            f"{DECODE_PROMPT_ASSIGNMENT_RULE_ID} requires prompt_index 0 for "
+            "every decode block"
+        )
+    return supersession
+
+
 def _load_prefill_prompt_pin(
     path: Path, *, prefill_length: int, tokenizer_json_sha256: str, panel_sha256: str
 ) -> dict[str, Any]:
@@ -855,6 +937,8 @@ def configure_model_pair(
     prefill_prompt_pin_path: Path | None = None,
 ) -> None:
     """Load the selected admitted pair and derive every model-bearing identity."""
+
+    validate_decode_prompt_assignment_rule()
 
     global PACK_REL, PLAN_ID, EVIDENCE_ROOT_ID, CLAIM_ROOT_LEAF, BOUND_ROOT_LEAF
     global MODEL_A, MODEL_B, MODEL_ENTRIES, MODEL_IDS, MODEL_ID_TOKENS
@@ -1378,7 +1462,7 @@ def decode_family_definition(arm: str) -> dict[str, Any]:
 
 
 def decode_prompt_index(block: int) -> int:
-    return (block - 1) % len(DECODE_PROFILE["prompts"])
+    return 0
 
 
 def decode_suite_relpath(arm: str, prompt_index: int) -> Path:
@@ -1399,7 +1483,7 @@ def decode_suite_manifest(arm: str, prompt_index: int) -> dict[str, Any]:
         ),
         "suite_profile": DECODE_PROFILE["profile_id"],
         "suite_revision": DECODE_PROFILE["prompt_set_sha256"],
-        "suite_seed": "d166-block-prompt-cycle-v1",
+        "suite_seed": "d166-fixed-prompt-zero-v1",
         "generator": {
             "name": "d117_v5_chat_template_renderer",
             "version": "1.0.0",
@@ -1476,7 +1560,7 @@ def decode_suite_manifest(arm: str, prompt_index: int) -> dict[str, Any]:
 
 
 def decode_declared_suite_manifest_set(arm: str) -> list[dict[str, Any]]:
-    """Declare the closed manifest census from the registered block rotation."""
+    """Declare the closed manifest census from the fixed-zero assignment."""
 
     counts = [0] * len(DECODE_PROFILE["prompts"])
     members_per_block = sum(label == arm for label, _position in ABBA_POSITIONS)
@@ -1496,6 +1580,7 @@ def decode_declared_suite_manifest_set(arm: str) -> list[dict[str, Any]]:
             "declared_member_count": counts[prompt_index],
         }
         for prompt_index in range(len(DECODE_PROFILE["prompts"]))
+        if counts[prompt_index] > 0
     ]
 
 
@@ -1539,8 +1624,8 @@ def decode_workload_candidate() -> dict[str, Any]:
             "output_policy": "greedy_forced_512_suppress_eos",
         },
         "assignment": {
-            "rule_id": "d166_block_prompt_cycle.v1",
-            "rule": "prompt_index = (block_number - 1) mod prompt_count",
+            "rule_id": DECODE_PROMPT_ASSIGNMENT_RULE_ID,
+            "rule": DECODE_PROMPT_ASSIGNMENT_RULE,
             "same_prompt_for_all_a_and_b_members_in_block": True,
             "prompt_count": len(DECODE_PROFILE["prompts"]),
         },
@@ -1730,7 +1815,7 @@ def ordered_blocks(runs: Iterable[dict[str, Any]], measurement_arm: str) -> list
                 "executed_labels": ["A", "B", "B", "A"],
                 "prompt_assignment": (
                     {
-                        "rule_id": "d166_block_prompt_cycle.v1",
+                        "rule_id": DECODE_PROMPT_ASSIGNMENT_RULE_ID,
                         "prompt_index": decode_prompt_index(block),
                         "prompt_id": DECODE_PROFILE["prompts"][
                             decode_prompt_index(block)
@@ -2777,7 +2862,7 @@ def build_tree(
         "decode_workload": {
             "path": "decode_workload_candidate.json",
             "sha256": decode_workload_sha,
-            "assignment_rule_id": "d166_block_prompt_cycle.v1",
+            "assignment_rule_id": DECODE_PROMPT_ASSIGNMENT_RULE_ID,
         },
         "runtime_budget": {
             # The D-134 plan-tree sidecar pins this nested field by SHA.
@@ -2787,8 +2872,8 @@ def build_tree(
                 "minutes_with_margin": 168.0,
                 "authority": REFERENCE_CADENCE_AUTHORITY,
                 "prompt_assignment": {
-                    "rule_id": "d166_block_prompt_cycle.v1",
-                    "rule": "prompt_index = (block_number - 1) mod prompt_count",
+                    "rule_id": DECODE_PROMPT_ASSIGNMENT_RULE_ID,
+                    "rule": DECODE_PROMPT_ASSIGNMENT_RULE,
                     "same_prompt_for_all_a_and_b_members_in_block": True,
                     "prompt_count": len(DECODE_PROFILE["prompts"]),
                 },
@@ -2999,6 +3084,7 @@ def generate(
     identity: GenerationIdentity | None = None,
 ) -> dict[str, str]:
     with generation_context(identity or GenerationIdentity()):
+        validate_decode_prompt_assignment_rule()
         output_repo_root.mkdir(parents=True, exist_ok=True)
         outputs = validate_generation_output_inventory(active_generation())
         validate_generation_write_boundary(output_repo_root, outputs)
