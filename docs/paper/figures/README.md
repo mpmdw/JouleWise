@@ -1,117 +1,58 @@
-# Schematic figures
+# Paper figures
 
-Four publication-grade schematic figures for the MVP paper. They are drawings
-of mechanism, not renderings of evidence: every quantity that appears in them
-is illustrative, chosen to make the geometry legible, and none of it comes from
-a measurement window, a bundle, or an issued artifact. They therefore sit
-outside the results-figure contract in `../figures-plan.md` and consume no
-registry row. Each file is a self-contained SVG with a white background and
-generic `sans-serif` type, sized for a wide page column and legible at 50%
-reduction.
+The article uses the SVG sources directly. Printed labels, rather than legacy
+filename numbers, determine the contiguous article sequence. The prospective
+protocol has its own Figure P1. Existing `png/` files are historical exports,
+not suppliers for this draft.
 
-## `fig1_boundary_attribution.svg` — the attribution mechanism
+| Printed label | SVG | Evidence and placement |
+|---|---|---|
+| Figure 1 | `fig1_boundary_attribution.svg` | Synthetic boundary allocation, article §2; SYN-08. One 30-W record is split at 1.040 or 1.050 s. The full-height 0.010-s slice transfers 0.30 J; both allocations total 3.00 J. |
+| Figure 2 | `fig4_edge_excursions.svg` | Historical current-method pulse re-derivation, article §4; DX-001/003/010–013. Marks are fitted lags from the retained capture, not schematic power values. |
+| Figure 3 | `fig5_phase_record_overlap.svg` | Schematic record support, article §4. Two and three overlaps illustrate the cutoff, not population frequencies; widths and positions are not to scale. |
+| Figure A1 | `figA_partial_record_enclosure.svg` | Synthetic partial-record enclosure, first cited in §1 and displayed in Appendix A.6; PE-01. Point assignment, timing envelope and fixed-window physical allocation enclosure remain distinct. |
+| Figure A2 | `fig2_window_timeline.svg` | Measurement-window schematic, first cited in §2 and displayed in Appendix A.7. A/B/B/A cancels linear drift only with equal condition-midpoint sums. References sample selected times and do not bound arbitrary between-reference excursions. |
+| Figure A3 | `figA3_block_corners.svg` | Synthetic endpoint enumeration, article §3; SYN-05. Four corners, each complete bound, the maximum, and the enumeration limit are labelled. |
+| Figure A4 | `figA5_shared_signs.svg` | Synthetic shared/local sign calculation, article §3; SYN-01. Block allowances feed the eight cases in Table 4; one shared energy sign is not one physical time shift. |
+| Figure A5 | `figA4_clock_polygon.svg` | Synthetic clock-constraint intersection, Appendix A.3.9; SYN-07. Constraints, vertices, axis projections and an empty-set refusal are labelled. |
+| Figure A6 | `figA6_pulse_fit.svg` | Historical current-anchor pulse 9, Appendix A.3.9; DG-134. Gray records, blue predicted averages, dashed commands and an outward-rounded enclosing rectangle use the registered sidecar. |
+| Figure P1 | `fig3_decision_gates.svg` | Prospective protocol P.3 only. Invalid evidence is refused before the magnitude and direction gates. Direction requires both intervals and Holm to pass; usable below-floor evidence is not resolvable and does not establish equality. |
 
-Power against time across the handoff from prompt processing to token
-generation. Sampler interval-average power is drawn as step rectangles about
-112 ms wide; power is high while prompt processing saturates the compute units
-and steps down when token generation begins and spends much of each step
-waiting on memory. The boundary the runtime records is a vertical line, the
-calibrated timing bound is a shaded band around it, and the hatched sliver
-between the recorded boundary and the edge of that band is the energy that
-changes phase when the boundary moves — bounded by the shift times the power
-step, annotated at an illustrative 0.030 s × 33 W ≈ 1 J. The figure also states
-that the request total is unchanged, since energy removed from one phase is
-added to the other. Every number in it, including the ±30 ms bound, the 33 W
-step, and both axis scales, is illustrative and marked as such. It appears in
-§2, immediately after the paragraph that introduces the boundary-attribution
-mechanism.
-
-## `fig2_window_timeline.svg` — window structure and counterbalanced order
-
-A horizontal session timeline for one measurement window: pre-window
-calibration pulse train, admission gate, reference runs, science stages built
-from A/B/B/A blocks, a midpoint reference, more science stages, closing reference
-runs, and the post-window calibration pulse train, with the calibration bracket
-drawn as a span underneath. The reference cadence is deliberately left generic
-— the note states that the schedule is pre-registered per campaign — so the
-figure is not pinned to any one collection night. An inset expands a single
-A/B/B/A block: four runs at slots one to four, labelled A, B, B, A, on a slanted
-drift line, with nested brackets showing that the two A runs and the two B runs
-share the same average position in time, so a steady drift subtracts out of the
-A-versus-B difference while curvature does not and is measured separately. Stage
-widths are illustrative and not to scale; no measured value appears. It appears
-in §2 with the bracket and operative timing bound, and it also explains the
-admission and counterbalanced-order rules used later in §5.
-
-## `fig3_decision_gates.svg` — the two claim gates
-
-A compact decision flow from a measured contrast — carried as a point estimate
-plus its composed uncertainty interval — through two gates checked separately:
-first whether the magnitude exceeds the cell's detection floor, then whether the
-whole uncertainty interval points one way. Passing both yields a directional
-claim; failing the floor yields *not resolvable*, explicitly not zero, equality,
-or no difference; passing the floor without a one-way interval yields
-*direction unresolved*;
-and a separate side inlet, taken whenever an admission or custody check fails,
-yields *refused* without reaching either gate. A side note records that the sum
-of the floor and the claim-side interval is disclosed only for sizing and is
-never used as a single acceptance threshold. The figure contains no measured
-quantity or numeric threshold, and its layout implies no threshold. It belongs
-to §4, beside the
-"Publication label and the two claim gates" paragraph.
-
-## `fig5_phase_record_overlap.svg` — the phase–record overlap rule
-
-Two time-axis rows show adjacent sampling-record intervals against
-prompt-processing intervals of the same illustrative width. In the upper row,
-sampling records about as wide as the phase are misaligned with it: the phase
-straddles one record boundary, yielding two positive overlaps and falling below
-the fixed three-record minimum. In the lower row, a shorter middle sampling
-record lies entirely inside the phase, yielding three positive overlaps and
-meeting that minimum; the SVG explicitly labels that record widths vary. Every
-drawn data mark is labelled: each sampling record, prompt-processing interval,
-phase edge, positive-overlap segment, count box, rule decision, and time axis.
-The counts illustrate the decision rule, not measured population frequencies;
-record widths and phase-edge positions are not to scale, and the drawing
-contains no measured timing value. It appears in Section 6 beside the printed
-diagnostic-era negative result.
-
-## Captions in the paper
-
-Captions written for these four figures must stay in plain language and must
-not cite internal decision-log identifiers, registry row keys, campaign
-codenames, or window labels. Each caption must identify the drawing as schematic,
-state that any shown values or widths are illustrative or not to scale, and state
-that no measured data or numeric threshold is encoded by the layout.
-
-
-## Paper-M round 1 (2026-09-05)
-
-The article uses SVG sources directly. Figure 1 now draws the full-height
-0.010 s × 30 W allocation slice (0.30 J); Figure 3 is used only in the
-prospective protocol and includes Holm. Figure 4 and Figure A2 carry their
-correct embedded numbers, and A2 describes references as sampled evidence,
-not a bound on arbitrary between-reference excursions. Existing PNG exports
-under `png/` are historical exports and are not suppliers for this draft.
+Every article figure has a caption identifying its elements and whether it is
+historical, synthetic or schematic. The registry binds empirical marks and
+worked arithmetic; the schematic layouts encode no measured value.
+The retained P1 label in Figure A1 identifies the partial-record example;
+article Appendix A.6 explains it before the artwork.
 
 `reproduce_worked_examples.py` produces `worked-examples.json` and
 `pulse-table.md` from the pinned synthetic fixture and retained historical
-sources. `build_mechanism_figures.py` regenerates the eight corrected/new SVGs,
-including synthetic A3–A5 and historical pulse-fit A6. Run both from the
-repository root:
+sources. Repository-only synthetic replay works at the article’s development
+pin `2d96783857741f03ad9d634328efaf8bc6d676bc`:
 
 ```bash
-python3 -B docs/paper/figures/reproduce_worked_examples.py --corpus-root /Users/edr/code/JouleWise --output-dir /tmp/paper-m-worked-replay
+python3 -B -c 'import json, runpy; m = runpy.run_path("docs/paper/figures/reproduce_worked_examples.py"); print(json.dumps(m["synthetic"](), indent=2, sort_keys=True))'
+```
+
+Any later explicitly issued replay pin supersedes that development pin.
+Compare this output with the `synthetic` member of the registered sidecar.
+With the unreleased historical corpus, reproduce the full sidecar in a
+separate output directory and compare it with the registered parents:
+
+```bash
+python3 -B docs/paper/figures/reproduce_worked_examples.py --corpus-root /path/to/corpus --output-dir /tmp/paper-m-worked-replay
+```
+
+The native-label fields use raw whole-second metadata, not interpolated parser
+timestamps. The sidecar retains all native constraints, clock and command
+stamps, local pulse predictions/losses, overlap examples with zero-overlap
+neighbors, and all synthetic sign cases with member-envelope integrals.
+
+To regenerate the mechanisms from the retained sidecar, use:
+
+```bash
 python3 -B docs/paper/figures/build_mechanism_figures.py
 ```
 
-Compare the temporary replay JSON and Markdown with the registered parents
-before refreshing them. The native-label fields use the raw plist's
-whole-second metadata, not the parser's interpolated `timestamp_s`. The
-sidecar retains all 1665 label constraints, clock and command stamps, local
-pulse-9 predictions/losses, both overlap examples with zero-overlap neighbors,
-and all eight synthetic sign cases with the member-envelope integrals.
-
-Visual QA: all eight revised/new SVGs were rasterized locally with the
-installed `sharp` renderer and inspected at native size on 2026-09-05.
-The main historical excursion SVG and the P1 enclosure SVG remain byte-identical.
+The builder writes eight SVGs: Figures 1, 3, A2–A6 and P1. Figure 2’s producer
+is `scripts/paper_excursion_decomposition.py`; Figure A1’s producer and exact
+invocation are in article Appendix A.6. Both retain their registered bytes.

@@ -36,8 +36,8 @@ t(s,35,507,'The request total remains 3.00 J. Blue hatching is the energy reassi
 save(s,'fig1_boundary_attribution.svg')
 # Existing diagrams: repair claims and title numbers without changing empirical marks.
 p=F/'fig2_window_timeline.svg';a=p.read_text().replace('Figure 2.', 'Figure A2.').replace('not cancel this way. It is bounded by the whole-window','not cancel this way. References sample selected times;').replace('drift allowance, tracked by the reference runs above.','their allowance cannot bound any rise and fall between.');p.write_text(a)
-p=F/'fig5_phase_record_overlap.svg';a=p.read_text().replace('Figure 5.','Figure 4.');p.write_text(a)
-p=F/'fig3_decision_gates.svg';a=p.read_text().replace('no result of any kind','no authorized comparison result').replace('font-size="12.5" fill="#333333" text-anchor="middle">no authorized','font-size="11.5" fill="#333333" text-anchor="middle">no authorized').replace('does the whole uncertainty','do both intervals point the').replace('interval point one way?','registered way AND Holm pass?').replace('y="310" font-family="sans-serif" font-size="13"','y="310" font-family="sans-serif" font-size="11.5"').replace('interval does not settle direction,','interval or Holm does not pass,').replace('Gate two asks whether the whole uncertainty interval points one way','Gate two asks whether both intervals point the registered way and the Holm-adjusted test passes');p.write_text(a)
+p=F/'fig5_phase_record_overlap.svg';a=p.read_text().replace('Figure 5.','Figure 3.').replace('Figure 4.','Figure 3.');p.write_text(a)
+p=F/'fig3_decision_gates.svg';a=p.read_text().replace('Figure 3.', 'Figure P1.').replace('no result of any kind','no authorized comparison result').replace('font-size="12.5" fill="#333333" text-anchor="middle">no authorized','font-size="11.5" fill="#333333" text-anchor="middle">no authorized').replace('does the whole uncertainty','do both intervals point the').replace('interval point one way?','registered way AND Holm pass?').replace('y="310" font-family="sans-serif" font-size="13"','y="310" font-family="sans-serif" font-size="11.5"').replace('interval does not settle direction,','interval or Holm does not pass,').replace('Gate two asks whether the whole uncertainty interval points one way','Gate two asks whether both intervals point the registered way and the Holm-adjusted test passes');p.write_text(a)
 # Convex endpoint enumeration diagram with all four numerical corners.
 s=begin('Figure A3. Block endpoint enumeration',1000,410)
 t(s,30,32,'Figure A3. SYNTHETIC: form block intervals, then enumerate their corners',20)
@@ -51,8 +51,8 @@ t(s,30,350,'A box point is a weighted average of corners, so no interior value e
 t(s,30,380,'n > 16 refuses exact enumeration. This two-block example is diagnostic only, below the five-unit publication minimum.')
 save(s,'figA3_block_corners.svg')
 # synthetic clock polygon all vertices satisfy displayed rows.
-s=begin('Figure A4. Clock constraint intersection',1000,500)
-t(s,30,32,'Figure A4. SYNTHETIC clock constraints after eliminating the offset',20)
+s=begin('Figure A5. Clock constraint intersection',1000,500)
+t(s,30,32,'Figure A5. SYNTHETIC clock constraints after eliminating the offset',20)
 t(s,30,60,'Coordinates: x = (β − 1) × 10⁶ ppm; y = (A − Aref) in milliseconds. Aref is an arbitrary origin.')
 X=lambda x:110+x*90;Y=lambda y:385-y*65
 for v in range(5):line(s,X(v),Y(0),X(v),Y(4),'#eceff2');t(s,X(v)-5,407,str(v),13)
@@ -66,8 +66,8 @@ for j,l in enumerate(['Rows: 0 ≤ x ≤ 4; 0 ≤ y ≤ 4','and 1 ≤ y − x �
 t(s,30,479,'The real solver uses all native labels and five stamp brackets; Table A3 and its sidecar identify those inputs.')
 save(s,'figA4_clock_polygon.svg')
 d=json.loads((F/'worked-examples.json').read_text());h=d['historical'];sy=d['synthetic']
-s=begin('Figure A5. Shared and local signs',1000,425)
-t(s,30,32,'Figure A5. SYNTHETIC two-block shared-sign / local-corner calculation',20)
+s=begin('Figure A4. Shared and local signs',1000,425)
+t(s,30,32,'Figure A4. SYNTHETIC two-block shared-sign / local-corner calculation',20)
 t(s,30,60,'Within each block: shared start shifts and shared end shifts are swept separately over record-edge breakpoints.')
 for j,b in enumerate(sy['blocks']):
  x=30+j*485;rect(s,x,95,460,153,'#f0f3f6');t(s,x+15,123,f'Block {j+1}: δ = {b["delta"]:.10f} J',17)
@@ -94,7 +94,7 @@ for v in (0,.5,1,1.5,2):t(s,X(v)-6,350,str(v),12)
 t(s,420,374,'Seconds from epoch origin');t(s,35,78,'GPU W',12)
 # inset projected rectangle - labelled enclosure only
 rect(s,80,420,250,120,'#eef6fc','#1b6ca8');t(s,90,444,'Retained enclosing rectangle',14)
-t(s,90,467,'on ∈ [25.449390, 28.932935] ms',13);t(s,90,490,'off ∈ [−8.607395, −5.308621] ms',13)
+t(s,90,467,'on ∈ [25.449389, 28.932935] ms',13);t(s,90,490,'off ∈ [−8.607395, −5.308621] ms',13)
 s.append('<circle cx="210" cy="513" r="4" fill="#1b6ca8"/>');t(s,222,518,'best (27, −7) ms',13)
 t(s,365,433,'Search axes: onset shift, offset shift. Candidate pairs predict each record average.',15)
 t(s,365,463,'Split rectangles; discard a rectangle only when its loss lower bound exceeds Λ.',15)

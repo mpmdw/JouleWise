@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Replay fence for the two Section 2 worked examples in ``docs/paper/draft-v2-skeleton.md``.
+"""Replay fence for the two Section 4 worked examples in ``docs/paper/draft-v2-skeleton.md``.
 
-WHAT THIS GUARDS.  Section 2 of the draft carries two worked examples that
+WHAT THIS GUARDS.  Section 4 of the draft carries two worked examples that
 quote numbers from one retained diagnostic capture, member
 ``20260722T145535-e941c821``:
 
@@ -65,7 +65,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-# The capture the two Section 2 worked examples quote, and the pulse they
+# The capture the two Section 4 worked examples quote, and the pulse they
 # single out.  Both are stated in the draft's own evidence comments.
 MEMBER_ID = "20260722T145535-e941c821"
 SOURCE_DIRECTORY = Path("runs_window_a_20260722") / "instrument_validation" / MEMBER_ID

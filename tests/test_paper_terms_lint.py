@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 import subprocess
@@ -32,11 +33,11 @@ def enclosure_placement_errors(draft: str, registry: str) -> list[str]:
         errors.append("PE-01 must record the synthetic placement")
     body = draft.split("## First-use audit ledger", 1)[0]
     sections = re.split(r"(?m)^### ", body)
-    appendix = next((s for s in sections if s.startswith("A.7 Synthetic partial-record enclosure\n")), "")
+    appendix = next((s for s in sections if s.startswith("A.6 Synthetic partial-record enclosure\n")), "")
     if body.count("[FILL:PE-01]") != 1 or appendix.count("[FILL:PE-01]") != 1:
-        errors.append("PE-01 must occur once, in Appendix A.7")
+        errors.append("PE-01 must occur once, in Appendix A.6")
     image = "(figures/figA_partial_record_enclosure.svg)"
-    if appendix.count(image) != 1 or "Figure A1. SYNTHETIC P1; no hardware observation." not in appendix:
+    if appendix.count(image) != 1 or "Figure A1. Synthetic; no hardware observation." not in appendix:
         errors.append("PE-01 appendix figure and synthetic caption are required")
     introduction = body.split("## 1. Introduction", 1)[-1].split("## 2.", 1)[0]
     if "Appendix Figure A1 shows the records, window, and three energy results for this synthetic example." not in introduction:
@@ -164,7 +165,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
             (draft.replace("[FILL:PE-01]", "[FILL:PE-02]"), registry),
             ("[FILL:PE-01]\n" + draft.replace("[FILL:PE-01]", ""), registry),
             (draft.replace("(figures/figA_partial_record_enclosure.svg)", "(missing.svg)"), registry),
-            (draft.replace("Figure A1. SYNTHETIC P1; no hardware observation.", "Figure A1."), registry),
+            (draft.replace("Figure A1. Synthetic; no hardware observation.", "Figure A1."), registry),
             (draft.replace("Appendix Figure A1 shows", "The appendix shows"), registry),
         )
         for index, (changed_draft, changed_registry) in enumerate(mutations):
@@ -297,7 +298,8 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertEqual(sum(row["offset_best_fit_lag_ms"] < 0 for row in rows), 49)
         self.assertEqual(payload["summary"]["onset_best_fit_lag"]["count_positive"], 59)
         self.assertEqual(payload["summary"]["offset_best_fit_lag"]["count_negative"], 49)
-        self.assertEqual(draft.count(SELECTOR.HEADLINE), 2)
+        for headline in (SELECTOR.ABSTRACT_HEADLINE, SELECTOR.CONCLUSION_HEADLINE):
+            self.assertEqual(" ".join(draft.split()).count(headline), 1)
         self.assertIn("Figure 2. Historical current-method re-derivation, one GPU pulse capture.", draft)
         self.assertIn("onset (switch-on edge) — 59 of 59 are late", figure.read_text())
         self.assertIn("offset (switch-off edge) — 49 of 59 are early", figure.read_text())
@@ -343,6 +345,55 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertNotIn("A — every required ratio passes", draft)
         self.assertNotIn("outcome A / outcome B", draft)
         self.assertNotIn("| Contrast | Point estimate |", draft)
+
+    def test_both_record_support_arms_and_new_registry_rows_match_primary(self) -> None:
+        from collections import Counter
+
+        locator = "docs/process_traces/2026-08-09-prefill-phase-proof/results.json"
+        primary = Path(os.environ.get("R7F_CORPUS_ROOT", REPO)) / locator
+        raw = primary.read_bytes()
+        self.assertEqual(raw, (REPO / locator).read_bytes())
+        digest = hashlib.sha256(raw).hexdigest()
+        self.assertEqual(digest, "e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1")
+        payload = json.loads(raw)
+        expected = {
+            "1.5B": ({"2": 37, "3": 13},
+                     {"not_resolvable_sample_count": 37, "identifiable": 13},
+                     {"runs_window_a10_20260725": 10, "runs_window_c_20260726": 40}),
+            "7B": ({"3": 33, "4": 17}, {"identifiable": 50},
+                   {"runs_window_7bfloor_20260729": 50}),
+        }
+        self.assertEqual({s["stack"] for s in payload["stack_summaries"]}, set(expected))
+        for stack, (overlaps, outcomes, roots) in expected.items():
+            with self.subTest(stack=stack):
+                rows = [r for r in payload["bundles"] if r["stack"] == stack]
+                summary = next(s for s in payload["stack_summaries"] if s["stack"] == stack)
+                self.assertEqual(len(rows), 50)
+                self.assertEqual(len({(r["corpus_root"], r["bundle"]) for r in rows}), 50)
+                self.assertEqual(summary["bundle_count"], len(rows))
+                self.assertEqual(Counter(str(r["power"]["prefill_overlap_sample_count"]) for r in rows), overlaps)
+                self.assertEqual(summary["prefill_overlap_sample_count"], overlaps)
+                self.assertEqual(Counter(r["resolvability"]["rederived"] for r in rows), outcomes)
+                self.assertEqual(summary["resolvability"], outcomes)
+                self.assertEqual(Counter(Path(r["corpus_root"]).name for r in rows), roots)
+                self.assertEqual(Counter(r["model"]["name"] for r in rows),
+                                 {f"Qwen2.5-{stack}-Instruct-4bit": 50})
+        registry = FILL_REGISTRY.read_text()
+        for number, value in ((135, "50"), (136, "50"), (137, "33"), (138, "17"),
+                              (139, "Qwen2.5-7B-Instruct-4bit")):
+            rows = [r for r in registry.splitlines() if r.startswith(f"| DG-{number} —")]
+            self.assertEqual(len(rows), 1)
+            cells = [c.strip() for c in rows[0].split("|")]
+            self.assertEqual(cells[2], f"`{value}`")
+            self.assertIn(locator, cells[3])
+            self.assertIn(digest, cells[3])
+            self.assertEqual(cells[5], "EXTRACT")
+            self.assertIn("NON_CLAIM_BEARING", cells[6])
+        draft = " ".join(SUCCESSOR_DRAFT.read_text().split())
+        for phrase in ("all 50 prompt-processing phases were identifiable",
+                       "33 overlapped three records and 17 overlapped four",
+                       "does not isolate a causal effect of model size"):
+            self.assertIn(phrase, draft)
 
     def test_synthetic_source_maps_reproduce_printed_arithmetic(self) -> None:
         import itertools
@@ -457,7 +508,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
         self.assertNotIn("## First-use audit ledger", draft)
         for moved in ("Two directional comparisons—", "### Measured admission rules",
                       "Under D-173,", "The registered minimum basis is forty",
-                      "revision\n`3b1b1768", "Fourth, the prospective design"):
+                      "revision\n`3b1b1768", "The prospective design"):
             self.assertIn(moved, protocol)
             self.assertNotIn(moved, draft)
         for cure in ("constant clock rate between stamps remains an unverified assumption",
@@ -476,15 +527,15 @@ class RealDocumentRegressionTests(unittest.TestCase):
 
     def test_references_close_existing_citations_and_availability_is_restricted(self) -> None:
         draft = SUCCESSOR_DRAFT.read_text()
-        related = draft.split("## 8. Related work\n")[1].split("## 9.")[0]
-        refs = draft.split("## 11. References\n")[1].split("## Appendix A.")[0]
+        related = draft.split("## 6. Related work\n")[1].split("## 7.")[0]
+        refs = draft.split("## 9. References\n")[1].split("## Appendix A.")[0]
         numbers = [int(n) for n in re.findall(r"^(\d+)\. ", refs, re.MULTILINE)]
         self.assertEqual(numbers, list(range(1, 22)))
         self.assertEqual(set(map(int, re.findall(r"\[(\d+)\]", related))), set(numbers))
         self.assertIn("https://hotcarbon.org/assets/2026/paper-17.pdf", refs)
         self.assertIn("https://hotcarbon.org/assets/2026/paper-46.pdf", refs)
         self.assertNotIn("[REF NEEDED]", refs)
-        availability = draft.split("## 9. Evidence and code availability\n")[1].split("## 10.")[0]
+        availability = draft.split("## 7. Evidence and code availability\n")[1].split("## 8.")[0]
         for phrase in ("No public submission", "not been released as a complete public reproduction",
                        "cannot\nreplace unavailable primary bytes"):
             self.assertIn(phrase, availability)
@@ -495,6 +546,71 @@ class RealDocumentRegressionTests(unittest.TestCase):
             self.assertNotIn(phrase, availability)
         self.assertIn("ten named members", availability)
         self.assertIn("forty of `runs_window_c_20260726/`", availability)
+
+    def test_post_cut_structure_figures_and_protocol_subjects(self) -> None:
+        draft, protocol = SUCCESSOR_DRAFT.read_text(), PROTOCOL.read_text()
+        self.assertEqual(re.findall(r"^## (\d+)\.", draft, re.MULTILINE),
+                         [str(n) for n in range(1, 10)])
+        self.assertEqual(re.findall(r"^### A\.(\d+) ", draft, re.MULTILINE),
+                         [str(n) for n in range(1, 8)])
+        first_figures = list(dict.fromkeys(re.findall(r"Figure (A?\d+)\b", draft)))
+        self.assertEqual([n for n in first_figures if n.isdigit()], ["1", "2", "3"])
+        self.assertEqual([n for n in first_figures if n.startswith("A")],
+                         [f"A{n}" for n in range(1, 7)])
+        for label, locator in re.findall(r"!\[Figure (A?\d+)[^\]]*\]\(([^)]+)\)", draft):
+            self.assertRegex(draft, rf"(?m)^\*?Figure {label}\. ")
+            svg = (SUCCESSOR_DRAFT.parent / locator).read_text()
+            # The two separately issued figures have unnumbered artwork;
+            # whenever a number is embedded, it must match the caption.
+            embedded = re.findall(r"Figure (A?\d+)\.", svg)
+            if label not in ("2", "A1"):
+                self.assertTrue(embedded, locator)
+            self.assertTrue(all(number == label for number in embedded), locator)
+        self.assertIn("Figure P1.", protocol)
+        self.assertNotRegex(protocol, r"Figure [1-9]|^### A\.")
+        for phrase in ("P.6 describes the separate", "gap described in P.5 above",
+                       "measured admission predicates in P.4", "permits no interpretation of the effect"):
+            self.assertIn(phrase, protocol)
+        self.assertNotIn("the effect may be absent", protocol)
+        self.assertNotIn("**close-out artifact**", draft)
+        self.assertNotIn("### Adding publication safeguards", draft)
+        self.assertIn("### Adding publication safeguards", protocol)
+        self.assertNotIn("synthetic P1", draft)
+        self.assertNotIn("SYNTHETIC P1", draft)
+        self.assertNotIn("**Gross energy**", draft)
+        self.assertNotIn("**Idle-subtracted energy**", draft)
+        self.assertNotIn("**same-cell floor**", draft)
+
+    def test_replay_pin_supplies_repository_only_synthetic_producer(self) -> None:
+        draft = SUCCESSOR_DRAFT.read_text()
+        pin = "2d96783857741f03ad9d634328efaf8bc6d676bc"
+        self.assertIn(f"`{pin}`", draft)
+        self.assertIn("Any later explicitly issued replay pin supersedes it", draft)
+        for path in ("docs/paper/figures/reproduce_worked_examples.py",
+                     "docs/paper/figures/build_mechanism_figures.py",
+                     "docs/paper/figures/worked-examples.json"):
+            result = subprocess.run(["git", "cat-file", "-e", f"{pin}:{path}"],
+                                    cwd=REPO, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        command = re.search(r"(?m)^python3 -B -c '(import json, runpy; .+)'$", draft)
+        self.assertIsNotNone(command)
+        result = subprocess.run([sys.executable, "-B", "-c", command.group(1)],
+                                cwd=REPO, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        parent = json.loads((REPO / "docs/paper/figures/worked-examples.json").read_text())
+        self.assertEqual(json.loads(result.stdout), parent["synthetic"])
+
+    def test_pulse_rectangle_display_encloses_unrounded_limits(self) -> None:
+        from decimal import Decimal
+        data = json.loads((REPO / "docs/paper/figures/worked-examples.json").read_text())
+        svg = (REPO / "docs/paper/figures/figA6_pulse_fit.svg").read_text()
+        for edge, label in (("onset", "on"), ("offset", "off")):
+            match = re.search(label + r" ∈ \[([−\d.]+), ([−\d.]+)\] ms", svg)
+            self.assertIsNotNone(match)
+            lower, upper = (Decimal(s.replace("−", "-")) for s in match.groups())
+            fit = data["historical"]["fit"]
+            self.assertLessEqual(lower, Decimal(str(fit[f"{edge}_residual_lower_s"])) * 1000)
+            self.assertGreaterEqual(upper, Decimal(str(fit[f"{edge}_residual_upper_s"])) * 1000)
 
 
 if __name__ == "__main__":

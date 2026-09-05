@@ -1,4 +1,4 @@
-"""Tests for the Section 2 replay fence (``scripts/check_paper_replay_fence.py``).
+"""Tests for the Section 4 replay fence (``scripts/check_paper_replay_fence.py``).
 
 Two layers, because the fence's two halves have different reach.
 
@@ -152,7 +152,7 @@ class FenceInvocationTests(unittest.TestCase):
     "run scripts/check_paper_replay_fence.py where the corpus lives",
 )
 class ReplayAgainstPrimaryArtifactsTests(unittest.TestCase):
-    """Re-derive both Section 2 substitutions and match the draft's literals."""
+    """Re-derive both Section 4 substitutions and match the draft's literals."""
 
     def test_every_fenced_value_replays(self) -> None:
         literals = FENCE.extract_draft_literals(DRAFT.read_text(encoding="utf-8"))

@@ -71,7 +71,7 @@
 <text x="35" y="78" font-size="12">GPU W</text>
 <rect x="80" y="420" width="250" height="120" fill="#eef6fc" stroke="#1b6ca8"/>
 <text x="90" y="444" font-size="14">Retained enclosing rectangle</text>
-<text x="90" y="467" font-size="13">on ∈ [25.449390, 28.932935] ms</text>
+<text x="90" y="467" font-size="13">on ∈ [25.449389, 28.932935] ms</text>
 <text x="90" y="490" font-size="13">off ∈ [−8.607395, −5.308621] ms</text>
 <circle cx="210" cy="513" r="4" fill="#1b6ca8"/>
 <text x="222" y="518" font-size="13">best (27, −7) ms</text>

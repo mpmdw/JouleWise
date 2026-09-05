@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="425" viewBox="0 0 1000 425" role="img"><title>Figure A5. Shared and local signs</title><rect width="100%" height="100%" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="425" viewBox="0 0 1000 425" role="img"><title>Figure A4. Shared and local signs</title><rect width="100%" height="100%" fill="white"/>
 <g font-family="sans-serif" fill="#20252b">
-<text x="30" y="32" font-size="20">Figure A5. SYNTHETIC two-block shared-sign / local-corner calculation</text>
+<text x="30" y="32" font-size="20">Figure A4. SYNTHETIC two-block shared-sign / local-corner calculation</text>
 <text x="30" y="60" font-size="15">Within each block: shared start shifts and shared end shifts are swept separately over record-edge breakpoints.</text>
 <rect x="30" y="95" width="460" height="153" fill="#f0f3f6" stroke="#58616c"/>
 <text x="45" y="123" font-size="17">Block 1: δ = 0.2146256513 J</text>

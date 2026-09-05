@@ -60,7 +60,7 @@ class SelectorGuardTests(unittest.TestCase):
             source.replace("(protocol/prospective-comparison-protocol.md)", "(missing.md)"),
             source + "\n[protocol](protocol/prospective-comparison-protocol.md)",
             source + "\n### Measured admission rules\n",
-            source.replace("## 6. Historical", "[FILL:PG-08]\n## 6. Historical"),
+            source.replace("## 4. Historical", "[FILL:PG-08]\n## 4. Historical"),
             source + "\n<!-- [FILL:DS-32] -->",
             source.replace("49 of 59 fitted offsets", "50 of 59 fitted offsets", 1),
             source.replace(SELECTOR.TRANSFER_LIMITATION_SENTENCE, "", 1),

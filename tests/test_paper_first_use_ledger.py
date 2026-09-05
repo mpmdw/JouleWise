@@ -63,6 +63,9 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     ),
     "commanded graphics-processor pulses": ("work with time-stamped start and stop commands",),
     "powermetrics": ("macOS powermetrics is the power sampler used here",),
+    "sampler": ("macOS powermetrics is the power sampler used here",),
+    "sampling record": ("reports average power between recorded start and end times",),
+    "token": ("a piece of generated text",),
     "Apple M3 Max / 128 GB unified memory": (
         "measures one Apple M3 Max",
         "128 GB of unified memory",
@@ -138,14 +141,14 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "its interpolation-bound term is zero",
         "timing uncertainty enters through separately recomputed boundary envelopes",
     ),
-    "Figure 3": (
+    "Figure P1": (
         "separates evidence refusal from the two claim gates",
         "four possible outcomes are refusal, not resolvable, direction unresolved, and a directional claim",
     ),
     "custody": ("each named input's fingerprint still matches its recorded bytes",),
     "best-fit lag": ("fitted edge time minus its matching command time",),
     "GPU / fitted onsets and offsets": (
-        "a gpu is a graphics processor",
+        "gpu (graphics-processor)",
         "switch-on and switch-off times selected by matching predicted interval-average power",
     ),
     "allowed region": ("contains every edge pair surviving the fit's discrepancy limit",),
@@ -167,6 +170,10 @@ SENTENCE_GLOSS_TERMS = frozenset({
     "timing envelope",
     "total standard error",
     "commanded graphics-processor pulses",
+    "powermetrics",
+    "sampler",
+    "sampling record",
+    "token",
 })
 
 LEXICON_REQUIRED_TERMS = (
@@ -550,8 +557,10 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
                 row = LedgerRow(term, "Example", "glossed-at-first-use", definition)
                 timely = [f"The {label} {definition}."]
                 late = [f"The {label} is used here. Later: {definition}."]
-                self.assertNotIn(term, "\n".join(_gloss_failures([row], timely)))
-                self.assertIn(term, "\n".join(_gloss_failures([row], late)))
+                self.assertFalse(any(f.startswith(f"{term}:")
+                                     for f in _gloss_failures([row], timely)))
+                self.assertTrue(any(f.startswith(f"{term}:")
+                                    for f in _gloss_failures([row], late)))
 
     def test_successor_lexicon_is_regeneration_protected(self) -> None:
         text = LEXICON.read_text(encoding="utf-8")

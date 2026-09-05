@@ -12,10 +12,16 @@ import re
 
 ABSTRACT_WORD_LIMIT = 250
 BRANCHES = ("METHODS_DIAGNOSTIC",)
-HEADLINE = (
-    "In a current-method re-analysis of one historical GPU pulse capture, all 59 "
+ABSTRACT_HEADLINE = (
+    "In a current-method re-analysis of one historical GPU (graphics-processor) pulse capture, all 59 "
     "fitted onsets occur after their commands and 49 of 59 fitted offsets occur "
     "before them; transfer of its timing allowance to inference remains untested."
+)
+CONCLUSION_HEADLINE = (
+    "The current-method re-analysis places all 59 fitted onsets after their "
+    "commands and 49 of 59 fitted offsets before them in the historical GPU "
+    "pulse capture. Transfer of its timing allowance to inference remains "
+    "untested."
 )
 TRANSFER_LIMITATION_SENTENCE = (
     "Transfer of the pulse-derived timing allowance to inference was not tested."
@@ -58,17 +64,18 @@ def validate_methods_draft(text: str) -> int:
         raise ValueError("reader-facing result fill remains")
     if re.search(r"\[FILL:(?:DS-|PG-|OB-|OR-|R_|V5-)", text):
         raise ValueError("retired empirical fill remains, including in comments")
-    for start, end in (("## Abstract\n", "## 1. Introduction"),
-                       ("## 10. Conclusion\n", "## 11. References")):
+    for start, end, headline in (("## Abstract\n", "## 1. Introduction", ABSTRACT_HEADLINE),
+                                 ("## 8. Conclusion\n", "## 9. References", CONCLUSION_HEADLINE)):
         if visible.count(start) != 1 or visible.count(end) != 1:
             raise ValueError(f"expected one {start.strip()} section")
         section = visible.split(start, 1)[1].split(end, 1)[0]
-        if section.count(HEADLINE) != 1:
-            raise ValueError("Abstract and Conclusion must each retain the exact historical headline")
-    if visible.count(HEADLINE) != 2:
-        raise ValueError("historical headline must have exactly two placements")
-    discussion = visible.split("## 7. Discussion and limitations\n", 1)[-1].split(
-        "## 8. Related work", 1)[0]
+        if " ".join(section.split()).count(headline) != 1:
+            raise ValueError("Abstract and Conclusion must each retain their historical headline")
+    normalized = " ".join(visible.split())
+    if any(normalized.count(headline) != 1 for headline in (ABSTRACT_HEADLINE, CONCLUSION_HEADLINE)):
+        raise ValueError("each historical headline must have exactly one placement")
+    discussion = visible.split("## 5. Discussion and limitations\n", 1)[-1].split(
+        "## 6. Related work", 1)[0]
     if discussion.count(TRANSFER_LIMITATION_SENTENCE) != 1:
         raise ValueError("Discussion must retain the fixed transfer limitation")
     if visible.count("(figures/fig4_edge_excursions.svg)") != 1:

@@ -10,7 +10,7 @@
 
   <rect x="0" y="0" width="1000" height="640" fill="#ffffff"/>
 
-  <text x="40" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1b1b1b">Figure 3. Two separate gates, four possible outcomes</text>
+  <text x="40" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1b1b1b">Figure P1. Two separate gates, four possible outcomes</text>
   <text x="40" y="54" font-family="sans-serif" font-size="13" fill="#555555">Schematic diagram. No measured data is shown; no numeric threshold is implied by the layout.</text>
 
   <!-- refusal inlet row -->

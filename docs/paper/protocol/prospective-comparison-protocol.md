@@ -3,7 +3,7 @@
 Status: PROSPECTIVE / UNPERFORMED. Extracted from the methods/diagnostic
 article on 2026-09-05 under the paper-M magistrate ruling. This document
 specifies future work and labelled synthetic illustrations; it supplies no
-comparison result. Read the article’s Sections 1, 2, and 4 for the energy
+comparison result. Read the article’s Sections 1, 2, and 3 for the energy
 allocation, pulse calibration, and sensitivity formulas. References to those
 sections refer to `../draft-v2-skeleton.md`; local P.* sections are below.
 
@@ -12,7 +12,7 @@ sections refer to `../draft-v2-skeleton.md`; local P.* sections are below.
 Before either ratio is compared with 2, **authentication** matches every input
 to its named source-file contents. **Evaluation** then requires a nonzero
 point-only value, making the ratio evaluable. In the prospective design,
-the twelve required ratios are
+the **twelve required ratios** are
 one independent-edge ratio for each of the eight floor components (two models,
 two phases, and for each of those the same-model repeat and same-model null
 A/B/B/A sources) and one comparative \(R_{cm}\) diagnostic for each of the four
@@ -21,7 +21,9 @@ equality passes. A ratio of at least 2 means that moving
 the edge adds at least one entire point-only value to the bound—the
 **twofold boundary contribution** defined by the method. This submission
 reports the method and its worked arithmetic; it does not evaluate that
-twelve-ratio empirical hypothesis.
+twelve-ratio empirical hypothesis. A prospective **close-out artifact**
+checks every required ratio against this census and binds the evidence and
+plan by their expected SHA-256 fingerprints and named-input agreement.
 
 That ratio result does not by itself choose between models. The
 **decision rule**, fixed before collection, reports a direction only when the
@@ -228,6 +230,75 @@ supply an independent coverage guarantee. <!-- reviewer C5: containment caveat -
 
 ## P.3 Directional comparison and claim gates
 
+### Adding publication safeguards after the ratio
+
+The ratio is calculated before the safeguards used to publish the final
+resolution bound, the registered operational guard for assigned-energy
+differences in this cell. The final resolution bound is called the cell floor
+in the artifacts. For
+\(n\ge5\) independent units, first apply the fixed
+small-sample multiplier
+
+\[
+g(n)=\max\!\left(1,\sqrt{9/(n-1)}\right).
+\]
+
+The 9 is \(10-1\): the multiplier compares the residual degrees of freedom
+at the 10-unit design point with the \(n-1\) residual degrees of freedom
+actually observed. It is an operational widening rule, not a population-
+coverage or confidence guarantee. For example, five units give \(g(5)=1.5\),
+while ten give \(g(10)=1\). Below five units the calculation deliberately
+returns no multiplier and no publishable component; its unguarded value is
+diagnostic only.
+
+Next add that component's whole-window allowance \(A_k\) once. For a named
+energy family \(k\), take the means of its opening, midpoint when present, and
+closing reference runs. The **reference-trajectory excursion** is the largest
+of those means minus the smallest. The **issued repeatability bound** is the
+positive endpoint bound for that family from an earlier retained calculation,
+not a number re-estimated from this window. Its artifact field is
+`replicated_endpoint_bound_j` when the reference protocol has a midpoint and
+`single_member_endpoint_bound_j` otherwise. The forcing problem is a rise and
+fall: A/B/B/A suppresses a steady straight-line change only when the A and B
+run-midpoint sums match, and it does not remove a path that turns between
+references. Then \(A_k\) is the larger of that independent bound
+and the observed excursion. Thus reference means 10.0, 10.6, and 10.2 J have
+an excursion of \(10.6-10.0=0.6\) J; with an issued 0.4-J repeatability bound,
+\(A_k=\max(0.6,0.4)=0.6\) J. This empirical allowance samples the registered
+reference epochs; it is not a deterministic bound on arbitrary unobserved
+excursions between them. It is a joule quantity and is distinct from the
+timing allowance already embedded in each energy interval. The published
+components and cell floor are
+
+\[
+F_{\mathrm{abs}}=g(n)U_{\mathrm{abs,corner}}+A_{\mathrm{abs}},\qquad
+F_{\mathrm{cmp}}=g(n)U_{\mathrm{cmp,corner}}+A_{\mathrm{cmp}},
+\]
+
+\[
+F_{\mathrm{cell}}=\max(F_{\mathrm{abs}},F_{\mathrm{cmp}}).
+\]
+
+The maximum is used because either component can manufacture the apparent
+difference the claim must clear; summing them would charge both competing
+worst cases at once. For this labelled synthetic regression, use five zero-valued
+repeat energies and five zero-valued block differences, each with a 0.5-J
+allowed half-width. The functions `absolute_false_effect_floor` and
+`comparative_false_effect_floor` in `joulewise/detection_floor.py` return
+unguarded moved-edge limits of 1.6656 J absolute and 1.7656 J comparative
+(registry SYN-02). With
+\(g(5)=1.5\) and a 0.4 J allowance for each component, the published values
+are \(1.5(1.6656)+0.4=2.8984\) J and
+\(1.5(1.7656)+0.4=3.0484\) J. Their maximum, 3.0484 J, is the cell floor.
+The example's point-only values are zero, so it demonstrates floor composition
+but correctly refuses \(R\); it supplies no boundary-doubling result.
+
+### Directional comparison
+
+**Gross energy** is the processor energy recorded during a run.
+**Idle-subtracted energy** removes the mean idle power multiplied by run
+duration from that gross amount.
+
 Two directional comparisons—token generation and prompt processing, each with
 its expected direction fixed before collection—share one two-sided Holm
 step-down correction. We apply Holm at nominal family-wise level 0.05 to two
@@ -332,7 +403,7 @@ interval used by the direction check.
 The schematic describes the method's possible decisions; this paper reports
 no new model-comparison verdict.
 
-Figure 3 separates evidence refusal from the two claim gates. An admission
+Figure P1 separates evidence refusal from the two claim gates. An admission
 failure means the stage did not pass the entry check. **Custody** means that
 each named input's fingerprint still matches its recorded bytes; a custody
 failure means at least one does not. Missing, stale,
@@ -343,9 +414,9 @@ that clears the cell floor then reaches the direction gate. The four
 possible outcomes are refusal, not resolvable, direction unresolved, and a
 directional claim.
 
-![Figure 3. Evidence refusal and two sequential claim gates.](../figures/fig3_decision_gates.svg)
+![Figure P1. Evidence refusal and two sequential claim gates.](../figures/fig3_decision_gates.svg)
 
-*Figure 3. Decision-gate schematic; no measured data or numeric threshold is encoded by its layout. On the white background, the title and subtitle identify two gates and four outcomes. In the upper lane, a dashed box lists an admission or custody failure and the six evidence defects that can cause it; a right-pointing arrow labelled as a side entry that reaches no gate leads to the bordered “refused” box, which says that the evidence produces no authorized comparison result. A pale horizontal rule separates that refusal lane from the lower decision lane. The lower lane starts with a gray measured-contrast box containing the point estimate and composed uncertainty interval. A right-pointing arrow leads to the first white rounded box, Gate 1, which asks whether the estimate's magnitude exceeds the cell floor. Its “yes” arrow leads to the second white rounded box, Gate 2, which asks whether both intervals point the registered way and Holm passes; the next “yes” arrow leads to the blue directional-claim box, which states that both gates passed in the direction registered before collection. Gate 1's downward “no” arrow leads to the “not resolvable” box, which says the effect is smaller than this instrument can resolve and does not mean zero, equality, or no difference. Gate 2's downward “no” arrow leads to the “direction unresolved” box, which says the floor cleared but the interval or Holm did not settle direction, so no claim is made. The bottom notes define the cell floor as the registered operational resolution guard for assigned-energy differences, retain the separate floor and interval gates, and identify F+B—floor plus deterministic widening—as a non-gating planning diagnostic, neither necessary nor sufficient for acceptance.*
+*Figure P1. Decision-gate schematic; no measured data or numeric threshold is encoded by its layout. On the white background, the title and subtitle identify two gates and four outcomes. In the upper lane, a dashed box lists an admission or custody failure and the six evidence defects that can cause it; a right-pointing arrow labelled as a side entry that reaches no gate leads to the bordered “refused” box, which says that the evidence produces no authorized comparison result. A pale horizontal rule separates that refusal lane from the lower decision lane. The lower lane starts with a gray measured-contrast box containing the point estimate and composed uncertainty interval. A right-pointing arrow leads to the first white rounded box, Gate 1, which asks whether the estimate's magnitude exceeds the cell floor. Its “yes” arrow leads to the second white rounded box, Gate 2, which asks whether both intervals point the registered way and Holm passes; the next “yes” arrow leads to the blue directional-claim box, which states that both gates passed in the direction registered before collection. Gate 1's downward “no” arrow leads to the “not resolvable” box, which says the effect is smaller than this instrument can resolve and does not mean zero, equality, or no difference. Gate 2's downward “no” arrow leads to the “direction unresolved” box, which says the floor cleared but the interval or Holm did not settle direction, so no claim is made. The bottom notes define the cell floor as the registered operational resolution guard for assigned-energy differences, retain the separate floor and interval gates, and identify F+B—floor plus deterministic widening—as a non-gating planning diagnostic, neither necessary nor sufficient for acceptance.*
 
 ## P.4 Operational admission and refusal
 
@@ -376,12 +447,12 @@ The repository is tamper-evident for the operator's own benefit—a way to catch
 
 The repository artifact guide holds the maintainer-facing path conventions,
 **freeze receipts**—records that fix the plan bytes and the time those bytes
-were frozen—generated-state checks, and reissue workflow; Appendix A retains
-the scientific route from raw bytes to the reported verdict.
+were frozen—generated-state checks, and reissue workflow. Article Appendix A gives historical and synthetic replay; P.2, P.3
+and P.8 here specify the prospective characterization and contrast route.
 
 ## P.5 Campaign dependence and custody limitations
 
-Fourth, the prospective design's ten blocks in one measurement window would not automatically be ten
+The prospective design's ten blocks in one measurement window would not automatically be ten
 independent physical draws. Consecutive member runs inside a block share the same
 local machine state, and blocks can share the calibration bracket, thermal
 trajectory, background activity, neighbouring sampler behavior, and serial
@@ -449,7 +520,7 @@ registered independent-block calculation and every pre-registered dependence
 sensitivity model, and compare their total standard errors, degrees of freedom,
 intervals, and direction gates without changing the member set.
 
-Fifth, the generic floor consumer does not independently rederive every
+The generic floor consumer does not independently rederive every
 uncertainty width from primary inputs. It binds configurations, membership,
 identities and point metrics; its floor validator recomposes the result from
 widths supplied by the floor artifact. The mint performs a stronger
@@ -457,10 +528,11 @@ source-based width comparison. Thus a coherently produced wrong-width artifact
 is not independently caught at every consumption boundary. Byte seals catch
 later substitution but do not close that production-error gap. This submission
 publishes no new floor; the gap is a limit of the reusable method, not a
-claim that an unissued floor was reproduced. Section 9 describes the separate
-paper-input custody requirement and public reproduction limits.
+claim that an unissued floor was reproduced. P.6 describes the separate
+paper-input custody requirement; article Section 7 describes public
+availability and reproduction limits.
 
-Sixth, the provenance is trusted-operator rather than adversarial. The hashes
+The provenance is trusted-operator rather than adversarial. The hashes
 and refusal records can expose an accidental edit or inconsistent derived file,
 but an operator who controls acquisition, hashing, and analysis could replace
 the primary files and recompute the records consistently; the possible effect
@@ -479,7 +551,7 @@ a role name and runs root resolve through a clean-Git supply map to fixed
 paths and expected digests, followed by fresh validator replay from disk.
 The rule is an input requirement, not evidence that this draft has a released
 production supply chain. It does not close the generic floor consumer's
-uncertainty-width gap described in Section 7. Any later floor publication
+uncertainty-width gap described in P.5 above. Any later floor publication
 requires a source-member and width census, bracket and basis identifiers,
 estimator identity, and an independently reconstructed-versus-published floor
 comparison. Correct points with coherently wrong widths cannot count as
@@ -504,7 +576,7 @@ docs/process/state_kernel.json:/tasks/TRANSFER-FIDUCIAL-01; runtime events:
 joulewise/adapters/mlx_runtime.py:795-809 emits phase_end/prefill, "mlx prefill
 completed", and phase_start/decode, "mlx decode started". -->
 
-Apply the detector that Section 2 defines for commanded pulse edges, without
+Apply the detector that article Section 2 defines for commanded pulse edges, without
 modification, to the falling edge when the sleep begins and the rising edge
 when decode resumes. For each edge
 \(e\), define
@@ -535,24 +607,28 @@ questions remain outside this capstone's scope.
 
 ## P.8 Comparison archive objects
 
-3. The fixed campaign plan, its freeze receipt, calibration-acceptance file, policy, drift-bound artifact, extraction specification, and analysis manifest. The receipt issue time and fingerprints establish which membership, limits, estimator, and contrasts were fixed before the evidence they judge.
-4. The append-only whole-window verdict, which binds admitted members, preserved failures and replacements, the calibration bracket, policy, and drift evidence. The floor extraction then binds each reported floor to its admitted cell. The claim verdict binds the contrast estimate, composed uncertainty, cell floor, and two decision gates to those authenticated inputs.
+In addition to the run bundle and `instrument_calibration/` subtree of
+article Appendix A.2, a complete comparison archive would need:
+
+1. The fixed campaign plan, its freeze receipt, calibration-acceptance file, policy, drift-bound artifact, extraction specification, and analysis manifest. The receipt issue time and fingerprints establish which membership, limits, estimator, and contrasts were fixed before the evidence they judge.
+2. The append-only whole-window verdict, which binds admitted members, preserved failures and replacements, the calibration bracket, policy, and drift evidence. The floor extraction then binds each reported floor to its admitted cell. The claim verdict binds the contrast estimate, composed uncertainty, cell floor, and two decision gates to those authenticated inputs.
 
 ## P.9 Comparison refusal interpretation
 
-A refused contrast does not show equality. It says the named instrument and evidence cannot adjudicate that difference: the effect may be absent or may lie below what the cell resolves. Failed and interrupted occurrences remain in the archive, while replacements are named separately; therefore extra directories are expected and must never be treated as admitted merely because they exist.
+A refused contrast means that its evidence failed the validity requirements
+in P.4 and permits no interpretation of the effect. Separately, usable
+evidence below the cell floor is not resolvable; it does not establish
+equality. Failed and interrupted occurrences remain in the archive, while replacements are named separately; therefore extra directories are expected and must never be treated as admitted merely because they exist.
 
 ## P.10 Historical release-status note
 
-### A.6 Release status
-
 No public archive, release revision or fingerprint-manifest locator has issued.
-Section 9 and registry DS-34 give the current availability statement; local
+Article Section 7 and registry DS-34 give the current availability statement; local
 project custody paths are not public release locators. A complete public
 historical replay remains unavailable, while Figure A1 can be regenerated
 from the repository alone.
 
 ## P.11 Fresh collection prerequisites
 
-Fresh collection additionally requires the configured Apple-silicon instrument, the exact model files named by the plan, the measurement environment recorded in `env/mac-measurement-lock.txt`, non-interactive permission to run `/usr/bin/powermetrics`, and the measured admission predicates in Section 5 (the pass/fail checks a machine's own calibration must satisfy before its runs are admitted). The retained configuration used the machine named in Section 1. This work does not establish that another Mac, operating-system build, model revision, or quantization shares its measured limits; that machine must characterize its own cells.
+Fresh collection additionally requires the configured Apple-silicon instrument, the exact model files named by the plan, the measurement environment recorded in `env/mac-measurement-lock.txt`, non-interactive permission to run `/usr/bin/powermetrics`, and the measured admission predicates in P.4 (the pass/fail checks a machine's own calibration must satisfy before its runs are admitted). The retained configuration used the machine named in article Section 1. This work does not establish that another Mac, operating-system build, model revision, or quantization shares its measured limits; that machine must characterize its own cells.
 
