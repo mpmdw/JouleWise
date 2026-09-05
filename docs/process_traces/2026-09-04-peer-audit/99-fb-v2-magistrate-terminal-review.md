@@ -21,3 +21,13 @@ site page is unpinned (D-136; its generator broke at 731a0a74 — a main-side de
 Bench (this session, final head): the seven modules green (497 tests, one skip); frozen-file diff empty.
 
 Verdict: LANDABLE. Full-suite replay on the merged head before merge.
+
+## Addendum 2026-09-05 — post-review commits c8ab5efb..9d854b4d (magistrate, this session)
+
+Read and bench-verified: the regenerated dependence sheet (two source-line citations), the mint-fixture review
+under ruling 50 (eight discipline-only pins; diffs in report 51; mint module 83 OK, both relocation tests OK,
+discipline matrix 12 OK, dependence 29 OK at my bench), the census-marker comment reword (census 6 OK), the
+custody fixture re-anchor via the contract's repin lane (custody 29 OK, rendering 3 OK), and the seam reader
+classification as a pass-through carrier (report 53; Opus delta 52 covers closure and consequences of the
+fixture review, one blocker cured). No production code path changed after the terminal review above except
+what the seam merge brought from main. Merge candidate: 9d854b4d plus this record. Verdict: LANDABLE.
