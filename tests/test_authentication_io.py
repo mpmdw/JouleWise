@@ -28,6 +28,8 @@ from joulewise.authentication_io import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUTHENTICATION_SURFACE = (
     "joulewise/paper_custody.py",
+    "joulewise/paper_rendering.py",
+    "joulewise/analysis_engine/claim_side_bound.py",
     "joulewise/analysis_engine/artifact.py",
     "joulewise/analysis_engine/inputs.py",
     "joulewise/analysis_manifest_v3.py",
@@ -590,6 +592,59 @@ def authenticate(path):
                         if not identity.startswith("git:")
                     }
             self.assertEqual(opened, registered)
+
+
+
+def renderer_boundary_violations(source: str) -> tuple[str, ...]:
+    expected = {
+        "render_reported_energy": ("VerifiedReportedEnergyParents", "cell"),
+        "render_d165": ("VerifiedD165Closeout", "outcome"),
+        "render_whole_window": ("VerifiedWholeWindowVerdict", "positive"),
+        "render_claim": ("VerifiedClaimEvidence", "outcome"),
+        "render_transfer": ("VerifiedTransferProjection", "diagnostic"),
+    }
+    tree = ast.parse(source)
+    functions = {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and not node.name.startswith("_")}
+    errors = []
+    if set(functions) != set(expected):
+        errors.append("unregistered or missing public renderer")
+    for name, (kind, grant) in expected.items():
+        node = functions.get(name)
+        if node is None:
+            continue
+        arguments = node.args
+        if (len(arguments.args) != 1 or arguments.args[0].arg != "value"
+            or ast.unparse(arguments.args[0].annotation) != kind or arguments.kwonlyargs
+            or arguments.vararg or arguments.kwarg or arguments.posonlyargs):
+            errors.append(f"{name}: widened issuing annotation")
+        decorators = [ast.unparse(item) for item in node.decorator_list]
+        if decorators != [f"_issued_renderer({kind}, {grant!r})"]:
+            errors.append(f"{name}: missing exact issuing wrapper")
+    return tuple(errors)
+
+
+class PaperRendererBoundaryTests(unittest.TestCase):
+    def test_registered_renderers_require_issuing_boundary(self):
+        from joulewise import paper_rendering
+        from joulewise import paper_custody
+        source = (REPO_ROOT / "joulewise/paper_rendering.py").read_text()
+        self.assertEqual(renderer_boundary_violations(source), ())
+        public = {node.name for node in ast.parse(source).body if isinstance(node, ast.FunctionDef)
+                  and not node.name.startswith("_")}
+        self.assertEqual(public, set(paper_rendering._RENDERERS))
+        self.assertEqual(set(paper_rendering.__all__), public)
+        for name, pair in paper_rendering._RENDERERS.items():
+            renderer = getattr(paper_rendering, name)
+            self.assertEqual(renderer._issuing_boundary, pair)
+            self.assertTrue(hasattr(renderer, "__wrapped__"))
+            self.assertIs(pair[0], getattr(paper_custody, pair[0].__name__))
+        variants = [source.replace('@_issued_renderer(VerifiedD165Closeout, "outcome")\n', ""),
+                    source.replace('value: VerifiedD165Closeout) -> str:', 'value: object) -> str:'),
+                    source + '\ndef render_unregistered(value):\n    return "paper"\n']
+        for mutation in variants:
+            self.assertTrue(renderer_boundary_violations(mutation))
+        print("KILLED 3 renderer AST mutations: wrapper deletion, widened annotation, unregistered renderer")
 
 
 if __name__ == "__main__":
