@@ -22,6 +22,7 @@ from joulewise import paper_rendering as rendering
 from joulewise import identity_pins
 from joulewise.authentication_io import V2AuthenticationReadSession
 from joulewise.identity_pins import IdentityPinProjectionError
+from tests.git_fixture import init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -197,7 +198,7 @@ class _FamilyFixture:
         anchor_map = self.anchor_root / custody._SUPPLY_MAP_PATH
         anchor_map.parent.mkdir(parents=True)
         anchor_map.write_bytes(supply_map_raw)
-        subprocess.run(["git", "init", "-q"], cwd=self.anchor_root, check=True)
+        init_git_fixture(self.anchor_root, "-q")
         subprocess.run(
             ["git", "config", "user.email", "paper-custody@example.invalid"],
             cwd=self.anchor_root,
