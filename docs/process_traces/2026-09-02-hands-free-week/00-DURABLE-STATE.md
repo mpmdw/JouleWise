@@ -376,3 +376,16 @@ THEN, in order:
   file 18 replay record, rows 11/12 = e61b0db5). REFUSAL-CARRIER-01 remains queued behind readiness.
 - F+B (#292): ruling 50 authorized the mint-fixture review under five conditions; seat `fb-ci3` (astra
   high) executing it; report 51.
+
+## 2026-09-05 ~10:20 PDT — paper-M fix round 1 landed (d243c776); F+B fixture review landed (e1690f20)
+
+- Paper-M: all 30 refuter findings cured by `paperm-fix1`; campaign-presuming sections now live in
+  docs/paper/protocol/prospective-comparison-protocol.md (558 lines) and the editorial ledger in
+  docs/paper/protocol/first-use-audit-ledger.md; article 1421 lines; bench: first-use ledger 11 OK, terms
+  lint 12 OK, selector 5 OK, replay fence 10 OK + checker 43 compared / 0 mismatches. paper-L (with main)
+  merged in. Running: fresh astra xhigh delta (report 04) and Opus counter-review (report 05). Next: fix
+  round 2 if needed → apex read → PR #? against main (after #290 merges) with the 12-row ledger.
+- F+B (#292): fixture review landed at e1690f20 under ruling 50 (report 51); magistrate bench: mint 83 OK,
+  both relocation tests OK, discipline matrix 12 OK, dependence sheet 29 OK. Running: Opus non-author
+  delta (report 52). Next: CI on head → rows 9/11/12 → merge.
+- Paper-L (#290): replay running on a3bbd9b3 (started before the seam merge; docs-only branch, accepted).
