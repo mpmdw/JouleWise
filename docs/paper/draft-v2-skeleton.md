@@ -26,19 +26,19 @@ ratio forbids the subtitle. -->
 <!-- OUTCOME-BRANCH:A:START -->
 **A — every required ratio passes:**
 
-> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain—the set of edge movements fixed before collection. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. For every required calculation, that limit was at least twice the limit obtained at the recorded dividing time; the result remained at least twice as large under a second calculation retaining a shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. JouleWise assigns energy to each part as average power times overlap duration; moving the dividing time reallocates energy without changing the request total. Using a timing allowance from commanded graphics-processor pulses (work with time-stamped start and stop commands), JouleWise recalculated bounds on repeat scatter or same-condition differences over the registered timing domain—the edge movements fixed before collection—and divided each largest bound by its recorded-time value. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. For every required calculation, the largest bound was at least twice its recorded-time value; the result remained at least twice as large under a second calculation retaining a shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier short requests had [FILL:DG-067] of [FILL:DG-068] measured parts crossed by fewer than three power readings; [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:A:END -->
 
 <!-- OUTCOME-BRANCH:B:START -->
 **B — an authenticated, evaluable ratio is below 2:**
 
-> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain—the set of edge movements fixed before collection. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. Every required value matched its named source record, and every division used a nonzero second value, but at least one result was less than 2. The cases below 2 were [FILL:OB-01], so the evidence did not show that allowed movement at least doubled the recorded-time limit in every case. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. JouleWise assigns energy to each part as average power times overlap duration; moving the dividing time reallocates energy without changing the request total. Using a timing allowance from commanded graphics-processor pulses (work with time-stamped start and stop commands), JouleWise recalculated bounds on repeat scatter or same-condition differences over the registered timing domain—the edge movements fixed before collection—and divided each largest bound by its recorded-time value. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. Every required value matched its named source record, and every recorded-time value was nonzero, but at least one result was less than 2. The cases below 2 were [FILL:OB-01], so the evidence did not show that allowed movement at least doubled the recorded-time limit in every case. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier short requests had [FILL:DG-067] of [FILL:DG-068] measured parts crossed by fewer than three power readings; [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:B:END -->
 
 <!-- OUTCOME-BRANCH:REFUSAL:START -->
 **Refusal — stopped before comparison or at close-out:**
 
-> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain—the set of edge movements fixed before collection. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. JouleWise stopped at one of two points. Before comparison, it stopped if either model's planned measurement period was excluded or a required, source-checked result for reading the input or generating output tokens was absent. At close-out, it stopped if a required division lacked a value, could not be matched to its source record, or divided by zero. The issued stop and reason were [FILL:OR-01]. The stopped evidence supports neither a direction between Qwen3-8B and Qwen3-1.7B nor a statement about how much the dividing-time error increased the limit. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The stop is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Software can report average power over a span crossing the change from reading input to generating tokens. JouleWise assigns energy to each part as average power times overlap duration; moving the dividing time reallocates energy without changing the request total. Using a timing allowance from commanded graphics-processor pulses (work with time-stamped start and stop commands), JouleWise would recalculate bounds on repeat scatter or same-condition differences over the registered timing domain—the edge movements fixed before collection—and divide each largest bound by its recorded-time value. This holds each record at its reported average; it does not bound physical phase energy under arbitrary within-record allocations. Before comparison, stating that a window failed requires a verified failed production-window record bound to the affected model and window; absent or invalid source evidence selects the methods/diagnostics fallback. Independently authenticated, unaffected model-comparison verdicts remain reportable. At close-out, a required division stops on absent or unauthenticated values or a zero denominator. The stop and issued reason, or unavailable source evidence, were [FILL:OR-01]. Stopped evidence supports no ratio result or model direction. Earlier short requests had [FILL:DG-067] of [FILL:DG-068] measured parts crossed by fewer than three power readings; [FILL:DG-069] had at least three. The scope is one Apple computer, software configuration, workloads, and macOS processor-power records. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:REFUSAL:END -->
 <!-- OUTCOME-BRANCHES:ABSTRACT:END -->
 
@@ -58,12 +58,13 @@ is the **phase boundary**.
 One sampling record can begin during prefill and end during decode. It then
 reports one average power for a span that contains both parts, rather than one
 value for each. The measurand is energy assigned to each phase by
-interval-overlap allocation of the sampler's interval-average records. The
-record's integrated energy is the time integral \(\int P(t)\,dt\) over its full
-span. The timing envelope describes movement of that allocation over the
-registered timing domain, conditional on holding each record at its reported
-average. It bounds neither physical phase energy under arbitrary within-record
-allocations nor inference transfer nor future-error coverage. Moving the edge
+**interval-overlap allocation**: each sampling record's energy is divided
+between the two phases in proportion to the share of its interval falling on
+each side of the phase boundary. The record's integrated energy is the time integral \(\int P(t)\,dt\) over its full
+span. The **timing envelope** is the range of assigned energies over the
+registered timing domain, conditional on the **held-average reconstruction**,
+which holds each record at its reported average. It bounds neither physical
+phase energy under arbitrary within-record allocations nor inference transfer nor future-error coverage. Moving the edge
 within the same record reassigns a slice of recorded energy from one phase to
 the other, but the request total does not change. Repeating the request can
 narrow ordinary run-to-run scatter; it does not remove this allocation
@@ -71,9 +72,11 @@ sensitivity.
 
 In a **synthetic enclosure diagnostic**, a 0.9-s window crossing ten 100-ms
 records that each report 10 W is assigned 9 J. Its \(\pm10\)-ms two-edge timing
-envelope is [8.8, 9.2] J, while the nonnegative partial-record enclosure is
-[8, 10] J. The latter is a diagnostic of allocation ambiguity at the registered
-window; it is reported, never composed into any bound.
+envelope is [8.8, 9.2] J, while allowing each record's energy to sit anywhere
+inside its own interval gives the nonnegative partial-record enclosure
+[8, 10] J: the eight records lying wholly inside contribute 8 J, and the two
+records the window only partly covers contribute between 0 and 1 J each.
+The latter is a diagnostic of allocation ambiguity at the registered window; it is reported, never composed into any bound.
 
 The experiment is deliberately narrow. It measures one Apple M3 Max with
 128 GB of unified memory and one configuration of `powermetrics`. MLX is
@@ -99,10 +102,10 @@ The largest displacement between the commanded times and every edge position
 allowed by the pulse records, plus the **clock-anchor bound**—the uncertainty in
 placing the power record on wall-clock time—is the **pulse-derived limit**.
 Applying that limit to inference assumes that the power record locates pulse edges and
-model-work edges with the same error. Because pulses are not inference, a
-later **inserted-gap check** creates about 500 ms of no work between prefill and
-decode and compares the gap's independently time-stamped edges with the power
-record.
+model-work edges with the same error. Because pulses are not inference, an
+**inserted-gap check**—commanding about 500 ms of no work between prefill and
+decode and comparing the gap's independently time-stamped edges with the power
+record—is registered as future diagnostic work; this paper did not run it.
 
 A **configuration cell**, shortened below to **cell**, is the set of runs with
 one phase, workload, model, hardware, software, and power-measurement boundary,
@@ -480,10 +483,7 @@ the retained timing bound ranged from 25.6 ms to 31.1 ms.
 because repeated runs can share timing sources. <!-- DG-056 -->
 
 The current named bracket screen—the minimum pre/post allowance retained from
-the calibration corpus—is 9.724 ms. <!-- DG-059 --> The same screen is rendered
-elsewhere as 0.009724 s, as a 9.724-ms reference, and again as 9.724 ms; these
-are unit or prose renderings of that one screen, not separate sensitivity
-results. <!-- DG-060; DG-061; DG-062 --> The superseded calibration corpus
+the calibration corpus—is 9.724 ms. <!-- DG-059 --> The superseded calibration corpus
 contained nineteen captures; the current corpus contains seventeen.
 <!-- DG-064; DG-065 --> Separately, the historical short-prefill diagnostic
 population contained 50 bundles. <!-- DG-066 -->
@@ -828,30 +828,33 @@ joules: \([5.0,7.6,5.5,4.2,4.7,6.8,5.5,3.6,3.9,3.2]\). Their mean is
 \(s=\sqrt{17.64/9}=1.4\) J and
 \(se_{\mathrm{repeat}}=1.4/\sqrt{10}=0.442719\) J. With no additional
 stochastic metrology term on this phase path, \(t=5.0/0.442719=11.2938\) on 9
-degrees of freedom. The separate dependence-sensitivity sheet,
+degrees of freedom, with two-sided \(p=1.29\times10^{-6}\). The separate
+dependence-sensitivity sheet,
 `docs/paper/round7/dependence-sensitivity.md`, works the same ten differences
 under a stipulated effective-sample-size halving and an estimated AR(1) model,
 which treats adjacent block errors as serially correlated. Those alternatives
 are sensitivity scenarios, not estimates of independence for the campaign.
 
 Order the two raw probabilities \(p_{(1)}\le p_{(2)}\). Compare the first with
-0.025; only if it passes, compare the second with 0.05. Pairing an illustrative
-\(2.8\times10^{-6}\) with a second illustrative raw probability of \(0.041\) for
-the other comparison orders them as \(2.8\times10^{-6}<0.041\): the smaller
+0.025; only if it passes, compare the second with 0.05. Pairing that
+\(1.29\times10^{-6}\) with a second illustrative raw probability of \(0.041\) for
+the other comparison orders them as \(1.29\times10^{-6}<0.041\): the smaller
 passes 0.025, then 0.041 passes 0.05, so both directional comparisons pass
 Holm. If one contrast is missing, its slot remains: a sole value 0.041 is
 compared with 0.025 and fails, while the missing contrast cannot pass. Holm is
 one step; the decision-interval sign check (the direction gate) in the next
-paragraph is the other, and the sheet's \(\nu=9\) row fails that direction gate
-on these same deltas while both comparisons pass Holm.
+paragraph is the other. The sheet's \(\nu=9\) row adds a stipulated
+0.2-J stochastic metrology standard error to these same deltas; its different
+raw probability also passes Holm, but its decision interval fails the
+direction gate. That composition example is not a campaign input.
 
 A directional result then faces two different checks. The magnitude check
 requires the absolute point estimate to exceed \(F_{\mathrm{cell}}\); failure
 means **not resolvable**—the estimate does not clear the cell floor—not zero.
-The direction check requires two named complete uncertainty intervals: the
-measurement interval, formed from the total standard error, and the decision
-interval, formed by extending both ends of that measurement interval by the
-sum of the recorded deterministic bounds. A deterministic bound is a
+The direction check requires the measurement interval, formed from the repeat
+standard error already defined for this gross phase-energy path, and the
+decision interval, formed by extending both ends by the sum of the recorded
+deterministic bounds. A deterministic bound is a
 non-random maximum displacement carried in the authenticated block record.
 For native interval-average records, the reducer integrates constant reported power
 over the overlap duration; its interpolation-bound term is zero. Timing
@@ -904,7 +907,7 @@ Do not soften, combine, or mechanically retensor these sentences.
 
 **Refusal — stopped before comparison or at close-out:**
 
-> Before comparison, Refusal applies when a model-specific measurement window was excluded or an authenticated token-generation or prompt-processing verdict is absent. At close-out, it applies when a required ratio is missing, unauthenticated, or has a zero denominator. In either case, the paper names the stopped stage and prints its issued reason as [FILL:OR-01]; it selects neither outcome A nor outcome B and makes no boundary-doubling or directional model claim from the stopped evidence.
+> Before comparison, an empirical non-admission statement requires a verified failed production-window record bound to the affected model and window; missing or invalid source evidence selects the methods/diagnostics fallback. Independently authenticated, unaffected model-comparison verdicts remain reportable. At close-out, it applies when a required ratio is missing, unauthenticated, or has a zero denominator. In either case, the paper names the stopped stage and prints its issued reason, or identifies the unavailable source evidence, as [FILL:OR-01]; it selects neither outcome A nor outcome B and makes no boundary-doubling or directional model claim from the stopped evidence.
 
 Figure 3 separates evidence refusal from the two claim gates. An admission
 failure means the stage did not pass the entry check. **Custody** means that
@@ -919,7 +922,7 @@ directional claim.
 
 ![Figure 3. Evidence refusal and two sequential claim gates.](figures/fig3_decision_gates.svg)
 
-*Figure 3. Decision-gate schematic; no measured data or numeric threshold is encoded by its layout. On the white background, the title and subtitle identify two gates and four outcomes. In the upper lane, a dashed box lists an admission or custody failure and the six evidence defects that can cause it; a right-pointing arrow labelled as a side entry that reaches no gate leads to the bordered “refused” box, which says that the evidence produces no result. A pale horizontal rule separates that refusal lane from the lower decision lane. The lower lane starts with a gray measured-contrast box containing the point estimate and composed uncertainty interval. A right-pointing arrow leads to the first white rounded box, Gate 1, which asks whether the estimate's magnitude exceeds the cell floor. Its “yes” arrow leads to the second white rounded box, Gate 2, which asks whether the whole uncertainty interval points one way; the next “yes” arrow leads to the blue directional-claim box, which states that both gates passed in the direction registered before collection. Gate 1's downward “no” arrow leads to the “not resolvable” box, which says the effect is smaller than this instrument can resolve and does not mean zero, equality, or no difference. Gate 2's downward “no” arrow leads to the “direction unresolved” box, which says the floor cleared but the interval did not settle direction, so no claim is made. The three bottom notes define the cell floor as the largest apparent effect produced when nothing changed, after the safeguards of Section 4, state that the floor and interval are separate gates, and state that their sum is a planning disclosure rather than an acceptance threshold.*
+*Figure 3. Decision-gate schematic; no measured data or numeric threshold is encoded by its layout. On the white background, the title and subtitle identify two gates and four outcomes. In the upper lane, a dashed box lists an admission or custody failure and the six evidence defects that can cause it; a right-pointing arrow labelled as a side entry that reaches no gate leads to the bordered “refused” box, which says that the evidence produces no result. A pale horizontal rule separates that refusal lane from the lower decision lane. The lower lane starts with a gray measured-contrast box containing the point estimate and composed uncertainty interval. A right-pointing arrow leads to the first white rounded box, Gate 1, which asks whether the estimate's magnitude exceeds the cell floor. Its “yes” arrow leads to the second white rounded box, Gate 2, which asks whether the whole uncertainty interval points one way; the next “yes” arrow leads to the blue directional-claim box, which states that both gates passed in the direction registered before collection. Gate 1's downward “no” arrow leads to the “not resolvable” box, which says the effect is smaller than this instrument can resolve and does not mean zero, equality, or no difference. Gate 2's downward “no” arrow leads to the “direction unresolved” box, which says the floor cleared but the interval did not settle direction, so no claim is made. The bottom notes define the cell floor as the registered operational resolution guard for assigned-energy differences, retain the separate floor and interval gates, and identify F+B—floor plus deterministic widening—as a non-gating planning diagnostic, neither necessary nor sufficient for acceptance.*
 
 <!-- CAMPAIGN FILL LEDGER:
 1. Report all eight independent-edge ratios:
@@ -1168,7 +1171,7 @@ not tested. Do not copy the superseded Discussion prose. -->
 
 > ### What a twofold boundary contribution changes
 >
-> Every independent-edge ratio and every required comparative shared-energy-sign/local-corner ratio was at least 2. This registered allocation-sensitivity result does not establish physical common-time robustness or transfer the pulse-derived timing allowance to inference. Measurement practice should characterize the named workload boundary, construct a separate registered allocation-sensitivity calculation for each configuration cell, and size the comparison before collection against that planning information. Additional repeats can narrow the point-only value, but they cannot remove the larger contribution from allowed boundary movement under the specified perturbation set; the fixed Qwen3-8B-versus-Qwen3-1.7B pair demonstrates that decision behavior, not a model-size scaling law. Independently of the ratio disposition, its authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-099], [FILL:DG-100], and [FILL:DG-101], respectively; these historical examples neither supplied nor selected the campaign result. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Every independent-edge ratio and every required comparative shared-energy-sign/local-corner ratio was at least 2. This registered allocation-sensitivity result does not establish physical common-time robustness or transfer the pulse-derived timing allowance to inference. Measurement practice should characterize the named workload boundary, construct a separate registered allocation-sensitivity calculation for each configuration cell, and size the comparison before collection against that planning information. At the observed sample sizes, the registered perturbation calculations at least doubled every required component's point-only bound; this result does not establish how additional repeats would change those ratios. Independently of the ratio disposition, its authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-099], [FILL:DG-100], and [FILL:DG-101], respectively; these historical examples neither supplied nor selected the campaign result. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:A:END -->
 
 <!-- OUTCOME-BRANCH:B:START -->
@@ -1184,7 +1187,7 @@ not tested. Do not copy the superseded Discussion prose. -->
 
 > ### What a stop before comparison or at close-out establishes
 >
-> The result stopped at one of two points. Before comparison, it stopped if a model-specific measurement window was excluded or if an authenticated token-generation or prompt-processing verdict was absent. At close-out, it stopped if a required ratio was missing, unauthenticated, or had a zero denominator. The applicable stop and its issued reason were [FILL:OR-01]. The stopped evidence supports neither the all-pass statement nor a below-two result, neither a directional model result nor a boundary-movement quotient, and no model-size scaling law. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-099], [FILL:DG-100], and [FILL:DG-101], respectively; these historical examples do not replace the unavailable campaign result. Transfer of the pulse-derived timing allowance to inference was not tested.
+> The result stopped at one of two points. Before comparison, an empirical non-admission statement requires a verified failed production-window record bound to the affected model and window; missing or invalid source evidence selects the methods/diagnostics fallback. Independently authenticated, unaffected model-comparison verdicts remain reportable. At close-out, it stopped if a required ratio was missing, unauthenticated, or had a zero denominator. The applicable stop and its issued reason, or the unavailable source evidence, were [FILL:OR-01]. The stopped evidence supports neither the all-pass statement nor a below-two result, neither a directional model result nor a boundary-movement quotient, and no model-size scaling law. Earlier non-claim measurements produced prompt-processing, token-generation, and short-prompt ratios of [FILL:DG-099], [FILL:DG-100], and [FILL:DG-101], respectively; these historical examples do not replace the unavailable campaign result. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:REFUSAL:END -->
 <!-- OUTCOME-BRANCHES:DISCUSSION:END -->
 
@@ -1240,7 +1243,9 @@ while its direction and size here are unquantified.
 <!-- Source: docs/paper/round7/dependence-sensitivity.md; reviewer item D6; ranked item 15. -->
 The sampling unit—the smallest observation treated as a separate draw—is one
 complete A/B/B/A block, never one of its four member runs. For block \(i\),
-\(d_i=(B_{i1}+B_{i2}-A_{i1}-A_{i2})/2\). The sensitivity calculation is
+\(d_i=(B_{i1}+B_{i2}-A_{i1}-A_{i2})/2\). For this path, the **total standard error** equals the modeled repeat
+standard error, with no additional stochastic metrology variance. The
+sensitivity calculation is
 
 \[
 \begin{aligned}
@@ -1262,10 +1267,13 @@ from its finite sum over the estimated correlation between successive block
 differences and uses
 \(\nu=\min(n-1,\lfloor n_{\mathrm{eff}}\rfloor-1)\). The named fixed effective-
 sample-size halving case supplies \(V=2\), \(n_{\mathrm{eff}}=5\), and \(\nu=4\).
-For these gross phase-energy contrasts, the current builder supplies no
-additional stochastic metrology variance. Every dependence model therefore
-sets the total stochastic standard error to its modeled repeat standard error;
-timing and other deterministic allowances remain separate. <!-- Pre-registered design/model
+For these gross phase-energy contrasts the current builder supplies no
+additional stochastic metrology variance, so \(SE_{\mathrm{metrology}}=0\) on
+this path and each model's total stochastic standard error reduces to its
+modeled repeat standard error. The dependence-sensitivity sheet's worked
+example stipulates a nonzero \(se_{\mathrm{metrology}}\) and is an arithmetic
+check of the composition, not a campaign input. Timing and other deterministic
+allowances remain separate. <!-- Pre-registered design/model
 constants: docs/paper/round7/dependence-sensitivity.md:28-52; builder treatment:
 joulewise/analysis_engine/__init__.py:588-603 and
 joulewise/analysis_engine/estimators.py:350-371; not measured values. -->
@@ -1407,19 +1415,19 @@ Split and disaggregated inference remain a demanding application rather than thi
 <!-- OUTCOME-BRANCH:A:START -->
 **A — every required ratio passes:**
 
-> JouleWise measures how interval-overlap-assigned phase energy changes over the registered timing domain, conditional on the held-average reconstruction; it does not bound physical phase energy under arbitrary within-record allocations. Every independent-edge ratio was at least 2, and every comparative ratio remained at least 2 under a second calculation retaining a shared sign for block-level energy allowances, so the registered perturbation calculations at least doubled every component's point-only value. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with short prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Transfer of the pulse-derived timing allowance to inference was not tested.
+> JouleWise measures how interval-overlap-assigned phase energy—average power times overlap duration—changes over the registered timing domain, conditional on the held-average reconstruction, which holds each record at its reported average; it does not bound physical phase energy under arbitrary within-record allocations. Every independent-edge ratio was at least 2, and every comparative ratio remained at least 2 under a second calculation retaining a shared sign for block-level energy allowances, so the registered perturbation calculations at least doubled every component's point-only value. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with short prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:A:END -->
 
 <!-- OUTCOME-BRANCH:B:START -->
 **B — an authenticated, evaluable ratio is below 2:**
 
-> JouleWise measures how interval-overlap-assigned phase energy changes over the registered timing domain, conditional on the held-average reconstruction; it does not bound physical phase energy under arbitrary within-record allocations. Every required ratio was authenticated and evaluable, but at least one independent-edge ratio or required comparative shared-energy-sign/local-corner ratio was below 2, so the paper does not claim that the registered perturbation set doubled every point-only value. The components with a below-two ratio were [FILL:OB-01]. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with short prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Transfer of the pulse-derived timing allowance to inference was not tested.
+> JouleWise measures how interval-overlap-assigned phase energy—average power times overlap duration—changes over the registered timing domain, conditional on the held-average reconstruction, which holds each record at its reported average; it does not bound physical phase energy under arbitrary within-record allocations. Every required ratio was authenticated and evaluable, but at least one independent-edge ratio or required comparative shared-energy-sign/local-corner ratio was below 2, so the paper does not claim that the registered perturbation set doubled every point-only value. The components with a below-two ratio were [FILL:OB-01]. Independently of that ratio disposition, the fixed Qwen3-8B-versus-Qwen3-1.7B comparison's authenticated token-generation verdict is [FILL:DS-32] and its authenticated prompt-processing verdict is [FILL:PG-08]; the pair demonstrates the resulting decision behavior rather than a model-size scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with short prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The result applies to one Apple computer, one software and internal-counter configuration, and the tested workloads. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:B:END -->
 
 <!-- OUTCOME-BRANCH:REFUSAL:START -->
 **Refusal — stopped before comparison or at close-out:**
 
-> JouleWise fixes how interval-overlap-assigned phase energy would be tested over the registered timing domain, conditional on the held-average reconstruction; it does not bound physical phase energy under arbitrary within-record allocations. The result stopped at one of two points. Before comparison, it stopped if a model-specific measurement window was excluded or if an authenticated token-generation or prompt-processing verdict was absent. At close-out, it stopped if a required ratio was missing, unauthenticated, or had a zero denominator. The applicable stop and its issued reason were [FILL:OR-01]. The stopped evidence supports neither a boundary-doubling result nor a below-two result, and it supports no model direction or scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with short prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The stopped result is confined to one Apple computer, one software and internal-counter configuration, and the tested workloads. Transfer of the pulse-derived timing allowance to inference was not tested.
+> JouleWise fixes how interval-overlap-assigned phase energy—average power times overlap duration—would be tested over the registered timing domain, conditional on the held-average reconstruction, which holds each record at its reported average; it does not bound physical phase energy under arbitrary within-record allocations. The result stopped at one of two points. Before comparison, an empirical non-admission statement requires a verified failed production-window record bound to the affected model and window; missing or invalid source evidence selects the methods/diagnostics fallback. Independently authenticated, unaffected model-comparison verdicts remain reportable. At close-out, it stopped if a required ratio was missing, unauthenticated, or had a zero denominator. The applicable stop and its issued reason, or the unavailable source evidence, were [FILL:OR-01]. The stopped evidence supports neither a boundary-doubling result nor a below-two result, and it supports no model direction or scaling law. The retained **short-input diagnostic records** are the earlier measurements of requests with short prompt processing. They found that [FILL:DG-067] of [FILL:DG-068] measured phases failed the minimum overlap rule and [FILL:DG-069] passed it. The stopped result is confined to one Apple computer, one software and internal-counter configuration, and the tested workloads. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:REFUSAL:END -->
 <!-- OUTCOME-BRANCHES:CONCLUSION:END -->
 
@@ -1754,8 +1762,11 @@ The reading order tested here is the selected draft's real order: title, the one
 
 | Term | First reader-facing home | Status | Definition or disposition |
 |---|---|---|---|
-| commanded graphics-processor pulses | 1. Introduction | glossed-at-first-use | Fixed-duration graphics-processor work with time-stamped start and stop commands inside one uninterrupted measurement session. |
+| commanded graphics-processor pulses | Abstract | glossed-at-first-use | Each branch defines work with time-stamped start and stop commands; the Introduction supplies the fixed duration and measurement session. |
 | pulse-derived limit | 1. Introduction | glossed-at-first-use | Largest displacement between the commanded times and every edge position allowed by the pulse records, plus the clock-anchor bound. |
+| interval-overlap allocation / interval-overlap-assigned phase energy | 1. Introduction | glossed-at-first-use | Split each record's energy in proportion to the interval on each side of the phase boundary; each Abstract and Conclusion branch states average power times overlap duration. |
+| held-average reconstruction | 1. Introduction | glossed-at-first-use | Hold each record at its reported average; each Abstract states the mechanism and each Conclusion glosses the label. |
+| timing envelope | 1. Introduction | glossed-at-first-use | Range of assigned energies over the registered timing domain, conditional on the stated reconstruction. |
 | synthetic enclosure diagnostic | 1. Introduction | glossed-at-first-use | A labelled 0.9-s, ten-record example comparing the timing envelope with a nonnegative partial-record enclosure; it is never composed into a bound. |
 | component | 1. Introduction | glossed-at-first-use | One separate same-model repeat or same-model null A/B/B/A floor calculation. |
 | permitted edge movement | 1. Introduction | glossed-at-first-use | Every lower-or-upper edge position allowed by the pulse calibration and clock mapping. |
@@ -1833,7 +1844,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | false-difference components / false-difference | 1. Introduction | glossed-at-first-use | The same-model null A/B/B/A block produces this diagnostic, distinct from the two-model science contrast. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | 3. Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
-| floor packs / contrast pack | 3. Instrument characterization | glossed-at-first-use | The first use defines floor packs as campaign plans that collect null-calibration data; the contrast pack is the separate two-model science comparison. |
+| floor packs / contrast pack | 3. Instrument characterization | glossed-at-first-use | The first use defines floor packs as campaign plans that collect calibration data used to build a comparator floor; the contrast pack is the separate two-model science comparison. |
 | Workload response | 3. Instrument characterization | glossed-at-first-use | Whether request and token-generation energy increase with realized output length in the registered way. |
 | Identical-condition null | 3. Instrument characterization | glossed-at-first-use | Whether an A/B/B/A comparison manufactures a difference when both conditions are the same. |
 | independent unit | 3. Instrument characterization | glossed-at-first-use | One separately admitted bundle, not one sampler record within it. |
@@ -1884,7 +1895,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | directional comparison / directional comparisons | Adding publication safeguards after the ratio | glossed-at-first-use | The expected direction is fixed before collection. |
 | Holm step-down correction / raw probability | Adding publication safeguards after the ratio | glossed-at-first-use | Applied at nominal family-wise level 0.05 to two model-based tests, conditional on distributional and dependence assumptions; the later worked ordering supplies mechanics. |
 | repeat standard error | Adding publication safeguards after the ratio | glossed-at-first-use | Repeat-to-repeat scatter divided by \(\sqrt n\). |
-| total standard error | Adding publication safeguards after the ratio | glossed-at-first-use | For the gross phase-energy path, this is the standard error of the block differences because the builder supplies no additional stochastic metrology variance. |
+| total standard error | Further limitations | glossed-at-first-use | For the gross phase-energy path, this is the standard error of the block differences because the builder supplies no additional stochastic metrology variance. |
 | null hypothesis / tail area | Adding publication safeguards after the ratio | audience-vocabulary | Textbook statistics vocabulary for zero mean difference and the resulting two-sided probability. |
 | effective sample size / n_{\mathrm{eff}} | Adding publication safeguards after the ratio | glossed-at-first-use | Number of independent blocks giving the same repeat scatter. |
 | AR(1) model | Adding publication safeguards after the ratio | glossed-at-first-use | Adjacent block errors are treated as serially correlated. |
@@ -1892,7 +1903,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | decision-interval sign check / direction gate | Adding publication safeguards after the ratio | forward-pointer-next-paragraph | The first use explicitly says the direction gate is in the next paragraph, which defines both intervals and the fixed direction. |
 | magnitude check / direction check | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute estimate must clear the cell floor; both complete intervals must remain on the fixed direction. |
 | not resolvable | Adding publication safeguards after the ratio | glossed-at-first-use | The estimate does not clear the cell floor; it is not zero. |
-| measurement interval / decision interval / deterministic bound | Adding publication safeguards after the ratio | glossed-at-first-use | Total-standard-error interval; that interval extended by authenticated non-random maximum displacements. |
+| measurement interval / decision interval / deterministic bound | Adding publication safeguards after the ratio | glossed-at-first-use | Repeat-standard-error interval for this gross phase-energy path; that interval extended by authenticated non-random maximum displacements. |
 | deterministic-bound kinds / interpolation edge | Adding publication safeguards after the ratio | glossed-at-first-use | Native interval-average records integrate constant reported power and have zero interpolation-bound term; the named interpolation edge belongs to the point-sample fallback, while timing uses separate boundary envelopes. |
 | close-out artifact | Comparing the moved-edge limit and point-only value | glossed-at-first-use | Post-campaign artifact that checks every required ratio. |
 | signed clearance or shortfall | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute point estimate minus cell floor, with positive clearance and nonpositive shortfall. |
@@ -2019,4 +2030,4 @@ The reading order tested here is the selected draft's real order: title, the one
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms inventoried: 261; FAILS: 0.
+a failure. Terms inventoried: 264; FAILS: 0.

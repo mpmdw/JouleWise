@@ -50,6 +50,16 @@ EXTRA_ALTERNATIVES: dict[str, tuple[str, ...]] = {
 # must occur no later than the paragraph or table row containing the term's
 # first use. This binds the definition itself, not merely its section heading.
 GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
+    "interval-overlap allocation / interval-overlap-assigned phase energy": (
+        "energy is divided between the two phases in proportion to the share of its interval",
+    ),
+    "held-average reconstruction": ("which holds each record at its reported average",),
+    "timing envelope": ("is the range of assigned energies over the registered timing domain",),
+    "total standard error": (
+        "equals the modeled repeat standard error",
+        "with no additional stochastic metrology variance",
+    ),
+    "commanded graphics-processor pulses": ("work with time-stamped start and stop commands",),
     "powermetrics": ("macOS powermetrics is the power sampler used here",),
     "Apple M3 Max / 128 GB unified memory": (
         "measures one Apple M3 Max",
@@ -67,7 +77,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     ),
     "A/B/B/A block": ("An A/B/B/A block is four runs in the order A, B, B, A",),
     "registered rounding / registered": (
-        "registered timing domain—the set of edge movements fixed before collection",
+        "registered timing domain—the edge movements fixed before collection",
     ),
     "local half-width / shared sign": (
         "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
@@ -138,6 +148,14 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "custody": ("each named input's fingerprint still matches its recorded bytes",),
     "measured contrast": ("point estimate and composed uncertainty interval",),
 }
+
+SENTENCE_GLOSS_TERMS = frozenset({
+    "interval-overlap allocation / interval-overlap-assigned phase energy",
+    "held-average reconstruction",
+    "timing envelope",
+    "total standard error",
+    "commanded graphics-processor pulses",
+})
 
 LEXICON_REQUIRED_TERMS = (
     "| powermetrics | §1 |",
@@ -370,13 +388,30 @@ def _gloss_failures(rows: list[LedgerRow], body_lines: list[str]) -> list[str]:
         if occurrence is None:
             failures.append(f"{row_term}: term is absent")
             continue
-        block = _plain_for_gloss_check(blocks[occurrence.block_index].text)
+        raw_block = blocks[occurrence.block_index].text
+        unit = "paragraph"
+        if row_term in SENTENCE_GLOSS_TERMS:
+            # A definition in the next sentence cannot cure these first uses,
+            # even when Markdown places both sentences in one paragraph.
+            boundaries = list(re.finditer(r"[.!?]\s+", raw_block))
+            start = max(
+                (match.end() for match in boundaries
+                 if match.end() <= occurrence.character_index), default=0,
+            )
+            end = min(
+                (match.end() for match in boundaries
+                 if match.start() >= occurrence.character_index),
+                default=len(raw_block),
+            )
+            raw_block = raw_block[start:end]
+            unit = "sentence"
+        block = _plain_for_gloss_check(raw_block)
         missing = [
             phrase for phrase in required_phrases if phrase.casefold() not in block
         ]
         if missing:
             failures.append(
-                f"{row_term}: first-use paragraph (line {occurrence.line_index + 1}) "
+                f"{row_term}: first-use {unit} (line {occurrence.line_index + 1}) "
                 f"is missing defining words {missing}"
             )
     return failures
@@ -481,6 +516,17 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
             [],
             "required first-use glosses are absent or arrive too late",
         )
+
+    def test_new_glosses_cannot_arrive_in_a_later_sentence(self) -> None:
+        for term in SENTENCE_GLOSS_TERMS:
+            with self.subTest(term=term):
+                label = _alternatives(term)[0]
+                definition = " ".join(GLOSS_REQUIREMENTS[term])
+                row = LedgerRow(term, "Example", "glossed-at-first-use", definition)
+                timely = [f"The {label} {definition}."]
+                late = [f"The {label} is used here. Later: {definition}."]
+                self.assertNotIn(term, "\n".join(_gloss_failures([row], timely)))
+                self.assertIn(term, "\n".join(_gloss_failures([row], late)))
 
     def test_successor_lexicon_is_regeneration_protected(self) -> None:
         text = LEXICON.read_text(encoding="utf-8")
