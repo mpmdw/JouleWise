@@ -218,7 +218,8 @@ class AppendixDeriveProductionTests(unittest.TestCase):
     def test_checker_recognizes_future_appendix_derive_rows(self) -> None:
         text = REGISTRY_PATH.read_text(encoding="utf-8")
         row = next(line for line in text.splitlines() if line.startswith("| PE-01 —"))
-        future = row.replace("PE-01", "ZZ-42").replace("Appendix A.7", "Appendix B.2")
+        appendix = FENCE.parse_registry_text(text).rows["PE-01"].appendix
+        future = row.replace("PE-01", "ZZ-42").replace(f"Appendix {appendix}", "Appendix B.2")
         spec = FENCE.parse_registry_text(text + "\n" + future)
         self.assertIn("ZZ-42", spec.rows)
         self.assertEqual(spec.rows["ZZ-42"].fill_rule, "DERIVE")
@@ -338,13 +339,32 @@ class RegistryAndDigestTests(unittest.TestCase):
                 self.assertEqual(observed, expected)
                 self.assertIs(type(observed), expected_type)
 
-    def test_placement_rows_are_the_16_parsed_nonidentity_rows(self) -> None:
-        expected = {
-            *(f"DX-{number:03d}" for number in range(10, 18)),
-            *(f"DX-{number:03d}" for number in range(20, 28)),
-        }
+    def test_placement_rows_are_the_four_active_nonidentity_rows(self) -> None:
+        expected = {"DX-010", "DX-011", "DX-012", "DX-013"}
         self.assertEqual(set(FENCE._placement_row_ids(self.spec)), expected)
-        self.assertEqual(len(FENCE._placement_row_ids(self.spec)), 16)
+        self.assertEqual(len(FENCE._placement_row_ids(self.spec)), 4)
+
+    def test_retirements_preserve_the_closed_dx_artifact_census(self) -> None:
+        self.assertEqual(len(self.spec.retired_sites), 228)
+        retired_dx = {row.row_id for row in self.spec.rows.values()
+                      if row.fill_rule == "RETIRED_FALLBACK"}
+        self.assertEqual(retired_dx, {"DX-002", "DX-014", "DX-015", "DX-016", "DX-017",
+                                     *(f"DX-{n:03d}" for n in range(20, 28))})
+        self.assertTrue(retired_dx <= set(self.spec.retired_sites))
+        # Retired historical renderings still receive all artifact checks.
+        checked = {c.label for c in FENCE.check_rendered_rows(self.spec, self.artifacts)}
+        self.assertTrue({f"row {row_id}" for row_id in retired_dx - {"DX-002"}} <= checked)
+
+    def test_all_retired_sites_are_absent_and_reinsertion_is_refused(self) -> None:
+        draft = SKELETON_PATH.read_text(encoding="utf-8")
+        checks = FENCE.check_retired_placement(draft, self.spec)
+        self.assertEqual(len(checks), 228)
+        self.assertTrue(all(c.match for c in checks), checks)
+        for site in self.spec.retired_sites:
+            with self.subTest(site=site):
+                checks = FENCE.check_retired_placement(f"<!-- {site} -->", self.spec)
+                self.assertTrue(any(c.label == f"retired placement {site}" and not c.match
+                                    for c in checks))
 
     def test_standing_sentence_head_is_pinned_to_the_registry(self) -> None:
         self.assertIn(FENCE.DX_STANDING_SENTENCE_HEAD, self.text)
@@ -363,6 +383,59 @@ class RefusalTests(unittest.TestCase):
         cls.text = REGISTRY_PATH.read_text(encoding="utf-8")
         cls.spec = FENCE.parse_registry_text(cls.text)
         cls.artifacts, _ = FENCE.load_json_artifacts(ROOT, cls.spec)
+
+    def test_every_retirement_requires_its_dated_note(self) -> None:
+        lines = [line for line in self.text.splitlines()
+                 if line.startswith("| ") and FENCE.RETIREMENT_DATE in line]
+        self.assertEqual(len(lines), 228)
+        for line in lines:
+            with self.subTest(site=line.split("|", 2)[1]), self.assertRaises(FENCE.RegistryError):
+                FENCE.parse_registry_text(self.text.replace(
+                    line, line.replace(FENCE.RETIREMENT_DATE, "RETIRED_FALLBACK (undated)"), 1))
+
+    def test_retired_dx_requires_the_original_rule_and_freeze_status(self) -> None:
+        for row_id in ("DX-002", "DX-016"):
+            line = next(line for line in self.text.splitlines() if line.startswith(f"| {row_id} "))
+            for changed in (line.replace("former rule MEASURED", "former rule DERIVE")
+                            if row_id == "DX-002" else line.replace("former rule DERIVE", "former rule MEASURED"),
+                            line.replace("NON_CLAIM_BEARING", "CLAIM_BEARING")):
+                with self.subTest(row_id=row_id), self.assertRaises(FENCE.RegistryError):
+                    FENCE.parse_registry_text(self.text.replace(line, changed, 1))
+
+    def test_active_dx_still_requires_exact_freeze_status(self) -> None:
+        line = next(line for line in self.text.splitlines() if line.startswith("| DX-010 "))
+        with self.assertRaises(FENCE.RegistryError):
+            FENCE.parse_registry_text(self.text.replace(line, line.replace("NON_CLAIM_BEARING", "CLAIM_BEARING"), 1))
+
+    def test_retired_dx_literals_refused_even_when_exact_or_commented(self) -> None:
+        for row in self.spec.rows.values():
+            if row.fill_rule != "RETIRED_FALLBACK":
+                continue
+            for placed in (f"[FILL:{row.row_id}] {row.marker}",
+                           f"<!-- [FILL:{row.row_id}] `{row.marker}` -->"):
+                with self.subTest(row_id=row.row_id):
+                    checks = FENCE.check_skeleton_literals(placed, self.spec)
+                    self.assertEqual(len(checks), 1)
+                    self.assertFalse(checks[0].match)
+                    self.assertEqual(checks[0].observed, "retired row placed")
+
+    def test_retired_dx_prose_refused_with_or_without_marker(self) -> None:
+        for value in ("2.5 ms", "[FILL:DX-014] 2.5 ms"):
+            checks = FENCE.check_prose_literals(FENCE.DX_STANDING_SENTENCE_HEAD + "\n" + value,
+                                               self.spec)
+            self.assertTrue(any(c.label == "prose DX-014" and not c.match for c in checks))
+
+    def test_checker_cli_refuses_retired_sites_in_article_comments(self) -> None:
+        for site in ("DX-014", "DS-02", "PG-03", "[PREFILL_LENGTH]"):
+            with self.subTest(site=site), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                _copy_checker_inputs(root)
+                draft = root / FENCE.SKELETON_RELATIVE_PATH
+                draft.write_text(draft.read_text(encoding="utf-8") + f"\n<!-- {site} -->",
+                                 encoding="utf-8")
+                result = _run_scratch_checker(root)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(f"MISMATCH retired placement {site}", result.stdout)
 
     def test_malformed_dx_row_is_refused(self) -> None:
         original = next(line for line in self.text.splitlines() if line.startswith("| DX-010 "))
@@ -405,9 +478,9 @@ class RefusalTests(unittest.TestCase):
 
     def test_bare_successor_literals_reject_ambiguous_continuations(self) -> None:
         cases = (
-            ("DX-020", "150 captures"),
+            ("DX-010", "+13.0 msx"),
             ("DX-012", "59 of 599 pulses"),
-            ("DX-026", "4.05 %%%"),
+            ("DX-011", "−5.5 ms.5"),
         )
         for row_id, literal in cases:
             with self.subTest(row_id=row_id):
@@ -419,7 +492,7 @@ class RefusalTests(unittest.TestCase):
                 self.assertEqual(comparisons[0].observed, literal)
 
     def test_exact_bare_and_backticked_successor_literals_are_accepted(self) -> None:
-        for row_id in ("DX-020", "DX-012", "DX-026"):
+        for row_id in ("DX-010", "DX-012", "DX-011"):
             expected = self.spec.rows[row_id].marker
             for rendered in (expected, f"`{expected}`"):
                 with self.subTest(row_id=row_id, rendered=rendered):
@@ -431,7 +504,7 @@ class RefusalTests(unittest.TestCase):
 
     def test_legacy_literal_separator_is_not_stripped(self) -> None:
         comparisons = FENCE.check_skeleton_literals(
-            "[FILL:DX-020] = 15\n", self.spec
+            "[FILL:DX-010] = +13.0 ms\n", self.spec
         )
         self.assertEqual(len(comparisons), 1)
         self.assertFalse(comparisons[0].match)
@@ -1162,7 +1235,7 @@ class TypedArtifactCliTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, output)
         self.assertIn("ok   row DX-025", output)
 
-    def test_standing_sentence_with_15_markers_refuses_the_16th(self) -> None:
+    def test_standing_sentence_missing_one_active_marker_is_refused(self) -> None:
         row_ids = FENCE._placement_row_ids(self.spec)
         missing = row_ids[-1]
         skeleton = [FENCE.DX_STANDING_SENTENCE_HEAD]
@@ -1183,7 +1256,7 @@ class TypedArtifactCliTests(unittest.TestCase):
         output = completed.stdout + completed.stderr
         self.assertEqual(completed.returncode, 2, output)
         self.assertIn(f"MISMATCH placement {missing}", output)
-        self.assertIn("R7F PLACED 15/16", output)
+        self.assertIn("R7F PLACED 3/4", output)
 
     def test_marker_without_standing_sentence_is_refused(self) -> None:
         with tempfile.TemporaryDirectory(
@@ -1226,31 +1299,14 @@ class TypedArtifactCliTests(unittest.TestCase):
                 f"Across the retained excursion reconstruction, the onset and "
                 f"offset medians were {marker['DX-010']} and {marker['DX-011']}; "
                 f"the signed directions held for {marker['DX-012']} onsets and "
-                f"{marker['DX-013']} offsets. Their median absolute deviations "
-                f"were {marker['DX-014']} and {marker['DX-015']}; these are "
+                f"{marker['DX-013']} offsets; these are "
                 f"sample summaries, not claim evidence."
-            ),
-            (
-                f"The ramp explained {marker['DX-016']} of the apparent shift, "
-                f"while the worst onset exceeded the center by {marker['DX-017']}; "
-                f"both remain diagnostic."
-            ),
-            (
-                f"The anchor comparison covered {marker['DX-020']} captures: "
-                f"{marker['DX-021']}, with {marker['DX-022']} admissibility "
-                f"flips and a v2 control of {marker['DX-023']}; the control "
-                f"failure stays named."
-            ),
-            (
-                f"The bound changes had median {marker['DX-024']}, maximum "
-                f"{marker['DX-025']}, maximum relative change {marker['DX-026']}, "
-                f"and median relative change {marker['DX-027']}; none supplies "
-                f"a claim."
             ),
             *extra_lines,
         ]
-        appendix = skeleton.split("### A.7 ", 1)[1].split("## First-use audit ledger", 1)[0]
-        return "\n\n".join(paragraphs) + "\n\n### A.7 " + appendix
+        heading = f"### {self.spec.rows['PE-01'].appendix} "
+        appendix = skeleton.split(heading, 1)[1].split("## First-use audit ledger", 1)[0]
+        return "\n\n".join(paragraphs) + "\n\n" + heading + appendix
 
     def test_prose_fixture_uses_checklist_sentence_and_real_skeleton_prose(self) -> None:
         region = self._real_shaped_dx_region()
@@ -1260,7 +1316,7 @@ class TypedArtifactCliTests(unittest.TestCase):
             "diagnostic capture",
             region,
         )
-        self.assertEqual(region.count("[FILL:DX-"), 16)
+        self.assertEqual(region.count("[FILL:DX-"), 4)
 
     def test_unmarked_rendered_literal_inside_dx_prose_region_is_refused(self) -> None:
         skeleton = self._real_shaped_dx_region(
@@ -1339,12 +1395,12 @@ class InvocationTests(unittest.TestCase):
             )
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         lines = completed.stdout.splitlines()
-        self.assertEqual(lines[-2], "R7F PLACED 0/16")
+        self.assertEqual(lines[-2], "R7F PLACED 0/4")
         self.assertEqual(
             lines[-1],
-            "R7F LITERALS-ONLY COMPARED 184 / MISMATCHES 0",
+            "R7F LITERALS-ONLY COMPARED 412 / MISMATCHES 0",
         )
-        self.assertLess(lines.index("R7F PLACED 0/16"), len(lines) - 1)
+        self.assertLess(lines.index("R7F PLACED 0/4"), len(lines) - 1)
 
     def test_absent_corpus_exits_three_and_names_path(self) -> None:
         with tempfile.TemporaryDirectory(
@@ -1399,7 +1455,7 @@ class ReplayAgainstRetainedCorporaTests(unittest.TestCase):
         )
         self.assertIsNotNone(spec)
         assert spec is not None
-        self.assertEqual(len(digest_comparisons), 184)
+        self.assertEqual(len(digest_comparisons), 412)
         self.assertTrue(
             all(row.match for row in digest_comparisons), digest_comparisons
         )
@@ -1411,7 +1467,7 @@ class ReplayAgainstRetainedCorporaTests(unittest.TestCase):
             "replay AQ bytes",
         ])
         self.assertTrue(all(row.match for row in replay.comparisons), replay)
-        self.assertEqual(len(digest_comparisons) + len(replay.comparisons), 187)
+        self.assertEqual(len(digest_comparisons) + len(replay.comparisons), 415)
 
 
 if __name__ == "__main__":

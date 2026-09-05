@@ -791,6 +791,17 @@ or independence claims. Those restrictions apply to the whole figure and its
 caption. No anchor-correction population or floor ratio is printed. The
 historical requirement to name AS/AQ alongside every XD placement is replaced
 by this source-specific statement; the absent AQ placements are retired.
+R7F accepts a retired DX row only with its exact dated retirement note,
+former fill rule and former freeze label. All historical artifact checks
+remain in force, including AQ integrity and replay; those checks grant no
+submission placement. Its active DX marker census is DX-010–013. Across the
+registry, R7F validates all 228 retirement notes and rejects retired site
+identifiers or tokens in the article, including source-map comments; within
+the bounded DX prose region it also rejects retired numeric renderings.
+Legacy marker-based DX prose remains bounded by the standing-sentence head
+“The following are diagnostic-era instrument statistics and the next Markdown
+heading. If that region is used, every active DX value must retain its marker
+and exact registered rendering; retired rows still have no placement.
 Figure bytes and registered numerical suppliers are unchanged. Additional
 Figure 2 explanatory counts 8 positive/2 zero offsets are exact integers from
 `XD#summary.offset_best_fit_lag.{count_positive,count_zero}`; together with
