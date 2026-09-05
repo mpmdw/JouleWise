@@ -23,3 +23,17 @@ Bench (this session): tests.test_paper_first_use_ledger, test_paper_terms_lint, 
 green after each bench edit. Fill markers 131; outcome markers parent-identical; ledger zero FAIL.
 
 Verdict: LANDABLE, stacked on paper-J (#286). Full-suite replay on the merged head recorded before merge.
+
+## Full-suite replay (row 9)
+
+Unpiped `python3 -m unittest discover -s tests` on the merged head d053e969 (log: magistrate job dir,
+paperk-replay.log), exact tail:
+
+    Ran 5124 tests in 6820.392s
+    FAILED (failures=1, skipped=110)
+
+The single failure is tests.test_node_worker_subprocess…test_real_client_worker_artifact_contract_over_localhost:
+ENVIRONMENTAL / PRE-EXISTING TEST SENSITIVITY (diagnosed in docs/process_traces/2026-09-04-fanout/30; same
+disposition as PRs #285, #286 and #287): the test-only 15 s fake-vLLM prepare budget under concurrent load;
+identical bytes on main; Linux CI green on this head. Paper-K touches docs/paper, its fill-rehearsal selector and
+three test modules only.

@@ -10,6 +10,14 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T34 (2026-09-04 evening PDT) — WATCHDOG INSTALL HANDOFF.** Ed's /loop of 2026-09-04 evening makes
+unattended windows the first priority. The magistrate executes docs/process/MAGISTRATE_WATCHDOG.md §Install
+handoff after PR #288 merges; the session is reaped by design and launchd relaunches a headless magistrate that
+resumes from the RELAUNCH RESUME PLAN section of
+`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md` (first night = REHEARSAL_STUB only, per cold
+ruling 22). Paper-J is merged (#286 → fcf86495); paper-K (#288), paper-L, the custody seam round 5/6, D-165 and
+F+B lanes are listed there with their next exact action.
+
 **T33 (2026-09-05) — POST-MERGE PAPER FREEZE; this is what a fresh
 magistrate must know first.** PR #285 is merged at `82636d67`, making its
 seven named wave-2 lanes terminal. Start with

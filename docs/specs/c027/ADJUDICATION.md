@@ -93,6 +93,7 @@ implementation must not assume them.
 | RPT-001 | n=3 representation | Raw points + mean + observed range; SD in T1; t-interval only in the audit artifact |
 | RPT-001 | Claims-index authority | JSONL canonical; Markdown generated projection |
 | RPT-001 | Stack IDs | RENAME `LEGACY-M3MAX-QWEN25-15B-MLX` → `LEGACY-M3MAX-QWEN25-1P5B-MLX` before the ID becomes durable |
+| RPT-001 | Legacy L1 void disposition | Per peer-audit finding `01-F3` (`docs/process_traces/2026-09-04-peer-audit/01-full-base.md`) and ruling 17 Q7 (`docs/process_traces/2026-09-04-peer-audit/17-magistrate-final-ruling.md:49-51`), amend §7, §6.2 steps 3–5, §6.3, and §6.4 of `rpt-001_report_vertical_slice.md` to the void disposition: the profile is a voided historical demonstration; `voided-placeholder` is a legal build mode and `voided` is a legal claims-index status. The Markdown projection intentionally sanitizes even the exact-legacy grandfather row; the mechanical `PROJECTION_DRIFT` invariant is unchanged. |
 | RPT/REPRO | Full-corpus CI | Scheduled/manually-triggered job after pack publication, never per-PR **[ED: publication/CI commitment]** |
 | RPT-001 | Renderer/template | Defer until P1-008 supplies the submission target **[ED: evaluator input]** |
 | REPRO-001 | Environment identity | Two-lock case ratified (Mac `.venv` + minimal system-Python analysis lock) |
