@@ -976,6 +976,16 @@ def _load_supply_entry(
         "schema_version"
     ) != _SUPPLY_MAP_SCHEMA:
         raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
+    pending_roles = value.get("pending_roles")
+    if not isinstance(pending_roles, dict) or any(
+        not isinstance(key, str)
+        or _SUPPLY_ROLE_RE.fullmatch(key) is None
+        or not isinstance(pending, dict)
+        or set(pending) != {"status", "family", "input_role", "base", "authority", "path"}
+        or pending.get("status") != "pending_desk_day"
+        for key, pending in pending_roles.items()
+    ):
+        raise PaperCustodyRefusal("paper_custody_supply_map_invalid")
     roles = value.get("roles")
     if not isinstance(roles, dict) or any(
         not isinstance(key, str) or _SUPPLY_ROLE_RE.fullmatch(key) is None

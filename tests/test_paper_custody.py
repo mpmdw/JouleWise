@@ -593,6 +593,30 @@ class PaperCustodyApiTests(unittest.TestCase):
                 custody.open_paper_input(fixture.ref)
         self.assertIn(nested.exception.code, custody.PAPER_CUSTODY_REFUSAL_CODES)
 
+    def test_malformed_pending_roles_refuse_every_fixture_family(self) -> None:
+        supply_map = json.loads(SUPPLY_MAP.read_bytes())
+        role, pending = next(iter(supply_map["pending_roles"].items()))
+        malformed = [
+            None, 7, [], "pending_desk_day",
+            *({key: pending} for key in ("", "UPPERCASE", "pending/role")),
+            *({role: value} for value in (None, 7, [])),
+            {role: dict(pending, extra="junk")},
+            {role: dict(pending, status="PASS")},
+            {role: dict(pending, status=None)},
+            *({role: {key: value for key, value in pending.items() if key != missing}}
+              for missing in pending),
+        ]
+        for family in _FAMILIES:
+            fixture = self._fixture(family)
+            self.assertFalse(custody.open_paper_input(fixture.ref).evidence.issuance_authorized)
+            for index, invalid in enumerate(malformed):
+                with self.subTest(family=family, mutation=index):
+                    mutated = dict(supply_map, pending_roles=invalid)
+                    with mock.patch.object(custody, "_git_blob", return_value=_json_bytes(mutated)):
+                        with self.assertRaises(custody.PaperCustodyRefusal) as raised:
+                            custody.open_paper_input(fixture.ref)
+                    self.assertEqual(raised.exception.code, "paper_custody_supply_map_invalid")
+
     def test_public_boundary_rejects_supplier_authored_value_shapes(self) -> None:
         for value in ({}, b"{}", object()):
             with self.subTest(value=type(value).__name__):

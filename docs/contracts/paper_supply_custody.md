@@ -55,6 +55,9 @@ after replay.
 A verified result is one of the five frozen, non-container types minted with a construction token created inside private seam closures. The token is also stored on every authentic capability and is readable by ordinary attribute access, because `_custody_token` is not among the guarded `_CAPABILITY_FIELDS`. The guards prevent construction mistakes, not token recovery. Forging a result additionally requires importing the module-private `_construct_custody_evidence` / `_construct_verified`, a deliberate act outside D-161's threat model. Physics/evidence and pre-registration failures and ordinary operator mistakes remain fail-closed. Direct public construction and tokenless `object.__new__` instances refuse on guarded access. These guards prevent ordinary caller and operator mistakes; they do not prevent deliberate token extraction or token-bearing reconstruction, which D-161 places outside the threat model. A dictionary, mapping, bytes object, arbitrary sequence, prevalidated object, or tokenless `object.__new__` object is never a valid ref or verified capability.
 
 The token is recoverable from the closure cells of the private guard functions.
+The five names above are the issuing types. Each has a non-issuing
+`Fixture*` sibling built on the same private base; no fixture role is ever issuing,
+and no renderer accepts one.
 Evidence records the authorizing anchor commit and exact supply-map SHA-256,
 input digests, selected subjects, and family-specific rendering grants.
 **Issuance** means releasing a result that may authorize paper text.
@@ -72,9 +75,10 @@ Every reference has exactly two fields, in this order: `role: str` and
 | `D165CloseoutRef` | `VerifiedD165Closeout` | **D-165**, the adopted falsifier requiring every attribution-dominance ratio to reach the fixed twofold threshold before licensing the headline ([decision log](../decision_log.md#d-165-the-falsifier-magistrate--cold-gate-2026-08-28)) |
 | `WholeWindowVerdictRef` | `VerifiedWholeWindowVerdict` | One authenticated whole-window admission verdict row and its provenance |
 | `ClaimEvidenceRef` | `VerifiedClaimEvidence` | `claim_verdicts.v1`, `claim_side_bound.v1`, and their authenticated parents |
-| `TransferProjectionRef` | `VerifiedTransferProjection` | The diagnostic inserted-gap transfer projection used by **TR-01**, the branch-independent paper fill that states whether the measured transfer supports applying the pulse-derived timing bound ([registry row](../paper/results-fill-registry.md#L920)) |
+| `TransferProjectionRef` | `VerifiedTransferProjection` | The diagnostic inserted-gap transfer projection used by **TR-01**, the branch-independent paper fill that states whether the measured transfer supports applying the pulse-derived timing bound ([registry row](../paper/results-fill-registry.md#tr-01)) |
 
-The module exports no path/digest binding class and no receipt reference class.
+The module exports no path/digest **binding** class usable for lookup and no receipt reference class; the exported
+`VerifiedDigest` is a read-census record with no lookup or issuance authority.
 It exposes no public reader, parser, replay dispatcher, payload constructor, or
 verified-result constructor. Calling `CustodyEvidence` or any `Verified*` or
 `Fixture*` class directly refuses with `paper_custody_request_invalid`.
@@ -92,6 +96,27 @@ production mode, selected subjects and the required grant for every subject.
 Fixture results never enter any renderer, without a caller boolean check.
 The registry and AST census reject unwrapped, widened, or unregistered public
 renderers. Public suppliers accept refs and use the opener.
+
+
+## Custody-bound registry rows
+
+A `results-fill-registry.md` row is **custody-bound** when its supplier column names a
+`paper_custody` family and role as `<family>/<supply role>`. Every claim-bearing row must
+be custody-bound before its value renders; a row naming no family and role is
+`STOP_FILL`. The table below enumerates every custody-bound row and is the only such
+enumeration. (Today it is empty: all five roles are fixtures.)
+
+| Registry row | Family / supply role |
+|---|---|
+
+**Pending paper-side work (D-173 SCOPE):** registry rows naming `paper_custody`
+families and roles have not been installed. Before any claim-bearing row renders,
+acceptance requires adding `<family>/<supply role>` to every affected row's
+supplier column, enumerating every custody-bound row in the table above, and
+adding a test asserting that this contract table and the registry agree, shaped
+like `test_refusal_constructor_ast_census`. The stable `#tr-01` row-ID anchor
+must also be installed in the registry. This fixture-only landing does not
+satisfy that pending paper-side acceptance.
 
 
 ## Supply-map schema and lookup
