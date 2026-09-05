@@ -231,3 +231,13 @@ Still-running Sol seats (launched before the rule) finish as is: d174-wire, encl
   wording) running; D-166 luna registry fix running. PR #286 paper-J + PR #287 legacy: full replays running
   (~/.claude/jobs/3c46c831/tmp/{paperj,legacy}-replay.log) for row 9.
 - Ed's three questions still open by email (defaults running).
+
+## 2026-09-05 ~16:30 PT — paper-K PR #288 (stacked on #286); ruling-17 code lanes in delta; D-173 adopted on main
+- PR #288 paper-K (92f1ca19 + 99) base = feat/2026-09-04-paper-j; retarget to main after #286 merges. CI watched.
+- Enclosure: fix 1 (Opus C-1..C-6) committed 5a29be48, astra delta running (39). F+B v2: round 3 committed
+  df1a2d82, astra delta 2 running (39-fb). D-165: fix 2 committed c43b7086 (floor-pack generator digests change →
+  custody supersession before collection), astra delta running (05). D-166: registry fix committed 3aeed4ed,
+  astra delta running (05). Seam round-5 design spec (astra xhigh) still running → paper-custody/11.
+- D-173 adopted as amended on main (2fcf4397). Orchestration adoption 02 on main.
+- Replays for #286 (paper-J) and #287 (legacy) still running under load ~10 (both machine-heavy).
+- Rule learned (memory): merge to main ONLY from the canonical checkout; never `pull --ff-only` in a worktree.
