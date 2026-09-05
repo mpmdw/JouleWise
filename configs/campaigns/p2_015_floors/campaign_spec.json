@@ -1,0 +1,191 @@
+{
+  "schema_version": "joulewise.campaign_spec.v1",
+  "campaign": {
+    "campaign_id": "p2-015-window-a",
+    "plan_revision": "v1",
+    "run_id_prefix": "p2015",
+    "runs_dir": "runs/p2_015_floors_window_a",
+    "n": 10
+  },
+  "model": {
+    "tag": "qwen25-1p5b-mlx",
+    "plan_tag": "qwen25-1p5b",
+    "config": {
+      "name": "Qwen2.5-1.5B-Instruct-4bit",
+      "family": "qwen2.5",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "weight_format": "mlx",
+      "context_window": 32768
+    }
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "plan_tag": "m3max",
+    "config": {
+      "id": "macbook_m3_max",
+      "transport": "local",
+      "runtime_backend": "mlx",
+      "telemetry_backend": "powermetrics",
+      "device_kind": "apple_silicon_unified_memory",
+      "notes": "P2-015 Window-A floor calibration on the current M3 Max; normal powermetrics sampler set only."
+    }
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "suite_manifest": {
+    "ref": "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json",
+    "sha256": "0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471"
+  },
+  "block_pattern": [
+    {
+      "label": "A",
+      "position": "A1"
+    },
+    {
+      "label": "B",
+      "position": "B1"
+    },
+    {
+      "label": "B",
+      "position": "B2"
+    },
+    {
+      "label": "A",
+      "position": "A2"
+    }
+  ],
+  "profiles": {
+    "df-rq-mid": {
+      "name": "df_rq_mid",
+      "prompt_tokens": 1024,
+      "output_tokens": 256,
+      "df_rows": [
+        "DF-RQ-GROSS-MID",
+        "DF-RQ-IDLE-MID"
+      ],
+      "metrics": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "window_class": "request",
+      "use_role": "primary_claim_gate",
+      "cluster_reducer": "single"
+    },
+    "df-rq-short": {
+      "name": "df_rq_short",
+      "prompt_tokens": 128,
+      "output_tokens": 64,
+      "df_rows": [
+        "DF-RQ-GROSS-SHORT",
+        "DF-RQ-IDLE-SHORT"
+      ],
+      "metrics": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "window_class": "request",
+      "use_role": "primary_claim_gate",
+      "cluster_reducer": "single"
+    },
+    "df-rq-long-prompt": {
+      "name": "df_rq_long_prompt",
+      "prompt_tokens": 4096,
+      "output_tokens": 64,
+      "df_rows": [
+        "DF-RQ-GROSS-LONG-PROMPT",
+        "DF-RQ-IDLE-LONG-PROMPT"
+      ],
+      "metrics": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "window_class": "request",
+      "use_role": "optional_direct_coverage",
+      "cluster_reducer": "single"
+    },
+    "df-rq-long-decode": {
+      "name": "df_rq_long_decode",
+      "prompt_tokens": 128,
+      "output_tokens": 512,
+      "df_rows": [
+        "DF-RQ-GROSS-LONG-DECODE",
+        "DF-RQ-IDLE-LONG-DECODE"
+      ],
+      "metrics": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "window_class": "request",
+      "use_role": "optional_direct_coverage",
+      "cluster_reducer": "single"
+    },
+    "df-ph-prefill": {
+      "name": "df_ph_prefill",
+      "prompt_tokens": 4096,
+      "output_tokens": 64,
+      "df_rows": [
+        "DF-PH-PREFILL"
+      ],
+      "metrics": [
+        "phase_energy_j.prefill"
+      ],
+      "window_class": "phase",
+      "use_role": "primary_claim_gate",
+      "cluster_reducer": "single"
+    },
+    "df-ph-decode": {
+      "name": "df_ph_decode",
+      "prompt_tokens": 128,
+      "output_tokens": 512,
+      "df_rows": [
+        "DF-PH-DECODE"
+      ],
+      "metrics": [
+        "phase_energy_j.decode"
+      ],
+      "window_class": "phase",
+      "use_role": "primary_claim_gate",
+      "cluster_reducer": "single"
+    },
+    "df-ph-short-prefill": {
+      "name": "df_ph_short_prefill",
+      "prompt_tokens": 128,
+      "output_tokens": 64,
+      "df_rows": [
+        "DF-PH-SHORT-PREFILL"
+      ],
+      "metrics": [
+        "phase_energy_j.prefill"
+      ],
+      "window_class": "phase",
+      "use_role": "identifiability_and_floor_if_eligible",
+      "cluster_reducer": "single"
+    },
+    "df-su-sentinel": {
+      "name": "df_su_sentinel",
+      "suite_manifest": true,
+      "df_rows": [
+        "DF-SU-ITEM",
+        "DF-SU-LEVEL"
+      ],
+      "metrics": [
+        "suite_metrics.items[*].gross_energy_j",
+        "suite_metrics.levels[*].gross_energy_j"
+      ],
+      "window_class": "item_and_level",
+      "use_role": "primary_claim_gate",
+      "cluster_reducer": "mean"
+    }
+  }
+}

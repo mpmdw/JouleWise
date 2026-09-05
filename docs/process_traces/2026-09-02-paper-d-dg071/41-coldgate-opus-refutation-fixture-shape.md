@@ -72,7 +72,7 @@ Every wrong implementation dies, including all three that survive the packet's c
 
 **`--follow` and `--first-parent`.** The packet says its bench replay finds both "indistinguishable from the reference on this fixture." That is right about the fixture and wrong about the semantics, in opposite directions:
 
-- **`--follow` is correct, not merely lucky.** At `-n 1` it is identical to the reference by construction — rename-following only alters the walk once it reaches the path's creation, which `-1` never does. Verified under an actual rename (`scripts/old.py` → the pinned path): reference, `--follow`, `--first-parent` and `--all` all return `fb601e54`.
+- **`--follow` is correct, not merely lucky.** At `-n 1` it is identical to the reference by construction — rename-following only alters the walk once it reaches the path's creation, which `-1` never does. Verified under an actual rename (`scripts/old.py` → the pinned path): reference, `--follow`, `--first-parent` and `--all` all return `fb601e54`, a throwaway-repository experiment SHA rather than a JouleWise commit.
 - **`--first-parent` is distinguishable and is non-conforming**, just not by any fixture without merges (F3 above). Under the prose — which names the exact command — it is wrong. Under what the reader needs it is harmless (P1 holds, `git show` works). If the project wants `--first-parent` to count as correct, the Method prose must stop naming a command and start naming a property; if it wants it to count as wrong, the fixture needs a merge. The packet's replay cannot answer this because it never built one.
 
 **Simpler shape, if the differential is judged too expensive:** keep the two-repository byte-identity pair as-is (it tests a different thing — same producer commit ⇒ same bytes), and add a small set of *single-repository* shape cases, each asserting equality to that repo's own oracle-computed commit: {script only added; script modified after add; near-miss sibling changed later; abandoned ref with a later change; producer == HEAD; merge}. That is still enumeration, but of the six shapes above rather than of commands, and it kills every candidate in the table. It is strictly better than H1–H3 and strictly worse than the differential.
@@ -155,7 +155,7 @@ cd $SCRATCH && export TMPDIR=$PWD/tmp
 
 # --follow / --first-parent under a real rename
 #  scripts/old.py -(modify)-> -(git mv)-> scripts/issue_dg071_dg075_statistics.py -> empty commit
-#  reference / --follow / --first-parent / --all all -> fb601e540240a2a9ce736420fc9c7fa9ae34471e
+#  reference / --follow / --first-parent / --all all -> fb601e540240a2a9ce736420fc9c7fa9ae34471e (throwaway-repository SHA; not a JouleWise commit)
 ```
 
 Key raw outputs (abridged; full tables in the Q2 matrix above):

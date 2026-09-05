@@ -318,7 +318,14 @@ def revalidate_identity(
         return Revalidation.UNOBSERVABLE, None
     if observed == expected:
         return Revalidation.MATCH, observed
-    return Revalidation.PID_REUSED, observed
+    # PID reuse is established only by the table's start-time anchor.  If
+    # that anchor is unchanged, disagreement in executable, argv, or ancestry
+    # means the candidate changed while it was being observed.  Treat that as
+    # unavailable evidence rather than allowing an identity-churn race to be
+    # recorded as proven PID reuse.
+    if row.start_time != expected.start_time:
+        return Revalidation.PID_REUSED, observed
+    return Revalidation.UNOBSERVABLE, observed
 
 
 class SnapshotProcessSource:

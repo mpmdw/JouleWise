@@ -116,12 +116,13 @@ one-line pointer; shape test in `tests/test_docs_freshness.py`):**
 
 ## Installation (decided ≠ done; T26 item 1 form)
 
-Both rules install via the in-flight T26 install branch
-(`feat/2026-09-02-t26-install`, kernel row `T26-RULING-INSTALL-01`) as a
-follow-up seat after Sol 193 lands: D-170 body gains a "Q1/Q2 (cold gate
-2026-09-02)" paragraph; D-160 pointer line cites Q2; `bridge_protocol.md` §1
-+ §10; M0 pointer; `test_custodied_impl_reports_carry_clause_map` beside the
-item-4 test. This ruling and both sealed outputs are custodied under
+Both rules are installed. The T26 install branch
+(`feat/2026-09-02-t26-install`) merged as PR #273, and the former installing
+row `T26-RULING-INSTALL-01` is retired. D-170's dated addendum records the
+producer evidence. The installed sites are the D-170 Q1/Q2 paragraph, the
+D-160 pointer, `bridge_protocol.md` §§1 and 10, the Mission M0 pointer, and
+`test_custodied_impl_reports_carry_clause_map` beside the item-4 test. This
+ruling and both sealed outputs remain custodied under
 `docs/process_traces/2026-09-02-process-rules/`.
 
 ## Executed evidence

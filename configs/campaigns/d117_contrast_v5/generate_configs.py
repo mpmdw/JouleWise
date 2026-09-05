@@ -23,6 +23,13 @@ CURRENT_FAMILY_SUFFIX = "_v5"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.campaign_generator_core import (  # noqa: E402
+    actual_pack_paths,
+    make_render_json,
+    sha256_bytes,
+    sidecar_bytes,
+    validate_generation_write_boundary,
+)
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
@@ -363,6 +370,9 @@ def thread_generation_identity(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(thread_generation_identity(item) for item in value)
     return value
+
+
+render_json = make_render_json(thread_generation_identity)
 
 
 def embedded_generator_bytes() -> bytes:
@@ -1105,22 +1115,11 @@ END_REF_MANIFEST_PATH = Path(
 )
 
 
-def render_json(value: Any) -> bytes:
-    return (
-        json.dumps(thread_generation_identity(value), indent=2, ensure_ascii=False)
-        + "\n"
-    ).encode("utf-8")
-
-
 def render_suite_manifest_bytes(value: dict[str, Any]) -> bytes:
     """Render exactly the effective bytes named by suite_manifest_sha256."""
 
     effective = SuiteManifest.from_mapping(value).to_dict()
     return (json.dumps(effective, indent=2, sort_keys=True) + "\n").encode("utf-8")
-
-
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def file_sha256(path: Path) -> str:
@@ -1158,71 +1157,6 @@ def write_bytes(path: Path, data: bytes) -> None:
         raise ValueError(f"output path is outside the closed inventory: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
-
-
-def validate_generation_write_boundary(
-    output_root: Path, outputs: Iterable[Path]
-) -> None:
-    """Refuse link traversal or anomalous existing nodes before any write."""
-
-    # Registered residual (lead disposition; registration lives in
-    # docs/risk_register.md -- this comment is not the registration). This
-    # boundary is check-then-write: a concurrent process could substitute a
-    # validated ancestor or write target with a symlink after this function
-    # returns and before the bytes land.
-    #
-    # The disposition rests on DESK-TIME SINGLE-OPERATOR GENERATION, not on the
-    # measurement threat model. Pack generation is hand-run by one operator at
-    # the desk, outside any measurement window, against a repository checkout
-    # the operator controls; nothing else is scheduled to write into the pack
-    # path while it runs. The non-adversarial concurrency that genuinely occurs
-    # here -- editors, backup and sync daemons, the parallel worktree fleet --
-    # clobbers or duplicates files; none of it substitutes an ancestor
-    # directory with a symlink in the microseconds after validation. Winning
-    # this race requires a local program acting adversarially and with
-    # knowledge of the boundary, which single-operator desk discipline
-    # excludes. D-139 A1 ("no adversarial programs affecting the measurement
-    # can be assumed") is cited BY ANALOGY only: its own scope is the
-    # measurement environment, not this generator's desk-time write boundary.
-    #
-    # The accidental class IS closed: pre-existing links anywhere in the pack
-    # path, spec, sidecar, or ancestors refuse before any write. The residual
-    # reopens if the threat model is revised to admit concurrent adversarial
-    # local processes, or if generation moves to multi-operator/shared-machine
-    # use (cold-gate conditions C-B1a and C-B1b, 2026-08-18; C-B1b formally
-    # supersedes delta-4's F2 dirfd remedy demand). No dirfd/O_NOFOLLOW
-    # hardening is attempted here; the residual is registered, not closed.
-
-    root = output_root.absolute()
-
-    def refuse(path: Path, reason: str) -> None:
-        destination = path.resolve(strict=False)
-        raise ValueError(
-            f"refusing generation: {reason}: {path} -> {destination}"
-        )
-
-    if root.is_symlink():
-        refuse(root, "output root is a symlink")
-    if root.exists() and not root.is_dir():
-        refuse(root, "output root is not a real directory")
-
-    for relative in sorted(outputs, key=lambda path: path.as_posix()):
-        current = root
-        for component in relative.parts[:-1]:
-            current = current / component
-            if current.is_symlink():
-                refuse(current, "write ancestor is a symlink")
-            if current.exists() and not current.is_dir():
-                refuse(current, "write ancestor is not a real directory")
-        target = current / relative.name
-        if target.is_symlink():
-            refuse(target, "write target is a symlink")
-        if target.exists() and not target.is_file():
-            refuse(target, "existing write target is not a regular file")
-
-
-def sidecar_bytes(digest: str, filename: str) -> bytes:
-    return f"{digest}  {filename}\n".encode("utf-8")
 
 
 def repo_sha(path: Path) -> str:
@@ -3432,14 +3366,6 @@ def validate_prompt_realization_registration(pack_root: Path) -> None:
                 "prompt_realization_registration_inconsistent",
                 f"{config_path.relative_to(pack_root)}: config/candidate/family disagree",
             )
-
-
-def actual_pack_paths(pack_root: Path) -> set[Path]:
-    return {
-        path.relative_to(pack_root)
-        for path in pack_root.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
-    }
 
 
 def check(

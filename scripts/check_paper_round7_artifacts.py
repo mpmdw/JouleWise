@@ -13,37 +13,15 @@ pulse index (0.005 * 58 / 844, rounded upward).
 
 The default invocation additionally re-runs both producers into a directory
 under TMPDIR and requires byte identity for XD, AQ, and the XS-produced F4.
-Three things end that replay half with exit 3: this script's own preflight
-finds a required corpus entry absent, or either producer exits 3 from its own
-preflight (absent input, or a present input whose bytes do not match the
-sha256 the producer retains).  None is ever a pass.  ``--literals-only`` runs
-only the always-on digest/field/literal half.
+``--literals-only`` runs only the always-on digest/field/literal half.  A replay
+that stops for unavailable input keeps every comparison already completed, but
+the incomplete replay remains the primary terminal disposition.  Producer
+integrity disagreement is a mismatch, never an unavailable-input stop.
 
-Exit codes: 0 when every comparison agrees, 2 when any comparison mismatches
-(including a producer that fails with a code other than 3), and 3 when the
-replay half ends as above.  The digest half runs first and returns 2 on its
-own mismatches before any replay.  Within the replay half, exit 3 preempts 2:
-the comparisons a stopped replay had already collected are discarded, so an
-AS exit 3 discards the XD and F4 byte comparisons, and a mismatch coexisting
-with a stop is reported as 3 with no ``MISMATCH`` line.  Exit 3 also does not
-mean "a file was absent": a producer exits 3 when a required file is present
-but its bytes do not match the retained sha256.
-Successful full replay ends with ``R7F COMPARED n / MISMATCHES m``;
-``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.  A
-stopped replay instead ends with ``R7F CORPUS UNAVAILABLE: <detail>`` and
-prints no ``COMPARED`` line.  ``<detail>`` is written at exactly three sites
-and is therefore exactly one of three things: (i) the first required corpus
-path the preflight finds absent -- name components joined onto the corpus root
-after ``Path.resolve()``, so the root is resolved but the joined remainder is
-not, and the path may name a directory (``<root>/runs/instrument_validation``)
-rather than a file; (ii) a producer's stdout and stderr concatenated,
-stripped, split into lines and rejoined with `` | `` on one line, when that
-producer exits 3 having written something; (iii) the resolved corpus root,
-when a producer exits 3 having written nothing.  Only (i) is a missing path;
-(iii) is a path that exists.  A consumer must therefore compare paths against
-the resolved form of the corpus root it passed, never the as-given argument --
-and must never stat ``<detail>`` unconditionally, because in forms (ii) and
-(iii) it is not a missing path.
+The executable disposition table below is the sole exit-code and terminal-token
+definition.  ``--help`` renders its exit-code paragraph directly from that
+table.  Complete full replay ends with ``R7F COMPARED n / MISMATCHES m``;
+``--literals-only`` uses the distinct ``R7F LITERALS-ONLY COMPARED`` token.
 """
 
 from __future__ import annotations
@@ -51,6 +29,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import Enum
 import hashlib
 import json
 import os
@@ -140,10 +119,6 @@ class RegistryError(RuntimeError):
     """The registry cannot be interpreted without guessing."""
 
 
-class ArtifactsUnavailable(RuntimeError):
-    """The retained replay corpus is absent."""
-
-
 @dataclass(frozen=True)
 class SourcePin:
     code: str
@@ -191,6 +166,59 @@ class Comparison:
     expected: str
     observed: str
     match: bool
+
+
+class DispositionKind(Enum):
+    """Closed terminal disposition set for the round-7 replay fence."""
+
+    AGREEMENT = "agreement"
+    MISMATCH = "mismatch"
+    REPLAY_INCOMPLETE = "replay_incomplete"
+
+
+@dataclass(frozen=True)
+class Disposition:
+    exit_code: int
+    terminal_token: str
+    help_clause: str
+
+
+DISPOSITIONS: dict[DispositionKind, Disposition] = {
+    DispositionKind.AGREEMENT: Disposition(
+        exit_code=0,
+        terminal_token="R7F COMPARED",
+        help_clause="when every requested comparison completes and agrees.",
+    ),
+    DispositionKind.MISMATCH: Disposition(
+        exit_code=2,
+        terminal_token="R7F COMPARED",
+        help_clause=(
+            "when a completed comparison, producer integrity check, or "
+            "producer execution definitively disagrees."
+        ),
+    ),
+    DispositionKind.REPLAY_INCOMPLETE: Disposition(
+        exit_code=3,
+        terminal_token="R7F REPLAY INCOMPLETE",
+        help_clause=(
+            "when required input is unavailable and the requested replay "
+            "cannot complete; earlier comparisons remain visible."
+        ),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class ReplayStop:
+    source: str
+    reason: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class ReplayResult:
+    comparisons: tuple[Comparison, ...]
+    stop: ReplayStop | None = None
 
 
 def _comparison(label: str, expected: Any, observed: Any) -> Comparison:
@@ -723,6 +751,79 @@ def check_skeleton_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
     return comparisons
 
 
+def _dx_prose_regions(text: str) -> Iterable[str]:
+    """Yield each standing-sentence region through the next Markdown heading."""
+
+    cursor = 0
+    while True:
+        start = text.find(DX_STANDING_SENTENCE_HEAD, cursor)
+        if start < 0:
+            return
+        remainder = text[start + len(DX_STANDING_SENTENCE_HEAD) :]
+        heading = re.search(r"^#", remainder, re.MULTILINE)
+        end = (
+            start + len(DX_STANDING_SENTENCE_HEAD) + heading.start()
+            if heading is not None
+            else len(text)
+        )
+        yield text[start:end]
+        cursor = end if end > start else start + len(DX_STANDING_SENTENCE_HEAD)
+
+
+def _rendered_literal_pattern(literal: str) -> re.Pattern[str]:
+    # The leading boundary keeps short values such as ``15`` out of signed,
+    # decimal, and larger-number tokens.  The trailing boundary matches the
+    # canonical literal parser: prose punctuation and units may follow, but a
+    # longer alphanumeric, decimal, or percentage token is not the same value.
+    return re.compile(rf"(?<![\w.%+\-−]){re.escape(literal)}(?![\w.%])")
+
+
+def _has_immediately_preceding_marker(
+    region: str, literal_start: int, row_id: str
+) -> bool:
+    prefix = region[:literal_start]
+    marker = re.escape(f"[FILL:{row_id}]")
+    return re.search(rf"{marker}[ \t]*`?$", prefix) is not None
+
+
+def check_prose_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
+    """Refuse unmarked rendered values inside each bounded DX prose region."""
+
+    comparisons: list[Comparison] = []
+    for region in _dx_prose_regions(text):
+        candidates: list[tuple[int, int, str, str]] = []
+        for row_id in _placement_row_ids(spec):
+            marker = spec.rows[row_id].marker
+            for match in _rendered_literal_pattern(marker).finditer(region):
+                candidates.append((match.start(), match.end(), row_id, marker))
+
+        # A short registered value can be a component of another row's longer
+        # registered rendering (DX-020's ``15`` occurs inside DX-023).  The
+        # longest containing rendering owns that prose span.
+        maximal = [
+            candidate
+            for candidate in candidates
+            if not any(
+                other[0] <= candidate[0]
+                and candidate[1] <= other[1]
+                and (other[1] - other[0]) > (candidate[1] - candidate[0])
+                for other in candidates
+            )
+        ]
+        for start, _end, row_id, marker in sorted(maximal):
+            if _has_immediately_preceding_marker(region, start, row_id):
+                continue
+            comparisons.append(
+                Comparison(
+                    f"prose {row_id}",
+                    f"[FILL:{row_id}] immediately before {marker!r}",
+                    marker,
+                    False,
+                )
+            )
+    return comparisons
+
+
 def _placement_row_ids(spec: RegistrySpec) -> tuple[str, ...]:
     return tuple(row_id for row_id in spec.rows if row_id not in IDENTITY_ROWS)
 
@@ -786,6 +887,7 @@ def digest_half(
         comparisons.append(_comparison("successor skeleton", "readable", f"{type(exc).__name__}: {exc}"))
     else:
         comparisons.extend(check_skeleton_literals(skeleton_text, spec))
+        comparisons.extend(check_prose_literals(skeleton_text, spec))
         comparisons.extend(
             comparison
             for comparison in check_placement(skeleton_text, spec)
@@ -854,11 +956,9 @@ def _producer_failure(label: str, completed: subprocess.CompletedProcess[str]) -
     return _comparison(f"replay {label} exit", 0, f"{completed.returncode}: {tail}")
 
 
-def _producer_unavailable_message(
-    completed: subprocess.CompletedProcess[str], fallback: Path
-) -> str:
+def _producer_unavailable_detail(completed: subprocess.CompletedProcess[str]) -> str:
     output = (completed.stdout + completed.stderr).strip().splitlines()
-    return " | ".join(output) if output else str(fallback)
+    return " | ".join(output) if output else "no output"
 
 
 def _replace_command_value(command: list[str], flag: str, value: Path) -> None:
@@ -893,10 +993,17 @@ def _f4_replay_argv(
 
 def replay_half(
     repository_root: Path, corpus_root: Path, spec: RegistrySpec
-) -> list[Comparison]:
+) -> ReplayResult:
     for path in _required_corpus_paths(corpus_root, repository_root, spec):
         if not path.exists():
-            raise ArtifactsUnavailable(str(path))
+            return ReplayResult(
+                (),
+                ReplayStop(
+                    source="preflight",
+                    reason="required_input_unavailable",
+                    detail=str(path),
+                ),
+            )
 
     tmp_parent = Path(os.environ.get("TMPDIR", tempfile.gettempdir()))
     tmp_parent.mkdir(parents=True, exist_ok=True)
@@ -913,15 +1020,20 @@ def replay_half(
             )
         except ValueError as exc:
             comparisons.append(_comparison("replay F4 command", "valid pinned argv", str(exc)))
-            return comparisons
+            return ReplayResult(tuple(comparisons))
         xs = _run_producer(xs_command, repository_root)
         if xs.returncode != 0:
             if xs.returncode == 3:
-                raise ArtifactsUnavailable(
-                    _producer_unavailable_message(xs, corpus_root)
+                return ReplayResult(
+                    tuple(comparisons),
+                    ReplayStop(
+                        source="excursion",
+                        reason="required_input_unavailable",
+                        detail=_producer_unavailable_detail(xs),
+                    ),
                 )
             comparisons.append(_producer_failure("XS", xs))
-            return comparisons
+            return ReplayResult(tuple(comparisons))
 
         for code, output_path in (("XD", xd_out), ("F4", f4_out)):
             committed = repository_root / spec.sources[code].path
@@ -946,16 +1058,21 @@ def replay_half(
         )
         if anchor.returncode != 0:
             if anchor.returncode == 3:
-                raise ArtifactsUnavailable(
-                    _producer_unavailable_message(anchor, corpus_root)
+                return ReplayResult(
+                    tuple(comparisons),
+                    ReplayStop(
+                        source="anchor_summary",
+                        reason="required_input_unavailable",
+                        detail=_producer_unavailable_detail(anchor),
+                    ),
                 )
             comparisons.append(_producer_failure("AS", anchor))
-            return comparisons
+            return ReplayResult(tuple(comparisons))
         committed_aq = repository_root / spec.sources["AQ"].path
         comparisons.append(
             _byte_comparison("replay AQ bytes", committed_aq.read_bytes(), aq_out.read_bytes())
         )
-    return comparisons
+    return ReplayResult(tuple(comparisons))
 
 
 def _print_comparisons(comparisons: Iterable[Comparison]) -> None:
@@ -987,8 +1104,50 @@ def _print_tail(
     print(f"{token} {len(comparisons)} / MISMATCHES {mismatches}")
 
 
+def _exit_code_help() -> str:
+    lines = ["Exit codes:"]
+    lines.extend(
+        f"  {row.exit_code} {row.help_clause}" for row in DISPOSITIONS.values()
+    )
+    return "\n".join(lines)
+
+
+def _finalize(
+    kind: DispositionKind,
+    comparisons: list[Comparison],
+    skeleton_path: Path,
+    spec: RegistrySpec | None,
+    *,
+    literals_only: bool = False,
+    stop: ReplayStop | None = None,
+) -> int:
+    disposition = DISPOSITIONS[kind]
+    _print_comparisons(comparisons)
+    if kind is DispositionKind.REPLAY_INCOMPLETE:
+        if stop is None:
+            raise ValueError("replay_incomplete disposition requires a stop record")
+        print(
+            f"{disposition.terminal_token}: source={stop.source}; "
+            f"reason={stop.reason}; detail={stop.detail}"
+        )
+    else:
+        if stop is not None:
+            raise ValueError(f"{kind.value} disposition cannot carry a stop record")
+        token = (
+            "R7F LITERALS-ONLY COMPARED"
+            if literals_only
+            else disposition.terminal_token
+        )
+        _print_tail(token, comparisons, skeleton_path, spec)
+    return disposition.exit_code
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=_exit_code_help(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--repository-root",
         type=Path,
@@ -1016,24 +1175,38 @@ def main(argv: list[str] | None = None) -> int:
     skeleton_path = args.skeleton or repository_root / SKELETON_RELATIVE_PATH
     spec, comparisons = digest_half(repository_root, registry_path, skeleton_path)
     if any(not comparison.match for comparison in comparisons) or spec is None:
-        _print_comparisons(comparisons)
-        token = "R7F LITERALS-ONLY COMPARED" if args.literals_only else "R7F COMPARED"
-        _print_tail(token, comparisons, skeleton_path, spec)
-        return 2
+        return _finalize(
+            DispositionKind.MISMATCH,
+            comparisons,
+            skeleton_path,
+            spec,
+            literals_only=args.literals_only,
+        )
 
     if not args.literals_only:
-        try:
-            comparisons.extend(replay_half(repository_root, corpus_root, spec))
-        except ArtifactsUnavailable as exc:
-            _print_comparisons(comparisons)
-            print(f"R7F CORPUS UNAVAILABLE: {exc}")
-            return 3
+        replay = replay_half(repository_root, corpus_root, spec)
+        comparisons.extend(replay.comparisons)
+        if replay.stop is not None:
+            return _finalize(
+                DispositionKind.REPLAY_INCOMPLETE,
+                comparisons,
+                skeleton_path,
+                spec,
+                stop=replay.stop,
+            )
 
-    _print_comparisons(comparisons)
-    mismatches = sum(not comparison.match for comparison in comparisons)
-    token = "R7F LITERALS-ONLY COMPARED" if args.literals_only else "R7F COMPARED"
-    _print_tail(token, comparisons, skeleton_path, spec)
-    return 0 if mismatches == 0 else 2
+    kind = (
+        DispositionKind.MISMATCH
+        if any(not comparison.match for comparison in comparisons)
+        else DispositionKind.AGREEMENT
+    )
+    return _finalize(
+        kind,
+        comparisons,
+        skeleton_path,
+        spec,
+        literals_only=args.literals_only,
+    )
 
 
 if __name__ == "__main__":

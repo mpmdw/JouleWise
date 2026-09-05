@@ -9,16 +9,19 @@ Before starting a big run:
 2. If `RUN_STATE.md` has an ACTIVE `ACTIVE_STOP_CARD`, follow that card
    first. It may point to a stream log or checkpoint artifact that is newer
    than the latest run report.
-3. Read the latest report in this directory unless the stop card names a
-   different resume authority.
+3. Follow the latest session-record pointer in `RUN_STATE.md`. A formal run
+   report in this directory is one session-record form; a dated `RUN_STATE.md`
+   block linked to `docs/process_traces/` is another. Directory order is not a
+   freshness signal.
 4. Check the working tree.
 5. Confirm the next task against `TASK_QUEUE.md` and `AGENT_PLAN.md`.
 
 After finishing a big run:
 
 1. Update `RUN_STATE.md`.
-2. Add a new dated report here, or update the current report if the run is a
-   continuation of the same task.
+2. Add a new dated report here, or make the dated `RUN_STATE.md` block point to
+   the session's committed `docs/process_traces/` record. Do not leave the
+   current session without a durable pointer.
 3. Include tests, commands, blockers, and concrete next steps.
 4. If the run used delegation, tools, skills, councils, or worktrees, include
    the lightweight process trace below.

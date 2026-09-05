@@ -10,6 +10,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts" / "check_gate_ledger.py"
@@ -36,8 +38,8 @@ class CheckGateLedgerTests(unittest.TestCase):
         cls.repo = Path(cls.temporary.name) / "repo"
         cls.repo.mkdir()
         (cls.repo / "evidence.txt").write_text("evidence\n", encoding="utf-8")
+        init_git_fixture(cls.repo, "-q")
         for command in (
-            ["git", "init", "-q"],
             ["git", "config", "user.email", "tests@joulewise.invalid"],
             ["git", "config", "user.name", "JouleWise tests"],
             ["git", "add", "evidence.txt"],

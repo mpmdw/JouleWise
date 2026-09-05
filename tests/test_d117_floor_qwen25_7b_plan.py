@@ -32,6 +32,7 @@ from joulewise.identity_pins import (
 from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts.extract_detection_floors import main as extract_main
 from scripts.run_campaign import load_order_entries
+from tests.git_fixture import init_git_fixture
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -156,13 +157,7 @@ def initialize_git_tracked_checkout(
         target = checkout_root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO_ROOT / relative, target)
-    subprocess.run(
-        ["git", "init", "-q"],
-        cwd=checkout_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    init_git_fixture(checkout_root, "-q")
     subprocess.run(
         ["git", "add", "--", *(path.as_posix() for path in sorted(tracked))],
         cwd=checkout_root,
