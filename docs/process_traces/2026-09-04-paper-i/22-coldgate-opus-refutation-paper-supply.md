@@ -1,9 +1,9 @@
-# Cold-gate independent contract lens - Opus refuter, PAPER-SUPPLY (2026-09-04)
+# Cold-gate contract lens - Opus refuter, PAPER-SUPPLY (2026-09-04)
 
-Contract-lens refuter paired with the cold Fable judge; independent of the
-concurrent Fable ruling (not read). Scale: **REFUTED / NOT REFUTED / AMEND**.
+Paired with the cold Fable judge; independent of the concurrent Fable ruling
+(not read). Scale: **REFUTED / NOT REFUTED / AMEND**.
 
-## 0. Validation and custody (executed this session)
+## 0. Validation and custody (this session)
 `scripts/validate_gate_packet.py` with the supplied pins -> `"result":"PASS"`,
 42/42 digests observed == expected. Custody re-derived independently: the fetch
 of `feat/2026-09-04-paper-custody-seam` **succeeded here** and resolves
@@ -11,20 +11,20 @@ of `feat/2026-09-04-paper-custody-seam` **succeeded here** and resolves
 byte-identical to `git show 84b24686:<path>`, and the assembly
 `analysis_manifest_v3.py` copy matches `635c5ef0`.
 
-## Q-PS-1 - five typed refs, no receipt families -> **AMEND**
+## Q-PS-1 - five typed refs -> **AMEND**
 
-Correct as far as it goes: `_FAMILY_SPECS` (`paper_custody.py:339-395`) has
-exactly five entries; `FLOOR_ARTIFACT` is an input role inside `d165_closeout`
-and `claim_evidence` (`:351-379`), never a ref; `__all__` (`:1311-1331`) exports
-no binding, receipt, payload or verified-result constructor. But the
-substitution class is **relocated, not closed**.
+Correct as far as it goes: `_FAMILY_SPECS` (`paper_custody.py:339-395`) has five
+entries; `FLOOR_ARTIFACT` is an input role in `d165_closeout` and `claim_evidence`
+(`:351-379`), never a ref; `__all__` (`:1311-1331`) exports no binding, receipt,
+payload or verified-result constructor. But the substitution class is
+**relocated, not closed**.
 
 **(1) Fixture and production results share a type; only an advisory boolean
 separates them.** Fixture mode returns a fully readable `Verified*`
-(`:1300-1309`); production raises (`:1297-1299`). `mode` and
-`issuance_authorized` sit on `evidence` (`:207-219`), and `_payload` is readable
-by any holder because `_capability_getattribute` (`:149-152`) only checks that
-the object carries the token, which every authentic fixture object does.
+(`:1300-1309`); production raises (`:1297-1299`). `issuance_authorized` sits on
+`evidence` (`:207-219`), and `_payload` is readable by any holder because
+`_capability_getattribute` (`:149-152`) only checks that the object carries the
+token, which every authentic fixture object does.
 `tests/test_paper_custody.py:645-647` shows the shape: open, then *remember* to
 assert `issuance_authorized` is False. A supplier naming `fixture.d165_closeout`
 and omitting that assertion renders synthetic numbers as paper - the
@@ -39,14 +39,14 @@ fixture, and an **ordinary operator mistake** inside D-161's fail-closed zone.
 proves the generated path only.
 
 **(3) No scope census.** D-173 binds "a paper supplier or renderer" but nothing
-enumerates which inputs are in scope: `docs/paper/results-fill-registry.md` has
-**zero** occurrences of `D-173`/`paper_custody`/`open_paper_input`.
+says which inputs are in scope: `results-fill-registry.md` has **zero**
+occurrences of `D-173`/`paper_custody`/`open_paper_input`.
 
 **Replacement text - append to D-173 before ratification:**
 
 > Scope. A `results-fill-registry.md` row is *custody-bound* when its supplier
 > column names a `paper_custody` family and role; every claim-bearing row must be
-> custody-bound before its value renders, and the bindings are enumerated in the
+> custody-bound before its value renders, and the bindings are listed in the
 > contract.
 > Non-issuing results. A fixture result must carry a distinct type that no
 > renderer accepts, so that omitting an `issuance_authorized` check cannot render
@@ -56,8 +56,8 @@ enumerates which inputs are in scope: `docs/paper/results-fill-registry.md` has
 > Whole window. `WholeWindowVerdictRef` is a registered binding target with no
 > producer until `WHOLE-WINDOW-STOP-RECEIPT-01` lands.
 
-That last clause is forced: `paper_custody.py:1291-1296` raises
-`paper_custody_blocked_pending_receipt` for the ref **unconditionally**.
+Forced: `paper_custody.py:1291-1296` raises
+`paper_custody_blocked_pending_receipt` for that ref **unconditionally**.
 
 ## Q-PS-2 - landability under D-161 -> **NOT REFUTED (landing) / AMEND (wording)**
 
@@ -68,10 +68,10 @@ to a deliberate insider, and production issuance is blanket-refused
 (`:1297-1299`).
 
 **AMEND - the proposition overclaims in the other direction.** It says recovery
-needs "deliberate private introspection". `_CAPABILITY_FIELDS` (`:132-146`) does
-**not** contain `_custody_token`, so `_capability_getattribute` passes that name
-to `object.__getattribute__`: `opened._custody_token` is a plain attribute read,
-no `inspect`, no mangling. Replace sentences 2-3 of the narrowing with:
+needs "deliberate private introspection", but `_CAPABILITY_FIELDS` (`:132-146`)
+does **not** contain `_custody_token`, so `_capability_getattribute` passes that
+name to `object.__getattribute__`: `opened._custody_token` is a plain attribute
+read. Replace sentences 2-3 of the narrowing with:
 
 > The token is also stored on every authentic capability and is readable by
 > ordinary attribute access, because `_custody_token` is not among the guarded
@@ -86,8 +86,8 @@ clause; without it this proposition's own last sentence is false.
 
 **F2 does not change landability.** `paper_custody.py:41-60`'s 16 codes and the
 current conditions agree; the `source.count(code)>1` census at
-`tests/test_paper_custody.py:614-658` is test debt a dead literal survives -
-a condition on the supplier landing, not on this fixture-only seam.
+`tests/test_paper_custody.py:614-658` is test debt - a condition on the supplier
+landing, not on this seam.
 
 ## Q-PS-3 - fixed sentence + six-case CLI acceptance -> **REFUTED**
 
@@ -106,9 +106,8 @@ that gate, so its `status` can only ever be `"passed"`.
 **(c) No producer exists, in either target.** Grep for the ratified sentence hits
 **only** `docs/process_traces/...`; `OR-01`/`OR_01` appears in no Python file.
 The seam successor is dead on arrival (`:1291-1296`), and
-`WholeWindowRowValidation` (`whole_window.py:85-91`) carries only
-`authentic, admitted, status, reasons`. **The six-case acceptance has no
-producer.**
+`WholeWindowRowValidation` (`whole_window.py:85-91`) carries only `authentic, admitted,
+status, reasons`. **The six-case acceptance has no producer.**
 
 **Replacement disposition:**
 
@@ -118,25 +117,24 @@ producer.**
 > window identity, evaluation basis, membership and governing row; an
 > `analysis_manifest_v3` path admitting a non-passed verdict without licensing
 > any claim; the `WHOLE-WINDOW-STOP-RECEIPT-01` producer lifting
-> `paper_custody.py:1291-1296`; and the CLI renderer plus its six-case test. The
-> sentence's exact words and historical verdicts are preserved.
+> `:1291-1296`; and the CLI renderer plus its six-case test. The sentence's exact
+> words and historical verdicts are preserved.
 
-## Q-PS-4 - 02-F4 width recomputation -> **AMEND (disclosable limitation + one mandatory check)**
+## Q-PS-4 - 02-F4 widths -> **AMEND (disclosable limitation + one mandatory check)**
 
 **Gap confirmed.** The binder (`analysis_engine/inputs.py:1862-1999`) checks
 bundle and config sha256, ABBA order tags, scientific-config and stack
 identities, and compares the *stored point metric* to the strict summary
 (`:1972-1975`) - it never recomputes stored member/block **widths**, which the
-mint does (`floor_mint_estimator.py:683-717`: `recompute_comparative_estimate`
-then exact `Decimal` equality per width). A coherently-wrong-width artifact with
-correct points and hashes passes the binder.
+mint does (`floor_mint_estimator.py:683-717`). A coherently-wrong-width artifact
+with correct points and hashes passes it.
 
 **Not a submission blocker.** Every submission floor is produced by the mint,
 which runs that comparison at mint time; the residual is an artifact from an
 older or bypassed path, not a live wrong number. The 1-2 engineer-day custodied
 join is disproportionate, and trace 10 records the floor-bearing roles carry none
 of the mint's input manifest/pinset, component reports, evidence-root locator,
-calibration acceptance, ledger/head pin or bracket binding.
+calibration acceptance or bracket binding.
 
 **Replacement disposition:**
 
@@ -151,13 +149,13 @@ calibration acceptance, ledger/head pin or bracket binding.
 > consuming binder." Issuance stays stopped for any floor-bearing output whose
 > acceptance run is absent.
 
-## Q-PS-5 - Q-R1-2 composition rule -> **REFUTED (not preregisterable as written)**
+## Q-PS-5 - composition rule -> **REFUTED (not preregisterable as written)**
 
 **`t95` is ambiguous by ~20%.** Computed this session by numerical inversion of
 the Student-t CDF: `t(0.95,49)=1.6766`, `t(0.975,49)=2.0096`, ratio **1.1986**.
-The name selects neither tail, and ruling 06 R1 Q-R1-2 fixes neither it nor `df`.
-The variance convention is unstated (`ddof=1` vs `0`, factor 1.0102), and the
-window allowance has no field, source or selection rule anywhere.
+The name selects neither tail, and ruling 06 R1 Q-R1-2 fixes neither it nor `df`
+nor the variance convention (`ddof=1` vs `0`, 1.0102); the window allowance has
+no field, source or selection rule anywhere.
 
 **Estimand mismatch - the deciding defect.** Averaging the 50 member endpoints
 yields a half-width equal to the *mean member half-width*, which does not shrink
@@ -177,10 +175,10 @@ member-envelope term list exists.
 
 Packet 05's claim that the recommendation "adds repeatability once and avoids
 Fable's second anchor charge" is therefore **unsupported by any artifact**. Two
-double-count risks cannot be excluded: a run-to-run repeatability term inside the
-member envelope would make `t*s(point)/sqrt(50)` charge dispersion twice; an
-idle/window allowance already inside it would be charged twice by the added
-allowance - the likelier, since member energies are floor-referenced.
+risks cannot be excluded: a run-to-run repeatability term inside the member
+envelope would make `t*s(point)/sqrt(50)` charge dispersion twice; an idle/window
+allowance already inside it would be charged twice by the added allowance - the
+likelier, since member energies are floor-referenced.
 
 **Replacement text:**
 
@@ -193,21 +191,21 @@ allowance - the likelier, since member energies are floor-referenced.
 > rule; and a term-by-term disjointness table against the member term list.
 > Until then `composed_member_envelope_mean.v1` remains the bound default.
 
-## Packet hygiene (separate finding)
+## Packet hygiene
 
 1. **MATERIAL** - the contract's Closed public wire cites the TR-01 row as
    `../paper/results-fill-registry.md#L920`; line 920 is TR-01 today (verified),
    but a raw line anchor breaks on any insertion above. Cure: row-ID anchor.
 2. **MATERIAL** - Q-PS-3 asks to ratify the fixed sentence while
    `results-fill-registry.md:885, 894, 921` register *different* REFUSAL
-   renderings for DS-32, PG-08, OR-01; the packet nowhere discloses that adopting
-   Q6 supersedes them.
+   renderings for DS-32/PG-08/OR-01; the packet never discloses that adopting Q6
+   supersedes them.
 
 
-## Supersession / re-pin forced by adopting D-173
+## Supersession / re-pin forced by D-173
 
-- Every claim-bearing `results-fill-registry.md` row gains a custody family+role
-  in its supplier column; zero rows name one today. Unbound rows stay STOP_FILL.
+- Every claim-bearing row gains a custody family+role in its supplier column;
+  zero rows name one today. Unbound rows stay STOP_FILL.
 - **OR-01 (:921), DS-32 (:885), PG-08 (:894)** - registered REFUSAL renderings
   superseded by the ratified Q6 sentence; re-pinned to `whole_window_verdict`,
   blocked on `WHOLE-WINDOW-STOP-RECEIPT-01`.
