@@ -865,7 +865,7 @@ def owned_process(lock: Mapping[str, Any] | None, processes: Sequence[ProcessInf
 
 
 def _claude_command_suffix(command: str) -> str | None:
-    match = re.search(r"(?:^|[/\s])claude(?:\s|$)", command, re.IGNORECASE)
+    match = re.search(r"(?:^|[/\s])claude(?:/versions/\d+\.\d+\.\d+)?(?:\s|$)", command, re.IGNORECASE)
     return command[match.end() :].lstrip().casefold() if match is not None else None
 
 
