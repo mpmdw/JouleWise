@@ -460,7 +460,7 @@ runbook by hand.
   freeze until submission or Ed lifts the freeze in writing. Opus S3 in
   [the D-165 recheck](docs/process_traces/2026-09-05-d165-relabel/16-recheck-opus.md)
   records era-blind validation: `validate_d165_paper_sources` (reviewed
-  `joulewise/dominance_closeout.py:464-465`) accepts any registered sidecar
+  `joulewise/dominance_closeout.py:466-467`) accepts any registered sidecar
   era, and `validate_d165_closeout` has no close-out era field. The recorded
   probe gives `validate_d165_replay_sidecar(v1_shaped_sidecar) == []`.
   This remains below blocker because rebuild is stopped for this submission,
