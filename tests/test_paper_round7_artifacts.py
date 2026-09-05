@@ -93,6 +93,8 @@ def _copy_checker_inputs(root: Path) -> None:
         FENCE.SKELETON_RELATIVE_PATH,
         FENCE.EXPECTED_R7F_PATH,
         *FENCE.EXPECTED_SOURCE_PATHS.values(),
+        *(row.producer.path for row in FENCE.parse_registry(REGISTRY_PATH).rows.values()
+          if isinstance(row, FENCE.AppendixDeriveRow)),
     ]
     for relative_path in paths:
         target = root / relative_path
@@ -172,6 +174,68 @@ def _registry_with_current_source_pins(directory: Path) -> Path:
     return path
 
 
+class AppendixDeriveProductionTests(unittest.TestCase):
+    def test_checker_accepts_pe01_pins_and_placement(self) -> None:
+        spec, comparisons = FENCE.digest_half(ROOT, REGISTRY_PATH, SKELETON_PATH)
+        self.assertIn("PE-01", spec.rows)
+        self.assertEqual(spec.rows["PE-01"].fill_rule, "DERIVE")
+        checks = {item.label: item.match for item in comparisons if "PE-01" in item.label}
+        self.assertEqual(checks, {
+            "digest PE-01": True, "size PE-01": True, "placement PE-01": True,
+        })
+
+    def test_checker_cli_refuses_producer_digest_and_size_drift(self) -> None:
+        for mutation in ("digest", "size"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                _copy_checker_inputs(root)
+                row = FENCE.parse_registry(root / FENCE.REGISTRY_RELATIVE_PATH).rows["PE-01"]
+                producer = root / row.producer.path
+                original = producer.read_bytes()
+                producer.write_bytes(
+                    bytes([original[0] ^ 1]) + original[1:]
+                    if mutation == "digest" else original + b"\n"
+                )
+                result = _run_scratch_checker(root)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(f"MISMATCH {mutation} PE-01", result.stdout)
+
+    def test_checker_cli_refuses_missing_duplicate_or_moved_marker(self) -> None:
+        original = SKELETON_PATH.read_text(encoding="utf-8")
+        marker = "[FILL:PE-01]"
+        for text in (
+            original.replace(marker, ""), original + "\n" + marker,
+            marker + "\n" + original.replace(marker, ""),
+        ):
+            with self.subTest(text_tail=text[-30:]), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                _copy_checker_inputs(root)
+                (root / FENCE.SKELETON_RELATIVE_PATH).write_text(text, encoding="utf-8")
+                result = _run_scratch_checker(root)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("MISMATCH placement PE-01", result.stdout)
+
+    def test_checker_recognizes_future_appendix_derive_rows(self) -> None:
+        text = REGISTRY_PATH.read_text(encoding="utf-8")
+        row = next(line for line in text.splitlines() if line.startswith("| PE-01 —"))
+        future = row.replace("PE-01", "ZZ-42").replace("Appendix A.7", "Appendix B.2")
+        spec = FENCE.parse_registry_text(text + "\n" + future)
+        self.assertIn("ZZ-42", spec.rows)
+        self.assertEqual(spec.rows["ZZ-42"].fill_rule, "DERIVE")
+        self.assertTrue(all(item.match for item in FENCE.check_file_pins(ROOT, spec)))
+        draft = SKELETON_PATH.read_text(encoding="utf-8") + "\n### B.2 Future appendix\n[FILL:ZZ-42]\n"
+        self.assertTrue(all(item.match for item in FENCE.check_appendix_placement(draft, spec)))
+        for changed in (
+            future.replace("| DERIVE |", "| MEASURED |"),
+            future.replace("`[FILL:ZZ-42]`", "`[FILL:ZZ-43]`"),
+            future.replace("SHA-256", "digest"),
+            future.replace(" B;", " bytes;"),
+            future + " | extra |", future + "\n" + future,
+        ):
+            with self.subTest(row=changed), self.assertRaises(FENCE.RegistryError):
+                FENCE.parse_registry_text(text + "\n" + changed)
+
+
 class RegistryAndDigestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -182,8 +246,9 @@ class RegistryAndDigestTests(unittest.TestCase):
             raise AssertionError(json_checks)
 
     def test_registry_has_the_closed_dx_row_set(self) -> None:
-        self.assertEqual(tuple(self.spec.rows), FENCE.EXPECTED_DX_IDS)
-        self.assertEqual(len(self.spec.rows), 19)
+        dx_ids = tuple(key for key, row in self.spec.rows.items() if isinstance(row, FENCE.DXRow))
+        self.assertEqual(dx_ids, FENCE.EXPECTED_DX_IDS)
+        self.assertEqual(len(dx_ids), 19)
 
     def test_registry_pinned_files_match(self) -> None:
         comparisons = FENCE.check_file_pins(ROOT, self.spec)
@@ -197,7 +262,7 @@ class RegistryAndDigestTests(unittest.TestCase):
     def test_every_registry_marker_renders_from_its_supplier(self) -> None:
         comparisons = FENCE.check_rendered_rows(self.spec, self.artifacts)
         self.assertEqual(
-            len(comparisons), len(self.spec.rows) - len(FENCE.IDENTITY_ROWS)
+            len(comparisons), len(FENCE.EXPECTED_DX_IDS) - len(FENCE.IDENTITY_ROWS)
         )
         self.assertTrue(all(row.match for row in comparisons), comparisons)
 
@@ -1184,7 +1249,8 @@ class TypedArtifactCliTests(unittest.TestCase):
             ),
             *extra_lines,
         ]
-        return "\n\n".join(paragraphs) + "\n"
+        appendix = skeleton.split("### A.7 ", 1)[1].split("## First-use audit ledger", 1)[0]
+        return "\n\n".join(paragraphs) + "\n\n### A.7 " + appendix
 
     def test_prose_fixture_uses_checklist_sentence_and_real_skeleton_prose(self) -> None:
         region = self._real_shaped_dx_region()
@@ -1276,7 +1342,7 @@ class InvocationTests(unittest.TestCase):
         self.assertEqual(lines[-2], "R7F PLACED 0/16")
         self.assertEqual(
             lines[-1],
-            "R7F LITERALS-ONLY COMPARED 181 / MISMATCHES 0",
+            "R7F LITERALS-ONLY COMPARED 184 / MISMATCHES 0",
         )
         self.assertLess(lines.index("R7F PLACED 0/16"), len(lines) - 1)
 
@@ -1333,7 +1399,7 @@ class ReplayAgainstRetainedCorporaTests(unittest.TestCase):
         )
         self.assertIsNotNone(spec)
         assert spec is not None
-        self.assertEqual(len(digest_comparisons), 181)
+        self.assertEqual(len(digest_comparisons), 184)
         self.assertTrue(
             all(row.match for row in digest_comparisons), digest_comparisons
         )
@@ -1345,7 +1411,7 @@ class ReplayAgainstRetainedCorporaTests(unittest.TestCase):
             "replay AQ bytes",
         ])
         self.assertTrue(all(row.match for row in replay.comparisons), replay)
-        self.assertEqual(len(digest_comparisons) + len(replay.comparisons), 184)
+        self.assertEqual(len(digest_comparisons) + len(replay.comparisons), 187)
 
 
 if __name__ == "__main__":

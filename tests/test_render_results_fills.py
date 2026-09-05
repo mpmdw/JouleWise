@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -205,6 +206,53 @@ def write_json(directory: Path, name: str, value) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+class AppendixDeriveProductionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Do not inherit this module's historical registry-global overrides.
+        spec = importlib.util.spec_from_file_location("appendix_renderer", RENDERER_PATH)
+        self.renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.renderer)
+
+    def test_production_renderer_knows_pe01_and_refuses_results_prose(self) -> None:
+        renderer = self.renderer
+        row = "[FILL:PE-01]"
+        self.assertIn(row, renderer.REGISTRY_ROWS)
+        self.assertIn(row, renderer.VALUE_UNISSUED_ROWS)
+        self.assertNotIn(row, renderer.SUPPLIER_UNKNOWN_ROWS)
+        self.assertEqual(renderer.StopFill(row, "VALUE_UNISSUED", "probe").label, "VALUE_UNISSUED")
+        for operation in (
+            lambda: renderer._replace_tokens(row, {}),
+            lambda: renderer._replace_tokens(row, {"FILL:PE-01": "9.0 J"}),
+            lambda: renderer.validate_rendered(row),
+        ):
+            with self.subTest(operation=operation):
+                with self.assertRaises(renderer.StopFill) as caught:
+                    operation()
+                self.assertEqual(caught.exception.registry_row, row)
+                self.assertEqual(caught.exception.label, "VALUE_UNISSUED")
+
+    def test_future_appendix_derive_row_uses_the_same_nonresults_path(self) -> None:
+        renderer = self.renderer
+        text = renderer.REGISTRY_PATH.read_text(encoding="utf-8")
+        text = text.replace("PE-01", "ZZ-42").replace("Appendix A.7", "Appendix A.8")
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "registry.md"
+            registry.write_text(text, encoding="utf-8")
+            with mock.patch.object(renderer, "REGISTRY_PATH", registry):
+                rows, unknown, unissued = renderer._registry_rows()
+        row = "[FILL:ZZ-42]"
+        self.assertIn(row, rows)
+        self.assertIn(row, unissued)
+        self.assertNotIn(row, unknown)
+        with mock.patch.multiple(
+            renderer, REGISTRY_ROWS=rows, VALUE_UNISSUED_ROWS=unissued,
+            APPENDIX_DERIVE_ROWS=frozenset({row}),
+        ):
+            with self.assertRaises(renderer.StopFill) as caught:
+                renderer._replace_tokens(row, {"FILL:ZZ-42": "9.0 J"})
+        self.assertEqual(caught.exception.label, "VALUE_UNISSUED")
 
 
 class InterimVocabularyContractTests(unittest.TestCase):
