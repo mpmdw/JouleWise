@@ -56,17 +56,24 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "128 GB of unified memory",
     ),
     "detection floor": (
-        "largest false phase-energy difference",
+        "registered operational resolution guard for assigned-energy differences",
         "the detection floor in the advisor's terminology",
         "the artifacts call the final gate value after those safeguards the cell floor",
     ),
     r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
         "component bound calculated at the recorded edges",
         "largest result retained",
-        "shared movement uses a different numerator",
+        "this replay uses a different numerator",
     ),
-    "A/B/B/A block": ("four runs in the order A, B, B, A",),
-    "timing-error sign": ("says which direction the allowed error moves energy",),
+    "A/B/B/A block": ("same-model null A/B/B/A blocks, with A = B",),
+    "energy-allowance sign": (
+        "says which direction a nonnegative block-level allowance moves assigned energy",
+    ),
+    r"\(R_{cm}\)": (
+        "shared-energy-sign/local-corner sensitivity diagnostic",
+        "does not globally replay one physical common-time shift",
+        "has no proven conservatism for common-time motion",
+    ),
     "reasoning disabled": ("optional chain-of-thought output is switched off",),
     "declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file": (
         "hardware and operating conditions recorded before collection",
@@ -110,15 +117,10 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     ),
     r"small-sample multiplier / \(g(n)\)": ("factor that widens a result to allow for limited repetition",),
     "close-out artifact": ("checks every required ratio",),
-    "energy terms": (
-        "claim-bearing energy terms",
-        "gross request energy",
-        "gross token-generation energy",
-    ),
     "deterministic-bound kinds / interpolation edge": (
-        "phase window's start or end when it falls between two neighboring power samples",
-        "straight line joining those samples",
-        "largest resulting energy change",
+        "for native interval-average records, the reducer integrates constant reported power over the overlap duration",
+        "its interpolation-bound term is zero",
+        "timing uncertainty enters through separately recomputed boundary envelopes",
     ),
     "Figure 3": (
         "separates evidence refusal from the two claim gates",
