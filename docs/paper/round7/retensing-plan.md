@@ -140,6 +140,8 @@ Before comparison, Refusal applies when a model-specific measurement window was 
 
 **Fails:** C: refused evidence may produce no admissible component pair.
 
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
+
 **A — dominance reproduced:** The two components—the spread among repeated runs within one model arm and the between-model difference formed by subtracting the two A energies from the two B energies and dividing by two—were produced independently for every phase cell used in a claim; allowing calibrated boundary movement at least doubled each component bound, including each comparison recalculated with its shared timing error moving together.
 
 **B — dominance not reproduced:** The same two components were produced independently for every usable phase cell, but at least one boundary-movement quotient was below 2 under the rule stated below.
@@ -330,7 +332,11 @@ Before comparison, Refusal applies when a model-specific measurement window was 
 
 **Fails:** C: a refused cell may publish neither magnitude nor label.
 
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
+
 **A — dominance reproduced:** Each published floor cell reported its magnitude, independent-edge ratio, and code-generated diagnostic label, and n counted independent run bundles that passed every entry check rather than power records. Absolute rows printed the shared-error ratio as `not_applicable` because, under the registered replay's idealization that one shared timing error moves every run's energy by the same amount, subtracting the cell mean cancels that energy displacement exactly; comparative rows reported the replayed shared-error ratio.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
 
 **B — dominance not reproduced:** Each published floor cell reported the same magnitude, ratio, diagnostic-label, and independent-bundle-count columns. Absolute rows printed the shared-error ratio as `not_applicable` because, under the registered replay's idealization that one shared timing error moves every run's energy by the same amount, subtracting the cell mean cancels that energy displacement exactly; comparative rows reported the replayed shared-error ratio. The paper identified every independent-edge ratio below 2 and every comparative shared-error ratio below 2 and withdrew the boundary-doubling sentence for those components; the code-generated label remained diagnostic rather than the headline test.
 
