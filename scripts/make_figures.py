@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """RPT-001 vertical-slice analysis pipeline (spec: docs/specs/c027/rpt-001_report_vertical_slice.md).
 
-Reads the six pinned strict-valid legacy bundles through the existing shared
-read layer (``joulewise.bundle_read.BundleReader`` +
-``joulewise.aggregate.aggregate_experiment``) and emits:
+Authenticates the six pinned strict-valid legacy bundles, but does not extract
+or reproduce their measurements.  The pre-repair time-anchor defect voided
+every energy result from this corpus, so the v2 route emits explicit void
+placeholders instead:
 
-- ``analysis/rpt001-v2/dataset.csv``            (one row per bundle)
-- ``analysis/rpt001-v2/aggregates.json``        (aggregate_experiment output)
+- ``analysis/rpt001-v2/dataset.csv``            (void placeholder)
+- ``analysis/rpt001-v2/aggregates.json``        (void placeholder)
 - ``figures/rpt001-v2/F1_legacy_l1_instrument_results.svg``
 - ``analysis/rpt001-v2/tables/T1_legacy_l1_results.{csv,md}``
 - ``analysis/rpt001-v2/tables/S1_legacy_stack_identity.{csv,md}``
-- ``analysis/rpt001-v2/claims_index.jsonl``     (sealed v1 claim row, byte-identical)
+- ``analysis/rpt001-v2/claims_index.jsonl``     (retained row, status voided)
 - ``analysis/rpt001-v2/artifact_manifest.json``
 
 Deterministic: sorted keys, fixed precision, no timestamps, no absolute
@@ -52,7 +53,19 @@ from joulewise.publication_privacy import (  # noqa: E402
 SCHEMA_INPUT = "joulewise.report_analysis_input.v1"
 ARTIFACT_VERSION = "rpt001-v2"
 EVIDENCE_CLASS = "legacy_l1_manual_review_pre_2m"
-LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
+VOID_STATUS = "voided"
+VOID_LABEL = "VOIDED historical evidence — permanently ineligible for claim use"
+LEGACY_LABEL = VOID_LABEL
+VOID_DISPOSITION = (
+    "Pre-repair time attribution is invalid; no measurement from this corpus "
+    "is eligible for claim use or reproduced by the rpt001-v2 route."
+)
+VOID_REASON_CODES = ["pre_repair_time_anchor_invalid"]
+VOID_CLAIM_TEXT = (
+    "The retained RPT-001 legacy L1 history row is voided because its pre-repair "
+    "time anchor invalidates physical energy attribution; it is permanently "
+    "ineligible for claim use and carries no energy result."
+)
 BOUNDARY_LABEL = "Apple SoC CPU + GPU + ANE package power"
 
 EXPERIMENTS = ["example-mac-mlx-local", "example-mac-mlx-qwen35-122b-512t"]
@@ -80,6 +93,7 @@ DATASET_COLUMNS = [
 UNKNOWN = "unknown"
 LEGACY_V1_TREE_IDENTITY_ALGORITHM = "sha256"
 LEGACY_V1_TREE_IDENTITY_VERSION = "rpt001.bundle-tree.tab-v1"
+VOID_CSV_COLUMNS = ["artifact_version", "artifact_id", "status", "disposition"]
 
 
 def fail(msg: str) -> None:
@@ -564,63 +578,99 @@ def s1_rows(stacks: dict) -> list[dict]:
 
 # ------------------------------------------------------------ claims row ----
 
-def claims_row(stacks: dict, mean_by_stack: dict) -> dict:
-    small, large = sorted(stacks)
+def voided_claim_row() -> dict:
+    """Retain the historical index identity without reproducing voided results."""
+
     return {
         "schema": "joulewise.claims_index.v1",
         "claim_id": "CLM-RPT001-LEGACY-L1-001",
-        "claim_text": (
-            "Across three strict-valid legacy runs per exact stack, mean "
-            f"idle-subtracted request energy was {mean_by_stack[small]!r} J for stack "
-            f"{small} and {mean_by_stack[large]!r} J for stack {large}; these are "
-            "separate stack-specific L1 observations, not a cross-stack comparison, "
-            "efficiency ranking, or scaling claim."
-        ),
+        "claim_text": VOID_CLAIM_TEXT,
         "claim_level": "L1",
         "claim_role": "secondary",
-        "status": "supported",
+        "status": VOID_STATUS,
         "evidence_class": EVIDENCE_CLASS,
-        "legacy_label": LEGACY_LABEL,
+        "legacy_label": VOID_LABEL,
         "figure_ids": ["F1_legacy_l1_instrument_results"],
         "table_ids": ["T1_legacy_l1_results", "S1_legacy_stack_identity"],
-        "analysis_function": "make_f1_legacy_l1_instrument_results",
-        "dataset_filter": "artifact_version == rpt001-v1",
+        "analysis_function": "emit_rpt001_void_placeholders",
+        "dataset_filter": "none (legacy corpus voided)",
         "bundle_ids": [f"{e}__r{i}" for e in EXPERIMENTS for i in (1, 2, 3)],
         "manifest_ids": EXPERIMENTS,
         "stack_ids": sorted(STACK_IDS.values()),
         "boundary_labels": [BOUNDARY_LABEL],
-        "metrics": [
-            {"metric": "gross_energy_j", "basis": "gross request",
-             "unit": "J/request", "denominator_provenance": "request"},
-            {"metric": "energy_request_j", "basis": "idle-subtracted request",
-             "unit": "J/request", "denominator_provenance": "request"},
-            {"metric": "energy_output_token_j",
-             "basis": "idle-subtracted output-token companion",
-             "unit": "J/runtime-observed output token",
-             "denominator_provenance": "runtime_observed",
-             "tokenizer_identity": UNKNOWN_LEGACY},
-        ],
-        "strict_validation": {"result": "passed", "mode": "strict", "legacy_allowlist": True},
-        "quality_waivers": [
-            {"scope": "example-mac-mlx-local__r2",
-             "reason": "cooldown cap hit was recorded; the point is retained and visibly reported under the legacy manual-review carve-out"},
-            {"scope": "token-normalized companion metrics",
-             "reason": "legacy bundles predate captured tokenizer identity, sampler/output policy, and stop-reason provenance; values remain explicitly tokenizer-unknown L1 descriptors and support no ranking"},
-        ],
-        "floor_ref": {"status": "not_applicable_legacy_l1", "artifact": None, "row_id": None},
+        "metrics": [],
+        "strict_validation": {
+            "result": "not_applicable_voided",
+            "mode": "none",
+            "legacy_allowlist": False,
+        },
+        "quality_waivers": [],
+        "floor_ref": {"status": VOID_STATUS, "artifact": None, "row_id": None},
         "analysis_manifest_ref": None,
         "verdict_ref": {
             "schema": "joulewise.claim_verdict.v1",
-            "status": "not_applicable_l1",
+            "status": VOID_STATUS,
             "artifact": None, "sha256": None, "row_id": None,
-            "contrast_id": None, "reason_codes": [],
+            "contrast_id": None, "reason_codes": VOID_REASON_CODES,
         },
         "claim_ceiling_reason_codes": [
-            "legacy_pre_2m", "n3_below_l2_protocol",
-            "no_interleaved_cross_condition_design", "no_detection_floor_artifact",
-            "no_contrast_verdict", "tokenizer_identity_unavailable",
+            *VOID_REASON_CODES,
+            "legacy_pre_2m",
         ],
         "artifact_manifest": "analysis/rpt001-v1/artifact_manifest.json",
+    }
+
+
+def render_void_csv(artifact_id: str) -> str:
+    return csv_table(VOID_CSV_COLUMNS, [{
+        "artifact_version": ARTIFACT_VERSION,
+        "artifact_id": artifact_id,
+        "status": VOID_STATUS,
+        "disposition": VOID_DISPOSITION,
+    }])
+
+
+def render_void_markdown(title: str, artifact_id: str) -> str:
+    return (
+        f"{title}\n\n"
+        f"Status: **{VOID_LABEL}**.\n\n"
+        f"{VOID_DISPOSITION}\n\n"
+        + markdown_table(VOID_CSV_COLUMNS, [{
+            "artifact_version": ARTIFACT_VERSION,
+            "artifact_id": artifact_id,
+            "status": VOID_STATUS,
+            "disposition": VOID_DISPOSITION,
+        }])
+    )
+
+
+def render_void_figure() -> str:
+    """Deterministic SVG placeholder with no measurement geometry or values."""
+
+    return "\n".join([
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 260" '
+        'font-family="sans-serif" font-size="16">',
+        '<rect x="0" y="0" width="940" height="260" fill="white"/>',
+        '<rect x="32" y="32" width="876" height="196" rx="12" fill="#fff4f2" '
+        'stroke="#a33" stroke-width="2"/>',
+        '<text x="64" y="88" font-size="24" font-weight="bold">VOIDED historical evidence</text>',
+        '<text x="64" y="126">Permanently ineligible for claim use.</text>',
+        '<text x="64" y="160">Pre-repair time attribution is invalid.</text>',
+        '<text x="64" y="194">No measurement values are rendered.</text>',
+        '</svg>',
+        '',
+    ])
+
+
+def voided_aggregates() -> dict:
+    return {
+        "schema": "joulewise.report_analysis_aggregates.v1",
+        "artifact_version": ARTIFACT_VERSION,
+        "evidence_class": EVIDENCE_CLASS,
+        "status": VOID_STATUS,
+        "disposition": VOID_DISPOSITION,
+        "void_reason_codes": VOID_REASON_CODES,
+        "experiments": {},
     }
 
 
@@ -662,62 +712,29 @@ def main() -> int:
         d.mkdir(parents=True, exist_ok=True)
 
     input_manifest = json.loads((out_root / args.input_manifest).read_text())
-    manifests = gate_inputs(runs_root, input_manifest)
+    gate_inputs(runs_root, input_manifest)
     tree = input_manifest["bundle_tree_sha256"]
 
-    rows = extract_rows(runs_root, manifests, tree)
-    write_dataset(rows, analysis_dir / "dataset.csv")
+    # The corpus is authenticated above, but its measurements are never read
+    # into a regenerated publication artifact.  Every v2 surface carries the
+    # same explicit void disposition.
+    (analysis_dir / "dataset.csv").write_text(
+        render_void_csv("dataset"), encoding="utf-8", newline="\n")
+    (analysis_dir / "aggregates.json").write_text(
+        dump_json(voided_aggregates()), encoding="utf-8", newline="\n")
+    (figures_dir / FIGURE_NAME).write_text(
+        render_void_figure(), encoding="utf-8", newline="\n")
 
-    aggregates = {
-        exp_id: aggregate_experiment(runs_root, manifests[exp_id])
-        for exp_id in sorted(manifests)
-    }
-    (analysis_dir / "aggregates.json").write_text(dump_json({
-        "schema": "joulewise.report_analysis_aggregates.v1",
-        "artifact_version": ARTIFACT_VERSION,
-        "evidence_class": EVIDENCE_CLASS,
-        "note": "aggregate_experiment() output preserved verbatim; the RPT-001 "
-                "figure deliberately renders raw points + mean + min-max, not "
-                "the Student-t interval (spec §4.2).",
-        "experiments": aggregates,
-    }), encoding="utf-8", newline="\n")
+    for stem, title in (
+        ("T1_legacy_l1_results", "Table T1: voided legacy result placeholder"),
+        ("S1_legacy_stack_identity", "Table S1: voided legacy identity placeholder"),
+    ):
+        (tables_dir / f"{stem}.csv").write_text(
+            render_void_csv(stem), encoding="utf-8", newline="\n")
+        (tables_dir / f"{stem}.md").write_text(
+            render_void_markdown(title, stem), encoding="utf-8", newline="\n")
 
-    stacks = per_stack_metrics(rows)
-
-    # Cross-check: figure/table stats must agree with aggregate_experiment().
-    for exp_id, stack_id in STACK_IDS.items():
-        agg_mean = aggregates[exp_id]["metrics"]["energy_request_j"]["mean"]
-        local_mean = stacks[stack_id]["metrics"]["energy_request_j"]["mean"]
-        if abs(agg_mean - local_mean) > 1e-12:
-            fail(f"aggregate/table mean mismatch for {stack_id}")
-
-    figures_path = figures_dir / FIGURE_NAME
-    figures_path.write_text(render_figure(stacks), encoding="utf-8", newline="\n")
-
-    waivers = {
-        STACK_IDS["example-mac-mlx-local"]:
-            "cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out)",
-    }
-    t1 = t1_rows(stacks, waivers)
-    (tables_dir / "T1_legacy_l1_results.csv").write_text(csv_table(T1_COLUMNS, t1), encoding="utf-8", newline="\n")
-    (tables_dir / "T1_legacy_l1_results.md").write_text(
-        f"Table T1: per-stack instrument results — {LEGACY_LABEL}. Values are mean, "
-        "sample SD, and observed min–max over n=3 sequential repetitions per exact stack. "
-        "No cross-stack comparison is made.\n\n"
-        "The per-output-token companion is omitted because runtime stop-reason and "
-        "output-policy provenance are unavailable; no stop reason is inferred from the cap.\n\n"
-        + markdown_table(T1_COLUMNS, t1), encoding="utf-8", newline="\n")
-
-    s1 = s1_rows(stacks)
-    s1_columns = ["stack_id"] + S1_FIELDS
-    (tables_dir / "S1_legacy_stack_identity.csv").write_text(csv_table(s1_columns, s1), encoding="utf-8", newline="\n")
-    (tables_dir / "S1_legacy_stack_identity.md").write_text(
-        f"Table S1: full D-058 stack identity for both legacy stacks — {LEGACY_LABEL}. "
-        "Every cell is a concrete recorded value or an explicit unknown.\n\n"
-        + markdown_table(s1_columns, s1), encoding="utf-8", newline="\n")
-
-    mean_by_stack = {sid: stacks[sid]["metrics"]["energy_request_j"]["mean"] for sid in stacks}
-    row = claims_row(stacks, mean_by_stack)
+    row = voided_claim_row()
     (analysis_dir / "claims_index.jsonl").write_text(
         json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
@@ -734,7 +751,9 @@ def main() -> int:
     manifest_out = {
         "schema": "joulewise.report_artifact_manifest.v1",
         "artifact_version": ARTIFACT_VERSION,
-        "build_mode": "real-bundles",
+        "build_mode": "voided-placeholder",
+        "status": VOID_STATUS,
+        "void_reason_codes": VOID_REASON_CODES,
         "bundle_tree_identity": tree_identity_descriptor(),
         "input_manifest_sha256": hashlib.sha256((out_root / args.input_manifest).read_bytes()).hexdigest(),
         "experiment_manifest_sha256": {
@@ -756,7 +775,7 @@ def main() -> int:
             os.replace(source, target)
     finally:
         shutil.rmtree(stage_tmp, ignore_errors=True)
-    print("make_figures: OK — dataset, aggregates, figure, T1, S1, claims row, artifact manifest")
+    print("make_figures: OK — authenticated inputs; emitted void placeholders and voided claim row")
     return 0
 
 

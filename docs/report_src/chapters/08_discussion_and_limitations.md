@@ -10,10 +10,11 @@ results; the limitations below already bind. -->
   unit, not the hardware model line.
 - **Boundary:** Apple SoC CPU + GPU + ANE package power only; wall power and
   the rest of the system are unmeasured.
-- **Legacy corpus:** the six existing bundles are legacy L1 evidence
-  (manual review; pre-2M) with n=3 sequential repetitions — below the
-  headline comparison protocol and carrying explicit provenance gaps
-  (tokenizer identity, sampler policy, artifact hashes).
+- **Historical corpus:** the six retained bundles are **VOIDED permanently for
+  claim use** under the
+  [root README void disposition](../../../README.md#current-state). They supply
+  no report observations or energy values; their evidence-path validation does
+  not repair the defective physical time attribution.
 
 ## Discussion
 
