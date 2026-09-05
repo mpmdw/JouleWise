@@ -9,43 +9,15 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Status:** the measurement campaign that will produce the paper's numbers
-is designed, its supporting code is merged, and it has not yet been run. In
-late August the campaign was re-specified around a newer pair of models (the
-Qwen3 1.7B and 8B pair, decisions D-164 through D-166) and the preparation
-work for it merged to this main branch. Since then the project has built the
-machinery to run measurement nights unattended — a driver that refuses to
-start if any other agent process is alive, runs the measurement chain once,
-signs every outcome, and mails a morning summary — and that driver is on
-main (D-169). What remains before real numbers exist: the campaign's frozen
-plans must pass a tokenizer-identity check that is being fixed now, the
-night machinery must be re-armed, and then the pre-registered nights run.
-Nothing on this page is a measured result from that campaign.
-Live state, gates, and work selection are owned by
-[`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
-(`docs/process/state_kernel.json`); this summary does not duplicate them.
-
-## Current activity (refreshed each work block; last: 2026-09-03)
-
-**Now:** the unattended-night machinery has been proven and is temporarily
-switched off while its last two pieces are built. Two rehearsal nights fired
-on their own from the macOS scheduler at 02:56 (2026-09-02 and 09-03), each
-pushed its results to a branch readable from a phone and sent the morning
-summary email with nobody at the keyboard; the second also proved the case
-where the scheduler is installed the morning before a night, so the 07:00
-watchdog correctly noticed the night had not happened yet and stood down. The
-scheduled jobs were then uninstalled, so nothing fires tonight.
-
-**Next, in this order:** install a supervisor that can stop a working session
-on a deadline (so a session can never overrun the quiet hour a measurement
-needs); pin each night's plan to the dedicated measurement copy of the
-repository, because an ordinary daytime code pull currently moves the
-repository past the commit a plan was pinned to and the safety gate then
-refuses the plan; then arm the first real diagnostic night, which measures
-four candidate prompt lengths and picks one. On the paper lane, a defect in
-the plan generator — the plan rotates through eight prompt texts while the
-identity check expected exactly one — is being fixed so the three campaign
-plans can be frozen against the real tokenizers.
+**Status:** This week, three independent peer audits found that the draft
+overstated what the instrument can establish about physical phase energy. The
+paper now describes the measurement honestly as energy assigned to inference
+phases from interval-average power records, together with its sensitivity to
+allowed timing changes. The old route that could reproduce voided legacy
+results is closed, and work is frozen to the methods and diagnostic paper;
+next come the remaining paper corrections, readiness checks, and scheduled
+measurements. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+That file's generated state-kernel view owns current work selection.
 
 ## Current State
 
