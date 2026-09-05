@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import builtins
 import hashlib
+import inspect
 import shutil
 import tempfile
 import unittest
@@ -11,10 +12,12 @@ from unittest import mock
 
 from joulewise.authentication_io import (
     V2_AUTHENTICATION_INPUT_CHANGED,
+    V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
     V2AuthenticationInputError,
     V2AuthenticationReadSession,
     direct_read_violations,
     ingest_git_authentication_input,
+    paper_supplier_signature_violations,
     read_authentication_input,
     read_authentication_input_nofollow,
     sha256_authentication_input,
@@ -24,6 +27,14 @@ from joulewise.authentication_io import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUTHENTICATION_SURFACE = (
+    "joulewise/paper_custody.py",
+    "joulewise/paper_rendering.py",
+    "joulewise/analysis_engine/claim_side_bound.py",
+    "joulewise/analysis_engine/artifact.py",
+    "joulewise/analysis_engine/inputs.py",
+    "joulewise/analysis_manifest_v3.py",
+    "joulewise/dominance_closeout.py",
+    "joulewise/floor_extraction.py",
     "scripts/mint_floor_artifact_generalized.py",
     "scripts/mint_floor_artifact.py",
     "joulewise/calibration_ledger.py",
@@ -45,6 +56,15 @@ NON_AUTHENTICATION_WRITERS = {
     "bootstrap_historical_import",
 }
 CLASSIFIED_NON_AUTHENTICATION_READS = {
+    # Append-only publisher idempotence check over its own prospective output;
+    # this is writer state, not evidence admitted to analysis or paper custody.
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4009:read_bytes",
+    # Locked recheck of the same publisher-owned output before atomic creation;
+    # routing it into an evidence session would misclassify mutable writer state.
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4027:read_bytes",
+    # Parent directory descriptor used only for fsync durability after publish;
+    # no file content is read through this descriptor.
+    "joulewise/analysis_manifest_v3.py:_write_append_only:4033:os.open",
     # Linux mountinfo describes OS filesystem topology, not project evidence.
     "joulewise/calibration_ledger.py:_filesystem_type:2842:read_text",
     # The lock sidecar descriptor is used for inode/lock state, never content.
@@ -341,6 +361,26 @@ class V2AuthenticationReadSessionTests(unittest.TestCase):
                     1,
                 )
 
+    def test_pinned_nofollow_read_checks_digest_before_json_grammar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "input.json"
+            authentic = b'{"status":"ok"}\n'
+            path.write_bytes(b"!" + authentic[1:])
+            with V2AuthenticationReadSession() as session:
+                with self.assertRaises(V2AuthenticationInputError) as raised:
+                    session.read_nofollow_pinned(
+                        root,
+                        "input.json",
+                        expected_sha256=hashlib.sha256(authentic).hexdigest(),
+                        grammar="json",
+                        label="paper input",
+                    )
+            self.assertEqual(
+                raised.exception.reason,
+                V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
+            )
+
 
 class AuthenticationSurfaceGuardTests(unittest.TestCase):
     def test_issued_reducer_sha_and_five_direct_reads_are_characterized(self) -> None:
@@ -387,6 +427,65 @@ class AuthenticationSurfaceGuardTests(unittest.TestCase):
         self.assertEqual(
             classified_non_authentication_reads,
             CLASSIFIED_NON_AUTHENTICATION_READS,
+        )
+
+    def test_paper_supplier_signature_guard_closes_value_channels(self) -> None:
+        unsafe = """
+def supplier(payload: bytes, values: Mapping[str, object], *args, receipt=None):
+    return payload
+"""
+        self.assertEqual(
+            paper_supplier_signature_violations(
+                unsafe, marked_functions={"supplier"}
+            ),
+            (
+                "supplier:args:variadic",
+                "supplier:payload:annotation:bytes",
+                "supplier:receipt:value-channel",
+                "supplier:values:annotation:Mapping",
+            ),
+        )
+        source = (REPO_ROOT / "joulewise/paper_custody.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(
+            paper_supplier_signature_violations(
+                source, marked_functions={"open_paper_input"}
+            ),
+            (),
+        )
+
+        tree = ast.parse(source)
+        expected_refs = {
+            "ReportedEnergyParentsRef",
+            "D165CloseoutRef",
+            "WholeWindowVerdictRef",
+            "ClaimEvidenceRef",
+            "TransferProjectionRef",
+        }
+        actual_fields: dict[str, tuple[str, ...]] = {}
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name in expected_refs:
+                actual_fields[node.name] = tuple(
+                    child.target.id
+                    for child in node.body
+                    if isinstance(child, ast.AnnAssign)
+                    and isinstance(child.target, ast.Name)
+                )
+        self.assertEqual(set(actual_fields), expected_refs)
+        self.assertEqual(
+            actual_fields,
+            {name: ("role", "runs_root") for name in expected_refs},
+        )
+        self.assertNotIn('"BoundFile"', source)
+        self.assertNotIn('"ReceiptRef"', source)
+
+    def test_campaign_log_loader_has_no_caller_byte_channel(self) -> None:
+        from joulewise.campaign_provenance import load_campaign_log_rows
+
+        self.assertEqual(
+            tuple(inspect.signature(load_campaign_log_rows).parameters),
+            ("log_path",),
         )
 
     def test_guard_distinguishes_readable_and_output_only_open(self) -> None:
@@ -493,6 +592,59 @@ def authenticate(path):
                         if not identity.startswith("git:")
                     }
             self.assertEqual(opened, registered)
+
+
+
+def renderer_boundary_violations(source: str) -> tuple[str, ...]:
+    expected = {
+        "render_reported_energy": ("VerifiedReportedEnergyParents", "cell"),
+        "render_d165": ("VerifiedD165Closeout", "outcome"),
+        "render_whole_window": ("VerifiedWholeWindowVerdict", "positive"),
+        "render_claim": ("VerifiedClaimEvidence", "outcome"),
+        "render_transfer": ("VerifiedTransferProjection", "diagnostic"),
+    }
+    tree = ast.parse(source)
+    functions = {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and not node.name.startswith("_")}
+    errors = []
+    if set(functions) != set(expected):
+        errors.append("unregistered or missing public renderer")
+    for name, (kind, grant) in expected.items():
+        node = functions.get(name)
+        if node is None:
+            continue
+        arguments = node.args
+        if (len(arguments.args) != 1 or arguments.args[0].arg != "value"
+            or ast.unparse(arguments.args[0].annotation) != kind or arguments.kwonlyargs
+            or arguments.vararg or arguments.kwarg or arguments.posonlyargs):
+            errors.append(f"{name}: widened issuing annotation")
+        decorators = [ast.unparse(item) for item in node.decorator_list]
+        if decorators != [f"_issued_renderer({kind}, {grant!r})"]:
+            errors.append(f"{name}: missing exact issuing wrapper")
+    return tuple(errors)
+
+
+class PaperRendererBoundaryTests(unittest.TestCase):
+    def test_registered_renderers_require_issuing_boundary(self):
+        from joulewise import paper_rendering
+        from joulewise import paper_custody
+        source = (REPO_ROOT / "joulewise/paper_rendering.py").read_text()
+        self.assertEqual(renderer_boundary_violations(source), ())
+        public = {node.name for node in ast.parse(source).body if isinstance(node, ast.FunctionDef)
+                  and not node.name.startswith("_")}
+        self.assertEqual(public, set(paper_rendering._RENDERERS))
+        self.assertEqual(set(paper_rendering.__all__), public)
+        for name, pair in paper_rendering._RENDERERS.items():
+            renderer = getattr(paper_rendering, name)
+            self.assertEqual(renderer._issuing_boundary, pair)
+            self.assertTrue(hasattr(renderer, "__wrapped__"))
+            self.assertIs(pair[0], getattr(paper_custody, pair[0].__name__))
+        variants = [source.replace('@_issued_renderer(VerifiedD165Closeout, "outcome")\n', ""),
+                    source.replace('value: VerifiedD165Closeout) -> str:', 'value: object) -> str:'),
+                    source + '\ndef render_unregistered(value):\n    return "paper"\n']
+        for mutation in variants:
+            self.assertTrue(renderer_boundary_violations(mutation))
+        print("KILLED 3 renderer AST mutations: wrapper deletion, widened annotation, unregistered renderer")
 
 
 if __name__ == "__main__":

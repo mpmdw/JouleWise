@@ -9,14 +9,14 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Status:** This week, three independent peer audits found that the draft
-overstated what the instrument can establish about physical phase energy. The
-paper now describes the measurement honestly as energy assigned to inference
-phases from interval-average power records, together with its sensitivity to
-allowed timing changes. The old route that could reproduce voided legacy
-results is closed, and work is frozen to the methods and diagnostic paper;
-next come the remaining paper corrections, readiness checks, and scheduled
-measurements. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+**Status:** Three independent peer audits found that the draft overstated what the
+instrument can establish about physical phase energy, so the paper now describes the
+measurement honestly as energy assigned to inference phases from interval-average
+power records, with its sensitivity to allowed timing changes. Work is frozen to that
+methods and diagnostic paper. Because the scheduled comparison measurements are
+unlikely to run before the deadline, a fallback version of the paper that does not
+depend on them is being written and reviewed now, section by section, while the
+overnight measurement machinery is handed to an unattended watchdog. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
 That file's generated state-kernel view owns current work selection.
 
 ## Current State

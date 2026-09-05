@@ -27,6 +27,9 @@ from typing import Any, BinaryIO, Literal, Mapping, TextIO
 
 AuthenticationGrammar = Literal["json", "jsonl", "raw"]
 V2_AUTHENTICATION_INPUT_CHANGED = "v2_authentication_input_changed"
+V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH = (
+    "v2_authentication_input_digest_mismatch"
+)
 
 
 class V2AuthenticationInputError(RuntimeError):
@@ -451,6 +454,39 @@ class V2AuthenticationReadSession:
             )
             return raw
 
+    def read_nofollow_pinned(
+        self,
+        directory: Path | str,
+        relative: str,
+        *,
+        expected_sha256: str,
+        grammar: AuthenticationGrammar,
+        label: str,
+    ) -> bytes:
+        """Hash a no-follow read against its pin before strict parsing."""
+
+        root = Path(directory)
+        identity = str((root / relative).resolve(strict=False))
+        effective = _forced_grammar(identity, grammar)
+        with self._lock:
+            raw = _read_nofollow_bytes(root, relative)
+            digest = hashlib.sha256(raw).hexdigest()
+            if digest != expected_sha256:
+                raise V2AuthenticationInputError(
+                    V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
+                    f"{label} ({identity}) does not match its caller pin",
+                )
+            _parse_strict(
+                raw,
+                effective,
+                label,
+                allow_governed_spec_vocabulary=(
+                    identity in self._governed_spec_vocabulary_identities
+                ),
+            )
+            self._register(identity, digest, effective, label)
+            return raw
+
     def ingest(
         self,
         identity: str,
@@ -718,16 +754,78 @@ def direct_read_violations(
     return tuple(sorted(set(violations)))
 
 
+def paper_supplier_signature_violations(
+    source: str,
+    *,
+    marked_functions: set[str] | frozenset[str],
+) -> tuple[str, ...]:
+    """Reject public supplier signatures that can carry untrusted values.
+
+    Paper suppliers receive one closed family ref.  Byte/object containers,
+    arbitrary sequences, validation results, receipts, and variadic channels
+    would recreate the bypass at the function boundary.
+    """
+
+    forbidden_annotations = {
+        "Any",
+        "Iterable",
+        "Mapping",
+        "MutableMapping",
+        "Sequence",
+        "bytearray",
+        "bytes",
+        "dict",
+    }
+
+    def annotation_names(annotation: ast.AST | None) -> set[str]:
+        if annotation is None:
+            return set()
+        names: set[str] = set()
+        for node in ast.walk(annotation):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                names.add(node.attr)
+        return names
+
+    tree = ast.parse(source)
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or (
+            node.name not in marked_functions
+        ):
+            continue
+        arguments = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        for argument in arguments:
+            forbidden = sorted(
+                annotation_names(argument.annotation) & forbidden_annotations
+            )
+            if forbidden:
+                violations.append(
+                    f"{node.name}:{argument.arg}:annotation:{','.join(forbidden)}"
+                )
+            lowered = argument.arg.lower()
+            if "receipt" in lowered or "validation_result" in lowered:
+                violations.append(f"{node.name}:{argument.arg}:value-channel")
+        if node.args.vararg is not None:
+            violations.append(f"{node.name}:{node.args.vararg.arg}:variadic")
+        if node.args.kwarg is not None:
+            violations.append(f"{node.name}:{node.args.kwarg.arg}:variadic")
+    return tuple(sorted(set(violations)))
+
+
 __all__ = [
     "AuthenticationInputRecord",
     "V2AuthenticationPath",
     "V2AuthenticationInputError",
     "V2AuthenticationReadSession",
     "V2_AUTHENTICATION_INPUT_CHANGED",
+    "V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH",
     "active_v2_authentication_session",
     "direct_read_violations",
     "ingest_git_authentication_input",
     "open_authentication_input",
+    "paper_supplier_signature_violations",
     "read_authentication_input",
     "read_authentication_input_nofollow",
     "read_authentication_text",

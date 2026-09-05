@@ -13,6 +13,7 @@ from joulewise import arm_readiness, identity_pins
 from joulewise.arm_readiness import committed_pack_tree_sha256
 from joulewise.analysis_engine import _resolve_contrast_floor
 from joulewise.analysis_engine.inputs import (
+    AuthenticatedFloorArtifact,
     BundleEvidence,
     FloorEvidenceBinding,
     LoadedAnalysisInputs,
@@ -20,6 +21,7 @@ from joulewise.analysis_engine.inputs import (
     _typed_config,
     floor_request_for_evidence,
     floor_stack_identity,
+    load_floor_artifact,
     realized_scientific_identity,
 )
 try:
@@ -29,7 +31,7 @@ except ImportError:  # RED staging: production helper lands with the cure.
 from joulewise.identity_pins import scientific_config_identity_sha256
 from joulewise.suite import SuiteManifest, suite_manifest_sha256
 from tests import test_d117_contrast_v5_pack as d117_fixture
-from tests.test_detection_floor import make_cell, make_regime
+from tests.test_detection_floor import make_artifact, make_cell, make_regime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +41,24 @@ GSM8K_MANIFEST_PATH = (
 MIXED_MANIFEST_PATH = (
     ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
 )
+
+
+class FloorArtifactLoaderCapabilityTests(unittest.TestCase):
+    def test_public_loader_preserves_authenticated_capability(self) -> None:
+        artifact = make_artifact()
+        raw = (json.dumps(artifact, sort_keys=True) + "\n").encode("utf-8")
+        with tempfile.TemporaryDirectory(prefix="analysis-floor-loader-") as temporary:
+            path = Path(temporary) / "floor.json"
+            path.write_bytes(raw)
+
+            loaded = load_floor_artifact(path)
+
+        self.assertIsInstance(loaded, AuthenticatedFloorArtifact)
+        self.assertNotIsInstance(loaded, (Mapping, tuple))
+        self.assertEqual(loaded.raw_bytes, raw)
+        self.assertEqual(loaded.file_sha256, hashlib.sha256(raw).hexdigest())
+        with self.assertRaises(TypeError):
+            _mapping, _digest = loaded
 
 
 def _legacy_realized_identity_matches_config(

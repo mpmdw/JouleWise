@@ -355,3 +355,50 @@ THEN, in order:
 - Open PRs: #288 paper-K (CI re-running after the ledger commit; merge when green), #289 seam (replay running for
   row 9; gate-ledger fails until row 9 is filled), #292 F+B (CI fix seat `fb-ci` running), #290 paper-L (retarget
   after #288).
+
+## 2026-09-05 ~08:10 PDT — paper-K merged (#288 → 6b224521); paper-L retargeted; F+B fix round 2
+
+- PR #288 (paper-K) merged at 6b224521 with the full 12-row ledger. PR #290 (paper-L) retargeted to main;
+  origin/main merged into feat/2026-09-05-paper-l at a3bbd9b3; its full replay is running (row 9), then CI
+  on the final head (row 11) and the terminal review (row 12).
+- PR #289 (seam): row 9 = docs/process_traces/2026-09-04-paper-custody/18-full-replay-f13e3a44.md (one
+  load-sensitive node-worker failure reproduced on main), row 12 = e61b0db5; row 11 waits on CI.
+- PR #292 (F+B): the sheet is regenerated (c8ab5efb). The two relocation errors are golden mint-fixture pins
+  in tests/test_mint_floor_artifact_generalized.py that still hash v1 discipline bytes; fix round 2 seat
+  `fb-ci2` (astra high) performs the file's own fixture-review step with the independent oracle and adds one
+  regression; report 49. Then rows 9/11/12.
+- Paper-M fix round 1 (`paperm-fix1`) still running on feat/2026-09-05-paper-m (stacked on paper-L before
+  the main merge; rebase or merge paper-L into it after the seat returns, before the delta).
+
+## 2026-09-05 ~09:05 PDT — seam PR #289 merged
+
+- PR #289 (custody seam, rounds 5+6, D-173 as amended) merged to main with the full ledger (row 9 =
+  file 18 replay record, rows 11/12 = e61b0db5). REFUSAL-CARRIER-01 remains queued behind readiness.
+- F+B (#292): ruling 50 authorized the mint-fixture review under five conditions; seat `fb-ci3` (astra
+  high) executing it; report 51.
+
+## 2026-09-05 ~10:20 PDT — paper-M fix round 1 landed (d243c776); F+B fixture review landed (e1690f20)
+
+- Paper-M: all 30 refuter findings cured by `paperm-fix1`; campaign-presuming sections now live in
+  docs/paper/protocol/prospective-comparison-protocol.md (558 lines) and the editorial ledger in
+  docs/paper/protocol/first-use-audit-ledger.md; article 1421 lines; bench: first-use ledger 11 OK, terms
+  lint 12 OK, selector 5 OK, replay fence 10 OK + checker 43 compared / 0 mismatches. paper-L (with main)
+  merged in. Running: fresh astra xhigh delta (report 04) and Opus counter-review (report 05). Next: fix
+  round 2 if needed → apex read → PR #? against main (after #290 merges) with the 12-row ledger.
+- F+B (#292): fixture review landed at e1690f20 under ruling 50 (report 51); magistrate bench: mint 83 OK,
+  both relocation tests OK, discipline matrix 12 OK, dependence sheet 29 OK. Running: Opus non-author
+  delta (report 52). Next: CI on head → rows 9/11/12 → merge.
+- Paper-L (#290): replay running on a3bbd9b3 (started before the seam merge; docs-only branch, accepted).
+
+## 2026-09-05 ~11:40 PDT — paper-M fix round 2 running; F+B at d2cf1859 (replay + CI running)
+
+- Paper-M: astra delta 04 (no blockers; 27/30 closed, 3 partial, F1–F4 should-fix) and Opus counter-review 05
+  (NOT LANDABLE: B1 abstract first-use, B2 omitted 7B record-support arm 50/50 identifiable, B3 figure
+  numbering, B4 'synthetic P1'; 11 should-fix; 7 nits; all arithmetic verified) committed at 2d967838.
+  Fix round 2 seat `paperm-fix2` (astra xhigh) running on all of it; report 06. Then one fresh delta
+  (astra) + Opus re-check of B1–B4 → apex → PR.
+- F+B (#292): Opus delta 52 verified closure/consequences; its one blocker (census marker in a comment)
+  cured at 3688d1b6; main merged → d2cf1859; full replay (row 9) and CI (row 11) running.
+- D-165 relabel: merging origin/main had real conflicts (registry SUPPLIER_PENDING wording vs relabel text;
+  dominance_closeout constants); Opus lieutenant resolving in JouleWise-wt-d165-relabel; report 13.
+  The old d165-renderer worktree merge was aborted (lane superseded).

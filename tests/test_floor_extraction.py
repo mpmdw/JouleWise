@@ -28,6 +28,11 @@ from types import SimpleNamespace
 from unittest import mock
 
 import joulewise.arm_readiness as arm_readiness
+from joulewise.authentication_io import (
+    V2_AUTHENTICATION_INPUT_CHANGED,
+    V2AuthenticationInputError,
+    V2AuthenticationReadSession,
+)
 from joulewise.analysis_engine.inputs import (
     AnalysisInputError,
     _strict_jsonl_admission_bytes,
@@ -81,6 +86,7 @@ from joulewise.floor_extraction import (
     _common_mode_floor_from_extracted_inputs,
     _ingested_consumption_semantics_id,
     _read_summary,
+    _strict_admission_json_file,
     _strict_admission_json_value,
     extract_absolute_cell,
     extract_cells,
@@ -6409,6 +6415,34 @@ class LaunchLineageExtractionTests(unittest.TestCase):
         )
 
         self.assertIn("launch_lifecycle_incomplete", member.reasons)
+
+
+class FloorCustodyReadTests(unittest.TestCase):
+    def test_lower_floor_readers_register_and_refuse_changed_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            standalone = root / "standalone.json"
+            standalone.write_text('{"status":"first"}\n', encoding="utf-8")
+            with V2AuthenticationReadSession():
+                self.assertEqual(
+                    _strict_admission_json_file(standalone, "standalone")["status"],
+                    "first",
+                )
+                standalone.write_text('{"status":"second"}\n', encoding="utf-8")
+                with self.assertRaises(V2AuthenticationInputError) as raised:
+                    _strict_admission_json_file(standalone, "standalone")
+                self.assertEqual(raised.exception.reason, V2_AUTHENTICATION_INPUT_CHANGED)
+
+            bundle = root / "bundle"
+            bundle.mkdir()
+            summary = bundle / "summary_metrics.json"
+            summary.write_text('{"status":"first"}\n', encoding="utf-8")
+            with V2AuthenticationReadSession():
+                self.assertEqual(_read_summary(bundle)[0]["status"], "first")
+                summary.write_text('{"status":"second"}\n', encoding="utf-8")
+                with self.assertRaises(V2AuthenticationInputError) as raised:
+                    _read_summary(bundle)
+                self.assertEqual(raised.exception.reason, V2_AUTHENTICATION_INPUT_CHANGED)
 
 
 if __name__ == "__main__":
