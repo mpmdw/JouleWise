@@ -554,6 +554,16 @@ def make_t0_fixture(
         },
     )
     time_origin = now_monotonic_ns - t0._MIN_IDLE_NS - 1_000
+    r0_anchor_monotonic_raw_ns = time_origin + 20
+    if synthetic_clock:
+        r0_anchor_realtime_ns = None
+        r0_anchor_read_skew_ns = 1_000
+    else:
+        real_anchor = t0._clock_reference.sample_anchor()
+        r0_anchor_realtime_ns = r0_anchor_monotonic_raw_ns + (
+            real_anchor.realtime_ns - real_anchor.monotonic_raw_ns
+        )
+        r0_anchor_read_skew_ns = real_anchor.read_skew_ns
     reservation_argv = [
         str(repository / ".venv/bin/python"),
         str(repository / "scripts/reserve_calibration_window_bracket.py"),
@@ -602,7 +612,9 @@ def make_t0_fixture(
             stdout=readiness.render_json(
                 _clock_reference_value(
                     boot_session_id=boot_session_id,
-                    anchor_monotonic_raw_ns=time_origin + 20,
+                    anchor_monotonic_raw_ns=r0_anchor_monotonic_raw_ns,
+                    anchor_realtime_ns=r0_anchor_realtime_ns,
+                    anchor_read_skew_ns=r0_anchor_read_skew_ns,
                 )
             ).decode("utf-8"),
             boot_session_id=boot_session_id,
@@ -2882,6 +2894,18 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         ):
             result = author_arm_readiness_evidence_t0(pack, custody)
             self.assertEqual(len(result["authored_rows"]), 15)
+            if not synthetic_clock:
+                clock_receipt = next(
+                    json.loads(Path(path).read_text(encoding="utf-8"))
+                    for path in result["receipt_paths"]
+                    if json.loads(Path(path).read_text(encoding="utf-8"))["kind"]
+                    == "CLOCK_ATTESTATION"
+                )
+                self.assertLess(
+                    clock_receipt["facts"][0]["value"]["anchor_delta_ns"],
+                    500_000,
+                    "real R0-to-author RAW anchor delta must retain a 10x margin",
+                )
         command = [
             sys.executable,
             "scripts/generate_arm_readiness.py",
