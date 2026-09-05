@@ -1123,8 +1123,8 @@ class SingleCountCensusTests(unittest.TestCase):
         from joulewise.detection_floor import (
             attribution_single_count_discipline, SINGLE_COUNT_DISCIPLINE_ID_V1,
         )
-        for relative in ("docs/contracts/adapter_contracts.md", "docs/phase_2/detection_floor.md",
-                         "docs/site/adapter_contracts.html"):
+        # D-136 retires the site lane; commit 731a0a74 leaves its generator broken, so pin only canonical Markdown documents.
+        for relative in ("docs/contracts/adapter_contracts.md", "docs/phase_2/detection_floor.md"):
             text = html.unescape((ROOT / relative).read_text())
             for version, expected in (
                 ("v1", attribution_single_count_discipline(SINGLE_COUNT_DISCIPLINE_ID_V1)),
