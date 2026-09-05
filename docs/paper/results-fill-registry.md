@@ -40,7 +40,8 @@ Fill-rule vocabulary is closed:
 Freeze labels distinguish a frozen key or derivation from an issued value.
 `KEY_FROZEN / VALUE_UNISSUED` means the vocabulary is fixed but no result may
 be inserted. `SUPPLIER_UNKNOWN` identifies a missing field contract, not a
-license to infer one.
+license to infer one. `FIXED_WINDOW_ONLY` restricts the enclosure diagnostic to
+the recorded phase windows of its authenticated input bundle.
 
 Capture-method and estimator provenance are independent fill preconditions:
 
@@ -91,6 +92,9 @@ Every row cites one or more of these defining sources:
   conservative claim language; D-122 supersedes decode-only gamma; D-123 owns
   the reported-mean cells; D-124 owns the candidate contrast estimator and its
   transfer-assumption disclosure.
+- `PE-GATE` — `docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`
+  and `docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`,
+  Q-17-1: the ratified pinned desk-script enclosure and its appendix DERIVE row.
 - `PLAN` —
   `docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`, which names
   alpha and beta as four-cell floor producers and gamma as the prospective
@@ -145,10 +149,10 @@ is `STOP_FILL`.
 |---|---|---|---|---|
 | V5-ID-001 | Small-model ID `qwen3-1p7b`, revision `3b1b1768f8f8cf8351c712464f906e86c2b8269e` | `configs/model_panels/qwen3_4bit.json` entry `qwen3-1p7b` | KEY_FROZEN | D-164, PANEL |
 | V5-ID-002 | Large-model ID `qwen3-8b`, revision `545dc4251c05440727734bcd94334791f6ab0192` | `configs/model_panels/qwen3_4bit.json` entry `qwen3-8b` | KEY_FROZEN | D-164, PANEL |
-| V5-WL-001 | Decode profile `real_prompts_v1`, eight ordered prompts, prompt-set SHA-256 `20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474`; the two-model contrast uses prompt 0 in both arms and makes no prompt-population generality claim | Workload profile plus panel rendering pinset `qwen3-real-prompts-v1-thinking-off` | KEY_FROZEN | D-166, WORKLOAD, PANEL |
+| V5-WL-001 | Decode profile `real_prompts_v1`, eight ordered prompts, prompt-set SHA-256 `20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474`; every decode block uses fixed prompt index 0 under rule `d166_fixed_prompt_zero.v1` (superseding `d166_block_prompt_cycle.v1`, ratified in `docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md` Q-17-4) | Workload profile plus panel rendering pinset `qwen3-real-prompts-v1-thinking-off` | KEY_FROZEN | D-166, WORKLOAD, PANEL |
 | V5-WL-002 | Shared `tokenizer.json` SHA-256 `aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4` | Both panel entries and the rendering pinset | KEY_FROZEN | D-164, D-166, PANEL |
 | V5-WL-003 | Shared chat-template SHA-256 `87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5`; template applied; `enable_thinking=false` | Both panel entries and the rendering pinset | KEY_FROZEN | D-166, PANEL |
-| V5-WL-004 | Greedy generation, forced 512 output tokens, one rendered prompt per member; gamma uses prompt 0 throughout while the same-model floor packs remain unchanged | `_v5` generator decode workload and D-166 R-1 | KEY_FROZEN | D-166, V5GEN |
+| V5-WL-004 | Greedy generation, forced 512 output tokens, one rendered prompt at fixed prompt index 0 per member under rule `d166_fixed_prompt_zero.v1` (superseding `d166_block_prompt_cycle.v1`, ratified in `docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md` Q-17-4). The comparison supports this fixed prompt and makes no prompt-population generality claim. Paper placement: Section 1 workload paragraph — `draft-v2-skeleton.md, workload paragraph, paper-K seat` | `_v5` generator decode workload and D-166 R-1 | KEY_FROZEN | D-166, V5GEN |
 | V5-G2A-001 | `[PREFILL_LENGTH]` = G2-a record `collection_prefill_tokens`; shortest clearing rung in 512/1024/2048/4096, otherwise 4096 | `scripts/select_g2a_prefill_length.py` output; exact output path and its SHA-256 are not yet issued | UNRESOLVED-UNTIL-G2A / STOP_FILL | D-166 as amended, G2A |
 | V5-WL-005 | Prefill text, token IDs, repeat count, generation method, and selection authority | Post-selection `joulewise.prefill_prompt_pin.v2`, including `g2a_record_sha256` | UNRESOLVED-UNTIL-G2A / STOP_FILL | D-166 as amended, V5GEN, G2A |
 
@@ -914,16 +918,20 @@ be inferred from the ratio outcome.
 
 ### Successor-skeleton outcome-branch slots
 
-These rows govern nonnumeric semantic placements added to
-`draft-v2-skeleton.md`; they are outside the frozen-draft marker census above.
-Each repeated marker shares one result across the Abstract, Section 7, and
-Section 10. No row authorizes prose to be inferred at the desk.
+These rows govern successor-skeleton outcome placements and the synthetic
+appendix enclosure placement; they are outside the frozen-draft marker census
+above. Each repeated outcome marker shares one result across the Abstract,
+Section 7, and Section 10 of `draft-v2-skeleton.md`. PE-01 binds the single
+Appendix A.7 marker and Figure A1, cited from the Introduction. Its synthetic
+illustration issues no measured result. No row authorizes empirical prose to
+be inferred at the desk.
 
 | Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
 |---|---|---|---|---|---|---|
 | OB-01 — Outcome-B failed-component list in the Abstract, Section 7, and Section 10 | `[FILL:OB-01]` | Authenticated `joulewise.d165_dominance_closeout.v1`: conservatively render every record with `passes` false from `independent_ratios[].{cell_id,component,passes}` and `comparative_common_mode_ratios[].{cell_id,component,passes}`; no professor-facing list renderer exists yet | alpha and beta / all required absolute, comparative, and comparative shared-energy-sign/local-corner components | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; TOKEN_MISSING; never render from an unauthenticated or incomplete close-out | DRAFT, D165 |
 | TR-01 — Branch-independent transfer limitation in the Abstract, Section 7, and Section 10 | `Transfer of the pulse-derived timing allowance to inference was not tested.` | Fixed limitation sentence; no evidence lookup, late-window predicate, or outcome branch may alter it | pulse-to-inference transfer / all three outcome branches | LIMITATION | WITHDRAWN 2026-09-04 under provisional final ruling 17: all nine fill placements became the fixed sentence; the selector still retains one placement in each of its three selected outcome groups | DRAFT, AUTH |
 | OR-01 — Refusal stop stage and issued reason in the Section-4 form and the Abstract, Section 7, and Section 10 Refusal paragraphs | `[FILL:OR-01]` | Before comparison: an empirical non-admission statement requires a verified failed production-window record bound to the affected model and window; missing or invalid source evidence selects the methods/diagnostics fallback, with no empirical failure inferred. At close-out: authenticated `joulewise.d165_dominance_closeout.v1`, including issued zero-denominator refusals; missing or invalid ratio evidence selects the fallback without erasing separately authenticated verdicts. At every placement, render exactly one stage label (`before comparison` or `at close-out`) plus the reason issued by its governing evidence, or explicitly state that the source evidence is unavailable or invalid without inventing an issued reason; name each affected model, window, or verdict. Independently authenticated, unaffected model-comparison verdicts remain reportable through `DS-32` and `PG-08`; never infer a reason or model verdict from ratio disposition | fixed Qwen3 pair / two-stage refusal | STOP_FILL | SUPPLIERS_NAMED / VALUE_UNISSUED; TOKEN_MISSING; use methods/diagnostics fallback on absent or invalid sources; refuse conflicting or multi-stage-without-precedence inputs | DRAFT, AUTH, D165 |
+| PE-01 — Appendix A.7 Figure A1 and Introduction citation | `[FILL:PE-01]` | `scripts/paper/partial_record_enclosure.py`, SHA-256 `0fe7e2dc3c94f03f635e30d925d0f37cf26518341aadc34f95100f3f31d13aee`, 17,187 B; `derive_synthetic_p1()` and `write_synthetic_p1_figure()` derive `docs/paper/figures/figA_partial_record_enclosure.svg` and its `.json` sidecar from SYNTHETIC P1: ten adjacent 100 ms records at 10 W over [0.5, 1.5] s, fixed window [0.55, 1.45] s, independent edge shifts ±0.01 s; point 9.0 J, timing envelope [8.8, 9.2] J, nonnegative enclosure [8, 10] J. The separate authenticated-bundle entry still consumes only strict-valid recorded phase windows, counts each record once, pins the bundle SHA-256 census, and refuses point-supported, nonfinite-power, negative-power, or strict-invalid inputs; no measured enclosure is issued here; never composed into any bound | SYNTHETIC P1 / fixed illustrative window; authenticated campaign values remain unissued | DERIVE | SYNTHETIC_FIGURE_PLACED / VALUE_UNISSUED for measured inputs; APPENDIX_ONLY_REGISTRY_BOUND; NON_CLAIM_BEARING; FIXED_WINDOW_ONLY | PE-GATE |
 
 ## Authority discrepancies and non-token gaps
 

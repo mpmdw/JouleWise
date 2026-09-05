@@ -154,10 +154,19 @@ class DXRow:
 
 
 @dataclass(frozen=True)
+class AppendixDeriveRow:
+    row_id: str
+    marker: str
+    appendix: str
+    producer: SourcePin
+    fill_rule: str = "DERIVE"
+
+
+@dataclass(frozen=True)
 class RegistrySpec:
     sources: dict[str, SourcePin]
     r7f_path: Path
-    rows: dict[str, DXRow]
+    rows: dict[str, DXRow | AppendixDeriveRow]
 
 
 @dataclass(frozen=True)
@@ -234,7 +243,7 @@ def _source_size(metadata: str | None) -> int | None:
 
 
 def parse_registry_text(text: str) -> RegistrySpec:
-    """Parse the one DX subsection and reject any malformed or missing row."""
+    """Parse the closed DX subsection and pinned appendix DERIVE placements."""
 
     if text.count(DX_HEADING) != 1:
         raise RegistryError(
@@ -281,7 +290,7 @@ def parse_registry_text(text: str) -> RegistrySpec:
             f"R7F path definition is {r7f_matches!r}, expected {[str(EXPECTED_R7F_PATH)]!r}"
         )
 
-    rows: dict[str, DXRow] = {}
+    rows: dict[str, DXRow | AppendixDeriveRow] = {}
     for line in section.splitlines():
         if not line.startswith("| DX-"):
             continue
@@ -348,6 +357,41 @@ def parse_registry_text(text: str) -> RegistrySpec:
             raise RegistryError(
                 f"{row_id} marker does not equal the {source} source-block digest"
             )
+    for line in text.splitlines():
+        if not line.startswith("| "):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        # Legacy appendix numeric rows have no FILL marker or script pin.
+        # Select by placement shape, not a PE-specific identifier whitelist.
+        if " — Appendix " not in cells[0] or not (
+            "[FILL:" in line or "SHA-256" in line
+        ):
+            continue
+        if len(cells) != 7:
+            raise RegistryError(f"appendix DERIVE row must have 7 cells: {line}")
+        site, marker, supplier, _campaign, fill_rule, freeze_status, _sources = cells
+        site_match = re.match(
+            r"([A-Z][A-Z0-9]*-[0-9]+) — Appendix ([A-Z](?:\.[0-9]+)*)(?=\s|$)", site
+        )
+        if site_match is None:
+            raise RegistryError(f"malformed appendix site cell {site!r}")
+        row_id, appendix = site_match.groups()
+        if row_id in rows:
+            raise RegistryError(f"duplicate registry row {row_id}")
+        if marker != f"`[FILL:{row_id}]`" or fill_rule != "DERIVE":
+            raise RegistryError(f"{row_id} must bind its FILL marker with DERIVE")
+        if "VALUE_UNISSUED" not in freeze_status or "APPENDIX_ONLY_REGISTRY_BOUND" not in freeze_status:
+            raise RegistryError(f"{row_id} must remain appendix-only / VALUE_UNISSUED")
+        pins = re.findall(r"`(scripts/[^`]+\.py)`, SHA-256 `([0-9a-f]{64})`, ([0-9,]+) B", supplier)
+        if len(pins) != 1:
+            raise RegistryError(f"{row_id} must pin exactly one producer digest and byte size")
+        path, sha256, size = pins[0]
+        if ".." in Path(path).parts:
+            raise RegistryError(f"{row_id} producer must be repository-relative")
+        rows[row_id] = AppendixDeriveRow(
+            row_id, marker.strip("`"), appendix,
+            SourcePin(row_id, Path(path), sha256, int(size.replace(",", "")), None, None),
+        )
     return RegistrySpec(sources=sources, r7f_path=EXPECTED_R7F_PATH, rows=rows)
 
 
@@ -367,7 +411,12 @@ def _byte_comparison(label: str, expected: bytes, observed: bytes) -> Comparison
 
 def check_file_pins(repository_root: Path, spec: RegistrySpec) -> list[Comparison]:
     comparisons: list[Comparison] = []
-    for code, pin in spec.sources.items():
+    pins = dict(spec.sources)
+    pins.update(
+        (row.row_id, row.producer)
+        for row in spec.rows.values() if isinstance(row, AppendixDeriveRow)
+    )
+    for code, pin in pins.items():
         path = repository_root / pin.path
         if not path.is_file():
             comparisons.append(_comparison(f"digest {code}", pin.sha256, f"MISSING {path}"))
@@ -423,6 +472,8 @@ def check_supplier_fields(
 ) -> list[Comparison]:
     comparisons: list[Comparison] = []
     for row in spec.rows.values():
+        if isinstance(row, AppendixDeriveRow):
+            continue
         for field in row.field_refs:
             if field.source not in artifacts:
                 comparisons.append(
@@ -580,7 +631,7 @@ def check_rendered_rows(
 ) -> list[Comparison]:
     comparisons: list[Comparison] = []
     for row in spec.rows.values():
-        if row.row_id in IDENTITY_ROWS:
+        if isinstance(row, AppendixDeriveRow) or row.row_id in IDENTITY_ROWS:
             continue
         try:
             rendered = render_row(row, spec, artifacts)
@@ -825,7 +876,29 @@ def check_prose_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
 
 
 def _placement_row_ids(spec: RegistrySpec) -> tuple[str, ...]:
-    return tuple(row_id for row_id in spec.rows if row_id not in IDENTITY_ROWS)
+    return tuple(
+        row_id for row_id, row in spec.rows.items()
+        if isinstance(row, DXRow) and row_id not in IDENTITY_ROWS
+    )
+
+
+def check_appendix_placement(text: str, spec: RegistrySpec) -> list[Comparison]:
+    comparisons: list[Comparison] = []
+    for row in spec.rows.values():
+        if not isinstance(row, AppendixDeriveRow):
+            continue
+        headings = list(re.finditer(
+            rf"(?m)^(#{{2,6}}) {re.escape(row.appendix)}(?=\s|$)[^\n]*\n", text
+        ))
+        placed = False
+        if len(headings) == 1:
+            heading = headings[0]
+            rest = text[heading.end():]
+            end = re.search(rf"(?m)^#{{1,{len(heading.group(1))}}} ", rest)
+            section = rest[:end.start()] if end else rest
+            placed = text.count(row.marker) == 1 and section.count(row.marker) == 1
+        comparisons.append(_comparison(f"placement {row.row_id}", True, placed))
+    return comparisons
 
 
 def _placed_row_count(skeleton_text: str, spec: RegistrySpec) -> int:
@@ -886,6 +959,7 @@ def digest_half(
     except (OSError, UnicodeError) as exc:
         comparisons.append(_comparison("successor skeleton", "readable", f"{type(exc).__name__}: {exc}"))
     else:
+        comparisons.extend(check_appendix_placement(skeleton_text, spec))
         comparisons.extend(check_skeleton_literals(skeleton_text, spec))
         comparisons.extend(check_prose_literals(skeleton_text, spec))
         comparisons.extend(

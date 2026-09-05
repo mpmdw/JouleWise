@@ -104,6 +104,13 @@ def _registry_rows() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
     for line in REGISTRY_PATH.read_text(encoding="utf-8").splitlines():
         match = re.match(r"^\| `(\[[^\]]+\])` \|", line)
         if match is None:
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if len(cells) == 7 and " — Appendix " in cells[0] and cells[4] == "DERIVE":
+                marker = re.fullmatch(r"`(\[FILL:[A-Z][A-Z0-9]*-[0-9]+\])`", cells[1])
+                if marker is not None:
+                    row = marker.group(1)
+                    rows.add(row)
+                    value_unissued.add(row)
             continue
         row = match.group(1)
         rows.add(row)
@@ -115,6 +122,7 @@ def _registry_rows() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
 
 
 REGISTRY_ROWS, SUPPLIER_UNKNOWN_ROWS, VALUE_UNISSUED_ROWS = _registry_rows()
+APPENDIX_DERIVE_ROWS = frozenset(row for row in REGISTRY_ROWS if row.startswith("[FILL:"))
 
 
 class StopFill(ValueError):
@@ -820,6 +828,7 @@ def select_variant_from_atoms(section: str, atoms: Mapping[str, bool]) -> str:
 
 
 def _replace_tokens(text: str, fills: Mapping[str, str]) -> str:
+    _refuse_appendix_derivations(text)
     seen: set[str] = set()
 
     def replace(match: re.Match[str]) -> str:
@@ -1072,11 +1081,18 @@ CANONICAL_RENDER_LINE_PATTERNS = {
 }
 
 
+def _refuse_appendix_derivations(text: str) -> None:
+    for row in sorted(APPENDIX_DERIVE_ROWS):
+        if row in text:
+            _value_unissued(row)
+
+
 def validate_rendered(text: str) -> dict[str, str]:
     """Validate filled prose independently of the unfilled-scaffold linter."""
 
     if not isinstance(text, str) or not text.strip():
         raise RenderedValidationError("rendered output is empty")
+    _refuse_appendix_derivations(text)
     seven = [key for key, heading in S7_HEADINGS.items() if text.count(heading) == 1]
     six = [key for key, heading in S6_HEADINGS.items() if text.count(heading) == 1]
     if len(seven) != 1 or len(six) != 1:

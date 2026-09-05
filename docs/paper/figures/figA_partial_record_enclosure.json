@@ -1,0 +1,119 @@
+{
+  "claim_bearing": false,
+  "figure": {
+    "sha256": "cff121d6215279cf73622a7315d954b78e719f4e9f7a5a3299ffa72e24986656"
+  },
+  "inputs": {
+    "independent_edge_shift_s": [
+      -0.01,
+      0.01
+    ],
+    "records": [
+      {
+        "end_s": 0.6,
+        "power_w": 10.0,
+        "start_s": 0.5
+      },
+      {
+        "end_s": 0.7,
+        "power_w": 10.0,
+        "start_s": 0.6
+      },
+      {
+        "end_s": 0.8,
+        "power_w": 10.0,
+        "start_s": 0.7
+      },
+      {
+        "end_s": 0.9,
+        "power_w": 10.0,
+        "start_s": 0.8
+      },
+      {
+        "end_s": 1.0,
+        "power_w": 10.0,
+        "start_s": 0.9
+      },
+      {
+        "end_s": 1.1,
+        "power_w": 10.0,
+        "start_s": 1.0
+      },
+      {
+        "end_s": 1.2,
+        "power_w": 10.0,
+        "start_s": 1.1
+      },
+      {
+        "end_s": 1.3,
+        "power_w": 10.0,
+        "start_s": 1.2
+      },
+      {
+        "end_s": 1.4,
+        "power_w": 10.0,
+        "start_s": 1.3
+      },
+      {
+        "end_s": 1.5,
+        "power_w": 10.0,
+        "start_s": 1.4
+      }
+    ],
+    "window_s": [
+      0.55,
+      1.45
+    ]
+  },
+  "label": "SYNTHETIC P1",
+  "outputs": {
+    "basis": "nonnegative_partial_record_enclosure.v1",
+    "lower_j": 7.999999999999999,
+    "point_j": 9.0,
+    "scope": "synthetic_p1_fixed_window.v1",
+    "straddling_energy_j": 2.000000000000001,
+    "straddling_record_count": 2,
+    "timing_corners": [
+      {
+        "point_j": 9.0,
+        "window_s": [
+          0.54,
+          1.44
+        ]
+      },
+      {
+        "point_j": 9.2,
+        "window_s": [
+          0.54,
+          1.46
+        ]
+      },
+      {
+        "point_j": 8.799999999999999,
+        "window_s": [
+          0.56,
+          1.44
+        ]
+      },
+      {
+        "point_j": 9.0,
+        "window_s": [
+          0.56,
+          1.46
+        ]
+      }
+    ],
+    "timing_envelope_j": [
+      8.799999999999999,
+      9.2
+    ],
+    "upper_j": 10.0
+  },
+  "producer": {
+    "entry": "derive_synthetic_p1",
+    "path": "scripts/paper/partial_record_enclosure.py",
+    "sha256": "0fe7e2dc3c94f03f635e30d925d0f37cf26518341aadc34f95100f3f31d13aee",
+    "size_bytes": 17187
+  },
+  "schema": "synthetic_p1_partial_record_figure.v1"
+}

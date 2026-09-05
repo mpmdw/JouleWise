@@ -35,6 +35,11 @@ from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "configs/campaigns/d117_contrast_v5/generate_configs.py"
+SUPERSESSION = (
+    ROOT
+    / "configs/campaigns/d117_contrast_v5/"
+    "d166_decode_prompt_assignment_supersession.json"
+)
 PANEL = ROOT / "configs/model_panels/qwen3_4bit.json"
 WORKLOAD = ROOT / "configs/workloads/real_prompts_v1.json"
 PACK_ID = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
@@ -1000,16 +1005,140 @@ class D117ContrastV5PackTests(unittest.TestCase):
             self.assertEqual(verified["status"], "PASS")
             self.assertEqual(verified["reason_codes"], [])
 
-    def test_decode_rotation_is_the_ruled_modulo_eight_cycle(self) -> None:
-        """Ruling 171a R-2 fixes eight prompts and (block - 1) modulo 8."""
+    def test_decode_assignment_is_fixed_zero_for_all_blocks_and_arms(self) -> None:
+        """Q-17-4 fixes prompt index zero for every decode block and arm."""
 
-        with tempfile.TemporaryDirectory(prefix="d117-v5-rotation-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-prompt-zero-") as temporary:
             self.configure(self.write_prefill_pin(Path(temporary)))
             self.assertEqual(len(self.generator.DECODE_PROFILE["prompts"]), 8)
             self.assertEqual(
-                [self.generator.decode_prompt_index(block) for block in range(1, 17)],
-                [(block - 1) % 8 for block in range(1, 17)],
+                [self.generator.decode_prompt_index(block) for block in range(1, 11)],
+                [0] * 10,
             )
+            runs, _by_stage = self.generator.build_runs()
+            resolved = {
+                (block, arm): {
+                    run["decode_prompt_index"]
+                    for run in runs
+                    if run["measurement_arm"] == "decode"
+                    and run["block_index"] == block
+                    and run["arm"] == arm
+                }
+                for block in range(1, 11)
+                for arm in ("A", "B")
+            }
+            self.assertEqual(
+                set(resolved),
+                {
+                    (block, arm)
+                    for block in range(1, 11)
+                    for arm in ("A", "B")
+                },
+            )
+            self.assertTrue(all(indices == {0} for indices in resolved.values()))
+            for arm in ("A", "B"):
+                configs = [
+                    self.generator.config_for(run, "a" * 64)
+                    for run in runs
+                    if run["measurement_arm"] == "decode" and run["arm"] == arm
+                ]
+                self.assertEqual(len(configs), 20)
+                self.assertEqual(len({config["run_id"] for config in configs}), 20)
+                self.assertEqual(
+                    len({
+                        identity_pins.scientific_config_identity_sha256(config)
+                        for config in configs
+                    }),
+                    1,
+                )
+                self.assertEqual(
+                    [
+                        member["declared_member_count"]
+                        for member in self.generator.decode_declared_suite_manifest_set(arm)
+                    ],
+                    [20],
+                )
+
+    def test_decode_assignment_supersession_names_cycle_rule(self) -> None:
+        record = self.generator.load_decode_prompt_assignment_supersession()
+
+        self.assertEqual(
+            record["superseded_rule_id"], "d166_block_prompt_cycle.v1"
+        )
+        self.assertEqual(record["active_rule_id"], "d166_fixed_prompt_zero.v1")
+        self.assertEqual(
+            record["ratified_authority"],
+            {
+                "path": (
+                    "docs/process_traces/2026-09-04-peer-audit/"
+                    "43-magistrate-synthesis-gate-17.md"
+                ),
+                "question": "Q-17-4",
+            },
+        )
+        self.assertEqual(
+            record["dependency_census_path"],
+            "docs/process_traces/2026-09-05-d166-prompt0/01-dependency-census.md",
+        )
+        self.assertEqual(
+            record["precollection_requirement"],
+            "pack generation with this rule precedes collection",
+        )
+
+    def test_decode_assignment_supersession_refuses_absent_record(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="d117-v5-no-supersession-"
+        ) as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            missing = root / SUPERSESSION.name
+            with mock.patch.object(
+                self.generator,
+                "DECODE_PROMPT_ASSIGNMENT_SUPERSESSION_PATH",
+                missing,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError, "decode_prompt_assignment_supersession_missing"
+                ):
+                    self.configure(pin)
+
+    def test_decode_assignment_supersession_refuses_wrong_active_rule(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="d117-v5-old-supersession-"
+        ) as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            path = root / SUPERSESSION.name
+            value = json.loads(SUPERSESSION.read_text(encoding="utf-8"))
+            value["active_rule_id"] = "d166_block_prompt_cycle.v1"
+            path.write_text(json.dumps(value), encoding="utf-8")
+            with mock.patch.object(
+                self.generator,
+                "DECODE_PROMPT_ASSIGNMENT_SUPERSESSION_PATH",
+                path,
+            ):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "decode_prompt_assignment_supersession_active_rule_mismatch",
+                ):
+                    self.configure(pin)
+
+    def test_decode_assignment_refuses_cycle_rule_mutation(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="d117-v5-cycle-mutation-"
+        ) as temporary:
+            root = Path(temporary)
+            self.configure(self.write_prefill_pin(root))
+
+            def cycle(block: int) -> int:
+                return (block - 1) % len(self.generator.DECODE_PROFILE["prompts"])
+
+            with mock.patch.object(self.generator, "decode_prompt_index", new=cycle):
+                with self.assertRaisesRegex(
+                    ValueError, "decode_prompt_assignment_rule_mismatch"
+                ):
+                    self.generator.generate(root, self.generator.GenerationIdentity())
+            self.assertFalse((root / "configs/campaigns" / PACK_ID).exists())
 
     def test_gamma_identity_roster_is_exact_and_rejects_three_units(self) -> None:
         """Ruling 171a R-7 requires exactly four ordered A/B identity units."""
@@ -1036,7 +1165,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 self.generator.validate_gamma_identity_unit_roster(tree)
 
     def test_decode_declaration_is_rule_derived_not_folded_from_emission(self) -> None:
-        """M1 dies: an emitted drift cannot rewrite R-7's registered 4/4/2 census."""
+        """An emitted drift cannot rewrite Q-17-4's 20/0 fixed-zero census."""
 
         with tempfile.TemporaryDirectory(prefix="d117-v5-rule-census-") as temporary:
             root = Path(temporary)
@@ -1055,15 +1184,18 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 staged_pack = staging_root / self.generator.active_generation().pack_rel
                 config_path = staged_pack / row["config_path"]
                 config = json.loads(config_path.read_text(encoding="utf-8"))
-                current_sha = config["workload_profile"]["suite_manifest_sha256"]
-                replacement = next(
-                    member
-                    for member in self.generator.decode_declared_suite_manifest_set("A")
-                    if member["suite_manifest_sha256"] != current_sha
+                replacement_index = 1
+                replacement_manifest = self.generator.decode_suite_manifest(
+                    "A", replacement_index
                 )
                 config["workload_profile"].update(
-                    suite_manifest_ref=replacement["suite_manifest_ref"],
-                    suite_manifest_sha256=replacement["suite_manifest_sha256"],
+                    suite_manifest_ref=(
+                        self.generator.active_generation().pack_rel
+                        / self.generator.decode_suite_relpath("A", replacement_index)
+                    ).as_posix(),
+                    suite_manifest_sha256=self.generator.suite_manifest_sha256(
+                        replacement_manifest
+                    ),
                 )
                 raw = self.generator.render_json(config)
                 config_path.write_bytes(raw)
@@ -1095,12 +1227,12 @@ class D117ContrastV5PackTests(unittest.TestCase):
             ]
             self.assertEqual(
                 [member["declared_member_count"] for member in declaration],
-                [4, 4, 2, 2, 2, 2, 2, 2],
+                [20],
             )
             self.commit_fixture(root, "commit emitted manifest census drift")
             with self.assertRaises(identity_pins.IdentityPinProjectionError) as raised:
                 self.freeze_identity_fixture(root, pack)
-            self.assertIn("suite manifest census", str(raised.exception))
+            self.assertIn("undeclared suite manifest", str(raised.exception))
 
     def test_generated_v5_pack_refuses_tampered_declared_manifest_bytes(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-manifest-auth-") as temporary:
