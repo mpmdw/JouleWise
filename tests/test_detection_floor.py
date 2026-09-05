@@ -36,7 +36,7 @@ from joulewise.detection_floor import (
     COMMON_MODE_REFUSAL_CODES,
     CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
-    FLOOR_METRIC_CATALOG,
+    detection_floor_closed_sets,
     GUARD_MINIMUM_N,
     GUARD_REFERENCE_N,
     SCHEMA_VERSION,
@@ -2244,7 +2244,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
             ("phase_energy_j.deserialize", "phase"),
         )
         self.assertEqual(
-            FLOOR_METRIC_CATALOG,
+            detection_floor_closed_sets().floor_metrics,
             tuple(metric for metric, _ in expected_pairs),
         )
 
@@ -2275,7 +2275,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
                 artifact["cells"][0]["key"]["window_class"] = window_class
                 artifact["transport_groups"][0]["metric"] = metric
                 artifact["transport_groups"][0]["window_class"] = window_class
-                self.assert_invalid(artifact, "not in FLOOR_METRIC_CATALOG")
+                self.assert_invalid(artifact, "not in the detection-floor registry")
 
     def test_valid_artifact_passes_and_round_trips(self):
         artifact = make_artifact()

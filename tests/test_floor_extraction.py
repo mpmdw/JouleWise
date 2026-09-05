@@ -47,7 +47,7 @@ from joulewise.detection_floor import (
     COMMON_MODE_ESTIMATOR_ID,
     CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
-    FLOOR_METRIC_CATALOG,
+    detection_floor_closed_sets,
     METHOD_ID,
     _common_mode_window_is_strictly_noncollapsed,
     abba_delta,
@@ -4486,7 +4486,7 @@ class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             ("phase_energy_j.deserialize", "phase"),
         )
         self.assertEqual(
-            FLOOR_METRIC_CATALOG,
+            detection_floor_closed_sets().floor_metrics,
             tuple(metric for metric, _ in governed_pairs),
         )
         for metric, window_class in governed_pairs:
@@ -4508,7 +4508,7 @@ class MetricHygieneTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             with self.subTest(metric=metric):
                 with self.assertRaisesRegex(
                     FloorExtractionError,
-                    "not in FLOOR_METRIC_CATALOG",
+                    "not in the detection-floor registry",
                 ):
                     governed_cell_metric(metric, window_class)
 

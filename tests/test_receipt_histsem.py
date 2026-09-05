@@ -18,6 +18,7 @@ from unittest import mock
 
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as evidence_author
+import joulewise.identity_pins as identity_pins
 from joulewise.arm_readiness import (
     HISTSEM_REASON_CODES,
     READINESS_REASON_CODES,
@@ -38,6 +39,7 @@ from tests.test_arm_readiness_evidence_author import (
 )
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 from tests.test_arm_readiness_lifecycle import commit_u11_projection
+from tests.git_fixture import init_git_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -653,7 +655,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "repo"
             repository.mkdir()
-            git(repository, "init", "-q")
+            init_git_fixture(repository, "-q")
             git(repository, "config", "user.email", "tests@joulewise.invalid")
             git(repository, "config", "user.name", "JouleWise tests")
             pack = repository / "configs/campaigns/synthetic-pack"
@@ -1006,7 +1008,7 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         repository = Path(temporary.name) / "repository"
         repository.mkdir()
-        git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         git(repository, "config", "user.email", "histsem-sidecars@invalid")
         git(repository, "config", "user.name", "histsem sidecar test")
         scripts = repository / "scripts"
@@ -1697,7 +1699,7 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
         custody = Path(temporary.name) / "custody"
         repository.mkdir()
         custody.mkdir()
-        git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         git(repository, "config", "user.email", "test@example.invalid")
         git(repository, "config", "user.name", "S1 Finish Round")
         (repository / "dependency.txt").write_text("stable\n")
@@ -2066,14 +2068,30 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
         # the plan-tree gate that follows the pre-authoring test.
         (pack / "plan_tree.json").write_bytes(render_json({"arm_attachments": {}}))
         (pack / "producer_contract.json").write_bytes(render_json({"revision": 1}))
-        git(repository, "init", "-q", "-b", "main")
+        init_git_fixture(repository, "-q", "-b", "main")
         git(repository, "config", "user.name", "histsem test")
         git(repository, "config", "user.email", "histsem@invalid")
         git(repository, "add", "-A")
         git(repository, "commit", "-qm", "bootstrap")
 
         for directory in historical_custody:
-            write_custody_json(pack / directory, "record-0001.json", {"kind": directory})
+            if directory == "identity_pin_projection.receipts":
+                receipt = write_custody_json(
+                    pack / directory,
+                    "projection-0001.json",
+                    {"kind": directory},
+                )
+                receipt.with_name("projection-0001.json.sha256").replace(
+                    receipt.with_name("projection-0001.sha256")
+                )
+            elif directory.startswith("identity_pin_projection.receipts/"):
+                path = pack / directory
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(render_json({"kind": directory}))
+            else:
+                write_custody_json(
+                    pack / directory, "record-0001.json", {"kind": directory}
+                )
         git(repository, "add", "-A")
         git(repository, "commit", "-qm", "historical custody")
         historical_head = git(repository, "rev-parse", "HEAD").stdout.strip()
@@ -2100,6 +2118,95 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
         detail = self._row_error(("identity_pin_projection.receipts",))
         self.assertNotIn("pre-authoring", detail)
         self.assertEqual(detail, "plan tree has no pinned freeze receipt")
+
+    def test_nested_projection_path_refuses_at_the_pre_authoring_gate(self) -> None:
+        detail = self._row_error(
+            (
+                "identity_pin_projection.receipts/"
+                "arm_readiness.evidence/x.json",
+            )
+        )
+        self.assertEqual(detail, "historical coordinate is not pre-authoring")
+
+    def test_projection_exclusion_is_exactly_the_freeze_path_grammar(self) -> None:
+        for path in (
+            "identity_pin_projection.receipts/projection-0001.json",
+            "identity_pin_projection.receipts/projection-10000.json",
+            "identity_pin_projection.receipts/projection-0001.sha256",
+            "identity_pin_projection.receipts/projection-10000.sha256",
+        ):
+            with self.subTest(admitted=path):
+                self.assertFalse(
+                    readiness._histsem_tree_has_authoring_custody((path,))
+                )
+        for path in (
+            "identity_pin_projection.receipts/evil.bin",
+            "identity_pin_projection.receipts/projection-001.json",
+            "identity_pin_projection.receipts/projection-0001.json.sha256",
+            "identity_pin_projection.receipts/nested/projection-0001.json",
+        ):
+            with self.subTest(refused=path):
+                self.assertTrue(
+                    readiness._histsem_tree_has_authoring_custody((path,))
+                )
+
+    def test_projection_grammar_owner_mutation_reaches_both_consumers(self) -> None:
+        coordinate = "identity_pin_projection.receipts/projection-0001.json"
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, pack, historical, _current = self._repository(
+                temporary, ("identity_pin_projection.receipts",)
+            )
+            committed_path = f"{self.PACK_RELATIVE}/{coordinate}"
+            committed_sha256 = hashlib.sha256(
+                (pack / coordinate).read_bytes()
+            ).hexdigest()
+
+            # Both consumers accept this coordinate under the owner's real
+            # grammar: committed history finds no anomaly, and the ARM
+            # pre-authoring gate excludes it from authoring custody.
+            self.assertIsNone(
+                identity_pins._committed_successor(
+                    pack,
+                    repository,
+                    historical,
+                    committed_path,
+                    committed_sha256,
+                )
+            )
+            self.assertFalse(
+                readiness._histsem_tree_has_authoring_custody((coordinate,))
+            )
+
+            amended = (
+                identity_pins.IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN.replace(
+                    "json|sha256", "sha256"
+                )
+            )
+            with mock.patch.object(
+                identity_pins,
+                "IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN",
+                amended,
+            ):
+                # Mutating the owner now makes the same coordinate refuse at
+                # both consumers.  Calling _committed_successor directly also
+                # kills a crash-mutant of that consumer.
+                with self.assertRaises(
+                    identity_pins.IdentityPinProjectionError
+                ) as caught:
+                    identity_pins._committed_successor(
+                        pack,
+                        repository,
+                        historical,
+                        committed_path,
+                        committed_sha256,
+                    )
+                self.assertEqual(
+                    caught.exception.reason_code,
+                    "readiness_identity_receipt_namespace_anomalous",
+                )
+                self.assertTrue(
+                    readiness._histsem_tree_has_authoring_custody((coordinate,))
+                )
 
     def test_authoring_and_freeze_custody_still_refuse(self) -> None:
         for directory in (

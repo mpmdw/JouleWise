@@ -123,24 +123,27 @@ authority to stop the pipeline, no human veto in the loop — and they are
 outputs, not errors: the instrument publishes them, counts them, and treats a
 night that produced only refusals as a successful night.
 
-*Status note: revised 2026-08-27. This revision makes the measured boundary,
+*Historical status note: revised 2026-08-27. At that revision, the measured boundary,
 the before-and-after known-workload timing calibration, the detection floor,
 the ordered collection window, the two claim gates, and a recorded **verdict**
-— the final pass-or-refuse decision — reproducible from the text. It also records three changes in the current
-checkout: code now builds and checks a record binding a window's fixed pack,
+— the final pass-or-refuse decision — reproducible from the text. It also recorded three changes in that
+checkout: code built and checked a record binding a window's fixed pack,
 its two timing calibrations, its run directory, and its verdict, although the
-current pack does not yet pass that record into the verdict stage; short desk
-tests now exercise refusal paths through the ordered pipeline; and the operator
+then-current pack did not pass that record into the verdict stage; short desk
+tests exercised refusal paths through the ordered pipeline; and the operator
 **threat model** — the set of operator failures the design promises to handle —
-now protects against plausible mistakes rather than a deliberately dishonest
+protected against plausible mistakes rather than a deliberately dishonest
 operator. A proposed pre-start check for the complete two-comparison statistical
-plan is not yet connected to the code that makes plan bytes final, and the
-planned clean end-to-end window check has not yet been run. Every calibration
+plan was not yet connected to the code that makes plan bytes final, and the
+planned clean end-to-end window check had not yet been run. Every calibration
 number below was re-checked against the current **calibration acceptance
 artifact** — the issued file that pins which calibration recordings,
 numerical pass-or-refuse limits, and versions of the code that calculates each
 bound these numbers come from — named
-`d079_calibration_acceptance_v2_n17_r6` and built in §7.*
+`d079_calibration_acceptance_v2_n17_r6` and built in §7. D-164 through D-167
+later retired that Qwen2.5 campaign and installed the prospective `_v5` Qwen3
+campaign. Current readiness and collection state live in `RUN_STATE.md`; this
+dated note does not claim that an `_v5` pack or result exists.*
 
 ## 2. The measurement primitive, and why it cannot be trusted blindly
 
@@ -825,10 +828,11 @@ record, and analysis finalization compares the record evaluated into the
 verdict byte-for-byte with the supplied binding. This closes a whole-window
 substitution gap: individually valid plan, calibration, run, and verdict files
 cannot be borrowed from different windows and assembled into one apparently
-valid result. The reusable mechanism is implemented, but the current locked
-comparison pack's verdict command does not pass the binding argument; its plan
-only reserves an empty post-collection fingerprint slot. Treat the complete
-pack-to-verdict lifecycle as planned until a successor pack wires that input.
+valid result. The reusable mechanism was implemented before D-167 retired the
+Qwen2.5 predecessor pack, but that pack's verdict command did not pass the
+binding argument; its plan reserved only an empty post-collection fingerprint
+slot. The `_v5` successor must prove the complete pack-to-verdict lifecycle on
+its own frozen bytes before claim use.
 
 ## 5. The clock anchor, and the day its model was falsified
 
@@ -1228,9 +1232,11 @@ edge calibration can lower such a floor; adding repetitions without changing
 the timing bound cannot make the boundary uncertainty disappear.
 
 **Per-phase, per-stack.** Floors do not transfer across phases, prompt
-lengths, or stacks. The plan requires a 256-token prefill floor dependency,
-but no 256-token floor artifact or transport rule is currently ratified; the
-committed fields remain `EMPTY`.
+lengths, or stacks. D-166 makes the live `_v5` prefill length an output of the
+G2-a diagnostic selection rather than a number inherited from a predecessor
+pack. Because the `_v5` transaction has not been collected, it has issued no
+claim-bearing prefill floor; current readiness lives in `RUN_STATE.md` and the
+state kernel.
 
 ## 9. The quiet machine: protecting the signal
 
@@ -1297,12 +1303,13 @@ The projection lets a later gate compare intended bytes with executed bytes.
 
 Receipts form a lineage rather than overwriting history. A successor pack
 contains the predecessor's pack, plan, receipt, and identity fingerprints;
-older packs remain checkable as historical records. The three current
-successor packs each pin `freeze-0003.json`, and those receipt files and their
-fingerprint sidecars exist in this checkout. That corrects the earlier status
-that described the receipts as still outstanding.
+older packs remain checkable as historical records. The Qwen2.5 successor
+receipts described by the earlier revision remain historical evidence, but
+D-167 retired their campaign. The live `_v5` packs are generated and frozen
+only after the G2-a selection and the decode-identity correction recorded in
+the state kernel; predecessor receipts do not make those new packs ready.
 
-**The statistical-plan gap in this checkout.** The intended model comparison
+**Historical predecessor-pack gap.** The intended model comparison
 has two planned contrasts. Because testing more than one contrast increases
 the chance that at least one looks positive by luck, the analysis proposal
 puts both in one **multiple-comparison family** — a set judged together — and
@@ -1313,16 +1320,11 @@ smaller by 2, leaves the larger as it is, then walks the list raising any value
 to the largest adjustment seen so far. It declares an effect only where the
 adjusted value is at or below 0.05. Worked: p = 0.02 and 0.04 become 0.04 and
 0.04, and both clear 0.05; p = 0.03 and 0.04 become 0.06 and 0.06, and neither
-does. That design is documented, but it is not yet an installed
-pre-start guarantee here: the current **analysis manifest** — the
-machine-readable file meant to name the analysis rule before collection —
-still has incomplete family fields, and the plan-locking implementation does not invoke the
-manifest validator. The campaign launcher has its own pre-run validation, but
-that is later than the receipt and does not make the receipt attest the rule.
-Therefore a current receipt proves the plan bytes and existing readiness rows,
-not that this complete statistical rule is present. Collection must remain
-blocked until a successor implementation makes that check part of locking and
-a new receipt authenticates the corrected plan.
+does. In the predecessor pack, that design was documented but not installed as
+a pre-start guarantee: the analysis manifest had incomplete family fields and
+the plan-locking implementation did not invoke its validator. D-167 retired
+that campaign. The `_v5` campaign must satisfy its own frozen analysis and
+readiness contracts; no predecessor receipt supplies that proof.
 
 ## 11. Arming, the window, and the operator
 
@@ -1491,20 +1493,22 @@ When the bracket-binding input is supplied, it strengthens this shape: a
 finalizer compares the binding supplied beside the verdict with the binding
 recorded inside it. A passed verdict copied from another run therefore cannot
 finalize the current window merely because its top-level status says `passed`.
-As section 4.8 notes, the reusable checks exist but the current locked pack has
-not yet wired the complete lifecycle.
+As section 4.8 notes, the reusable checks exist, but the retired predecessor
+pack did not wire the complete lifecycle. The prospective `_v5` pack must do
+so and pass on its own evidence before claim use.
 
 ## 13. Verification without overstating it
 
 The implemented gates described here are designed to **fail closed**: when one
 of those gates sees missing or invalid evidence, it refuses rather than
-accepting by silence. The current short pipeline checks exercise that property
+accepting by silence. Short pipeline checks exercise that property
 at a desk in minutes: they cover refusal-tail behavior, reason-code separation,
 launcher arguments, and the window environment allowlist. They do not create a
 clean live measurement window and therefore do not prove that the full physical
-pipeline succeeds end to end. That clean quiet-machine run remains planned and
-must be performed with development agents stopped; fixture-based tests must not
-be presented as hardware validation.
+pipeline succeeds end to end. The unattended rehearsal records prove scheduling
+and refusal behavior, not a claim-bearing `_v5` capture. That quiet-machine
+campaign must run with development agents stopped; fixture-based tests and
+rehearsal stubs must not be presented as hardware validation.
 
 ## 14. Glossary
 

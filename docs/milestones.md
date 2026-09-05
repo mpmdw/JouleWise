@@ -1,61 +1,63 @@
 # Milestones And Calendar Map
 
-Status: skeleton - real dates pending user input (task P1-008). Capstones
-fail by calendar, not by code (R-012); this file exists so schedule risk is
-visible in one place. Update dates the moment they are known; review at
-every phase start.
+Status: live sequence, with unresolved external dates named explicitly. The
+state kernel (`docs/process/state_kernel.json`) owns whether a step is ready;
+`RUN_STATE.md` owns the current restart point. This page records calendar
+constraints and the dependency order without turning an estimate into a
+promise.
 
 ## Known Date Constraints
 
-| Constraint | Date | Source |
+| Constraint | Recorded state | Truth source |
 |---|---|---|
-| Mac local-machine auth session (unblocks privileged powermetrics sample) | CLOSED 2026-07-06 - privileged sample captured and sudoers rule recorded (C-027 correction: this row had stayed "to reschedule" after the gate closed; the missed 2026-06-10 slot remains a historical note) | user; updated 2026-07-09 |
-| Project pause (vacation) | 2026-06-13 through 2026-07-04 | user; recorded 2026-07-05 so the run-report gap reads as planned, not stalled |
-| Supervisor approval meeting | TBD | P1-001 |
-| 3080 Ti borrow window | TBD | R-006; needed during Phase 3 Stage 3.4 |
-| Colloquium date | TBD | user/program |
-| Final report due | TBD | user/program |
+| Local Mac authorization needed for privileged `powermetrics` sampling | Closed on 2026-07-06; the privileged sample and restricted permission rule were recorded. | Phase 1 exit checklist; `RUN_STATE.md` project history |
+| Advisor meeting | On 2026-08-28, the meeting was moved one week later. No subsequent meeting outcome or replacement date is recorded in the repository. | `RUN_STATE.md`, T27c |
+| Evaluator acceptance bar, colloquium date, and final report deadline | Not yet recorded. Task `ED-DATES-01` remains the owner; no repository document may infer these dates. | `docs/process/state_kernel.json`, task `ED-DATES-01` |
 
-## Evidence-By Dates (C-027 / proposed D-060)
+## Live `_v5` Campaign Sequence
 
-Every external gate needs a hard evidence-by date with an automatic cut
-rule: if the gate is not proven by its date, the project moves
-permanently to the Mac + synthetic-transfer/analytical-composition
-floor for that dependency. Dates to be filled with P1-008. D-060 was RATIFIED 2026-07-10, so the
-automatic cut rule is ACTIVE once evidence-by dates are set with
-P1-008.
+The internal name `_v5` denotes the prospective Qwen3 campaign selected by
+D-164 through D-167. A *prospective* campaign fixes its plan and decision rules
+before the data they judge exist. None of the rows below asserts that a
+claim-bearing result has been collected.
 
-## Phase Targets
+| Order | Milestone | Calendar rule and evidence |
+|---|---|---|
+| Infrastructure gate | Finish the unattended-night supervisor and pin each night plan to the dedicated measurement checkout. | These gates precede every real window; see `RUN_STATE.md` T31 and D-169/D-171. |
+| Diagnostic probe | Run G2-a, the quiet-machine prompt-length probe. | It follows the infrastructure gate. Its date is selected through the governed night plan, not copied here; see state-kernel task `V5-G2A-PREFILL-PROBE-01`. |
+| Desk day | Authenticate the G2-a selection, generate the three `_v5` packs, and prove them in a fresh checkout. | It starts only after G2-a and the decode-identity correction; see state-kernel task `V5-DESK-DAY-01`. |
+| Shakedown and transaction | Prove the frozen pack on the measurement machine, then open the claim-bearing transaction under the authorization rule. | D-167 owns the order; state-kernel task `V5-TRANSACTION-01` owns the live gates. |
+| Nightly collection and desk checks | Run the pre-registered campaign nights, handing each completed night to the G3 check before another arm. | D-167 and the transaction task own the sequence. The repository does not promise a completion date. |
+| Issue and write | Produce governed floor and close-out artifacts, then fill only the paper statements those artifacts license. | D-078 bars all predecessor-corpus energy values from this step; the results-fill registry owns each fill. |
 
-Fill "Target end" from the real deadlines backwards once known. Until
-then, the dependency structure is the schedule.
+## Historical Phase Skeleton — Not A Live Schedule
 
-| Phase | Depends on | Hardware-critical window | Target end |
-|---|---|---|---|
-| 1: Approval, feasibility, measurement design | supervisor + device access | local auth session CLOSED 2026-07-06; lab answers | TBD |
-| 2: Harness + Mac slice + baselines | Phase 1 readiness gate | Mac sessions; remote-node access | TBD |
-| 3: Disaggregation + interconnect sweep | Phase 2 readiness gate | borrow window; network hardware | TBD |
-| 4: Analysis | dataset frozen | none (desk work) | TBD |
-| 5: Presentation + submission | Phase 4 gate | rehearsals, supervisor review | TBD |
+The original five-phase table is retained only to explain the repository's
+directory names. It no longer selects work or predicts dates; the live `_v5`
+sequence above and the state kernel do.
+
+| Historical phase | Original dependency | Present interpretation |
+|---|---|---|
+| 1: Approval, feasibility, measurement design | supervisor and device access | Method and access history; unresolved advisor/calendar input remains in `ED-DATES-01`. |
+| 2: Harness, Mac slice, and baselines | Phase 1 readiness gate | The Mac instrument path exists; current measurement work is the `_v5` campaign. |
+| 3: Disaggregation and interconnect sweep | Phase 2 readiness gate | Not a current paper-schedule promise. Any extension remains behind its live gate. |
+| 4: Analysis | dataset frozen | Current desk analysis follows authenticated campaign artifacts. |
+| 5: Presentation and submission | analysis gate | Dates remain unknown until `ED-DATES-01` records the evaluator calendar. |
 
 ## Scheduling Rules
 
-- Hardware-gated work is scheduled around access windows; desk work
-  (hardware-independent floors listed in each phase plan) fills the gaps -
-  no idle time while blocked.
-- The borrow window (R-006) must land after Stage 3.0 verdicts and the
-  rehearsed runbook exist; if it cannot, the GPU<->GPU pairing is descoped
-  per the ladder rather than rushed.
-- Phase 4 needs no hardware: it is the schedule buffer. If dates compress,
-  protect Phase 2's Mac slice and Phase 3's synthetic sweep first (the
-  R-012 floor), and shrink Phase 3's matrix before shrinking Phase 4's
-  audit rigor.
-- Slides (5.4) want frozen figures >=1 week before the colloquium;
-  the report (5.5) wants the claims-index final pass >=1 week before
-  submission. Work backwards from there when dates land.
-- Heartbeat (added 2026-07-05): if more than 14 days pass with no run
-  report and no recorded break in this file, the next session starts with
-  a milestones + risk-register review before any other work - a
-  calendar-risk-dominated project must notice its own silence. Planned
-  breaks are recorded in the constraints table above so they do not
-  trip this rule.
+- Quiet-machine measurement is never performed while an agent session is
+  active. The state kernel's machine-state lane and current operator card must
+  both authorize it.
+- The diagnostic probe, desk day, shakedown, transaction, nightly checks,
+  artifact issuance, and paper fills run in the order above. A later row never
+  borrows an unmet gate from an earlier row.
+- If G2-a cannot support a prefill arm, D-166 requires the registered refusal;
+  the threshold is not lowered after seeing data. If the timing-dominance test
+  fails, D-165 withdraws that sentence rather than changing the test.
+- Session-record heartbeat: if more than fourteen days pass with neither a
+  dated session record linked from `RUN_STATE.md` nor a recorded break here,
+  the next session starts with a milestones and risk-register review. A session
+  record may be a formal file under `docs/run_reports/` or the dated
+  `RUN_STATE.md` block plus its linked `docs/process_traces/` record, matching
+  the repository's current session-record convention.

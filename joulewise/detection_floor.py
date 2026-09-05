@@ -39,6 +39,10 @@ from joulewise.calibration_bracketing import (
     acceptance_allowance_rule,
     acceptance_bracket_screen_s,
 )
+from joulewise.detection_floor_registry import (
+    DetectionFloorClosedSets,
+    default_detection_floor_closed_sets,
+)
 from joulewise.identity_pins import (
     STACK_IDENTITY_DOMAIN,
     STACK_IDENTITY_FIELDS,
@@ -52,7 +56,8 @@ from joulewise.whole_window import (
 
 __all__ = [
     "SCHEMA_VERSION",
-    "FLOOR_METRIC_CATALOG",
+    "calibration_scope_is_registered",
+    "detection_floor_closed_sets",
     "METHOD_ID",
     "GUARD_RULE_ID",
     "TRANSPORT_RULE_ID",
@@ -190,12 +195,23 @@ COMMON_MODE_PARAMETER_SHA256 = hashlib.sha256(
     ).encode("utf-8")
 ).hexdigest()
 
-_CALIBRATION_SCOPES = (
-    "window_a",
-    "window_b_revalidation",
-    "production_window",
-    "smoke",
-)
+def detection_floor_closed_sets() -> DetectionFloorClosedSets:
+    """Return the checksum-authenticated analysis declaration registry."""
+
+    return default_detection_floor_closed_sets()
+
+
+def calibration_scope_is_registered(
+    scope: object,
+    *,
+    registry: DetectionFloorClosedSets | None = None,
+) -> bool:
+    """Return whether ``scope`` is declared by an authenticated registry."""
+
+    closed_sets = detection_floor_closed_sets() if registry is None else registry
+    return isinstance(scope, str) and scope in closed_sets.calibration_scopes
+
+
 _CONSUMPTION_SEMANTICS_IDS = {
     MINTED_CONSUMPTION_SEMANTICS_ID,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
@@ -245,17 +261,6 @@ _FLOOR_MINT_COMPONENT_PIN_KEYS = {
     "drift_allowance_j",
     "order_manifest_id",
 }
-FLOOR_METRIC_CATALOG = (
-    "gross_energy_j",
-    "energy_request_j",
-    "idle_subtracted_energy_j",
-    "phase_energy_j.tokenize",
-    "phase_energy_j.prefill",
-    "phase_energy_j.decode",
-    "phase_energy_j.serialize",
-    "phase_energy_j.transfer",
-    "phase_energy_j.deserialize",
-)
 # DATA FOR A FUTURE GATE, NOT ENFORCEMENT: source_class records how the
 # artifact's source evidence was obtained, but it does not make that evidence
 # claim-eligible. The enforcement counterpart is a separate registered task:
@@ -317,24 +322,25 @@ TRANSPORT_REASON_CODES = (
 def validate_floor_metric_window_class(
     metric: object,
     window_class: object,
+    *,
+    registry: DetectionFloorClosedSets | None = None,
 ) -> tuple[str, str]:
     """Return a governed floor metric/window pair or raise ``ValueError``."""
 
+    closed_sets = detection_floor_closed_sets() if registry is None else registry
     if not isinstance(metric, str) or not metric:
         raise ValueError("cell metric must be a nonempty string")
-    window_classes = ("request", "phase")
+    window_classes = tuple(dict.fromkeys(closed_sets.metric_window_classes.values()))
     if window_class not in window_classes:
         raise ValueError(
             f"cell window_class must be one of {window_classes}, "
             f"got {window_class!r}"
         )
-    if metric not in FLOOR_METRIC_CATALOG:
+    if metric not in closed_sets.metric_window_classes:
         raise ValueError(
-            f"invalid metric {metric!r}: not in FLOOR_METRIC_CATALOG"
+            f"invalid metric {metric!r}: not in the detection-floor registry"
         )
-    expected_window_class = (
-        "phase" if metric.startswith("phase_energy_j.") else "request"
-    )
+    expected_window_class = closed_sets.metric_window_classes[metric]
     if window_class != expected_window_class:
         if expected_window_class == "phase":
             raise ValueError(
@@ -2943,8 +2949,8 @@ def _validate_provenance(
             )
         else:
             calibration_plan_sha256 = calibration_plan["sha256"]
-        if calibration_plan["declared_calibration_scope"] not in (
-            _CALIBRATION_SCOPES
+        if not calibration_scope_is_registered(
+            calibration_plan["declared_calibration_scope"]
         ):
             errors.append(
                 f"{where}.calibration_plan.declared_calibration_scope: "
@@ -3098,7 +3104,9 @@ def _validate_provenance(
             errors.append(f"{producer_where}.sha256: duplicate producer plan hash")
         else:
             producer_hashes.add(plan_sha256)
-        if producer["declared_calibration_scope"] not in _CALIBRATION_SCOPES:
+        if not calibration_scope_is_registered(
+            producer["declared_calibration_scope"]
+        ):
             errors.append(
                 f"{producer_where}.declared_calibration_scope: must be recognized"
             )
@@ -4237,7 +4245,7 @@ def validate_floor_artifact(
         return errors
     if value["schema_version"] != SCHEMA_VERSION:
         errors.append(f"artifact: schema_version must be {SCHEMA_VERSION!r}")
-    if value["calibration_scope"] not in _CALIBRATION_SCOPES:
+    if not calibration_scope_is_registered(value["calibration_scope"]):
         errors.append("artifact: invalid calibration_scope")
     if value["source_class"] not in _SOURCE_CLASSES:
         errors.append("artifact: invalid source_class")

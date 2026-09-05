@@ -1,0 +1,56 @@
+        assert numeric_estimate is not None
+        assert metrology_interval is not None
+        assert decision is not None
+        if floor is None or reasons & _NOT_RESOLVABLE:
+            outcome = "not_resolvable"
+        else:
+            if equivalence is None and abs(numeric_estimate) <= floor:
+                reasons.add("effect_not_above_floor")
+
+            if equivalence is not None:
+                margin = _finite(equivalence.get("margin")) if isinstance(equivalence, Mapping) else None
+                method = equivalence.get("method") if isinstance(equivalence, Mapping) else None
+                if margin is None or margin <= 0.0 or method != "tost_v1":
+                    reasons.add("equivalence_not_supported")
+                elif margin <= floor:
+                    reasons.add("equivalence_margin_not_above_floor")
+
+            if reasons & _NOT_RESOLVABLE:
+                outcome = "not_resolvable"
+            elif reasons & _UNRESOLVED:
+                outcome = "unresolved"
+            elif equivalence is not None:
+                margin = float(equivalence["margin"])
+                if (
+                    not _inside_equivalence(metrology_interval, margin)
+                    or not _inside_equivalence(decision, margin)
+                    or not adjusted_rejected
+                ):
+                    reasons.add("equivalence_not_supported")
+                    outcome = "unresolved"
+                else:
+                    outcome = "equivalent"
+            elif (
+                metrology_interval[0] <= 0.0 <= metrology_interval[1]
+                or decision[0] <= 0.0 <= decision[1]
+            ):
+                if not (metrology_interval[0] <= 0.0 <= metrology_interval[1]):
+                    reasons.add("deterministic_bound_obscures_direction")
+                    outcome = "not_resolvable"
+                else:
+                    outcome = "unresolved"
+            elif not adjusted_rejected:
+                reasons.add("multiplicity_not_rejected")
+                outcome = "unresolved"
+            else:
+                outcome = "direction_supported"
+
+    direction = None
+    if outcome == "direction_supported" and numeric_estimate is not None:
+        direction = "positive" if numeric_estimate > 0.0 else "negative"
+
+    demoted = confirmatory_status != "confirmatory"
+    legacy = evidence_class == "legacy_l1"
+    sensitivity_reasons = reasons & {
+        "randomization_sensitivity_disagrees",
+        "loo_verdict_influential",
