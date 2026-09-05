@@ -159,3 +159,9 @@ External custody remains outside the repository and must be freshly created by
 the named tools; it is not a request to widen repository scope. No production
 pack, test, pinset, custody artifact, generator byte, or Phase-2 report was
 changed in this seat.
+
+## Paper destination
+
+Registry rows `V5-WL-001` and `V5-WL-004` carry the fixed-zero decode
+assignment and its paper disclaimer. The disclaimer is placed in the Section 1
+workload paragraph: `draft-v2-skeleton.md, workload paragraph, paper-K seat`.
