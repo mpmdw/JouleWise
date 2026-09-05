@@ -77,7 +77,7 @@ for j,b in enumerate(sy['blocks']):
 t(s,30,282,'One shared sign s; independent signs e1,e2 → δ′j = δj + s qj + ej ℓj → eight rows in Table 4.')
 t(s,30,319,'Maximum: (s,e1,e2) = (+1,−1,+1) → (0.4278157324, 1.1582423076) J.',17)
 t(s,30,352,'Recompute mean, SD and largest magnitude → Ucmp,shared = 8.8304376431 J.',17)
-t(s,30,392,'A shared energy sign does not replay one physical time shift across blocks; no common-time conservatism is proven.')
+t(s,30,392,"A shared energy sign does not replay one timing shift across all blocks or prove its limit covers that shift's effect.")
 save(s,'figA4_shared_signs.svg')
 s=begin('Figure A6. Current-anchor pulse 9 fit and projected enclosure',1100,615)
 t(s,30,32,'Figure A6. Historical pulse 9 under the current anchor: records, fit, enclosure',20)

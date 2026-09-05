@@ -153,8 +153,8 @@ is replayed across all blocks and one local sign is chosen per block. Their
 quotient is \(R_{cm}=U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). This
 \(R_{cm}\) quantity is a **shared-energy-sign/local-corner sensitivity
 diagnostic**: it retains one shared sign for block-level energy allowances and
-one local sign per block. It does not globally replay one physical common-time
-shift and has no proven conservatism for common-time motion. Both ratios
+one local sign per block. It does not replay the same timing shift in every block
+or prove that its limit covers the effect of such a shift. Both ratios
 measure enlargement under specified perturbation sets; they do not estimate
 how often or how strongly those errors occur.
 
@@ -393,7 +393,7 @@ checked is unauthenticated and cannot select a ratio outcome.
 
 The comparative \(R_{cm}\) diagnostic first derives a block-level energy
 allowance from shared start and end movements within each A/B/B/A block. This
-within-block construction is not a global common-time replay across blocks.
+within-block construction does not replay the same timing shift in every block.
 For a block \(j\), start
 with its admitted point difference \(\delta_j\). Reintegrate the four retained
 power traces after moving all four phase starts by the same shift while holding
@@ -808,7 +808,7 @@ power distribution within a record.
 
 Transfer of the pulse-derived timing allowance to inference was not tested.
 The shared-energy-sign/local-corner ratio is a sensitivity calculation with
-no proven conservatism for physical common-time motion. The floor construction in protocol P.3 is operational; it supplies no new model
+no proof that its limit covers the effect of the same timing shift in every block. The floor construction in protocol P.3 is operational; it supplies no new model
 comparison or empirical coverage guarantee.
 
 ### Further limitations
