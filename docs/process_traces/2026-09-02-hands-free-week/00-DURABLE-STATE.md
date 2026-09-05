@@ -297,3 +297,15 @@ THEN, in order:
   when CI settles. Paper-K #288: replay running (row 9). Paper-L: parser fix round 1b running (wt-paper-l).
 - D-165: round 6 widened the census (RED only on draft :29/:1387/:1738 until paper-K/L land); round 7 (luna) bounds
   the round7 plan hits; then merge main → census GREEN → Opus re-check → PR (author the registry merge).
+
+## 2026-09-04 ~21:25 PDT — final pre-handoff delta (supersedes the lane lines above where they differ)
+- PR #290 paper-L opened (base feat/2026-09-04-paper-k; retarget to main after #288 merges): delta 05 CLEAN, apex
+  99 LANDABLE; rows 9/11/12 pending. Enclosure and D-166 registry rows ride in #290; the enclosure branch needs no
+  separate PR; D-166's generator change still needs its own PR after #290.
+- PR #289 seam: git-init helper fix f13e3a44 pushed; CI rerun pending; the codex_app_bridge timeout in job
+  test (3.14, 3) was a runner timeout, not seam-related — rerun the job if it repeats.
+- PR #288 paper-K: replay was still running at handoff (~/.claude/jobs/3c46c831/tmp/paperk-replay.log, killed by
+  the handoff); rerun on its head d053e969 at low load, fill row 9, merge, then retarget #290 to main.
+- Paper-side one-row cure queued: draft-v2-skeleton.md ~:1738 ledger phrase "timing error common to" (D-165
+  census survivor) → next paper round (with #290 or after).
+- Install notice emailed to Ed 21:05 PDT (thread "INSTALL NOTICE — magistrate watchdog goes live tonight").
