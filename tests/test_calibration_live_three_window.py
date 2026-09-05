@@ -57,6 +57,7 @@ from joulewise.powermetrics_fiducial import (
 from joulewise.schemas import CalibrationBracketingPolicy
 from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 from scripts import validate_powermetrics_fiducial as production_writer
+from tests.git_fixture import init_git_fixture
 from tests.receipt_corpus import ReceiptCorpus
 
 
@@ -173,7 +174,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             _pin_bytes(_pin_for(base_receipts.one(sequence=cls.base_sequence)))
         )
 
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        init_git_fixture(root, "-q")
         subprocess.run(
             ["git", "config", "user.email", "tests@joulewise.invalid"],
             cwd=root,
@@ -1354,7 +1355,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         pin.parent.mkdir(parents=True)
         ledger.write_bytes(self.final_ledger_bytes)
         pin.write_bytes(self.final_pin_bytes)
-        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        init_git_fixture(repo, "-q")
         subprocess.run(
             ["git", "config", "user.email", "tests@joulewise.invalid"],
             cwd=repo,

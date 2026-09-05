@@ -30,6 +30,7 @@ from tests.test_calibration_bracketing import (
     _unissued_acceptance_fixture_bytes,
 )
 from tests.receipt_corpus import ReceiptCorpus
+from tests.git_fixture import init_git_fixture
 from joulewise.calibration_bracketing import (
     _canonical_sha256 as acceptance_canonical_sha256,
     _valid_acceptance_bound,
@@ -141,7 +142,7 @@ class CalibrationLedgerTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        init_git_fixture(repo, "-q")
         subprocess.run(
             ["git", "config", "user.email", "tests@joulewise.invalid"],
             cwd=repo,

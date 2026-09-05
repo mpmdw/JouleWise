@@ -160,3 +160,84 @@ beside its prompt; harvest from disk, never relaunch blind.
   Q4 floor-prompt regeneration decision, Q6 scope freeze ruling (skill-distill second convening PARKED until Q6).
 - Kernel rows merged to main (branch head 064b0dbc; merge landed with the next push). AUTH round 3 running with the registry file in scope (report 15).
 - Still running: custody fix 4, paper-J fix 1, wave-2 replay-3 (PR #285 rows 9/11/12 pending).
+
+## 2026-09-04 ~22:30 PT — consult complete; astra mirrors the magistrate; cures in flight
+
+- Consult seats archived: 10 Sol physics, 11 Opus contract, 12 blind Fable. Draft ruling 13 on main (cfdb24ac).
+  Ed (in chat): "when astra gets back … assess its work … have it mirror your tasks and you two discuss final
+  moves" → assessment given in chat; astra peer-magistrate seat running → 14 (wt-astra-peer). Then 15 (magistrate
+  reply), 16 (astra final), 17 (final ruling) → cold Fable gate. PARKED lanes launch no new rounds until 17.
+- Custody seam: fix 4 f2d35b4f, delta 4 LANDABLE (10). F1 = token recoverable by private introspection →
+  outside D-161 ordinary-operator threat; cure = narrow contract lines 53-56/75-81, no code round. F2 = census
+  regression is a string count → test debt, recorded. Peer-audit 02-F4 width recomputation: factor the mint's
+  reconstruction (1–2 days) — packet question, not a round. Seal the paper-supply packet AFTER 17 (D-173 amendments).
+- FB-PLANNING-METADATA-01 (wt-fb-metadata): seat landed keys, but detection_floor.py:3353 compares the artifact's
+  object to the canonical emitter by exact equality (also :3845, :4115, analysis_engine/artifact.py:494) → every
+  previously issued floor object would fail validation. HELD, not merged; needs SINGLE_COUNT_DISCIPLINE_ID .v2
+  with a version-aware validator + adapter_contracts.md amendment = cold-gate item in 17.
+- ESTIMAND-ENCLOSURE-01 (wt-estimand-enclosure) still running; its blast-radius report decides field vs script.
+- Legacy L1: rounds 1+2 on feat/2026-09-04-legacy-l1 (a379b5af), execution refuter running → PR.
+- Paper-J: PR #286 open (rows 9/11/12 pending). Wave-2 PR #285 replay-3 still running. AUTH round 3 running
+  (last round; PARK after).
+
+## 2026-09-05 ~02:00 PT — final ruling 17 written; cold-gate packet sealing; paper-K launched
+
+- Peer discussion closed (14 astra plan, 15 reply, 16 astra final). FINAL ruling 17 on main (e323f1aa) with the
+  decision-log addendum texts (D-078, D-083, D-165, D-166, scope-freeze rule, D-161 line). NOT ratified until the
+  cold Fable gate rules: packet seat → 40-coldgate-packet-ruling-17.md (wt-packet-ruling-17); then convene cold
+  Fable (doctrine-free worktree, foreground-only charge) + Opus refuter; then decision-log edits + email Ed.
+- Ed emailed (thread "three questions only you can answer"): due date / fallback acceptability; same-condition vs
+  ensemble prompt question (default prompt-0 contrast); estimand relabel veto. Defaults proceed if silent.
+- Seats running: paper-K (wt-paper-k, off paper-J head + 17 staged; provisional under 17); wave-2 T0 test cure
+  (wt-int-fan-wave2; test-only; fanout/31); legacy-L1 delta 3 (24); AUTH round 3 (last; PARK after);
+  paper-J full replay (~/.claude/jobs/3c46c831/tmp/paperj-replay.log) for PR #286 row 9.
+- Held branches: feat/2026-09-04-estimand-enclosure (accepted conditionally in 17 Q1; needs inside-one-record
+  oracle + delta), feat/2026-09-04-fb-metadata (re-brief to 17 Q3 shape after the gate).
+- Wave-2 #285: replay-3 5116 tests, 2 failures diagnosed (fanout/30): node-worker = environmental pre-existing
+  (ledger wording in 30); T0 real-boot = test defect, cure seat running; row 9 fills with the re-run tail.
+- Internal cuts adopted: readiness proven by 6 Sep or fallback; last acquisition night 8 Sep; freeze 9 Sep.
+
+## 2026-09-05 ~05:30 PT — ruling 17 RATIFIED as amended (gate 41/42, synthesis 43); post-gate seats running
+
+- Cold gate: 41 (Fable) + 42 (Opus refuter) agree; 43 adopts every amendment. Enclosure = DESK SCRIPT (reducer field
+  rejected: strict validation of stored 0.5.2/0.6.2 summaries). D-166 sentence and scope-rule insertion adopted;
+  D-161 as rule text. Dates: last acquisition night 8 Sep; desk 9 Sep 06:00–18:00; freeze 9 Sep 18:00 PT.
+- Seats: dl-ratify (decision-log addenda D-078/D-083/D-165/D-166, new D-174, D-161 line; wt-dl-ratify);
+  enclosure-script (revert reducer, scripts/paper/partial_record_enclosure.py + DERIVE row; wt-estimand-enclosure);
+  fb-v2 (SINGLE_COUNT_DISCIPLINE .v2, ten equality sites; wt-fb-metadata); d165-relabel (wt-d165-relabel);
+  d166-prompt0 (census first, NEEDS_SCOPE allowed; wt-d166-prompt0); paperk-fix1 (F1 terms + F2 note; title →
+  astra's 'Timing Sensitivity of Phase-Energy Assignments on Apple Silicon'; wt-paper-k).
+- PRs: #285 wave-2 (merged main; T0 test cure; rows filled at f1600c10; CI watched); #286 paper-J (rows 11/12
+  filled; full replay running for row 9); #287 legacy-L1 (opened; rows 9/11/12 pending). AUTH parked at 93d0d91c.
+- Ed emails outstanding: due date/fallback; ensemble vs same-condition; estimand relabel veto (defaults running).
+
+## 2026-09-05 ~08:00 PT — MODEL ROUTING CHANGE (Ed, in chat): astra replaces Sol everywhere
+"keep spamming astra use it instead of sol in all cases now. use sol where you would have used terra. luna max for
+simple tasks. astra high for an equal use in all parts for fable 5.1 with 5.1 deciding final merges."
+→ every NEW seat: `-m gpt-6-astra --effort high` (xhigh on the usual triggers); Sol = mid tier; luna `--effort max`
+= simple tasks (probe running); astra is an equal peer in review/consult/adjudication; Fable merges. Recorded in
+memory (instrument-mix-authority). First astra seats under the rule: paperk-astra (peer review beside Opus),
+packet-paper-supply-2 (D-173 cold-gate packet seal with seam head 84b24686 and 43 Q6 / 02-F4 questions).
+Still-running Sol seats (launched before the rule) finish as is: d174-wire, enclosure-script, fb-v2b.
+
+## 2026-09-05 ~13:00 PT — D-173 gate closed; astra routing + orchestration adopted; lanes in gauntlet
+- D-173: cold gate 21 (Fable) + 22 (Opus) → 23 synthesis: ADOPTED AS AMENDED (receipt clause replaced; scope /
+  non-issuing type / git_blob coverage / whole-window clauses; Q-PS-3 acceptance spec with seven cases →
+  REFUSAL-CARRIER-01; Q-PS-4 one mint desk check; Q-PS-5 Q-R1-2 REFUSED). Luna seat installs the D-173 addendum
+  (wt-d173-adopt). Astra round-5 design spec running (wt-seam-spec → paper-custody/11).
+- Orchestration: astra design consult 01 adopted as routing 02 (docs/process_traces/2026-09-05-orchestration/).
+- Lanes: paper-K fix 2 committed (1dcf45bf), delta 3 running; enclosure fix 1 (Opus C-1/C-2) running; F+B v2
+  round 3 (R1 aggregation, R2 html) running; D-165 relabel fix 2 (R1 floor mirrors, R2 night_gate pin, R3
+  wording) running; D-166 luna registry fix running. PR #286 paper-J + PR #287 legacy: full replays running
+  (~/.claude/jobs/3c46c831/tmp/{paperj,legacy}-replay.log) for row 9.
+- Ed's three questions still open by email (defaults running).
+
+## 2026-09-05 ~16:30 PT — paper-K PR #288 (stacked on #286); ruling-17 code lanes in delta; D-173 adopted on main
+- PR #288 paper-K (92f1ca19 + 99) base = feat/2026-09-04-paper-j; retarget to main after #286 merges. CI watched.
+- Enclosure: fix 1 (Opus C-1..C-6) committed 5a29be48, astra delta running (39). F+B v2: round 3 committed
+  df1a2d82, astra delta 2 running (39-fb). D-165: fix 2 committed c43b7086 (floor-pack generator digests change →
+  custody supersession before collection), astra delta running (05). D-166: registry fix committed 3aeed4ed,
+  astra delta running (05). Seam round-5 design spec (astra xhigh) still running → paper-custody/11.
+- D-173 adopted as amended on main (2fcf4397). Orchestration adoption 02 on main.
+- Replays for #286 (paper-J) and #287 (legacy) still running under load ~10 (both machine-heavy).
+- Rule learned (memory): merge to main ONLY from the canonical checkout; never `pull --ff-only` in a worktree.

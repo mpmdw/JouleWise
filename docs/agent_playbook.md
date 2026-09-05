@@ -1,83 +1,62 @@
 # Agent Playbook: Ordered Missions
 
 Audience: an agent (or human) told "go do the next step" with no other
-context. This file turns the project's plans into self-contained,
-executable missions. Each mission says what to read, what to do, how to
-verify, and what to update afterward.
+context. This file retains the preflight that every session runs and the
+historical mission wrappers that explain how the early implementation was
+built. Live work is selected only from `RUN_STATE.md` and the state kernel;
+the historical missions below are not a menu of available work.
 
 Division of labor (D-023 discipline — do not duplicate):
 
-- **This file owns:** the operational wrapper per mission (read-first
-  lists, execution order, verification commands, handoff checklists) and
-  the code-level pointers from the 2026-07-05 external code review that
-  exist nowhere else.
+- **This file owns:** Mission M0 preflight and the archived operational
+  wrappers for early missions, including code-level pointers from the
+  2026-07-05 external code review that exist nowhere else.
 - **It points to:** `docs/phase_N/phase_N_plan.md` for objectives, gates,
   acceptance criteria, and fallbacks; `docs/phase_2/
   hardware_slice_implementation_guide.md` for hardware-slice pinned APIs;
   `docs/decision_log.md` for settled decisions; the phase exit checklists
   for current per-item status.
-- **No status lives here.** To find out what is already done, read
-  `RUN_STATE.md` and the exit checklists. To find out what outranks what,
-  read `TASK_QUEUE.md`. If this playbook and a plan disagree, the plan
-  wins; fix the drift in the same run.
+- **No status lives here.** The generated regions in `RUN_STATE.md` and
+  `TASK_QUEUE.md` project live work-selection state from
+  `docs/process/state_kernel.json`; phase exit checklists own per-item
+  completion. Named decisions and task fences remain binding if prose drifts.
 
-## How To Pick A Mission
+## How To Select Live Work
 
 1. Run Mission M0 (preflight) — always.
-2. Take the highest-ranked task in `TASK_QUEUE.md` whose gate is open.
-3. Find its mission below and execute it. One mission per session unless
-   the first finishes early and cleanly.
+2. Execute the task selected by the generated restart and queue views, then
+   use its authority pointer to find the applicable mission or plan.
 
-Gate summary (check the queue/checklists for live status; this is just
-the dependency shape):
-
-```text
-ungated, any time:      M1 (Slice 2N), M2 (backup protocol prep), M3 (related work)
-needs user/advisor:     M4 (D-016 model selection), and the P1 evidence gates
-needs D-016 + install:  M5 (2G MLX)
-needs auth session:     M6 (2H powermetrics)
-needs M5+M6:            M7 (2I Mac slice — the flagship)
-needs P1-006 evidence:  M8 (2K/2L remote-target live validation;
-                         2K fixture-first stack merged 2026-07-08 via PR #11)
-needs M7:               M9 (2M baselines)
-post-docs branch:       M10 Stage 3.0.1 verdict is replay_supported
-                         after lead live re-verification
-needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
-```
+A session may execute one task or multiple genuinely independent task
+records. Multiple writers require orchestration’s separate-worktree and
+two-writer rules; rank may be bypassed only by an active stop card, explicit
+user direction, or a recorded safety emergency.
 
 ---
 
 ## Mission M0: Preflight (every session)
 
-1. Read only the targeted `RUN_STATE.md` sections: `ACTIVE_STOP_CARD`
-   if present, "Current Project Status", "Known Workspace State", and
-   "What Is Next". If the stop card is ACTIVE, it overrides this
-   playbook and the task queue until cleared.
-2. Read `TASK_QUEUE.md`'s Current Queue and Do-Not-Do-Yet list.
-   A pending `kind: decision` dependency in `state_kernel.json` is an
-   uninstalled ruling — the task is not selectable until the dependency is
+1. Read the generated `RUN_STATE.md` intake/restart region. If a stop card is
+   active, follow only its pointer.
+2. Read the selected kernel or generated queue row and the manual
+   Do-Not-Do-Yet list. A pending `kind: decision` dependency in the kernel is
+   an uninstalled ruling: the task is not selectable until the dependency is
    satisfied with an evidence pointer (D-170).
-   A brief that installs a ruling carries the clause map as an `ACCEPTANCE` item — `docs/contracts/bridge_protocol.md` §1 Clause map (`docs/process_traces/2026-09-02-process-rules/MAGISTRATE-RULING-process-rules.md`).
-3. Read the selected mission's own read-first list. Read `AGENT_PLAN.md`
-   only at phase starts or when the project structure changes. Consult
-   `docs/decision_log.md` by targeted decision ID, not as a whole-file
-   intake step.
-   If the session involves delegation, review, or multi-stream work, also
-   read `docs/orchestration.md` (the process layer) — not optional for
-   landing code.
-4. Check workspace state with `git status --short --branch`; inspect
-   recent commits only when the handoff or mission needs them.
-5. Run `python3 -m unittest discover -s tests`, then compare its result with
-   the CI result for the current head (the commit being checked). A red suite
-   is itself the mission: stop and fix or report.
-6. Review `docs/risk_register.md` at phase starts, before hardware tasks,
-   when a trigger fires, or if >14 days passed since the last run report
-   with no break recorded in `docs/milestones.md`.
-7. At session end, always: update `RUN_STATE.md`, update `TASK_QUEUE.md`,
-   write a dated run report in `docs/run_reports/`, update the phase exit
-   checklist for anything that closed, and `PROJECT_STATUS.md` if
-   advisor-visible state changed. Commit when the user asks or has
-   standing-approved it.
+3. Read the task authority, acceptance, and targeted mission or plan
+   pointers. Consult `docs/decision_log.md` by targeted decision identifier,
+   not as a whole-file intake step. A brief that installs a ruling carries
+   the clause map as an `ACCEPTANCE` item; see
+   `docs/contracts/bridge_protocol.md` §1, “Clause map.”
+4. Read `AGENT_PLAN.md` only for phase or structure changes, read the risk
+   register when an existing trigger applies, and read the latest report when
+   the selected state points to it.
+5. For delegation, review, or multiple streams, read
+   `docs/orchestration.md` before writes.
+6. Inspect workspace state with `git status --short --branch`; inspect recent
+   commits when the handoff or task needs them, then run task-proportionate
+   baseline checks. A failing required baseline is part of the handoff: fix it
+   within authority or report it rather than treating historical green
+   evidence as current.
 
 Environment cautions:
 
@@ -89,6 +68,14 @@ Environment cautions:
 - Schema changes are additive-only until v0.2 (R-015/D-008).
 
 ---
+
+## Historical Missions M1–M10 — Do Not Select
+
+The wrappers below are retained as implementation history. Their queue labels,
+gates, branch names, and “next” language describe the project before the live
+`_v5` campaign. Completed or superseded work stays readable here, but no
+session may start one of these wrappers merely because its old prose says it
+is ungated. Use the state kernel as described above.
 
 ## Mission M1: Slice 2N — Pre-Hardware Hardening (queue P2-007)
 
@@ -324,6 +311,9 @@ argue).
 
 ## Mission M4: Close D-016 Model Selection (queue P2-004)
 
+**Historical only.** D-164 selected the live Qwen3 pair and D-167 installed
+the `_v5` campaign. Do not execute this predecessor selection wrapper.
+
 **Gate:** P1-001 supervisor scope OR an explicit user go-ahead recorded
 in the run report. Never close it silently (Do-Not-Do-Yet list).
 **Criteria + candidate set:** D-016 in `docs/decision_log.md`.
@@ -446,9 +436,10 @@ Wrapper notes:
   matrix with `validate-config` before any hardware time.
 - Interleave conditions per D-014 where model-reload cost permits;
   record executed order in the experiment manifests.
-- Handoff: manifests + bundles; `docs/phase_2/baseline_results.md` with
-  variance and the prefill/decode comparison; back up the corpus; run
-  report.
+- Historical handoff: manifests and bundles, the owning Phase 2 exit-checklist
+  evidence, corpus backup, and a run report. The former
+  `docs/phase_2/baseline_results.md` pointer never resolved to a repository
+  file and is not a current destination.
 
 ## Mission M10: Phase 3 Stage 3.0 — KV Feasibility Spikes
 
@@ -471,7 +462,13 @@ Wrapper notes:
 
 ## After Any Mission
 
-The M0 step-6 handoff list, plus: if you changed an adapter or bundle
-contract, `docs/contracts/` must already reflect it (same run); if you
-made a choice between real alternatives, the decision log must already
-hold it. A mission whose bookkeeping is missing is not done.
+Update live task state in `docs/process/state_kernel.json`, then run
+`python3 scripts/gen_state.py`; never hand-edit either generated region.
+Write the dated run report, update the owning phase exit checklist for anything
+that closed, and refresh `PROJECT_STATUS.md` when advisor-visible state
+changed. For code changes, run the canonical suite unless the controlling
+brief explicitly narrows verification; record every check actually run. If an
+adapter or bundle contract changed, update its owner under `docs/contracts/`
+in the same run. If a choice between real alternatives was made, the decision
+log must already hold it. A mission whose required evidence or bookkeeping is
+missing is not done.

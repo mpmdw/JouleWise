@@ -11,8 +11,10 @@ implementation contract. Pinned facts from the draft brief remain valid
    METHOD_ID / TRANSPORT_RULE_ID / SINGLE_COUNT_DISCIPLINE_ID unchanged.
    NO v1 writer, NO migration arm (no v1 artifact ever persisted);
    validator rejects v1 after the bump.
-2. W8 — public FLOOR_METRIC_CATALOG in detection_floor.py, imported by
-   floor_extraction.py; NINE entries: gross_energy_j, energy_request_j,
+2. W8 — the frozen detection-floor registry (`joulewise/detection_floor_registry.py`,
+   `load_detection_floor_closed_sets`, fail-closed against a source-pinned trust
+   anchor; it replaced the former public FLOOR_METRIC_CATALOG on 2026-09-04,
+   MODULARITY-01) consumed by detection_floor.py and floor_extraction.py; NINE entries: gross_energy_j, energy_request_j,
    idle_subtracted_energy_j, phase_energy_j.{tokenize, prefill, decode,
    serialize, transfer, deserialize}. One shared metric/window-class
    validator used by validate_floor_artifact AND governed_cell_metric;

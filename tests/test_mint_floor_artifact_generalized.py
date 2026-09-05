@@ -36,6 +36,7 @@ from joulewise.analysis_engine.registry import (
     sha256_bytes,
 )
 from joulewise.bundle_read import BundleReader
+from tests.git_fixture import init_git_fixture
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
     STACK_IDENTITY_DOMAIN,
@@ -4600,7 +4601,7 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
     binding = load_json(binding_path)
     second_binding = load_json(second_binding_path)
 
-    _run_fixture_command(["git", "init", "-q"], cwd=repository)
+    init_git_fixture(repository, "-q")
     _run_fixture_command(["git", "config", "user.name", "D117 Fixture"], cwd=repository)
     _run_fixture_command(["git", "config", "user.email", "d117@example.invalid"], cwd=repository)
     _run_fixture_command(["git", "add", "."], cwd=repository)

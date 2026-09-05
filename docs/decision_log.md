@@ -216,7 +216,8 @@ be re-derived by a future agent gets an entry here.
 | D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | adopted (magistrate, 2026-09-03; installed by PRs #273, #274, #275) |
 | D-171 | HANDS-FREE WEEK — Ed's delegations for unattended windows: E-10 amended (driver invokes the launcher), hC + transaction GO delegated to the magistrate's gate, watchdog install authorized, 5-min stand-down | ratified (Ed, 2026-09-02) |
 | D-172 | REAL-ENTRY-POINT SUBPROCESS TEST — any change to the magistrate watchdog, its installer, its launchd templates, or its session argv ships with a green subprocess test of the real entry point plus one named RED mutation | adopted (magistrate on the cold gate's amended text, packet 21 Q-PROC, 2026-09-04; Ed notified, may veto) |
-| D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | proposed (magistrate, provisional, 2026-09-04, after a three-seat consult; pending the paper-supply cold gate before any supplier merges; Ed may veto) |
+| D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
+| D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 
 ---
 
@@ -10931,3 +10932,200 @@ Status: PROVISIONAL. Adopted by the magistrate to unblock the seam's
 construction; it is placed before the next cold gate (the paper-supply
 packet) BEFORE any supplier lands on main; Ed notified by email the same day
 and may veto.
+
+## D-078 dated addendum (magistrate via dictated-fills seat, 2026-09-04): interval-overlap estimand and clause-11 withdrawal
+
+For phase and request metrics formed from interval-average sampler records, the
+estimand is energy assigned by interval-overlap allocation. The timing envelope
+describes movement of that allocation over the registered timing domain,
+conditional on the held-average reconstruction; it does not bound physical
+energy under arbitrary within-record allocations or establish inference transfer
+or future-error coverage. Withdraw clause 11's unrestricted largest-false-effect
+and permanent-dominance assertions. Preserve the labelled widened-floor path and
+both mandatory roles: the published floor and the claim's separately widened
+decision interval. F+B is only a non-gating planning diagnostic, never an
+effective-clearable-effect guarantee; neither role may be removed as double
+counting. Historical bytes remain unchanged; new disclosures use a versioned
+rule. The nonnegative partial-record enclosure is a diagnostic of allocation
+ambiguity at the registered window; it is reported, never composed into any
+bound.
+
+Gate records:
+`docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`;
+`docs/process_traces/2026-09-04-peer-audit/42-coldgate-opus-refutation-packet-17.md`;
+synthesis
+`docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
+
+## D-083 dated addendum (magistrate via dictated-fills seat, 2026-09-04): separate gates supersede F+B as a joint description
+
+Supersede D-083's endorsement of F+B as the correct joint clearable-effect
+description; preserve its rejection of an additive acceptance gate. Checks
+remain separate: |estimate|>F and exclusion of zero by both metrology and
+decision intervals, plus multiplicity and evidence/eligibility requirements.
+For a symmetric metrology interval estimate±h and symmetric nonnegative widening
+B, the numerical conjunction is |estimate|>max(F,h+B); asymmetric intervals use
+actual endpoints. Both roles remain mandatory. F+B is heuristic planning,
+neither necessary nor sufficient for acceptance; absent suppliers remain
+absent. New metadata retains both_terms_required:true, states gating:false, and
+uses a distinct rule version with version-aware consumers; legacy objects retain
+exact bytes and historical meaning.
+
+Gate records:
+`docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`;
+`docs/process_traces/2026-09-04-peer-audit/42-coldgate-opus-refutation-packet-17.md`;
+synthesis
+`docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
+
+## D-165 dated addendum (magistrate via dictated-fills seat, 2026-09-04): R_cm is a sensitivity diagnostic
+
+Supersede the physical common-time interpretation and R-5's fiducial-shift
+cancellation rationale. A uniform additive energy offset cancels from absolute
+residuals; a common time shift need not. R_cm is a shared-energy-sign/local-corner
+sensitivity diagnostic, with no proven conservatism for common-time motion.
+Retain the eight independent and four comparative diagnostic ratios, thresholds,
+census, arithmetic and branch restrictions: any required R_cm<2 still withdraws
+the dominance sentence; passage licenses no physical-common-time robustness
+claim. Absolute R_cm remains not_applicable because the registered replay is
+comparative-only, not because absolute timing uncertainty vanishes. Relabel under
+d165_shared_sign_local_corner_replay.v2; preserve v1 meanings/bytes. Rebuild is
+stopped for this submission; later changes require prospective registration.
+
+Gate records:
+`docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`;
+`docs/process_traces/2026-09-04-peer-audit/42-coldgate-opus-refutation-packet-17.md`;
+synthesis
+`docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
+
+## D-166 dated addendum (magistrate via dictated-fills seat, 2026-09-04): fixed prompt 0 for the decode demonstration
+
+Prospectively amend the v5 decode demonstration to use prompt 0 of
+real_prompts_v1 for every block in both model arms, matching the floor packs'
+fixed-prompt repeats and null blocks. Floor packs remain unchanged; thinking
+off, greedy forced-512 decoding, tokenizer/token-ID pins and shape checks remain
+required. G2-a prefill selection and its pin are unchanged. Regenerate every
+artifact whose identity, digest or custody pin derives from the decode prompt
+selection — at minimum contrast configs, suite manifests, identities,
+projections and custody pins, including expected_pack_paths() pack-level objects
+and the D-138 successor-generation requirement — as enumerated by a dependency
+census recorded in the supersession record before collection, and rerun the
+required clone proof. The comparison supports this fixed prompt and makes no
+prompt-population generality claim. An ensemble alternative requires explicit
+prospective authorization and matching registrations before its data are
+collected.
+
+Gate records:
+`docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`;
+`docs/process_traces/2026-09-04-peer-audit/42-coldgate-opus-refutation-packet-17.md`;
+synthesis
+`docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
+
+## D-174: Submission scope freeze (magistrate, 2026-09-04)
+
+Until submission, tasks must be necessary for a selected figure, table or
+refusal sentence, name it, and have bounded acceptance and a stop time; optional
+slots create no dependency. 'Selected' means a figure, table or refusal sentence
+listed in docs/paper/results-fill-registry.md at ratification. This rule expires
+at submission or on Ed's written instruction, whichever is first, and is amended
+only by a dated addendum; it never bars a fix to a claim-bearing path. Keep the
+five-ref seam, renderer, paper corrections, enclosure and acquisition
+dependencies. Park receipts (`WHOLE-WINDOW-STOP-RECEIPT-01`,
+`CLAIM-NONISSUANCE-RECEIPT-01`), AUTH
+(`AUTHENTICATOR-ALLOWLIST-GUARD-01`), new kernel work, skill-distill
+(`SKILL-DISTILL-01`), LINEAGE merges (`LINEAGE-RELOCATABLE-01`), MODULARITY
+follow-ups (`MODULARITY-01`), transfer (`TRANSFER-FIDUCIAL-01`) and common-time
+replay. Preserve final-head, integration and publication checks.
+Methods/diagnostics is the base deliverable. Establish desk readiness and
+feasible acquisition scheduling by 6 September; the final useful acquisition is
+the night of 8 September and ends at 06:00 on 9 September; the reduction and desk
+interval is 9 September from 06:00 to 18:00; content freezes at 18:00 PT on 9
+September, reserving 48 hours for verification/reading. Missing evidence selects
+fallback, never empirical refusal. Authoritative earlier deadlines advance these
+cuts.
+
+Gate records:
+`docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`;
+`docs/process_traces/2026-09-04-peer-audit/42-coldgate-opus-refutation-packet-17.md`;
+synthesis
+`docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
+All seven mapped queue IDs exist in `docs/process/state_kernel.json`; none is
+missing.
+
+## D-161 dated addendum (magistrate via dictated-fills seat, 2026-09-04): rpt001 is a closed publication route
+
+The rpt001 capstone profile is a closed publication route for legacy energy
+values; every producer under it must emit void placeholders carrying no joule
+observation, result table, 'primary' or 'manual review' text; a census regression
+over every artifact the profile writes enforces this, and regeneration cannot
+reopen it. This rule falls under D-161's preserved physics/evidence carve-out: it
+is an evidence fence, not a deliberate-operator guard subject to the
+THREAT-MODEL-PRUNE-01 downgrade sweep.
+
+Gate records:
+`docs/process_traces/2026-09-04-peer-audit/41-coldgate-fable-ruling-17.md`;
+`docs/process_traces/2026-09-04-peer-audit/42-coldgate-opus-refutation-packet-17.md`;
+synthesis
+`docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`.
+Census output: delta 24,
+`docs/process_traces/2026-09-04-peer-audit/24-legacy-l1-delta-round-3.md`.
+
+## D-173 dated addendum (magistrate, 2026-09-05): adopted as amended by the cold gate
+
+D-173 moves PROVISIONAL → ADOPTED **as amended**: (a) replace the
+receipt-authorization clause with "governed files are authorized through clean
+Git blobs; generated files are authorized only by the Git-anchored supply map's
+pinned digest, with the registered custody inventory and validator receipt
+corroborating and never authorizing"; (b) append Opus's four clauses: SCOPE (a
+results-fill-registry row is custody-bound when its supplier column names a
+paper_custody family and role; every claim-bearing row must be custody-bound
+before its value renders; bindings enumerated in the contract), NON-ISSUING
+RESULTS (a fixture result carries a distinct type no renderer accepts; until
+installed no supplier lands), COVERAGE (at least one registered production role
+carries git_blob inputs exercised by the family census), WHOLE WINDOW
+(WholeWindowVerdictRef is a registered binding target with no producer until
+the issuance gate lands). Contract step 8 / :234 replaced by the per-family
+issuance gate sentence (21 Q-PS-1): "Whole-window issuance, admitted or
+non-admitted, remains stopped until a registered
+per-family issuance gate lands that requires `WholeWindowRowValidation.authentic`
+to be true and binds model, window, basis, membership and governing row per
+ruling 43 Q-17-6; non-admission issuance carries only the fixed Q6 sentence."
+
+Q-PS-2: Seam LANDABLE fixture-only and non-issuing after the round-5
+installation: 21's replacement narrowing text for contract :53-56/:75-81,
+corrected per 22 (the token is readable by ORDINARY attribute access because
+`_custody_token` is not among `_CAPABILITY_FIELDS`; forging additionally needs
+the module-private constructors — deliberate, outside D-161), PLUS the
+non-issuing distinct type (Opus MATERIAL); F2 census test → AST census of
+`PaperCustodyRefusal("<code>", …)` call sites before the first production role
+registers; no further same-shape fix round is licensed (charter §9).
+Q-PS-3: The fixed non-admission sentence and acceptance table are ratified as
+the ACCEPTANCE SPECIFICATION with SEVEN cases (six negative plus "authentic
+PASSED production row, correctly bound → no refusal sentence"), with
+REFUSAL-CARRIER-01 transition work for the failed-row carrier schema binding
+model, window, basis, membership, governing row, an analysis_manifest_v3 path
+admitting a non-passed verdict without licensing any claim, the per-family
+issuance gate lifting the seam's unconditional stop
+(`paper_custody.py:1291-1296`) on `authentic == True and admitted == False`, the
+renderer and seven-case test, and OR-01/DS-32/PG-08 amended to non-admission;
+historical verdicts are preserved.
+Q-PS-4: 02-F4 is a disclosed limitation with ONE mandatory check: before
+submission run the mint's `bind_v2_floor_artifact_evidence` once over each
+actual submission floor and its authenticated sources, record the pass as a
+pinned acceptance artifact beside the finalized manifest, and use only the
+restricted wording that floors are "reconstructed from authenticated member
+sources once, at mint (and re-checked once before submission); at analysis
+consumption validated against the widths recorded in the floor artifact and
+byte-sealed by the finalized manifest, not re-derived"; the full custodied join
+is post-submission.
+Q-PS-5: Q-R1-2 is refused because the single-count composition is unprovable
+from the packet (the window allowance's derived repeatability bound may
+double-charge the t·s/√50 term); `composed_member_envelope_mean.v1` stays the
+default, no _v5 collection binds the proposed rule, and the cure path is the
+estimator source for replicated_endpoint_bound_j / single_member_endpoint_bound_j,
+the D-102 allowance-once text, the allowance selection rule, and a worked
+synthetic counterfactual.
+
+Gate records:
+`docs/process_traces/2026-09-04-paper-i/21-coldgate-fable-ruling-paper-supply.md`;
+`docs/process_traces/2026-09-04-paper-i/22-coldgate-opus-refutation-paper-supply.md`;
+synthesis
+`docs/process_traces/2026-09-04-paper-i/23-magistrate-synthesis-gate-paper-supply.md`.

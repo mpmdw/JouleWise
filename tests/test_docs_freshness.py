@@ -20,6 +20,25 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 
 DOC_PATHS = ("README.md", "PROJECT_STATUS.md", "docs/orchestration.md")
+PROJECT_STATUS_CURRENT_HEADINGS = (
+    "Current Claim And Scope",
+    "Measured Evidence",
+    "Gate Matrix",
+    "Artifact State",
+    "Advisor Decisions And Risks",
+    "Next Milestone",
+    "Evidence Links",
+)
+DOC008_PATHS = (
+    "AGENT_PLAN.md",
+    "README.md",
+    "PROJECT_STATUS.md",
+    "docs/agent_playbook.md",
+    "docs/orchestration.md",
+    "docs/phase_2/phase_2_exit_checklist.md",
+    "docs/planning_reflection_protocol.md",
+    "docs/project_status_history.md",
+)
 CAPSULE_DOC_PATHS = (
     "site_capsule/AGENTS.md",
     "site_capsule/CLAUDE.md",
@@ -305,6 +324,121 @@ def _documents() -> dict[str, str]:
     return {path: _read(path) for path in DOC_PATHS}
 
 
+def _doc008_documents() -> dict[str, str]:
+    return {path: _read(path) for path in DOC008_PATHS}
+
+
+def _doc008_spec_block(heading: str) -> str:
+    spec = _read("docs/specs/c027/doc-008_state_kernel.md")
+    match = re.search(
+        rf"^{re.escape(heading)}\s*$\n\n```markdown\n(.*?)\n```",
+        spec,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, f"DOC-008 specification block missing: {heading}"
+    return match.group(1) + "\n"
+
+
+def _assert_doc008_contract(docs: dict[str, str]) -> None:
+    missing = sorted(set(DOC008_PATHS) - set(docs))
+    assert not missing, f"DOC-008 required document missing: {missing}"
+
+    agent_plan = docs["AGENT_PLAN.md"]
+    readme = docs["README.md"]
+    project = docs["PROJECT_STATUS.md"]
+    playbook = docs["docs/agent_playbook.md"]
+    checklist = docs["docs/phase_2/phase_2_exit_checklist.md"]
+    reflection = docs["docs/planning_reflection_protocol.md"]
+    orchestration = docs["docs/orchestration.md"]
+    history = docs["docs/project_status_history.md"]
+
+    retired_path = "docs/planning_reflection_protocol.md"
+    assert retired_path not in agent_plan, "AGENT_PLAN retains retired intake"
+    assert retired_path not in readme, "README retains retired intake"
+    assert "PROJECT_STATUS.md#" not in readme, (
+        "README retains an anchor removed by PROJECT_STATUS compaction"
+    )
+    for text, label in ((agent_plan, "AGENT_PLAN"), (readme, "README")):
+        assert "Mission M0" in text, f"{label} does not route through Mission M0"
+        assert "docs/process/state_kernel.json" in text, (
+            f"{label} does not route through the state kernel"
+        )
+
+    expected_headings = [
+        "Current Claim And Scope",
+        "Measured Evidence",
+        "Gate Matrix",
+        "Artifact State",
+        "Advisor Decisions And Risks",
+        "Next Milestone",
+        "Evidence Links",
+    ]
+    headings = re.findall(r"^## (.+)$", project, flags=re.MULTILINE)
+    assert headings == expected_headings, (
+        f"PROJECT_STATUS must carry exactly the compact seven sections: {headings}"
+    )
+    non_table_prose = "\n".join(
+        line for line in project.splitlines() if not line.lstrip().startswith("|")
+    )
+    assert len(re.findall(r"\b[\w’-]+\b", non_table_prose)) <= 1400, (
+        "PROJECT_STATUS exceeds the 1,400-word non-table target"
+    )
+    for retired_heading in (
+        "Update Ledger",
+        "Architecture",
+        "Experiment Plan",
+        "Phase Plan Detail",
+        "Process Note",
+    ):
+        assert f"## {retired_heading}\n" not in project, (
+            f"PROJECT_STATUS retains retired section: {retired_heading}"
+        )
+    assert "docs/project_status_history.md" in project
+    assert "not required" in project and "D-171" in project
+
+    m0 = _between(playbook, "## Mission M0: Preflight (every session)\n", "\n---\n")
+    m0_normalized = re.sub(r"\s+", " ", m0)
+    for required in (
+        "generated `RUN_STATE.md` intake/restart region",
+        "selected kernel or generated queue row",
+        "task authority, acceptance",
+        "task-proportionate baseline checks",
+    ):
+        assert required in m0_normalized, (
+            f"Mission M0 missing required route: {required}"
+        )
+    assert "planning_reflection_protocol.md" not in playbook
+    assert "one mission per session" not in playbook.lower()
+    closeout = _after(playbook, "## After Any Mission\n")
+    assert "docs/process/state_kernel.json" in closeout
+    assert "python3 scripts/gen_state.py" in closeout
+    assert "Mission M0" in checklist and "D-023" in checklist
+    assert "planning_reflection_protocol.md" not in checklist
+
+    assert reflection == _doc008_spec_block("### 6.3 Exact redirect stub"), (
+        "reflection protocol is not the exact DOC-008 redirect stub"
+    )
+    for heading in (
+        "### 7.1 Two-writer rule",
+        "### 7.2 Credential-boundary push procedure",
+    ):
+        assert _doc008_spec_block(heading) in orchestration, (
+            f"orchestration missing exact DOC-008 procedure: {heading}"
+        )
+
+    assert history.startswith(
+        "# Project Status History\n\nHistorical snapshots; non-operative;"
+    )
+    for archived_heading in (
+        "## Update Ledger",
+        "## Evolution From The Original Architecture Sketch",
+        "## Process Note",
+    ):
+        assert archived_heading in history, (
+            f"project-status history missing {archived_heading}"
+        )
+
+
 def _current_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
     """Return every current region, excluding only named history/policy blocks."""
     docs = _documents() if docs is None else docs
@@ -312,25 +446,18 @@ def _current_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
     project = docs["PROJECT_STATUS.md"]
     orchestration = docs["docs/orchestration.md"]
 
+    project_headings = tuple(re.findall(r"^## (.+)$", project, flags=re.MULTILINE))
+    if project_headings != PROJECT_STATUS_CURRENT_HEADINGS:
+        raise AssertionError(
+            "PROJECT_STATUS.md must contain exactly the ruled seven current sections: "
+            f"{project_headings!r}"
+        )
+
     return {
         # README has no dated-history section; every part is current.
         "README": readme,
-        # The Previous Update block and Update Ledger are dated history.
-        "PROJECT_STATUS front": _between(
-            project,
-            "# JouleWise: Project Status, Plan, And Architecture\n",
-            "## Previous Update",
-        ),
-        "PROJECT_STATUS status/architecture": _between(
-            project, "## Summary\n", "## Process Note\n"
-        ),
-        # The 2026-09-01 reconcile (PR #253) dropped the two dated "What one
-        # day" anecdotes; the process contract now runs up to the owner
-        # pointers, which remain checked separately.
-        "PROJECT_STATUS process contract": _between(
-            project, "## Process Note\n", "**Where to look.**"
-        ),
-        "PROJECT_STATUS owner pointers": _after(project, "**Where to look.**"),
+        # DOC-008 moved dated history out of the compact current document.
+        "PROJECT_STATUS": project,
         # WO-022's verbatim spend policy and the dated topology/session examples
         # are deliberately excluded. Current reconstruction pointers are not.
         "orchestration process": _between(
@@ -943,13 +1070,79 @@ class DocsFreshnessTests(unittest.TestCase):
     def test_current_sections_do_not_copy_volatile_literals(self) -> None:
         self.assertEqual([], _volatile_violations(_current_sections()))
 
+    def test_doc008_contract(self) -> None:
+        _assert_doc008_contract(_doc008_documents())
+
+    def test_doc008_old_intake_and_closeout_counterfactual_is_rejected(self) -> None:
+        docs = _doc008_documents()
+        docs["docs/agent_playbook.md"] = (
+            "## Mission M0: Preflight (every session)\n\n"
+            "1. Read only the targeted `RUN_STATE.md` sections.\n"
+            "2. Read `TASK_QUEUE.md`'s Current Queue and Do-Not-Do-Yet list.\n"
+            "5. Run `python3 -m unittest discover -s tests`.\n\n"
+            "---\n\n## After Any Mission\n\n"
+            "The M0 step-6 handoff list applies.\n"
+        )
+        docs["docs/phase_2/phase_2_exit_checklist.md"] = (
+            "# Phase 2 Exit Checklist\n\n"
+            "Phase 2 is complete only when every required item below has evidence, "
+            "per `docs/planning_reflection_protocol.md`.\n"
+        )
+        with self.assertRaisesRegex(AssertionError, r"Mission M0|retired"):
+            _assert_doc008_contract(docs)
+
+    def test_doc008_live_reflection_counterfactual_is_rejected(self) -> None:
+        docs = _doc008_documents()
+        docs["docs/planning_reflection_protocol.md"] = (
+            "# Planning Reflection Protocol\n\n"
+            "Every phase and substantial run must begin with a planning audit.\n\n"
+            "## Start-Of-Run Planning Audit\n\n1. What is the exact goal?\n"
+        )
+        with self.assertRaises(AssertionError):
+            _assert_doc008_contract(docs)
+
+    def test_doc008_missing_orchestration_procedures_counterfactual_is_rejected(self) -> None:
+        docs = _doc008_documents()
+        orchestration = docs["docs/orchestration.md"]
+        for heading in (
+            "### 7.1 Two-writer rule",
+            "### 7.2 Credential-boundary push procedure",
+        ):
+            orchestration = orchestration.replace(_doc008_spec_block(heading), "", 1)
+        docs["docs/orchestration.md"] = orchestration
+        with self.assertRaisesRegex(AssertionError, "orchestration missing"):
+            _assert_doc008_contract(docs)
+
+    def test_doc008_absent_status_history_counterfactual_is_rejected(self) -> None:
+        docs = _doc008_documents()
+        docs.pop("docs/project_status_history.md")
+        with self.assertRaisesRegex(AssertionError, "required document missing"):
+            _assert_doc008_contract(docs)
+
+    def test_doc008_stale_root_routes_and_uncompacted_status_are_rejected(self) -> None:
+        docs = _doc008_documents()
+        docs["AGENT_PLAN.md"] += (
+            "\nApply `docs/planning_reflection_protocol.md` before implementation.\n"
+        )
+        docs["README.md"] += (
+            "\nUse `docs/planning_reflection_protocol.md` for intake.\n"
+        )
+        with self.subTest(counterfactual="stale root intake routes"):
+            with self.assertRaisesRegex(AssertionError, "retired intake"):
+                _assert_doc008_contract(docs)
+
+        docs = _doc008_documents()
+        docs["PROJECT_STATUS.md"] += "".join(
+            f"\n## Historical Counterfactual {index}\n\nOld current/history mixture.\n"
+            for index in range(9)
+        )
+        with self.subTest(counterfactual="16-H2 historical/current mixture"):
+            with self.assertRaisesRegex(AssertionError, "compact seven sections"):
+                _assert_doc008_contract(docs)
+
     def test_current_sections_point_to_freshness_owners(self) -> None:
         readme = _between(_read("README.md"), "# JouleWise\n", "## Release\n")
-        project = _between(
-            _read("PROJECT_STATUS.md"),
-            "# JouleWise: Project Status, Plan, And Architecture\n",
-            "## Previous Update",
-        )
+        project = _read("PROJECT_STATUS.md")
         orchestration = _between(
             _read("docs/orchestration.md"),
             "## The loop, end to end\n",
@@ -966,13 +1159,35 @@ class DocsFreshnessTests(unittest.TestCase):
         self.assertIn("docs/site/DRIFT.md", orchestration)
         self.assertIn("Ed deploys", orchestration)
 
-        project_status = _current_sections()["PROJECT_STATUS status/architecture"]
+        project_status = _current_sections()["PROJECT_STATUS"]
         # Freshness ownership: the status document defers live sequencing to
         # RUN_STATE.md and promises no dates of its own (Window A literals
         # retired with the 2026-09-01 reconcile; that campaign is voided).
         self.assertIn("This document promises sequence, not dates.", project_status)
         self.assertIn("Live status is in `RUN_STATE.md`.", project_status)
         self.assertIn("RUN_STATE.md", project_status)
+
+    def test_compact_project_status_is_current_and_history_is_separate(self) -> None:
+        docs = _documents()
+        compact = docs["PROJECT_STATUS.md"]
+        sections = _current_sections(docs)
+
+        self.assertEqual(
+            PROJECT_STATUS_CURRENT_HEADINGS,
+            tuple(re.findall(r"^## (.+)$", compact, flags=re.MULTILINE)),
+        )
+        self.assertEqual(compact, sections["PROJECT_STATUS"])
+        self.assertNotIn("## Previous Update", sections["PROJECT_STATUS"])
+        self.assertNotIn("## Update Ledger", sections["PROJECT_STATUS"])
+        self.assertNotIn("docs/project_status_history.md", sections)
+
+        # The historical archive may retain retired publication language
+        # without becoming an active instruction surface.
+        docs["docs/project_status_history.md"] = (
+            _read("docs/project_status_history.md")
+            + "\nAgents regenerate the site and deploy it.\n"
+        )
+        self.assertEqual([], _site_publish_instructions(_current_sections(docs)))
 
     def test_site_closeout_is_drift_report_then_ed_deploy(self) -> None:
         docs = _documents()
@@ -1006,12 +1221,12 @@ class DocsFreshnessTests(unittest.TestCase):
         )
         self.assertEqual([], _site_publish_instructions({"Ed runbook": ed_manual}))
 
-    def test_checker_mutation_probes_are_rejected_and_history_is_ignored(self) -> None:
+    def test_checker_mutation_probes_are_rejected_on_current_sources(self) -> None:
         docs = _documents()
         probe = "9,999 tests; PR #999; Claude-99."
         mutated = dict(docs)
         mutated["PROJECT_STATUS.md"] = mutated["PROJECT_STATUS.md"].replace(
-            "## Architecture\n", probe + "\n\n## Architecture\n", 1
+            "## Artifact State\n", probe + "\n\n## Artifact State\n", 1
         )
         violations = _volatile_violations(_current_sections(mutated))
         self.assertEqual(
@@ -1028,12 +1243,14 @@ class DocsFreshnessTests(unittest.TestCase):
             mutated["README.md"] += "\n" + probe + "\n"
             self.assertTrue(_site_publish_instructions(_current_sections(mutated)))
 
-        mutated = dict(docs)
-        history_heading = "## Previous Update"
-        mutated["PROJECT_STATUS.md"] = mutated["PROJECT_STATUS.md"].replace(
-            history_heading,
-            history_heading + "\n\nAgents regenerate the site and deploy it.\n",
-            1,
+    def test_checker_mutation_probes_are_rejected_and_history_is_ignored(self) -> None:
+        # Preserve the mission test identity while wave 2's renamed test above
+        # owns the active-surface mutation matrix.
+        self.test_checker_mutation_probes_are_rejected_on_current_sources()
+        mutated = _documents()
+        mutated["docs/project_status_history.md"] = (
+            _read("docs/project_status_history.md")
+            + "\nAgents regenerate the site and deploy it.\n"
         )
         self.assertEqual([], _site_publish_instructions(_current_sections(mutated)))
 

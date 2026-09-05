@@ -686,14 +686,86 @@ def git_source_stamp(source: str) -> SourceStamp:
     return SourceStamp(source=source, commit=commit, dirty=dirty)
 
 
-def parse_pipe_row(line: str) -> list[str]:
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+def parse_pipe_row(line: str, expected_cells: int | None = None) -> list[str]:
+    row = line.strip()
+
+    def is_escaped(index: int) -> bool:
+        preceding_backslashes = 0
+        index -= 1
+        while index >= 0 and row[index] == "\\":
+            preceding_backslashes += 1
+            index -= 1
+        return preceding_backslashes % 2 == 1
+
+    if row.startswith("|"):
+        row = row[1:]
+    if row.endswith("|") and not is_escaped(len(row) - 1):
+        row = row[:-1]
+
+    def split(*, whitespace_boundaries_only: bool) -> list[str]:
+        cells: list[str] = []
+        cell: list[str] = []
+        code_ticks = 0
+        index = 0
+        while index < len(row):
+            char = row[index]
+            if char == "`":
+                run_end = index
+                while run_end < len(row) and row[run_end] == "`":
+                    run_end += 1
+                tick_count = run_end - index
+                if code_ticks == 0:
+                    code_ticks = tick_count
+                elif tick_count == code_ticks:
+                    code_ticks = 0
+                cell.append(row[index:run_end])
+                index = run_end
+                continue
+            whitespace_boundary = (
+                index > 0
+                and index + 1 < len(row)
+                and row[index - 1].isspace()
+                and row[index + 1].isspace()
+            )
+            if (
+                char == "|"
+                and code_ticks == 0
+                and not is_escaped(index)
+                and (not whitespace_boundaries_only or whitespace_boundary)
+            ):
+                cells.append("".join(cell).strip())
+                cell = []
+            else:
+                cell.append(char)
+            index += 1
+        cells.append("".join(cell).strip())
+        return cells
+
+    cells = split(whitespace_boundaries_only=False)
+    if expected_cells is not None and len(cells) > expected_cells:
+        legacy_cells = split(whitespace_boundaries_only=True)
+        if len(legacy_cells) == expected_cells:
+            return legacy_cells
+    return cells
 
 
-def parse_table_after_heading(md: str, source: str, heading: str, headers: list[str]) -> list[dict[str, str]]:
-    heading_match = re.search(rf"^##\s+{re.escape(heading)}\s*$", md, re.MULTILINE)
+def parse_table_after_heading(
+    md: str,
+    source: str,
+    heading: str,
+    headers: list[str],
+    *,
+    allow_subheading: bool = False,
+) -> list[dict[str, str]]:
+    heading_prefix = r"##{1,2}" if allow_subheading else r"##"
+    heading_match = re.search(
+        rf"^{heading_prefix}\s+{re.escape(heading)}\s*$", md, re.MULTILINE
+    )
     if not heading_match:
-        fail(heading, source, f"heading '## {heading}'")
+        expected = f"heading '## {heading}'"
+        if allow_subheading:
+            expected += f" or '### {heading}'"
+        fail(heading, source, expected)
     tail = md[heading_match.end():]
     lines = tail.splitlines()
     table_start = None
@@ -705,7 +777,7 @@ def parse_table_after_heading(md: str, source: str, heading: str, headers: list[
             break
     if table_start is None:
         fail(heading, source, "markdown table after heading")
-    parsed_headers = parse_pipe_row(lines[table_start])
+    parsed_headers = parse_pipe_row(lines[table_start], expected_cells=len(headers))
     if parsed_headers != headers:
         fail(heading, source, f"table headers {headers!r}")
     if table_start + 1 >= len(lines) or not re.match(r"^\s*\|?\s*:?-{3,}", lines[table_start + 1]):
@@ -714,7 +786,7 @@ def parse_table_after_heading(md: str, source: str, heading: str, headers: list[
     for line in lines[table_start + 2:]:
         if not line.strip().startswith("|"):
             break
-        cells = parse_pipe_row(line)
+        cells = parse_pipe_row(line, expected_cells=len(headers))
         if len(cells) != len(headers):
             fail(heading, source, f"{len(headers)} table cells per row")
         rows.append(dict(zip(headers, cells)))
@@ -724,7 +796,13 @@ def parse_table_after_heading(md: str, source: str, heading: str, headers: list[
 
 
 def parse_status_at_glance(md: str, source: str = "PROJECT_STATUS.md") -> list[StatusPhase]:
-    rows = parse_table_after_heading(md, source, "Status At A Glance", ["Phase", "Scope", "Status"])
+    rows = parse_table_after_heading(
+        md,
+        source,
+        "Status At A Glance",
+        ["Phase", "Scope", "Status"],
+        allow_subheading=True,
+    )
     phases = []
     for row in rows:
         status = row["Status"]
@@ -984,7 +1062,7 @@ def is_table_separator(line: str) -> bool:
 
 def render_table(lines: list[str]) -> str:
     headers = parse_pipe_row(lines[0])
-    rows = [parse_pipe_row(line) for line in lines[2:]]
+    rows = [parse_pipe_row(line, expected_cells=len(headers)) for line in lines[2:]]
     head = "".join(f"<th>{inline_md(cell)}</th>" for cell in headers)
     body_rows = []
     for row in rows:
@@ -1388,7 +1466,6 @@ def render_project_page(stamps: dict[str, SourceStamp]) -> str:
         {
             "README_STAMP": source_chip(stamps["README.md"]),
             "DECISION_STAMP": source_chip(stamps["docs/decision_log.md"]),
-            "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
             "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/index.html"]),
         },
     )
@@ -1396,17 +1473,14 @@ def render_project_page(stamps: dict[str, SourceStamp]) -> str:
         stamps["docs/site_src/index.html"],
         stamps["README.md"],
         stamps["docs/decision_log.md"],
-        stamps[FLOOR_EXTRACTION_SOURCE],
     ]
     return page_shell("Project README", "Project", body, page_footer(footer_stamps))
 
 
-def render_learning_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -> str:
+def render_learning_page(stamps: dict[str, SourceStamp]) -> str:
     replacements = {
-        **floor_replacements(floors),
         "METHODOLOGY_STAMP": source_chip(stamps["docs/contracts/measurement_methodology.md"]),
         "FLOOR_SPEC_STAMP": source_chip(stamps["docs/phase_2/detection_floor.md"]),
-        "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
         "CLAIMS_STAMP": source_chip(stamps["docs/contracts/claims_ladder.md"]),
         "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/research.html"]),
     }
@@ -1415,18 +1489,15 @@ def render_learning_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -
         stamps["docs/site_src/research.html"],
         stamps["docs/contracts/measurement_methodology.md"],
         stamps["docs/phase_2/detection_floor.md"],
-        stamps[FLOOR_EXTRACTION_SOURCE],
         stamps["docs/contracts/claims_ladder.md"],
     ]
     return page_shell("Learn measurement science", "Learn", body, page_footer(footer_stamps))
 
 
-def render_measurements_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -> str:
+def render_measurements_page(stamps: dict[str, SourceStamp]) -> str:
     replacements = {
-        **floor_replacements(floors),
         "README_STAMP": source_chip(stamps["README.md"]),
         "DECISION_STAMP": source_chip(stamps["docs/decision_log.md"]),
-        "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
         "CLAIMS_STAMP": source_chip(stamps["docs/contracts/claims_ladder.md"]),
         "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/results.html"]),
     }
@@ -1435,7 +1506,6 @@ def render_measurements_page(floors: FloorSummary, stamps: dict[str, SourceStamp
         stamps["docs/site_src/results.html"],
         stamps["README.md"],
         stamps["docs/decision_log.md"],
-        stamps[FLOOR_EXTRACTION_SOURCE],
         stamps["docs/contracts/claims_ladder.md"],
     ]
     return page_shell("Measurements", "Measurements", body, page_footer(footer_stamps))
@@ -2193,7 +2263,6 @@ def build(no_marked: bool = False) -> None:
     sessions = parse_session_history(run_md)
     report_source = latest_report_source_from_sessions(sessions)
     report_md = read_source(report_source)
-    floor_summary = parse_verified_floor_summary(read_json_source(FLOOR_EXTRACTION_SOURCE))
     decision_parts = split_decision_log_markdown(decision_md)
     docs = doc_pages(report_source, len(decision_parts))
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
@@ -2222,8 +2291,8 @@ def build(no_marked: bool = False) -> None:
 
     update_site_styles()
     write(OUT / "index.html", render_project_page(stamps))
-    write(OUT / "research.html", render_learning_page(floor_summary, stamps))
-    write(OUT / "results.html", render_measurements_page(floor_summary, stamps))
+    write(OUT / "research.html", render_learning_page(stamps))
+    write(OUT / "results.html", render_measurements_page(stamps))
     write(OUT / "status.html", render_status_page(phases, verification, bundle_count, now, sessions, queue, risks, stamps, report_source))
     write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
