@@ -1,11 +1,10 @@
-# Cold-gate packet: PAPER-SUPPLY (2026-09-04)
+# Cold-gate packet: PAPER-SUPPLY (sealed 2026-09-04)
 
-Assembled on `feat/2026-09-04-packet-paper-supply` from the PAPER-I rulings
-revision `913bf3f76025f654e5b910670c5a00bfd82c34d4`. The seats receive this
-packet, every exhibit in the manifest, the charter, and read-only access to
-the specifically cited decision, contract, and code locations. This packet
-asks atomic questions and offers no recommended verdict. The magistrate's
-earlier dispositions are identified as positions, not evidence on the merits.
+Assembly branch: `feat/2026-09-05-packet-paper-supply-2`.
+Assembly HEAD: `635c5ef039fb21144f7483f0375f4817a7278888`.
+Seam under judgment: `84b24686` (full commit `84b24686d4e11b36d2f6fe64e08616ff3ab1c050`).
+D-173 remains **PROVISIONAL** pending judgment. This is the sealed evidence
+packet, not a gate verdict or supplier-merge authorization.
 
 ## 1. Charter pin
 
@@ -13,102 +12,258 @@ Charter: `docs/process/coldgate_charter.md`
 sha256:
 099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81
 
-## 2. Assembly pins and seal-time replacement
+The judge independently checks this digest against the separately supplied pin
+before reading the merits. The packet and every manifested exhibit are the
+same frozen inputs for the judge and independent contract lens.
 
-The seam branch to be judged is
-`origin/feat/2026-09-04-paper-custody-seam`. Its final head is
-`<<SEAM-HEAD>>`.
+## 2. Seal and source custody
 
-The seam exhibits in this draft are labelled **DRAFT-HEAD** and were copied
-from the locally agreeing branch and remote-tracking refs at
-`2e3349e1f412349638c578b56a9927824fc4713d`. The assembly runner could not
-network-refresh the ref because DNS access to GitHub was unavailable. The
-DRAFT-HEAD contract has SHA-256
-`523230f733d54981ae92dc826b01e2052c6c77be652e5c17c0149b6c8cd53bcb`;
-the DRAFT-HEAD `joulewise/paper_custody.py` has SHA-256
-`41d4b2129bfb387cd2797a7080dc4f0d7d6cf8ba476ad74b49ba7a4b52a43f5b`.
-These labels identify draft custody only and make no final-head claim.
+The requested remote branch is `origin/feat/2026-09-04-paper-custody-seam`.
+The attempted command `git fetch origin feat/2026-09-04-paper-custody-seam`
+failed before fetching: the sandbox refused writing shared-worktree
+`FETCH_HEAD`. No remote refresh is claimed. The existing local remote-tracking
+ref resolves exactly to `84b24686d4e11b36d2f6fe64e08616ff3ab1c050` and all copies below
+come from that immutable Git object, not another worktree's current files.
 
-Before sealing, the magistrate must fetch the seam branch, replace every
-DRAFT-HEAD seam exhibit with a verbatim copy from `<<SEAM-HEAD>>`, replace
-every occurrence of the placeholder with that one full commit, regenerate
-the exhibit manifest, and recompute the packet digest. A validator PASS on
-this draft does not perform that replacement and does not authorize a
-supplier merge, paper fill, or `_v5` collection.
+The final seam commit adds only trace 10 to audited implementation head
+`f2d35b4f7fe58f059ed999e18754fa3a4f8ff9ba`; `git diff f2d35b4f 84b24686`
+contains no code or contract change. The earlier draft seam subtree was
+replaced with verbatim final-head copies. No placeholder remains.
 
-## 3. Convening triggers (charter §3)
+Source roots (packet-relative):
 
-- §3 item 1 and charter §9: the provisional D-173 record and rulings 15/16
-  say three supplier lanes each reached three occurrences of one
-  caller-authority signature. Q-SIG asks the judge to verify both the count
-  and the structural classification.
-- §3 item 4: `composed_member_envelope_mean_t95_window.v1` is a proposed
-  claim-bearing statistical composition rule. It must be ruled before any
-  `_v5` collection consumes it.
-- §3 item 4: Q-PROC presents a proposed extension of D-172's
-  real-entry-point testing rule. It is not adopted.
-- §3 items 3 and 4: D-173 is provisional and must be ruled before any paper
-  supplier merges through the new shared trust boundary.
+- `20-exhibits/seam-84b24686/`: seam traces 01–10 (including both 02 seats),
+  contract, implementation and cited supporting source at `84b24686d4e11b36d2f6fe64e08616ff3ab1c050`.
+- `20-exhibits/authority/`: verbatim D-173 and D-161 bodies and index rows
+  from the same seam commit. The source index specifies exact line ranges.
+- `20-exhibits/peer-audit/43-magistrate-synthesis-gate-17.md`: full ratified
+  synthesis at `ff82e0dd3678b06febac1d3c4fe2b16f0926538a`, Q-17-6 row.
+- `20-exhibits/peer-audit/17-Q6-verbatim.md`: complete Q6 paragraph at that
+  revision, whose exact words are the Q-PS-3 object ratified by 43.
+- `20-exhibits/peer-audit/02-F4-verbatim.md`: complete finding F4, including
+  limitation, counterargument and minimum evidence, at
+  `5e416c47b6236e66eeb861584ad19aeff4e012a4`. Trace 10's assessment names this same source.
+- `20-exhibits/assembly-635c5ef0/joulewise/analysis_manifest_v3.py`: current
+  pre-seam frozen whole-window binding target at the assembly HEAD.
+- `20-exhibits/paper-i/`: unchanged earlier consults and rulings, copied from
+  `913bf3f76025f654e5b910670c5a00bfd82c34d4`. They preserve the R1 alternatives
+  and earlier receipt position; later ruling 43 controls Q6.
 
-## 4. Objects and controlling locations
+`20-exhibits/source-index.json` records each original path, full immutable
+revision, exact contiguous line range and content digest. Full copies preserve
+original line numbers; excerpt line 1 maps to the recorded source start.
+The manifest hashes the actual copies and this index.
 
-1. **D-173.** At `<<SEAM-HEAD>>`, read the exact D-173 index row and body in
-   `docs/decision_log.md` and the normative
-   `docs/contracts/paper_supply_custody.md`. The DRAFT-HEAD contract and
-   implementation are copied in the seam exhibit subtree. Rulings 15 and 16
-   record the magistrate's provisional adoption and amendments.
-2. **R1 interval proposal.** PAPER-I ruling 06 §R1 registers the proposed
-   rule ID and leaves `composed_member_envelope_mean.v1` as the current
-   default. Consult packet 05 §R1 records the three competing constructions.
-3. **R2 sidecar.** Ruling 06 initially selected a v2 sibling. Addendum 07
-   replaced it with production `joulewise.claim_verdicts.v1` plus a
-   separately content-addressed `joulewise.claim_side_bound.v1` sidecar.
-   At PAPER-I revision `913bf3f7`, `docs/contracts/claims_ladder.md:21-30`
-   and `docs/process/v5-artifact-flow.md:23-24,32` name v1 as the registered
-   production claim artifact and do not yet name the sidecar as a flow edge.
-4. **R4 map and receipts.** Addendum 09 requires a total map from the D-165
-   producer's closed reason-code enumeration to professor-facing OR-01
-   sentences. Addendum 07 names two follow-on receipt missions. At
-   `<<SEAM-HEAD>>`, inspect `joulewise/dominance_closeout.py` for
-   `D165_CLOSEOUT_REFUSAL_ENUMERATION`, `D165_CLOSEOUT_REFUSAL_CODES`, and
-   `D165_OR01_REASON_SENTENCES`, and inspect the custody contract's family
-   replay requirements.
-5. **D-172.** At `<<SEAM-HEAD>>`, read `docs/decision_log.md` §D-172. Its
-   adopted scope is the watchdog, installer, launchd templates, and session
-   argv. It does not presently bind paper suppliers.
+Assembly-generated seal records under `20-exhibits/` are **not custody inputs**
+and are excluded from the manifest to avoid a packet/receipt self-reference.
+`seal-record.md` pastes the validator receipt, exact replay command and final
+packet SHA-256. Its receipt binds validation-time byte observation only; it
+neither binds judge delivery nor authorizes a merge or collection. A subsequent
+packet or exhibit edit requires a new seal.
 
-## 5. Questions (answer each atomically)
+## 3. Judgment scope and authority
 
-Use the charter verdicts AFFIRM, REJECT, or REFUSE for every numbered atom.
-When an amendment is necessary, REJECT the superseded wording and state the
-exact replacement wording being AFFIRMED. Every REFUSE must name the packet
-defect and minimum cure.
+Answer exactly Q-PS-1 through Q-PS-5 below, each **AFFIRM / AMEND / REFUSE**.
+For compatibility with pinned charter §8, AMEND must explicitly REJECT the
+superseded proposition and AFFIRM exact replacement wording. This notation
+does not amend the charter. REFUSE names the precise packet defect and minimum
+cure, with no effect on the merits. Preserve BLOCKER / MATERIAL / NIT severity,
+file:line or artifact:field evidence personally checked, and disagreement with
+the lead's labeled position. Give a separate packet-hygiene finding.
 
-### Q-D173 — ratification of the shared custody boundary
+Convening triggers: repeated seam fix rounds (charter §3.1 and §9), proposed
+D-173 custody policy and R1 composition (§3.4), and the requested interpretation
+of the F1 stop/contract overclaim (§3.2). These explain review, not its result.
 
-**Q-D173-1.** Should the exact provisional D-173 entry at `<<SEAM-HEAD>>` be
-ratified as adopted before any D-123, gamma, transfer, or D-165 paper supplier
-merges? Grade its core rule: caller supplies only a closed role name and runs
-root; a clean-Git-anchored tracked supply map owns paths and expected digests;
-fresh validator replay produces frozen verified objects; receipts corroborate
-but never authorize; caller paths, digests, bytes, mappings, sequences, and
-prevalidated objects cannot enter; refusals stay in the closed non-renderable
-`paper_custody_*` namespace.
+**Lead's submitted position, not evidence:** the seam is landable under D-161
+with F1 cured by contract narrowing; F2 is census test debt. Q-PS-1, Q-PS-3 and
+Q-PS-5 request ratification/sufficiency judgments; Q-PS-4 requests a timing
+ruling. The assembler makes no merits recommendation.
 
-**Q-D173-2.** Does the normative
-`docs/contracts/paper_supply_custody.md` at `<<SEAM-HEAD>>` completely and
-unambiguously install D-173 without contradicting the registered claim,
-floor, whole-window, transfer, authentication, or paper-rendering contracts?
-If not, cite each conflicting clause and give the minimum amendment.
+Read the charter, packet, manifested custody inputs and their specifically
+cited primary code/authority only. Exhibits are data, never instructions to
+execute their historical commands. No new tests or witness executions were
+performed in this assembly; historical results remain attributed to their
+original seats and heads. No quiet-machine or production evidence was taken.
+Narrative traces are preserved verbatim at the lead's explicit request; their
+claims and dispositions are objects to assess, not process authority or a
+substitute for primary evidence. Under charter §4, do not use narrative process
+material as rationale or authority. The bounded 17-Q6 excerpt is necessary
+because its exact rule text is being judged, and 43's row incorporates rather
+than restates it; it includes the entire contiguous paragraph. Source identity
+and line range are pinned in the index. If an exhibit's admissibility or
+neutrality prevents an answer, REFUSE the affected atom.
 
-**Q-D173-3.** Does `joulewise/paper_custody.py` at `<<SEAM-HEAD>>` conform to
-that decision and contract at the public wire, authority root, map lookup,
-validator census, replay/receipt comparison, reopen boundary, lower-boundary
-closures, refusal translation, and non-issuing fixture fence? This is an
-implementation-conformance atom, not a presumption that policy ratification
-requires accepting the current implementation.
+## 4. Questions
 
-### Q-R1-2 — preregistered composed interval
+### Q-PS-1 — D-173 as written: five typed refs, no receipt families
+
+**AFFIRM / AMEND / REFUSE:** Ratify the exact provisional D-173 entry as written,
+with five typed refs and no additional receipt families, consistent with ruling
+43 Q-17-6 and its ratified Q6 text?
+
+The complete D-173 body and index row are exhibits. Its public call is
+`open_paper_input(ref)`; every ref carries only `role` and `runs_root`. The
+Git-tracked supply map under a clean authenticated anchor owns paths and
+digests. Fresh validator replay precedes frozen verified output; caller dicts,
+bytes, sequences and prevalidated objects cannot authorize paper values.
+Refusals remain closed and non-renderable. The five refs are:
+
+| Ref | Family |
+|---|---|
+| `ReportedEnergyParentsRef` | Reported energy parents |
+| `D165CloseoutRef` | D-165 close-out |
+| `WholeWindowVerdictRef` | Whole-window verdict |
+| `ClaimEvidenceRef` | Claims v1, side bound and parents |
+| `TransferProjectionRef` | Transfer projection |
+
+Primary locations: seam contract §Closed public wire and §Family censuses;
+`paper_custody.py` ref declarations and `_FAMILY_SPECS`. `floor_artifact` is
+an input role inside the D-165 and Claims families, **not a sixth public ref**.
+“No receipt families” does not delete existing corroborative inventory/receipt
+checks or turn absence into an authenticated empirical result. Older Paper-I
+07/14/15 receipt-mission prescriptions remain historical positions; ratified
+17/43 parks receipt lanes and specifies the whole-window ref for Q6.
+
+The pinned seam contract still demands a whole-window stop-receipt producer
+(§Read, replay, receipt, and reopen algorithm step 8; §Family replay
+requirements). Its code still stops that family at `paper_custody.py:1291-1296`.
+Judge whether D-173 as written is compatible with 43 and state any exact
+consequential contract amendment. Do not read implementation of an old stop
+as a reversal of the ratified refusal rule. Adoption of policy does not prove
+that any production supplier implements it.
+
+### Q-PS-2 — landability with contract narrowing under D-161
+
+**AFFIRM / AMEND / REFUSE:** Is the seam at `84b24686` landable with F1 cured by
+contract narrowing, without a token-residency code change, under D-161's
+ordinary-operator threat model?
+
+Read traces 01–10 in source order; both original 02 seats are included. Trace
+09 §Trace-code correction and trace 10's G2/C-05 assessment qualify the original
+01/02 reseal claims: their historical test actually observed
+`paper_custody_digest_mismatch`; the round-4 coherent reseal reaches
+`paper_custody_anchor_mismatch`. Do not quote the earlier claim as demonstrated
+execution of the later gate. Trace 10 reports G1/G2 closed and LANDABLE at
+`f2d35b4f`; `84b24686` changes only that report.
+
+**Uncured wording at the pinned head:** contract lines 53–56 claim the token is
+held only inside closures; lines 75–81 claim an `object.__new__` instance is
+never a valid capability. The code stores `_custody_token` on authentic objects
+(`paper_custody.py:155-203`). Trace 10 F1 records private introspection recovering
+it and private constructors forging an authorized result. Direct construction
+and tokenless ordinary forgeries refuse. No claim is made that token residency
+was removed or that the contract amendment is already installed.
+
+**Contract-narrowing proposition submitted for judgment:**
+
+> The private seam closures create the construction token, which is also
+> stored on authentic capabilities. Direct public construction and tokenless
+> `object.__new__` instances refuse on guarded access. These guards prevent
+> ordinary caller/operator mistakes; they do not prevent deliberate private
+> introspection, token extraction, or token-bearing reconstruction. Those
+> deliberate acts are outside D-161's threat model. Physics/evidence failures,
+> pre-registration failures and ordinary operator mistakes remain fail-closed.
+
+This is proposed replacement wording for the overclaim, not a modification of
+the verbatim contract exhibit. AFFIRM licenses the stated narrowing as the cure;
+identify the installation required before landing. AMEND gives an alternative
+precise cure. REFUSE identifies missing evidence/authority.
+
+Separately disclose **F2 test debt** without silently upgrading it to a current
+registry defect: trace 10 finds the current 16-code registry and conditions
+agree, but `tests/test_paper_custody.py:614-658` uses a string count as alleged
+raise-site reachability. A dead literal can preserve that count after a raise
+changes. Judge whether that residual changes landability or needs a condition.
+Do not confuse this refusal-code census weakness with the per-validator source
+mutation census or the three-arm input census. The seam is still synthetic and
+non-issuing; no supplier landing or publication gate is thereby passed.
+
+### Q-PS-3 — Refusal branch: fixed sentence and six-case real CLI acceptance
+
+**AFFIRM / AMEND / REFUSE:** Is ruling 43 Q-17-6's fixed non-admission sentence,
+issued from the verified whole-window ref and checked by the six-case actual
+CLI acceptance, sufficient for the Refusal branch?
+
+The ratified sentence (17 Q6; 43 Q-17-6) is:
+
+> The registered window was not admitted for this submission's claim-bearing comparison
+
+Its source must be verified **failed production evidence** bound to model,
+window, basis, membership and governing row. OR-01, DS-32 and PG-08 become
+non-admission surfaces; affected arms are mapped and unaffected verdicts stay
+as issued. Missing evidence selects fallback and cannot manufacture an
+empirical refusal sentence. The six cases are acceptance requirements, not
+claimed executed results:
+
+| Actual CLI input | Required output |
+|---|---|
+| Authentic failed production row, correctly bound | Exact fixed sentence |
+| Missing evidence | No empirical refusal |
+| Corrupt evidence | No empirical refusal |
+| Diagnostic-only evidence | No empirical refusal |
+| Conflicting evidence | No empirical refusal |
+| Wrong-window evidence | No empirical refusal |
+
+Ruling 43's transition is explicit: until D-173 is ratified and the seam lands,
+the target is the frozen `whole_window_verdict` ref in
+`joulewise/analysis_manifest_v3.py`; the seam ref replaces it on landing.
+Read the assembly copy's `_authenticate_finalization_inputs` and
+`attachments["whole_window_verdict"]` at lines 3481–3525 and 3814–3820.
+The current finalizer requires `status == "passed"` and `claim_licensing is True`
+and raises `analysis_finalization_verdict_not_passed` otherwise. Thus the named
+frozen ref is a binding target, not proof of an implemented failed-row renderer.
+The seam copy likewise has the explicit whole-window issuance stop. This
+packet requests the rule's sufficiency; it supplies no six-case production CLI
+completion claim. Specify any additional binding/refusal condition and the
+minimum transition work, preserving the fixed sentence and historical verdicts.
+
+### Q-PS-4 — 02-F4 width reconstruction before submission or disclosure
+
+**AFFIRM / AMEND / REFUSE:** Decide whether factoring the mint's authenticated
+reconstruction into a production module reused by the `floor_artifact` input
+role is required before submission, or whether 02-F4 may remain a disclosed
+limitation. AFFIRM means require that shared reconstruction before submission;
+AMEND must state the permitted disclosure/fallback and any restricted claim;
+REFUSE names evidence needed to choose. Either outcome must name the affected
+submission claim or source-reproduction statement.
+
+The full 02-F4 finding and trace 10's §Residual risk are verbatim exhibits.
+The analysis binder checks source hashes, identities, order and point metrics
+but does not reconstruct stored member/block widths. Floor validation can
+recompute floor arithmetic from the widths recorded in the floor. The mint's
+`bind_v2_floor_artifact_evidence` at `floor_mint_estimator.py:598-718`, especially
+683–717, reconstructs comparative operands from authenticated sources and
+compares exact widths. Coherently wrong widths are an ordinary generator or
+operator mistake under D-161; finalized-manifest seals protect subsequent byte
+substitution and do not supply this missing independent reconstruction.
+
+Trace 10 assesses reuse as possible but **not drop-in**: the present floor-bearing
+roles omit the mint input manifest/pinset, component reports/specs/order
+manifests, evidence-root locator, calibration acceptance, ledger/head pin and
+bracket binding consumed by the mint path. It estimates about half a day for
+arithmetic factoring and 1–2 engineer-days for the full custodied join with
+source census, supply-map contract and wrong-width regression, assuming final
+v5 inputs exist. These are attributed estimates, not a measured schedule.
+
+The candidate fix reuses the authenticated component reconstruction and exact
+comparison, adds a Git-map-authorized recomputation descriptor and complete
+source census to the two floor-bearing families, and includes the shared
+functions in validator-source hashing. It creates no second estimator or new
+receipt family. Acceptance would require a correct-point/coherently-wrong-width
+counterexample to refuse source-reproduced status and the actual submission
+floors to independently match. No such acceptance run was performed here.
+If disclosure is allowed, specify wording that cannot overstate floor binding
+and whether production issuance remains stopped for any affected output.
+
+### Q-PS-5 — Q-R1-2 preregistered composition rule
+
+**AFFIRM / AMEND / REFUSE:** Ratify, amend or refuse Q-R1-2's proposed composition
+rule before any `_v5` collection consumes it. The two checks below define this
+single rule judgment; an AFFIRM must satisfy both, and an AMEND must supply a
+complete replacement. Paper-I 05 preserves competing proposals; 06 §R1 is the
+registration object. The existing default remains
+`composed_member_envelope_mean.v1` until explicitly replaced.
 
 The proposed rule is
 `composed_member_envelope_mean_t95_window.v1`, over the generator-frozen
@@ -128,171 +283,38 @@ alternatives preserved in packet 05 are: mean member-envelope endpoints only
 (blind Fable); or no arithmetic until a separately registered rule and term
 list exist (Opus).
 
-**Q-R1-2-1.** Ratify, amend, or refuse this rule before any `_v5` collection
+**Composition definition.** Ratify, amend, or refuse this rule before any `_v5` collection
 consumes it. AFFIRM as written means the displayed arithmetic is sufficiently
 defined and scientifically justified for preregistration. An amendment must
 state the exact critical value/degree-of-freedom rule, variance convention,
 authenticated allowance source and reduction, single-count relation, refusal
 conditions, and whether the current default is replaced.
 
-**Q-R1-2-2.** Does applying both the averaged member envelopes and the added
+**Single-count check.** Does applying both the averaged member envelopes and the added
 t/allowance terms preserve the project's single-count uncertainty doctrine,
 or does it double-count a component already present in the member endpoints?
 Name the exact source field or derivation that proves the answer.
 
-### Q-R2 — claim-side-bound sidecar versus the registered ladder and flow
 
-The amended design keeps `joulewise.claim_verdicts.v1` unchanged and adds
-`joulewise.claim_side_bound.v1`. The sidecar is content-addressed, joins to the
-v1 artifact through `claim_verdicts_sha256`, and carries the separately typed
-`claim_side_bound` whose value is the named
-`E_clock_anchor_shift_bound_j` contrast term, never
-`deterministic_bounds.total` or the complete decision-interval half-width.
-The gamma renderer reads v1 plus the sidecar and refuses every digest or
-identity mismatch. D-173 places both inside one verified Claims family.
+## 5. Preserved limitations and next gate
 
-**Q-R2-1.** Should that v1-plus-sidecar design be ratified, rejected in favor
-of a versioned `claim_verdicts.v2` successor, or refused pending a more
-complete wire? Grade value identity, content identity, join direction,
-single-count semantics, null/refusal behavior, and whether the sidecar can
-ever become a gate rather than disclosure/sizing input.
+All five current map roles are synthetic. D-173 remains PROVISIONAL; the code
+blanket-refuses production and whole-window issuance. F1 narrowing is submitted,
+F2 census debt is disclosed, 02-F4 remains open, and six-case CLI completion is
+not asserted. This gate asks the five questions above; it does not certify four
+supplier re-landings, infer paper values from fixtures, or authorize `_v5`
+collection. The lead must consume the sealed judge and independent contract
+outputs, record each ruling and dissent, install accepted amendments, and
+complete the relevant supplier/publication gates.
 
-**Q-R2-2.** If the sidecar design is affirmed, do the present
-`claims_ladder.md` and `v5-artifact-flow.md` contracts already permit it, or
-must both be amended before implementation or collection? State the exact
-flow position, producer, consumer, and failure edge that must be registered;
-do not silently reinterpret their existing v1-only language.
-
-### Q-R4 — D-165 reason map and the two receipt missions
-
-The proposed D-165 rule has one producer-owned refusal enumeration, an exactly
-key-equal professor-sentence map, an enumeration test that fails on additions
-or removals on either side, no rendering of exception/free text, and
-STOP_FILL/structured refusal on an unknown code. Addendum 07 records these two
-follow-on missions as queued in its ruling prose:
-
-- `WHOLE-WINDOW-STOP-RECEIPT-01`: a typed validator must distinguish an
-  authentic admission failure from provenance/structure failure, after which
-  a governed producer issues the receipt. Until both exist, the whole-window
-  stop path cannot issue paper prose.
-- `CLAIM-NONISSUANCE-RECEIPT-01`: a missing claim-verdict artifact is
-  non-issuance, not an authenticated outcome. The registered “required
-  verdict absent” sentence cannot issue until a governed non-issuance artifact
-  exists.
-
-**Q-R4-1.** Ratify, amend, or refuse the total D-165 reason-code-to-sentence
-map rule. Inspect the actual enumeration and map at `<<SEAM-HEAD>>`; identify
-any producer-emittable code without exactly one safe sentence, any sentence
-without a producer code, or any internal diagnostic that can leak into prose.
-
-**Q-R4-2.** Ratify, amend, or refuse the whole-window receipt mission and its
-blocking rule. Is a typed authenticity/admission result plus a governed,
-independently anchored receipt both necessary and sufficient, or does the
-proposal omit an authority or replay relation?
-
-**Q-R4-3.** Ratify, amend, or refuse the claim-nonissuance receipt mission.
-Can absence ever authorize the registered sentence without a positive
-governed non-issuance artifact? If yes, state the non-self-authenticating proof
-and exact failure semantics.
-
-### Q-SIG — repeated signature and the shared-seam response
-
-The provisional D-173 body and ruling 15 record three occurrences in each of
-three lanes:
-
-| Lane | Recorded recurring signature |
-|---|---|
-| D-123 reported means | A caller-supplied projection or embedded document is sealed beside its own digest instead of being derived from independently authenticated parent bytes. |
-| Gamma claim renderer | Claim/floor values and their copied identities can be re-content-addressed together without an independently anchored source-cell authorization. |
-| D-165 outcome renderer | Caller-selected paths/digests and a caller-constructible PASS receipt can authenticate caller-authored reasons or values. |
-
-The consult seats 11/11-blind/12 and packet 14 argue that these are one trust
-boundary defect, and rulings 15/16 choose one shared seam rather than another
-same-shape per-lane fix or parking the suppliers.
-
-**Q-SIG-1.** Do the exhibits establish three same-signature occurrences in
-each named lane, rather than three merely similar symptoms? For each lane,
-cite the three occurrences and the invariant authority defect. If the packet
-lacks the underlying evidence for any count, REFUSE that lane and name the
-missing exhibit.
-
-**Q-SIG-2.** Given only the verified count and signature, was building the
-shared seam the correct structural response rather than parking the affected
-suppliers or attempting another per-lane repair? Grade whether the seam is the
-smallest shared abstraction, whether it introduces an avoidable second trust
-system, and whether its non-issuing fence prevents construction work from
-silently licensing paper values.
-
-### Q-PROC — proposed extension of D-172
-
-D-172 arose from a watchdog that stayed unit-green while its real production
-entry point was broken. The proposed extension, presented here and **not
-adopted**, is:
-
-> Any change to `joulewise/paper_custody.py`, the Git-tracked paper supply
-> map, or a paper supplier/renderer production entry point must ship with a
-> green test that runs the real paper supplier/renderer entry point as a
-> subprocess, exercising real argv parsing where a CLI exists, role lookup,
-> supply-map load, authentication-session construction, validator replay, and
-> structured-refusal-to-exit behavior; at most the repository/runs-root
-> location and unavoidable operating-system seams may be redirected to an
-> isolated fixture. It must also carry at least one named mutation of the
-> changed lines shown RED under that test. A unit test that directly
-> constructs a verified result or injects readers or validators does not
-> satisfy the rule.
-
-**Q-PROC-1.** Should D-172's real-entry-point rule be extended to paper
-suppliers using that text? Grade applicability, whether “real entry point” is
-well-defined for library-only suppliers, whether the allowed fixture seams
-make the test feasible without making the clean-tree anchor self-authenticating,
-and whether D-173's auto-census mutation test already covers the same failure
-class. If amending, give exact scope, allowed seams, RED mutation obligation,
-drop/review trigger, and enforcement home.
-
-### Q-HYGIENE — packet completeness and neutrality
-
-**Q-HYGIENE-1.** Is this packet complete and neutrally assembled for every
-question? Name any omitted contrary/supporting evidence, stale DRAFT-HEAD
-claim, unsupported “queued” status, compound atom, leading formulation, or
-authority conflict and identify every affected question.
-
-## 6. Facts and tensions the ruling must preserve
-
-- No exhibit issues a measurement value, paper fill, claim, or launch
-  authorization. The seam contract's current roles are synthetic and
-  non-issuing.
-- Ruling 06 made `composed_member_envelope_mean.v1` the default; the t95/window
-  rule remains a proposal until this gate rules it.
-- Addendum 07 reversed ruling 06's in-place production-v2 direction after the
-  seat found the registered v1 ladder/flow conflict. Ratifying the sidecar
-  cannot be treated as if those registered contracts already named it.
-- Addenda 07 and 09 use “queued” mission language; this packet proves the
-  proposed mission semantics, not current state-kernel registration. Do not
-  use queue presence or absence as evidence on the design merits.
-- Ruling 15's D-173 is explicitly provisional. Ruling 16 changes who owns
-  every digest and makes the caller wire role plus runs root only.
-- A DRAFT-HEAD validator PASS binds only the copied bytes observed by that
-  invocation. It does not bind the later `<<SEAM-HEAD>>` judge handoff.
-
-## 7. What the seats must not do
-
-Do not read `RUN_STATE.md`, `TASK_QUEUE.md`, run reports, council logs,
-private doctrine, session memory, or scratchpads. Do not write to the
-checkout, run state-changing commands, collect quiet-machine evidence, or
-contact the operating session for clarification. Do not infer a paper value
-from a fixture, infer adoption from implementation, treat a digest supplied
-beside bytes as authority, or convert an undecidable atom into a favorable
-merits verdict. Verify the charter digest independently before reading the
-merits and report expected value, observed value, and method.
-
-Return each numbered atom with AFFIRM/REJECT/REFUSE, severity, load-bearing
-file:line or artifact:field evidence personally checked, explicit agreement
-or disagreement with the magistrate's position, and a separate packet-hygiene
-finding.
-
-## 8. Exhibit manifest
+## 6. Exhibit manifest
 
 ```
+7634e68c1b6fec99881a3ab9028a1bd734389aad60cf792676a0105f4657228b  20-exhibits/assembly-635c5ef0/joulewise/analysis_manifest_v3.py
+21feeaad03661286a617d7a4dc62aab4cfbee0ea198cf297816b7ce1f57f9753  20-exhibits/authority/D-161-entry.md
+0a3146dde1c5feb1d21ba06f99824e7e3bbb49649e2d4eca49161cc975a5a528  20-exhibits/authority/D-161-index-row.md
+eb178f38c9dc909eaf808ad1fd076b3b2889579be03d53767b5ee718187d2300  20-exhibits/authority/D-173-entry.md
+dc084a93aa944fff37435cf5e723bf2fb2577df1aa5ffd0218d76b49cdf423ff  20-exhibits/authority/D-173-index-row.md
 5ca9242e3b66931ed47d0b525a251f8a8e022420fac41065f419fed18ec6d112  20-exhibits/paper-i/02-blind-fable-contract-seat.md
 d517fc7ce75a789ab4a511269a3c4a4f259c11c19daafedd6441a120a203b344  20-exhibits/paper-i/02-consult-sol-contracts.md
 a6840c5376e1b8806e47fad85fb0ef1e47678b6d2563b96c4bf81caa5bab1507  20-exhibits/paper-i/03-consult-opus-contracts.md
@@ -308,12 +330,27 @@ cc3fb162548affbe58054bff4263a607493d01ad4cf142fea42dec94308e9a14  20-exhibits/pa
 7da689fe98a18f206255fee8774df0b1ed4def256d273911c37bb7b3692a932c  20-exhibits/paper-i/14-adjudication-packet-custody-seam.md
 067ade49d88dbf30c5c75491ab5293133e8867c6efd70fd363e1319ee95f66e4  20-exhibits/paper-i/15-magistrate-ruling-custody-seam.md
 11a3bc19907f4f74f6c7398647e1f5a14a560f4dd195b8dd740f038b18451bd1  20-exhibits/paper-i/16-magistrate-rulings-addendum-5.md
-523230f733d54981ae92dc826b01e2052c6c77be652e5c17c0149b6c8cd53bcb  20-exhibits/seam-draft-head-2e3349e1/docs/contracts/paper_supply_custody.md
-a4d498f908b95d089401aa8d6f1dd6d2aa120dfae0cb6d6d32140d116f46e401  20-exhibits/seam-draft-head-2e3349e1/docs/process_traces/2026-09-04-paper-custody/01-seat-landing-report.md
-8a153042819b75faa48f8cdebb79d185c9c5db568742f9e7dbcd89bd029ba679  20-exhibits/seam-draft-head-2e3349e1/docs/process_traces/2026-09-04-paper-custody/02-refuter-contract.md
-d5f46526bbe78b05962ca6f51bac3c6234d415a4e74c828d8e7d93e65def7a91  20-exhibits/seam-draft-head-2e3349e1/docs/process_traces/2026-09-04-paper-custody/02-refuter-execution.md
-a8ae042ee88c39ae703da61d1d359ae77a0a00bcf19113e4947d4123826bd7d4  20-exhibits/seam-draft-head-2e3349e1/docs/process_traces/2026-09-04-paper-custody/03-sol-fix-round-1-report.md
-8943b8e45d3cba1daafb5e491ddbddf5f05bbb3a6be44450c3d6386ced291245  20-exhibits/seam-draft-head-2e3349e1/docs/process_traces/2026-09-04-paper-custody/04-delta-reaudit-round-1.md
-55f06c87f202824a3a1b851404dc82389e574dbf1311b1a5eb8901904d969364  20-exhibits/seam-draft-head-2e3349e1/docs/process_traces/2026-09-04-paper-custody/05-sol-fix-round-2-report.md
-41d4b2129bfb387cd2797a7080dc4f0d7d6cf8ba476ad74b49ba7a4b52a43f5b  20-exhibits/seam-draft-head-2e3349e1/joulewise/paper_custody.py
+8390dcf47e6d4b150f42377fda7d4fd352a7340e33ae7cf7a8f0c18d1bb01faa  20-exhibits/peer-audit/02-F4-verbatim.md
+3c219d721ad5cb083b4160998e83b3ab5cf993060498976e41fe247039e5f084  20-exhibits/peer-audit/17-Q6-verbatim.md
+a0e0b9ac388e040b86d043d5031f61772abc37c42cdc9216eac3e896ec9d146e  20-exhibits/peer-audit/43-magistrate-synthesis-gate-17.md
+ced629e34e8f98c5e4524e2dbcdb8582447481ead2936adea60bc121fab0d1ff  20-exhibits/seam-84b24686/configs/paper_supply/supply_map.json
+56fe96621484484db7db8f0017631aaa26eb29e0834792120e2797308464422f  20-exhibits/seam-84b24686/docs/contracts/paper_supply_custody.md
+a4d498f908b95d089401aa8d6f1dd6d2aa120dfae0cb6d6d32140d116f46e401  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/01-seat-landing-report.md
+8a153042819b75faa48f8cdebb79d185c9c5db568742f9e7dbcd89bd029ba679  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/02-refuter-contract.md
+d5f46526bbe78b05962ca6f51bac3c6234d415a4e74c828d8e7d93e65def7a91  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/02-refuter-execution.md
+a8ae042ee88c39ae703da61d1d359ae77a0a00bcf19113e4947d4123826bd7d4  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/03-sol-fix-round-1-report.md
+8943b8e45d3cba1daafb5e491ddbddf5f05bbb3a6be44450c3d6386ced291245  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/04-delta-reaudit-round-1.md
+55f06c87f202824a3a1b851404dc82389e574dbf1311b1a5eb8901904d969364  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/05-sol-fix-round-2-report.md
+acca042364a805b849d318568c60c1f21c29f3b4fffa1715fd7c37ecb90c1229  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/06-sol-fix-round-3-report.md
+221a328ae8fda35112e200e9bd83ec6e50dc6e1785d1178ed8db42919daac125  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/07-delta-reaudit-round-2.md
+1d61e17f38666f6b0b5e2ef05b6490b253e4574e27fa2f3614eccbe3885477c2  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/08-opus-counter-review.md
+b35f60a6c9852af13596ddda4abde5127a92aa39d13dd509201ba4eeb9f6142f  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/09-sol-fix-round-4-report.md
+79b5209d9b12b3a25a16cbd1ac68ea7511a2b47dffae0f6850b99c70e8f1eade  20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/10-delta-re-audit-round-4.md
+292e1285d496e20a40c868aa10fc7ea46e16e1e4850e226f527085f511e7de36  20-exhibits/seam-84b24686/joulewise/analysis_engine/inputs.py
+73e20342f2a71db4563ba2277b20de3fee7da9e9f555329c918f0614c8eccaf6  20-exhibits/seam-84b24686/joulewise/analysis_manifest_v3.py
+7a6a4a12ae2522ac763bab58a50a6990e2ae1620aa3265dcd6fc70dcc51a971b  20-exhibits/seam-84b24686/joulewise/floor_mint_estimator.py
+8a94b8433c415eb0abd4d4ea3cc9aed6cc994e089a6360d73919fdf825c343bd  20-exhibits/seam-84b24686/joulewise/paper_custody.py
+b243419365becd5c46911154a6683302db85c3a4fd2ba9c2828017cf3475d78a  20-exhibits/seam-84b24686/joulewise/whole_window.py
+241b645b2def824d3677e70a5085c098d7d62c8a49b40920df91e05c511b8179  20-exhibits/seam-84b24686/tests/test_paper_custody.py
+3ef565c7ecb846faa4d4e1d073544f38c1ee6097417ee8bb9afab5815f4aa739  20-exhibits/source-index.json
 ```

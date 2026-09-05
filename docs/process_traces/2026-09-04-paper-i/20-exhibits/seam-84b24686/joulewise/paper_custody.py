@@ -15,7 +15,7 @@ import inspect
 import json
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Callable, Literal, overload
@@ -54,9 +54,7 @@ PAPER_CUSTODY_REFUSAL_CODES = frozenset(
         "paper_custody_receipt_invalid",
         "paper_custody_receipt_binding_mismatch",
         "paper_custody_validator_refused",
-        "paper_custody_derivation_mismatch",
         "paper_custody_evidence_ambiguous",
-        "paper_custody_identity_not_v5",
         "paper_custody_input_changed",
     }
 )
@@ -128,14 +126,97 @@ class VerifiedDigest:
     strict_parse_succeeded: bool
 
 
-@dataclass(frozen=True)
+def _refuse_verified_construction(*_args: object, **_kwargs: object) -> None:
+    raise PaperCustodyRefusal("paper_custody_request_invalid")
+
+
+_CAPABILITY_FIELDS = frozenset(
+    {
+        "family",
+        "inputs",
+        "receipt_sha256",
+        "validator_source_sha256",
+        "anchor_head",
+        "supply_map_sha256",
+        "mode",
+        "issuance_authorized",
+        "evidence",
+        "_payload",
+    }
+)
+
+
+def _capability_getattribute(value: object, name: str) -> object:
+    if name in _CAPABILITY_FIELDS:
+        _require_custody_capability(value)
+    return object.__getattribute__(value, name)
+
+
+def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
+    """Keep the construction token inside the seam's private closures."""
+
+    token = object()
+
+    def require(value: object) -> None:
+        try:
+            presented = object.__getattribute__(value, "_custody_token")
+        except AttributeError as exc:
+            raise PaperCustodyRefusal("paper_custody_request_invalid") from exc
+        if presented is not token:
+            raise PaperCustodyRefusal("paper_custody_request_invalid")
+
+    def construct_evidence(presented: object, **values: object) -> object:
+        if presented is not token:
+            raise PaperCustodyRefusal("paper_custody_request_invalid")
+        evidence = object.__new__(CustodyEvidence)
+        for name, child in values.items():
+            object.__setattr__(evidence, name, child)
+        object.__setattr__(evidence, "_custody_token", token)
+        return evidence
+
+    def construct_verified(
+        presented: object,
+        output_type: type,
+        evidence: object,
+        payload: object,
+    ) -> object:
+        if presented is not token:
+            raise PaperCustodyRefusal("paper_custody_request_invalid")
+        require(evidence)
+        if output_type not in {
+            VerifiedReportedEnergyParents,
+            VerifiedD165Closeout,
+            VerifiedWholeWindowVerdict,
+            VerifiedClaimEvidence,
+            VerifiedTransferProjection,
+        } or type(payload) is not _FrozenObject:
+            raise PaperCustodyRefusal("paper_custody_request_invalid")
+        result = object.__new__(output_type)
+        object.__setattr__(result, "evidence", evidence)
+        object.__setattr__(result, "_payload", payload)
+        object.__setattr__(result, "_custody_token", token)
+        return result
+
+    def open_with_token(ref: object) -> object:
+        return _open_paper_input_impl(ref, _custody_token=token)
+
+    return construct_evidence, construct_verified, require, open_with_token
+
+
+@dataclass(frozen=True, init=False, slots=True)
 class CustodyEvidence:
     family: str
     inputs: tuple[VerifiedDigest, ...]
     receipt_sha256: str
     validator_source_sha256: str
+    anchor_head: str
+    supply_map_sha256: str
     mode: Literal["production", "test_fixture_non_issuing"]
     issuance_authorized: bool
+    _custody_token: object = field(repr=False, compare=False)
+
+    __init__ = _refuse_verified_construction
+    __getattribute__ = _capability_getattribute
 
 
 @dataclass(frozen=True)
@@ -148,48 +229,62 @@ class _FrozenArray:
     items: tuple[object, ...]
 
 
-def _refuse_verified_construction(*_args: object, **_kwargs: object) -> None:
-    raise PaperCustodyRefusal("paper_custody_request_invalid")
-
-
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class VerifiedReportedEnergyParents:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+    _custody_token: object = field(repr=False, compare=False)
 
     __init__ = _refuse_verified_construction
+    __getattribute__ = _capability_getattribute
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class VerifiedD165Closeout:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+    _custody_token: object = field(repr=False, compare=False)
 
     __init__ = _refuse_verified_construction
+    __getattribute__ = _capability_getattribute
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class VerifiedWholeWindowVerdict:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+    _custody_token: object = field(repr=False, compare=False)
 
     __init__ = _refuse_verified_construction
+    __getattribute__ = _capability_getattribute
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class VerifiedClaimEvidence:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+    _custody_token: object = field(repr=False, compare=False)
 
     __init__ = _refuse_verified_construction
+    __getattribute__ = _capability_getattribute
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, slots=True)
 class VerifiedTransferProjection:
     evidence: CustodyEvidence
     _payload: _FrozenObject
+    _custody_token: object = field(repr=False, compare=False)
 
     __init__ = _refuse_verified_construction
+    __getattribute__ = _capability_getattribute
+
+
+(
+    _construct_custody_evidence,
+    _construct_verified,
+    _require_custody_capability,
+    _open_paper_input,
+) = _make_custody_capability_mint()
 
 
 class PaperCustodyRefusal(RuntimeError):
@@ -318,6 +413,7 @@ class _ResolvedSupply:
     inventory: _BoundFile
     sources: tuple[_BoundFile, ...]
     receipt: _ReceiptRef
+    supply_map_sha256: str
 
 
 @dataclass(frozen=True)
@@ -677,6 +773,7 @@ def _load_supply_entry(
         inventory=inventory,
         sources=tuple(sources),
         receipt=_ReceiptRef(file=receipt_file, validator=validator),
+        supply_map_sha256=_sha256(raw),
     )
 
 
@@ -1019,17 +1116,6 @@ def _after_validator_replay(state: _ReplayState) -> None:
         raise TypeError("invalid paper custody replay state")
 
 
-def _construct_verified(
-    output_type: type,
-    evidence: CustodyEvidence,
-    payload: _FrozenObject,
-) -> _VerifiedFamily:
-    value = object.__new__(output_type)
-    object.__setattr__(value, "evidence", evidence)
-    object.__setattr__(value, "_payload", payload)
-    return value
-
-
 @overload
 def open_paper_input(ref: ReportedEnergyParentsRef) -> VerifiedReportedEnergyParents: ...
 
@@ -1061,7 +1147,11 @@ def open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
         raise PaperCustodyRefusal("paper_custody_request_invalid") from exc
 
 
-def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
+def _open_paper_input_impl(
+    ref: _FamilyRef,
+    *,
+    _custody_token: object,
+) -> _VerifiedFamily:
     spec = _FAMILY_SPECS.get(type(ref))
     if spec is None:
         raise PaperCustodyRefusal("paper_custody_request_invalid")
@@ -1078,7 +1168,7 @@ def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
     if not runs_root.is_dir():
         raise PaperCustodyRefusal("paper_custody_path_refused")
     try:
-        repository, head = _mint_git_anchor()
+        repository, head = _mint_git_anchor(require_origin_main=True)
     except IdentityPinProjectionError as exc:
         raise PaperCustodyRefusal("paper_custody_anchor_unavailable") from exc
 
@@ -1097,7 +1187,7 @@ def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
             supply.inventory,
             bindings=bindings,
         )
-        mode, inventory = _validate_inventory(
+        mode, _inventory = _validate_inventory(
             inventory_raw,
             family=spec.family,
             expected=(*sources, receipt_binding),
@@ -1114,16 +1204,6 @@ def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                 binding,
                 bindings=bindings,
             )
-            row = inventory[binding.role]
-            if row["sha256"] != _sha256(raw):
-                _raise(
-                    "paper_custody_anchor_mismatch",
-                    role=binding.role,
-                    session=session,
-                    repository=repository,
-                    runs_root=runs_root,
-                    bindings=bindings,
-                )
             all_first_raws[binding.role] = raw
             if binding.role is not InputRole.VALIDATOR_RECEIPT:
                 raws[binding.role] = raw
@@ -1195,13 +1275,16 @@ def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                 )
 
         records = _record_tuple(session, repository, runs_root, bindings)
-        evidence = CustodyEvidence(
+        evidence = _construct_custody_evidence(
+            _custody_token,
             family=spec.family,
             inputs=records,
             receipt_sha256=_sha256(
                 all_first_raws[InputRole.VALIDATOR_RECEIPT]
             ),
             validator_source_sha256=_validator_source_sha256(spec.family),
+            anchor_head=head,
+            supply_map_sha256=supply.supply_map_sha256,
             mode=mode,
             issuance_authorized=mode == "production",
         )
@@ -1223,7 +1306,9 @@ def _open_paper_input(ref: _FamilyRef) -> _VerifiedFamily:
                 for binding in sources
             )
         )
-        return _construct_verified(spec.output_type, evidence, payload)
+        return _construct_verified(
+            _custody_token, spec.output_type, evidence, payload
+        )
 
 
 __all__ = [

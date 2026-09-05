@@ -35,8 +35,14 @@ clean-tree function `joulewise.identity_pins._mint_git_anchor()`, plus the
 supply-map blob read from that exact commit. The function calls the generalized
 mint's Git-state implementation on its fixed `REPO_ROOT`, requires a 40-digit
 `HEAD`, and runs `git status --porcelain --untracked-files=all`. Any tracked or
-untracked change refuses the anchor. Whether `origin/main` contains `HEAD` is
-recorded by the mint implementation but is not an anchor gate.
+untracked change refuses the anchor, including an untracked file outside the
+supply-map paths. This strict rule is intentional: the paper build is a
+release operation, and an operator must stage, commit, ignore, or remove all
+untracked scratch material before it can read. The returned `HEAD` must also be
+provably contained in local `origin/main`; false or unknown containment
+refuses. Synthetic tests may replace this private anchor call only while
+exercising a map-pinned `test_fixture_non_issuing` inventory. The public
+production path exposes no fixture switch and always executes the real gate.
 
 The custody inventory and receipt are corroborating structures, not independent
 authority: changing evidence and minting replacements cannot change the
@@ -45,8 +51,12 @@ Git-anchored supply map.
 A **fresh replay** runs the current owning validator code in-process over the
 bytes read in the current call. A **reopen** reads every selected input again
 after replay. A **verified result** is one of the five frozen, non-container
-types that only the seam can construct. **Issuance** means releasing a result
-that may authorize paper text; every fixture role is explicitly non-issuing.
+types minted with a capability token held only inside private seam closures.
+The same token guards `CustodyEvidence`; direct construction and an
+`object.__new__` object without that token refuse on access. Evidence records
+the authorizing anchor commit and exact supply-map SHA-256 in addition to the
+admitted input digests. **Issuance** means releasing a result that may authorize
+paper text; every fixture role is explicitly non-issuing.
 
 ## Closed public wire
 
@@ -64,10 +74,11 @@ Every reference has exactly two fields, in this order: `role: str` and
 
 The module exports no path/digest binding class and no receipt reference class.
 It exposes no public reader, parser, replay dispatcher, payload constructor, or
-verified-result constructor. Calling any `Verified*` class directly refuses
-with `paper_custody_request_invalid`; only the private seam factory can create a
-populated instance. A dictionary, mapping, bytes object, arbitrary sequence,
-prevalidated object, or object made with `object.__new__` is never a valid ref.
+verified-result constructor. Calling `CustodyEvidence` or any `Verified*`
+class directly refuses with `paper_custody_request_invalid`; private
+construction requires the closure-held token. A dictionary, mapping, bytes
+object, arbitrary sequence, prevalidated object, or object made with
+`object.__new__` is never a valid ref or verified capability.
 
 ## Supply-map schema and lookup
 
@@ -115,8 +126,9 @@ Lookup is exact and mechanical:
 
 1. Validate the concrete ref type, role grammar, and `Path`-typed runs root;
    resolve the runs root strictly and require a directory.
-2. Call `_mint_git_anchor()` with no arguments. Do not accept a repository,
-   commit, map path, map bytes, or anchor from the caller.
+2. Call the private `_mint_git_anchor(require_origin_main=True)` release form.
+   Do not accept a repository, commit, map path, map bytes, containment
+   override, fixture switch, or anchor from the caller.
 3. Start a new `V2AuthenticationReadSession`. Run
    `git -C <repository> show <head>:configs/paper_supply/supply_map.json`, then
    pass those exact bytes to the active session as the identity
@@ -197,10 +209,12 @@ fresh `V2AuthenticationReadSession`:
    receipt again through the same session and pins. Removal, replacement,
    digest change, grammar change, or inode/path substitution refuses as
    `paper_custody_input_changed`.
-8. Build a frozen read census and privately construct the matching verified
-   result. Production mode still refuses until that family's governed producer
-   is registered. Whole-window positive issuance additionally remains blocked
-   on `WHOLE-WINDOW-STOP-RECEIPT-01`.
+8. Build a frozen read census carrying `anchor_head` and
+   `supply_map_sha256`, then privately construct the matching verified result
+   with the seam token. The current implementation blanket-refuses every
+   production inventory; a future producer mission must replace that explicit
+   stop with a registered per-family issuance gate. Whole-window positive
+   issuance additionally remains blocked on `WHOLE-WINDOW-STOP-RECEIPT-01`.
 
 ## Family replay requirements
 
@@ -239,12 +253,43 @@ and reads its bytes through the authentication input API; it has no
 The returned object is the authenticated capability itself; no public
 `(Mapping, digest)` projection is part of this wire.
 
-The authentication AST guard includes `joulewise/paper_custody.py`, and its
-public-wire test parses all five ref class bodies rather than trusting only the
-outer `open_paper_input(ref)` signature. It requires exactly `role` and
-`runs_root` and rejects reintroduction of public binding or receipt types.
+The authentication AST guard includes `joulewise/paper_custody.py`, every
+supplier owner module in the validator census, and both
+`joulewise.analysis_engine.inputs` and `joulewise.analysis_manifest_v3`.
+Evidence reads in those modules route through the active authentication
+session. The manifest's three append-only publisher reads are explicitly
+classified by the lint as writer-state/idempotence/directory-fsync operations,
+not evidence admission. The guard does not treat subprocess stdout as a direct
+filesystem read; the seam's `git show` bytes are therefore registered by an
+explicit `session.ingest` call. The public-wire test parses all five ref class
+bodies rather than trusting only the outer `open_paper_input(ref)` signature.
+It requires exactly `role` and `runs_root` and rejects reintroduction of public
+binding or receipt types.
 
 ## Closed refusals and exception translation
+
+This is the exhaustive refusal-code registry. A declared code without the
+listed reachable condition, or a raise-site code absent from this table, is a
+contract failure.
+
+| Code | Reachable condition |
+|---|---|
+| `paper_custody_request_invalid` | Invalid ref/value shape, private-capability construction/access, or translated unexpected ordinary exception |
+| `paper_custody_anchor_unavailable` | Dirty/unreadable Git state, HEAD not provably contained in `origin/main`, or failed anchored `git show` |
+| `paper_custody_anchor_mismatch` | A custody-inventory locator, authority, or digest disagrees with the Git-anchored supply-map binding |
+| `paper_custody_supply_map_invalid` | Supply-map schema, family, validator, role ordering, path, digest, or binding grammar is invalid |
+| `paper_custody_role_unregistered` | The requested role is absent from the anchored map |
+| `paper_custody_path_refused` | Runs root or a resolved input path is unsafe, non-directory, symlinked, or non-regular |
+| `paper_custody_input_unreadable` | A required root or input cannot be read |
+| `paper_custody_digest_mismatch` | Input bytes disagree with the map-pinned SHA-256 before parsing |
+| `paper_custody_parse_invalid` | Pinned bytes fail strict UTF-8, JSON/JSONL, duplicate-key, or finite-number admission |
+| `paper_custody_receipt_unissued` | A non-whole-window production inventory reaches the current blanket production stop |
+| `paper_custody_blocked_pending_receipt` | Whole-window evidence reaches its mandatory stop-receipt gate |
+| `paper_custody_receipt_invalid` | Inventory or validator-receipt schema/canonical form/status is invalid |
+| `paper_custody_receipt_binding_mismatch` | Receipt input census, validator source digest, or replay-code binding disagrees |
+| `paper_custody_validator_refused` | Fresh owning-validator replay returns one or more private diagnostic codes |
+| `paper_custody_evidence_ambiguous` | Duplicate paths/roles or a non-exact inventory census prevents unique evidence selection |
+| `paper_custody_input_changed` | Reopen detects replacement, removal, grammar/digest change, or different bytes after replay |
 
 Every public-entry failure is `PaperCustodyRefusal` with a code from the closed
 `paper_custody_*` set and empty `rendered_output`. This includes malformed

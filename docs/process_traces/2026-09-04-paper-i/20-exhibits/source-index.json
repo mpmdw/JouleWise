@@ -1,0 +1,341 @@
+{
+  "schema": "paper-supply-exhibit-provenance/v1",
+  "sources": [
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/01-seat-landing-report.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/01-seat-landing-report.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-60",
+      "copy": "full",
+      "sha256": "a4d498f908b95d089401aa8d6f1dd6d2aa120dfae0cb6d6d32140d116f46e401"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/02-refuter-contract.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/02-refuter-contract.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-81",
+      "copy": "full",
+      "sha256": "8a153042819b75faa48f8cdebb79d185c9c5db568742f9e7dbcd89bd029ba679"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/02-refuter-execution.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/02-refuter-execution.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-72",
+      "copy": "full",
+      "sha256": "d5f46526bbe78b05962ca6f51bac3c6234d415a4e74c828d8e7d93e65def7a91"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/03-sol-fix-round-1-report.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/03-sol-fix-round-1-report.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-39",
+      "copy": "full",
+      "sha256": "a8ae042ee88c39ae703da61d1d359ae77a0a00bcf19113e4947d4123826bd7d4"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/04-delta-reaudit-round-1.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/04-delta-reaudit-round-1.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-71",
+      "copy": "full",
+      "sha256": "8943b8e45d3cba1daafb5e491ddbddf5f05bbb3a6be44450c3d6386ced291245"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/05-sol-fix-round-2-report.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/05-sol-fix-round-2-report.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-54",
+      "copy": "full",
+      "sha256": "55f06c87f202824a3a1b851404dc82389e574dbf1311b1a5eb8901904d969364"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/06-sol-fix-round-3-report.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/06-sol-fix-round-3-report.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-46",
+      "copy": "full",
+      "sha256": "acca042364a805b849d318568c60c1f21c29f3b4fffa1715fd7c37ecb90c1229"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/07-delta-reaudit-round-2.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/07-delta-reaudit-round-2.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-91",
+      "copy": "full",
+      "sha256": "221a328ae8fda35112e200e9bd83ec6e50dc6e1785d1178ed8db42919daac125"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/08-opus-counter-review.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/08-opus-counter-review.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-371",
+      "copy": "full",
+      "sha256": "1d61e17f38666f6b0b5e2ef05b6490b253e4574e27fa2f3614eccbe3885477c2"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/09-sol-fix-round-4-report.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/09-sol-fix-round-4-report.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-101",
+      "copy": "full",
+      "sha256": "b35f60a6c9852af13596ddda4abde5127a92aa39d13dd509201ba4eeb9f6142f"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/process_traces/2026-09-04-paper-custody/10-delta-re-audit-round-4.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-custody/10-delta-re-audit-round-4.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-68",
+      "copy": "full",
+      "sha256": "79b5209d9b12b3a25a16cbd1ac68ea7511a2b47dffae0f6850b99c70e8f1eade"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/joulewise/paper_custody.py",
+      "source_path": "joulewise/paper_custody.py",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-1331",
+      "copy": "full",
+      "sha256": "8a94b8433c415eb0abd4d4ea3cc9aed6cc994e089a6360d73919fdf825c343bd"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/docs/contracts/paper_supply_custody.md",
+      "source_path": "docs/contracts/paper_supply_custody.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-304",
+      "copy": "full",
+      "sha256": "56fe96621484484db7db8f0017631aaa26eb29e0834792120e2797308464422f"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/joulewise/floor_mint_estimator.py",
+      "source_path": "joulewise/floor_mint_estimator.py",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-718",
+      "copy": "full",
+      "sha256": "7a6a4a12ae2522ac763bab58a50a6990e2ae1620aa3265dcd6fc70dcc51a971b"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/joulewise/analysis_engine/inputs.py",
+      "source_path": "joulewise/analysis_engine/inputs.py",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-4594",
+      "copy": "full",
+      "sha256": "292e1285d496e20a40c868aa10fc7ea46e16e1e4850e226f527085f511e7de36"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/joulewise/analysis_manifest_v3.py",
+      "source_path": "joulewise/analysis_manifest_v3.py",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-4573",
+      "copy": "full",
+      "sha256": "73e20342f2a71db4563ba2277b20de3fee7da9e9f555329c918f0614c8eccaf6"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/joulewise/whole_window.py",
+      "source_path": "joulewise/whole_window.py",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-6041",
+      "copy": "full",
+      "sha256": "b243419365becd5c46911154a6683302db85c3a4fd2ba9c2828017cf3475d78a"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/tests/test_paper_custody.py",
+      "source_path": "tests/test_paper_custody.py",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-662",
+      "copy": "full",
+      "sha256": "241b645b2def824d3677e70a5085c098d7d62c8a49b40920df91e05c511b8179"
+    },
+    {
+      "exhibit": "20-exhibits/seam-84b24686/configs/paper_supply/supply_map.json",
+      "source_path": "configs/paper_supply/supply_map.json",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "1-68",
+      "copy": "full",
+      "sha256": "ced629e34e8f98c5e4524e2dbcdb8582447481ead2936adea60bc121fab0d1ff"
+    },
+    {
+      "exhibit": "20-exhibits/assembly-635c5ef0/joulewise/analysis_manifest_v3.py",
+      "source_path": "joulewise/analysis_manifest_v3.py",
+      "revision": "635c5ef039fb21144f7483f0375f4817a7278888",
+      "lines": "1-4524",
+      "copy": "full",
+      "sha256": "7634e68c1b6fec99881a3ab9028a1bd734389aad60cf792676a0105f4657228b"
+    },
+    {
+      "exhibit": "20-exhibits/authority/D-173-entry.md",
+      "source_path": "docs/decision_log.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "10903-10933",
+      "copy": "verbatim excerpt",
+      "sha256": "eb178f38c9dc909eaf808ad1fd076b3b2889579be03d53767b5ee718187d2300"
+    },
+    {
+      "exhibit": "20-exhibits/authority/D-173-index-row.md",
+      "source_path": "docs/decision_log.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "219-219",
+      "copy": "verbatim excerpt",
+      "sha256": "dc084a93aa944fff37435cf5e723bf2fb2577df1aa5ffd0218d76b49cdf423ff"
+    },
+    {
+      "exhibit": "20-exhibits/authority/D-161-entry.md",
+      "source_path": "docs/decision_log.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "10392-10405",
+      "copy": "verbatim excerpt",
+      "sha256": "21feeaad03661286a617d7a4dc62aab4cfbee0ea198cf297816b7ce1f57f9753"
+    },
+    {
+      "exhibit": "20-exhibits/authority/D-161-index-row.md",
+      "source_path": "docs/decision_log.md",
+      "revision": "84b24686d4e11b36d2f6fe64e08616ff3ab1c050",
+      "lines": "207-207",
+      "copy": "verbatim excerpt",
+      "sha256": "0a3146dde1c5feb1d21ba06f99824e7e3bbb49649e2d4eca49161cc975a5a528"
+    },
+    {
+      "exhibit": "20-exhibits/peer-audit/43-magistrate-synthesis-gate-17.md",
+      "source_path": "docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md",
+      "revision": "ff82e0dd3678b06febac1d3c4fe2b16f0926538a",
+      "lines": "1-19",
+      "copy": "full",
+      "sha256": "a0e0b9ac388e040b86d043d5031f61772abc37c42cdc9216eac3e896ec9d146e"
+    },
+    {
+      "exhibit": "20-exhibits/peer-audit/17-Q6-verbatim.md",
+      "source_path": "docs/process_traces/2026-09-04-peer-audit/17-magistrate-final-ruling.md",
+      "revision": "ff82e0dd3678b06febac1d3c4fe2b16f0926538a",
+      "lines": "41-48",
+      "copy": "verbatim excerpt",
+      "sha256": "3c219d721ad5cb083b4160998e83b3ab5cf993060498976e41fe247039e5f084"
+    },
+    {
+      "exhibit": "20-exhibits/peer-audit/02-F4-verbatim.md",
+      "source_path": "docs/process_traces/2026-09-04-peer-audit/02-claim-spine.md",
+      "revision": "5e416c47b6236e66eeb861584ad19aeff4e012a4",
+      "lines": "51-60",
+      "copy": "verbatim excerpt",
+      "sha256": "8390dcf47e6d4b150f42377fda7d4fd352a7340e33ae7cf7a8f0c18d1bb01faa"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/02-blind-fable-contract-seat.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/02-blind-fable-contract-seat.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-70",
+      "copy": "full",
+      "sha256": "5ca9242e3b66931ed47d0b525a251f8a8e022420fac41065f419fed18ec6d112"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/02-consult-sol-contracts.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/02-consult-sol-contracts.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-318",
+      "copy": "full",
+      "sha256": "d517fc7ce75a789ab4a511269a3c4a4f259c11c19daafedd6441a120a203b344"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/03-consult-opus-contracts.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/03-consult-opus-contracts.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-163",
+      "copy": "full",
+      "sha256": "a6840c5376e1b8806e47fad85fb0ef1e47678b6d2563b96c4bf81caa5bab1507"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/05-adjudication-packet-contracts.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/05-adjudication-packet-contracts.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-182",
+      "copy": "full",
+      "sha256": "d3ae4c74d9448b45395c73746446245cf2b1e32ffc413a5f58f42fdae235b72c"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/06-magistrate-contract-rulings.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/06-magistrate-contract-rulings.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-31",
+      "copy": "full",
+      "sha256": "ed31ce578a2993fc34d655441e67bab0babf61dc7cf8e1d0a21b1bd9295e9330"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/07-magistrate-rulings-addendum.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/07-magistrate-rulings-addendum.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-7",
+      "copy": "full",
+      "sha256": "a8737b0387fdd2f69f47e39fdd1f2e18352d0871b406c127e6c2ff4a71032ace"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/08-magistrate-rulings-addendum-2.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/08-magistrate-rulings-addendum-2.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-7",
+      "copy": "full",
+      "sha256": "959c2276f1497430140da27b8d3b7db6de813acb5a77f7f18c5213c5329f7fad"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/09-magistrate-rulings-addendum-3.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/09-magistrate-rulings-addendum-3.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-9",
+      "copy": "full",
+      "sha256": "18302ea48b235d592ca102855cb3cddd6b2bfd4faf636ea9c72e0411dc785c7f"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/10-magistrate-rulings-addendum-4.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/10-magistrate-rulings-addendum-4.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-7",
+      "copy": "full",
+      "sha256": "22714d90343376d011f92e5d40de8e084da1f40f7b72860a4723fd7d773da1e4"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/11-blind-fable-custody-read-seam-seat.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/11-blind-fable-custody-read-seam-seat.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-76",
+      "copy": "full",
+      "sha256": "c2d33b5537b29ecf6511440a9900dca95c5787e442943668bdd466f790818f92"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/11-custody-seam-consult-sol.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/11-custody-seam-consult-sol.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-80",
+      "copy": "full",
+      "sha256": "cc3fb162548affbe58054bff4263a607493d01ad4cf142fea42dec94308e9a14"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/12-custody-seam-consult-opus.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/12-custody-seam-consult-opus.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-225",
+      "copy": "full",
+      "sha256": "75da00c7890bb0198195aee3608848e3f1c43b1cb85e152d16ad473ed5d0dd11"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/14-adjudication-packet-custody-seam.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/14-adjudication-packet-custody-seam.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-135",
+      "copy": "full",
+      "sha256": "7da689fe98a18f206255fee8774df0b1ed4def256d273911c37bb7b3692a932c"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/15-magistrate-ruling-custody-seam.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/15-magistrate-ruling-custody-seam.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-13",
+      "copy": "full",
+      "sha256": "067ade49d88dbf30c5c75491ab5293133e8867c6efd70fd363e1319ee95f66e4"
+    },
+    {
+      "exhibit": "20-exhibits/paper-i/16-magistrate-rulings-addendum-5.md",
+      "source_path": "docs/process_traces/2026-09-04-paper-i/16-magistrate-rulings-addendum-5.md",
+      "revision": "913bf3f76025f654e5b910670c5a00bfd82c34d4",
+      "lines": "1-9",
+      "copy": "full",
+      "sha256": "11a3bc19907f4f74f6c7398647e1f5a14a560f4dd195b8dd740f038b18451bd1"
+    }
+  ]
+}
