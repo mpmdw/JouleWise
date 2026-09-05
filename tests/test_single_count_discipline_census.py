@@ -818,6 +818,11 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   "('Name', (('id', '_D117_MINT_CELL_OPTIONAL_KEYS'), ('ctx', ('Load', ()))))", 1),
  ('joulewise/floor_extraction.py', 'validate_d117_mint_consumption_report', 'api-reference',
   "('Name', (('id', '_D117_MINT_REPORT_OPTIONAL_KEYS'), ('ctx', ('Load', ()))))", 1),
+ # Pass-through carrier: evaluate_claim admits the unchanged wire via its reader.
+ ('joulewise/paper_custody.py', '<grep>', 'grep',
+  'floor_metadata_keys = {"floor_limit_class", "floor_source", "point_floor_diagnostics", "single_count_discipline"}', 1),
+ ('joulewise/paper_custody.py', '_claim_issuance_gate', 'key-token',
+  "('Constant', (('value', 'single_count_discipline'),))", 1),
  ('scripts/mint_floor_artifact.py', '<grep>', 'grep', 'DisciplineV2,', 1),
  ('scripts/mint_floor_artifact.py', '<grep>', 'grep', 'SingleCountDisciplineError,', 1),
  ('scripts/mint_floor_artifact.py', '<grep>', 'grep', 'except SingleCountDisciplineError as exc:', 1),
