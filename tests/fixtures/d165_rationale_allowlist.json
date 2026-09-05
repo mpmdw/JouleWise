@@ -1,0 +1,26 @@
+[
+  {
+    "path": "docs/paper/round7/structural-edits.md",
+    "line": 84,
+    "phrase": "cancels exactly",
+    "reason": "Historical insertion paragraph explicitly SUPERSEDED by the preceding 2026-09-05 banner; retained for custody, not active paper text."
+  },
+  {
+    "path": "joulewise/dominance_closeout.py",
+    "line": 59,
+    "phrase": "cancels exactly",
+    "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
+  },
+  {
+    "path": "joulewise/dominance_closeout.py",
+    "line": 59,
+    "phrase": "shared fiducial shift",
+    "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
+  },
+  {
+    "path": "joulewise/dominance_closeout.py",
+    "line": 59,
+    "phrase": "uniform shared fiducial shift cancels",
+    "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
+  }
+]

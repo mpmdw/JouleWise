@@ -59,7 +59,7 @@ the physical files do not support:
 |---|---|---|
 | Ordinary R | A widened floor alone does not say whether attribution uncertainty dominates repeatability. | A 2.0 J corner-widened floor divided by a 1.0 J point floor gives R = 2.0 and passes; 1.5 J / 1.0 J gives R = 1.5 and selects B when every record is complete. |
 | Shared/local split and replay | The diagnostic restricts the additive energy sign shared across blocks while enumerating independent local corners; it does not prove physical timing coverage. | Measured block `b01` has `delta_j = 0.21462565134537215`, `shared_width_j = 0.2617693341828027`, and `local_width_j = 0.048579253149402035`. With the authenticated `shared_edge_bound_s = 0.03678263869781979`, the two-block replay gives point 2.430576610260499 J, corner 8.830437643102993 J, and R_cm = 3.6330628731577335. |
-| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar is produced by `replay_sidecar` in `tests/test_d165_dominance_closeout.py:200`; its bytes hash to `f0f8e86e2aa6c9a3c920e026813b8ce9c34c78e5b21dc7457cbe7bf2de9ba870`. Reproduce the pinned digest with `TMPDIR=<scratch> python3 -m unittest tests.test_d165_dominance_closeout.D165DominanceCloseoutTests.test_worked_sidecar_digest_matches_contract_literal`; changing one operand changes the digest and yields `replay_sidecar_digest_mismatch`. |
+| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar is produced by `replay_sidecar` in `tests/test_d165_dominance_closeout.py:200`; its bytes hash to `cff755ba28175cff51bc47298ee97c97011444c8a7f2dd08de89d3216fe38500`. Reproduce the pinned digest with `TMPDIR=<scratch> python3 -m unittest tests.test_d165_dominance_closeout.D165DominanceCloseoutTests.test_worked_sidecar_digest_matches_contract_literal`; changing one operand changes the digest and yields `replay_sidecar_digest_mismatch`. |
 | Exact census | Twelve plausible records can still omit a physical cell and duplicate another. | Cells `cell-decode-a`, `cell-decode-b`, `cell-prefill_p<N>-a`, and `cell-prefill_p<N>-b` must yield exactly eight ordinary slots (4 × 2 components) and four R_cm slots (4 × 1 comparative component). |
 | Byte-only source custody | A parsed object and an authenticated byte string supplied through two channels can describe different artifacts. | A close-out built from sidecar bytes X must validate against X. If block 0's energy operands are multiplied by 0.9 and its split/result are recomputed into bytes Y, validation still refuses because X's stored file digest does not equal Y's digest, even though Y is internally consistent. |
 | Manifest-sealed floor | A close-out canonical digest can authenticate a newly rendered floor Y while the finalized manifest separately seals floor X; both digests can be individually valid but authenticate different artifacts. | The worked manifest seals floor X as `5be2fdc561e93b40810d6707f531e1d8668f2a675586a2d6ddbeccbc4dbe8a8c`. Changing one corner from 2.0 J to 2.1 J produces floor Y at `39221b0503af3479db2bad595c2e7201a522b0e5e1dc4b426562e7b538854099`; the builder records `floor_artifact_source_hash_mismatch` and selects neither branch. |
@@ -107,13 +107,30 @@ The absolute parent is `max_abs_residual_j`; the comparative parent is
 
 ## Replay sidecar: `joulewise.d165_dominance_replay.v1`
 
-The replay sidecar is a JSON object with exactly these top-level fields:
+New replay sidecars are JSON objects with exactly these top-level fields:
 
 | Field | Type | Meaning and producer |
 |---|---|---|
 | `schema_version` | string | Exact value `joulewise.d165_dominance_replay.v1`; the stage-2 mint writes it. |
+| `rule_id` | string | Producer-declared replay era. New output must carry `d165_shared_sign_local_corner_replay.v2`. Historical v1 may explicitly declare `d165_shared_sign_local_corner_replay.v1`. |
 | `sidecar_id` | nonempty string | Mint-issued identity for this replay sidecar. |
 | `cells` | nonempty array of cell objects | One record for each cell emitted by the mint. The standalone validator permits a one-cell diagnostic sidecar; the close-out requires exactly the four floor cells. |
+
+The historical producer shape has exactly `schema_version`, `sidecar_id`, and
+`cells`. That original three-field shape declares the v1 era and remains readable
+without rewriting its bytes. Its missing `rule_id` never means v2 or an era
+inferred from a result. A present `rule_id` must be one of the two registered
+strings; null, unknown values, and extra fields are invalid. The schema version
+continues to identify the structural family; the producer declaration binds the
+replay meaning within it.
+
+Every comparative replay result must carry the sidecar's declared rule id.
+`validate_d165_replay_sidecar` refuses a mismatch with the named error
+`d165_replay_rule_era_mismatch` at the offending result's `rule_id`, including
+when every result has been relabelled to the other era. A v2 result in the
+historical three-field shape is also refused. This check uses producer metadata,
+not agreement among result labels. The current builder always emits the explicit
+v2 declaration, including for sidecars containing only default-estimator cells.
 
 Each cell object has exactly `cell_id` (nonempty string), `absolute` (object),
 and `comparative` (object). `cell_id` comes from the matching
@@ -138,8 +155,8 @@ fields:
 
 `absolute.common_mode` has exactly `status` and `reason`. `status` is
 `not_applicable`. New output uses the comparative-only rationale returned by
-`ABSOLUTE_COMMON_MODE_REASON` (quoted above). Validation also accepts the exact
-`LEGACY_ABSOLUTE_COMMON_MODE_REASON` to keep historical v1 bytes readable;
+`ABSOLUTE_COMMON_MODE_REASON` (quoted above). Declared v1 sidecars instead require
+the exact `LEGACY_ABSOLUTE_COMMON_MODE_REASON` to keep historical bytes readable;
 that withdrawn rationale is not the active physical interpretation. No numeric
 R_cm field is allowed.
 
@@ -190,7 +207,7 @@ energy sign in each block.
 
 | Field | Type | Unit | Producer |
 |---|---|---:|---|
-| `rule_id` | string | none | Active output is `d165_shared_sign_local_corner_replay.v2`; validation also accepts historical `d165_shared_sign_local_corner_replay.v1` without rewriting its bytes. Arithmetic is unchanged. |
+| `rule_id` | string | none | Must match the sidecar's producer-declared era: active output is `d165_shared_sign_local_corner_replay.v2`; historical v1 sidecars require `d165_shared_sign_local_corner_replay.v1`. Arithmetic is unchanged. |
 | `point_unguarded_floor_j` | finite nonnegative number | J | `replay_common_mode_dominance`, using the block deltas with zero added widths. |
 | `common_mode_corner_widened_unguarded_floor_j` | finite nonnegative number | J | `replay_common_mode_dominance`, taking the maximum floor over the shared/local sign enumeration. |
 | `ratio` | finite nonnegative number | dimensionless | `dominance_ratio` over the preceding two fields. |

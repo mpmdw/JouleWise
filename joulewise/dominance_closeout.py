@@ -587,6 +587,7 @@ def build_d165_replay_sidecar(
 
     sidecar = {
         "schema_version": REPLAY_SCHEMA_VERSION,
+        "rule_id": COMMON_MODE_REPLAY_RULE_ID,
         "sidecar_id": f"{artifact_id}::d165-replay",
         "cells": sidecar_cells,
     }
@@ -842,6 +843,8 @@ def _validate_common_mode_result(
     expected: Mapping[str, Any] | None,
     where: str,
     errors: list[str],
+    *,
+    sidecar_rule_id: str,
 ) -> None:
     if not _check_keys(value, _COMMON_MODE_RESULT_KEYS, where, errors):
         return
@@ -850,6 +853,11 @@ def _validate_common_mode_result(
     if not isinstance(rule_id, str) or rule_id not in COMMON_MODE_REPLAY_RULE_IDS:
         errors.append(
             f"{where}.rule_id: must be a registered D-165 replay rule id"
+        )
+    elif rule_id != sidecar_rule_id:
+        errors.append(
+            f"{where}.rule_id: d165_replay_rule_era_mismatch; "
+            f"sidecar requires {sidecar_rule_id!r}"
         )
     for key in (
         "point_unguarded_floor_j",
@@ -873,12 +881,29 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
     """Return closed-schema and arithmetic errors for one replay sidecar."""
 
     errors: list[str] = []
-    if not _check_keys(value, _SIDECAR_TOP_KEYS, "sidecar", errors):
+    top_keys = _SIDECAR_TOP_KEYS
+    if isinstance(value, Mapping) and "rule_id" in value:
+        top_keys = top_keys | {"rule_id"}
+    if not _check_keys(value, top_keys, "sidecar", errors):
         return errors
     if value["schema_version"] != REPLAY_SCHEMA_VERSION:
         errors.append(
             f"sidecar.schema_version: must be {REPLAY_SCHEMA_VERSION!r}"
         )
+    # The original three-field producer shape declares the historical v1 era.
+    # New producers explicitly declare v2; never infer era from result labels.
+    sidecar_rule_id = value.get("rule_id", LEGACY_COMMON_MODE_REPLAY_RULE_ID)
+    if (
+        not isinstance(sidecar_rule_id, str)
+        or sidecar_rule_id not in COMMON_MODE_REPLAY_RULE_IDS
+    ):
+        errors.append("sidecar.rule_id: must be a registered D-165 replay rule id")
+        return errors
+    absolute_reason = (
+        LEGACY_ABSOLUTE_COMMON_MODE_REASON
+        if sidecar_rule_id == LEGACY_COMMON_MODE_REPLAY_RULE_ID
+        else ABSOLUTE_COMMON_MODE_REASON
+    )
     if not isinstance(value["sidecar_id"], str) or not value["sidecar_id"]:
         errors.append("sidecar.sidecar_id: must be a nonempty string")
     cells = value["cells"]
@@ -911,16 +936,10 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
                 _ABSOLUTE_COMMON_MODE_KEYS,
                 f"{cell_where}.absolute.common_mode",
                 errors,
-            ) and dict(common) not in (
-                {
-                    "status": "not_applicable",
-                    "reason": ABSOLUTE_COMMON_MODE_REASON,
-                },
-                {
-                    "status": "not_applicable",
-                    "reason": LEGACY_ABSOLUTE_COMMON_MODE_REASON,
-                },
-            ):
+            ) and dict(common) != {
+                "status": "not_applicable",
+                "reason": absolute_reason,
+            }:
                 errors.append(
                     f"{cell_where}.absolute.common_mode: must be the "
                     "registered not_applicable record"
@@ -1090,6 +1109,7 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
             expected_result,
             f"{cell_where}.comparative.common_mode_replay.result",
             errors,
+            sidecar_rule_id=sidecar_rule_id,
         )
     return errors
 

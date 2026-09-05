@@ -27,7 +27,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 ROOTS = ("joulewise/", "configs/", "docs/contracts/", "docs/paper/",
          "docs/campaign_packs/")
-ALLOWLIST = ROOT / "tests/fixtures/d165_rationale_legacy_allowlist.json"
+ALLOWLIST = ROOT / "tests/fixtures/d165_rationale_allowlist.json"
 RETIRED = (
     "cancels exactly",
     "uniform shared fiducial shift cancels",
