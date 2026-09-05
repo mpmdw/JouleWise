@@ -97,3 +97,13 @@ The entry is `mode: test_fixture_non_issuing` with marker
 nonetheless a fail-closed custody anchor with no documented refresh lane in
 `docs/contracts/paper_supply_custody.md` and no regeneration script; re-anchoring
 it is a magistrate call under D-161, not a lieutenant one. Left RED.
+
+## Magistrate addendum, 2026-09-05 — fixture re-anchor executed
+
+The escalated `test_paper_custody` failure was cured with the contract's own reviewed lane for this
+case, `tests/fixtures/paper_custody/repin.py` ("repin only current synthetic custody envelopes after
+validator changes"; refuses non-fixture roles). Bench run on this branch after the merge: the only
+bytes that moved are the `fixture.d165_closeout` inventory digest (50ed99c0… → 44360110…) and receipt
+digest (1a10b387… → efde2f12…), both equal to the values this report pre-computed; the role stays
+`test_fixture_non_issuing` with no measurement value. `tests.test_paper_custody`: Ran 29, OK.
+No production role, gate, or issuing path changed (D-161: fixture re-anchor through the reviewed lane).

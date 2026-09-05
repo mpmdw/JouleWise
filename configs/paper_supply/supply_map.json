@@ -99,14 +99,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "50ed99c0aeb6443f1199912f188442fa8fe1e0383de57ecac4f9381b61254815",
+        "expected_sha256": "443601108ab65868bb63585b432eae8c7082b043d42a6ff9c8b67d424a3a06d7",
         "path": "d165_closeout/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "1a10b387b0b38eb2e6e5f94796f83c01905ff039823540afd65d97f343a05f53",
+        "expected_sha256": "efde2f1252fbb7cd55edc8614c0973983f34e52f61fc5d847bc99c6171cfc450",
         "path": "d165_closeout/inputs/validator_receipt.json"
       },
       "source_census": [
