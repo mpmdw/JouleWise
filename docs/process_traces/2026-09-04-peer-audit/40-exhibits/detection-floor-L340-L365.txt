@@ -1,0 +1,26 @@
+            )
+        raise ValueError(
+            "phase cells extract only catalogued phase_energy_j metrics, "
+            f"got {metric!r}"
+        )
+    return metric, str(window_class)
+
+
+def attribution_single_count_discipline() -> dict[str, object]:
+    """Return the D-078 clause-11 non-removable two-role composition rule."""
+
+    return {
+        "rule_id": SINGLE_COUNT_DISCIPLINE_ID,
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,
+        "both_terms_required": True,
+        "apparent_double_count_removal_forbidden": True,
+        "statement": (
+            "effective clearable effect = floor + claim-side bound; "
+            "neither term may be removed as an apparent double count"
+        ),
+    }
+
+

@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.git_fixture import init_git_fixture
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "install_magistrate_watchdog.sh"
@@ -95,9 +97,7 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         self.shadow_script = self.shadow_repo / "scripts" / SCRIPT_PATH.name
         self.shadow_script.write_text(source, encoding="utf-8")
         self.shadow_script.chmod(0o755)
-        subprocess.run(
-            ["/usr/bin/git", "init", "-q", str(self.shadow_repo)], check=True
-        )
+        init_git_fixture(self.shadow_repo, "-q")
 
         self.noncanonical_repo = self.root / "noncanonical-copy"
         self.noncanonical_script = (
@@ -114,10 +114,7 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         )
         noncanonical_template.parent.mkdir(parents=True)
         shutil.copyfile(TEMPLATE_PATH, noncanonical_template)
-        subprocess.run(
-            ["/usr/bin/git", "init", "-q", str(self.noncanonical_repo)],
-            check=True,
-        )
+        init_git_fixture(self.noncanonical_repo, "-q")
 
     def tearDown(self) -> None:
         self.temporary.cleanup()

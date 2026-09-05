@@ -1,0 +1,31 @@
+DOMINANCE_ZERO_DENOMINATOR_REASON = "dominance_ratio_zero_denominator"
+FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH = "floor_artifact_source_hash_mismatch"
+CLOSEOUT_INPUT_MALFORMED = "closeout_input_malformed"
+CLOSEOUT_INPUT_MALFORMED_SOURCE = (
+    "closeout_input_malformed: source.census_or_block_membership"
+)
+CLOSEOUT_INPUT_MALFORMED_RECORDS = (
+    "closeout_input_malformed: closeout.independent_ratios"
+)
+CLOSEOUT_INPUT_MALFORMED_ADAPTER = "closeout_input_malformed: replay.block_ids"
+COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
+ABSOLUTE_COMMON_MODE_REASON = (
+    "the absolute estimator uses deviations from the mean, so a uniform shared "
+    "fiducial shift cancels exactly; the replay is registered only for "
+    "comparative ABBA block inputs"
+)
+COMMON_MODE_INPUT_FIELDS = (
+    "delta_j",
+    "onset_sweep_j",
+    "offset_sweep_j",
+    "zero_point_contrast_j",
+    "bundle_residual_half_widths_j",
+    "member_window_bounds_s",
+    "member_envelope_integral_sum_j",
+    "calibration_bracket",
+    "shared_edge_bound_s",
+)
+
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+_SIDECAR_TOP_KEYS = {"schema_version", "sidecar_id", "cells"}
+_SIDECAR_CELL_KEYS = {"cell_id", "absolute", "comparative"}

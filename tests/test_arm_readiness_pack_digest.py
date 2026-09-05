@@ -17,6 +17,7 @@ from joulewise.arm_readiness import (
     render_json,
 )
 from tests.test_arm_readiness_schemas import sample_arm
+from tests.git_fixture import init_git_fixture
 
 
 class CommittedPackDigestTests(unittest.TestCase):
@@ -29,7 +30,7 @@ class CommittedPackDigestTests(unittest.TestCase):
         script = pack / "sub/run.sh"
         script.write_bytes(b"#!/bin/sh\nexit 0\n")
         script.chmod(0o755)
-        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        init_git_fixture(repo, "-q")
         subprocess.run(["git", "config", "user.email", "tests@joulewise.invalid"], cwd=repo, check=True)
         subprocess.run(["git", "config", "user.name", "JouleWise tests"], cwd=repo, check=True)
         subprocess.run(["git", "add", "."], cwd=repo, check=True)

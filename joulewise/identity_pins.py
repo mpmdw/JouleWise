@@ -36,6 +36,14 @@ IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA = (
 )
 IDENTITY_PIN_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
 
+# One owner for the governed projection-freeze namespace grammar.  Consumers
+# call ``identity_pin_projection_freeze_path_matches`` rather than compiling a
+# private copy so a future grammar amendment cannot strand an earlier gate.
+IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN = (
+    r"(?:^|/)identity_pin_projection\.receipts/"
+    r"projection-[0-9]{4,}\.(?:json|sha256)$"
+)
+
 IDENTITY_PIN_PROJECTION_REASON_CODES = frozenset(
     {
         "readiness_identity_artifact_unreadable",
@@ -45,6 +53,13 @@ IDENTITY_PIN_PROJECTION_REASON_CODES = frozenset(
         "readiness_identity_receipt_namespace_anomalous",
     }
 )
+
+
+def identity_pin_projection_freeze_path_matches(path: str) -> bool:
+    """Return whether ``path`` conforms to the projection-freeze grammar."""
+
+    return re.search(IDENTITY_PIN_PROJECTION_FREEZE_PATH_PATTERN, path) is not None
+
 
 STACK_IDENTITY_FIELDS = (
     "hardware_unit",
@@ -991,10 +1006,6 @@ def _committed_successor(
     namespace_pattern = re.compile(
         r"(?:^|/)identity_pin_projection\.receipts/(?!$)"
     )
-    conforming_pattern = re.compile(
-        r"(?:^|/)identity_pin_projection\.receipts/"
-        r"projection-[0-9]{4,}\.(?:json|sha256)$"
-    )
     # The receipts directory is a governed namespace: a committed entry
     # there that does not conform to the freeze grammar cannot be proven
     # NOT to be a successor, so verification refuses rather than skips.
@@ -1003,7 +1014,7 @@ def _committed_successor(
         for path in paths
         if path
         and namespace_pattern.search(path)
-        and not conforming_pattern.search(path)
+        and not identity_pin_projection_freeze_path_matches(path)
     )
     if anomalous:
         raise IdentityPinProjectionError(
@@ -1998,7 +2009,9 @@ def _load_pack_projection(
         raise IdentityPinProjectionError(
             "readiness_identity_artifact_unreadable", "plan tree arm_attachments are unavailable"
         )
-    projection = validate_identity_pin_projection(attachments.get("identity_pin_projection"))
+    projection = validate_identity_pin_projection(
+        attachments.get("identity_pin_projection")
+    )
     sidecar_path = pack_root / "plan_tree.sha256"
     try:
         if sidecar_path.is_symlink():

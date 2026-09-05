@@ -12,18 +12,18 @@ checked, and backed up. A
 checks the resulting files. This window produces a real verdict, but it is
 **diagnostic**: it tests whether the instrument's collection plumbing works.
 It is not **claim-bearing**, meaning its result may not be used to support a
-capstone conclusion about model energy. A planned, roughly 20-minute
-end-to-end route is shorter, but it has no **operator card** — a reviewed,
-checked-in procedure naming the exact commands, inputs, and stop conditions
-for one window — so it is not the route taught here.
+capstone conclusion about model energy. The live `_v5` campaign uses a newer
+governed route, but it is not the historical one-run route taught here. An
+**operator card** is a reviewed, checked-in procedure naming the exact
+commands, inputs, and stop conditions for one window; only the current card
+and live state may authorize collection.
 
 This tutorial is a procedure, not permission to collect. Before using it,
 ask the person supervising the campaign to confirm two things: that a
-quiet-machine collection night is currently permitted, and that a current
-operator card names this exact campaign and has not been superseded. In this
-checkout, quiet-machine collection is blocked and no operator card
-authorizes the one-run route below, so do not **arm** — grant a single-use
-launch authorization — and do not sample. The
+quiet-machine collection night is currently permitted by `RUN_STATE.md` and
+the state kernel, and that a current operator card names this exact campaign
+and has not been superseded. This tutorial grants no permission to **arm** —
+grant a single-use launch authorization — or sample. The
 historical card at `docs/process/window-run-cards/shakedown-v3-first-light.md`
 authorizes a calibration-only procedure, not this campaign.
 

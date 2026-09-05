@@ -87,6 +87,7 @@ from scripts.calibration_ledger_bootstrap import (
     _issued_acceptance_artifact,
     _issued_artifact_bytes,
 )
+from tests.git_fixture import init_git_fixture
 
 
 _REAL_D079_TABLE = Path("/private/tmp/d079-ledger-dispositions.json")
@@ -946,7 +947,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             ledger.parent.mkdir(parents=True)
             ledger.write_bytes(plan.ledger_bytes)
             pin.write_text(json.dumps(dict(plan.head_pin)) + "\n", encoding="utf-8")
-            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            init_git_fixture(repo, "-q")
             subprocess.run(
                 ["git", "config", "user.email", "tests@joulewise.invalid"],
                 cwd=repo,

@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/reauthor_clean.py"
@@ -81,7 +83,7 @@ class ReauthorCleanTests(unittest.TestCase):
         self.addCleanup(cleanup)
         repository = temporary_root / "repo"
         repository.mkdir()
-        self._git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         self._git(repository, "config", "user.email", "tests@example.invalid")
         self._git(repository, "config", "user.name", "JouleWise Tests")
         pack = repository / "configs/campaigns/test_campaign_v4"
