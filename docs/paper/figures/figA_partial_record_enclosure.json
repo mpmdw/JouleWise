@@ -1,7 +1,7 @@
 {
   "claim_bearing": false,
   "figure": {
-    "sha256": "39d113f80956b59e476c7989380fd814163c12a39ffee7b67930bfe869c967d5"
+    "sha256": "cff121d6215279cf73622a7315d954b78e719f4e9f7a5a3299ffa72e24986656"
   },
   "inputs": {
     "independent_edge_shift_s": [

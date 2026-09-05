@@ -633,7 +633,9 @@ class RealDocumentRegressionTests(unittest.TestCase):
                                 ("A5", "figA5_clock_polygon.svg")):
             self.assertRegex(draft, rf"!\[Figure {label}[^\]]*\]\(figures/{filename}\)")
         self.assertNotIn("synthetic P1", draft)
-        self.assertNotIn("SYNTHETIC P1", draft)
+        # The artwork label is allowed exactly once, where the caption defines it.
+        self.assertEqual(draft.count("SYNTHETIC P1"), 1)
+        self.assertIn("The artwork label \"SYNTHETIC P1\" is the desk script's name for this fixture", draft)
         self.assertNotIn("**Gross energy**", draft)
         self.assertNotIn("**Idle-subtracted energy**", draft)
         self.assertNotIn("**same-cell floor**", draft)

@@ -1415,7 +1415,7 @@ A matching refusal is a reproduced result, not a failed replication. Given ident
 <!-- [FILL:PE-01] SYNTHETIC appendix placement; no measured value is issued. -->
 ![Figure A1: synthetic records, fixed window, point, timing envelope, and nonnegative enclosure.](figures/figA_partial_record_enclosure.svg)
 
-Figure A1. Synthetic; no hardware observation. Panel A's ten numbered
+Figure A1. Synthetic; no hardware observation. The artwork label "SYNTHETIC P1" is the desk script's name for this fixture: one synthetic phase inside a fixed window. Panel A's ten numbered
 rectangles R1–R10 are adjacent records from 0.5 to 1.5 s: record Ri covers
 \([0.5+0.1(i-1),\,0.5+0.1i]\) s and reports an interval average of 10 W,
 so each contains \(10\times0.1=1\) J. The horizontal purple segment marks
@@ -1445,15 +1445,10 @@ regenerate both files with:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 - <<'PYFIG'
-import hashlib, json
 from pathlib import Path
-from scripts.paper.partial_record_enclosure import derive_synthetic_p1, synthetic_p1_svg
+from scripts.paper.partial_record_enclosure import write_synthetic_p1_figure
 p = Path("docs/paper/figures/figA_partial_record_enclosure")
-data = derive_synthetic_p1()
-svg = synthetic_p1_svg(data).replace(data["label"], "SYNTHETIC")
-data["figure"] = {"sha256": hashlib.sha256(svg.encode("utf-8")).hexdigest()}
-p.with_suffix(".svg").write_text(svg, encoding="utf-8")
-p.with_suffix(".json").write_text(json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")
+write_synthetic_p1_figure(p.with_suffix(".svg"), p.with_suffix(".json"))
 PYFIG
 ```
 

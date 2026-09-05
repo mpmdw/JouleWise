@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1060" height="560" viewBox="0 0 1060 560" role="img" aria-labelledby="title desc">
-<title id="title">Figure A1. SYNTHETIC partial-record enclosure</title>
+<title id="title">Figure A1. SYNTHETIC P1 partial-record enclosure</title>
 <desc id="desc">Ten 100 ms records reporting 10 W, window 0.55 to 1.45 s. Point 9.0 J; timing envelope 8.8 to 9.2 J; nonnegative fixed-window enclosure 8 to 10 J. Not measured evidence.</desc>
 <rect width="1060" height="560" fill="white"/>
 <g font-family="Arial, sans-serif" font-size="17" fill="#17232d">
-<text x="40" y="36" font-size="23" font-weight="bold">Figure A1 · SYNTHETIC</text>
+<text x="40" y="36" font-size="23" font-weight="bold">Figure A1 · SYNTHETIC P1</text>
 <text x="40" y="67">A · Reported intervals: 100 ms × 10 W = 1 J each</text>
 <rect x="130" y="100" width="80" height="70" fill="#f4d09b" stroke="#17232d"/>
 <text x="170" y="142" text-anchor="middle">R1</text>
