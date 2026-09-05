@@ -127,7 +127,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    done
    ```
 
-3. First `cd /Users/edr/code/JouleWise`, the canonical checkout, then from the Terminal-hosted interactive magistrate record the exact handoff inventory. The read-only helper places the interactive twin and its ancestry-closed descendants in `owned`; PPID-1 command-shape matches and their descendants are only `unclassified_candidates`. It excludes the helper's transient call chain and rejects a headless `claude -p` ancestor. Inspect every candidate. Promote one only by repeating the command with its exact `--adopt-pid P --start T`; that explicit adoption and its descendants then appear in `owned` with provenance. Keep PID, start-time, command, and provenance together so PID reuse can be rejected:
+3. First `cd /Users/edr/code/JouleWise`, the canonical checkout, then from the Terminal- or background-host-hosted interactive magistrate (a claude binary or a versioned claude/versions/<ver> binary in the caller's ancestry) record the exact handoff inventory. The read-only helper places the interactive twin and its ancestry-closed descendants in `owned`; PPID-1 command-shape matches and their descendants are only `unclassified_candidates`. It excludes the helper's transient call chain and rejects a headless `claude -p` ancestor. Inspect every candidate. Promote one only by repeating the command with its exact `--adopt-pid P --start T`; that explicit adoption and its descendants then appear in `owned` with provenance. Keep PID, start-time, command, and provenance together so PID reuse can be rejected:
 
    ```zsh
    cd /Users/edr/code/JouleWise

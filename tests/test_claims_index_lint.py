@@ -418,6 +418,11 @@ class ClaimIndexLintTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        voided_legacy = json.loads(
+            (ROOT / "analysis/rpt001-v2/claims_index.jsonl").read_text(
+                encoding="utf-8"
+            )
+        )
         current = base_row()
         unknown = {
             "schema": "joulewise.claims_index.v1",
@@ -427,6 +432,9 @@ class ClaimIndexLintTests(unittest.TestCase):
         hybrid = copy.deepcopy(current)
         hybrid["claim_level"] = "L2"
         self.assertEqual(claims_lint._claim_row_dialect(legacy), "exact-legacy")
+        self.assertEqual(
+            claims_lint._claim_row_dialect(voided_legacy), "voided-legacy"
+        )
         self.assertEqual(claims_lint._claim_row_dialect(current), "engine-linked")
         self.assertEqual(claims_lint._claim_row_dialect(unknown), "unknown")
         self.assertEqual(claims_lint._claim_row_dialect(hybrid), "hybrid")
@@ -446,7 +454,7 @@ class ClaimIndexLintTests(unittest.TestCase):
                     )
                     self.assertIn(expected, error_codes(findings))
 
-    def test_current_pre_p2037_legacy_row_is_exactly_grandfathered(self) -> None:
+    def test_historical_pre_p2037_legacy_row_is_exactly_grandfathered(self) -> None:
         canonical_row = json.loads(
             (ROOT / "analysis/rpt001-v1/claims_index.jsonl").read_text(encoding="utf-8")
         )
@@ -498,9 +506,43 @@ class ClaimIndexLintTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(payload["errors"], 0, payload)
-        self.assertEqual(
-            [finding["code"] for finding in payload["findings"]],
-            ["CLAIM_INDEX_PRE_P2037_LEGACY_SKIPPED"],
+        self.assertEqual(payload["findings"], [])
+
+    def test_voided_legacy_status_kill_rejects_supported(self) -> None:
+        row = json.loads(
+            (ROOT / "analysis/rpt001-v2/claims_index.jsonl").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(row["status"], "voided")
+        row["status"] = "supported"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "claims.jsonl").write_text(
+                json.dumps(row) + "\n", encoding="utf-8"
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--mode",
+                    "claim-index",
+                    "--root",
+                    str(root),
+                    "--claims-index",
+                    "claims.jsonl",
+                    "--json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
+        self.assertIn(
+            "CLAIM_INDEX_UNKNOWN_DIALECT",
+            {finding["code"] for finding in payload["findings"]},
         )
 
     def test_default_and_all_cli_reach_unified_version_dispatch(self) -> None:
@@ -521,7 +563,7 @@ class ClaimIndexLintTests(unittest.TestCase):
                         finding["code"] == "CLAIM_INDEX_PRE_P2037_LEGACY_SKIPPED"
                         for finding in payload["findings"]
                     ),
-                    1,
+                    0,
                     payload,
                 )
 

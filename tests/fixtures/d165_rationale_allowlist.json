@@ -55,25 +55,25 @@
   },
   {
     "path": "docs/paper/draft-v2-skeleton.md",
-    "line": 221,
+    "line": 253,
     "phrase": "common-time",
     "reason": "Unrelated Figure-2 ABBA drift schematic caption: the common-time line illustrates cancellation of steady drift, not D-165 timing robustness."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 229,
+    "line": 231,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 244,
+    "line": 246,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
-    "line": 260,
+    "line": 262,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },
@@ -193,37 +193,37 @@
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 50,
+    "line": 167,
     "phrase": "d165_shared_sign_local_corner_replay.v1",
     "reason": "LEGACY_COMMON_MODE_REPLAY_RULE_ID is the preserved historical compatibility constant; active COMMON_MODE_REPLAY_RULE_ID is separately v2."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 59,
+    "line": 176,
     "phrase": "cancels exactly",
     "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 59,
+    "line": 176,
     "phrase": "shared fiducial shift",
     "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 59,
+    "line": 176,
     "phrase": "uniform shared fiducial shift cancels",
     "reason": "Exact LEGACY v1 reason bytes retained only for reading pre-relabel artifacts, inside an explicit LEGACY v1 block."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 65,
+    "line": 182,
     "phrase": "common-time",
     "reason": "Decoded ABSOLUTE_COMMON_MODE_REASON string begins here and explicitly denies an implemented absolute common-time replay."
   },
   {
     "path": "joulewise/dominance_closeout.py",
-    "line": 606,
+    "line": 874,
     "phrase": "common-time",
     "reason": "Replay docstring begins here and explicitly denies proven conservatism for common-time motion."
   }

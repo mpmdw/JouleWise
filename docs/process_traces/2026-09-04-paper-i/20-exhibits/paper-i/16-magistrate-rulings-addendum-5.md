@@ -1,0 +1,9 @@
+# Contract rulings addendum 5 (magistrate, 2026-09-04): the Opus seat's four disagreements, adopted as amendments
+
+From docs/process_traces/2026-09-04-paper-i/12-custody-seam-consult-opus.md (binding on PAPER-CUSTODY-SEAM-01 and every supplier re-landing):
+
+1. **Who names the expected digest.** "Paths + expected digests + receipts" (addenda 07/09) never said who supplies the digest; a caller-supplied pin is caller authority. AMENDED: expected digests come from the repository — a git-tracked supply map read through `joulewise/authentication_io.py`'s `V2AuthenticationReadSession` with the clean-tree anchor (`identity_pins._mint_git_anchor`); callers pass a ROLE NAME and a runs root, nothing else. The seam WRAPS the existing authentication session and its AST lint list (the new module and every supplier join `tests/test_authentication_io.py`'s enforced list); it does not re-derive read machinery.
+2. **R2-FL-1 amended.** The floor artifact is authenticated against the digest the supply map pins for that cell, never against `file_sha256` carried in the same claim-verdicts object.
+3. **R4-B1 amended.** The reason map is closed by construction: `joulewise/d165_dominance_closeout.py` emits refusal codes only from a module-level constant enumeration; the registry map and the enumeration are cross-checked by a test that fails when either side gains or loses a code.
+4. **R4-S1 amended.** The `_v5` identity gate reads the identity from the seam's verified manifest object (supply-map-pinned), not from fields the renderer selects.
+5. **Lane order.** d165 keeps its path-bound machinery and is the reference; d123 is rebuilt on the seam (its `_wrapped_document` never opened the path — deleted). Lower bypasses named in trace 12 (`inputs.py` degrading `AuthenticatedFloorArtifact`, `campaign_provenance.load_campaign_log_rows(raw_bytes=)`) are closed in the seam landing.

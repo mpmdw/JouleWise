@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import CodeType, SimpleNamespace
 from unittest import mock
@@ -48,6 +49,7 @@ from tests.test_mint_floor_artifact_generalized import (
     freeze_mixed_estimator_v2_pinset,
 )
 from joulewise.identity_pins import build_stack_identity, stack_identity_sha256
+from joulewise import dominance_closeout as paper_adapter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -384,7 +386,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "branch": None,
                 "dominance_sentence_licensed": False,
                 "subtitle_licensed": False,
-                "refusal_reason": reason,
+                "refusal_reason": core._closed_refusal_code(reason),
             }
         )
 
@@ -655,6 +657,67 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         )
         self.assert_valid_closeout(closeout, manifest, floor, sidecar)
 
+    def test_real_closeout_refusal_paths_stay_closed_when_message_is_reworded(
+        self,
+    ) -> None:
+        refusal_cases = (
+            ("zero denominator", 0.0, 1.0, core.DOMINANCE_ZERO_DENOMINATOR_REASON),
+            ("negative denominator", -1.0, 1.0, core._DOMINANCE_DENOMINATOR_INVALID),
+            ("nan denominator", float("nan"), 1.0, core._DOMINANCE_DENOMINATOR_INVALID),
+            ("negative numerator", 1.0, -1.0, core._DOMINANCE_NUMERATOR_INVALID),
+            ("nan numerator", 1.0, float("nan"), core._DOMINANCE_NUMERATOR_INVALID),
+            ("infinite numerator", 1.0, float("inf"), core._DOMINANCE_NUMERATOR_INVALID),
+            ("nonfinite result", 5e-324, 1e308, core._DOMINANCE_RESULT_INVALID),
+        )
+        for label, point, corner, expected in refusal_cases:
+            with self.subTest(path=label):
+                record = core._build_independent_record(
+                    point_unguarded_floor_j=point,
+                    corner_widened_unguarded_floor_j=corner,
+                )
+                self.assertEqual(record["status"], "refused")
+                self.assertEqual(record["refusal_reason"], expected)
+                self.assertIn(
+                    record["refusal_reason"], core.D165_CLOSEOUT_REFUSAL_CODES
+                )
+
+        floor = floor_artifact()
+        floor["cells"][0]["absolute"]["max_abs_residual_j"] = 0.0
+        floor["cells"][0]["absolute"]["prediction_component_j"] = 0.0
+        original_ratio = core.dominance_ratio
+
+        def reworded_ratio(*, corner_widened_unguarded_floor_j, point_unguarded_floor_j):
+            if point_unguarded_floor_j == 0.0:
+                raise ValueError("the denominator wording changed")
+            return original_ratio(
+                corner_widened_unguarded_floor_j=corner_widened_unguarded_floor_j,
+                point_unguarded_floor_j=point_unguarded_floor_j,
+            )
+
+        with mock.patch.object(core, "dominance_ratio", side_effect=reworded_ratio):
+            closeout, manifest, floor, sidecar = self.build(floor)
+            refused = [
+                record
+                for record in closeout["independent_ratios"]
+                if record["status"] == "refused"
+            ]
+            self.assertEqual(len(refused), 1)
+            self.assertEqual(
+                refused[0]["refusal_reason"],
+                core.DOMINANCE_ZERO_DENOMINATOR_REASON,
+            )
+            self.assertEqual(
+                closeout["refusal_reason"],
+                core.DOMINANCE_ZERO_DENOMINATOR_REASON,
+            )
+            self.assertTrue(
+                all(
+                    record["refusal_reason"] in core.D165_CLOSEOUT_REFUSAL_CODES
+                    for record in (*refused, closeout)
+                )
+            )
+            self.assert_valid_closeout(closeout, manifest, floor, sidecar)
+
     def test_missing_sidecar_cell_stops_with_neither_branch(self) -> None:
         floor = floor_artifact()
         manifest = finalized_manifest()
@@ -676,7 +739,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             if record["cell_id"] == missing_id
         ]
         self.assertEqual(missing[0]["status"], "refused")
-        self.assertIn("cell census", closeout["refusal_reason"])
+        self.assertEqual(
+            closeout["refusal_reason"], core.CLOSEOUT_INPUT_MALFORMED_SOURCE
+        )
         self.assert_valid_closeout(closeout, manifest, floor, sidecar)
 
     def test_source_hash_mutation_refuses_validation(self) -> None:
@@ -1448,7 +1513,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                     floor_artifact_bytes=floor_bytes,
                     replay_sidecar_bytes=sidecar_bytes,
                 )[0]
-                self.assertIn("cannot align with floor artifact", expected)
+                self.assertEqual(
+                    expected, core.CLOSEOUT_INPUT_MALFORMED_SOURCE
+                )
                 with self.assertRaises(ValueError) as raised:
                     build_d165_dominance_closeout(
                         manifest_bytes,
@@ -1472,13 +1539,13 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "manifest schema",
                 wrong_manifest_schema,
                 floor,
-                "finalized_manifest: schema is not finalized v3",
+                core.CLOSEOUT_INPUT_MALFORMED_SOURCE,
             ),
             (
                 "floor schema",
                 manifest,
                 wrong_floor_schema,
-                "floor_artifact: schema is not detection_floor_artifact.v2",
+                core.CLOSEOUT_INPUT_MALFORMED_SOURCE,
             ),
         )
         for guard, manifest_value, floor_value, expected in cases:
@@ -2110,6 +2177,123 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 [invalid_members],
             )
 
+
+class D165PaperCustodyAdapterTests(unittest.TestCase):
+    def _validate(self) -> tuple[str, ...]:
+        return paper_adapter.validate_d165_paper_sources(
+            closeout={},
+            finalized_manifest_bytes=b"{}",
+            finalized_manifest_path=Path("manifest.json"),
+            custody_root=Path("."),
+            floor_artifact_bytes=b"{}",
+            replay_sidecar_bytes=b"{}",
+        )
+
+    def test_adapter_replays_all_four_owners_without_exposing_free_text(self) -> None:
+        with (
+            mock.patch.object(
+                paper_adapter, "validate_finalized_analysis_manifest_v3", return_value=()
+            ) as manifest_validator,
+            mock.patch.object(
+                paper_adapter, "authenticate_floor_artifact_bytes", return_value=object()
+            ) as floor_validator,
+            mock.patch.object(
+                paper_adapter, "validate_d165_replay_sidecar", return_value=[]
+            ) as sidecar_validator,
+            mock.patch.object(
+                paper_adapter, "validate_d165_closeout", return_value=[]
+            ) as closeout_validator,
+        ):
+            self.assertEqual(self._validate(), ())
+        manifest_validator.assert_called_once()
+        floor_validator.assert_called_once_with(b"{}")
+        sidecar_validator.assert_called_once_with({})
+        closeout_validator.assert_called_once()
+
+    def test_adapter_maps_each_owner_failure_to_one_closed_code(self) -> None:
+        cases = (
+            (
+                "manifest",
+                "d165_paper_finalized_manifest_invalid",
+                {"validate_finalized_analysis_manifest_v3": (object(),)},
+            ),
+            (
+                "floor",
+                "d165_paper_floor_artifact_invalid",
+                {"authenticate_floor_artifact_bytes": ValueError("private detail")},
+            ),
+            (
+                "sidecar",
+                "d165_paper_replay_sidecar_invalid",
+                {"validate_d165_replay_sidecar": ["private detail"]},
+            ),
+            (
+                "closeout",
+                "d165_paper_closeout_invalid",
+                {"validate_d165_closeout": ["private detail"]},
+            ),
+        )
+        for label, expected, override in cases:
+            with self.subTest(label=label), ExitStack() as stack:
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "validate_finalized_analysis_manifest_v3",
+                    return_value=override.get(
+                        "validate_finalized_analysis_manifest_v3", ()
+                    ),
+                ))
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "authenticate_floor_artifact_bytes",
+                    side_effect=(
+                        override.get("authenticate_floor_artifact_bytes")
+                        if isinstance(
+                            override.get("authenticate_floor_artifact_bytes"),
+                            Exception,
+                        )
+                        else None
+                    ),
+                    return_value=object(),
+                ))
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "validate_d165_replay_sidecar",
+                    return_value=override.get("validate_d165_replay_sidecar", []),
+                ))
+                stack.enter_context(mock.patch.object(
+                    paper_adapter,
+                    "validate_d165_closeout",
+                    return_value=override.get("validate_d165_closeout", []),
+                ))
+                self.assertEqual(self._validate(), (expected,))
+                self.assertIn(expected, paper_adapter.D165_PAPER_VALIDATOR_CODES)
+
+    def test_real_module_reason_enum_and_or01_registry_map_are_bidirectional(
+        self,
+    ) -> None:
+        self.assertEqual(
+            set(core.D165_OR01_REASON_SENTENCES),
+            core.D165_CLOSEOUT_REFUSAL_CODES,
+        )
+        extra = "d165_paper_future_unmapped"
+        with mock.patch.object(
+            core,
+            "D165_CLOSEOUT_REFUSAL_CODES",
+            core.D165_CLOSEOUT_REFUSAL_CODES | {extra},
+        ):
+            self.assertNotEqual(
+                set(core.D165_OR01_REASON_SENTENCES),
+                core.D165_CLOSEOUT_REFUSAL_CODES,
+            )
+        with mock.patch.object(
+            core,
+            "D165_OR01_REASON_SENTENCES",
+            {**core.D165_OR01_REASON_SENTENCES, extra: "future sentence"},
+        ):
+            self.assertNotEqual(
+                set(core.D165_OR01_REASON_SENTENCES),
+                core.D165_CLOSEOUT_REFUSAL_CODES,
+            )
 
 if __name__ == "__main__":
     unittest.main()

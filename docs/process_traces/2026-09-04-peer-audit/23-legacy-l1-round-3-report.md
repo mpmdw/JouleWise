@@ -1,0 +1,79 @@
+```json
+{
+  "schema": "claude-codex-report/v1",
+  "genre": "implementation",
+  "status": "clean",
+  "completion": "complete",
+  "summary": "The rpt001 default and full routes now regenerate only explicit void artifacts, and the retained legacy claim row is schema-valid only as voided.",
+  "workspace": {"base_requested":"7c2eebd2afd14cabaf0a3340b2869cbc9ef595c9","base_mode":"exact","head_start":"7c2eebd2afd14cabaf0a3340b2869cbc9ef595c9","head_end":"7c2eebd2afd14cabaf0a3340b2869cbc9ef595c9","upstream_end":"7c2eebd2afd14cabaf0a3340b2869cbc9ef595c9","branch":"feat/2026-09-04-legacy-l1"},
+  "pathspec": [
+    "analysis/rpt001-v2/aggregates.json",
+    "analysis/rpt001-v2/artifact_manifest.json",
+    "analysis/rpt001-v2/claims_index.jsonl",
+    "analysis/rpt001-v2/dataset.csv",
+    "analysis/rpt001-v2/tables/S1_legacy_stack_identity.csv",
+    "analysis/rpt001-v2/tables/S1_legacy_stack_identity.md",
+    "analysis/rpt001-v2/tables/T1_legacy_l1_results.csv",
+    "analysis/rpt001-v2/tables/T1_legacy_l1_results.md",
+    "docs/phase_4/claims_index.md",
+    "docs/process_traces/2026-09-04-peer-audit/23-legacy-l1-round-3-report.md",
+    "docs/report_src/README.md",
+    "docs/report_src/appendices/A_reproducibility.md",
+    "docs/report_src/appendices/B_claims_index.md",
+    "docs/report_src/appendices/C_stack_identity.md",
+    "docs/report_src/generated/rpt001_vertical_slice.md",
+    "figures/rpt001-v2/F1_legacy_l1_instrument_results.svg",
+    "scripts/build_capstone.py",
+    "scripts/claims_lint.py",
+    "scripts/make_figures.py",
+    "tests/test_claims_index_lint.py",
+    "tests/test_rpt001_report_slice.py"
+  ],
+  "unowned_dirty": [],
+  "verdict": {"implementation":"implemented","acceptance":"ready"},
+  "verification": [
+    {"id":"V1","kind":"build","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs --input-manifest analysis/rpt001-v2/input_manifest.json --offline","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["make_figures: OK — authenticated inputs; emitted void placeholders and voided claim row"]},"expected":{"exit_code":0,"tail_regex":"emitted void placeholders and voided claim row"}},
+    {"id":"V2","kind":"lint","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 scripts/claims_lint.py --mode phase4","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["claims_lint: clean"]},"expected":{"exit_code":0,"tail_regex":"claims_lint: clean"}},
+    {"id":"V3","kind":"test","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_build_capstone","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 2 tests in 0.000s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},
+    {"id":"V4","kind":"test","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_claims_index_lint","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 30 tests in 6.950s","OK"]},"expected":{"exit_code":0,"tail_regex":"OK"}},
+    {"id":"V5","kind":"test","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_rpt001_report_slice","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 19 tests in 11.256s","OK (skipped=2)"]},"expected":{"exit_code":0,"tail_regex":"OK \\(skipped=2\\)"}},
+    {"id":"V6","kind":"build","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 scripts/build_capstone.py --profile rpt001 --full --offline --runs-root /Users/edr/code/JouleWise/runs","cwd":"/private/tmp/jw-legacy-l1-round3.BUQ1e1","observed":{"result":"pass","exit_code":0,"tail":["make_figures: OK — authenticated inputs; emitted void placeholders and voided claim row","claims_lint: clean","build_capstone: assembled build/capstone/rpt001/report.md sha256=a13fb1f89621f4b441d4f4a55958e1413a8063cf4757302756c9c26bfd9540a4"]},"expected":{"exit_code":0,"tail_regex":"assembled build/capstone/rpt001/report.md sha256="}},
+    {"id":"V7","kind":"build","cmd":"PYTHONDONTWRITEBYTECODE=1 python3 scripts/build_capstone.py --profile rpt001 --offline --check","cwd":"/private/tmp/jw-legacy-l1-check.EjyJeu","observed":{"result":"pass","exit_code":0,"tail":["build_capstone: check OK (no drift)"]},"expected":{"exit_code":0,"tail_regex":"check OK \\(no drift\\)"}},
+    {"id":"V8","kind":"inspection","cmd":"git diff --check","cwd":".","observed":{"result":"pass","exit_code":0,"tail":[]},"expected":{"exit_code":0,"tail_regex":"^$"}}
+  ],
+  "flags": [
+    {"id":"F1","kind":"environment","level":"nonblocking","text":"The two skipped report-slice tests require a repo-local runs/ directory; the required census and explicit full-route replay both ran against the refuter's controlled /Users/edr/code/JouleWise/runs corpus.","needs":""}
+  ]
+}
+```
+
+## Change
+
+The full producer still authenticates the pinned experiment manifests, bundle-tree hashes, strict validation, and succeeded status, but it no longer extracts or aggregates the legacy measurements. The current v2 tree consists of explicit void placeholders, its artifact manifest hashes those regenerated bytes, and the retained claims-index history row is `status: "voided"` with no metric values. The executable claims-index schema now has a first-class `voided-legacy` dialect; changing that row back to `supported` is a lint error. The exact-hash v1 grandfather remains readable as immutable history, but any Markdown projection of it is sanitized to the void disposition.
+
+Route census (every persistent artifact written by the rpt001 default/full routes):
+
+| Route | Artifact | Producer function | Disposition |
+|---|---|---|---|
+| default, full | `docs/report_src/generated/rpt001_vertical_slice.md` | `build_capstone.main` from `generate_results_page` | void page |
+| default, full | `build/capstone/rpt001/report.md` | `build_capstone.main` from `assemble` | assembled report containing the void page; untracked |
+| full | `analysis/rpt001-v2/dataset.csv` | `make_figures.main` from `render_void_csv` | void placeholder |
+| full | `analysis/rpt001-v2/aggregates.json` | `make_figures.main` from `voided_aggregates` | void placeholder |
+| full | `figures/rpt001-v2/F1_legacy_l1_instrument_results.svg` | `make_figures.main` from `render_void_figure` | void SVG placeholder |
+| full | `analysis/rpt001-v2/tables/T1_legacy_l1_results.csv` | `make_figures.main` from `render_void_csv` | void placeholder |
+| full | `analysis/rpt001-v2/tables/T1_legacy_l1_results.md` | `make_figures.main` from `render_void_markdown` | void placeholder |
+| full | `analysis/rpt001-v2/tables/S1_legacy_stack_identity.csv` | `make_figures.main` from `render_void_csv` | void placeholder |
+| full | `analysis/rpt001-v2/tables/S1_legacy_stack_identity.md` | `make_figures.main` from `render_void_markdown` | void placeholder |
+| full | `analysis/rpt001-v2/claims_index.jsonl` | `make_figures.main` from `voided_claim_row` | retained row, status voided |
+| full | `analysis/rpt001-v2/artifact_manifest.json` | `make_figures.main` | void build mode plus hashes of the eight preceding v2 artifacts |
+| full | `docs/phase_4/claims_index.md` | `claims_lint.lint_claim_index` from `render_phase4_projection` | void projection |
+
+Standalone `--check` writes nothing. `--full --check` regenerates the ten full-route preprocessing artifacts (the nine v2 analysis/figure outputs plus the claims projection) and then checks the generated page in memory; it does not write the generated page or assembled report. `analysis/rpt001-v2/input_manifest.json` is read-only on these routes; only the separately requested bootstrap route can rewrite it.
+
+The census regression deletes all twelve expected full-route outputs in a tracked-file-only temporary copy, runs the exact refuter corpus route, asserts that exactly those twelve files reappear, and scans every byte-decoded file for the two full-precision gross means, two full-precision idle-subtracted means, their rounded table forms, the retired label, and `primary basis`. It also pins `status: "voided"`. The separate kill changes only that status to `supported` and requires lint exit 2.
+
+The immutable `analysis/rpt001-v1/**` and `figures/rpt001-v1/**` trees were not modified; their ten pinned hashes remain asserted by V5.
+
+## Verification notes
+
+No discovery suite or nested agent was run. `tests/test_make_figures.py` does not exist. V7 ran from a fresh tracked-file-only copy with no `runs/` or `build/` tree. The first development run of V5 exposed one stale expected documentation heading; that assertion was updated, and the final tail above is clean.
