@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -197,7 +198,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertGreater(payload["finding_count"], 0)
 
-    def test_successor_carries_provisional_paper_k_rulings(self) -> None:
+    def test_fallback_preserves_ratified_paper_k_rulings(self) -> None:
         draft = SUCCESSOR_DRAFT.read_text(encoding="utf-8")
         registry = FILL_REGISTRY.read_text(encoding="utf-8")
 
@@ -211,7 +212,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
             draft.count(
                 "Transfer of the pulse-derived timing allowance to inference was not tested."
             ),
-            9,
+            1,
         )
         for retired in (
             "largest false",
@@ -231,7 +232,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
 
         for required in (
             "registered timing domain—the edge movements fixed before collection",
-            "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
+            "A\nshared sign is one choice applied across all blocks",
             "An A/B/B/A block is four runs in the order A, B, B, A.",
             "The measurand is energy assigned to each phase by\n"
             "**interval-overlap allocation**: each sampling record's energy is divided",
@@ -267,13 +268,144 @@ class RealDocumentRegressionTests(unittest.TestCase):
             draft.count(
                 "registered timing domain—the edge movements fixed before collection"
             ),
-            3,
+            2,
         )
         self.assertGreaterEqual(
             registry.count("d165_shared_sign_local_corner_replay.v2"),
             5,
         )
         self.assertIn("| LIMITATION | WITHDRAWN 2026-09-04", registry)
+
+    def test_historical_headline_matches_registered_json_and_svg(self) -> None:
+        from tests.test_select_outcome_branches import SELECTOR
+        draft = SUCCESSOR_DRAFT.read_text(encoding="utf-8")
+        registry = FILL_REGISTRY.read_text(encoding="utf-8")
+        source = REPO / "docs/paper/round7/excursion-decomposition.json"
+        figure = REPO / "docs/paper/figures/fig4_edge_excursions.svg"
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        for path, digest in (
+            (source, "21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b"),
+            (figure, "6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf"),
+        ):
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
+            self.assertIn(digest, registry)
+        rows = payload["per_pulse"]
+        self.assertEqual(len(rows), 59)
+        self.assertEqual(sum(row["onset_best_fit_lag_ms"] > 0 for row in rows), 59)
+        self.assertEqual(sum(row["offset_best_fit_lag_ms"] < 0 for row in rows), 49)
+        self.assertEqual(payload["summary"]["onset_best_fit_lag"]["count_positive"], 59)
+        self.assertEqual(payload["summary"]["offset_best_fit_lag"]["count_negative"], 49)
+        self.assertEqual(draft.count(SELECTOR.HEADLINE), 2)
+        self.assertIn("Figure 2. Historical current-method re-derivation, one GPU pulse capture.", draft)
+        self.assertIn("onset (switch-on edge) — 59 of 59 are late", figure.read_text())
+        self.assertIn("offset (switch-off edge) — 49 of 59 are early", figure.read_text())
+
+    def test_record_support_matches_registered_population_and_statistics(self) -> None:
+        source = REPO / "docs/process_traces/2026-08-09-prefill-phase-proof/results.json"
+        payload = json.loads(source.read_text())
+        summary = next(row for row in payload["stack_summaries"] if row["stack"] == "1.5B")
+        self.assertEqual(summary["bundle_count"], 50)
+        self.assertEqual(summary["resolvability"],
+                         {"not_resolvable_sample_count": 37, "identifiable": 13})
+        self.assertEqual(summary["prefill_overlap_sample_count"], {"2": 37, "3": 13})
+        rows = [row for row in payload["bundles"] if "1.5B" in row["model"]["name"]]
+        self.assertEqual(len(rows), 50)
+        self.assertEqual(len({row["bundle"] for row in rows}), 50)
+        self.assertEqual(sum(row["power"]["prefill_overlap_sample_count"] == 2 for row in rows), 37)
+        stats_path = REPO / "docs/paper/round7/dg071-dg075-statistics.json"
+        self.assertEqual(hashlib.sha256(stats_path.read_bytes()).hexdigest(),
+                         "9a4fdddeb8939ce363a93be617352781dba5bfb39bc7a3b1aa8130c9d691c3c7")
+        stats = json.loads(stats_path.read_text())["statistics"]
+        draft = SUCCESSOR_DRAFT.read_text()
+        for key, count, median, iqr in (("DG-071", 406, "120.9186", "5.9508"),
+                                        ("DG-075", 405, "120.9224", "5.8949")):
+            self.assertEqual(stats[key]["sample_count"], count)
+            self.assertEqual(stats[key]["median_ms"], median)
+            self.assertEqual(stats[key]["iqr_ms"], iqr)
+            self.assertIn(median + " ms", draft)
+            self.assertIn(iqr + " ms", draft)
+
+    def test_retired_result_rows_remain_and_have_no_draft_slots(self) -> None:
+        draft = SUCCESSOR_DRAFT.read_text()
+        registry = FILL_REGISTRY.read_text()
+        ids = [f"DS-{i:02d}" for i in range(9, 34)] + [
+            f"PG-{i:02d}" for i in range(1, 9)] + ["OB-01", "OR-01"]
+        for row_id in ids:
+            with self.subTest(row=row_id):
+                rows = [line for line in registry.splitlines()
+                        if line.startswith("| " + row_id + " —")]
+                self.assertEqual(len(rows), 1)
+                self.assertIn("RETIRED_FALLBACK 2026-09-05", rows[0])
+                self.assertNotIn("[FILL:" + row_id + "]", draft)
+        self.assertNotIn("OUTCOME-BRANCH", draft)
+        self.assertNotIn("A — every required ratio passes", draft)
+        self.assertNotIn("outcome A / outcome B", draft)
+        self.assertNotIn("| Contrast | Point estimate |", draft)
+
+    def test_synthetic_source_maps_reproduce_printed_arithmetic(self) -> None:
+        import itertools
+        import math
+        import statistics
+        fixture = REPO / "tests/fixtures/fcm_r4_real_blocks/measured_pair.json"
+        digest = hashlib.sha256(fixture.read_bytes()).hexdigest()
+        self.assertEqual(digest, "ba9398bf74829d0dbf00dc19b6bb14c4119efc750e132dfef1daab0fc2808ea4")
+        self.assertIn(digest, FILL_REGISTRY.read_text())
+        blocks = json.loads(fixture.read_text())["blocks"]
+        point, shared_allowance, local_allowance = [], [], []
+        for block in blocks:
+            delta, zero = block["delta_j"], block["zero_point_contrast_j"]
+            onset, offset = block["onset_sweep_j"], block["offset_sweep_j"]
+            point.append(delta)
+            shared_allowance.append(max(abs(min(onset) + min(offset) - 2*zero),
+                                        abs(max(onset) + max(offset) - 2*zero)) + abs(zero-delta))
+            local_allowance.append(sum(block["bundle_residual_half_widths_j"])/2)
+        def bound(values: list[float]) -> float:
+            return max(max(map(abs, values)), abs(statistics.mean(values)) +
+                       12.706*statistics.stdev(values)*math.sqrt(1+1/len(values)))
+        maximum = max(bound([d+s*q+t*l for d,q,l,t in
+                             zip(point,shared_allowance,local_allowance,signs)])
+                      for s in (-1,1) for signs in itertools.product((-1,1), repeat=2))
+        for actual, printed in ((bound(point), 2.4305766103), (maximum, 8.8304376431),
+                                (maximum/bound(point), 3.6330628732)):
+            self.assertAlmostEqual(actual, printed, places=9)
+        draft = SUCCESSOR_DRAFT.read_text()
+        self.assertIn("SYNTHETIC ARITHMETIC", draft)
+        self.assertIn("registry\nSYN-01", draft)
+        p1 = json.loads((REPO / "docs/paper/figures/figA_partial_record_enclosure.json").read_text())
+        self.assertFalse(p1["claim_bearing"])
+        self.assertEqual(p1["label"], "SYNTHETIC P1")
+        records = p1["inputs"]["records"]
+        start, end = p1["inputs"]["window_s"]
+        def overlap(a: float, b: float) -> float:
+            return sum(row["power_w"]*max(0,min(b,row["end_s"])-max(a,row["start_s"]))
+                       for row in records)
+        whole = [row for row in records if start <= row["start_s"] and row["end_s"] <= end]
+        touched = [row for row in records if min(end,row["end_s"]) > max(start,row["start_s"])]
+        lower = sum(row["power_w"]*(row["end_s"]-row["start_s"]) for row in whole)
+        upper = sum(row["power_w"]*(row["end_s"]-row["start_s"]) for row in touched)
+        for actual, expected in ((overlap(start,end),9), (lower,8), (upper,10),
+                                 (overlap(start+.01,end-.01),8.8),
+                                 (overlap(start-.01,end+.01),9.2)):
+            self.assertAlmostEqual(actual, expected)
+        svg = REPO / "docs/paper/figures/figA_partial_record_enclosure.svg"
+        self.assertEqual(hashlib.sha256(svg.read_bytes()).hexdigest(), p1["figure"]["sha256"])
+
+    def test_references_close_existing_citations_and_availability_is_restricted(self) -> None:
+        draft = SUCCESSOR_DRAFT.read_text()
+        related = draft.split("## 8. Related work\n")[1].split("## 9.")[0]
+        refs = draft.split("## 11. References\n")[1].split("## Appendix A.")[0]
+        numbers = [int(n) for n in re.findall(r"^(\d+)\. ", refs, re.MULTILINE)]
+        self.assertEqual(numbers, list(range(1, 22)))
+        self.assertEqual(set(map(int, re.findall(r"\[(\d+)\]", related))), set(numbers))
+        self.assertIn("https://hotcarbon.org/assets/2026/paper-17.pdf", refs)
+        self.assertIn("https://hotcarbon.org/assets/2026/paper-46.pdf", refs)
+        self.assertNotIn("[REF NEEDED]", refs)
+        availability = draft.split("## 9. Evidence and code availability\n")[1].split("## 10.")[0]
+        for phrase in ("No public submission", "not been released as a complete public reproduction",
+                       "cannot\nreplace unavailable primary bytes", "open_paper_input(ref)",
+                       "Correct points with coherently wrong widths cannot count as"):
+            self.assertIn(phrase, availability)
+
 
 if __name__ == "__main__":
     unittest.main()

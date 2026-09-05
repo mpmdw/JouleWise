@@ -80,10 +80,10 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "registered timing domain—the edge movements fixed before collection",
     ),
     "local half-width / shared sign": (
-        "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
+        "a shared sign is one choice applied across all blocks",
     ),
     "floor packs / contrast pack": (
-        "floor packs—the campaign plans that collect calibration data used to build a comparator floor",
+        "floor packs are the campaign plans that collect calibration data used to build a comparator floor",
     ),
     "energy-allowance sign": (
         "says which direction a nonnegative block-level allowance moves assigned energy",
@@ -122,17 +122,12 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "package power": ("summed CPU, GPU, and neural-engine power",),
     "workload-response slope": ("fitted change in energy per output token",),
     "workload level": ("one output-token count fixed before collection",),
-    "workload magnitude": ("one target size fixed in the identical-condition ladder",),
+    "workload magnitude": ("one target size in the null test",),
     "per-token conversion": ("fitted joules per output token",),
     "sampling flags / cadence ratio": (
         "sampling cadence cannot be recorded or does not stay above a fixed multiple of the phase rate",
         "SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0",
         "REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0",
-    ),
-    "retired calculation": (
-        "equal-rate clock anchor",
-        "point-only value was multiplied by a fixed factor to allow for limited repetition",
-        "current calculation instead uses the corner-to-point ratios",
     ),
     r"small-sample multiplier / \(g(n)\)": ("factor that widens a result to allow for limited repetition",),
     "close-out artifact": ("checks every required ratio",),
@@ -146,7 +141,22 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "four possible outcomes are refusal, not resolvable, direction unresolved, and a directional claim",
     ),
     "custody": ("each named input's fingerprint still matches its recorded bytes",),
+    "best-fit lag": ("fitted edge time minus its matching command time",),
+    "GPU / fitted onsets and offsets": (
+        "a gpu is a graphics processor",
+        "switch-on and switch-off times selected by matching predicted interval-average power",
+    ),
+    "allowed region": ("contains every edge pair surviving the fit's discrepancy limit",),
     "measured contrast": ("point estimate and composed uncertainty interval",),
+}
+
+# Historical pre-cure regression retains its own removed-term definition.
+LEGACY_GLOSS_REQUIREMENTS = {
+    "retired calculation": (
+        "equal-rate clock anchor",
+        "point-only value was multiplied by a fixed factor to allow for limited repetition",
+        "current calculation instead uses the corner-to-point ratios",
+    ),
 }
 
 SENTENCE_GLOSS_TERMS = frozenset({
@@ -375,11 +385,13 @@ def _plain_for_gloss_check(text: str) -> str:
     return text.replace("**", "").replace("`", "").casefold()
 
 
-def _gloss_failures(rows: list[LedgerRow], body_lines: list[str]) -> list[str]:
+def _gloss_failures(rows: list[LedgerRow], body_lines: list[str], *, include_legacy: bool = False) -> list[str]:
     rows_by_term = {row.term: row for row in rows}
     blocks = _search_blocks(body_lines)
     failures: list[str] = []
-    for row_term, required_phrases in GLOSS_REQUIREMENTS.items():
+    requirements = {**GLOSS_REQUIREMENTS, **{key: value for key, value in
+                    LEGACY_GLOSS_REQUIREMENTS.items() if include_legacy or key in rows_by_term}}
+    for row_term, required_phrases in requirements.items():
         row = rows_by_term.get(row_term)
         if row is None:
             failures.append(f"{row_term}: required ledger row is missing")
@@ -618,7 +630,7 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
         body_lines = _strip_comments_preserving_lines(
             "\n".join(raw_body_lines)
         ).splitlines()
-        failures = _gloss_failures(rows, body_lines)
+        failures = _gloss_failures(rows, body_lines, include_legacy=True)
         joined = "\n".join(failures)
         self.assertIn("package power", joined)
         self.assertIn("retired calculation", joined)
@@ -633,13 +645,9 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
                 "and neural-engine power—bounds what may be missing.",
                 "its duration times its largest recorded package power bounds what may be missing.",
             ),
-            "retired calculation": (
-                "That calculation used an equal-rate clock anchor and a yes/no rule that\n"
-                "called a cell attribution-limited when its exact moved-edge limit\n"
-                "exceeded its point-only value after that point-only value was multiplied by a\n"
-                "fixed factor to allow for limited repetition. The\n"
-                "current calculation instead uses the corner-to-point ratios in Section 4.\n",
-                "",
+            "best-fit lag": (
+                "A **best-fit lag** is fitted edge time minus its matching command time.",
+                "A **best-fit lag** describes an edge.",
             ),
             r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
                 "lower-or-upper edge choice for that component is evaluated jointly and the\n"
