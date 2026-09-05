@@ -135,8 +135,10 @@ draft in place.
 
    Substitute `[PREFILL_LENGTH]` in these shell values only after step 2 passes.
    Hash every artifact into the fill ledger. A comparative R_cm value is
-   unavailable unless the registered `d165_shared_sign_local_corner_replay.v1`
-   result can be authenticated against the same custodied block inputs.
+   unavailable unless the registered `d165_shared_sign_local_corner_replay.v2`
+   (active) or `d165_shared_sign_local_corner_replay.v1` (historical, pre-relabel
+   artifacts only) result can be authenticated against the same custodied block
+   inputs.
 
 4. Prove the frozen baseline before replacement:
 

@@ -83,7 +83,9 @@ where the one shared sign \(s\in\{-1,+1\}\) is the same for every block and each
 
 Absolute rows do not report this comparative replay as though it were a measurement. They print `not_applicable`: the registered absolute estimator first subtracts its cell mean, so under the replay's stated idealization that one shared fiducial timing error displaces every observation uniformly, that displacement cancels exactly. This cancellation is the reason for `not_applicable`, not evidence that a shared timing error is physically absent.
 
-**Authority:** `docs/decision_log.md` D-165 R-5 completion; D-165-as-amended index row; `06-COLD-GATE-RULING.md` R-2; the registered replay in `configs/campaigns/d117_contrast_v5/generate_configs.py` (`_common_mode_split`, `replay_common_mode_dominance`, and the `d165_shared_sign_local_corner_replay.v1` registration); `docs/paper/results-fill-registry.md` comparative and absolute R_cm rows.
+**Authority:** `docs/decision_log.md` D-165 R-5 completion; D-165-as-amended index row; `06-COLD-GATE-RULING.md` R-2; the registered replay in `configs/campaigns/d117_contrast_v5/generate_configs.py` (`_common_mode_split`, `replay_common_mode_dominance`, and the `d165_shared_sign_local_corner_replay.v2` registration (active); the `d165_shared_sign_local_corner_replay.v1` registration is historical and accepted only for pre-relabel artifacts); `docs/paper/results-fill-registry.md` comparative and absolute R_cm rows.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The prior v1-only insertion-authority citation is retained for custody and must not be used as active paper authority. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; `d165_shared_sign_local_corner_replay.v1` is historical and accepted only for pre-relabel artifacts.
 
 ## S04 — Methods disclosure for the contingent subtitle — RATIFIED placement before draft line 187
 
