@@ -373,8 +373,11 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
         This synthetic pack gives the second half a separately named manifest
         of the same prompt zero. The real generator propagates both bindings
         through config inventories, manifests, and plan hashes before freeze.
+        The pack is not campaign-shaped: it overwrites prompt index 1's manifest.
         """
 
+        split_block_count = 5
+        members_per_half = 2 * split_block_count  # Two runs per arm per ABBA block.
         generator = fixture.generator
         original_manifest = generator.decode_suite_manifest
         original_relpath = generator.decode_suite_relpath
@@ -406,17 +409,20 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
 
         def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
             value = original_config(run, plan_sha256)
-            if run["measurement_arm"] == "decode" and run["block_index"] > 5:
+            if (
+                run["measurement_arm"] == "decode"
+                and run["block_index"] > split_block_count
+            ):
                 value["workload_profile"].update(second_binding(run["arm"]))
             return value
 
         def declaration(arm: str) -> list[dict[str, Any]]:
             members = original_declaration(arm)
             self.assertEqual(len(members), 1)
-            self.assertEqual(members[0]["declared_member_count"], 20)
+            self.assertEqual(members[0]["declared_member_count"], 2 * members_per_half)
             return [
-                {**members[0], "declared_member_count": 10},
-                {**second_binding(arm), "declared_member_count": 10},
+                {**members[0], "declared_member_count": members_per_half},
+                {**second_binding(arm), "declared_member_count": members_per_half},
             ]
 
         with (
@@ -437,6 +443,12 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
         fixture.init_fixture_git(root)
         fixture.configure(fixture.write_prefill_pin(root))
         pack = self._generate_two_manifest_decode_pack(fixture, root)
+        self._freeze_generated_gate_pack(fixture, root, pack)
+        return fixture, pack
+
+    def _freeze_generated_gate_pack(
+        self, fixture: d117_fixture.D117ContrastV5PackTests, root: Path, pack: Path
+    ) -> None:
         fixture.commit_fixture(root, "generated unprojected v5 pack")
         fixture.freeze_identity_fixture(root, pack)
 
@@ -503,7 +515,6 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
         }
         fixture.write_identity_tree(pack, tree)
         fixture.commit_fixture(root, "bind synthetic U8 freeze receipt")
-        return fixture, pack
 
     def _generated_transport_case(
         self,
@@ -786,6 +797,27 @@ class FrozenConsumerIdentitySetTests(unittest.TestCase):
             )
 
             self.assertIn(resolution.status, {"exact", "transported"})
+            self.assertEqual(resolution.reason_codes, ())
+
+    def test_real_singleton_pack_authenticates_and_resolves_exact_cell(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="analysis-v5-singleton-") as temporary:
+            root = Path(temporary)
+            fixture = d117_fixture.D117ContrastV5PackTests()
+            fixture.setUp()
+            fixture.init_fixture_git(root)
+            fixture.configure(fixture.write_prefill_pin(root))
+            pack = fixture.generate_pack(root)
+            self._freeze_generated_gate_pack(fixture, root, pack)
+            case = self._generated_exact_case(pack)
+
+            identities = _frozen_consumer_identity_set(case[4], case[3])
+            self.assertEqual(
+                identities,
+                frozenset({scientific_config_identity_sha256(case[4][0].raw_config)}),
+            )
+            resolution = self._production_floor_resolution(case)
+
+            self.assertEqual(resolution.status, "exact")
             self.assertEqual(resolution.reason_codes, ())
 
     def test_missing_pack_root_refuses_with_unauthenticated_label(self) -> None:
