@@ -130,7 +130,9 @@
     <p><strong>Strict-valid does not mean scientifically conclusive.</strong> It
     means the recorded artifact is internally valid under the strict contract.
     A bundle can be strict-valid and still carry flags that prevent a
-    comparison claim. That distinction matters in the newest floor data.</p>
+    comparison claim. D-078 makes the distinction decisive for the predecessor
+    corpus: its stored evidence path remains checkable, but its energy values
+    are permanently barred from claim use.</p>
     <div class="provenance-plate">@@CLAIMS_STAMP@@</div>
   </div>
 </section>
@@ -145,30 +147,11 @@
     repeat scatter—or an ABBA comparison artifact—can look. An effect below the
     applicable floor is <strong>not resolvable</strong>, not proven absent.</p>
 
-    <div class="interactive-card floor-lab" data-floor-lab>
-      <div class="interactive-head"><div><span class="card-label">Effect-versus-floor gate</span><h3>Try to clear a real verified floor.</h3></div><span class="status-chip">calibration logic</span></div>
-      <label class="floor-select">Choose the applicable gate
-        <select data-floor-select>
-          <option value="@@FLOOR_REQUEST_GROSS_ABS@@" data-basis="gross request · absolute repeat">Gross mid-request absolute · @@FLOOR_REQUEST_GROSS_ABS@@ J</option>
-          <option value="@@FLOOR_REQUEST_GROSS_CMP@@" data-basis="gross request · comparative ABBA">Gross mid-request comparative · @@FLOOR_REQUEST_GROSS_CMP@@ J</option>
-          <option value="@@FLOOR_REQUEST_IDLE_ABS@@" data-basis="idle-subtracted request · within-device secondary">Idle-subtracted mid-request absolute · @@FLOOR_REQUEST_IDLE_ABS@@ J</option>
-          <option value="@@FLOOR_REQUEST_IDLE_CMP@@" data-basis="idle-subtracted request · within-device secondary comparative">Idle-subtracted mid-request comparative · @@FLOOR_REQUEST_IDLE_CMP@@ J</option>
-          <option value="@@FLOOR_PHASE_PREFILL_GATE@@" data-basis="gross prefill phase · governing gate">Gross prefill phase gate · @@FLOOR_PHASE_PREFILL_GATE@@ J</option>
-          <option value="@@FLOOR_PHASE_DECODE_GATE@@" data-basis="gross decode phase · governing gate">Gross decode phase gate · @@FLOOR_PHASE_DECODE_GATE@@ J</option>
-          <option value="@@FLOOR_SUITE_ITEM_GATE@@" data-basis="gross suite-item · governing gate">Gross suite-item gate · @@FLOOR_SUITE_ITEM_GATE@@ J</option>
-          <option value="@@FLOOR_SUITE_LEVEL_GATE@@" data-basis="gross suite-level · governing gate">Gross suite-level gate · @@FLOOR_SUITE_LEVEL_GATE@@ J</option>
-        </select>
-      </label>
-      <label class="effect-control">Hypothetical observed effect
-        <input data-effect type="range" min="0" max="30" value="0.70" step="0.01">
-        <output data-effect-out>0.70 J</output>
-      </label>
-      <div class="floor-track" aria-hidden="true"><span data-floor-mark></span><i data-effect-mark></i></div>
-      <div class="floor-verdict" data-floor-verdict aria-live="polite"></div>
-      <p class="interactive-note">Clearing this numeric gate is necessary, not
-      sufficient. It does not clear clock, sampling, uncertainty, contamination,
-      multiplicity, correctness, or pre-registered analysis-plan gates.</p>
-    </div>
+    <aside class="evidence-warning"><strong>No current numeric floor is displayed.</strong>
+    The earlier floor extraction came from the time-anchor-defective corpus and
+    is non-claim-bearing under D-078. The prospective <code>_v5</code> campaign
+    must collect admitted evidence and issue its own governed floors before an
+    observed model difference can be compared with a numeric gate.</aside>
     <div class="provenance-plate">@@FLOOR_SPEC_STAMP@@</div>
   </div>
 </section>
@@ -177,36 +160,18 @@
   <div class="chapter-number">06</div>
   <div class="chapter-copy">
     <div class="kicker">What the project has found so far</div>
-    <h2>Real floors, plus an important warning.</h2>
-    <p class="chapter-lede">The verified Window-A extraction reports the
-    following false-effect guard floors. Comparative values use ABBA blocks;
-    “gate” is the larger applicable absolute/comparative value. Every energy
-    number states its D-067 basis.</p>
-    <div class="table-scroll">
-      <table class="ledger measurement-table learn-floor-table">
-        <thead><tr><th>window</th><th>energy basis</th><th>verified floor</th><th>how to read it</th></tr></thead>
-        <tbody>
-          <tr><td>mid request · absolute</td><td>gross · headline</td><td>@@FLOOR_REQUEST_GROSS_ABS@@ J</td><td>repeat-scatter floor</td></tr>
-          <tr><td>mid request · comparative</td><td>gross · headline</td><td>@@FLOOR_REQUEST_GROSS_CMP@@ J</td><td>ABBA comparison floor</td></tr>
-          <tr><td>mid request · absolute</td><td>idle-subtracted · within-device secondary</td><td>@@FLOOR_REQUEST_IDLE_ABS@@ J</td><td>repeat-scatter floor</td></tr>
-          <tr><td>mid request · comparative</td><td>idle-subtracted · within-device secondary</td><td>@@FLOOR_REQUEST_IDLE_CMP@@ J</td><td>ABBA comparison floor</td></tr>
-          <tr><td>prefill phase</td><td>gross · phase basis</td><td>@@FLOOR_PHASE_PREFILL_GATE@@ J</td><td>governing gate</td></tr>
-          <tr><td>decode phase</td><td>gross · phase basis</td><td>@@FLOOR_PHASE_DECODE_GATE@@ J</td><td>governing gate</td></tr>
-          <tr><td>suite item</td><td>gross · headline</td><td>@@FLOOR_SUITE_ITEM_GATE@@ J</td><td>governing gate</td></tr>
-          <tr><td>suite level</td><td>gross · headline</td><td>@@FLOOR_SUITE_LEVEL_GATE@@ J</td><td>governing gate</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <aside class="evidence-warning"><strong>The warning is part of the result.</strong>
-    The floor collection is strict-valid and collection-usable, yet every
-    contributing bundle is claim-evidence flagged. Universal clock-bound and
-    in-window-sample flags, plus drift/cooldown concerns in several comparative
-    cells, mean these values are calibration evidence pending adjudication—not
-    a license for an L2/L3 comparison claim.</aside>
-    <p class="source-path">Cited artifact:
-      <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json"><code>docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json</code></a>
-    </p>
-    <div class="provenance-plate">@@FLOOR_STAMP@@</div>
+    <h2>A validated file path, followed by a soundness refusal.</h2>
+    <p class="chapter-lede">The predecessor bundles demonstrated that the Mac
+    path could collect raw telemetry, store workload events, and replay its
+    recorded calculations. The later soundness audit showed that the two time
+    axes were joined incorrectly. D-078 therefore preserves the files as
+    instrument evidence while permanently refusing their energy values for
+    scientific claims.</p>
+    <aside class="evidence-warning"><strong>The refusal is the result.</strong>
+    No re-rendering, strict-validation pass, or report-building success can
+    convert those predecessor values into evidence about model energy. The
+    current campaign begins prospectively and must issue new artifacts from
+    correctly anchored data.</aside>
   </div>
 </section>
 
@@ -214,21 +179,21 @@
   <div class="chapter-number">07</div>
   <div class="chapter-copy">
     <div class="kicker">What comes next</div>
-    <h2>Turn calibration into governed comparisons.</h2>
+    <h2>Collect new evidence before making a comparison.</h2>
     <div class="next-grid">
-      <article><span>Adjudicate</span><h3>Resolve the evidence flags.</h3><p>Decide
-      whether clock-bound, cadence, drift, and cooldown evidence allows these
-      floors to govern later claims or requires a revised capture.</p></article>
-      <article><span>Baseline</span><h3>Run the controlled Mac campaign.</h3><p>Use
-      counterbalanced order, fixed workloads, strict-valid bundles, and the
-      applicable floor gates before interpreting model differences.</p></article>
+      <article><span>Freeze</span><h3>Fix the plan before data exist.</h3><p>Authenticate
+      the model, tokenizer, workload, order, analysis, and refusal rules before
+      a claim-bearing night begins.</p></article>
+      <article><span>Collect</span><h3>Run the prospective Mac campaign.</h3><p>Use
+      the quiet-machine gate, correctly anchored telemetry, counterbalanced
+      order, and immutable bundles.</p></article>
+      <article><span>Issue</span><h3>Produce governed floors and verdicts.</h3><p>Only
+      admitted transaction evidence may supply the floor and close-out
+      artifacts used by the paper.</p></article>
       <article><span>Stress</span><h3>Test the energy model.</h3><p>Batching,
       speculative decoding, MoE versus dense execution, quantization, and
       reasoning length probe where the fixed-plus-marginal model holds or
       breaks.</p></article>
-      <article><span>Extend</span><h3>Add hardware without changing honesty.</h3><p>Remote
-      NVIDIA and Orin paths remain provisional until live contact. Cross-device
-      headlines stay gross-first and boundary-labeled.</p></article>
     </div>
     <div class="research-questions">
       <h3>The research arc</h3>

@@ -80,12 +80,13 @@ class S0BlockedEnumerationTests(unittest.TestCase):
             if reason.startswith(prefix)
         )
         self.assertEqual(counts["S0-BLOCKED:"], 0)
-        # The four ACID tests moved STRUCTURAL 2026-08-27 (MLX-ACID-SIGABRT-01,
-        # PR #203): the process-level abort that made them CRASH-BLOCKED is
-        # cured, and what remains is the fixture R1 schema work of A84.
-        self.assertEqual(counts["STRUCTURAL-BLOCKED:"], 21)
+        # FIXTURE-MODERNIZATION-01 removes the eighteen fixture-schema skips
+        # (the original fourteen plus the four ACID cases unblocked after the
+        # SIGABRT cure) and reconstructs the historical-chain test.  Only the
+        # independent gate-shadowing and generator-chain cases remain.
+        self.assertEqual(counts["STRUCTURAL-BLOCKED:"], 2)
         self.assertEqual(counts["CRASH-BLOCKED:"], 0)
-        self.assertEqual(len(blocked), 21)
+        self.assertEqual(len(blocked), 2)
         for test_id, reason, docstring in blocked:
             with self.subTest(test_id=test_id):
                 matching = [

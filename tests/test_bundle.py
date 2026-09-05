@@ -38,6 +38,7 @@ from joulewise.schemas import (
     SchemaError,
     SummaryMetrics,
 )
+from tests.git_fixture import init_git_fixture
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -200,7 +201,7 @@ class RunBundleWriterTests(unittest.TestCase):
         outside_path.parent.mkdir(parents=True)
         source_path.write_text("# source marker\n")
         outside_path.write_text("# outside marker\n")
-        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        init_git_fixture(root, "-q")
         subprocess.run(
             ["git", "config", "user.email", "bundle-test@example.invalid"],
             cwd=root,

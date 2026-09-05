@@ -126,3 +126,87 @@ beside its prompt; harvest from disk, never relaunch blind.
 - WATCHDOG: cold ruling 22 (packet 21, second convening, foreground-only) + Opus refutation 23 → synthesis 24 (cure table) → rounds 10 (M-A/M-B/M-C/H-2/step 0/24a) and 11 (reaper detachment guard; step 0 vs merge commit) → delta 11 residual N1 cured at the bench (trace 31, executed both paths) → terminal review 99 → **PR #284** open; integration replay on `int/2026-09-04-watchdog` (main d7d74225 + final head) running; CI running. After merge: canonical `pull --ff-only`, step 0 digest check, Terminal-hosted install per checklist; then the first launchd activation + `notice.ack` + a REHEARSAL_STUB night through the night driver's own courier BEFORE any real plan is armed (ruling 22 Q-C9). D-172 (real-entry-point subprocess test rule) recorded; Ed emailed with veto option.
 - PAPER-H: two cold rulings (06, 09), final bench round (10), sentence-unit delta CLEAN (11), terminal review 99 → **PR #283** open; CI green except ledger rows 9/11; full replay running.
 - FAN-OUT: wave 2 rebuilt on the final wave 1 (f7579c84) + 15 landings (ac7ca7f0; reduce.py restored to the D-138 pin on CUSTODY-HARDEN-01); round-2 contract refuter running; four landings (R7F-EXIT3, docs-vs-truth, one-name-sweep, GIT-FIXTURE sweep) merged with wave 2 on their branches by Sol seats and wait to fold in after the refuter. AUTHENTICATOR-ALLOWLIST-GUARD-01 PARKED (third same-signature occurrence; three-seat design consult owed). EPOCH-LINT-01 retired. LINEAGE-RELOCATABLE-01 landable but gated on a cold gate (NR-3). skill-distill held (doctrine).
+
+## 2026-09-04 ~16:30 PT — paper H merged; supplier contracts ruled; four supplier seats; watchdog PR at its ledger
+
+- MERGED: PR #283 (paper-H) at main 9eef8584. Paper lane next = result SUPPLIERS buildable before data: scout (`docs/process_traces/2026-09-04-paper-i/01`) mapped 68 STOP_FILL rows; three-seat consult (Sol 02 / Opus 03 / blind Fable 02-blind) + adjudication packet 05 → magistrate rulings 06 (R1 `reported_phase_energy.v1` with the composition rule behind an ID — the t95+window variant is PROPOSED for a cold gate before collection; R2 `claim_verdicts.v2` sibling `claim_side_bound` = the clock-anchor term, full symmetric prefill token family; R3 `transfer_fiducial_result.v1` projection, `[TRANSFER_FIDUCIAL_RESULT]`, Diagnostic-only prose; R4 D-165 renderer: register OB/OR strings, no precedence channel, governed before-comparison bytes, `_v5` identity gate). Seats RUNNING on branches `feat/2026-09-04-d123-reported-mean`, `feat/2026-09-04-gamma-claim-renderer`, `feat/2026-09-04-transfer-result-renderer`, `feat/2026-09-04-d165-outcome-renderer` (fix round 1). Each gets refuter pair + Opus counter-review before merge.
+- WATCHDOG PR #284: replay on 6975485d (4992 tests; two explained exclusions) recorded in 99; four Linux-CI portability commits (base64 --decode, plutil fallback, uninstall never mkdirs custody, resolved-path interpreter assert); ledger complete at head aa67c00d; checks watched → merge → canonical pull + step 0 → install → first launchd activation + notice.ack → REHEARSAL_STUB night → first real window.
+- FAN-OUT wave 2 (`int/2026-09-04-fan-wave-2`, 19 landings + doc008 with restored terms): round-3 contract refuter NOT LANDABLE (R3-F1 sign-off row — the sign-off commit had landed on the doc008 branch by mistake, now on main 45355f1e; R3-F2 three direct git-init calls from one-name-sweep/LINE-AUDIT under the sweep's guard; R3-F3 R7F /var assertion regrown; R3-F4 arm-readiness integration timing) → seam-fix seat RUNNING on the int tree; then main + doc008 tip merged, full replay, refuter round 4, Opus counter-review, PR.
+- Lessons in memory: gate bench commits on the stripped test tail; Linux CI vs Mac bench for shell installers; cold judges foreground-only.
+
+## 2026-09-04 evening — watchdog MERGED (#284, main c74c7e6a, step 0 STEP0_OK live); install pending the quiet point; wave 2 at its final replay; supplier lanes in fix rounds
+
+- WATCHDOG: on main; canonical checkout pulled; step 0 digest check executed live → STEP0_OK. INSTALL = the handoff procedure in `docs/process/MAGISTRATE_WATCHDOG.md` (stop every background task, inventory, install from canonical main, first launchd activation + `notice.ack`, then a REHEARSAL_STUB night through the night driver's own courier BEFORE any real plan). It hands off FROM this session, so it runs at the quiet point after the in-flight seats are harvested.
+- FAN-OUT wave 2 (`int/2026-09-04-fan-wave-2` dc195049): replay diagnosis (07) — one shared finalization-fixture seam vs CUSTODY-HARDEN's NEG-8 ingress (fixture corrected; the narrowing STANDS as an evidence fence) + stale-module artifacts; seam-fix round 4 (08) applied the integration rulings (guard green; bridge gate removed; handoff fence kept; B2/B3; README; mutation kill); W8 and the PHASE-SHARE queue row cured at the bench. Definitive full replay RUNNING (`int-fan-wave2-replay-2.log`); then contract round 5 + Opus re-read → PR.
+- SUPPLIERS (paper-I): rulings 06 + addenda 07 (R2 sidecar; R4-F1 replaced), 08 (Q-R1-5 replaced: producer-only projection), 09 (R4 tightened: reason map, identity-pin validator, custody, out-of-band refusal), 10 (R2-FL-1 floor-lineage at the canonical validator). d165: fix 3 landed, delta 3 running; d123: fix 2 landed, delta 2 running; gamma: fix 2 running; transfer: fix 2 landed, delta 2 running. Each merges only after delta CLEAN + Opus + apex read; then one integration tree for the four (they all amend registry rows — conflicts expected; resolve on integration).
+- PARKED/HELD: AUTHENTICATOR-ALLOWLIST-GUARD-01 (three-seat design consult owed); LINEAGE-RELOCATABLE-01 (cold gate NR-3); skill-distill (doctrine → cold gate); the Q-R1-2 composition rule proposal (cold gate before collection); EPOCH-LINT-01 retired.
+
+## 2026-09-04 ~16:00 PT — fan-out waves 1+2 are PR #285; custody seam in fix round 2; watchdog install still pending the quiet point
+
+- FAN-OUT: `int/2026-09-04-fan-wave-2` → **PR #285** (32 landings; five Sol contract rounds, two Opus counter-reviews, five seam-fix rounds; bench restorations of the frozen v1 validator and draft-v1; MODULARITY generalisation re-homed in `joulewise/analysis_manifest_v2.py`). Final replay running (`int-fan-wave2-replay-3.log`); CI running; rows 9/11/12 then merge. After merge: kernel rows (Opus F-2 from wave 1: p2-rows retirements, QUIET-GUARD wording, PREWINDOW-REGEX row, P2-027/035/047A/050), README blurb, RUN_STATE T33.
+- SUPPLIERS: all four supplier lanes are blocked on the custody-read seam (`feat/2026-09-04-paper-custody-seam`, PAPER-CUSTODY-SEAM-01): landing → two refuters NOT LANDABLE → fix 1 → delta NOT LANDABLE (inputs.py bypass, shim, D-173 text) → fix 2 RUNNING (bounded; a repeat routes to a consult). D-173 (proposed/provisional) text synced to addendum 16 (role + runs root; git-tracked supply map). Rulings 06 + addenda 07–10, 15, 16 on `feat/2026-09-04-paper-i-scout`. Supplier branches at their last heads: d123 (fix 2, delta NOT LANDABLE third occurrence → seam), d165 (fix 3, delta NOT LANDABLE third → seam), gamma (fix 2, delta NOT LANDABLE third → seam), transfer (fix 3 committed; B1 → seam). Each re-lands on the seam after it passes; then one paper-supply cold gate (D-173) before any merges.
+- WATCHDOG: merged; install waits for the quiet point (custody seam + wave 2 settle), then handoff → first launchd activation → REHEARSAL_STUB night. Window tonight ~02:56 PT.
+
+## 2026-09-04 ~19:30 PT — astra peer audits landed; consult convened; scope-freeze pending
+
+- Three gpt-6-astra peer audits archived at docs/process_traces/2026-09-04-peer-audit/ (01 full base, 02 claim spine,
+  03 paper vs code); 04 = magistrate bench verification (all four executable witnesses reproduce on f4c812b4);
+  05 = three-seat consult questions Q1–Q7. Ed emailed (thread "astra peer audits are in").
+- Running: Sol xhigh physics consult → 10-consult-sol-physics.md (wt-consult-sol); Opus contract consult →
+  11-consult-opus-contract.md (wt-consult-opus, Agent); blind Fable → 12-consult-blind-fable.md (wt-consult-fable);
+  legacy-L1 cure seat → 20-legacy-l1-cure-report.md on feat/2026-09-04-legacy-l1 (wt-legacy-l1).
+- Next after consult: magistrate synthesis (13), estimand + D-165 relabel rulings → cold Fable gate (claim-bearing),
+  paper-K seat (03-F4 methods-vs-code corrections, null-vs-model wording, F+B metadata) after paper-J merges,
+  Q4 floor-prompt regeneration decision, Q6 scope freeze ruling (skill-distill second convening PARKED until Q6).
+- Kernel rows merged to main (branch head 064b0dbc; merge landed with the next push). AUTH round 3 running with the registry file in scope (report 15).
+- Still running: custody fix 4, paper-J fix 1, wave-2 replay-3 (PR #285 rows 9/11/12 pending).
+
+## 2026-09-04 ~22:30 PT — consult complete; astra mirrors the magistrate; cures in flight
+
+- Consult seats archived: 10 Sol physics, 11 Opus contract, 12 blind Fable. Draft ruling 13 on main (cfdb24ac).
+  Ed (in chat): "when astra gets back … assess its work … have it mirror your tasks and you two discuss final
+  moves" → assessment given in chat; astra peer-magistrate seat running → 14 (wt-astra-peer). Then 15 (magistrate
+  reply), 16 (astra final), 17 (final ruling) → cold Fable gate. PARKED lanes launch no new rounds until 17.
+- Custody seam: fix 4 f2d35b4f, delta 4 LANDABLE (10). F1 = token recoverable by private introspection →
+  outside D-161 ordinary-operator threat; cure = narrow contract lines 53-56/75-81, no code round. F2 = census
+  regression is a string count → test debt, recorded. Peer-audit 02-F4 width recomputation: factor the mint's
+  reconstruction (1–2 days) — packet question, not a round. Seal the paper-supply packet AFTER 17 (D-173 amendments).
+- FB-PLANNING-METADATA-01 (wt-fb-metadata): seat landed keys, but detection_floor.py:3353 compares the artifact's
+  object to the canonical emitter by exact equality (also :3845, :4115, analysis_engine/artifact.py:494) → every
+  previously issued floor object would fail validation. HELD, not merged; needs SINGLE_COUNT_DISCIPLINE_ID .v2
+  with a version-aware validator + adapter_contracts.md amendment = cold-gate item in 17.
+- ESTIMAND-ENCLOSURE-01 (wt-estimand-enclosure) still running; its blast-radius report decides field vs script.
+- Legacy L1: rounds 1+2 on feat/2026-09-04-legacy-l1 (a379b5af), execution refuter running → PR.
+- Paper-J: PR #286 open (rows 9/11/12 pending). Wave-2 PR #285 replay-3 still running. AUTH round 3 running
+  (last round; PARK after).
+
+## 2026-09-05 ~02:00 PT — final ruling 17 written; cold-gate packet sealing; paper-K launched
+
+- Peer discussion closed (14 astra plan, 15 reply, 16 astra final). FINAL ruling 17 on main (e323f1aa) with the
+  decision-log addendum texts (D-078, D-083, D-165, D-166, scope-freeze rule, D-161 line). NOT ratified until the
+  cold Fable gate rules: packet seat → 40-coldgate-packet-ruling-17.md (wt-packet-ruling-17); then convene cold
+  Fable (doctrine-free worktree, foreground-only charge) + Opus refuter; then decision-log edits + email Ed.
+- Ed emailed (thread "three questions only you can answer"): due date / fallback acceptability; same-condition vs
+  ensemble prompt question (default prompt-0 contrast); estimand relabel veto. Defaults proceed if silent.
+- Seats running: paper-K (wt-paper-k, off paper-J head + 17 staged; provisional under 17); wave-2 T0 test cure
+  (wt-int-fan-wave2; test-only; fanout/31); legacy-L1 delta 3 (24); AUTH round 3 (last; PARK after);
+  paper-J full replay (~/.claude/jobs/3c46c831/tmp/paperj-replay.log) for PR #286 row 9.
+- Held branches: feat/2026-09-04-estimand-enclosure (accepted conditionally in 17 Q1; needs inside-one-record
+  oracle + delta), feat/2026-09-04-fb-metadata (re-brief to 17 Q3 shape after the gate).
+- Wave-2 #285: replay-3 5116 tests, 2 failures diagnosed (fanout/30): node-worker = environmental pre-existing
+  (ledger wording in 30); T0 real-boot = test defect, cure seat running; row 9 fills with the re-run tail.
+- Internal cuts adopted: readiness proven by 6 Sep or fallback; last acquisition night 8 Sep; freeze 9 Sep.
+
+## 2026-09-05 ~05:30 PT — ruling 17 RATIFIED as amended (gate 41/42, synthesis 43); post-gate seats running
+
+- Cold gate: 41 (Fable) + 42 (Opus refuter) agree; 43 adopts every amendment. Enclosure = DESK SCRIPT (reducer field
+  rejected: strict validation of stored 0.5.2/0.6.2 summaries). D-166 sentence and scope-rule insertion adopted;
+  D-161 as rule text. Dates: last acquisition night 8 Sep; desk 9 Sep 06:00–18:00; freeze 9 Sep 18:00 PT.
+- Seats: dl-ratify (decision-log addenda D-078/D-083/D-165/D-166, new D-174, D-161 line; wt-dl-ratify);
+  enclosure-script (revert reducer, scripts/paper/partial_record_enclosure.py + DERIVE row; wt-estimand-enclosure);
+  fb-v2 (SINGLE_COUNT_DISCIPLINE .v2, ten equality sites; wt-fb-metadata); d165-relabel (wt-d165-relabel);
+  d166-prompt0 (census first, NEEDS_SCOPE allowed; wt-d166-prompt0); paperk-fix1 (F1 terms + F2 note; title →
+  astra's 'Timing Sensitivity of Phase-Energy Assignments on Apple Silicon'; wt-paper-k).
+- PRs: #285 wave-2 (merged main; T0 test cure; rows filled at f1600c10; CI watched); #286 paper-J (rows 11/12
+  filled; full replay running for row 9); #287 legacy-L1 (opened; rows 9/11/12 pending). AUTH parked at 93d0d91c.
+- Ed emails outstanding: due date/fallback; ensemble vs same-condition; estimand relabel veto (defaults running).

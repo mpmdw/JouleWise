@@ -1,0 +1,19 @@
+```json
+{"schema":"claude-codex-report/v1","genre":"review","status":"findings","completion":"complete","summary":"BLOCK: four landings are absent; D-172 is unindexed; DOC-008 lacks sign-off.","workspace":{"base_requested":"origin/int/2026-09-04-fan-wave-1","base_mode":"exact","head_start":"ac7ca7f0e22e1806f0f085b81ca2988ba6780281","head_end":"ac7ca7f0e22e1806f0f085b81ca2988ba6780281","upstream_end":"ac7ca7f0e22e1806f0f085b81ca2988ba6780281","branch":"int/2026-09-04-fan-wave-2"},"pathspec":["docs/process_traces/2026-09-04-fanout/wave-2/02-refuter-contract-integrated-round-2.md"],"unowned_dirty":[],"verdict":{"round1":{"F1":"CURED","F2":"CURED","F3":"CURED","F4":"CURED","F5":"CURED"},"findings":[{"id":"R2-F1","severity":"blocker","text":"Only 15 fan merges exist; R7F-EXIT3-SEMANTICS-01, docs-vs-truth, one-name-sweep, and GIT-FIXTURE-MAINTENANCE-SWEEP-01 are not ancestors."},{"id":"R2-F2","severity":"blocker","text":"D-172 has a body but no index row; docs freshness fails."},{"id":"R2-F3","severity":"blocker","text":"DOC-008 merged without required magistrate sign-off."},{"id":"R2-F4","severity":"should_fix","text":"Round-1 review is absent from HEAD and only in reflog commit bfd775ef."}]},"verification":[{"id":"V1","kind":"test","cmd":"mods=$(git diff --name-only f7579c8465a70e2335c61b180a6f0dd0e05659d4..HEAD -- 'tests/test_*.py'|sed 's#/#.#g;s#\\.py$##'|tr '\\n' ' '); env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest docs.paper.fill-rehearsal.test_select_outcome_branches $mods","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["First extra element 173: 'D-172'","Ran 1123 tests in 1424.629s","FAILED (failures=1, skipped=6)"]},"expected":{"exit_code":0,"tail_regex":"Ran 1123 tests.*OK"}},{"id":"V2","kind":"inspection","cmd":"m=0; for b in R7F-EXIT3-SEMANTICS-01 docs-vs-truth one-name-sweep GIT-FIXTURE-MAINTENANCE-SWEEP-01; do git merge-base --is-ancestor origin/feat/2026-09-04-fan-$b HEAD||m=$((m+1)); done; git cat-file -e HEAD:docs/process_traces/2026-09-04-fanout/wave-2/01-refuter-contract-integrated.md 2>/dev/null; t=$?; git grep -qiE 'DOC-008.{0,80}(APPROVED|SIGNED)' HEAD -- docs/process_traces/2026-09-04-fanout ':!docs/process_traces/2026-09-04-fanout/doc008/*'; s=$?; printf 'missing=%s trace=%s signoff=%s\\n' $m $t $s; test \"$m$t$s\" = 000","cwd":".","observed":{"result":"fail","exit_code":1,"tail":["missing=4 trace=128 signoff=1"]},"expected":{"exit_code":0,"tail_regex":"missing=0 trace=0 signoff=0"}},{"id":"V3","kind":"inspection","cmd":"shasum -a 256 joulewise/reduce.py; python3 scripts/check_campaign_generator_core_parity.py --baseline-ref origin/main","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc  joulewise/reduce.py","PARITY_OK generators=3 files=352 excluded=['generate_configs.py', 'plan_tree.json', 'plan_tree.sha256'] baseline=origin/main"]},"expected":{"exit_code":0,"tail_regex":"7b9c0d[\\s\\S]*PARITY_OK"}}],"flags":[{"id":"G1","kind":"verification_gap","level":"nonblocking","text":"Only touched modules ran, per preflight.","needs":"Magistrate runs full suite."},{"id":"G2","kind":"residual_risk","level":"nonblocking","text":"Real COLDGATE launcher remains fenced.","needs":"Ed ratification and lead live verification."}]}
+```
+
+## Findings
+
+R2-F1 — Integrate the four exact reviewed tips.
+
+R2-F2 — Index D-172 with its adopted status.
+
+R2-F3 — Magistrate-sign the exact compaction before merge.
+
+R2-F4 — Restore the round-1 trace from `bfd775ef`.
+
+Sensitive: D-138 reducer=`7b9c0d…`; floor-registry triple=`fc91df6d…`; D-117 trio is D-161-only (352-file parity); P2 history is byte-stable. Fill/RQ/P1 status gates are unchanged; custody hardens binding; phase-share is diagnostic; D-172 was cold-gated; handoff is fenced; identity-pin change is format-only. No floor/calibration bytes changed; absent R7 repin is R2-F1.
+
+## Residual risk
+
+Suite/launcher unverified.

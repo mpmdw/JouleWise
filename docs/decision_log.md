@@ -216,6 +216,7 @@ be re-derived by a future agent gets an entry here.
 | D-170 | T26 COLD-GATE VERDICTS — install ruling status, tracked gate ledger, T-0 liveness bound, and executed-evidence duty | adopted (magistrate, 2026-09-03; installed by PRs #273, #274, #275) |
 | D-171 | HANDS-FREE WEEK — Ed's delegations for unattended windows: E-10 amended (driver invokes the launcher), hC + transaction GO delegated to the magistrate's gate, watchdog install authorized, 5-min stand-down | ratified (Ed, 2026-09-02) |
 | D-172 | REAL-ENTRY-POINT SUBPROCESS TEST — any change to the magistrate watchdog, its installer, its launchd templates, or its session argv ships with a green subprocess test of the real entry point plus one named RED mutation | adopted (magistrate on the cold gate's amended text, packet 21 Q-PROC, 2026-09-04; Ed notified, may veto) |
+| D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | proposed (magistrate, provisional, 2026-09-04, after a three-seat consult; pending the paper-supply cold gate before any supplier merges; Ed may veto) |
 
 ---
 
@@ -10897,3 +10898,36 @@ adopted by the magistrate on the cold gate's amended text (rule 11: a
 proposed process rule goes before a cold instance — it did); Ed notified by
 email the same day and may veto. Enforcement: the PR ledger row 2 for any such
 change cites the subprocess test and the RED mutation transcript.
+
+
+## D-173: paper supply custody — one custody-read seam for every claim-bearing paper input (magistrate, PROVISIONAL, 2026-09-04)
+
+Origin: three paper-supplier lanes (D-123 reported means, D-165 outcome
+renderer, gamma claim renderer) each failed three consecutive rounds with one
+class — a caller-supplied document (a projection, a normalized stop object, a
+dict plus bytes) entered the source chain and the supplier sealed it with its
+own hash, so a fabricated number or reason could be rendered into the paper.
+A three-seat design consult (Sol, Opus, blind Fable; traces
+`docs/process_traces/2026-09-04-paper-i/11-*.md`, `12-*.md`) and the
+adjudication packet (`14-*.md`) converged; the magistrate ruled (`15-*.md`).
+
+Rule: a paper supplier or renderer obtains every claim-bearing input ONLY
+through `joulewise/paper_custody.py`'s `open_paper_input(ref)`, where `ref` is one of
+five closed typed refs each carrying only a role name and a runs root. In: that
+ref — nothing else; a
+git-tracked supply map (read through the repository's authentication session
+and anchored on a clean tree, addendum 16) names every path and expected
+digest, so no caller ever names a digest. Out: frozen verified objects carrying the digests actually verified, after a
+fresh validator replay from disk; governed files are authorized through
+clean Git blobs, generated files through receipts reached from a registered
+custody inventory. No supplier accepts a dict, bytes, sequence, or
+pre-validated object from a caller. Refusals use the closed `paper_custody_*`
+namespace; nested validator codes are never renderable. Each family carries
+an auto-census test: raw byte mutation, full caller resealing, and
+replay-to-reopen replacement each yield the exact refusal code and zero
+rendered output. Normative home: `docs/contracts/paper_supply_custody.md`.
+
+Status: PROVISIONAL. Adopted by the magistrate to unblock the seam's
+construction; it is placed before the next cold gate (the paper-supply
+packet) BEFORE any supplier lands on main; Ed notified by email the same day
+and may veto.

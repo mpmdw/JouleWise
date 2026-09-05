@@ -1224,6 +1224,17 @@ long suite runs on the separate published checkout.
 | H3 | Send the D-150a notification: campaign span open; per-window notices to follow. |
 | H4 | Record the registered limitation (D-153 W5): a mid-campaign non-configuration cure forces a new family generation. There is no patching a published `_v4`. |
 
+### The mid-campaign cure boundary (D-153 W5)
+
+A **non-configuration cure** is a repair that changes measurement code,
+policy, or another frozen artifact, rather than a value selected through a
+configuration choice that the frozen plan already permits. If such a cure is
+needed while the campaign is in progress, it cannot be injected into the
+already-running foreground chain. A new family generation is required before
+the cured work can run. This limitation applies equally to the registered
+ALPHA, BETA, and GAMMA profiles: none provides a safe in-place cure path for a
+campaign already in progress.
+
 **H1's continuation clause — what "sealed" means here.** Sealing exists to make
 the record non-repudiable: **nothing already written is ever mutated, reworded,
 or removed, at any later point.** That property is what H1 establishes and it
