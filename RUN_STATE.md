@@ -10,6 +10,17 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T35 (2026-09-05 afternoon PDT) — FALLBACK PAPER MERGED; HANDOFF NEXT.** The readiness ruling
+(`docs/process_traces/2026-09-05-readiness/02`) selected the fallback; paper-K (#288), paper-L (#290), the
+custody seam (#289), F+B v2 (#292) and paper-M (#293, the fallback methods/diagnostic paper) are all merged.
+The article is `docs/paper/draft-v2-skeleton.md` (single METHODS_DIAGNOSTIC outcome); every section that
+presumed the unperformed comparison lives in `docs/paper/protocol/prospective-comparison-protocol.md`.
+Remaining before the watchdog handoff: the D-165 relabel branch (main merged by the Opus lieutenant, census
+RED lines cured by one astra seat, PR). Then the magistrate executes docs/process/MAGISTRATE_WATCHDOG.md
+§Install handoff steps 1/3/4/5 with no seat or replay running; the relaunched headless magistrate resumes
+from the RELAUNCH RESUME PLAN plus the dated deltas in
+`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md` (latest ~14:50 PDT 2026-09-05).
+
 **T34 (2026-09-04 evening PDT) — WATCHDOG INSTALL HANDOFF.** Ed's /loop of 2026-09-04 evening makes
 unattended windows the first priority. The magistrate executes docs/process/MAGISTRATE_WATCHDOG.md §Install
 handoff after PR #288 merges; the session is reaped by design and launchd relaunches a headless magistrate that
