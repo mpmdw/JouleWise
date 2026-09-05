@@ -241,3 +241,12 @@ Still-running Sol seats (launched before the rule) finish as is: d174-wire, encl
 - D-173 adopted as amended on main (2fcf4397). Orchestration adoption 02 on main.
 - Replays for #286 (paper-J) and #287 (legacy) still running under load ~10 (both machine-heavy).
 - Rule learned (memory): merge to main ONLY from the canonical checkout; never `pull --ff-only` in a worktree.
+
+## 2026-09-05 ~20:00 PT — paper-J MERGED (#286 → fcf86495); paper-K retargeted to main (#288, head d053e969, replay running)
+- Paper-L tree (feat/2026-09-05-paper-l, from the K head): integrates the enclosure branch and the D-166 branch
+  registry rows (both conflicted with K), then an astra seat adds the appendix enclosure figure + citation and the
+  PE-01 row validation (enclosure delta 39 D2/D3).
+- D-165: Opus review NOT LANDABLE (F1 fill-checklist rationale, F2 campaign pack doc, F3 validator adopts supplied
+  rule_id); round 4 running with the STRUCTURAL cure (repo-wide retired-rationale census test) per the same-signature
+  trigger. F+B: round 4 committed; delta 3 with from-scratch consumer census running (same trigger applies).
+- Seam round 5 (astra xhigh) still running. Legacy replay still running.
