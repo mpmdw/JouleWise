@@ -438,6 +438,59 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             )
         )
 
+    def test_p2_shared_energy_sign_witness_is_unchanged_under_v2(self) -> None:
+        self.assertEqual(
+            core.replay_common_mode_dominance.__doc__,
+            "shared-energy-sign / local-corner sensitivity diagnostic; no "
+            "proven conservatism for common-time motion",
+        )
+        bracket = authenticated_bracket(0.05)
+        blocks = [
+            {
+                "delta_j": 1.0,
+                "onset_sweep_j": [1.0 - width, 1.0, 1.0 + width],
+                "offset_sweep_j": [1.0],
+                "zero_point_contrast_j": 1.0,
+                "bundle_residual_half_widths_j": [0.0] * 4,
+                "member_window_bounds_s": [[1.0, 2.0]] * 4,
+                "member_envelope_integral_sum_j": 100.0,
+            }
+            for width in [0.5, -0.5] * 5
+        ]
+
+        result = core.replay_common_mode_dominance(
+            blocks,
+            calibration_bracket=bracket,
+            shared_edge_bound_s=0.05,
+        )
+
+        self.assertEqual(result["rule_id"], "d165_shared_sign_local_corner_replay.v2")
+        self.assertEqual(f"{result['ratio']:.6f}", "1.500000")
+        self.assertFalse(result["passes"])
+
+    def test_v1_sidecar_result_and_reason_remain_validator_compatible(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        for cell in sidecar["cells"]:
+            cell["absolute"]["common_mode"][
+                "reason"
+            ] = core.LEGACY_ABSOLUTE_COMMON_MODE_REASON
+            replay = cell["comparative"].get("common_mode_replay")
+            if replay is not None:
+                replay["result"][
+                    "rule_id"
+                ] = core.LEGACY_COMMON_MODE_REPLAY_RULE_ID
+
+        self.assertEqual(core.validate_d165_replay_sidecar(sidecar), [])
+
+    def test_new_sidecar_uses_corrected_absolute_reason(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        reasons = {
+            cell["absolute"]["common_mode"]["reason"]
+            for cell in sidecar["cells"]
+        }
+        self.assertEqual(reasons, {core.ABSOLUTE_COMMON_MODE_REASON})
+        self.assertNotIn("cancels exactly", core.ABSOLUTE_COMMON_MODE_REASON)
+
     def test_terra_relabel_all_cells_to_forged_ids_refuses_neither_branch(self) -> None:
         closeout, manifest, floor, sidecar = self.build()
         forged_ids = ("forged-a", "forged-b", "forged-c", "forged-d")
@@ -614,7 +667,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         sidecar_bytes = _file_json_bytes(replay_sidecar(floor_artifact()))
         self.assertEqual(
             hashlib.sha256(sidecar_bytes).hexdigest(),
-            "69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735",
+            "f0f8e86e2aa6c9a3c920e026813b8ce9c34c78e5b21dc7457cbe7bf2de9ba870",
         )
 
     def test_stage2_builder_uses_floor_identity_and_default_shape(self) -> None:
@@ -1751,7 +1804,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self.assertFalse(branch_b["subtitle_licensed"])
         self.assert_valid_closeout(branch_b, manifest_b, floor_b, sidecar_b)
 
-    def test_generator_imports_shared_core_and_registration_bytes_are_unchanged(self) -> None:
+    def test_generator_imports_shared_core_and_registration_bytes_match_v2(self) -> None:
         self.assertIs(generator.dominance_ratio, core.dominance_ratio)
         self.assertIs(
             generator.split_common_mode_block_width,
@@ -1767,7 +1820,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         )
         self.assertEqual(
             hashlib.sha256(PINNED_DOMINANCE_CRITERION_BYTES).hexdigest(),
-            "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b",
+            "dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265",
         )
 
     def test_contract_runnable_command_names_exactly_the_parser_flags(self) -> None:

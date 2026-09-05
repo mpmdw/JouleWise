@@ -47,11 +47,22 @@ CLOSEOUT_INPUT_MALFORMED_RECORDS = (
     "closeout_input_malformed: closeout.independent_ratios"
 )
 CLOSEOUT_INPUT_MALFORMED_ADAPTER = "closeout_input_malformed: replay.block_ids"
-COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
-ABSOLUTE_COMMON_MODE_REASON = (
+LEGACY_COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
+COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v2"
+COMMON_MODE_REPLAY_RULE_IDS = (
+    LEGACY_COMMON_MODE_REPLAY_RULE_ID,
+    COMMON_MODE_REPLAY_RULE_ID,
+)
+LEGACY_ABSOLUTE_COMMON_MODE_REASON = (
     "the absolute estimator uses deviations from the mean, so a uniform shared "
     "fiducial shift cancels exactly; the replay is registered only for "
     "comparative ABBA block inputs"
+)
+ABSOLUTE_COMMON_MODE_REASON = (
+    "a uniform additive energy offset cancels from absolute residuals; no "
+    "absolute common-time replay is implemented; absolute R_cm is not_applicable "
+    "because the registered replay is comparative-only, not because absolute "
+    "timing uncertainty vanishes"
 )
 COMMON_MODE_INPUT_FIELDS = (
     "delta_j",
@@ -588,7 +599,7 @@ def replay_common_mode_dominance(
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> dict[str, Any]:
-    """Replay comparative R_cm from authenticated, pre-mint block inputs."""
+    """shared-energy-sign / local-corner sensitivity diagnostic; no proven conservatism for common-time motion"""
 
     if not blocks or len(blocks) > MAX_EXACT_ADMISSIBLE_CORNER_N:
         raise ValueError("common_mode_replay_block_count_invalid")
@@ -828,6 +839,11 @@ def _validate_common_mode_result(
     if not _check_keys(value, _COMMON_MODE_RESULT_KEYS, where, errors):
         return
     assert isinstance(value, Mapping)
+    rule_id = value["rule_id"]
+    if not isinstance(rule_id, str) or rule_id not in COMMON_MODE_REPLAY_RULE_IDS:
+        errors.append(
+            f"{where}.rule_id: must be a registered D-165 replay rule id"
+        )
     for key in (
         "point_unguarded_floor_j",
         "common_mode_corner_widened_unguarded_floor_j",
@@ -838,8 +854,12 @@ def _validate_common_mode_result(
             errors.append(f"{where}.{key}: must be finite and nonnegative")
     if not isinstance(value["passes"], bool):
         errors.append(f"{where}.passes: must be Boolean")
-    if expected is not None and dict(value) != dict(expected):
-        errors.append(f"{where}: does not match replay_common_mode_dominance")
+    if expected is not None:
+        versioned_expected = dict(expected)
+        if rule_id in COMMON_MODE_REPLAY_RULE_IDS:
+            versioned_expected["rule_id"] = rule_id
+        if dict(value) != versioned_expected:
+            errors.append(f"{where}: does not match replay_common_mode_dominance")
 
 
 def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
@@ -884,10 +904,16 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
                 _ABSOLUTE_COMMON_MODE_KEYS,
                 f"{cell_where}.absolute.common_mode",
                 errors,
-            ) and dict(common) != {
-                "status": "not_applicable",
-                "reason": ABSOLUTE_COMMON_MODE_REASON,
-            }:
+            ) and dict(common) not in (
+                {
+                    "status": "not_applicable",
+                    "reason": ABSOLUTE_COMMON_MODE_REASON,
+                },
+                {
+                    "status": "not_applicable",
+                    "reason": LEGACY_ABSOLUTE_COMMON_MODE_REASON,
+                },
+            ):
                 errors.append(
                     f"{cell_where}.absolute.common_mode: must be the "
                     "registered not_applicable record"

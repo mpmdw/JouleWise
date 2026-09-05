@@ -81,12 +81,14 @@ PINNED_DOMINANCE_CRITERION_BYTES = (
     b'j","member_window_bounds_s","member_envelope_integral_sum_j","calibration_'
     b'bracket","shared_edge_bound_s"],"replay_fence":"authenticated_custodied_'
     b'block_inputs_only",'
-    b'"rule_id":"d165_shared_sign_local_corner_replay.v1"},"threshold":2.0,'
+    b'"rule_id":"d165_shared_sign_local_corner_replay.v2"},"threshold":2.0,'
     b'"withdrawal_comparison":"R_cm < 2.0","withdrawal_consequence":"withdraw_'
     b'dominance_sentence"},"comparison":"greater_than_or_equal","component_'
-    b'dispositions":{"absolute_common_mode":{"reason":"the absolute estimator '
-    b'uses deviations from the mean, so a uniform shared fiducial shift cancels '
-    b'exactly; the replay is registered only for comparative ABBA block inputs",'
+    b'dispositions":{"absolute_common_mode":{"reason":"a uniform additive '
+    b'energy offset cancels from absolute residuals; no absolute common-time '
+    b'replay is implemented; absolute R_cm is not_applicable because the '
+    b'registered replay is comparative-only, not because absolute timing '
+    b'uncertainty vanishes",'
     b'"status":"not_applicable"},"absolute_independent_corner":{"part_of_ratio_'
     b'gate":true,"status":"reportable"},"absolute_local_only_diagnostic":{'
     b'"reason":"deferred; requires a distinct versioned name","status":"not_'
@@ -1625,6 +1627,18 @@ class D117ContrastV5PackTests(unittest.TestCase):
             frozen_json_bytes(criterion),
             PINNED_DOMINANCE_CRITERION_BYTES,
         )
+        self.assertEqual(
+            criterion["common_mode"]["replay_rule"]["rule_id"],
+            "d165_shared_sign_local_corner_replay.v2",
+        )
+        absolute_reason = criterion["component_dispositions"][
+            "absolute_common_mode"
+        ]["reason"]
+        self.assertEqual(
+            absolute_reason,
+            dominance_closeout.ABSOLUTE_COMMON_MODE_REASON,
+        )
+        self.assertNotIn("cancels exactly", absolute_reason)
         self.assertTrue(
             self.generator.dominance_ratio(
                 corner_widened_unguarded_floor_j=2.0,
