@@ -121,8 +121,9 @@ verbatim; it now names a labelled condition, not permission to publish a
 repeatability-only number.
 
 Every extraction, canonical floor, transported-floor, or claim/analysis
-artifact that publishes an attribution-limited floor carries this exact
-object:
+artifact that publishes an attribution-limited floor carries an exact,
+versioned object. Existing artifacts retain this frozen v1 object byte for
+byte:
 
 ```json
 {
@@ -137,12 +138,41 @@ object:
 }
 ```
 
-This is the D-078 clause-11 single-count discipline. The anchor term
+New extraction and floor production emits this v2 object under D-078/D-083,
+as amended by their 2026-09-04 dated addenda:
+
+```json
+{
+  "rule_id": "attribution_floor_plus_claim_side_bound.v2",
+  "planning_sizing_expression": "floor_j + claim_side_bound_j",
+  "floor_role": "calibration_false_effect_bound",
+  "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+  "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+  "both_terms_required": true,
+  "apparent_double_count_removal_forbidden": true,
+  "gating": false,
+  "role": "prospective_sizing_diagnostic",
+  "not_an_acceptance_gate": true,
+  "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise."
+}
+```
+
+This is the versioned D-078/D-083 single-count discipline. The anchor term
 legitimately appears once in the calibrated false-effect floor and separately
-in the claim decision interval as measurement uncertainty. Therefore the
-effective clearable effect is `FLOOR + CLAIM-SIDE BOUND`, approximately 5 J
-for the measured phase contrasts, not the floor alone. The two roles are
-distinct and neither may be optimized away as an apparent double count.
+in the claim decision interval as measurement uncertainty. The sum is only a
+prospective planning/sizing diagnostic. Acceptance uses two separate checks:
+strict `|estimate| > F` and zero-exclusion by both metrology and decision
+intervals, plus the registered multiplicity adjustment and evidence/eligibility
+requirements. For symmetric `estimate ± h` intervals with nonnegative widening
+`B`, their numerical conjunction is strict
+`|estimate| > max(F, h+B)`; asymmetric intervals use their actual endpoints.
+The two roles remain mandatory and neither may be optimized away as apparent
+double counting.
+
+Consumers dispatch on `rule_id` and require exact equality to that version's
+canonical object. A v1 artifact remains v1 throughout propagation, a v2
+artifact remains v2, and unknown, malformed, or mixed-version artifacts
+refuse.
 
 Rationale: the previous population-percentile floor target at `n = 10` is not
 identifiable enough for this campaign. With 10 samples, even the sample maximum
