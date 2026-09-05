@@ -219,3 +219,15 @@ simple tasks. astra high for an equal use in all parts for fable 5.1 with 5.1 de
 memory (instrument-mix-authority). First astra seats under the rule: paperk-astra (peer review beside Opus),
 packet-paper-supply-2 (D-173 cold-gate packet seal with seam head 84b24686 and 43 Q6 / 02-F4 questions).
 Still-running Sol seats (launched before the rule) finish as is: d174-wire, enclosure-script, fb-v2b.
+
+## 2026-09-05 ~13:00 PT — D-173 gate closed; astra routing + orchestration adopted; lanes in gauntlet
+- D-173: cold gate 21 (Fable) + 22 (Opus) → 23 synthesis: ADOPTED AS AMENDED (receipt clause replaced; scope /
+  non-issuing type / git_blob coverage / whole-window clauses; Q-PS-3 acceptance spec with seven cases →
+  REFUSAL-CARRIER-01; Q-PS-4 one mint desk check; Q-PS-5 Q-R1-2 REFUSED). Luna seat installs the D-173 addendum
+  (wt-d173-adopt). Astra round-5 design spec running (wt-seam-spec → paper-custody/11).
+- Orchestration: astra design consult 01 adopted as routing 02 (docs/process_traces/2026-09-05-orchestration/).
+- Lanes: paper-K fix 2 committed (1dcf45bf), delta 3 running; enclosure fix 1 (Opus C-1/C-2) running; F+B v2
+  round 3 (R1 aggregation, R2 html) running; D-165 relabel fix 2 (R1 floor mirrors, R2 night_gate pin, R3
+  wording) running; D-166 luna registry fix running. PR #286 paper-J + PR #287 legacy: full replays running
+  (~/.claude/jobs/3c46c831/tmp/{paperj,legacy}-replay.log) for row 9.
+- Ed's three questions still open by email (defaults running).
