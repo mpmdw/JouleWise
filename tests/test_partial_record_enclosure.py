@@ -13,6 +13,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 from joulewise.bundle_read import TracePoint, Window
 from scripts.paper import partial_record_enclosure as enclosure
@@ -25,6 +26,49 @@ STRICT_SEED_BUNDLE = (
 
 
 class PartialRecordEnclosureTests(unittest.TestCase):
+    def test_synthetic_p1_entry_and_timing_corner_oracles(self) -> None:
+        with mock.patch.object(enclosure, "derive_bundle") as authenticated:
+            data = enclosure.derive_synthetic_p1()
+        authenticated.assert_not_called()
+        self.assertEqual(data["label"], "SYNTHETIC P1")
+        self.assertFalse(data["claim_bearing"])
+        self.assertEqual(data["inputs"]["window_s"], [0.55, 1.45])
+        self.assertEqual(data["inputs"]["independent_edge_shift_s"], [-0.01, 0.01])
+        self.assertEqual(len(data["inputs"]["records"]), 10)
+        for i, record in enumerate(data["inputs"]["records"]):
+            self.assertAlmostEqual(record["start_s"], 0.5 + i * 0.1)
+            self.assertAlmostEqual(record["end_s"] - record["start_s"], 0.1)
+            self.assertEqual(record["power_w"], 10)
+        result = data["outputs"]
+        self.assertEqual(result["scope"], "synthetic_p1_fixed_window.v1")
+        for field, expected in (("point_j", 9), ("lower_j", 8), ("upper_j", 10)):
+            self.assertAlmostEqual(result[field], expected)
+        self.assertEqual(result["straddling_record_count"], 2)
+        self.assertAlmostEqual(result["straddling_energy_j"], 2)
+        for corner, expected in zip(result["timing_corners"], (9, 9.2, 8.8, 9)):
+            self.assertAlmostEqual(corner["point_j"], expected)
+        for actual, expected in zip(result["timing_envelope_j"], (8.8, 9.2)):
+            self.assertAlmostEqual(actual, expected)
+
+    def test_synthetic_figure_and_sidecar_reproduce_exactly(self) -> None:
+        base = REPO_ROOT / "docs/paper/figures/figA_partial_record_enclosure"
+        data = json.loads(base.with_suffix(".json").read_text())
+        actual_svg = base.with_suffix(".svg").read_bytes()
+        self.assertEqual(data["figure"]["sha256"], hashlib.sha256(actual_svg).hexdigest())
+        with tempfile.TemporaryDirectory() as directory:
+            svg, sidecar = Path(directory) / "figure.svg", Path(directory) / "figure.json"
+            enclosure.write_synthetic_p1_figure(svg, sidecar)
+            self.assertEqual(svg.read_bytes(), actual_svg)
+            self.assertEqual(sidecar.read_bytes(), base.with_suffix(".json").read_bytes())
+        root = ET.fromstring(actual_svg)
+        ns = {"s": "http://www.w3.org/2000/svg"}
+        self.assertIn("SYNTHETIC P1", root.find("s:title", ns).text)
+        labels = [el.text for el in root.findall(".//s:text", ns)]
+        self.assertTrue(set(f"R{i}" for i in range(1, 11)).issubset(labels))
+        self.assertIn("Point 9.0 J", labels)
+        self.assertIn("Timing [8.8, 9.2] J", labels)
+        self.assertIn("Nonnegative [8, 10] J", labels)
+
     def assert_cli_refusal(self, bundle: Path, reason: str) -> None:
         stdout, stderr = io.StringIO(), io.StringIO()
         with (

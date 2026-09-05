@@ -77,6 +77,7 @@ inside its own interval gives the nonnegative partial-record enclosure
 [8, 10] J: the eight records lying wholly inside contribute 8 J, and the two
 records the window only partly covers contribute between 0 and 1 J each.
 The latter is a diagnostic of allocation ambiguity at the registered window; it is reported, never composed into any bound.
+Appendix Figure A1 shows the records, window, and three energy results for this synthetic example.
 
 The experiment is deliberately narrow. It measures one Apple M3 Max with
 128 GB of unified memory and one configuration of `powermetrics`. MLX is
@@ -1749,6 +1750,41 @@ repository revision, evidence-archive locator, and fingerprint-manifest
 locator. Until then, state that the evidence-dependent commands cannot support
 independent re-reduction. Release does not remove the pulse-to-inference
 transfer assumption. -->
+
+### A.7 Synthetic partial-record enclosure
+
+<!-- [FILL:PE-01] SYNTHETIC appendix placement; no measured value is issued. -->
+![Figure A1: synthetic records, fixed window, point, timing envelope, and nonnegative enclosure.](figures/figA_partial_record_enclosure.svg)
+
+Figure A1. SYNTHETIC P1; no hardware observation. Panel A's ten numbered
+rectangles R1–R10 are adjacent records from 0.5 to 1.5 s: record Ri covers
+\([0.5+0.1(i-1),\,0.5+0.1i]\) s and reports an interval average of 10 W,
+so each contains \(10\times0.1=1\) J. The horizontal purple segment marks
+the fixed window [0.55, 1.45] s; its dashed vertical lines mark the window's
+edges. The time axis and ticks are in seconds. The eight blue rectangles
+R2–R9 lie wholly inside and contribute 8 J. The two orange rectangles R1
+and R10 straddle the edges: each may place anywhere from 0 to its full 1 J
+inside the window when power is nonnegative and no within-record shape is
+assumed. Adding gives \([8+0+0,\,8+1+1]=[8,10]\) J. Holding each record
+at its reported average instead assigns half of each boundary record:
+\(8+0.5+0.5=9.0\) J. Independently moving each window edge by up to 10 ms
+under that held-average reconstruction gives the shortest window
+[0.56, 1.44] s and longest [0.54, 1.46] s, hence the timing envelope
+\([10(1.44-0.56),\,10(1.46-0.54)]=[8.8,9.2]\) J. In panel B, the orange
+capped segment shows the nonnegative enclosure at the original fixed
+window, the blue capped segment shows the timing envelope, and the black
+dot shows the 9.0 J point; caps mark endpoints, and the shared energy axis
+and ticks are in joules. These are distinct calculations, not confidence
+intervals; the enclosure is never composed into any bound.
+
+The adjacent `figA_partial_record_enclosure.json` records every input,
+the four timing corners, unrounded computed outputs, and SHA-256 fingerprints
+of the generating script and SVG. From the repository root, regenerate both
+files with:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -c 'from pathlib import Path; from scripts.paper.partial_record_enclosure import write_synthetic_p1_figure; p = Path("docs/paper/figures/figA_partial_record_enclosure"); write_synthetic_p1_figure(p.with_suffix(".svg"), p.with_suffix(".json"))'
+```
 
 ## First-use audit ledger
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,31 @@ REAL_DRAFT = REPO / "docs" / "paper" / "draft-v1.md"
 REAL_PLAN = REPO / "docs" / "paper" / "round7" / "retensing-plan.md"
 SUCCESSOR_DRAFT = REPO / "docs" / "paper" / "draft-v2-skeleton.md"
 FILL_REGISTRY = REPO / "docs" / "paper" / "results-fill-registry.md"
+
+
+def enclosure_placement_errors(draft: str, registry: str) -> list[str]:
+    """Bind the appendix-only row without treating it as a Results fill."""
+    errors = []
+    rows = [line for line in registry.splitlines() if line.startswith("| PE-01 —")]
+    if len(rows) != 1:
+        return ["PE-01 row must occur exactly once"]
+    cells = [cell.strip() for cell in rows[0].strip("|").split("|")]
+    if len(cells) != 7 or cells[1] != "`[FILL:PE-01]`" or cells[4] != "DERIVE":
+        errors.append("PE-01 marker and DERIVE rule must occupy their registry columns")
+    if "SYNTHETIC_FIGURE_PLACED" not in rows[0] or "TOKEN_MISSING" in rows[0]:
+        errors.append("PE-01 must record the synthetic placement")
+    body = draft.split("## First-use audit ledger", 1)[0]
+    sections = re.split(r"(?m)^### ", body)
+    appendix = next((s for s in sections if s.startswith("A.7 Synthetic partial-record enclosure\n")), "")
+    if body.count("[FILL:PE-01]") != 1 or appendix.count("[FILL:PE-01]") != 1:
+        errors.append("PE-01 must occur once, in Appendix A.7")
+    image = "(figures/figA_partial_record_enclosure.svg)"
+    if appendix.count(image) != 1 or "Figure A1. SYNTHETIC P1; no hardware observation." not in appendix:
+        errors.append("PE-01 appendix figure and synthetic caption are required")
+    introduction = body.split("## 1. Introduction", 1)[-1].split("## 2.", 1)[0]
+    if "Appendix Figure A1 shows the records, window, and three energy results for this synthetic example." not in introduction:
+        errors.append("Introduction must cite Figure A1")
+    return errors
 
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -123,6 +149,25 @@ class RealDocumentRegressionTests(unittest.TestCase):
     def test_plan_is_lint_clean(self) -> None:
         self.assertEqual(self.payload["finding_count"], 0)
         self.assertGreaterEqual(self.payload["sentence_count"], 80)
+
+    def test_enclosure_registry_row_and_appendix_placement(self) -> None:
+        draft = SUCCESSOR_DRAFT.read_text(encoding="utf-8")
+        registry = FILL_REGISTRY.read_text(encoding="utf-8")
+        self.assertEqual(enclosure_placement_errors(draft, registry), [])
+        row = next(line for line in registry.splitlines() if line.startswith("| PE-01 —"))
+        mutations = (
+            (draft, registry.replace(row, "")),
+            (draft, registry + "\n" + row),
+            (draft, registry.replace(row, row.replace("| DERIVE |", "| MEASURED |"))),
+            (draft.replace("[FILL:PE-01]", "[FILL:PE-02]"), registry),
+            ("[FILL:PE-01]\n" + draft.replace("[FILL:PE-01]", ""), registry),
+            (draft.replace("(figures/figA_partial_record_enclosure.svg)", "(missing.svg)"), registry),
+            (draft.replace("Figure A1. SYNTHETIC P1; no hardware observation.", "Figure A1."), registry),
+            (draft.replace("Appendix Figure A1 shows", "The appendix shows"), registry),
+        )
+        for index, (changed_draft, changed_registry) in enumerate(mutations):
+            with self.subTest(mutation=index):
+                self.assertTrue(enclosure_placement_errors(changed_draft, changed_registry))
 
     def test_reintroduced_early_vocabulary_is_caught(self) -> None:
         # The gate itself must still catch the historical failure class: a

@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import stat
@@ -270,6 +271,146 @@ def derive_bundle(bundle: Path) -> dict[str, dict[str, Any]]:
             return _derive_bundle_authenticated(bundle)
     except V2AuthenticationInputError as exc:
         raise EnclosureRefusal(exc.reason, exc.detail) from exc
+
+
+def derive_synthetic_p1() -> dict[str, Any]:
+    """Reproduce the labelled P1 illustration, without authenticating a bundle.
+
+    This separate entry never supplies a measured result. Each endpoint moves
+    independently by up to 10 ms for the held-average timing envelope; the
+    nonnegative enclosure uses only the original, fixed window.
+    """
+    records = [
+        {"start_s": (5 + i) / 10, "end_s": (6 + i) / 10, "power_w": 10.0}
+        for i in range(10)
+    ]
+    curve = [
+        TracePoint(t=r["end_s"], power_w=r["power_w"],
+                   support_start_s=r["start_s"], support_end_s=r["end_s"])
+        for r in records
+    ]
+    inputs = {
+        "records": records,
+        "window_s": [0.55, 1.45],
+        "independent_edge_shift_s": [-0.01, 0.01],
+    }
+    result = enclose_phase("SYNTHETIC P1", [(curve, [Window(0.55, 1.45)])])
+    # Do not inherit the authenticated-bundle scope label from enclose_phase.
+    result["scope"] = "synthetic_p1_fixed_window.v1"
+    result.pop("inputs")
+    corners = [
+        {"window_s": [start, end], "point_j": _integrate(curve, start, end)}
+        for start in (0.54, 0.56) for end in (1.44, 1.46)
+    ]
+    result["timing_corners"] = corners
+    result["timing_envelope_j"] = [
+        min(c["point_j"] for c in corners), max(c["point_j"] for c in corners)
+    ]
+    script = Path(__file__).read_bytes()
+    return {
+        "schema": "synthetic_p1_partial_record_figure.v1",
+        "label": "SYNTHETIC P1",
+        "claim_bearing": False,
+        "inputs": inputs,
+        "outputs": result,
+        "producer": {
+            "path": "scripts/paper/partial_record_enclosure.py",
+            "entry": "derive_synthetic_p1",
+            "sha256": hashlib.sha256(script).hexdigest(),
+            "size_bytes": len(script),
+        },
+    }
+
+
+def synthetic_p1_svg(data: dict[str, Any]) -> str:
+    """Draw P1 from its derived records and energies (stdlib-only SVG)."""
+    result = data["outputs"]
+    time_x = lambda t: 130 + (t - 0.5) * 800
+    energy_x = lambda j: 330 + (j - 8) * 250
+    parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="560" '
+        'viewBox="0 0 1060 560" role="img" aria-labelledby="title desc">',
+        '<title id="title">Figure A1. SYNTHETIC P1 partial-record enclosure</title>',
+        '<desc id="desc">Ten 100 ms records reporting 10 W, window 0.55 to '
+        '1.45 s. Point 9.0 J; timing envelope 8.8 to 9.2 J; nonnegative '
+        'fixed-window enclosure 8 to 10 J. Not measured evidence.</desc>',
+        '<rect width="1060" height="560" fill="white"/>',
+        '<g font-family="Arial, sans-serif" font-size="17" fill="#17232d">',
+        '<text x="40" y="36" font-size="23" font-weight="bold">'
+        'Figure A1 · SYNTHETIC P1</text>',
+        '<text x="40" y="67">A · Reported intervals: 100 ms × 10 W = 1 J each</text>',
+    ]
+    start, end = data["inputs"]["window_s"]
+    for i, record in enumerate(data["inputs"]["records"], 1):
+        inside = start <= record["start_s"] and record["end_s"] <= end
+        color = "#c5dfeb" if inside else "#f4d09b"
+        x = time_x(record["start_s"])
+        width = time_x(record["end_s"]) - x
+        parts += [
+            f'<rect x="{x:g}" y="100" width="{width:g}" height="70" '
+            f'fill="{color}" stroke="#17232d"/>',
+            f'<text x="{x + width / 2:g}" y="142" text-anchor="middle">R{i}</text>',
+        ]
+    for edge in (start, end):
+        x = time_x(edge)
+        parts += [
+            f'<line x1="{x:g}" y1="85" x2="{x:g}" y2="210" '
+            'stroke="#653b86" stroke-width="2" stroke-dasharray="6 4"/>',
+            f'<text x="{x:g}" y="235" text-anchor="middle" fill="#653b86">{edge:g}</text>',
+        ]
+    parts += [
+        f'<line x1="{time_x(start):g}" y1="88" x2="{time_x(end):g}" y2="88" '
+        'stroke="#653b86" stroke-width="4"/>',
+        '<text x="530" y="205" text-anchor="middle" fill="#653b86">'
+        'Fixed window [0.55, 1.45] s</text>',
+        '<line x1="130" y1="255" x2="930" y2="255" stroke="#17232d"/>',
+    ]
+    for i in range(11):
+        t = (5 + i) / 10
+        x = time_x(t)
+        parts += [f'<line x1="{x:g}" y1="250" x2="{x:g}" y2="260" stroke="#17232d"/>',
+                  f'<text x="{x:g}" y="280" text-anchor="middle">{t:.1f}</text>']
+    parts += [
+        '<text x="970" y="260">Time (s)</text>',
+        '<text x="40" y="324">B · Energy assigned to the window</text>',
+    ]
+    lo, hi = result["lower_j"], result["upper_j"]
+    tlo, thi = result["timing_envelope_j"]
+    for y, label, left, right, color in (
+        (365, f'Nonnegative [{lo:g}, {hi:g}] J', lo, hi, '#b56b13'),
+        (410, f'Timing [{tlo:.1f}, {thi:.1f}] J', tlo, thi, '#187295'),
+    ):
+        parts.append(f'<text x="40" y="{y + 6}">{label}</text>')
+        parts.append(f'<line x1="{energy_x(left):g}" y1="{y}" x2="{energy_x(right):g}" '
+                     f'y2="{y}" stroke="{color}" stroke-width="7"/>')
+        for value in (left, right):
+            x = energy_x(value)
+            parts.append(f'<line x1="{x:g}" y1="{y-10}" x2="{x:g}" y2="{y+10}" '
+                         f'stroke="{color}" stroke-width="2"/>')
+    point = result["point_j"]
+    parts += [
+        f'<text x="40" y="461">Point {point:.1f} J</text>',
+        f'<circle cx="{energy_x(point):g}" cy="455" r="7" fill="#17232d"/>',
+        '<line x1="305" y1="490" x2="855" y2="490" stroke="#17232d"/>',
+    ]
+    for value in (8, 8.8, 9, 9.2, 10):
+        x = energy_x(value)
+        parts += [f'<line x1="{x:g}" y1="485" x2="{x:g}" y2="495" stroke="#17232d"/>',
+                  f'<text x="{x:g}" y="517" text-anchor="middle">{value:g}</text>']
+    parts += ['<text x="890" y="497">Energy (J)</text>',
+              '<text x="40" y="549" font-size="15">SYNTHETIC · Fixed-window allocation diagnostic; never composed into any bound.</text>',
+              '</g></svg>']
+    return "\n".join(parts) + "\n"
+
+
+def write_synthetic_p1_figure(svg_path: Path, json_path: Path) -> None:
+    """Write the appendix illustration and exact floating-point replay inputs."""
+    data = derive_synthetic_p1()
+    svg = synthetic_p1_svg(data)
+    data["figure"] = {"sha256": hashlib.sha256(svg.encode("utf-8")).hexdigest()}
+    svg_path.write_text(svg, encoding="utf-8")
+    json_path.write_text(json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n",
+                         encoding="utf-8")
 
 
 def _parser() -> argparse.ArgumentParser:
