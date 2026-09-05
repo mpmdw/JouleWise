@@ -430,3 +430,11 @@ THEN, in order:
   review, merge.
 - After #290/#293/#292 merge: D-165 relabel wording cure against the merged draft → census GREEN → PR.
   Then the watchdog install handoff (steps 1/3/4/5) when no seat is running.
+
+## 2026-09-05 ~10:20 PDT — F+B PR #292 merged (2f08eaf9)
+
+- F+B v2 single-count discipline lane closed: PR #292 merged with the full ledger (replay record 54,
+  terminal-review addendum in 99-fb-v2, CI 7af4f35a). Ruling-17 code lanes remaining: D-165 relabel
+  (after paper-M), D-166 prompt-0 (carried inside paper-L #290).
+- Paper-M #293: checker reconciliation (report 11) bench: fast paper tests OK; round-7 module running to
+  paperm-r7-bench.log; then commit → replay → CI → retarget/merge after #290.
