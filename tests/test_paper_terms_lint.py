@@ -156,6 +156,10 @@ class RealDocumentRegressionTests(unittest.TestCase):
         draft = SUCCESSOR_DRAFT.read_text(encoding="utf-8")
         registry = FILL_REGISTRY.read_text(encoding="utf-8")
 
+        self.assertIn(
+            "# JouleWise: Timing Sensitivity of Phase-Energy Assignments on Apple Silicon",
+            draft,
+        )
         self.assertEqual(draft.count("[FILL:"), 131)
         self.assertNotIn("[FILL:TR-01]", draft)
         self.assertEqual(
@@ -173,11 +177,17 @@ class RealDocumentRegressionTests(unittest.TestCase):
             "2.776445",
             "4.808944",
             "95/95",
+            "BUILD AFTER CAMPAIGN AND TRANSFER FIDUCIAL",
+            "the headline remains conditional on it",
+            "the floor packs set A = B",
         ):
             with self.subTest(retired=retired):
                 self.assertNotIn(retired, draft)
 
         for required in (
+            "registered timing domain—the set of edge movements fixed before collection",
+            "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
+            "An A/B/B/A block is four runs in the order A, B, B, A.",
             "The measurand is energy assigned to each phase by\n"
             "interval-overlap allocation of the sampler's interval-average records.",
             "Its \\(\\pm10\\)-ms two-edge timing\n"
@@ -201,6 +211,17 @@ class RealDocumentRegressionTests(unittest.TestCase):
                 self.assertIn(required, draft)
 
         self.assertNotIn("d165_shared_sign_local_corner_replay.v1", registry)
+        self.assertIn(
+            "The protocol-first title fixed before collection is **JouleWise: Timing\n"
+            "Sensitivity of Phase-Energy Assignments on Apple Silicon**.",
+            registry,
+        )
+        self.assertEqual(
+            draft.count(
+                "registered timing domain—the set of edge movements fixed before collection"
+            ),
+            3,
+        )
         self.assertGreaterEqual(
             registry.count("d165_shared_sign_local_corner_replay.v2"),
             5,

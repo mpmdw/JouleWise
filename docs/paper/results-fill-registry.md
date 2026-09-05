@@ -267,8 +267,9 @@ comparative-only, not because absolute timing uncertainty vanishes.
 
 ### Protocol-first title and contingent subtitle (D-165)
 
-One protocol-first title is fixed before collection and does not branch on the
-result. “Attribution-limited” may appear only as a gate-contingent subtitle after
+The protocol-first title fixed before collection is **JouleWise: Timing
+Sensitivity of Phase-Energy Assignments on Apple Silicon**. It does not branch
+on the result. “Attribution-limited” may appear only as a gate-contingent subtitle after
 every independent-corner component in every cell has `R >= 2.0` and no mandatory
 comparative R_cm is below 2.0. A missing/refused R or R_cm does not select the
 subtitle. The methods sentence must disclose this branch rule; `R_cm < 2.0`

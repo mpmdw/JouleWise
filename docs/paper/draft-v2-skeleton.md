@@ -14,7 +14,7 @@ for example, R_1p7B_decode_abs. STOP_FILL means print the registered omission
 or refusal, never a guessed value.
 -->
 
-# JouleWise — Measuring Interval-Overlap-Allocated Energy for Large-Language-Model (LLM) Inference Phases on Apple Silicon
+# JouleWise: Timing Sensitivity of Phase-Energy Assignments on Apple Silicon
 
 <!-- BUILD NOTE — optional subtitle: add “Attribution-limited” only under
 Outcome A below. A missing, refused, zero-denominator, or below-two required
@@ -26,19 +26,19 @@ ratio forbids the subtitle. -->
 <!-- OUTCOME-BRANCH:A:START -->
 **A — every required ratio passes:**
 
-> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. For every required calculation, that limit was at least twice the limit obtained at the recorded dividing time; the result remained at least twice as large under a second calculation retaining a shared sign for block-level energy allowances. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain—the set of edge movements fixed before collection. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. For every required calculation, that limit was at least twice the limit obtained at the recorded dividing time; the result remained at least twice as large under a second calculation retaining a shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:A:END -->
 
 <!-- OUTCOME-BRANCH:B:START -->
 **B — an authenticated, evaluable ratio is below 2:**
 
-> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. Every required value matched its named source record, and every division used a nonzero second value, but at least one result was less than 2. The cases below 2 were [FILL:OB-01], so the evidence did not show that allowed movement at least doubled the recorded-time limit in every case. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain—the set of edge movements fixed before collection. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. Every required value matched its named source record, and every division used a nonzero second value, but at least one result was less than 2. The cases below 2 were [FILL:OB-01], so the evidence did not show that allowed movement at least doubled the recorded-time limit in every case. Independently of those calculations, the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The result is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:B:END -->
 
 <!-- OUTCOME-BRANCH:REFUSAL:START -->
 **Refusal — stopped before comparison or at close-out:**
 
-> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. JouleWise stopped at one of two points. Before comparison, it stopped if either model's planned measurement period was excluded or if a required, source-checked result for reading the input or generating output tokens was absent. At close-out, it stopped if a required division lacked a value, could not be matched to its source record, or divided by zero. The applicable stop and its issued reason were [FILL:OR-01]. The stopped evidence supports neither a direction between Qwen3-8B and Qwen3-1.7B nor a statement about how much the dividing-time error increased the limit. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The stop is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
+> Software can report one average power value over a span that crosses the change from reading an input to generating output tokens. Moving that dividing time changes the energy assigned to each part without changing the request total. JouleWise first used deliberately started graphics-processor work to measure how far the dividing time could be wrong, then recalculated the largest change in interval-overlap-assigned phase energy over the registered timing domain—the set of edge movements fixed before collection. This timing sensitivity is conditional on holding each record at its reported average; it is not a bound on physical phase energy under arbitrary within-record allocations. JouleWise stopped at one of two points. Before comparison, it stopped if either model's planned measurement period was excluded or a required, source-checked result for reading the input or generating output tokens was absent. At close-out, it stopped if a required division lacked a value, could not be matched to its source record, or divided by zero. The issued stop and reason were [FILL:OR-01]. The stopped evidence supports neither a direction between Qwen3-8B and Qwen3-1.7B nor a statement about how much the dividing-time error increased the limit. Earlier measurements of short requests found that [FILL:DG-067] of [FILL:DG-068] measured parts had fewer than three power readings crossing them, while [FILL:DG-069] had at least three. The stop is limited to the tested Apple computer, software, workloads, and processor-power figures reported by macOS rather than power at the wall outlet. Transfer of the pulse-derived timing allowance to inference was not tested.
 <!-- OUTCOME-BRANCH:REFUSAL:END -->
 <!-- OUTCOME-BRANCHES:ABSTRACT:END -->
 
@@ -110,6 +110,8 @@ meaning which power is counted: here the processor power macOS reports, not powe
 at the wall outlet.
 The floor sources and the science contrast have distinct estimands:
 
+An A/B/B/A block is four runs in the order A, B, B, A.
+
 | Source | Estimand |
 |---|---|
 | Same-model repeats | Absolute floor |
@@ -135,9 +137,9 @@ lower-or-upper edge choice for that component is evaluated jointly and the
 largest result retained. This **moved-edge limit** is called the
 **independent-edge corner bound** in the artifacts. Their quotient,
 \(U_{\mathrm{corner}}/U_{\mathrm{point}}\), is the **independent-edge ratio** because each
-run's edge may move separately. An A/B/B/A block is four runs in the order A,
-B, B, A, where A and B are condition-slot labels; the floor packs set A = B,
-whereas the science contrast assigns the two models to different conditions.
+run's edge may move separately. In the same-model null blocks, A and B are
+condition-slot labels set equal to each other; the science contrast assigns the
+two models to different conditions.
 The comparative replay also retains an **energy-allowance sign**, which says
 which direction a nonnegative block-level allowance moves assigned energy. A
 shared sign is one choice applied across all blocks, while a local sign is
@@ -1155,12 +1157,10 @@ the stricter design floor and leaves the two-comparison Holm family unchanged.
 
 ## 7. Discussion and limitations
 
-<!-- BUILD AFTER CAMPAIGN AND TRANSFER FIDUCIAL:
-1. Insert the selected exact outcome sentence.
-2. Explain what the fixed pair demonstrates and why it is not scaling.
-3. State whether the post-campaign inserted-gap fiducial supports transfer of
-   the pulse timing bound to inference; the headline remains conditional on it.
-4. Do not copy the superseded Discussion prose. -->
+<!-- BUILD AFTER CAMPAIGN. Insert the selected exact outcome sentence. Explain
+what the fixed pair demonstrates and why it is not scaling. Preserve the
+limitation that transfer of the pulse-derived timing allowance to inference was
+not tested. Do not copy the superseded Discussion prose. -->
 
 <!-- OUTCOME-BRANCHES:DISCUSSION:START -->
 <!-- OUTCOME-BRANCH:A:START -->
@@ -1833,7 +1833,7 @@ The reading order tested here is the selected draft's real order: title, the one
 | false-difference components / false-difference | 1. Introduction | glossed-at-first-use | The same-model null A/B/B/A block produces this diagnostic, distinct from the two-model science contrast. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | 3. Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
-| floor packs / contrast pack | 1. Introduction | glossed-at-first-use | Floor packs set A = B for null calibration; the contrast pack is the separate two-model science comparison. |
+| floor packs / contrast pack | 3. Instrument characterization | glossed-at-first-use | The first use defines floor packs as campaign plans that collect null-calibration data; the contrast pack is the separate two-model science comparison. |
 | Workload response | 3. Instrument characterization | glossed-at-first-use | Whether request and token-generation energy increase with realized output length in the registered way. |
 | Identical-condition null | 3. Instrument characterization | glossed-at-first-use | Whether an A/B/B/A comparison manufactures a difference when both conditions are the same. |
 | independent unit | 3. Instrument characterization | glossed-at-first-use | One separately admitted bundle, not one sampler record within it. |
@@ -1865,14 +1865,14 @@ The reading order tested here is the selected draft's real order: title, the one
 | independent-edge ratio \(R\) / dominates | Comparing the moved-edge limit and point-only value | glossed-at-first-use | Moved-edge limit divided by the matching point-only value; dominates means \(R\ge2\). |
 | threshold / exact equality | 3. Instrument characterization | glossed-at-first-use | A threshold is the numerical cutoff that the positive slope must exceed. |
 | authentication / evaluation | 1. Introduction | glossed-at-first-use | Authentication matches inputs to named source-file contents; evaluation requires a nonzero second value. |
-| registered rounding / registered | Abstract | glossed-at-first-use | The first use names the timing domain fixed before collection; the later registered-rounding use names a rule fixed in fingerprinted plan bytes. |
+| registered rounding / registered | Abstract | glossed-at-first-use | Each Abstract branch defines the registered timing domain as the set of edge movements fixed before collection; the later registered-rounding use names a rule fixed in fingerprinted plan bytes. |
 | reintegrate | Comparing the moved-edge limit and point-only value | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
 | onset set / offset set / zero-shift value | Comparing the moved-edge limit and point-only value | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
 | shared lower and upper excursions | Comparing the moved-edge limit and point-only value | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
 | binary64 / member-envelope integral sum | Comparing the moved-edge limit and point-only value | glossed-at-first-use | The usual 64-bit float format and a nonnegative four-member joule scale that covers the integrals before contrast. |
 | ulp | Comparing the moved-edge limit and point-only value | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local sign | 1. Introduction | glossed-at-first-use | The comparative replay chooses one separately for each block. |
-| local half-width / shared sign | Abstract | glossed-at-first-use | The Abstract first identifies a sign shared across block-level energy allowances; the later construction defines the local half-width. |
+| local half-width / shared sign | Abstract | glossed-at-first-use | The Abstract defines a shared sign as one direction applied to the nonnegative allowed energy changes in every group of four runs; the later construction defines the local half-width. |
 | half-width | 3. Instrument characterization | glossed-at-first-use | A timing half-width is half an allowed timing range. |
 | \(R_{cm}\) | 1. Introduction | glossed-at-first-use | Shared-energy-sign/local-corner sensitivity diagnostic with one shared sign for block-level energy allowances and one local sign per block; it is not a physical common-time replay. |
 | shared-energy-sign/local-corner sensitivity diagnostic / shared-energy-sign/local-corner ratio | 1. Introduction | glossed-at-first-use | Registered comparative diagnostic that retains scalar energy-allowance signs without claiming common-time conservatism. |

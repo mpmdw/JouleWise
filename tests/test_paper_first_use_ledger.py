@@ -65,7 +65,16 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "largest result retained",
         "this replay uses a different numerator",
     ),
-    "A/B/B/A block": ("same-model null A/B/B/A blocks, with A = B",),
+    "A/B/B/A block": ("An A/B/B/A block is four runs in the order A, B, B, A",),
+    "registered rounding / registered": (
+        "registered timing domain—the set of edge movements fixed before collection",
+    ),
+    "local half-width / shared sign": (
+        "shared sign, meaning one direction applied to the nonnegative energy changes allowed in every group of four runs",
+    ),
+    "floor packs / contrast pack": (
+        "floor packs—the campaign plans that collect calibration data used to build a comparator floor",
+    ),
     "energy-allowance sign": (
         "says which direction a nonnegative block-level allowance moves assigned energy",
     ),
