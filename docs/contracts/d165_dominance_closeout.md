@@ -1,6 +1,7 @@
 # D-165 dominance replay and close-out contract
 
-Status: stage-1 contract, 2026-09-01. The two JSON schemas are
+Status: stage-1 contract, 2026-09-01; semantic relabel updated 2026-09-05
+under the ratified D-165 addendum. The two JSON schemas are
 `joulewise.d165_dominance_replay.v1` and
 `joulewise.d165_dominance_closeout.v1`.
 
@@ -35,13 +36,14 @@ low or high endpoint for every uncertainty. “Unguarded” means the small-samp
 safety multiplier has not been applied. The registered predicate is R >= 2.0;
 exact equality passes.
 
-A **common-mode error** is one timing-edge error whose sign is shared by every
-comparative block. Each block also has a **local error**, whose sign is allowed
-to vary independently. The comparative common-mode ratio, written R_cm,
-replays one shared sign and all combinations of local signs. There is no
-absolute R_cm: a uniform shared shift cancels when the absolute estimator
-subtracts its mean. Absolute R_cm is therefore the text value
-`not_applicable`, never a number.
+The comparative ratio R_cm is a **shared-energy-sign/local-corner sensitivity
+diagnostic**. It holds one additive energy sign across every comparative block
+and enumerates every combination of independent local energy signs. This does
+not establish conservatism for physical common-time motion; passing the gate
+licenses no physical timing-robustness claim. Absolute R_cm is the text value
+`not_applicable`, never a number. Its registered rationale is:
+
+> a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes
 
 A **manifest attachment** is an evidence record inside the finalized manifest
 that names an external file and seals its exact bytes with SHA-256, a 256-bit
@@ -56,8 +58,8 @@ the physical files do not support:
 | Mechanism | Forcing problem | Worked example |
 |---|---|---|
 | Ordinary R | A widened floor alone does not say whether attribution uncertainty dominates repeatability. | A 2.0 J corner-widened floor divided by a 1.0 J point floor gives R = 2.0 and passes; 1.5 J / 1.0 J gives R = 1.5 and selects B when every record is complete. |
-| Shared/local split and replay | Giving every block an independent timing sign can claim combinations that one shared clock edge cannot physically take. | Measured block `b01` has `delta_j = 0.21462565134537215`, `shared_width_j = 0.2617693341828027`, and `local_width_j = 0.048579253149402035`. With the authenticated `shared_edge_bound_s = 0.03678263869781979`, the two-block replay gives point 2.430576610260499 J, corner 8.830437643102993 J, and R_cm = 3.6330628731577335. |
-| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar is produced by `replay_sidecar` in `tests/test_d165_dominance_closeout.py:196`; its bytes hash to `69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735`. Reproduce the pinned digest with `TMPDIR=<scratch> python3 -m unittest tests.test_d165_dominance_closeout.D165DominanceCloseoutTests.test_worked_sidecar_digest_matches_contract_literal`; changing one operand changes the digest and yields `replay_sidecar_digest_mismatch`. |
+| Shared/local split and replay | The diagnostic restricts the additive energy sign shared across blocks while enumerating independent local corners; it does not prove physical timing coverage. | Measured block `b01` has `delta_j = 0.21462565134537215`, `shared_width_j = 0.2617693341828027`, and `local_width_j = 0.048579253149402035`. With the authenticated `shared_edge_bound_s = 0.03678263869781979`, the two-block replay gives point 2.430576610260499 J, corner 8.830437643102993 J, and R_cm = 3.6330628731577335. |
+| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar is produced by `replay_sidecar` in `tests/test_d165_dominance_closeout.py:200`; its bytes hash to `f0f8e86e2aa6c9a3c920e026813b8ce9c34c78e5b21dc7457cbe7bf2de9ba870`. Reproduce the pinned digest with `TMPDIR=<scratch> python3 -m unittest tests.test_d165_dominance_closeout.D165DominanceCloseoutTests.test_worked_sidecar_digest_matches_contract_literal`; changing one operand changes the digest and yields `replay_sidecar_digest_mismatch`. |
 | Exact census | Twelve plausible records can still omit a physical cell and duplicate another. | Cells `cell-decode-a`, `cell-decode-b`, `cell-prefill_p<N>-a`, and `cell-prefill_p<N>-b` must yield exactly eight ordinary slots (4 × 2 components) and four R_cm slots (4 × 1 comparative component). |
 | Byte-only source custody | A parsed object and an authenticated byte string supplied through two channels can describe different artifacts. | A close-out built from sidecar bytes X must validate against X. If block 0's energy operands are multiplied by 0.9 and its split/result are recomputed into bytes Y, validation still refuses because X's stored file digest does not equal Y's digest, even though Y is internally consistent. |
 | Manifest-sealed floor | A close-out canonical digest can authenticate a newly rendered floor Y while the finalized manifest separately seals floor X; both digests can be individually valid but authenticate different artifacts. | The worked manifest seals floor X as `5be2fdc561e93b40810d6707f531e1d8668f2a675586a2d6ddbeccbc4dbe8a8c`. Changing one corner from 2.0 J to 2.1 J produces floor Y at `39221b0503af3479db2bad595c2e7201a522b0e5e1dc4b426562e7b538854099`; the builder records `floor_artifact_source_hash_mismatch` and selects neither branch. |
@@ -88,7 +90,7 @@ same meaning and bits while the two terms become available to the sidecar.
 
 `joulewise.dominance_closeout.replay_common_mode_dominance` authenticates the
 shared-edge bound, validates every four-member window, calculates every split,
-holds one shared sign across the blocks, enumerates every local-sign
+holds one shared additive energy sign across the blocks, enumerates every local-sign
 combination, and calls the existing comparative false-effect floor. A
 false-effect floor is the smallest energy difference the registered noise
 calculation can distinguish from zero. The supplied shared-edge bound must
@@ -135,8 +137,11 @@ fields:
 | `refusal_reason` | string or null | none | Null when complete; `dominance_ratio_zero_denominator` for the registered zero-denominator refusal. |
 
 `absolute.common_mode` has exactly `status` and `reason`. `status` is
-`not_applicable`. `reason` is the registered cancellation explanation returned
-by `ABSOLUTE_COMMON_MODE_REASON`. No numeric R_cm field is allowed.
+`not_applicable`. New output uses the comparative-only rationale returned by
+`ABSOLUTE_COMMON_MODE_REASON` (quoted above). Validation also accepts the exact
+`LEGACY_ABSOLUTE_COMMON_MODE_REASON` to keep historical v1 bytes readable;
+that withdrawn rationale is not the active physical interpretation. No numeric
+R_cm field is allowed.
 
 ### Comparative estimator and common-mode replay
 
@@ -175,15 +180,17 @@ Every block has exactly these fields:
 | `derived_split` | object | none | Output of `split_common_mode_block_width`; it has exactly the two fields below. |
 
 `derived_split.shared_width_j` and `derived_split.local_width_j` are finite
-nonnegative numbers in joules. The first is the timing excursion held to one
-sign across all blocks. The second is half the sum of the four bundle-local
-residual widths and gets an independent sign in each block.
+nonnegative numbers in joules. The first is the excursion envelope used with
+one shared additive energy sign across all blocks; it is not a claim that one
+physical timing displacement produces those signed excursions. The second is
+half the sum of the four bundle-local residual widths and gets an independent
+energy sign in each block.
 
 `result` has exactly:
 
 | Field | Type | Unit | Producer |
 |---|---|---:|---|
-| `rule_id` | string | none | Exact value `d165_shared_sign_local_corner_replay.v1`. |
+| `rule_id` | string | none | Active output is `d165_shared_sign_local_corner_replay.v2`; validation also accepts historical `d165_shared_sign_local_corner_replay.v1` without rewriting its bytes. Arithmetic is unchanged. |
 | `point_unguarded_floor_j` | finite nonnegative number | J | `replay_common_mode_dominance`, using the block deltas with zero added widths. |
 | `common_mode_corner_widened_unguarded_floor_j` | finite nonnegative number | J | `replay_common_mode_dominance`, taking the maximum floor over the shared/local sign enumeration. |
 | `ratio` | finite nonnegative number | dimensionless | `dominance_ratio` over the preceding two fields. |

@@ -191,7 +191,7 @@ class NightGateTests(unittest.TestCase):
 
     def test_d166_registration_digest_is_the_ruled_literal(self) -> None:
         self.assertEqual(
-            "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b",
+            "dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265",
             night_gate.D166_REGISTRATION_SHA256,
         )
 

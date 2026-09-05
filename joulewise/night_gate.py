@@ -25,8 +25,10 @@ RECEIPT_CLASSES = (
     "REHEARSAL_STUB",
     "TRANSACTION_PACK",
 )
+# 2026-09-05: D-165 v2 relabel supersedes the v1 registration digest
+# 1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b (bytes retained in Git history).
 D166_REGISTRATION_SHA256 = (
-    "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b"
+    "dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265"
 )
 # Tracked file whose bytes are canonical_json_bytes(dominance_criterion_registration());
 # a night plan's registration_path points at it (repo-relative or absolute).

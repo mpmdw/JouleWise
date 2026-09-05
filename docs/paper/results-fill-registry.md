@@ -219,48 +219,49 @@ equality passes. A zero denominator refuses with
 `dominance_ratio_zero_denominator`. Every registered component in every cell
 must pass; mixed outcomes are printed per component and use null framing.
 
-Comparative R_cm is mandatory per cell. Its supplier is the registered
-`d165_shared_sign_local_corner_replay.v1` rule over authenticated custodied
+Comparative R_cm is mandatory per cell. As of 2026-09-05, active output uses v2;
+historical v1 remains accepted with its original bytes. This is a shared-energy-sign/local-corner
+sensitivity diagnostic with no proven conservatism for physical timing motion.
+Its supplier is the registered
+`d165_shared_sign_local_corner_replay.v2` rule over authenticated custodied
 block inputs, before the producer's shared-plus-local composition destroys the
 split. `R_cm < 2.0` withdraws the dominance sentence even if independent-corner
-R passed. Absolute R_cm is not a missing value: it is registered
-`not_applicable` because the deviations-from-mean absolute estimator cancels a
-uniform shared fiducial shift exactly and the replay is comparative-only.
+R passed. Absolute R_cm is not a missing value. Its registered rationale is: a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes.
 
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
 | `[TERM_A_1p7B_prefill_p[PREFILL_LENGTH]_abs_J]` | Alpha prefill absolute parents; guarded point-only label term | alpha / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[TERM_B_1p7B_prefill_p[PREFILL_LENGTH]_abs_J]` | Alpha prefill absolute arrays; exact legacy corner label formula above | alpha / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[R_1p7B_prefill_p[PREFILL_LENGTH]_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | alpha / prefill-p[PREFILL_LENGTH] absolute R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
-| `[R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs]` | Literal `not_applicable` plus the registered deviations-from-mean cancellation reason | alpha / prefill-p[PREFILL_LENGTH] absolute R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / REGISTERED_NOT_APPLICABLE | D165, V5GEN, G2A |
+| `[R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs]` | Literal `not_applicable` plus the registered comparative-only rationale | alpha / prefill-p[PREFILL_LENGTH] absolute R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / REGISTERED_NOT_APPLICABLE | D165, V5GEN, G2A |
 | `[TERM_A_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Alpha prefill comparative parents; guarded point-only label term | alpha / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[TERM_B_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Alpha prefill comparative arrays; exact legacy corner label formula above | alpha / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[R_1p7B_prefill_p[PREFILL_LENGTH]_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | alpha / prefill-p[PREFILL_LENGTH] comparative R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
-| `[R_cm_1p7B_prefill_p[PREFILL_LENGTH]_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the alpha prefill cell's authenticated custodied block inputs | alpha / prefill-p[PREFILL_LENGTH] comparative R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN, G2A |
+| `[R_cm_1p7B_prefill_p[PREFILL_LENGTH]_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v2` over the alpha prefill cell's authenticated custodied block inputs | alpha / prefill-p[PREFILL_LENGTH] comparative R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN, G2A |
 | `[TERM_A_1p7B_decode_abs_J]` | Alpha decode absolute parents; guarded point-only label term | alpha / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[TERM_B_1p7B_decode_abs_J]` | Alpha decode absolute arrays; exact legacy corner label formula above | alpha / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[R_1p7B_decode_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | alpha / decode absolute R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
-| `[R_cm_1p7B_decode_abs]` | Literal `not_applicable`: the absolute estimator uses deviations from the mean, so a uniform shared fiducial shift cancels exactly; the replay is registered only for comparative ABBA block inputs | alpha / decode absolute R_cm column | DERIVE | REGISTERED_NOT_APPLICABLE | D165, V5GEN |
+| `[R_cm_1p7B_decode_abs]` | Literal `not_applicable`: a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes | alpha / decode absolute R_cm column | DERIVE | REGISTERED_NOT_APPLICABLE | D165, V5GEN |
 | `[TERM_A_1p7B_decode_cmp_J]` | Alpha decode comparative parents; guarded point-only label term | alpha / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[TERM_B_1p7B_decode_cmp_J]` | Alpha decode comparative arrays; exact legacy corner label formula above | alpha / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[R_1p7B_decode_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | alpha / decode comparative R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
-| `[R_cm_1p7B_decode_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the alpha decode cell's authenticated custodied block inputs | alpha / decode comparative R_cm column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN |
+| `[R_cm_1p7B_decode_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v2` over the alpha decode cell's authenticated custodied block inputs | alpha / decode comparative R_cm column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN |
 | `[TERM_A_8B_prefill_p[PREFILL_LENGTH]_abs_J]` | Beta prefill absolute parents; guarded point-only label term | beta / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[TERM_B_8B_prefill_p[PREFILL_LENGTH]_abs_J]` | Beta prefill absolute arrays; exact legacy corner label formula above | beta / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[R_8B_prefill_p[PREFILL_LENGTH]_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | beta / prefill-p[PREFILL_LENGTH] absolute R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
-| `[R_cm_8B_prefill_p[PREFILL_LENGTH]_abs]` | Literal `not_applicable` plus the registered deviations-from-mean cancellation reason | beta / prefill-p[PREFILL_LENGTH] absolute R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / REGISTERED_NOT_APPLICABLE | D165, V5GEN, G2A |
+| `[R_cm_8B_prefill_p[PREFILL_LENGTH]_abs]` | Literal `not_applicable` plus the registered comparative-only rationale | beta / prefill-p[PREFILL_LENGTH] absolute R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / REGISTERED_NOT_APPLICABLE | D165, V5GEN, G2A |
 | `[TERM_A_8B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Beta prefill comparative parents; guarded point-only label term | beta / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[TERM_B_8B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Beta prefill comparative arrays; exact legacy corner label formula above | beta / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
 | `[R_8B_prefill_p[PREFILL_LENGTH]_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | beta / prefill-p[PREFILL_LENGTH] comparative R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
-| `[R_cm_8B_prefill_p[PREFILL_LENGTH]_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the beta prefill cell's authenticated custodied block inputs | beta / prefill-p[PREFILL_LENGTH] comparative R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN, G2A |
+| `[R_cm_8B_prefill_p[PREFILL_LENGTH]_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v2` over the beta prefill cell's authenticated custodied block inputs | beta / prefill-p[PREFILL_LENGTH] comparative R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN, G2A |
 | `[TERM_A_8B_decode_abs_J]` | Beta decode absolute parents; guarded point-only label term | beta / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[TERM_B_8B_decode_abs_J]` | Beta decode absolute arrays; exact legacy corner label formula above | beta / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[R_8B_decode_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | beta / decode absolute R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
-| `[R_cm_8B_decode_abs]` | Literal `not_applicable`: the absolute estimator uses deviations from the mean, so a uniform shared fiducial shift cancels exactly; the replay is registered only for comparative ABBA block inputs | beta / decode absolute R_cm column | DERIVE | REGISTERED_NOT_APPLICABLE | D165, V5GEN |
+| `[R_cm_8B_decode_abs]` | Literal `not_applicable`: a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes | beta / decode absolute R_cm column | DERIVE | REGISTERED_NOT_APPLICABLE | D165, V5GEN |
 | `[TERM_A_8B_decode_cmp_J]` | Beta decode comparative parents; guarded point-only label term | beta / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[TERM_B_8B_decode_cmp_J]` | Beta decode comparative arrays; exact legacy corner label formula above | beta / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
 | `[R_8B_decode_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | beta / decode comparative R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
-| `[R_cm_8B_decode_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the beta decode cell's authenticated custodied block inputs | beta / decode comparative R_cm column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN |
+| `[R_cm_8B_decode_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v2` over the beta decode cell's authenticated custodied block inputs | beta / decode comparative R_cm column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN |
 
 ### Protocol-first title and contingent subtitle (D-165)
 
