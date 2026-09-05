@@ -321,3 +321,17 @@ THEN, in order:
   then re-armed as watchers — stop them again before step 3).
 - F+B: structural round landed (accessor + census + matrix, 495 tests), delta 44 LANDABLE; Opus counter-review
   running → apex → PR. Seam #289 CI green, replay running. Paper-K #288 replay running. Paper-L #290 ready.
+
+## 2026-09-05 ~06:00 PDT — paper-M landed; F+B PR #292; handoff after the paper-M refuters
+- PR #291 MERGED (Ed: standing merge permission, in chat). Step 0 OK on main 5c61deae; the amended inventory
+  recognises this session (dry-run: interactive_pid 4453, 19 owned, 0 unclassified). Handoff steps 1/3/4/5 run
+  right after the paper-M refuters return (this session is reaped by design; the relaunched magistrate resumes
+  from this file's RELAUNCH RESUME PLAN + the lane lines below).
+- Paper-M (fallback submission) landed at 6145e832 on feat/2026-09-05-paper-m (stacked on paper-L): single
+  METHODS_DIAGNOSTIC outcome; Figure 2 = fig4 edge excursions; record-support result; SYN-01/PE-01 illustrations;
+  228 registry rows RETIRED_FALLBACK; References 21 (no REF NEEDED); Availability written; ledger 260/0.
+  Blind astra refuters (02-refuter-fact.md, 02-refuter-pedagogy.md) running in detached worktrees; next: fix
+  round → deltas → Opus counter-review → apex → PR (base feat/2026-09-05-paper-l until L merges).
+- F+B: PR #292 opened (apex 99 LANDABLE); rows 9/11/12 pending replay + CI. Known main defect: scripts/build_site.py
+  fails since 731a0a74 removed the ADVISOR-PAGE-END marker from PROJECT_STATUS.md (site lane retired, D-136).
+- Replays for #288 (paper-K) and #289 (seam) still running (~/.claude/jobs/3c46c831/tmp/{paperk,seam}-replay.log).
