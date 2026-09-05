@@ -7,15 +7,15 @@ as the first research application that validates the harness.
 
 ## Ground Rules For Agents
 
-- At the start of every substantial run, read `RUN_STATE.md` first.
-- For any new/random user task, triage it in `TASK_QUEUE.md` before deciding
-  whether it outranks the current phase work.
-- At the start of each phase or major step, apply
-  `docs/planning_reflection_protocol.md` before implementation.
-- At the end of every substantial run, update `RUN_STATE.md` and add or update a
-  detailed report in `docs/run_reports/`. If advisor-visible state changed (a
-  phase or gate closed, a verdict landed, the schedule moved), refresh
-  `PROJECT_STATUS.md` too.
+- At the start of every substantial run, follow Mission M0 in
+  `docs/agent_playbook.md`: begin with the generated restart view, select the
+  state-kernel task, and follow its authority and acceptance pointers.
+- `docs/process/state_kernel.json` is the sole editable authority for live work
+  selection. `RUN_STATE.md` and `TASK_QUEUE.md` contain generated projections;
+  never hand-edit those regions.
+- At the end of every substantial run, update the kernel and regenerate its
+  views, add or update a detailed report in `docs/run_reports/`, and refresh
+  `PROJECT_STATUS.md` when advisor-visible state changed.
 - Check `docs/decision_log.md` before re-deciding anything; record new design
   decisions there with options and considerations.
 - Per-item phase status is asserted only in
@@ -42,9 +42,10 @@ report.
 | `PROJECT_STATUS.md` | advisor-facing status/plan/architecture summary (derived; update when advisor-visible state changes) |
 | `docs/phase_N/phase_N_plan.md` | step/slice detail: objectives, design, actions, evidence, fallbacks |
 | `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N, and per-item status (the authority, D-023) |
-| `TASK_QUEUE.md` | what to do next, and why it outranks the rest |
+| `docs/process/state_kernel.json` | editable live work-selection authority: lanes, ranks, dependencies, gates, acceptance, and restart pointers |
+| `TASK_QUEUE.md` | generated detailed queue projection plus dated history |
 | `docs/agent_playbook.md` | per-mission execution guides for agents: read-first lists, code-level routes, verification, handoff checklists |
-| `RUN_STATE.md` | current handoff: state, verification, next step |
+| `RUN_STATE.md` | generated restart projection plus compact handoff facts |
 | `docs/decision_log.md` | design decisions, options, considerations |
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar constraints and phase target dates |
@@ -53,7 +54,7 @@ report.
 | `docs/contracts/adapter_contracts.md` | adapter behavior contracts |
 | `docs/contracts/node_worker_protocol.md` | remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3) |
 
-Superseded (2026-07-15, WO-021; D-043): `docs/process/state_kernel.json` is the sole editable authority for live work selection, while generated `TASK_QUEUE.md` and `RUN_STATE.md` regions are projections; see `docs/specs/c027/doc-008_state_kernel.md` §§3.1, 3.6, and 4.
+Superseded (2026-07-15, WO-021; D-043): `docs/process/state_kernel.json` is the sole editable authority for live work selection, while generated `TASK_QUEUE.md` and `RUN_STATE.md` regions are projections; see `docs/specs/c027/doc-008_state_kernel.md` §§3.1, 3.6, and 4. The retired planning-reflection document remains only a compatibility pointer, not a separate intake or close-out procedure.
 
 ## Canonical Architecture
 
@@ -78,7 +79,7 @@ Exit: `docs/phase_1/phase_1_exit_checklist.md` (the evidence dossier). The
 contracts this phase produced live in `docs/contracts/`.
 
 - [x] Create repo-local agent plan.
-- [x] Add reusable planning reflection protocol.
+- [x] Consolidate planning intake and close-out into Mission M0 and the state kernel.
 - [x] Add evidence-based Phase 1 exit checklist.
 - [x] Add task queue protocol for prioritizing new work against repo state and
   recent handoffs.
@@ -129,8 +130,9 @@ merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
 `docs/phase_2/phase_2_exit_checklist.md`. Gated-slice specs:
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
-Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
-gated on Phase 1 evidence); code-level specs for the gated slices live in
+Historical mock-first ordering is retained below as phase context; live
+selection comes only from the state kernel and its generated views. Code-level
+specs for the gated slices live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 - [x] 2A Run-bundle writer.
@@ -256,7 +258,7 @@ python3 -m joulewise report runs --output report   # needs the [analysis] extra
 
 Every big run must leave a human-readable handoff note. The report should cover:
 
-- Planning reflection performed at the start of the run.
+- Mission M0 intake source and selected task.
 - What changed.
 - What commands were run.
 - What passed or failed.
@@ -264,17 +266,18 @@ Every big run must leave a human-readable handoff note. The report should cover:
 - What the next agent should do first.
 - New or updated decision-log entries and risk-register statuses.
 
-The root `RUN_STATE.md` is the current handoff. Dated reports live in
-`docs/run_reports/`.
+The generated `RUN_STATE.md` intake/restart region is the current handoff.
+Dated reports live in `docs/run_reports/`.
 
 Every new phase also needs an exit checklist or equivalent section that states
-the evidence required to close that phase. See
-`docs/planning_reflection_protocol.md` for the reusable format.
+the evidence required to close that phase. Mission M0 and the selected kernel
+row route work to that checklist; D-023 keeps per-item status there.
 
 ## Task Queue Protocol
 
-Random or newly discovered work should be ranked in `TASK_QUEUE.md` before it is
-executed. The queue ranks tasks against:
+Random or newly discovered work is added and ranked in
+`docs/process/state_kernel.json` before it is executed, then projected into
+`TASK_QUEUE.md`. Mission M0 ranks tasks against:
 
 - Current repo state.
 - Recent commits.
@@ -283,4 +286,4 @@ executed. The queue ranks tasks against:
 - Safety risk and implementation dependency order.
 
 If a task is executed immediately, the run report should state why it outranked
-the current top queued task.
+the generated lane head and which permitted override applied.

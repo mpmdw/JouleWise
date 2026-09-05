@@ -196,3 +196,26 @@ beside its prompt; harvest from disk, never relaunch blind.
 - Wave-2 #285: replay-3 5116 tests, 2 failures diagnosed (fanout/30): node-worker = environmental pre-existing
   (ledger wording in 30); T0 real-boot = test defect, cure seat running; row 9 fills with the re-run tail.
 - Internal cuts adopted: readiness proven by 6 Sep or fallback; last acquisition night 8 Sep; freeze 9 Sep.
+
+## 2026-09-05 ~05:30 PT — ruling 17 RATIFIED as amended (gate 41/42, synthesis 43); post-gate seats running
+
+- Cold gate: 41 (Fable) + 42 (Opus refuter) agree; 43 adopts every amendment. Enclosure = DESK SCRIPT (reducer field
+  rejected: strict validation of stored 0.5.2/0.6.2 summaries). D-166 sentence and scope-rule insertion adopted;
+  D-161 as rule text. Dates: last acquisition night 8 Sep; desk 9 Sep 06:00–18:00; freeze 9 Sep 18:00 PT.
+- Seats: dl-ratify (decision-log addenda D-078/D-083/D-165/D-166, new D-174, D-161 line; wt-dl-ratify);
+  enclosure-script (revert reducer, scripts/paper/partial_record_enclosure.py + DERIVE row; wt-estimand-enclosure);
+  fb-v2 (SINGLE_COUNT_DISCIPLINE .v2, ten equality sites; wt-fb-metadata); d165-relabel (wt-d165-relabel);
+  d166-prompt0 (census first, NEEDS_SCOPE allowed; wt-d166-prompt0); paperk-fix1 (F1 terms + F2 note; title →
+  astra's 'Timing Sensitivity of Phase-Energy Assignments on Apple Silicon'; wt-paper-k).
+- PRs: #285 wave-2 (merged main; T0 test cure; rows filled at f1600c10; CI watched); #286 paper-J (rows 11/12
+  filled; full replay running for row 9); #287 legacy-L1 (opened; rows 9/11/12 pending). AUTH parked at 93d0d91c.
+- Ed emails outstanding: due date/fallback; ensemble vs same-condition; estimand relabel veto (defaults running).
+
+## 2026-09-05 ~08:00 PT — MODEL ROUTING CHANGE (Ed, in chat): astra replaces Sol everywhere
+"keep spamming astra use it instead of sol in all cases now. use sol where you would have used terra. luna max for
+simple tasks. astra high for an equal use in all parts for fable 5.1 with 5.1 deciding final merges."
+→ every NEW seat: `-m gpt-6-astra --effort high` (xhigh on the usual triggers); Sol = mid tier; luna `--effort max`
+= simple tasks (probe running); astra is an equal peer in review/consult/adjudication; Fable merges. Recorded in
+memory (instrument-mix-authority). First astra seats under the rule: paperk-astra (peer review beside Opus),
+packet-paper-supply-2 (D-173 cold-gate packet seal with seam head 84b24686 and 43 Q6 / 02-F4 questions).
+Still-running Sol seats (launched before the rule) finish as is: d174-wire, enclosure-script, fb-v2b.

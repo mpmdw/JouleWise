@@ -10,6 +10,7 @@ from pathlib import Path
 
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as evidence
+from tests.git_fixture import init_git_fixture
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID, sample_evidence
 
 
@@ -266,7 +267,7 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
     def make_repository(self) -> tuple[tempfile.TemporaryDirectory, Path, str]:
         temporary = tempfile.TemporaryDirectory()
         repository = Path(temporary.name)
-        git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         git(repository, "config", "user.email", "test@example.invalid")
         git(repository, "config", "user.name", "R1 Test")
         (repository / "dependency.txt").write_text("stable\n")
@@ -590,7 +591,7 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         )
         installed_pack.mkdir(parents=True)
         (installed_pack / "copy-marker.txt").write_text("temporary registry copy\n")
-        git(repository, "init", "-q")
+        init_git_fixture(repository, "-q")
         git(repository, "config", "user.email", "test@example.invalid")
         git(repository, "config", "user.name", "R1 Test")
         git(repository, "add", ".")

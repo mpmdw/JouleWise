@@ -40,10 +40,52 @@ class BuildSiteParserTests(unittest.TestCase):
         with self.assertRaises(build_site.SiteBuildError):
             func(*args)
 
+    def test_claim_surfaces_do_not_render_d078_voided_values(self):
+        sources = {
+            name: build_site.read_source(f"docs/site_src/{name}")
+            for name in ("index.html", "research.html", "results.html")
+        }
+        for name, source in sources.items():
+            with self.subTest(name=name):
+                self.assertIn("D-078", source)
+                self.assertNotRegex(
+                    source, r"@@FLOOR_(?:REQUEST|PHASE|SUITE)_[A-Z0-9_]+@@"
+                )
+
+        stamp_sources = {
+            "README.md",
+            "docs/decision_log.md",
+            "docs/contracts/measurement_methodology.md",
+            "docs/contracts/claims_ladder.md",
+            "docs/phase_2/detection_floor.md",
+            "docs/site_src/index.html",
+            "docs/site_src/research.html",
+            "docs/site_src/results.html",
+        }
+        stamps = {
+            source: build_site.SourceStamp(source, "fixture")
+            for source in stamp_sources
+        }
+        rendered = {
+            "index.html": build_site.render_project_page(stamps),
+            "research.html": build_site.render_learning_page(stamps),
+            "results.html": build_site.render_measurements_page(stamps),
+        }
+        for name, page in rendered.items():
+            with self.subTest(rendered=name):
+                self.assertIn("D-078", page)
+                self.assertNotRegex(page, r"@@[A-Z0-9_]+@@")
+
+        combined = "\n".join(rendered.values())
+        self.assertNotIn("Verified Window-A floor extraction", combined)
+        self.assertNotIn("≈47.2", combined)
+        self.assertNotIn("≈44.4", combined)
+        self.assertNotIn("86.8", combined)
+
     def test_parse_status_at_glance(self):
         md = """# X
 
-## Status At A Glance
+### Status At A Glance
 
 | Phase | Scope | Status |
 |---|---|---|
@@ -53,6 +95,52 @@ class BuildSiteParserTests(unittest.TestCase):
         phases = build_site.parse_status_at_glance(md)
         self.assertEqual(["in progress", "planned"], [phase.state for phase in phases])
         self.assert_fail_closed(build_site.parse_status_at_glance, md.replace("Status", "State"))
+
+    def test_parse_status_at_glance_accepts_compact_table_rows(self):
+        md = """# X
+
+### Status At A Glance
+
+|Phase|Scope|Status|
+|---|---|---|
+|1. One|work|planned|
+"""
+        phases = build_site.parse_status_at_glance(md)
+        self.assertEqual(
+            [build_site.StatusPhase("1. One", "work", "planned", "planned")],
+            phases,
+        )
+
+    def test_compact_project_status_satisfies_production_consumers(self):
+        project = build_site.read_source("PROJECT_STATUS.md")
+        run = build_site.read_source("RUN_STATE.md")
+
+        self.assertEqual(
+            [
+                "Current Claim And Scope",
+                "Measured Evidence",
+                "Gate Matrix",
+                "Artifact State",
+                "Advisor Decisions And Risks",
+                "Next Milestone",
+                "Evidence Links",
+            ],
+            build_site.re.findall(r"^## (.+)$", project, build_site.re.MULTILINE),
+        )
+        phases = build_site.parse_status_at_glance(project)
+        now = build_site.parse_project_now(project, run)
+        self.assertEqual(5, len(phases))
+        self.assertIn("Phases 1, 2, and 4", now.phase_line)
+
+        self.assert_fail_closed(
+            build_site.parse_status_at_glance,
+            project.replace("### Status At A Glance", "### Campaign Overview"),
+        )
+        self.assert_fail_closed(
+            build_site.parse_project_now,
+            project.replace("- Project phase:", "- Campaign phase:"),
+            run,
+        )
 
     def test_parse_current_verification(self):
         md = """# X
@@ -195,6 +283,20 @@ class BuildSiteParserTests(unittest.TestCase):
         rows = build_site.parse_completed_queue(md)
         self.assertEqual("P2-011", rows[0]["ID"])
         self.assert_fail_closed(build_site.parse_completed_queue, md.replace("| ID | Priority | Completed | Task | Evidence |", "| ID | Task |"))
+
+    def test_parse_completed_queue_keeps_escaped_and_inline_code_pipes_in_one_cell(self):
+        md = r"""# Queue
+
+## Completed Queue Items
+
+| ID | Priority | Completed | Task | Evidence |
+|---|---|---|---|---|
+|FIX-1|P2|2026-09-04|Preserve max\|r\| and the filter|Checked with `git diff -G 'flagless|allowlist|preserve'`.|
+"""
+        rows = build_site.parse_completed_queue(md)
+        self.assertEqual(1, len(rows))
+        self.assertIn(r"max\|r\|", rows[0]["Task"])
+        self.assertIn("flagless|allowlist|preserve", rows[0]["Evidence"])
 
     def test_parse_do_not_do(self):
         md = """# Queue
@@ -994,7 +1096,13 @@ Text.
                 )
             self.assertIn("postcondition mode: measured", pack_stdout.getvalue())
             self.assertNotIn("estimator-only advisory", pack_stdout.getvalue())
-            self.assertEqual(pack_stderr.getvalue(), "")
+            self.assertTrue(
+                all(
+                    line.startswith("ADVISORY BUDGET EXCEEDED (D-135):")
+                    for line in pack_stderr.getvalue().splitlines()
+                ),
+                pack_stderr.getvalue(),
+            )
             estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
             # D-135: retain estimator coverage without turning it into a gate.
             self.assertGreater(estimated_artifact, 0)

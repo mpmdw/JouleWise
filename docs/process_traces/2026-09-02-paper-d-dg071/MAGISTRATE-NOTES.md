@@ -128,8 +128,10 @@ Adopting Opus 249 §6 (file 22) with the magistrate's reading:
 
 ## Follow-ups outside this PR
 
-- Registry rows DG-071/DG-075 and fill-checklist sentences: issued on the
-  bench-only registry after `feat/2026-09-02-dx-registry` merges.
+- Registry rows DG-071/DG-075 and fill-checklist sentences: the prerequisite
+  `feat/2026-09-02-dx-registry` branch has merged. The rows remain
+  `VALUE_UNISSUED` / `STOP_FILL` in `docs/paper/results-fill-registry.md`, so
+  artifact issuance is due rather than deferred behind that merge.
 - Paper-wide rendered-digit disclosure (`scripts/paper_excursion_decomposition.py`
   and `scripts/paper_anchor_correction_quantified.py` also render six
   decimals on different, already-relative data): kernel row.

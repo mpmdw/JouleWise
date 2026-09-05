@@ -881,34 +881,122 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertIn('clean_since=-1', source)
         self.assertNotIn("SETTLE_CHECKS", source)
 
-    def test_prewindow_runs_prefixes_name_the_successor_family(self) -> None:
-        """D-138: the operator gate must name the governed generation.
+    def test_prewindow_runs_prefixes_accept_live_family_and_refuse_stale_family(
+        self,
+    ) -> None:
+        """The executed selector must use the live family, not dead text."""
 
-        The runs-root prefix is ``runs_<pack_id>``.  It cannot be derived from
-        ``_PROFILE_BY_PACK`` — that map is immutable HISTORY (generation 1) —
-        so the prefixes are pinned against the three D-139-approved successor
-        name shapes instead: each window must name a later-generation pack ID
-        of its own profile, which is exactly what a registry install can admit.
-        """
-
-        source = (
-            Path(__file__).resolve().parents[1] / "scripts/prewindow_check.sh"
-        ).read_text(encoding="utf-8")
-        observed = dict(
-            re.findall(
-                r"^\s*(alpha|beta|gamma)\) WINDOW_RUNS_PREFIX=(\S+) ;;$",
-                source,
-                re.MULTILINE,
+        source_repository = Path(__file__).resolve().parents[1]
+        registry = json.loads(
+            (
+                source_repository
+                / "configs/arm_readiness/d117_row_registry_v2.json"
+            ).read_text(encoding="utf-8")
+        )
+        installed = registry["freeze_evidence_lifecycle"]["successor_policy"][
+            "successor_pack_ids"
+        ]
+        expected = {
+            profile.lower(): f"runs_{pack_id}"
+            for profile, pack_id in installed.items()
+        }
+        retired = {
+            "alpha": "runs_d117_floor_qwen25_1p5b_v2",
+            "beta": "runs_d117_floor_qwen25_7b_v2",
+            "gamma": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2",
+        }
+        source = (source_repository / "scripts/prewindow_check.sh").read_text(
+            encoding="utf-8"
+        )
+        unreachable_live_table = "\n".join(
+            (
+                "",
+                "# Counterfactual decoy: valid source text that is never executed.",
+                'case "__unreachable_live_selector_table__" in',
+                *(
+                    f"  {window}) WINDOW_RUNS_PREFIX={prefix} ;;"
+                    for window, prefix in sorted(expected.items())
+                ),
+                "esac",
+                "",
             )
         )
-        self.assertEqual(set(observed), {"alpha", "beta", "gamma"})
-        for window, prefix in sorted(observed.items()):
-            with self.subTest(window=window):
-                self.assertTrue(prefix.startswith("runs_"))
-                pack_id = prefix.removeprefix("runs_")
-                pattern = readiness._SUCCESSOR_PROFILE_PATTERNS[window.upper()]
-                self.assertIsNotNone(pattern.fullmatch(pack_id))
-                self.assertNotIn(pack_id, readiness._PROFILE_BY_PACK)
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            script = repository / "scripts/prewindow_check.sh"
+            script.parent.mkdir()
+            script.write_text(source + unreachable_live_table, encoding="utf-8")
+
+            fake_bin = repository / "fake-bin"
+            fake_bin.mkdir()
+            commands = {
+                "ps": "exit 0\n",
+                "uptime": (
+                    "printf '%s\\n' "
+                    "'12:00 up 1 day, load averages: 0.10 0.20 0.30'\n"
+                ),
+                "pmset": "printf \"%s\\n\" \"Now drawing from 'AC Power'\"\n",
+                "df": (
+                    "printf '%s\\n' "
+                    "'Filesystem blocks Used Available Capacity Mounted' "
+                    "'/dev/disk 1 1 100 1% /'\n"
+                ),
+            }
+            for name, body in commands.items():
+                command = fake_bin / name
+                command.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+                command.chmod(0o755)
+            environment = {
+                **os.environ,
+                "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+            }
+
+            for window in sorted(expected):
+                live_root = repository / expected[window]
+                live_root.mkdir()
+                (live_root / "occupied").write_text("live", encoding="utf-8")
+                live_occupied = subprocess.run(
+                    ["/bin/bash", str(script), "--window", window],
+                    cwd=repository,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                with self.subTest(window=window, occupied="live"):
+                    self.assertEqual(
+                        live_occupied.returncode,
+                        0,
+                        live_occupied.stdout + live_occupied.stderr,
+                    )
+                    self.assertIn("READY.", live_occupied.stdout)
+
+                shutil.rmtree(live_root)
+                stale_root = repository / retired[window]
+                stale_root.mkdir()
+                (stale_root / "occupied").write_text("stale", encoding="utf-8")
+                stale_only = subprocess.run(
+                    ["/bin/bash", str(script), "--window", window],
+                    cwd=repository,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                with self.subTest(window=window, occupied="retired"):
+                    self.assertEqual(
+                        stale_only.returncode,
+                        1,
+                        stale_only.stdout + stale_only.stderr,
+                    )
+                    self.assertIn(
+                        f"BLOCK stale runs roots already exist for window {window}",
+                        re.sub(r"\x1b\[[0-9;]*m", "", stale_only.stdout),
+                    )
+                    self.assertIn(str(stale_root), stale_only.stdout)
+                    self.assertIn("NOT READY.", stale_only.stdout)
+                shutil.rmtree(stale_root)
 
     def test_cli_usage_error_is_a_registered_json_refusal(self) -> None:
         completed = subprocess.run(
