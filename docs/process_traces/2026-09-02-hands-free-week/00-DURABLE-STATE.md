@@ -289,3 +289,11 @@ THEN, in order:
    --effort high|xhigh --genre … --write-scope '[…]' --timeout N "<prompt starting WRITE_SCOPE: […]>"; luna:
    -m gpt-5.6-luna --effort max; one runner per worktree; seats cannot commit; merge to main ONLY from the
    canonical checkout; gate bench commits on grep -qE '^OK'.
+
+## 2026-09-04 ~20:50 PDT — pre-handoff status delta
+- Custody seam: rounds 5+6 landed (refuters 13 astra / 14 Opus NOT REFUTED; delta 16 CLEAN); apex 99 LANDABLE;
+  PR #289 opened (rows 9/11/12 pending replay + CI). RESUME PLAN item for the seam is now: replay → merge #289.
+- Legacy #287: ledger complete at 8dfc3081 (replay: two load-sensitive failures, both pass in isolation); merge
+  when CI settles. Paper-K #288: replay running (row 9). Paper-L: parser fix round 1b running (wt-paper-l).
+- D-165: round 6 widened the census (RED only on draft :29/:1387/:1738 until paper-K/L land); round 7 (luna) bounds
+  the round7 plan hits; then merge main → census GREEN → Opus re-check → PR (author the registry merge).
