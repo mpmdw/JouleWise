@@ -605,7 +605,7 @@ method, `anchor_bound_s`, point, lower, upper, maximum delta, and half-width.
 Whole-window verification, floor extraction, and analysis input loading share
 this same session contract.
 
-### Attribution-limited floor claim path (D-078 clause 11, Ed-ratified 2026-07-25)
+### Attribution-limited floor claim path (D-078 clause 11, Ed-ratified 2026-07-25; amended by the D-078 and D-083 dated addenda, 2026-09-04)
 
 `admissible_set_uncertainty_dominates_point_floor` remains in the closed D-078
 registry but is a labelled floor condition when it is the sole condition on a
@@ -657,7 +657,7 @@ Newly emitted artifacts use this exact v2 object:
   "gating": false,
   "role": "prospective_sizing_diagnostic",
   "not_an_acceptance_gate": true,
-  "note": "The implemented rule is the two gates: |estimate| > F and zero-exclusion of both intervals; for symmetric intervals |estimate| > max(F, h+B), actual endpoints govern otherwise."
+  "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise."
 }
 ```
 

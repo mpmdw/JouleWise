@@ -138,7 +138,8 @@ byte:
 }
 ```
 
-New extraction and floor production emits this v2 object:
+New extraction and floor production emits this v2 object under D-078/D-083,
+as amended by their 2026-09-04 dated addenda:
 
 ```json
 {
@@ -152,7 +153,7 @@ New extraction and floor production emits this v2 object:
   "gating": false,
   "role": "prospective_sizing_diagnostic",
   "not_an_acceptance_gate": true,
-  "note": "The implemented rule is the two gates: |estimate| > F and zero-exclusion of both intervals; for symmetric intervals |estimate| > max(F, h+B), actual endpoints govern otherwise."
+  "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise."
 }
 ```
 
@@ -161,7 +162,8 @@ legitimately appears once in the calibrated false-effect floor and separately
 in the claim decision interval as measurement uncertainty. The sum is only a
 prospective planning/sizing diagnostic. Acceptance uses two separate checks:
 strict `|estimate| > F` and zero-exclusion by both metrology and decision
-intervals. For symmetric `estimate ± h` intervals with nonnegative widening
+intervals, plus the registered multiplicity adjustment and evidence/eligibility
+requirements. For symmetric `estimate ± h` intervals with nonnegative widening
 `B`, their numerical conjunction is strict
 `|estimate| > max(F, h+B)`; asymmetric intervals use their actual endpoints.
 The two roles remain mandatory and neither may be optimized away as apparent

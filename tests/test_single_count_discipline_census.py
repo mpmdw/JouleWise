@@ -17,6 +17,10 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+SCAN_ROOTS = ("joulewise", "scripts", "docs/paper/fill-rehearsal", "tests")
+# This file contains the scanner and its self-referential manifest/mutation
+# strings, not a helper supplying discipline objects to production consumers.
+SOURCE_EXEMPTIONS = {"tests/test_single_count_discipline_census.py"}
 KEY = "single_count_discipline"
 MARKERS = re.compile(r"single_count_discipline|single.count.discipline|SINGLE_COUNT_DISCIPLINE|DisciplineV[12]|SingleCountDiscipline|planning_sizing_(?:expression|formula)|effective_clearable_effect_formula|attribution_floor_plus_claim_side_bound\.v[12]")
 APIS = {
@@ -81,8 +85,38 @@ EDGES = {
 
 def sources():
     return {str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
-            for directory in ("joulewise", "scripts")
+            for directory in SCAN_ROOTS
             for path in sorted((ROOT / directory).rglob("*.py"))}
+
+
+def helper_source(path, source):
+    """Scan reusable test helpers, retaining source lines for the grep pin.
+
+    Test entry-point bodies contain intentional malformed objects and raw
+    assertions. Omit those bodies; retain imports, fixtures, setup/teardown,
+    module functions and other class methods, including their nested helpers.
+    Paper rehearsal scripts are scanned in full.
+    """
+    if path in SOURCE_EXEMPTIONS:
+        return ""
+    if not path.startswith("tests/"):
+        return source
+    lines = source.splitlines(keepends=True)
+    tree = ast.parse(source, filename=path)
+    entry_points = [node for node in tree.body
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            entry_points.extend(child for child in node.body
+                                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)))
+    for node in entry_points:
+        if node.name.startswith("test_"):
+            start = min([node.lineno] + [item.lineno for item in node.decorator_list]) - 1
+            lines[start:node.end_lineno] = [
+                " " * node.col_offset + "pass\n",
+                *["\n"] * (node.end_lineno - start - 1),
+            ]
+    return "".join(lines)
 
 
 def normalized_ast(node):
@@ -105,6 +139,7 @@ def normalized_ast(node):
 
 @lru_cache(maxsize=2048)
 def scan_source(path, source):
+    source = helper_source(path, source)
     tree = ast.parse(source, filename=path)
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     events = defaultdict(list)
@@ -253,6 +288,8 @@ def scan_source(path, source):
             add(node, kind)
     # Grep backstop inventories exact matching text independently of AST
     # classification, including unsupported string spellings and comments.
+    # Pure reflows require reviewed manifest updates; revisiting this cost is
+    # a post-submission decision (counter-review 45, N2).
     for line_number, line in enumerate(source.splitlines(), 1):
         if MARKERS.search(line):
             events[(path, "<grep>", "grep", line.strip())].append(line_number)
@@ -651,7 +688,8 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   "(('value', 'calibration_false_effect_bound'),)), ('Constant', (('value', 'claim_measurement_uncertainty_bound'),)), ('Name', (('id', "
   "'ATTRIBUTION_FLOOR_SOURCE'), ('ctx', ('Load', ())))), ('Constant', (('value', True),)), ('Constant', (('value', True),)), ('Constant', "
   "(('value', False),)), ('Constant', (('value', 'prospective_sizing_diagnostic'),)), ('Constant', (('value', True),)), ('Constant', "
-  "(('value', 'The implemented rule is the two gates: |estimate| > F and zero-exclusion of both intervals; for symmetric intervals "
+  "(('value', 'The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity "
+  "adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to "
   "|estimate| > max(F, h+B), actual endpoints govern otherwise.'),))))))),)))), ('returns', ('Subscript', (('value', ('Name', (('id', "
   "'dict'), ('ctx', ('Load', ()))))), ('slice', ('Tuple', (('elts', (('Name', (('id', 'str'), ('ctx', ('Load', ())))), ('Name', (('id', "
   "'object'), ('ctx', ('Load', ())))))), ('ctx', ('Load', ()))))), ('ctx', ('Load', ())))))))",
@@ -946,6 +984,98 @@ MANIFEST = [('joulewise/analysis_engine/__init__.py', '<grep>', 'grep', '"single
   1)]
 
 
+# Reviewed reusable-helper/import inventory added by counter-review 45 S3.
+MANIFEST += [
+ ('tests/test_analysis_claims.py', '<grep>', 'grep',
+  'SINGLE_COUNT_DISCIPLINE_ID_V1,', 1),
+ ('tests/test_analysis_claims.py', '<grep>', 'grep',
+  'attribution_single_count_discipline,', 1),
+ ('tests/test_analysis_claims.py', '<module>', 'api-alias',
+  "('alias', (('name', 'SINGLE_COUNT_DISCIPLINE_ID_V1'),))", 1),
+ ('tests/test_analysis_claims.py', '<module>', 'api-alias',
+  "('alias', (('name', 'attribution_single_count_discipline'),))", 1),
+ ('tests/test_analysis_integration.py', '<grep>', 'grep',
+  'attribution_single_count_discipline,', 1),
+ ('tests/test_analysis_integration.py', '<module>', 'api-alias',
+  "('alias', (('name', 'attribution_single_count_discipline'),))", 1),
+ ('tests/test_detection_floor.py', '<grep>', 'grep',
+  'SINGLE_COUNT_DISCIPLINE_ID,', 1),
+ ('tests/test_detection_floor.py', '<grep>', 'grep',
+  'SINGLE_COUNT_DISCIPLINE_ID_V1,', 1),
+ ('tests/test_detection_floor.py', '<grep>', 'grep',
+  'attribution_single_count_discipline,', 1),
+ ('tests/test_detection_floor.py', '<module>', 'api-alias',
+  "('alias', (('name', 'SINGLE_COUNT_DISCIPLINE_ID'),))", 1),
+ ('tests/test_detection_floor.py', '<module>', 'api-alias',
+  "('alias', (('name', 'SINGLE_COUNT_DISCIPLINE_ID_V1'),))", 1),
+ ('tests/test_detection_floor.py', '<module>', 'api-alias',
+  "('alias', (('name', 'attribution_single_count_discipline'),))", 1),
+ ('tests/test_floor_extraction.py', '<grep>', 'grep',
+  'attribution_single_count_discipline,', 1),
+ ('tests/test_floor_extraction.py', '<module>', 'api-alias',
+  "('alias', (('name', 'attribution_single_count_discipline'),))", 1),
+ ('tests/test_mint_floor_artifact.py', '<grep>', 'grep',
+  'SINGLE_COUNT_DISCIPLINE_ID_V1,', 1),
+ ('tests/test_mint_floor_artifact.py', '<grep>', 'grep',
+  'attribution_single_count_discipline,', 1),
+ ('tests/test_mint_floor_artifact.py', '<module>', 'api-alias',
+  "('alias', (('name', 'SINGLE_COUNT_DISCIPLINE_ID_V1'),))", 1),
+ ('tests/test_mint_floor_artifact.py', '<module>', 'api-alias',
+  "('alias', (('name', 'attribution_single_count_discipline'),))", 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  '"single_count_discipline",', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'VERSIONS = (df.SINGLE_COUNT_DISCIPLINE_ID_V1, df.SINGLE_COUNT_DISCIPLINE_ID)', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'canonical = df.attribution_single_count_discipline(rule_id)', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'carrier["single_count_discipline"] = copy.deepcopy(bad)', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'del carrier["single_count_discipline"]', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'if key == "single_count_discipline":', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'node[key] = df.attribution_single_count_discipline(rule_id)', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'other = df.attribution_single_count_discipline(next(v for v in VERSIONS if v != rule_id))', 1),
+ ('tests/test_single_count_discipline_matrix.py', '<grep>', 'grep',
+  'single_count_discipline=df.attribution_single_count_discipline(rule_id),', 1),
+ ('tests/test_single_count_discipline_matrix.py', 'claim_artifact', 'key-token',
+  "('Constant', (('value', 'single_count_discipline'),))", 1),
+ ('tests/test_single_count_discipline_matrix.py', 'corrupt', 'key-token',
+  "('Constant', (('value', 'single_count_discipline'),))", 2),
+ ('tests/test_single_count_discipline_matrix.py', 'corrupt', 'output',
+  ("('Assign', (('targets', (('Subscript', (('value', ('Name', (('id', 'carrier'), ('ctx', ('Load', ()))))), ('slice', "
+   "('Constant', (('value', 'single_count_discipline'),))), ('ctx', ('Store', ())))),)), ('value', ('Call', (('func', "
+   "('Attribute', (('value', ('Name', (('id', 'copy'), ('ctx', ('Load', ()))))), ('attr', 'deepcopy'), ('ctx', ('Load', "
+   "()))))), ('args', (('Name', (('id', 'bad'), ('ctx', ('Load', ())))),)))))))"), 1),
+ ('tests/test_single_count_discipline_matrix.py', 'resolution', 'delegate',
+  ("('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'df'), ('ctx', ('Load', ()))))), ('attr', "
+   "'attribution_single_count_discipline'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'rule_id'), ('ctx', "
+   "('Load', ())))),))))"), 1),
+ ('tests/test_single_count_discipline_matrix.py', 'resolution', 'output',
+  ("('keyword', (('arg', 'single_count_discipline'), ('value', ('Call', (('func', ('Attribute', (('value', ('Name', (('id', "
+   "'df'), ('ctx', ('Load', ()))))), ('attr', 'attribution_single_count_discipline'), ('ctx', ('Load', ()))))), ('args', "
+   "(('Name', (('id', 'rule_id'), ('ctx', ('Load', ())))),)))))))"), 1),
+ ('tests/test_single_count_discipline_matrix.py', 'shapes', 'delegate',
+  ("('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'df'), ('ctx', ('Load', ()))))), ('attr', "
+   "'attribution_single_count_discipline'), ('ctx', ('Load', ()))))), ('args', (('Call', (('func', ('Name', (('id', 'next'), "
+   "('ctx', ('Load', ()))))), ('args', (('GeneratorExp', (('elt', ('Name', (('id', 'v'), ('ctx', ('Load', ()))))), "
+   "('generators', (('comprehension', (('target', ('Name', (('id', 'v'), ('ctx', ('Store', ()))))), ('iter', ('Name', "
+   "(('id', 'VERSIONS'), ('ctx', ('Load', ()))))), ('ifs', (('Compare', (('left', ('Name', (('id', 'v'), ('ctx', ('Load', "
+   "()))))), ('ops', (('NotEq', ()),)), ('comparators', (('Name', (('id', 'rule_id'), ('ctx', ('Load', ())))),)))),)), "
+   "('is_async', 0))),)))),)))),))))"), 1),
+ ('tests/test_single_count_discipline_matrix.py', 'shapes', 'delegate',
+  ("('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'df'), ('ctx', ('Load', ()))))), ('attr', "
+   "'attribution_single_count_discipline'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'rule_id'), ('ctx', "
+   "('Load', ())))),))))"), 1),
+ ('tests/test_single_count_discipline_matrix.py', 'versioned.visit', 'delegate',
+  ("('Call', (('func', ('Attribute', (('value', ('Name', (('id', 'df'), ('ctx', ('Load', ()))))), ('attr', "
+   "'attribution_single_count_discipline'), ('ctx', ('Load', ()))))), ('args', (('Name', (('id', 'rule_id'), ('ctx', "
+   "('Load', ())))),))))"), 1),
+ ('tests/test_single_count_discipline_matrix.py', 'versioned.visit', 'key-token',
+  "('Constant', (('value', 'single_count_discipline'),))", 1)]
+
 class SingleCountCensusTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -990,12 +1120,54 @@ class SingleCountCensusTests(unittest.TestCase):
                     assert_inventory(changed)
 
     def test_generated_contract_keeps_the_canonical_v2_object(self):
-        from joulewise.detection_floor import attribution_single_count_discipline
-        for relative in ("docs/contracts/adapter_contracts.md", "docs/site/adapter_contracts.html"):
+        from joulewise.detection_floor import (
+            attribution_single_count_discipline, SINGLE_COUNT_DISCIPLINE_ID_V1,
+        )
+        for relative in ("docs/contracts/adapter_contracts.md", "docs/phase_2/detection_floor.md",
+                         "docs/site/adapter_contracts.html"):
             text = html.unescape((ROOT / relative).read_text())
-            candidates = re.findall(r'\{[^{}]*"rule_id"\s*:\s*"attribution_floor_plus_claim_side_bound\.v2"[^{}]*\}', text)
-            self.assertEqual(len(candidates), 1, relative)
-            self.assertEqual(json.loads(candidates[0]), attribution_single_count_discipline(), relative)
+            for version, expected in (
+                ("v1", attribution_single_count_discipline(SINGLE_COUNT_DISCIPLINE_ID_V1)),
+                ("v2", attribution_single_count_discipline()),
+            ):
+                with self.subTest(document=relative, version=version):
+                    candidates = re.findall(
+                        r'\{[^{}]*"rule_id"\s*:\s*"attribution_floor_plus_claim_side_bound\.'
+                        + version + r'"[^{}]*\}', text,
+                    )
+                    self.assertEqual(len(candidates), 1, relative)
+                    actual = json.loads(candidates[0])
+                    self.assertEqual(list(actual.items()), list(expected.items()), relative)
+                    self.assertEqual([type(value) for value in actual.values()],
+                                     [type(value) for value in expected.values()], relative)
+
+    def test_paper_and_test_helpers_are_scanned(self):
+        for directory in SCAN_ROOTS:
+            for path in (ROOT / directory).rglob("*.py"):
+                self.assertIn(str(path.relative_to(ROOT)), self.source_map)
+        for path in ("docs/paper/fill-rehearsal/new_supplier.py", "tests/new_helper.py",
+                     "tests/test_new_supplier.py"):
+            for body in (
+                'def fixture(carrier):\n    return carrier["single_count_discipline"]\n',
+                'class Helpers:\n    def setUp(self):\n        return self.carrier.get("single_count_discipline")\n',
+                'from joulewise.detection_floor import read_single_count_discipline\n'
+                'def fixture(carrier):\n    return read_single_count_discipline(carrier, where="fixture")\n',
+            ):
+                with self.subTest(path=path, body=body):
+                    changed = dict(self.source_map)
+                    changed[path] = body
+                    with self.assertRaisesRegex(AssertionError, "unclassified raw|reader census drift"):
+                        assert_inventory(changed)
+
+    def test_test_entry_points_do_not_hide_reusable_helpers(self):
+        source = ('class Checks:\n'
+                  '    def test_raw_assertion(self):\n'
+                  '        return self.carrier["single_count_discipline"]\n'
+                  '    def helper(self):\n'
+                  '        return self.carrier["single_count_discipline"]\n')
+        _, _, raw = scan_source("tests/test_example.py", source)
+        self.assertEqual([(row[1], row[2]) for row in raw],
+                         [("Checks.helper", "self.carrier['single_count_discipline']")])
 
     def test_manifest_exceptions_are_exact_and_used(self):
         kinds = {(row[0], row[1]) for row in MANIFEST if row[2] == "vocabulary"}

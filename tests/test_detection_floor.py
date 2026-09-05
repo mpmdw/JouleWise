@@ -2158,10 +2158,11 @@ class TestArtifactEmitValidate(unittest.TestCase):
                 "role": "prospective_sizing_diagnostic",
                 "not_an_acceptance_gate": True,
                 "note": (
-                    "The implemented rule is the two gates: |estimate| > F "
-                    "and zero-exclusion of both intervals; for symmetric "
-                    "intervals |estimate| > max(F, h+B), actual endpoints "
-                    "govern otherwise."
+                    "The implemented rule is |estimate| > F and zero-exclusion by "
+                    "both intervals, plus the registered multiplicity adjustment "
+                    "and evidence/eligibility requirements; for symmetric intervals "
+                    "the first two reduce to |estimate| > max(F, h+B), actual "
+                    "endpoints govern otherwise."
                 ),
             },
         )
