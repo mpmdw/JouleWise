@@ -224,6 +224,20 @@ def _floor_engine_reasons(resolutions: Sequence[FloorResolution]) -> list[str]:
 
 
 def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
+    # Validate carried metadata before selecting usable floors: dropping a bad
+    # discipline must never leave its numeric floor eligible for aggregation.
+    for resolution in resolutions:
+        if (
+            resolution.single_count_discipline is not None
+            or resolution.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
+            or resolution.floor_source == ATTRIBUTION_FLOOR_SOURCE
+        ) and not attribution_single_count_discipline_is_canonical(
+            resolution.single_count_discipline
+        ):
+            raise AnalysisInputError(
+                "floor_resolution_single_count_discipline_invalid: "
+                "discipline must match its declared rule version"
+            )
     if any(
         resolution.status == "exact" and len(resolution.source_cell_ids) != 1
         for resolution in resolutions
@@ -244,13 +258,10 @@ def _combined_floor(resolutions: Sequence[FloorResolution]) -> dict[str, Any]:
         if value.floor_limit_class == ATTRIBUTION_LIMIT_CLASS
         and value.floor_source == ATTRIBUTION_FLOOR_SOURCE
         and isinstance(value.point_floor_diagnostics, Mapping)
-        and attribution_single_count_discipline_is_canonical(
-            value.single_count_discipline
-        )
     ]
     discipline_ids = {
         value.single_count_discipline["rule_id"]
-        for value in limited
+        for value in resolutions
         if value.single_count_discipline is not None
     }
     if len(discipline_ids) > 1:

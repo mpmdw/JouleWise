@@ -1284,7 +1284,7 @@ class InputSeamTests(unittest.TestCase):
             "guarded_floor_j": 0.6,
         }
 
-        def resolution(cell_id, discipline):
+        def resolution(cell_id, discipline, diagnostics=diagnostic):
             return FloorResolution(
                 status="exact",
                 artifact_id="df",
@@ -1298,31 +1298,94 @@ class InputSeamTests(unittest.TestCase):
                 reason_codes=(),
                 floor_source=ATTRIBUTION_FLOOR_SOURCE,
                 floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
-                point_floor_diagnostics=diagnostic,
+                point_floor_diagnostics=diagnostics,
                 single_count_discipline=discipline,
             )
 
         legacy = attribution_single_count_discipline(
             SINGLE_COUNT_DISCIPLINE_ID_V1
         )
-        legacy_combined = _combined_floor(
-            (resolution("C1", legacy), resolution("C2", legacy))
-        )
-        self.assertEqual(legacy_combined["single_count_discipline"], legacy)
-
-        with self.assertRaisesRegex(
-            AnalysisInputError,
-            "mix single-count discipline rule versions",
-        ):
-            _combined_floor(
-                (
-                    resolution("C1", attribution_single_count_discipline()),
-                    resolution(
-                        "C2",
-                        legacy,
-                    ),
-                )
+        current = attribution_single_count_discipline()
+        for discipline in (legacy, current):
+            combined = _combined_floor(
+                (resolution("C1", discipline), resolution("C2", discipline))
             )
+            self.assertEqual(combined["status"], "resolved")
+            self.assertEqual(combined["single_count_discipline"], discipline)
+            for row in combined["resolutions"]:
+                self.assertEqual(row["single_count_discipline"], discipline)
+
+        for diagnostics in (diagnostic, None):
+            with self.subTest(diagnostics=diagnostics), self.assertRaisesRegex(
+                AnalysisInputError,
+                "mix single-count discipline rule versions",
+            ):
+                _combined_floor(
+                    (
+                        resolution("C1", current, diagnostics),
+                        resolution("C2", legacy, diagnostics),
+                    )
+                )
+
+    def test_combined_floor_refuses_discipline_version_body_mismatches(self):
+        legacy = attribution_single_count_discipline(SINGLE_COUNT_DISCIPLINE_ID_V1)
+        current = attribution_single_count_discipline()
+        for body, declared in ((legacy, current), (current, legacy)):
+            malformed = {**body, "rule_id": declared["rule_id"]}
+            with self.subTest(declared_version=declared["rule_id"]):
+                resolution = FloorResolution(
+                    status="exact",
+                    artifact_id="df",
+                    artifact_sha256=HEX,
+                    source_cell_ids=("C1",),
+                    transport_group_id=None,
+                    transport_rule_id="direct",
+                    floor_abs_j=0.5,
+                    floor_cmp_j=1.0,
+                    floor_gate_j=1.0,
+                    reason_codes=(),
+                    floor_source=ATTRIBUTION_FLOOR_SOURCE,
+                    floor_limit_class=ATTRIBUTION_LIMIT_CLASS,
+                    point_floor_diagnostics={},
+                    single_count_discipline=malformed,
+                )
+                with self.assertRaisesRegex(
+                    AnalysisInputError,
+                    "^floor_resolution_single_count_discipline_invalid:",
+                ):
+                    _combined_floor((resolution,))
+
+    def test_combined_floor_validates_metadata_before_filtering_resolutions(self):
+        current = attribution_single_count_discipline()
+        malformed_objects = (
+            {**current, "rule_id": "unknown.v3"},
+            {**current, "gating": True},
+            {**current, "both_terms_required": False},
+            {**current, "extra": "unrecognized"},
+            {},
+            "not an object",
+        )
+        for status in ("exact", "transported", "refused"):
+            for discipline in malformed_objects:
+                with self.subTest(status=status, discipline=discipline):
+                    resolution = FloorResolution(
+                        status=status,
+                        artifact_id="df",
+                        artifact_sha256=HEX,
+                        source_cell_ids=("C1",),
+                        transport_group_id=None,
+                        transport_rule_id="direct",
+                        floor_abs_j=0.5,
+                        floor_cmp_j=1.0,
+                        floor_gate_j=1.0,
+                        reason_codes=(),
+                        single_count_discipline=discipline,
+                    )
+                    with self.assertRaisesRegex(
+                        AnalysisInputError,
+                        "^floor_resolution_single_count_discipline_invalid:",
+                    ):
+                        _combined_floor((resolution,))
 
     def test_multi_source_exact_resolution_is_rejected_at_both_boundaries(self):
         diagnostic_c1 = {
