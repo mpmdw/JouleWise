@@ -1,0 +1,21 @@
+        deltas.append(delta)
+        splits.append((split["shared_width_j"], split["local_width_j"]))
+
+    point_floor = comparative_false_effect_floor(
+        deltas, admissible_half_widths_j=[0.0] * len(deltas)
+    ).unguarded_floor_j
+    common_mode_floor = 0.0
+    for shared_sign in (-1.0, 1.0):
+        for local_mask in range(1 << len(blocks)):
+            corner = [
+                delta
+                + shared_sign * shared
+                + (local if local_mask & (1 << index) else -local)
+                for index, (delta, (shared, local)) in enumerate(
+                    zip(deltas, splits, strict=True)
+                )
+            ]
+            floor = comparative_false_effect_floor(
+                corner, admissible_half_widths_j=[0.0] * len(corner)
+            ).unguarded_floor_j
+            common_mode_floor = max(common_mode_floor, floor)
