@@ -389,3 +389,16 @@ THEN, in order:
   both relocation tests OK, discipline matrix 12 OK, dependence sheet 29 OK. Running: Opus non-author
   delta (report 52). Next: CI on head → rows 9/11/12 → merge.
 - Paper-L (#290): replay running on a3bbd9b3 (started before the seam merge; docs-only branch, accepted).
+
+## 2026-09-05 ~11:40 PDT — paper-M fix round 2 running; F+B at d2cf1859 (replay + CI running)
+
+- Paper-M: astra delta 04 (no blockers; 27/30 closed, 3 partial, F1–F4 should-fix) and Opus counter-review 05
+  (NOT LANDABLE: B1 abstract first-use, B2 omitted 7B record-support arm 50/50 identifiable, B3 figure
+  numbering, B4 'synthetic P1'; 11 should-fix; 7 nits; all arithmetic verified) committed at 2d967838.
+  Fix round 2 seat `paperm-fix2` (astra xhigh) running on all of it; report 06. Then one fresh delta
+  (astra) + Opus re-check of B1–B4 → apex → PR.
+- F+B (#292): Opus delta 52 verified closure/consequences; its one blocker (census marker in a comment)
+  cured at 3688d1b6; main merged → d2cf1859; full replay (row 9) and CI (row 11) running.
+- D-165 relabel: merging origin/main had real conflicts (registry SUPPLIER_PENDING wording vs relabel text;
+  dominance_closeout constants); Opus lieutenant resolving in JouleWise-wt-d165-relabel; report 13.
+  The old d165-renderer worktree merge was aborted (lane superseded).
