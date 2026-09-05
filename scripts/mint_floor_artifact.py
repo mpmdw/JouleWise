@@ -31,6 +31,8 @@ from joulewise.authentication_io import (  # noqa: E402
     sha256_authentication_input,
 )
 from joulewise.detection_floor import (  # noqa: E402
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
     CONDITION_FAMILY_DOMAIN,
     absolute_false_effect_floor,
     abba_delta,
@@ -1912,17 +1914,36 @@ def bind_floor_artifact_evidence(
 def render_single_count_statement(artifact: Mapping[str, Any]) -> str:
     """Render the convenience prose only from the canonical artifact object."""
 
-    carried: list[Mapping[str, Any]] = []
-    for cell in artifact.get("cells", []):
-        if isinstance(cell, Mapping) and isinstance(
-            cell.get("single_count_discipline"), Mapping
+    carried: list[Any] = []
+
+    def collect(container: Mapping[str, Any]) -> None:
+        # Preserve malformed values for validation. A valid sibling must not
+        # hide a corrupt (or missing, when labelled) discipline before writing.
+        if (
+            "single_count_discipline" in container
+            or container.get("floor_limit_class") == ATTRIBUTION_LIMIT_CLASS
+            or container.get("floor_source") == ATTRIBUTION_FLOOR_SOURCE
         ):
-            carried.append(cell["single_count_discipline"])
-    for group in artifact.get("transport_groups", []):
-        if isinstance(group, Mapping) and isinstance(
-            group.get("single_count_discipline"), Mapping
-        ):
-            carried.append(group["single_count_discipline"])
+            carried.append(container.get("single_count_discipline"))
+
+    collect(artifact)
+    for name in ("cells", "transport_groups"):
+        containers = artifact.get(name, [])
+        if not isinstance(containers, list):
+            raise MintError(f"artifact {name} must be an array")
+        for container in containers:
+            if not isinstance(container, Mapping):
+                raise MintError(f"artifact {name} entry must be an object")
+            collect(container)
+            if name == "cells":
+                for component in ("absolute", "comparative"):
+                    record = container.get(component)
+                    if record is not None:
+                        if not isinstance(record, Mapping):
+                            raise MintError(
+                                f"artifact cell {component} must be an object"
+                            )
+                        collect(record)
     if not carried:
         raise MintError("artifact does not carry a single-count discipline object")
     if any(

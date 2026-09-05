@@ -1527,14 +1527,75 @@ class ConstructionTests(unittest.TestCase):
                 )
 
     def test_single_count_statement_refuses_mixed_versions(self) -> None:
-        artifact = make_artifact()
-        artifact["transport_groups"][0]["single_count_discipline"] = (
-            attribution_single_count_discipline(
-                SINGLE_COUNT_DISCIPLINE_ID_V1
+        for path in (
+            ("cells", 0),
+            ("cells", 0, "comparative"),
+            ("transport_groups", 0),
+            (),
+        ):
+            artifact = make_artifact()
+            carrier = artifact
+            for key in path:
+                carrier = carrier[key]
+            carrier["single_count_discipline"] = (
+                attribution_single_count_discipline(SINGLE_COUNT_DISCIPLINE_ID_V1)
             )
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
+                floor = Path(tmp) / "floor.json"
+                statement = Path(tmp) / "single-count.txt"
+                with self.assertRaisesRegex(mint.MintError, "mixes.*rule versions"):
+                    mint.render_single_count_statement(artifact)
+                with self.assertRaisesRegex(mint.MintError, "mixes.*rule versions"):
+                    mint.write_outputs_exclusive(artifact, floor, statement)
+                self.assertFalse(floor.exists())
+                self.assertFalse(statement.exists())
+
+    def test_localized_malformed_discipline_refuses_before_output(self) -> None:
+        missing = object()
+        paths = (
+            ("cells", 0),
+            ("cells", 0, "comparative"),
+            ("transport_groups", 0),
         )
-        with self.assertRaisesRegex(mint.MintError, "mixes.*rule versions"):
-            mint.render_single_count_statement(artifact)
+        for rule_id in (SINGLE_COUNT_DISCIPLINE_ID_V1, None):
+            canonical = (
+                attribution_single_count_discipline(rule_id)
+                if rule_id is not None
+                else attribution_single_count_discipline()
+            )
+            baseline = make_artifact()
+            for path in paths:
+                carrier = baseline
+                for key in path:
+                    carrier = carrier[key]
+                carrier["single_count_discipline"] = copy.deepcopy(canonical)
+            self.assertEqual(validate_floor_artifact(baseline), [])
+            self.assertTrue(mint.render_single_count_statement(baseline))
+            for path in paths:
+                for bad in (None, [], "bad", {}, missing):
+                    for operation in ("render", "write"):
+                        with self.subTest(
+                            rule_id=canonical["rule_id"], path=path,
+                            bad="missing" if bad is missing else bad,
+                            operation=operation,
+                        ), tempfile.TemporaryDirectory() as tmp:
+                            artifact = copy.deepcopy(baseline)
+                            carrier = artifact
+                            for key in path:
+                                carrier = carrier[key]
+                            if bad is missing:
+                                del carrier["single_count_discipline"]
+                            else:
+                                carrier["single_count_discipline"] = bad
+                            floor = Path(tmp) / "floor.json"
+                            statement = Path(tmp) / "single-count.txt"
+                            with self.assertRaisesRegex(mint.MintError, "not canonical"):
+                                if operation == "render":
+                                    mint.render_single_count_statement(artifact)
+                                else:
+                                    mint.write_outputs_exclusive(artifact, floor, statement)
+                            self.assertFalse(floor.exists())
+                            self.assertFalse(statement.exists())
 
     def test_exclusive_outputs_refuse_overwrite(self) -> None:
         artifact = make_artifact()
