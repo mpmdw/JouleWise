@@ -369,3 +369,10 @@ THEN, in order:
   regression; report 49. Then rows 9/11/12.
 - Paper-M fix round 1 (`paperm-fix1`) still running on feat/2026-09-05-paper-m (stacked on paper-L before
   the main merge; rebase or merge paper-L into it after the seat returns, before the delta).
+
+## 2026-09-05 ~09:05 PDT — seam PR #289 merged
+
+- PR #289 (custody seam, rounds 5+6, D-173 as amended) merged to main with the full ledger (row 9 =
+  file 18 replay record, rows 11/12 = e61b0db5). REFUSAL-CARRIER-01 remains queued behind readiness.
+- F+B (#292): ruling 50 authorized the mint-fixture review under five conditions; seat `fb-ci3` (astra
+  high) executing it; report 51.
