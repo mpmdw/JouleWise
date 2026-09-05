@@ -10,6 +10,32 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T33 (2026-09-05) — POST-MERGE PAPER FREEZE; this is what a fresh
+magistrate must know first.** PR #285 is merged at `82636d67`, making its
+seven named wave-2 lanes terminal. Start with
+`docs/process_traces/2026-09-04-peer-audit/`. Ruling 43, stored at Git object
+`ff82e0dd:docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`,
+ratified ruling 17 with every cold-gate 41/42 amendment; its durable summary
+is on this head in
+`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`. D-174
+freezes scope to work necessary for a selected paper figure, table, or refusal
+sentence, while never barring a claim-bearing-path fix; the base deliverable
+is the methods/diagnostic paper. Readiness must be proven or the fallback
+selected by 6 September, the last acquisition night is 8 September ending at
+06:00 on 9 September, and content freezes at 18:00 PT on 9 September.
+
+**T33 in-flight seats and questions.** Active seats are
+`DECISION-LOG-RATIFY`, `ESTIMAND-ENCLOSURE-01`,
+`FB-PLANNING-METADATA-01`, `D165-RELABEL-01`, `D166-PROMPT0-01`, and
+`PAPER-K`. PR #286 is Paper-J with its row-9 full replay pending; PR #287 is
+the legacy-L1 void-route cure. The three unanswered Ed questions are: the due
+date and whether the fallback is acceptable; ensemble versus same-condition
+prompt selection (prompt 0 is the ruled default); and whether Ed vetoes the
+estimand relabel. Parked under the D-174 scope freeze are the two receipt
+lanes, authenticator allowlist guard, skill distillation, the cold-gate-
+affirmed but unmerged lineage relocation, modularity follow-ups, and the
+transfer fiducial.
+
 **T31 (2026-09-02 21:07 PDT; updated 09-03 19:45 — 22-h usage stall, night delivered, agents uninstalled, canonical unfrozen) — HANDS-FREE WEEK BEGINS (Ed away up to a week;
 D-171 delegations ratified; /loop "til done"). Resume from ONE file on main:
 `docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md` (all
@@ -5113,7 +5139,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-04). Latest report: [2026-09-04 post-merge kernel oracle reconciliation](docs/process_traces/2026-09-04-kernel-rows/02-sol-oracle-report.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-05). Latest report: [2026-09-05 D-174 decision-to-kernel wiring](docs/process_traces/2026-09-05-post-merge-docs/02-d174-wiring-report.md).
 
 ### [ED-EXTERNAL]
 
@@ -5126,6 +5152,12 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 ### [AGENT]
 
 - CONTINUE — A139 `PAPER-CUSTODY-SEAM-01`: Finish the shared paper-custody read seam that wraps the existing authentication session, derives all bindings from a clean-Git supply map, replays validators, and returns only family-specific frozen verified objects.
+- CONTINUE — A149 `DECISION-LOG-RATIFY`: Install the ruling-43 addenda for D-078, D-083, D-165, D-166, and D-161 plus the new D-174 submission scope freeze in the decision log.
+- CONTINUE — A150 `ESTIMAND-ENCLOSURE-01`: Replace the rejected reducer-field approach with the pinned desk script for the paper's partial-record enclosure diagnostic.
+- CONTINUE — A151 `FB-PLANNING-METADATA-01`: Migrate the F+B planning metadata to a version-aware .v2 rule across the complete exact-equality and paper-consumer census.
+- CONTINUE — A152 `D165-RELABEL-01`: Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.
+- CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
+- CONTINUE — A154 `PAPER-K`: Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
