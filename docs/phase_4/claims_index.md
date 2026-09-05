@@ -5,9 +5,9 @@ Canonical source: `analysis/rpt001-v2/claims_index.jsonl`.
 
 ## CLM-RPT001-LEGACY-L1-001
 
-- Level/status: `L1` / `supported`
+- Level/status: `L1` / `voided`
 - Evidence: `legacy_l1_manual_review_pre_2m`
 - Figures: `F1_legacy_l1_instrument_results`
 - Tables: `T1_legacy_l1_results`, `S1_legacy_stack_identity`
 
-Across three strict-valid legacy runs per exact stack, mean idle-subtracted request energy was 44.42591347410544 J for stack LEGACY-M3MAX-QWEN25-1P5B-MLX and 298.68731644234157 J for stack LEGACY-M3MAX-QWEN35-122B-A10B-MLX; these are separate stack-specific L1 observations, not a cross-stack comparison, efficiency ranking, or scaling claim.
+The retained RPT-001 legacy L1 history row is voided because its pre-repair time anchor invalidates physical energy attribution; it is permanently ineligible for claim use and carries no energy result.

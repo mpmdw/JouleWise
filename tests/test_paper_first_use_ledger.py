@@ -578,7 +578,7 @@ class PaperFirstUseFormRegressionTests(unittest.TestCase):
             ),
             "retired calculation": (
                 "That calculation used an equal-rate clock anchor and a yes/no rule that\n"
-                "called a cell attribution-limited when its exact edge-moved corner maximum\n"
+                "called a cell attribution-limited when its exact moved-edge limit\n"
                 "exceeded its point-only value after that point-only value was multiplied by a\n"
                 "fixed factor to allow for limited repetition. The\n"
                 "current calculation instead uses the corner-to-point ratios in Section 4.\n",

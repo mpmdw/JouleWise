@@ -219,3 +219,93 @@ simple tasks. astra high for an equal use in all parts for fable 5.1 with 5.1 de
 memory (instrument-mix-authority). First astra seats under the rule: paperk-astra (peer review beside Opus),
 packet-paper-supply-2 (D-173 cold-gate packet seal with seam head 84b24686 and 43 Q6 / 02-F4 questions).
 Still-running Sol seats (launched before the rule) finish as is: d174-wire, enclosure-script, fb-v2b.
+
+## 2026-09-05 ~13:00 PT — D-173 gate closed; astra routing + orchestration adopted; lanes in gauntlet
+- D-173: cold gate 21 (Fable) + 22 (Opus) → 23 synthesis: ADOPTED AS AMENDED (receipt clause replaced; scope /
+  non-issuing type / git_blob coverage / whole-window clauses; Q-PS-3 acceptance spec with seven cases →
+  REFUSAL-CARRIER-01; Q-PS-4 one mint desk check; Q-PS-5 Q-R1-2 REFUSED). Luna seat installs the D-173 addendum
+  (wt-d173-adopt). Astra round-5 design spec running (wt-seam-spec → paper-custody/11).
+- Orchestration: astra design consult 01 adopted as routing 02 (docs/process_traces/2026-09-05-orchestration/).
+- Lanes: paper-K fix 2 committed (1dcf45bf), delta 3 running; enclosure fix 1 (Opus C-1/C-2) running; F+B v2
+  round 3 (R1 aggregation, R2 html) running; D-165 relabel fix 2 (R1 floor mirrors, R2 night_gate pin, R3
+  wording) running; D-166 luna registry fix running. PR #286 paper-J + PR #287 legacy: full replays running
+  (~/.claude/jobs/3c46c831/tmp/{paperj,legacy}-replay.log) for row 9.
+- Ed's three questions still open by email (defaults running).
+
+## 2026-09-05 ~16:30 PT — paper-K PR #288 (stacked on #286); ruling-17 code lanes in delta; D-173 adopted on main
+- PR #288 paper-K (92f1ca19 + 99) base = feat/2026-09-04-paper-j; retarget to main after #286 merges. CI watched.
+- Enclosure: fix 1 (Opus C-1..C-6) committed 5a29be48, astra delta running (39). F+B v2: round 3 committed
+  df1a2d82, astra delta 2 running (39-fb). D-165: fix 2 committed c43b7086 (floor-pack generator digests change →
+  custody supersession before collection), astra delta running (05). D-166: registry fix committed 3aeed4ed,
+  astra delta running (05). Seam round-5 design spec (astra xhigh) still running → paper-custody/11.
+- D-173 adopted as amended on main (2fcf4397). Orchestration adoption 02 on main.
+- Replays for #286 (paper-J) and #287 (legacy) still running under load ~10 (both machine-heavy).
+- Rule learned (memory): merge to main ONLY from the canonical checkout; never `pull --ff-only` in a worktree.
+
+## 2026-09-05 ~20:00 PT — paper-J MERGED (#286 → fcf86495); paper-K retargeted to main (#288, head d053e969, replay running)
+- Paper-L tree (feat/2026-09-05-paper-l, from the K head): integrates the enclosure branch and the D-166 branch
+  registry rows (both conflicted with K), then an astra seat adds the appendix enclosure figure + citation and the
+  PE-01 row validation (enclosure delta 39 D2/D3).
+- D-165: Opus review NOT LANDABLE (F1 fill-checklist rationale, F2 campaign pack doc, F3 validator adopts supplied
+  rule_id); round 4 running with the STRUCTURAL cure (repo-wide retired-rationale census test) per the same-signature
+  trigger. F+B: round 4 committed; delta 3 with from-scratch consumer census running (same trigger applies).
+- Seam round 5 (astra xhigh) still running. Legacy replay still running.
+
+## 2026-09-04 ~20:15 PDT — RELAUNCH RESUME PLAN (for the headless magistrate the watchdog spawns after tonight's install handoff)
+Authority: Ed's /loop (2026-09-04 evening): "the first priority is fully being able to run windows and experiments
+yourself"; cold ruling 22 (install affirmed; FIRST NIGHT = REHEARSAL_STUB only, no real plan until Q-C9 evidence);
+D-174 scope freeze; routing 2026-09-05-orchestration/02 (astra default, luna max simple, Opus contract lens).
+Handoff executed per docs/process/MAGISTRATE_WATCHDOG.md §Install handoff steps 0–6 after PR #288 merged (HEAD = merge).
+
+FIRST ACTS (per MAGISTRATE_RELAUNCH_PROMPT): heartbeat → launch email to Ed (why launched, pending notices, resume
+list) → notice.ack. That completes the first launchd activation evidence.
+THEN, in order:
+1. Record the activation evidence (state.json, events, heartbeat, notice.ack) as a trace under
+   docs/process_traces/2026-09-02-hands-free-week/ (this is Q-C9 evidence item 1) and commit.
+2. Arm a REHEARSAL_STUB night for the next belt via docs/process/NIGHT_HANDBACK.md (email-then-arm; Ed's NO
+   overrides). Never a real plan yet. Exit before the request deadline once armed; the LaunchAgent is the wake source.
+3. Lanes to resume (each has a worktree + branch, all pushed):
+   - PR #288 paper-K: if not merged, fill row 9 from ~/.claude/jobs/3c46c831/tmp/paperk-replay.log tail, merge.
+   - feat/2026-09-05-paper-l (wt-paper-l): fix round 1 (production parsers for PE-01) → delta → apex → PR on main.
+   - feat/2026-09-04-paper-custody-seam (wt-paper-custody): round 5 landed 01d00591; astra execution refuter 13 NOT
+     REFUTED; Opus contract refuter 14 pending/landed → fix round if needed → delta → apex → PR. F6 REFUSAL-CARRIER-01
+     only if readiness (6 Sep) is met.
+   - feat/2026-09-05-d165-relabel (wt-d165-relabel): round 5 landed; delta 3 (10) → Opus re-review if needed → PR
+     (registry conflicts with paper-K: author the merge). Floor-pack generator digests changed → custody
+     supersession of the floor packs BEFORE collection (delta 05 lists the artifacts).
+   - feat/2026-09-04-fb-metadata (wt-fb-metadata): consult 42 = structural cure (accessor choke point + persistent
+     census + shape matrix). Implement per 42 as one astra xhigh seat; R4 (unhashable rule_id TypeError) and S2 in
+     the same round; then delta; then PR.
+   - feat/2026-09-04-estimand-enclosure: folded into paper-L (registry) — close via paper-L's PR; the enclosure
+     branch itself needs no separate PR after L lands (verify byte-identity of the script).
+   - feat/2026-09-05-d166-prompt0: registry rows already integrated in paper-L; the generator change + supersession
+     record still need their own PR after L (rebase on main; refuter 03 NOT REFUTED on generation).
+   - PR #287 legacy-L1: rerun the full replay on its head at low load (~/.claude/jobs/3c46c831/tmp/legacy-replay.log
+     was killed by the handoff), fill row 9, merge; then the D-161 addendum is already on main.
+   - AUTH, receipts, skill-distill, LINEAGE: PARKED (D-174).
+4. Ed's three open questions (email thread "three questions only you can answer"): due date/fallback;
+   ensemble vs same-condition (default prompt-0); estimand relabel veto. Defaults are running.
+5. Seat launch mechanics: ~/.local/bin/codex-run-v3 <out.md> -C <worktree> -s workspace-write -m gpt-6-astra
+   --effort high|xhigh --genre … --write-scope '[…]' --timeout N "<prompt starting WRITE_SCOPE: […]>"; luna:
+   -m gpt-5.6-luna --effort max; one runner per worktree; seats cannot commit; merge to main ONLY from the
+   canonical checkout; gate bench commits on grep -qE '^OK'.
+
+## 2026-09-04 ~20:50 PDT — pre-handoff status delta
+- Custody seam: rounds 5+6 landed (refuters 13 astra / 14 Opus NOT REFUTED; delta 16 CLEAN); apex 99 LANDABLE;
+  PR #289 opened (rows 9/11/12 pending replay + CI). RESUME PLAN item for the seam is now: replay → merge #289.
+- Legacy #287: ledger complete at 8dfc3081 (replay: two load-sensitive failures, both pass in isolation); merge
+  when CI settles. Paper-K #288: replay running (row 9). Paper-L: parser fix round 1b running (wt-paper-l).
+- D-165: round 6 widened the census (RED only on draft :29/:1387/:1738 until paper-K/L land); round 7 (luna) bounds
+  the round7 plan hits; then merge main → census GREEN → Opus re-check → PR (author the registry merge).
+
+## 2026-09-04 ~21:25 PDT — final pre-handoff delta (supersedes the lane lines above where they differ)
+- PR #290 paper-L opened (base feat/2026-09-04-paper-k; retarget to main after #288 merges): delta 05 CLEAN, apex
+  99 LANDABLE; rows 9/11/12 pending. Enclosure and D-166 registry rows ride in #290; the enclosure branch needs no
+  separate PR; D-166's generator change still needs its own PR after #290.
+- PR #289 seam: git-init helper fix f13e3a44 pushed; CI rerun pending; the codex_app_bridge timeout in job
+  test (3.14, 3) was a runner timeout, not seam-related — rerun the job if it repeats.
+- PR #288 paper-K: replay was still running at handoff (~/.claude/jobs/3c46c831/tmp/paperk-replay.log, killed by
+  the handoff); rerun on its head d053e969 at low load, fill row 9, merge, then retarget #290 to main.
+- Paper-side one-row cure queued: draft-v2-skeleton.md ~:1738 ledger phrase "timing error common to" (D-165
+  census survivor) → next paper round (with #290 or after).
+- Install notice emailed to Ed 21:05 PDT (thread "INSTALL NOTICE — magistrate watchdog goes live tonight").
