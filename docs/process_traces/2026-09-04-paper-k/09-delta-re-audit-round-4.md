@@ -1,0 +1,13 @@
+```json
+{"schema":"claude-codex-report/v1","genre":"review","status":"clean","completion":"complete","summary":"CLEAN: the two Discussion antecedent cures and all requested gates pass.","workspace":{"base_requested":"d3e483dad4df5c7ca6d72ef1e842c0d83bda42ce","base_mode":"exact","head_start":"89b2140dc1537ae312da781b76326f59c68151d4","head_end":"89b2140dc1537ae312da781b76326f59c68151d4","upstream_end":"89b2140dc1537ae312da781b76326f59c68151d4","branch":"feat/2026-09-04-paper-k"},"pathspec":["docs/process_traces/2026-09-04-paper-k/09-delta-re-audit-round-4.md"],"unowned_dirty":[],"verdict":{"result":"CLEAN","findings":[],"new_sentence_count":2,"new_sentence_lines":[1174,1182],"parent_old_sentence_count":2,"outcome_marker_lines":24,"marker_lines_sha256_parent":"5a0d0e0374916eaa07dd7e5bb85032827a720842ed4b4011e693e41a90a05b42","marker_lines_sha256_head":"5a0d0e0374916eaa07dd7e5bb85032827a720842ed4b4011e693e41a90a05b42","fills":131,"footer":"Terms inventoried: 264; FAILS: 0.","changed_hunks":"1174 and 1182 only; inside Discussion OUTCOME-BRANCH A/B"},"verification":[{"id":"V1","kind":"test","cmd":"R7F_CORPUS_ROOT=/Users/edr/code/JouleWise PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_paper_first_use_ledger","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 11 tests in 1.891s","","OK"]},"expected":{"exit_code":0,"tail_regex":"Ran 11 tests in .*s\\n\\nOK"}},{"id":"V2","kind":"lint","cmd":"R7F_CORPUS_ROOT=/Users/edr/code/JouleWise PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_paper_terms_lint","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 4 tests in 1.383s","","OK"]},"expected":{"exit_code":0,"tail_regex":"Ran 4 tests in .*s\\n\\nOK"}},{"id":"V3","kind":"test","cmd":"R7F_CORPUS_ROOT=/Users/edr/code/JouleWise PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_select_outcome_branches","cwd":".","observed":{"result":"pass","exit_code":0,"tail":["Ran 4 tests in 0.488s","","OK"]},"expected":{"exit_code":0,"tail_regex":"Ran 4 tests in .*s\\n\\nOK"}}],"flags":[]}
+```
+
+## Findings
+
+None. The repaired sentence occurs once in Discussion A (1174) and once in B (1182); the parent’s old phrase occurred twice. Both hunks are inside `OUTCOME-BRANCH` blocks.
+
+Earlier in each selected draft, Abstract A (29) and B (35) say: “the fixed Qwen3-8B and Qwen3-1.7B comparison reported [FILL:DS-32] for generating later output tokens and [FILL:PG-08] for reading the input through its first output token.” The cure names the same pair in versus form.
+
+## Residual risk
+
+No delta-specific gap; live collection and filled rendering are outside this skeleton audit.
