@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "2026-09-05 post-merge paper-freeze projection",
-    "path": "docs/process_traces/2026-09-05-post-merge-docs/01-sol-report.md"
+    "label": "2026-09-05 D-174 decision-to-kernel wiring",
+    "path": "docs/process_traces/2026-09-05-post-merge-docs/02-d174-wiring-report.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -454,7 +454,17 @@
         "label": "Ruling 17 scope-freeze disposition, ratified as amended by ruling 43",
         "path": "docs/process_traces/2026-09-04-peer-audit/17-magistrate-final-ruling.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "D-174 is installed before this shelved successor can be reconsidered after the submission scope freeze expires or Ed lifts it in writing",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-174"
+        }
+      ],
       "fallback": null,
       "fences": [
         {
@@ -1572,7 +1582,17 @@
         "label": "Ruling 43 ratification and post-gate seat state",
         "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "the ratified D-174 submission scope freeze is fully installed in the decision log and generated work-selection projections",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D-174"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [],

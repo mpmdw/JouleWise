@@ -5139,7 +5139,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-05). Latest report: [2026-09-05 post-merge paper-freeze projection](docs/process_traces/2026-09-05-post-merge-docs/01-sol-report.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-05). Latest report: [2026-09-05 D-174 decision-to-kernel wiring](docs/process_traces/2026-09-05-post-merge-docs/02-d174-wiring-report.md).
 
 ### [ED-EXTERNAL]
 
