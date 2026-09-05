@@ -375,12 +375,18 @@ class RealDocumentRegressionTests(unittest.TestCase):
                 self.assertEqual(summary["prefill_overlap_sample_count"], overlaps)
                 self.assertEqual(Counter(r["resolvability"]["rederived"] for r in rows), outcomes)
                 self.assertEqual(summary["resolvability"], outcomes)
+                for row in rows:
+                    self.assertEqual(row["resolvability"]["minimum_samples"], 3)
+                    self.assertEqual(row["resolvability"]["rederived"],
+                                     "identifiable" if row["power"]["prefill_overlap_sample_count"] >= 3
+                                     else "not_resolvable_sample_count")
                 self.assertEqual(Counter(Path(r["corpus_root"]).name for r in rows), roots)
                 self.assertEqual(Counter(r["model"]["name"] for r in rows),
                                  {f"Qwen2.5-{stack}-Instruct-4bit": 50})
         registry = FILL_REGISTRY.read_text()
         for number, value in ((135, "50"), (136, "50"), (137, "33"), (138, "17"),
-                              (139, "Qwen2.5-7B-Instruct-4bit")):
+                              (139, "Qwen2.5-7B-Instruct-4bit"),
+                              (140, "Qwen2.5-1.5B-Instruct-4bit"), (141, "10"), (142, "40")):
             rows = [r for r in registry.splitlines() if r.startswith(f"| DG-{number} —")]
             self.assertEqual(len(rows), 1)
             cells = [c.strip() for c in rows[0].split("|")]
@@ -394,6 +400,26 @@ class RealDocumentRegressionTests(unittest.TestCase):
                        "33 overlapped three records and 17 overlapped four",
                        "does not isolate a causal effect of model size"):
             self.assertIn(phrase, draft)
+        self.assertNotIn("1.7B", draft)
+        for start, end in (("## Abstract", "## 1. Introduction"),
+                           ("### Record support in two historical model stacks", "## 5. Discussion"),
+                           ("## 5. Discussion", "## 6. Related work"),
+                           ("## 8. Conclusion", "## 9. References")):
+            with self.subTest(section=start):
+                self.assertEqual(draft.count(start), 1)
+                section = draft.split(start, 1)[1].split(end, 1)[0]
+                for stack in expected:
+                    self.assertIn(f"Qwen2.5-{stack}-Instruct-4bit", section)
+        for start, end in (("## Abstract", "## 1. Introduction"),
+                           ("## 8. Conclusion", "## 9. References")):
+            section = draft.split(start, 1)[1].split(end, 1)[0]
+            self.assertIn("37 of 50", section)
+            self.assertIn("13 crossed three and passed", section)
+            self.assertIn("33 crossed three records and 17 crossed four", section)
+        conclusion = draft.split("## 8. Conclusion", 1)[1].split("## 9. References", 1)[0]
+        self.assertIn("Record identifiability depended on the model/stack", conclusion)
+        self.assertIn("two records per bundle failed the count discipline for the 1.5B stack", conclusion)
+        self.assertIn("three or four passed for 7B", conclusion)
 
     def test_synthetic_source_maps_reproduce_printed_arithmetic(self) -> None:
         import itertools

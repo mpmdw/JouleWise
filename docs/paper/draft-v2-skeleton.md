@@ -25,14 +25,15 @@ predicted interval-average power to the recorded trace. In a current-method
 re-analysis of one historical GPU (graphics-processor) pulse capture, all 59
 fitted onsets occur after their commands and 49 of 59 fitted offsets occur
 before them; transfer of its timing allowance to inference remains untested.
-Earlier short requests had 37 of 50 prompt-processing phases crossed by two
-sampling records and 13 by three; only the latter met the three-record minimum.
-The historical 7B stack met the minimum in all 50 phases.
+For historical Qwen2.5-1.5B-Instruct-4bit requests, 37 of 50 prompt-processing
+phases crossed two sampling records and failed the three-record minimum; 13
+crossed three and passed. Qwen2.5-7B-Instruct-4bit passed in all 50 phases:
+33 crossed three records and 17 crossed four.
 Labelled synthetic examples make these distinctions reproducible.
 The historical evidence covers one Apple computer across retained
 measurement windows using macOS processor-power records. It supplies no
 new model-energy comparison or phase-energy dominance result.
-<!-- Headline: DX-001/003/012/013; record support: DG-067/068/069/072/073/135–139. -->
+<!-- Headline: DX-001/003/012/013; record support: DG-067/068/069/072/073/135–142. -->
 
 ## 1. Introduction
 
@@ -671,6 +672,23 @@ resolvable** because its record support is too small, using the label
 `not_resolvable_sample_count`. The same verdict words can separately describe
 a value below a cell floor; here they mean only insufficient record support.
 
+The Qwen2.5-1.5B-Instruct-4bit (1.5B) population consists of short
+prompt-processing phases in 50 bundles: 10 from `runs_window_a10_20260725`
+and 40 from `runs_window_c_20260726` (DG-140–142). Across this retained
+population, 37 of 50 phases overlapped two sampling records and the remaining 13 of 50 overlapped three. Accordingly, 37 failed
+the three-record minimum (`not_resolvable_sample_count`) and 13 passed
+(`identifiable`). This describes the retained population; it does not estimate the failure rate on future requests, show
+zero prompt-processing energy, or supply a model comparison.
+
+The same artifact also retains the Qwen2.5-7B-Instruct-4bit (7B) stack from
+`runs_window_7bfloor_20260729`: all 50 prompt-processing phases were
+identifiable under the record-support rule. Of these, 33 overlapped three
+records and 17 overlapped four (registry DG-135–139). Record identifiability
+depended on which model/stack was used in these retained populations: two records per bundle failed the count discipline for the 1.5B
+stack; three passed for its remaining bundles, and three or four passed for
+7B. This comparison does not isolate a causal effect of model size or imply
+that short requests always fail the minimum.
+
 Figure 3, the phase–record overlap diagram, names the phase boundaries, adjacent
 sampling-record intervals, shared portions, overlap count, and three-record
 minimum for both sides of the decision.
@@ -718,7 +736,8 @@ narrow range of relative positions satisfies both conditions. A middle record
 at the short end of the issued middle-half width spread leaves more room for
 both phase boundaries to fall outside it, making that full fit easier rather than
 first making it possible. Alignment, not width alone, therefore denies the
-third overlap in most phases of this smaller-stack population. In r03, relative to epoch 1784978933 s, the phase [0.267684,0.3887181]
+third overlap in most phases of the Qwen2.5-1.5B-Instruct-4bit population. In r03,
+relative to epoch 1784978933 s, the phase [0.267684,0.3887181]
 overlaps records [0.1945653,0.3210495] and [0.3210495,0.434475] for
 0.0533655 and 0.0676686 s: two records fail the three-record cutoff.
 The adjacent records have zero overlap. The same retained absolute campaign’s
@@ -741,23 +760,6 @@ come from the named event log and CSV bytes (registry DG-131/132).
 The event-duration statistic subtracts binary64 epoch values before rounding;
 these displayed relative endpoints use exact subtraction of stored decimal
 strings. Their last digits need not equal the binary64 duration statistic.
-
-
-The population consists of short prompt-processing phases from the earlier
-1.5-billion-parameter diagnostic configuration during the July 2026 window.
-Across this retained population, 37 of 50 phases overlapped two sampling
-records and the remaining 13 of 50 overlapped three. Accordingly, 37 failed
-the three-record minimum and 13 passed it. This describes the retained
-population; it does not estimate the failure rate on future requests, show
-zero prompt-processing energy, or supply a model comparison.
-
-The same artifact also retains the Qwen2.5-7B-Instruct-4bit stack from
-`runs_window_7bfloor_20260729`: all 50 prompt-processing phases were
-identifiable under the record-support rule. Of these, 33 overlapped three
-records and 17 overlapped four (registry DG-135–139). Record support thus
-differs by model/stack in these retained populations; the comparison does
-not isolate a causal effect of model size or imply that short requests
-always fail the minimum.
 
 D-078 voids these captures’ energy values for claim use. Record support
 counts overlapping record intervals, uses no energy value, and is reported
@@ -783,9 +785,9 @@ replace the interval-overlap calculation.
 
 The historical calibration shows asymmetric fitted edge placement in one
 capture. Record support differs between the retained model stacks: the
-smaller-stack population contains phases with too few overlaps, while the
-7B population meets the minimum throughout. A short phase can cross too few
-records even when the records tile continuously. Neither
+Qwen2.5-1.5B-Instruct-4bit population contains phases with too few overlaps,
+while Qwen2.5-7B-Instruct-4bit meets the minimum throughout. A short phase
+can cross too few records even when the records tile continuously. Neither
 result establishes a prospective energy difference between models. The
 synthetic examples explain how recorded averages support an allocation and
 how permitted timing changes alter it; they do not validate the physical
@@ -891,9 +893,9 @@ command/phase logs, `instrument_evidence.json` clock records, and run bundles
 are retained under project custody outside Git. **Custody** means that
 each named input's fingerprint still matches its recorded bytes. The calibration source is
 `runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/`;
-the smaller-stack record-support population comprises ten named members of
-`runs_window_a10_20260725/` and forty of `runs_window_c_20260726/`. The 7B
-stack contributes 50 members of `runs_window_7bfloor_20260729/` (DG-135).
+the Qwen2.5-1.5B-Instruct-4bit record-support population comprises
+ten named members of `runs_window_a10_20260725/` and forty of `runs_window_c_20260726/` (DG-140–142). Qwen2.5-7B-Instruct-4bit contributes
+50 members of `runs_window_7bfloor_20260729/` (DG-135/139).
 Both populations are enumerated with per-file fingerprints in
 `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`.
 The registry and issued diagnostic artifacts retain their source fingerprints.
@@ -913,15 +915,18 @@ JouleWise specifies interval-overlap-assigned phase energy—average power times
 overlap duration—and its sensitivity to the registered timing domain,
 conditional on the held-average reconstruction, which holds each record at
 its reported average. It does not enclose physical phase energy under arbitrary
-within-record allocations. The historical record-support population had 37 of
-50 phases below the three-record minimum and 13 meeting it; all 50 phases
-of the historical 7B stack met it. Record support depends on the model/stack
-in these retained populations. The synthetic partial-record
+within-record allocations. In the historical Qwen2.5-1.5B-Instruct-4bit
+(1.5B) population, 37 of 50 phases crossed two records and failed the
+three-record minimum; 13 crossed three and passed. Qwen2.5-7B-Instruct-4bit
+(7B) passed in all 50 phases: 33 crossed three records and 17 crossed four.
+Record identifiability depended on the model/stack: two records per bundle
+failed the count discipline for the 1.5B stack; three passed for its remaining
+bundles, and three or four passed for 7B. The synthetic partial-record
 enclosure and two-block fixture make the distinct calculations explicit and
 reproducible. The result is a methods/diagnostic contribution on one machine
 across retained measurement windows; it supports no new model-energy
 comparison, empirical phase-energy dominance, or future-error coverage.
-<!-- Headline: DX-001/003/012/013; record support: DG-067/068/069/135–139. -->
+<!-- Headline: DX-001/003/012/013; record support: DG-067/068/069/072/073/135–142. -->
 
 ## 9. References
 

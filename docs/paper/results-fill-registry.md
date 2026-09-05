@@ -16,7 +16,7 @@ only METHODS_DIAGNOSTIC; A, B and REFUSAL selections are rejected.
 
 Active empirical placements: Section 4's historical clock/pulse reconstruction,
 Figure 2 (the unchanged `fig4_edge_excursions.svg`), Section 4's two-stack
-record-support results (DG-067–069 and DG-135–139), and Appendix A's calibration
+record-support results (DG-067–069 and DG-135–142), and Appendix A's calibration
 arithmetic and 17-capture corpus. Figure 1, Figure 3 (`fig5_phase_record_overlap.svg`) and Appendix Figure A2
 (`fig2_window_timeline.svg`) are corrected schematics. Figure P1 occurs only
 in the prospective protocol. Figures A3–A5 are labelled synthetic mechanisms;
@@ -999,7 +999,8 @@ calls below determine every placement, not a new measurement. No row is deleted.
 
 ### Paper-M round-2 record-support disclosure — 2026-09-05
 
-These rows disclose the already-retained second arm; they create no comparison
+These rows disclose both retained model identities and the second arm;
+round 2b adds the source-backed 1.5B identity and membership. They create no comparison
 claim and reactivate no retired result row. The canonical artifact and the Git
 copy have the same fingerprint. Per-bundle counts were recomputed independently
 and agree with the stack summaries. EXTRACT retains artifact counts and
@@ -1012,6 +1013,9 @@ identities; it does not treat the record-support cutoff as energy precision.
 | DG-137 — Abstract, article Section 4, availability and Conclusion: 7B three-record phases | `33` | `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`, SHA-256 `e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1`; `stack_summaries[stack="7B"].prefill_overlap_sample_count["3"]; cross-check bundles[stack="7B"].power.prefill_overlap_sample_count == 3` | historical July 2026 / 7B stack | EXTRACT | BOUND 2026-09-05; DIAGNOSTIC_ERA; NON_CLAIM_BEARING | NR |
 | DG-138 — Abstract, article Section 4, availability and Conclusion: 7B four-record phases | `17` | `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`, SHA-256 `e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1`; `stack_summaries[stack="7B"].prefill_overlap_sample_count["4"]; cross-check bundles[stack="7B"].power.prefill_overlap_sample_count == 4` | historical July 2026 / 7B stack | EXTRACT | BOUND 2026-09-05; DIAGNOSTIC_ERA; NON_CLAIM_BEARING | NR |
 | DG-139 — Abstract, article Section 4, availability and Conclusion: historical 7B model identity | `Qwen2.5-7B-Instruct-4bit` | `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`, SHA-256 `e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1`; `stack_summaries[stack="7B"].model_names; every bundles[stack="7B"].model.name agrees` | historical July 2026 / 7B stack | EXTRACT | BOUND 2026-09-05; DIAGNOSTIC_ERA; NON_CLAIM_BEARING | NR |
+| DG-140 — Abstract, article Section 4, Discussion, availability and Conclusion: historical 1.5B model identity | `Qwen2.5-1.5B-Instruct-4bit` | `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`, SHA-256 `e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1`; `stack_summaries[stack="1.5B"].model_names; every bundles[stack="1.5B"].model.name agrees; stack label 1.5B` | historical July 2026 / 1.5B stack | EXTRACT | BOUND 2026-09-05; DIAGNOSTIC_ERA; NON_CLAIM_BEARING | NR |
+| DG-141 — article Section 4 and availability: 1.5B a10 membership | `10` | `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`, SHA-256 `e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1`; `bundles[stack="1.5B" and corpus_root="/Users/edr/code/JouleWise/runs_window_a10_20260725"].bundle; 10 distinct members` | historical July 2026 / 1.5B stack | EXTRACT | BOUND 2026-09-05; DIAGNOSTIC_ERA; NON_CLAIM_BEARING | NR |
+| DG-142 — article Section 4 and availability: 1.5B window-C membership | `40` | `docs/process_traces/2026-08-09-prefill-phase-proof/results.json`, SHA-256 `e93c1d9c9ccff764cb6c64379cc3551c710e63b38b5314569d89662d2b88d8b1`; `bundles[stack="1.5B" and corpus_root="/Users/edr/code/JouleWise/runs_window_c_20260726"].bundle; 40 distinct members; disjoint from the 10 a10 members, totaling the 50 bound in DG-068` | historical July 2026 / 1.5B stack | EXTRACT | BOUND 2026-09-05; DIAGNOSTIC_ERA; NON_CLAIM_BEARING | NR |
 
 ## Authority discrepancies and non-token gaps
 
