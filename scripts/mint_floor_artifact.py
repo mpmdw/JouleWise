@@ -31,10 +31,14 @@ from joulewise.authentication_io import (  # noqa: E402
     sha256_authentication_input,
 )
 from joulewise.detection_floor import (  # noqa: E402
+    ATTRIBUTION_FLOOR_SOURCE,
+    ATTRIBUTION_LIMIT_CLASS,
     CONDITION_FAMILY_DOMAIN,
     absolute_false_effect_floor,
     abba_delta,
-    attribution_single_count_discipline,
+    SingleCountDisciplineError,
+    DisciplineV2,
+    read_single_count_profile,
     build_absolute_record,
     build_comparative_record,
     build_floor_artifact,
@@ -554,6 +558,7 @@ def _target_spec_cell(
 def _target_report_cell(
     report: Mapping[str, Any], cell_id: str, kind: str
 ) -> Mapping[str, Any]:
+    _read_mint_disciplines(report, profile="extraction")
     matches = [
         cell
         for cell in report.get("cells", [])
@@ -1505,6 +1510,8 @@ def mint_authenticated_artifact(
 ) -> dict[str, Any]:
     """Run the gate, then construct and validate the one governed artifact."""
 
+    for component in (absolute, comparative):
+        _read_mint_disciplines(component.report, profile="extraction")
     pre_registration_gate(
         plan=plan,
         plan_sha256=plan_sha256,
@@ -1908,25 +1915,36 @@ def bind_floor_artifact_evidence(
     return result
 
 
+def _read_mint_disciplines(carrier, *, profile):
+    try:
+        return read_single_count_profile(carrier, profile=profile, where="artifact")
+    except SingleCountDisciplineError as exc:
+        if exc.mixed_versions:
+            raise MintError(f"artifact mixes single-count discipline rule versions: {exc}") from exc
+        raise MintError(f"artifact single-count discipline is not canonical: {exc}") from exc
+
+
 def render_single_count_statement(artifact: Mapping[str, Any]) -> str:
     """Render the convenience prose only from the canonical artifact object."""
 
-    expected = attribution_single_count_discipline()
-    carried: list[Mapping[str, Any]] = []
-    for cell in artifact.get("cells", []):
-        if isinstance(cell, Mapping) and isinstance(
-            cell.get("single_count_discipline"), Mapping
-        ):
-            carried.append(cell["single_count_discipline"])
-    for group in artifact.get("transport_groups", []):
-        if isinstance(group, Mapping) and isinstance(
-            group.get("single_count_discipline"), Mapping
-        ):
-            carried.append(group["single_count_discipline"])
-    if not carried:
+    profile = (
+        "extraction"
+        if isinstance(artifact, Mapping) and artifact.get("schema_version") == EXTRACTION_SCHEMA_VERSION
+        else "floor"
+    )
+    views = _read_mint_disciplines(artifact, profile=profile)
+    if not views:
         raise MintError("artifact does not carry a single-count discipline object")
-    if any(dict(value) != expected for value in carried):
-        raise MintError("artifact single-count discipline is not canonical")
+    view = views[0]
+    expected = view.copy_wire()
+    if isinstance(view, DisciplineV2):
+        return (
+            f"{expected['note']} "
+            f"Planning sizing expression: {expected['planning_sizing_expression']}; "
+            f"floor role: {expected['floor_role']}; "
+            f"claim-side role: {expected['claim_side_bound_role']}; "
+            f"claim-side source: {expected['claim_side_bound_source']}.\n"
+        )
     return (
         f"{expected['statement']}. "
         f"Formula: {expected['effective_clearable_effect_formula']}; "

@@ -390,6 +390,76 @@ THEN, in order:
   delta (report 52). Next: CI on head → rows 9/11/12 → merge.
 - Paper-L (#290): replay running on a3bbd9b3 (started before the seam merge; docs-only branch, accepted).
 
+## 2026-09-05 ~11:40 PDT — paper-M fix round 2 running; F+B at d2cf1859 (replay + CI running)
+
+- Paper-M: astra delta 04 (no blockers; 27/30 closed, 3 partial, F1–F4 should-fix) and Opus counter-review 05
+  (NOT LANDABLE: B1 abstract first-use, B2 omitted 7B record-support arm 50/50 identifiable, B3 figure
+  numbering, B4 'synthetic P1'; 11 should-fix; 7 nits; all arithmetic verified) committed at 2d967838.
+  Fix round 2 seat `paperm-fix2` (astra xhigh) running on all of it; report 06. Then one fresh delta
+  (astra) + Opus re-check of B1–B4 → apex → PR.
+- F+B (#292): Opus delta 52 verified closure/consequences; its one blocker (census marker in a comment)
+  cured at 3688d1b6; main merged → d2cf1859; full replay (row 9) and CI (row 11) running.
+- D-165 relabel: merging origin/main had real conflicts (registry SUPPLIER_PENDING wording vs relabel text;
+  dominance_closeout constants); Opus lieutenant resolving in JouleWise-wt-d165-relabel; report 13.
+  The old d165-renderer worktree merge was aborted (lane superseded).
+
+## 2026-09-05 (later) — paper-M fix round 2 complete at 4be34bc4; paper-L blocked on a D-166 regression
+
+- Paper-M: round 2 (report 06, 30/31) + round 2b (report 07, B2 with the source-backed Qwen2.5-1.5B /
+  7B arms; the magistrate's '1.7B' label was wrong and astra caught it) landed at 4be34bc4. Running:
+  fresh astra delta (08) + Opus re-check (09). Then apex → PR.
+- Paper-L (#290): replay at a3bbd9b3 failed 6 FrozenConsumerIdentitySetTests (A/decode inventory has one
+  distinct config) + node-worker. Cause: the branch carries the D-166 prompt-zero generator change to
+  configs/campaigns/d117_contrast_v5/generate_configs.py; main passes. Seat `paperl-d166fix` (astra
+  xhigh) diagnosing generator-vs-fixture in JouleWise-wt-paper-l (main merged → 3d3b4ba2); report
+  docs/process_traces/2026-09-05-d166-prompt0/06. Replay re-runs after the cure.
+- F+B (#292): head 9d854b4d (fixture re-anchor via repin lane; seam reader classified as pass-through
+  carrier, report 53); CI green → row 11 filled; replay (row 9) running; then terminal review → merge.
+
+## 2026-09-05 ~09:30 PDT — paper-M PR #293 open; paper-L and F+B on final heads
+
+- Paper-M PR #293 (base feat/2026-09-05-paper-l → retarget to main after #290): final head 5e262164;
+  rows 1–8/10/12 filled; terminal review 99 LANDABLE pending rows 9 (replay running, log
+  paperm-replay2.log) and 11 (CI). Round 3 hand-edited the pinned enclosure SVG; magistrate restored the
+  script's exact output and closed B4 by defining the artwork label in the A1 caption; lint regression
+  updated. Lesson recorded: gate every chain on the unittest exit code, never on the grep pipeline
+  (two commits went out on a red lint this way).
+- Paper-L PR #290: final head 3f391094 (D-166 fixture fix + Opus S1 singleton coverage test); replay
+  (paperl-replay4.log) and CI running; then row 12 + merge; then retarget #293 to main.
+- F+B PR #292: head 9d854b4d; CI green (row 11); replay (fb-replay2.log) running; then row 9, terminal
+  review, merge.
+- After #290/#293/#292 merge: D-165 relabel wording cure against the merged draft → census GREEN → PR.
+  Then the watchdog install handoff (steps 1/3/4/5) when no seat is running.
+
+## 2026-09-05 ~10:20 PDT — F+B PR #292 merged (2f08eaf9)
+
+- F+B v2 single-count discipline lane closed: PR #292 merged with the full ledger (replay record 54,
+  terminal-review addendum in 99-fb-v2, CI 7af4f35a). Ruling-17 code lanes remaining: D-165 relabel
+  (after paper-M), D-166 prompt-0 (carried inside paper-L #290).
+- Paper-M #293: checker reconciliation (report 11) bench: fast paper tests OK; round-7 module running to
+  paperm-r7-bench.log; then commit → replay → CI → retarget/merge after #290.
+
+## 2026-09-05 ~11:05 PDT — paper-L PR #290 merged (ef496742); paper-M retargeted to main
+
+- Paper-L merged with the full ledger (replay record 07, terminal-review addendum, CI 98036c0e). The D-166
+  prompt-zero generator and its identity-set fixture fix + singleton coverage test are on main.
+- Paper-M PR #293 now targets main; origin/main merged into the branch (integration tree); replay
+  (paperm-replay4.log) and CI re-run on that head; rows 9/11 then merge.
+- Next after #293: D-165 relabel wording cure against the merged draft → census GREEN → Opus → PR; then
+  the watchdog install handoff (steps 1/3/4/5) once no seat or replay is running.
+
+## 2026-09-05 ~14:50 PDT — paper-M PR #293 MERGED (b1644210)
+
+- The fallback methods/diagnostic paper is on main: docs/paper/draft-v2-skeleton.md (METHODS_DIAGNOSTIC),
+  docs/paper/protocol/prospective-comparison-protocol.md, docs/paper/protocol/first-use-audit-ledger.md,
+  reconciled round-7 checker, registry rows DG-135–144. Full ledger on the PR; replay record 12;
+  terminal review 99.
+- Remaining before the watchdog handoff: D-165 relabel branch — Opus lieutenant merging main again
+  (report 14) and listing census RED lines; then one astra seat cures the draft/protocol wording (paper
+  lanes closed, the relabel lane owns those lines now) → census GREEN → Opus re-check → PR → merge.
+- Then: watchdog install handoff steps 1/3/4/5 (docs/process/MAGISTRATE_WATCHDOG.md) from this session
+  with no seat or replay running. The relaunched magistrate resumes from RELAUNCH RESUME PLAN + these deltas.
+
 ## 2026-09-05 ~12:30 PDT — D-165 relabel branch integrated with main
 
 - feat/2026-09-05-d165-relabel: origin/main merged by the Opus lieutenant (cd71a5d0; report 13), fixture

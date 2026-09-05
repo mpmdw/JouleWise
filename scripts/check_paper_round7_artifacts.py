@@ -81,6 +81,17 @@ FREEZE_LABEL = (
     "DIAGNOSTIC_ERA / R7_FENCED; NOT RF-FENCED; NON_CLAIM_BEARING; "
     "SUCCESSOR_DRAFT_ONLY"
 )
+RETIREMENT_DATE = "RETIRED_FALLBACK 2026-09-05 (D-174)"
+RETIREMENT_PREFIX = f"{RETIREMENT_DATE}: no submission placement; "
+MOVED_METHOD_RETIREMENT_PREFIX = (
+    f"{RETIREMENT_DATE}: no result placement; related method moved 2026-09-05 to "
+    "`docs/paper/protocol/prospective-comparison-protocol.md` P.2; "
+    "old result anchor remains retired; "
+)
+CONSOLIDATED_RETIREMENT = (
+    f"{RETIREMENT_DATE}; previously consolidated under round-7 R-6; "
+    "retained as a tombstone, not a second active site"
+)
 XD_CAMPAIGN = "retained 20260722 capture / 59-pulse calibration"
 AQ_CAMPAIGN = "15 retained instrument_validation captures, v2 era"
 Y_VALUE_TOLERANCE_MS = 0.0008
@@ -154,10 +165,20 @@ class DXRow:
 
 
 @dataclass(frozen=True)
+class AppendixDeriveRow:
+    row_id: str
+    marker: str
+    appendix: str
+    producer: SourcePin
+    fill_rule: str = "DERIVE"
+
+
+@dataclass(frozen=True)
 class RegistrySpec:
     sources: dict[str, SourcePin]
     r7f_path: Path
-    rows: dict[str, DXRow]
+    rows: dict[str, DXRow | AppendixDeriveRow]
+    retired_sites: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -233,9 +254,41 @@ def _source_size(metadata: str | None) -> int | None:
     return int(match.group(1).replace(",", "")) if match else None
 
 
-def parse_registry_text(text: str) -> RegistrySpec:
-    """Parse the one DX subsection and reject any malformed or missing row."""
+def _retired_sites(text: str) -> tuple[str, ...]:
+    """Validate dated dispositions, including non-DX and metadata-only rows."""
+    sites = []
+    for line in text.splitlines():
+        if not line.startswith("| ") or "RETIRED_FALLBACK" not in line:
+            continue
+        # Escaped pipes occur inside the historical DS row anchors.
+        cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", line)[1:-1]]
+        notes = [cell for cell in cells if cell.startswith(RETIREMENT_DATE)]
+        if len(notes) != 1:
+            raise RegistryError(f"{cells[0]} must carry exactly one dated retirement note")
+        note = notes[0]
+        site = cells[0].split(" — ", 1)[0].strip("`")
+        if "RETIRED_FALLBACK" in cells:
+            index = cells.index("RETIRED_FALLBACK")
+            valid_note = re.fullmatch(
+                "(?:" + re.escape(RETIREMENT_PREFIX) + "|"
+                + re.escape(MOVED_METHOD_RETIREMENT_PREFIX) + ")"
+                + r"former rule (?:MEASURED|DERIVE|EXTRACT|STOP_FILL); former status: .+", note
+            ) or (site == "PG-03" and note == CONSOLIDATED_RETIREMENT)
+            if index + 1 >= len(cells) or cells[index + 1] != note or not valid_note:
+                raise RegistryError(f"{cells[0]} must preserve its former rule and status")
+        elif not re.fullmatch(re.escape(RETIREMENT_PREFIX) + r"former status: .+", note):
+            raise RegistryError(f"{cells[0]} has malformed metadata retirement")
+        if not (re.fullmatch(r"[A-Z][A-Z0-9-]*-[0-9]+[a-z]?", site)
+                or (site.startswith("[") and site.endswith("]"))):
+            raise RegistryError(f"unrecognized retired site {site!r}")
+        sites.append(site)
+    return tuple(sites)
 
+
+def parse_registry_text(text: str) -> RegistrySpec:
+    """Parse the closed DX subsection and pinned appendix DERIVE placements."""
+
+    retired_sites = _retired_sites(text)
     if text.count(DX_HEADING) != 1:
         raise RegistryError(
             f"expected exactly one {DX_HEADING!r} heading, found {text.count(DX_HEADING)}"
@@ -281,7 +334,7 @@ def parse_registry_text(text: str) -> RegistrySpec:
             f"R7F path definition is {r7f_matches!r}, expected {[str(EXPECTED_R7F_PATH)]!r}"
         )
 
-    rows: dict[str, DXRow] = {}
+    rows: dict[str, DXRow | AppendixDeriveRow] = {}
     for line in section.splitlines():
         if not line.startswith("| DX-"):
             continue
@@ -311,11 +364,16 @@ def parse_registry_text(text: str) -> RegistrySpec:
             for match in FIELD_RE.finditer(supplier)
         )
         expected_fill = "DERIVE" if row_id in DERIVED_ROWS else "MEASURED"
-        if fill_rule != expected_fill:
+        retired = fill_rule == "RETIRED_FALLBACK"
+        if not retired and fill_rule != expected_fill:
             raise RegistryError(
                 f"{row_id} fill rule is {fill_rule!r}, expected {expected_fill!r}"
             )
-        if freeze_status != FREEZE_LABEL:
+        expected_freeze = (
+            f"{RETIREMENT_PREFIX}former rule {expected_fill}; former status: {FREEZE_LABEL}"
+            if retired else FREEZE_LABEL
+        )
+        if freeze_status != expected_freeze:
             raise RegistryError(f"{row_id} has malformed freeze label {freeze_status!r}")
         if "[PENDING" in line:
             raise RegistryError(f"{row_id} illegally carries a PENDING marker")
@@ -348,7 +406,46 @@ def parse_registry_text(text: str) -> RegistrySpec:
             raise RegistryError(
                 f"{row_id} marker does not equal the {source} source-block digest"
             )
-    return RegistrySpec(sources=sources, r7f_path=EXPECTED_R7F_PATH, rows=rows)
+    for line in text.splitlines():
+        if not line.startswith("| "):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        # Legacy appendix numeric rows have no FILL marker or script pin.
+        # Select by placement shape, not a PE-specific identifier whitelist.
+        if " — Appendix " not in cells[0] or not (
+            "[FILL:" in line or "SHA-256" in line
+        ):
+            continue
+        if len(cells) != 7:
+            raise RegistryError(f"appendix DERIVE row must have 7 cells: {line}")
+        site, marker, supplier, _campaign, fill_rule, freeze_status, _sources = cells
+        if fill_rule == "RETIRED_FALLBACK":
+            # Its dated note and forbidden placement are checked separately.
+            continue
+        site_match = re.match(
+            r"([A-Z][A-Z0-9]*-[0-9]+) — Appendix ([A-Z](?:\.[0-9]+)*)(?=\s|$)", site
+        )
+        if site_match is None:
+            raise RegistryError(f"malformed appendix site cell {site!r}")
+        row_id, appendix = site_match.groups()
+        if row_id in rows:
+            raise RegistryError(f"duplicate registry row {row_id}")
+        if marker != f"`[FILL:{row_id}]`" or fill_rule != "DERIVE":
+            raise RegistryError(f"{row_id} must bind its FILL marker with DERIVE")
+        if "VALUE_UNISSUED" not in freeze_status or "APPENDIX_ONLY_REGISTRY_BOUND" not in freeze_status:
+            raise RegistryError(f"{row_id} must remain appendix-only / VALUE_UNISSUED")
+        pins = re.findall(r"`(scripts/[^`]+\.py)`, SHA-256 `([0-9a-f]{64})`, ([0-9,]+) B", supplier)
+        if len(pins) != 1:
+            raise RegistryError(f"{row_id} must pin exactly one producer digest and byte size")
+        path, sha256, size = pins[0]
+        if ".." in Path(path).parts:
+            raise RegistryError(f"{row_id} producer must be repository-relative")
+        rows[row_id] = AppendixDeriveRow(
+            row_id, marker.strip("`"), appendix,
+            SourcePin(row_id, Path(path), sha256, int(size.replace(",", "")), None, None),
+        )
+    return RegistrySpec(sources=sources, r7f_path=EXPECTED_R7F_PATH, rows=rows,
+                        retired_sites=retired_sites)
 
 
 def parse_registry(path: Path) -> RegistrySpec:
@@ -367,7 +464,12 @@ def _byte_comparison(label: str, expected: bytes, observed: bytes) -> Comparison
 
 def check_file_pins(repository_root: Path, spec: RegistrySpec) -> list[Comparison]:
     comparisons: list[Comparison] = []
-    for code, pin in spec.sources.items():
+    pins = dict(spec.sources)
+    pins.update(
+        (row.row_id, row.producer)
+        for row in spec.rows.values() if isinstance(row, AppendixDeriveRow)
+    )
+    for code, pin in pins.items():
         path = repository_root / pin.path
         if not path.is_file():
             comparisons.append(_comparison(f"digest {code}", pin.sha256, f"MISSING {path}"))
@@ -423,6 +525,8 @@ def check_supplier_fields(
 ) -> list[Comparison]:
     comparisons: list[Comparison] = []
     for row in spec.rows.values():
+        if isinstance(row, AppendixDeriveRow):
+            continue
         for field in row.field_refs:
             if field.source not in artifacts:
                 comparisons.append(
@@ -580,7 +684,7 @@ def check_rendered_rows(
 ) -> list[Comparison]:
     comparisons: list[Comparison] = []
     for row in spec.rows.values():
-        if row.row_id in IDENTITY_ROWS:
+        if isinstance(row, AppendixDeriveRow) or row.row_id in IDENTITY_ROWS:
             continue
         try:
             rendered = render_row(row, spec, artifacts)
@@ -721,6 +825,9 @@ def check_skeleton_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
         if row_id not in spec.rows:
             comparisons.append(_comparison(f"literal {row_id}", "registered row", "UNREGISTERED"))
             continue
+        if spec.rows[row_id].fill_rule == "RETIRED_FALLBACK":
+            comparisons.append(_comparison(f"literal {row_id}", "no submission placement", "retired row placed"))
+            continue
         if row_id in IDENTITY_ROWS:
             comparisons.append(_comparison(f"literal {row_id}", "no draft site", "identity row placed"))
             continue
@@ -792,8 +899,10 @@ def check_prose_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
     comparisons: list[Comparison] = []
     for region in _dx_prose_regions(text):
         candidates: list[tuple[int, int, str, str]] = []
-        for row_id in _placement_row_ids(spec):
-            marker = spec.rows[row_id].marker
+        for row_id, row in spec.rows.items():
+            if not isinstance(row, DXRow) or row_id in IDENTITY_ROWS:
+                continue
+            marker = row.marker
             for match in _rendered_literal_pattern(marker).finditer(region):
                 candidates.append((match.start(), match.end(), row_id, marker))
 
@@ -811,6 +920,9 @@ def check_prose_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
             )
         ]
         for start, _end, row_id, marker in sorted(maximal):
+            if spec.rows[row_id].fill_rule == "RETIRED_FALLBACK":
+                comparisons.append(_comparison(f"prose {row_id}", "no submission placement", marker))
+                continue
             if _has_immediately_preceding_marker(region, start, row_id):
                 continue
             comparisons.append(
@@ -825,7 +937,46 @@ def check_prose_literals(text: str, spec: RegistrySpec) -> list[Comparison]:
 
 
 def _placement_row_ids(spec: RegistrySpec) -> tuple[str, ...]:
-    return tuple(row_id for row_id in spec.rows if row_id not in IDENTITY_ROWS)
+    return tuple(
+        row_id for row_id, row in spec.rows.items()
+        if isinstance(row, DXRow) and row_id not in IDENTITY_ROWS
+        and row.fill_rule != "RETIRED_FALLBACK"
+    )
+
+
+def check_retired_placement(text: str, spec: RegistrySpec) -> list[Comparison]:
+    """Retired identifiers/tokens may not return, even in source-map comments.
+
+    Bare numeric values are ambiguous outside the bounded DX prose regions;
+    those regions are checked separately by check_prose_literals.
+    """
+    comparisons = []
+    for site in spec.retired_sites:
+        pattern = re.escape(site).replace(r"\*", r"[^\]\s]*")
+        if not site.startswith("["):
+            pattern = rf"(?<![\w-]){pattern}(?![\w-])"
+        placed = re.search(pattern, text) is not None
+        comparisons.append(_comparison(f"retired placement {site}", False, placed))
+    return comparisons
+
+
+def check_appendix_placement(text: str, spec: RegistrySpec) -> list[Comparison]:
+    comparisons: list[Comparison] = []
+    for row in spec.rows.values():
+        if not isinstance(row, AppendixDeriveRow):
+            continue
+        headings = list(re.finditer(
+            rf"(?m)^(#{{2,6}}) {re.escape(row.appendix)}(?=\s|$)[^\n]*\n", text
+        ))
+        placed = False
+        if len(headings) == 1:
+            heading = headings[0]
+            rest = text[heading.end():]
+            end = re.search(rf"(?m)^#{{1,{len(heading.group(1))}}} ", rest)
+            section = rest[:end.start()] if end else rest
+            placed = text.count(row.marker) == 1 and section.count(row.marker) == 1
+        comparisons.append(_comparison(f"placement {row.row_id}", True, placed))
+    return comparisons
 
 
 def _placed_row_count(skeleton_text: str, spec: RegistrySpec) -> int:
@@ -886,6 +1037,8 @@ def digest_half(
     except (OSError, UnicodeError) as exc:
         comparisons.append(_comparison("successor skeleton", "readable", f"{type(exc).__name__}: {exc}"))
     else:
+        comparisons.extend(check_retired_placement(skeleton_text, spec))
+        comparisons.extend(check_appendix_placement(skeleton_text, spec))
         comparisons.extend(check_skeleton_literals(skeleton_text, spec))
         comparisons.extend(check_prose_literals(skeleton_text, spec))
         comparisons.extend(

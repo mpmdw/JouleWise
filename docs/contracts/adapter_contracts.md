@@ -605,7 +605,7 @@ method, `anchor_bound_s`, point, lower, upper, maximum delta, and half-width.
 Whole-window verification, floor extraction, and analysis input loading share
 this same session contract.
 
-### Attribution-limited floor claim path (D-078 clause 11, Ed-ratified 2026-07-25)
+### Attribution-limited floor claim path (D-078 clause 11, Ed-ratified 2026-07-25; amended by the D-078 and D-083 dated addenda, 2026-09-04)
 
 `admissible_set_uncertainty_dominates_point_floor` remains in the closed D-078
 registry but is a labelled floor condition when it is the sole condition on a
@@ -626,8 +626,9 @@ uncertainty does not trigger the registered condition retain their existing
 shape and bytes.
 
 Every extraction, canonical floor, transported-floor, and claim/analysis
-artifact publishing this class must carry an exact
-`single_count_discipline` object:
+artifact publishing this class must carry an exact, versioned
+`single_count_discipline` object. The following v1 object is frozen historical
+wire data; existing v1 artifacts retain these exact keys, values, and meaning:
 
 ```json
 {
@@ -642,12 +643,41 @@ artifact publishing this class must carry an exact
 }
 ```
 
+Newly emitted artifacts use this exact v2 object:
+
+```json
+{
+  "rule_id": "attribution_floor_plus_claim_side_bound.v2",
+  "planning_sizing_expression": "floor_j + claim_side_bound_j",
+  "floor_role": "calibration_false_effect_bound",
+  "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+  "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+  "both_terms_required": true,
+  "apparent_double_count_removal_forbidden": true,
+  "gating": false,
+  "role": "prospective_sizing_diagnostic",
+  "not_an_acceptance_gate": true,
+  "note": "The implemented rule is |estimate| > F and zero-exclusion by both intervals, plus the registered multiplicity adjustment and evidence/eligibility requirements; for symmetric intervals the first two reduce to |estimate| > max(F, h+B), actual endpoints govern otherwise."
+}
+```
+
 The repeated anchor source is deliberate: the floor is a calibration bound on
 false observed effects, while the decision interval uses the claim-side
-measurement bound. Thus the effective clearable effect is
-`FLOOR + CLAIM-SIDE BOUND` (approximately 5 J for the measured phase
-contrasts), not the floor alone. Consumers must preserve both roles and the
-object above; neither term may later be removed as an apparent double count.
+measurement bound. `floor_j + claim_side_bound_j` is a prospective sizing
+diagnostic, neither necessary nor sufficient for acceptance. The implemented
+checks remain separate: strict `|estimate| > F` and exclusion of zero by both
+the metrology and decision intervals, plus the existing multiplicity and
+evidence/eligibility requirements. For symmetric `estimate ± h` intervals
+with nonnegative widening `B`, the two numerical checks reduce to strict
+`|estimate| > max(F, h+B)`; actual endpoints govern asymmetric intervals.
+`both_terms_required: true` records the two mandatory roles, not a summed
+acceptance threshold, and neither role may be removed as apparent double
+counting.
+
+Consumers dispatch on the embedded `rule_id`: v1 ids require exact equality to
+the frozen v1 object, and v2 ids require exact equality to the v2 object.
+Unknown ids, noncanonical objects, or a mixture of v1 and v2 objects within one
+artifact refuse rather than being normalized to the current version.
 
 Append-only verdict history dispatches this behavior semantically, never by
 file order. Mint-time rows carry

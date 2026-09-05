@@ -1,145 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="630" viewBox="0 0 1020 630" role="img" aria-labelledby="fig1title fig1desc">
-  <title id="fig1title">Timing uncertainty at the phase boundary moves energy between phases</title>
-  <desc id="fig1desc">Schematic power-versus-time diagram. Sampler interval-average power is drawn as step rectangles about 112 milliseconds wide. Power is high during prompt processing and steps down at the transition to token generation. The boundary recorded by the runtime is drawn as a vertical line with a shaded band showing the calibrated timing bound. A hatched sliver between the recorded boundary and the edge of the band shows the energy that changes phase when the boundary shifts. All values are illustrative; no measured data is shown.</desc>
-
-  <defs>
-    <pattern id="f1hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="9" height="9" fill="#1b6ca8" fill-opacity="0.08"/>
-      <line x1="0" y1="0" x2="0" y2="9" stroke="#1b6ca8" stroke-width="2.2"/>
-    </pattern>
-    <marker id="f1aEnd" markerWidth="9" markerHeight="9" refX="8.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,0 L8.5,4 L0,8 z" fill="#333333"/>
-    </marker>
-    <marker id="f1aStart" markerWidth="9" markerHeight="9" refX="0.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M8.5,0 L0.5,4 L8.5,8 z" fill="#333333"/>
-    </marker>
-    <marker id="f1aEndAcc" markerWidth="9" markerHeight="9" refX="8.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,0 L8.5,4 L0,8 z" fill="#1b6ca8"/>
-    </marker>
-  </defs>
-
-  <rect x="0" y="0" width="1020" height="630" fill="#ffffff"/>
-
-  <text x="115" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1b1b1b">Figure 1. Where the phase boundary is placed decides which phase is charged for the energy</text>
-  <text x="115" y="54" font-family="sans-serif" font-size="13" fill="#555555">Schematic diagram. Every value shown is illustrative; this figure contains no measured data.</text>
-
-  <!-- grid -->
-  <g stroke="#ececec" stroke-width="1.5">
-    <line x1="115" y1="400.0" x2="955" y2="400.0"/>
-    <line x1="115" y1="345.5" x2="955" y2="345.5"/>
-    <line x1="115" y1="290.9" x2="955" y2="290.9"/>
-    <line x1="115" y1="236.4" x2="955" y2="236.4"/>
-    <line x1="115" y1="181.8" x2="955" y2="181.8"/>
-    <line x1="115" y1="127.3" x2="955" y2="127.3"/>
-  </g>
-
-  <!-- calibrated timing band (behind everything else) -->
-  <rect x="510" y="100" width="50" height="300" fill="#1b6ca8" fill-opacity="0.13"/>
-  <line x1="510" y1="100" x2="510" y2="400" stroke="#1b6ca8" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <line x1="560" y1="100" x2="560" y2="400" stroke="#1b6ca8" stroke-width="1.5" stroke-dasharray="5 4"/>
-
-  <!-- sampler interval-average power bars -->
-  <g fill="#e6e6e6" stroke="#9a9a9a" stroke-width="1.5">
-    <rect x="115.00" y="140.9" width="93.33" height="259.1"/>
-    <rect x="208.33" y="135.5" width="93.33" height="264.5"/>
-    <rect x="301.67" y="139.3" width="93.33" height="260.7"/>
-    <rect x="395.00" y="137.1" width="93.33" height="262.9"/>
-    <rect x="488.33" y="228.2" width="93.33" height="171.8"/>
-    <rect x="581.67" y="316.0" width="93.33" height="84.0"/>
-    <rect x="675.00" y="319.8" width="93.33" height="80.2"/>
-    <rect x="768.33" y="317.1" width="93.33" height="82.9"/>
-    <rect x="861.67" y="318.7" width="93.33" height="81.3"/>
-  </g>
-
-  <!-- idealised underlying power -->
-  <path d="M115,138.2 L535,138.2 L535,318.2 L955,318.2" fill="none" stroke="#444444" stroke-width="2" stroke-dasharray="9 5"/>
-  <!-- guide out to the power-step arrow -->
-  <line x1="560" y1="138.2" x2="586" y2="138.2" stroke="#bbbbbb" stroke-width="1.5" stroke-dasharray="4 4"/>
-
-  <!-- migrating-energy sliver: between the recorded boundary and the far edge of the band -->
-  <rect x="535" y="138.2" width="25" height="180" fill="url(#f1hatch)" stroke="#1b6ca8" stroke-width="2"/>
-
-  <!-- boundary recorded by the runtime -->
-  <line x1="535" y1="100" x2="535" y2="410" stroke="#1b1b1b" stroke-width="2.5"/>
-
-  <!-- power-step measurement -->
-  <line x1="580" y1="138.2" x2="580" y2="318.2" stroke="#333333" stroke-width="1.8" marker-start="url(#f1aStart)" marker-end="url(#f1aEnd)"/>
-  <text x="592" y="264" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">power step &#8776; 33 W (illustrative):</text>
-  <text x="592" y="282" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">the sliver can be no taller than this step.</text>
-
-  <!-- sampler interval width indicator -->
-  <line x1="208.33" y1="120" x2="301.67" y2="120" stroke="#333333" stroke-width="1.8" marker-start="url(#f1aStart)" marker-end="url(#f1aEnd)"/>
-  <text x="255" y="113" font-family="sans-serif" font-size="12" fill="#333333" text-anchor="middle">one sampler interval &#8776; 112 ms</text>
-
-  <!-- annotation block: the ambiguous sliver -->
-  <polyline points="700,144 700,126 548,126 548,134" fill="none" stroke="#1b6ca8" stroke-width="1.8" marker-end="url(#f1aEndAcc)"/>
-  <text x="645" y="150" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold">Energy attributed to the wrong phase.</text>
-  <text x="645" y="168" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">If the true boundary lies at an edge of the timing</text>
-  <text x="645" y="186" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">bound, this sliver is billed to the wrong phase:</text>
-  <text x="645" y="204" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">shift &#215; power step &#8776; 0.030 s &#215; 33 W &#8776; 1 J</text>
-  <text x="645" y="222" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">(illustrative). Either edge of the band applies.</text>
-
-  <!-- axes -->
-  <line x1="115" y1="400" x2="955" y2="400" stroke="#333333" stroke-width="1.8"/>
-  <line x1="115" y1="100" x2="115" y2="400" stroke="#333333" stroke-width="1.8"/>
-
-  <g font-family="sans-serif" font-size="12" fill="#333333" text-anchor="end">
-    <text x="105" y="404">0</text>
-    <text x="105" y="349.5">10</text>
-    <text x="105" y="294.9">20</text>
-    <text x="105" y="240.4">30</text>
-    <text x="105" y="185.8">40</text>
-    <text x="105" y="131.3">50</text>
-  </g>
-  <text x="42" y="250" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 42 250)">power (watts)</text>
-
-  <g stroke="#333333" stroke-width="1.5">
-    <line x1="115" y1="400" x2="115" y2="406"/>
-    <line x1="281.67" y1="400" x2="281.67" y2="406"/>
-    <line x1="448.33" y1="400" x2="448.33" y2="406"/>
-    <line x1="615" y1="400" x2="615" y2="406"/>
-    <line x1="781.67" y1="400" x2="781.67" y2="406"/>
-    <line x1="948.33" y1="400" x2="948.33" y2="406"/>
-  </g>
-  <g font-family="sans-serif" font-size="12" fill="#333333" text-anchor="middle">
-    <text x="115" y="418">0.0</text>
-    <text x="281.67" y="418">0.2</text>
-    <text x="448.33" y="418">0.4</text>
-    <text x="615" y="418">0.6</text>
-    <text x="781.67" y="418">0.8</text>
-    <text x="948.33" y="418">1.0</text>
-  </g>
-  <text x="535" y="436" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">time (seconds, illustrative)</text>
-
-  <!-- phase spans -->
-  <rect x="115" y="452" width="420" height="22" fill="#ededed" stroke="#9a9a9a" stroke-width="1.5"/>
-  <rect x="535" y="452" width="420" height="22" fill="#ededed" stroke="#9a9a9a" stroke-width="1.5"/>
-  <text x="325" y="468" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">prompt processing (prefill)</text>
-  <text x="745" y="468" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">token generation (decode)</text>
-
-  <!-- plain-language notes -->
-  <g font-family="sans-serif" font-size="13" fill="#333333">
-    <text x="115" y="496">Prompt processing works on the whole input at once and saturates the compute units, so it draws high power.</text>
-    <text x="115" y="514">Token generation produces one token at a time and waits on memory much of the time, so it draws less power.</text>
-    <text x="115" y="532">The sampler interval containing the boundary reports one blended average, so the trace alone cannot show where the boundary is.</text>
-    <text x="115" y="550">The request total does not change when the boundary moves: energy removed from one phase is added to the other.</text>
-  </g>
-
-  <!-- legend -->
-  <g font-family="sans-serif" font-size="12.5" fill="#1b1b1b">
-    <rect x="115" y="567" width="22" height="14" fill="#e6e6e6" stroke="#9a9a9a" stroke-width="1.5"/>
-    <text x="145" y="578">sampler interval average power</text>
-
-    <line x1="380" y1="574" x2="402" y2="574" stroke="#444444" stroke-width="2" stroke-dasharray="9 5"/>
-    <text x="410" y="578">idealized underlying power</text>
-
-    <line x1="620" y1="566" x2="620" y2="582" stroke="#1b1b1b" stroke-width="2.5"/>
-    <text x="630" y="578">runtime-recorded boundary</text>
-
-    <rect x="115" y="595" width="22" height="14" fill="#1b6ca8" fill-opacity="0.13" stroke="#1b6ca8" stroke-width="1.5" stroke-dasharray="5 4"/>
-    <text x="145" y="606">calibrated timing bound (illustrative &#177;30 ms)</text>
-
-    <rect x="470" y="595" width="22" height="14" fill="url(#f1hatch)" stroke="#1b6ca8" stroke-width="1.5"/>
-    <text x="500" y="606">energy that changes phase when the boundary shifts</text>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="530" viewBox="0 0 1000 530" role="img"><title>Figure 1. Boundary movement reallocates assigned energy</title><rect width="100%" height="100%" fill="white"/>
+<g font-family="sans-serif" fill="#20252b">
+<text x="35" y="32" font-size="21">Figure 1. A boundary shift within one 30-W record transfers 0.30 J</text>
+<text x="35" y="58" font-size="15">SYNTHETIC: power levels and times are illustrative; no physical phase-power shape is inferred.</text>
+<line x1="100" y1="350" x2="700" y2="350" stroke="#e2e6ea" stroke-width="2"/>
+<text x="64" y="355" font-size="13">0</text>
+<line x1="100" y1="280" x2="700" y2="280" stroke="#e2e6ea" stroke-width="2"/>
+<text x="64" y="285" font-size="13">10</text>
+<line x1="100" y1="210" x2="700" y2="210" stroke="#e2e6ea" stroke-width="2"/>
+<text x="64" y="215" font-size="13">20</text>
+<line x1="100" y1="140" x2="700" y2="140" stroke="#e2e6ea" stroke-width="2"/>
+<text x="64" y="145" font-size="13">30</text>
+<rect x="100" y="140" width="600" height="210" fill="#e7ebef" stroke="#58616c"/>
+<rect x="340.0000000000002" y="140" width="60" height="210" fill="#c4def3" stroke="#1b6ca8"/>
+<line x1="340.0000000000002" y1="145" x2="400.0000000000003" y2="140" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="157" x2="400.0000000000003" y2="152" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="169" x2="400.0000000000003" y2="164" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="181" x2="400.0000000000003" y2="176" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="193" x2="400.0000000000003" y2="188" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="205" x2="400.0000000000003" y2="200" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="217" x2="400.0000000000003" y2="212" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="229" x2="400.0000000000003" y2="224" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="241" x2="400.0000000000003" y2="236" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="253" x2="400.0000000000003" y2="248" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="265" x2="400.0000000000003" y2="260" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="277" x2="400.0000000000003" y2="272" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="289" x2="400.0000000000003" y2="284" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="301" x2="400.0000000000003" y2="296" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="313" x2="400.0000000000003" y2="308" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="325" x2="400.0000000000003" y2="320" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="337" x2="400.0000000000003" y2="332" stroke="#1b6ca8" stroke-width="2"/>
+<line x1="340.0000000000002" y1="115" x2="340.0000000000002" y2="370" stroke="#222" stroke-width="2"/>
+<line x1="400.0000000000003" y1="115" x2="400.0000000000003" y2="370" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="5 4"/>
+<line x1="100" y1="350" x2="710" y2="350" stroke="#58616c" stroke-width="2"/>
+<line x1="100" y1="350" x2="100" y2="110" stroke="#58616c" stroke-width="2"/>
+<text x="100" y="95" font-size="15">Power (W)</text>
+<text x="735" y="155" font-size="16">Assigned-energy slice</text>
+<text x="735" y="180" font-size="17">0.010 s × 30 W</text>
+<text x="735" y="205" font-size="20">= 0.30 J</text>
+<text x="735" y="240" font-size="14">Full record-average height,</text>
+<text x="735" y="260" font-size="14">not a power-step difference.</text>
+<line x1="100" y1="350" x2="100" y2="359" stroke="#58616c" stroke-width="2"/>
+<text x="80" y="374" font-size="13">1.000</text>
+<line x1="340.0000000000002" y1="350" x2="340.0000000000002" y2="359" stroke="#58616c" stroke-width="2"/>
+<text x="320.0000000000002" y="374" font-size="13">1.040</text>
+<line x1="400.0000000000003" y1="350" x2="400.0000000000003" y2="359" stroke="#58616c" stroke-width="2"/>
+<text x="380.0000000000003" y="387" font-size="13">1.050</text>
+<line x1="700.0000000000006" y1="350" x2="700.0000000000006" y2="359" stroke="#58616c" stroke-width="2"/>
+<text x="680.0000000000006" y="374" font-size="13">1.100</text>
+<text x="245" y="414" font-size="15">Time (s); one record spans [1.000, 1.100]</text>
+<text x="35" y="454" font-size="15">Solid line: recorded boundary 1.040 s → prefill 1.20 J; decode 1.80 J.</text>
+<text x="35" y="479" font-size="15">Dashed line: moved boundary 1.050 s → prefill 1.50 J; decode 1.50 J.</text>
+<text x="35" y="507" font-size="15">The request total remains 3.00 J. Blue hatching is the energy reassigned under held averages.</text>
+</g></svg>

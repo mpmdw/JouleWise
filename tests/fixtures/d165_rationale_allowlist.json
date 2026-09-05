@@ -55,25 +55,25 @@
   },
   {
     "path": "docs/paper/draft-v2-skeleton.md",
-    "line": 253,
+    "line": 1459,
     "phrase": "common-time",
-    "reason": "Unrelated Figure-2 ABBA drift schematic caption: the common-time line illustrates cancellation of steady drift, not D-165 timing robustness."
-  },
-  {
-    "path": "docs/paper/results-fill-registry.md",
-    "line": 231,
-    "phrase": "common-time",
-    "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
-  },
-  {
-    "path": "docs/paper/results-fill-registry.md",
-    "line": 246,
-    "phrase": "common-time",
-    "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
+    "reason": "Unrelated Figure-A2 ABBA drift schematic caption: the common-time line illustrates cancellation of steady drift, not D-165 timing robustness."
   },
   {
     "path": "docs/paper/results-fill-registry.md",
     "line": 262,
+    "phrase": "common-time",
+    "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
+  },
+  {
+    "path": "docs/paper/results-fill-registry.md",
+    "line": 277,
+    "phrase": "common-time",
+    "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
+  },
+  {
+    "path": "docs/paper/results-fill-registry.md",
+    "line": 293,
     "phrase": "common-time",
     "reason": "Registry reproduces the corrected registered absolute rationale: no absolute common-time replay is implemented; not_applicable is comparative-only."
   },

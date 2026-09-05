@@ -1,0 +1,11 @@
+{
+  "schema_version": "joulewise.d166_decode_prompt_assignment_supersession.v1",
+  "superseded_rule_id": "d166_block_prompt_cycle.v1",
+  "active_rule_id": "d166_fixed_prompt_zero.v1",
+  "ratified_authority": {
+    "path": "docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md",
+    "question": "Q-17-4"
+  },
+  "dependency_census_path": "docs/process_traces/2026-09-05-d166-prompt0/01-dependency-census.md",
+  "precollection_requirement": "pack generation with this rule precedes collection"
+}

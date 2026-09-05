@@ -6,6 +6,7 @@ worked example.
 """
 
 import ast
+import copy
 import dataclasses
 import hashlib
 import inspect
@@ -39,6 +40,8 @@ from joulewise.detection_floor import (
     GUARD_MINIMUM_N,
     GUARD_REFERENCE_N,
     SCHEMA_VERSION,
+    SINGLE_COUNT_DISCIPLINE_ID,
+    SINGLE_COUNT_DISCIPLINE_ID_V1,
     STACK_IDENTITY_DOMAIN,
     TRANSPORT_REASON_CODES,
     TRANSPORT_RULE_ID,
@@ -2138,6 +2141,97 @@ def make_cross_window_cell(**overrides):
 
 
 class TestArtifactEmitValidate(unittest.TestCase):
+    def test_single_count_discipline_v2_is_exact_non_gating_planning_shape(self):
+        discipline = attribution_single_count_discipline()
+
+        self.assertEqual(
+            discipline,
+            {
+                "rule_id": SINGLE_COUNT_DISCIPLINE_ID,
+                "planning_sizing_expression": "floor_j + claim_side_bound_j",
+                "floor_role": "calibration_false_effect_bound",
+                "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+                "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,
+                "both_terms_required": True,
+                "apparent_double_count_removal_forbidden": True,
+                "gating": False,
+                "role": "prospective_sizing_diagnostic",
+                "not_an_acceptance_gate": True,
+                "note": (
+                    "The implemented rule is |estimate| > F and zero-exclusion by "
+                    "both intervals, plus the registered multiplicity adjustment "
+                    "and evidence/eligibility requirements; for symmetric intervals "
+                    "the first two reduce to |estimate| > max(F, h+B), actual "
+                    "endpoints govern otherwise."
+                ),
+            },
+        )
+
+    def test_v1_artifacts_validate_unchanged_and_mixed_versions_refuse(self):
+        legacy = attribution_single_count_discipline(
+            SINGLE_COUNT_DISCIPLINE_ID_V1
+        )
+        self.assertEqual(
+            legacy,
+            {
+                "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+                "effective_clearable_effect_formula": (
+                    "floor_j + claim_side_bound_j"
+                ),
+                "floor_role": "calibration_false_effect_bound",
+                "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+                "claim_side_bound_source": ATTRIBUTION_FLOOR_SOURCE,
+                "both_terms_required": True,
+                "apparent_double_count_removal_forbidden": True,
+                "statement": (
+                    "effective clearable effect = floor + claim-side bound; "
+                    "neither term may be removed as an apparent double count"
+                ),
+            },
+        )
+        frozen_path = (
+            Path(__file__).resolve().parents[1]
+            / "df-ph-decode-floor-mint1.json"
+        )
+        frozen_bytes = frozen_path.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(frozen_bytes).hexdigest(),
+            "559ab5ede19e5aba4110fca2177773458ac93d3248d3f7d143cc86d2071188a8",
+        )
+        self.assertEqual(validate_floor_artifact(json.loads(frozen_bytes)), [])
+
+        legacy_artifact = make_artifact(
+            [
+                make_cell(
+                    energies=[0.0] * 5,
+                    deltas=[0.0] * 5,
+                    absolute_half_widths=[0.5] * 5,
+                    comparative_half_widths=[0.5] * 5,
+                )
+            ]
+        )
+
+        def replace_discipline(value):
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if key == "single_count_discipline":
+                        value[key] = copy.deepcopy(legacy)
+                    else:
+                        replace_discipline(child)
+            elif isinstance(value, list):
+                for child in value:
+                    replace_discipline(child)
+
+        replace_discipline(legacy_artifact)
+        self.assertEqual(validate_floor_artifact(legacy_artifact), [])
+        legacy_artifact["transport_groups"][0]["single_count_discipline"] = (
+            attribution_single_count_discipline()
+        )
+        self.assertIn(
+            "artifact: single_count_discipline rule versions must not be mixed",
+            validate_floor_artifact(legacy_artifact),
+        )
+
     def test_floor_metric_catalog_is_exact_and_governs_artifact_cells(self):
         expected_pairs = (
             ("gross_energy_j", "request"),
@@ -3028,7 +3122,7 @@ class TestArtifactEmitValidate(unittest.TestCase):
         del stored["absolute"]["single_count_discipline"]
         self.assertTrue(
             any(
-                "attribution-limit metadata fields must be present together"
+                "cells[0].absolute.single_count_discipline: required metadata is absent"
                 in error
                 for error in validate_floor_artifact(artifact)
             )
