@@ -459,3 +459,10 @@ THEN, in order:
   lanes closed, the relabel lane owns those lines now) → census GREEN → Opus re-check → PR → merge.
 - Then: watchdog install handoff steps 1/3/4/5 (docs/process/MAGISTRATE_WATCHDOG.md) from this session
   with no seat or replay running. The relaunched magistrate resumes from RELAUNCH RESUME PLAN + these deltas.
+
+## 2026-09-05 ~12:30 PDT — D-165 relabel branch integrated with main
+
+- feat/2026-09-05-d165-relabel: origin/main merged by the Opus lieutenant (cd71a5d0; report 13), fixture
+  custody envelope re-anchored with the contract's repin lane (magistrate bench). Census RED only on 13
+  draft lines that paper-K/L/M own. SEQUENCING: the relabel PR waits until paper-M merges; then merge main
+  again and a seat cures the remaining D-165 wording in the current draft (census GREEN) → Opus re-check → PR.

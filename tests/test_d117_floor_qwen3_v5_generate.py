@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from joulewise import arm_readiness
+from joulewise.dominance_closeout import ABSOLUTE_COMMON_MODE_REASON
 from joulewise.provenance import prompt_token_ids_sha256
 from scripts import issue_g2a_prefill_prompt_pin as issuer
 from scripts import select_g2a_prefill_length as selector
@@ -514,6 +515,11 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
             floor.dominance_criterion_registration(),
             contrast.dominance_criterion_registration(),
         )
+        self.assertEqual(
+            floor.dominance_criterion_registration()["component_dispositions"]
+            ["absolute_common_mode"]["reason"],
+            ABSOLUTE_COMMON_MODE_REASON,
+        )
 
     def test_beta_dominance_registration_matches_contrast(self) -> None:
         floor = load_generator("d117_floor_qwen3-8b_v5")
@@ -521,6 +527,11 @@ class D117FloorQwen3V5PackTests(unittest.TestCase):
         self.assertEqual(
             floor.dominance_criterion_registration(),
             contrast.dominance_criterion_registration(),
+        )
+        self.assertEqual(
+            floor.dominance_criterion_registration()["component_dispositions"]
+            ["absolute_common_mode"]["reason"],
+            ABSOLUTE_COMMON_MODE_REASON,
         )
 
     def test_generators_do_not_synthesize_a_missing_g2a_prompt_pin(self) -> None:

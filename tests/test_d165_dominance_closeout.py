@@ -259,6 +259,7 @@ def replay_sidecar(
         )
     return {
         "schema_version": core.REPLAY_SCHEMA_VERSION,
+        "rule_id": core.COMMON_MODE_REPLAY_RULE_ID,
         "sidecar_id": "d165-test-replay",
         "cells": cells,
     }
@@ -439,6 +440,141 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 )
             )
         )
+
+    def test_p2_shared_energy_sign_witness_is_unchanged_under_v2(self) -> None:
+        self.assertIn("shared-energy-sign", core.replay_common_mode_dominance.__doc__)
+        bracket = authenticated_bracket(0.05)
+        blocks = [
+            {
+                "delta_j": 1.0,
+                "onset_sweep_j": [1.0 - width, 1.0, 1.0 + width],
+                "offset_sweep_j": [1.0],
+                "zero_point_contrast_j": 1.0,
+                "bundle_residual_half_widths_j": [0.0] * 4,
+                "member_window_bounds_s": [[1.0, 2.0]] * 4,
+                "member_envelope_integral_sum_j": 100.0,
+            }
+            for width in [0.5, -0.5] * 5
+        ]
+
+        result = core.replay_common_mode_dominance(
+            blocks,
+            calibration_bracket=bracket,
+            shared_edge_bound_s=0.05,
+        )
+
+        self.assertEqual(result["rule_id"], "d165_shared_sign_local_corner_replay.v2")
+        self.assertEqual(f"{result['ratio']:.6f}", "1.500000")
+        self.assertFalse(result["passes"])
+
+    def test_v1_sidecar_result_and_reason_remain_validator_compatible(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        del sidecar["rule_id"]
+        for cell in sidecar["cells"]:
+            cell["absolute"]["common_mode"][
+                "reason"
+            ] = core.LEGACY_ABSOLUTE_COMMON_MODE_REASON
+            replay = cell["comparative"].get("common_mode_replay")
+            if replay is not None:
+                replay["result"][
+                    "rule_id"
+                ] = core.LEGACY_COMMON_MODE_REPLAY_RULE_ID
+
+        historical_bytes = _file_json_bytes(sidecar)
+        self.assertEqual(core.validate_d165_replay_sidecar(sidecar), [])
+        self.assertEqual(_file_json_bytes(sidecar), historical_bytes)
+        sidecar["rule_id"] = core.LEGACY_COMMON_MODE_REPLAY_RULE_ID
+        self.assertEqual(core.validate_d165_replay_sidecar(sidecar), [])
+
+    def test_sidecar_rejects_mixed_result_eras_at_every_cell(self) -> None:
+        base = replay_sidecar(floor_artifact())
+        for era, other, reason in (
+            (core.COMMON_MODE_REPLAY_RULE_ID,
+             core.LEGACY_COMMON_MODE_REPLAY_RULE_ID,
+             core.ABSOLUTE_COMMON_MODE_REASON),
+            (core.LEGACY_COMMON_MODE_REPLAY_RULE_ID,
+             core.COMMON_MODE_REPLAY_RULE_ID,
+             core.LEGACY_ABSOLUTE_COMMON_MODE_REASON),
+        ):
+            homogeneous = copy.deepcopy(base)
+            homogeneous["rule_id"] = era
+            for cell in homogeneous["cells"]:
+                cell["absolute"]["common_mode"]["reason"] = reason
+                cell["comparative"]["common_mode_replay"]["result"]["rule_id"] = era
+            self.assertEqual(core.validate_d165_replay_sidecar(homogeneous), [])
+            for index in range(len(homogeneous["cells"])):
+                with self.subTest(era=era, cell=index):
+                    mixed = copy.deepcopy(homogeneous)
+                    mixed["cells"][index]["comparative"]["common_mode_replay"][
+                        "result"
+                    ]["rule_id"] = other
+                    self.assertEqual(core.validate_d165_replay_sidecar(mixed), [
+                        f"sidecar.cells[{index}].comparative.common_mode_replay."
+                        "result.rule_id: d165_replay_rule_era_mismatch; "
+                        f"sidecar requires {era!r}"
+                    ])
+
+    def test_v2_sidecar_rejects_all_results_downgraded_to_v1(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        for cell in sidecar["cells"]:
+            cell["comparative"]["common_mode_replay"]["result"][
+                "rule_id"
+            ] = core.LEGACY_COMMON_MODE_REPLAY_RULE_ID
+        errors = core.validate_d165_replay_sidecar(sidecar)
+        self.assertEqual(len(errors), 4)
+        self.assertTrue(all("d165_replay_rule_era_mismatch" in e for e in errors))
+
+    def test_v2_sidecar_requires_producer_rule_declaration(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        del sidecar["rule_id"]
+        errors = core.validate_d165_replay_sidecar(sidecar)
+        self.assertEqual(sum("d165_replay_rule_era_mismatch" in e for e in errors), 4)
+        for invalid in (None, [], {}, "", "d165_shared_sign_local_corner_replay.v3"):
+            with self.subTest(rule_id=invalid):
+                sidecar["rule_id"] = invalid
+                self.assertEqual(core.validate_d165_replay_sidecar(sidecar), [
+                    "sidecar.rule_id: must be a registered D-165 replay rule id"
+                ])
+
+    def test_v2_sidecar_rejects_legacy_absolute_reason(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        sidecar["cells"][0]["absolute"]["common_mode"][
+            "reason"
+        ] = core.LEGACY_ABSOLUTE_COMMON_MODE_REASON
+        self.assertEqual(core.validate_d165_replay_sidecar(sidecar), [
+            "sidecar.cells[0].absolute.common_mode: must be the "
+            "registered not_applicable record"
+        ])
+
+    def test_new_sidecar_uses_corrected_absolute_reason(self) -> None:
+        sidecar = replay_sidecar(floor_artifact())
+        reasons = {
+            cell["absolute"]["common_mode"]["reason"]
+            for cell in sidecar["cells"]
+        }
+        self.assertEqual(reasons, {core.ABSOLUTE_COMMON_MODE_REASON})
+        self.assertNotIn("cancels exactly", core.ABSOLUTE_COMMON_MODE_REASON)
+
+    def test_production_builder_emits_v2_rule_and_ratified_absolute_reason(self) -> None:
+        floor = floor_artifact()
+        source = replay_sidecar(floor)
+        built = core.build_d165_replay_sidecar(
+            floor, builder_recomputations(floor, source)
+        )
+        self.assertEqual(built["rule_id"], "d165_shared_sign_local_corner_replay.v2")
+        for cell in built["cells"]:
+            with self.subTest(cell_id=cell["cell_id"]):
+                self.assertEqual(
+                    cell["comparative"]["common_mode_replay"]["result"]["rule_id"],
+                    "d165_shared_sign_local_corner_replay.v2",
+                )
+                self.assertEqual(
+                    cell["absolute"]["common_mode"]["reason"],
+                    "a uniform additive energy offset cancels from absolute residuals; no "
+                    "absolute common-time replay is implemented; absolute R_cm is not_applicable "
+                    "because the registered replay is comparative-only, not because absolute "
+                    "timing uncertainty vanishes",
+                )
 
     def test_terra_relabel_all_cells_to_forged_ids_refuses_neither_branch(self) -> None:
         closeout, manifest, floor, sidecar = self.build()
@@ -679,7 +815,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         sidecar_bytes = _file_json_bytes(replay_sidecar(floor_artifact()))
         self.assertEqual(
             hashlib.sha256(sidecar_bytes).hexdigest(),
-            "69ac25694cb5d8f8cf7645c844b2eab3c769ba82748802a3291fcae950440735",
+            "cff755ba28175cff51bc47298ee97c97011444c8a7f2dd08de89d3216fe38500",
         )
 
     def test_stage2_builder_uses_floor_identity_and_default_shape(self) -> None:
@@ -1818,7 +1954,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self.assertFalse(branch_b["subtitle_licensed"])
         self.assert_valid_closeout(branch_b, manifest_b, floor_b, sidecar_b)
 
-    def test_generator_imports_shared_core_and_registration_bytes_are_unchanged(self) -> None:
+    def test_generator_imports_shared_core_and_registration_bytes_match_v2(self) -> None:
         self.assertIs(generator.dominance_ratio, core.dominance_ratio)
         self.assertIs(
             generator.split_common_mode_block_width,
@@ -1834,7 +1970,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         )
         self.assertEqual(
             hashlib.sha256(PINNED_DOMINANCE_CRITERION_BYTES).hexdigest(),
-            "1c0a4a119fa06984ff38082781e06bc9bd90f07eae7165359718dfb063783a2b",
+            "dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265",
         )
 
     def test_contract_runnable_command_names_exactly_the_parser_flags(self) -> None:

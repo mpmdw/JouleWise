@@ -95,8 +95,8 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     ),
     r"\(R_{cm}\)": (
         "shared-energy-sign/local-corner sensitivity diagnostic",
-        "does not globally replay one physical common-time shift",
-        "has no proven conservatism for common-time motion",
+        "does not replay the same timing shift in every block",
+        "or prove that its limit covers the effect of such a shift",
     ),
     "reasoning disabled": ("optional chain-of-thought output is switched off",),
     "declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file": (

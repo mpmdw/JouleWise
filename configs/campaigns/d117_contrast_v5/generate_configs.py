@@ -36,6 +36,7 @@ from joulewise.detection_floor import (  # noqa: E402
     two_shared_edge_common_mode_registration,
 )
 from joulewise.dominance_closeout import (  # noqa: E402
+    ABSOLUTE_COMMON_MODE_REASON,
     COMMON_MODE_INPUT_FIELDS,
     COMMON_MODE_REPLAY_RULE_ID,
     DOMINANCE_COMPARISON,
@@ -547,11 +548,7 @@ def dominance_criterion_registration() -> dict[str, Any]:
             },
             "absolute_common_mode": {
                 "status": "not_applicable",
-                "reason": (
-                    "the absolute estimator uses deviations from the mean, so a "
-                    "uniform shared fiducial shift cancels exactly; the replay is "
-                    "registered only for comparative ABBA block inputs"
-                ),
+                "reason": ABSOLUTE_COMMON_MODE_REASON,
             },
             "comparative_common_mode": {
                 "status": "mandatory",

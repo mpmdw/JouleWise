@@ -122,7 +122,11 @@ Before comparison, Refusal applies when a model-specific measurement window was 
 
 **Fails:** C: admission refusal leaves the dominance predicate unevaluated.
 
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
+
 **A — dominance reproduced:** In both prompt processing and token generation, the bound after allowing every registered boundary movement—that is, every movement allowed by the rule fixed before collection—was at least twice the bound from repeated point measurements alone, and the same was true when timing error shared within each four-run comparison moved together.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
 
 **B — dominance not reproduced:** In at least one phase, a bound after allowing registered boundary movement—movement allowed by the rule fixed before collection—was less than twice its point-measurement bound, or the quotient fell below 2 when timing error shared within a four-run comparison moved together; the paper identifies each failed component instead of calling it dominated by boundary placement.
 
@@ -135,6 +139,8 @@ Before comparison, Refusal applies when a model-specific measurement window was 
 **Frozen quote (verbatim):** "The two components will be produced independently for every phase cell that could support a claim."
 
 **Fails:** C: refused evidence may produce no admissible component pair.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
 
 **A — dominance reproduced:** The two components—the spread among repeated runs within one model arm and the between-model difference formed by subtracting the two A energies from the two B energies and dividing by two—were produced independently for every phase cell used in a claim; allowing calibrated boundary movement at least doubled each component bound, including each comparison recalculated with its shared timing error moving together.
 
@@ -326,7 +332,11 @@ Before comparison, Refusal applies when a model-specific measurement window was 
 
 **Fails:** C: a refused cell may publish neither magnitude nor label.
 
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
+
 **A — dominance reproduced:** Each published floor cell reported its magnitude, independent-edge ratio, and code-generated diagnostic label, and n counted independent run bundles that passed every entry check rather than power records. Absolute rows printed the shared-error ratio as `not_applicable` because, under the registered replay's idealization that one shared timing error moves every run's energy by the same amount, subtracting the cell mean cancels that energy displacement exactly; comparative rows reported the replayed shared-error ratio.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
 
 **B — dominance not reproduced:** Each published floor cell reported the same magnitude, ratio, diagnostic-label, and independent-bundle-count columns. Absolute rows printed the shared-error ratio as `not_applicable` because, under the registered replay's idealization that one shared timing error moves every run's energy by the same amount, subtracting the cell mean cancels that energy displacement exactly; comparative rows reported the replayed shared-error ratio. The paper identified every independent-edge ratio below 2 and every comparative shared-error ratio below 2 and withdrew the boundary-doubling sentence for those components; the code-generated label remained diagnostic rather than the headline test.
 
@@ -401,6 +411,8 @@ Before comparison, Refusal applies when a model-specific measurement window was 
 **Frozen quote (verbatim):** "For each `_v4` prefill and decode cell, the test compares the point-only repeatability bound with the same cell after calibrated phase-edge positions widen its energy range."
 
 **Fails:** C: refused evidence does not license that comparison.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
 
 **A — dominance reproduced:** For every usable `_v5` Qwen3-1.7B and Qwen3-8B prompt-processing and token-generation component, the complete unguarded interval-edge bound was divided by the complete unguarded point-only bound before \(g(n)\) and the whole-window allowance, and the quotient was at least 2; every comparative quotient remained at least 2 when timing error shared within a four-run block moved together, using the same unguarded inputs.
 
@@ -548,7 +560,11 @@ R-5 approved U01–U06 and the two additional census sentences as round-7 scope.
 
 Use the following as the opening of “### Results.” If characterization ran, print this lead sentence before the selected A, B, or C continuation: “The largest authenticated absolute A/B/B/A difference in the identical-condition null block was `[D_C_null_max_abs_J]` J, and its registered outcome was `[PLAIN_LANGUAGE_RESULT_null]`.” Neither token may be filled without the authenticated characterization report.
 
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
+
 **A — dominance reproduced:** For every absolute and comparative component, the complete unguarded bound after full interval-edge corner re-evaluation was divided by the same complete unguarded bound calculated from the observed point values alone, before \(g(n)\) and the whole-window allowance. Every resulting independent-edge quotient was at least 2, and every comparative quotient remained at least 2 when timing error shared within each four-run block moved together using the same unguarded inputs, so the registered boundary-doubling result held in both phases.
+
+**SUPERSEDED 2026-09-05 — D-165 ratified addendum:** The following historical paragraph is retained for custody and must not be inserted as active paper text. R_cm uses a shared additive energy sign and independent local corners; passage licenses no physical timing-robustness claim. Active replay rule: `d165_shared_sign_local_corner_replay.v2`; v1 bytes remain readable.
 
 **B — dominance not reproduced:** For every absolute and comparative component with usable evidence, the complete unguarded bound after full interval-edge corner re-evaluation was divided by the same complete unguarded bound calculated from the observed point values alone, before \(g(n)\) and the whole-window allowance. At least one resulting independent-edge quotient was below 2, or one comparative quotient fell below 2 when timing error shared within each four-run block moved together using the same unguarded inputs; the Results identify each failed component and make the boundary-doubling statement only for a phase whose required ratios all passed.
 

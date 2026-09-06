@@ -15,5 +15,5 @@
 <text x="30" y="282" font-size="15">One shared sign s; independent signs e1,e2 → δ′j = δj + s qj + ej ℓj → eight rows in Table 4.</text>
 <text x="30" y="319" font-size="17">Maximum: (s,e1,e2) = (+1,−1,+1) → (0.4278157324, 1.1582423076) J.</text>
 <text x="30" y="352" font-size="17">Recompute mean, SD and largest magnitude → Ucmp,shared = 8.8304376431 J.</text>
-<text x="30" y="392" font-size="15">A shared energy sign does not replay one physical time shift across blocks; no common-time conservatism is proven.</text>
+<text x="30" y="392" font-size="15">A shared energy sign does not replay one timing shift across all blocks or prove its limit covers that shift&#x27;s effect.</text>
 </g></svg>

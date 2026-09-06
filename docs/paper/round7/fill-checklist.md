@@ -58,7 +58,11 @@ draft in place.
 - **R_cm:** the common-mode sensitivity disclosure. Comparative R_cm comes from
   the registered pre-mint replay over custodied block inputs and `< 2.0`
   withdraws the dominance sentence. Absolute R_cm is literally
-  `not_applicable` with the registered deviations-from-mean cancellation reason.
+  `not_applicable` with the registered rationale (`ABSOLUTE_COMMON_MODE_REASON`):
+  a uniform additive energy offset cancels from absolute residuals; no absolute
+  common-time replay is implemented; absolute R_cm is not_applicable because the
+  registered replay is comparative-only, not because absolute timing uncertainty
+  vanishes.
 
 ## Preconditions (batch 0)
 
@@ -135,8 +139,10 @@ draft in place.
 
    Substitute `[PREFILL_LENGTH]` in these shell values only after step 2 passes.
    Hash every artifact into the fill ledger. A comparative R_cm value is
-   unavailable unless the registered `d165_shared_sign_local_corner_replay.v1`
-   result can be authenticated against the same custodied block inputs.
+   unavailable unless the registered `d165_shared_sign_local_corner_replay.v2`
+   (active) or `d165_shared_sign_local_corner_replay.v1` (historical, pre-relabel
+   artifacts only) result can be authenticated against the same custodied block
+   inputs.
 
 4. Prove the frozen baseline before replacement:
 
@@ -198,7 +204,7 @@ registered not-applicable reason, never a number.
 | `TERM_A_1p7B_prefill_p[PREFILL_LENGTH]_abs_J` | alpha selected prefill absolute parents | guarded point label term; unresolved until G2-a |
 | `TERM_B_1p7B_prefill_p[PREFILL_LENGTH]_abs_J` | alpha selected prefill absolute arrays | legacy absolute corner label; unresolved until G2-a |
 | `R_1p7B_prefill_p[PREFILL_LENGTH]_abs` | alpha selected prefill absolute component | corner-widened unguarded / point unguarded; `>=2.0` |
-| `R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs` | D-165 registration | `not_applicable`; deviations-from-mean cancels uniform shift |
+| `R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs` | D-165 registration | `not_applicable`; a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes |
 | `TERM_A_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J` | alpha selected prefill comparative parents | guarded point label term; unresolved until G2-a |
 | `TERM_B_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J` | alpha selected prefill comparative arrays | legacy comparative corner label; unresolved until G2-a |
 | `R_1p7B_prefill_p[PREFILL_LENGTH]_cmp` | alpha selected prefill comparative component | corner-widened unguarded / point unguarded; `>=2.0` |
@@ -206,7 +212,7 @@ registered not-applicable reason, never a number.
 | `TERM_A_1p7B_decode_abs_J` | alpha decode absolute parents | guarded point label term |
 | `TERM_B_1p7B_decode_abs_J` | alpha decode absolute arrays | legacy absolute corner label |
 | `R_1p7B_decode_abs` | alpha decode absolute component | corner-widened unguarded / point unguarded; `>=2.0` |
-| `R_cm_1p7B_decode_abs` | D-165 registration | `not_applicable`; deviations-from-mean cancels uniform shift |
+| `R_cm_1p7B_decode_abs` | D-165 registration | `not_applicable`; a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes |
 | `TERM_A_1p7B_decode_cmp_J` | alpha decode comparative parents | guarded point label term |
 | `TERM_B_1p7B_decode_cmp_J` | alpha decode comparative arrays | legacy comparative corner label |
 | `R_1p7B_decode_cmp` | alpha decode comparative component | corner-widened unguarded / point unguarded; `>=2.0` |
@@ -214,7 +220,7 @@ registered not-applicable reason, never a number.
 | `TERM_A_8B_prefill_p[PREFILL_LENGTH]_abs_J` | beta selected prefill absolute parents | guarded point label term; unresolved until G2-a |
 | `TERM_B_8B_prefill_p[PREFILL_LENGTH]_abs_J` | beta selected prefill absolute arrays | legacy absolute corner label; unresolved until G2-a |
 | `R_8B_prefill_p[PREFILL_LENGTH]_abs` | beta selected prefill absolute component | corner-widened unguarded / point unguarded; `>=2.0` |
-| `R_cm_8B_prefill_p[PREFILL_LENGTH]_abs` | D-165 registration | `not_applicable`; deviations-from-mean cancels uniform shift |
+| `R_cm_8B_prefill_p[PREFILL_LENGTH]_abs` | D-165 registration | `not_applicable`; a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes |
 | `TERM_A_8B_prefill_p[PREFILL_LENGTH]_cmp_J` | beta selected prefill comparative parents | guarded point label term; unresolved until G2-a |
 | `TERM_B_8B_prefill_p[PREFILL_LENGTH]_cmp_J` | beta selected prefill comparative arrays | legacy comparative corner label; unresolved until G2-a |
 | `R_8B_prefill_p[PREFILL_LENGTH]_cmp` | beta selected prefill comparative component | corner-widened unguarded / point unguarded; `>=2.0` |
@@ -222,7 +228,7 @@ registered not-applicable reason, never a number.
 | `TERM_A_8B_decode_abs_J` | beta decode absolute parents | guarded point label term |
 | `TERM_B_8B_decode_abs_J` | beta decode absolute arrays | legacy absolute corner label |
 | `R_8B_decode_abs` | beta decode absolute component | corner-widened unguarded / point unguarded; `>=2.0` |
-| `R_cm_8B_decode_abs` | D-165 registration | `not_applicable`; deviations-from-mean cancels uniform shift |
+| `R_cm_8B_decode_abs` | D-165 registration | `not_applicable`; a uniform additive energy offset cancels from absolute residuals; no absolute common-time replay is implemented; absolute R_cm is not_applicable because the registered replay is comparative-only, not because absolute timing uncertainty vanishes |
 | `TERM_A_8B_decode_cmp_J` | beta decode comparative parents | guarded point label term |
 | `TERM_B_8B_decode_cmp_J` | beta decode comparative arrays | legacy comparative corner label |
 | `R_8B_decode_cmp` | beta decode comparative component | corner-widened unguarded / point unguarded; `>=2.0` |

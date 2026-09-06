@@ -1,9 +1,11 @@
 """D-165 attribution-dominance arithmetic and artifact validation.
 
 The ordinary ratio compares a corner-widened attribution bound with the
-point-only repeatability floor.  The comparative common-mode replay keeps one
-shared timing-error sign across all A/B/B/A blocks while each block keeps its
-own local sign.  This module is the sole production home of those predicates.
+point-only repeatability floor. The comparative replay tries both signs of an
+additive energy change shared across all A/B/B/A blocks and every combination
+of independent local signs. It does not replay the same timing shift in every
+block or prove that its limit covers the effect of such a shift. This module
+is the sole production home of those predicates.
 """
 
 from __future__ import annotations
@@ -164,11 +166,25 @@ _REPLAY_SIDECAR_DIGEST_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
 _REPLAY_SIDECAR_IDENTITY_MISMATCH = D165_CLOSEOUT_REFUSAL_ENUMERATION[
     "REPLAY_SIDECAR_IDENTITY_MISMATCH"
 ]
-COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
-ABSOLUTE_COMMON_MODE_REASON = (
+LEGACY_COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
+COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v2"
+COMMON_MODE_REPLAY_RULE_IDS = (
+    LEGACY_COMMON_MODE_REPLAY_RULE_ID,
+    COMMON_MODE_REPLAY_RULE_ID,
+)
+# LEGACY v1 BEGIN
+# Retained verbatim solely to validate historical pre-relabel artifacts.
+LEGACY_ABSOLUTE_COMMON_MODE_REASON = (
     "the absolute estimator uses deviations from the mean, so a uniform shared "
     "fiducial shift cancels exactly; the replay is registered only for "
     "comparative ABBA block inputs"
+)
+# LEGACY v1 END
+ABSOLUTE_COMMON_MODE_REASON = (
+    "a uniform additive energy offset cancels from absolute residuals; no "
+    "absolute common-time replay is implemented; absolute R_cm is not_applicable "
+    "because the registered replay is comparative-only, not because absolute "
+    "timing uncertainty vanishes"
 )
 COMMON_MODE_INPUT_FIELDS = (
     "delta_j",
@@ -841,6 +857,7 @@ def build_d165_replay_sidecar(
 
     sidecar = {
         "schema_version": REPLAY_SCHEMA_VERSION,
+        "rule_id": COMMON_MODE_REPLAY_RULE_ID,
         "sidecar_id": f"{artifact_id}::d165-replay",
         "cells": sidecar_cells,
     }
@@ -856,7 +873,11 @@ def replay_common_mode_dominance(
     calibration_bracket: object,
     shared_edge_bound_s: float,
 ) -> dict[str, Any]:
-    """Replay comparative R_cm from authenticated, pre-mint block inputs."""
+    """Replay both shared energy signs and every independent local corner.
+
+    This shared-energy-sign / local-corner sensitivity diagnostic has no
+    proven conservatism for common-time motion.
+    """
 
     if not blocks or len(blocks) > MAX_EXACT_ADMISSIBLE_CORNER_N:
         raise ValueError(_COMMON_MODE_BLOCK_COUNT_INVALID)
@@ -1094,10 +1115,22 @@ def _validate_common_mode_result(
     expected: Mapping[str, Any] | None,
     where: str,
     errors: list[str],
+    *,
+    sidecar_rule_id: str,
 ) -> None:
     if not _check_keys(value, _COMMON_MODE_RESULT_KEYS, where, errors):
         return
     assert isinstance(value, Mapping)
+    rule_id = value["rule_id"]
+    if not isinstance(rule_id, str) or rule_id not in COMMON_MODE_REPLAY_RULE_IDS:
+        errors.append(
+            f"{where}.rule_id: must be a registered D-165 replay rule id"
+        )
+    elif rule_id != sidecar_rule_id:
+        errors.append(
+            f"{where}.rule_id: d165_replay_rule_era_mismatch; "
+            f"sidecar requires {sidecar_rule_id!r}"
+        )
     for key in (
         "point_unguarded_floor_j",
         "common_mode_corner_widened_unguarded_floor_j",
@@ -1108,20 +1141,41 @@ def _validate_common_mode_result(
             errors.append(f"{where}.{key}: must be finite and nonnegative")
     if not isinstance(value["passes"], bool):
         errors.append(f"{where}.passes: must be Boolean")
-    if expected is not None and dict(value) != dict(expected):
-        errors.append(f"{where}: does not match replay_common_mode_dominance")
+    if expected is not None:
+        versioned_expected = dict(expected)
+        if rule_id in COMMON_MODE_REPLAY_RULE_IDS:
+            versioned_expected["rule_id"] = rule_id
+        if dict(value) != versioned_expected:
+            errors.append(f"{where}: does not match replay_common_mode_dominance")
 
 
 def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
     """Return closed-schema and arithmetic errors for one replay sidecar."""
 
     errors: list[str] = []
-    if not _check_keys(value, _SIDECAR_TOP_KEYS, "sidecar", errors):
+    top_keys = _SIDECAR_TOP_KEYS
+    if isinstance(value, Mapping) and "rule_id" in value:
+        top_keys = top_keys | {"rule_id"}
+    if not _check_keys(value, top_keys, "sidecar", errors):
         return errors
     if value["schema_version"] != REPLAY_SCHEMA_VERSION:
         errors.append(
             f"sidecar.schema_version: must be {REPLAY_SCHEMA_VERSION!r}"
         )
+    # The original three-field producer shape declares the historical v1 era.
+    # New producers explicitly declare v2; never infer era from result labels.
+    sidecar_rule_id = value.get("rule_id", LEGACY_COMMON_MODE_REPLAY_RULE_ID)
+    if (
+        not isinstance(sidecar_rule_id, str)
+        or sidecar_rule_id not in COMMON_MODE_REPLAY_RULE_IDS
+    ):
+        errors.append("sidecar.rule_id: must be a registered D-165 replay rule id")
+        return errors
+    absolute_reason = (
+        LEGACY_ABSOLUTE_COMMON_MODE_REASON
+        if sidecar_rule_id == LEGACY_COMMON_MODE_REPLAY_RULE_ID
+        else ABSOLUTE_COMMON_MODE_REASON
+    )
     if not isinstance(value["sidecar_id"], str) or not value["sidecar_id"]:
         errors.append("sidecar.sidecar_id: must be a nonempty string")
     cells = value["cells"]
@@ -1156,7 +1210,7 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
                 errors,
             ) and dict(common) != {
                 "status": "not_applicable",
-                "reason": ABSOLUTE_COMMON_MODE_REASON,
+                "reason": absolute_reason,
             }:
                 errors.append(
                     f"{cell_where}.absolute.common_mode: must be the "
@@ -1327,6 +1381,7 @@ def validate_d165_replay_sidecar(value: Mapping[str, Any]) -> list[str]:
             expected_result,
             f"{cell_where}.comparative.common_mode_replay.result",
             errors,
+            sidecar_rule_id=sidecar_rule_id,
         )
     return errors
 
