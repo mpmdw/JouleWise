@@ -10,6 +10,14 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T36 (2026-09-06 early AM PDT) — ALL LANES LANDED; WATCHDOG HANDOFF EXECUTED.** PR #294 (D-165 relabel)
+merged at 0364e6fe; nothing is open. The interactive magistrate (session 3c46c831) executed
+docs/process/MAGISTRATE_WATCHDOG.md §Install handoff steps 0–5 and was reaped by design; launchd relaunches a
+headless magistrate that resumes from the RELAUNCH RESUME PLAN and the dated deltas in
+`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md` (first night REHEARSAL_STUB only, cold
+ruling 22). Open queue for it: T0-ACID-CLOCK-01 (H1), D165-CLOSEOUT-ERA-01 (fenced); Ed-only: fseventsd
+restart, Codex app bridge task.
+
 **T35 (2026-09-05 afternoon PDT) — FALLBACK PAPER MERGED; HANDOFF NEXT.** The readiness ruling
 (`docs/process_traces/2026-09-05-readiness/02`) selected the fallback; paper-K (#288), paper-L (#290), the
 custody seam (#289), F+B v2 (#292) and paper-M (#293, the fallback methods/diagnostic paper) are all merged.
