@@ -466,3 +466,18 @@ THEN, in order:
   custody envelope re-anchored with the contract's repin lane (magistrate bench). Census RED only on 13
   draft lines that paper-K/L/M own. SEQUENCING: the relabel PR waits until paper-M merges; then merge main
   again and a seat cures the remaining D-165 wording in the current draft (census GREEN) → Opus re-check → PR.
+
+## 2026-09-06 (early AM PDT) — D-165 relabel merged; HANDOFF EXECUTING
+
+- PR #294 merged: the D-165 relabel is on main (census normalised; custody fixture re-anchored; queue items
+  D165-CLOSEOUT-ERA-01 (fenced) and T0-ACID-CLOCK-01 (H1, unattended-window path)).
+- Machine notes for the relaunched magistrate: fseventsd (pid 553) has spun at ~100% CPU for three days
+  (sudo-only fix, Ed emailed); a stray 2026-09-04 cold-gate mutation-probe unittest (cwd
+  /private/tmp/coldgate21-mut-62076) burned a core for 39 h until killed today — after any future cold gate,
+  sweep `pgrep -f "python.*unittest"` for orphans. Full replays take ~2 h; the receipt-histsem refresh-lane
+  tests take 3–5 min each. Gate every bench chain on the unittest exit code (rc), never on a grep pipeline.
+- Codex app bridge task 019f77a6-3612-7332-9f5e-be9fbde56be5 not hosted; astra computer-use unavailable until
+  Ed opens it. Seats (codex-run-v3, astra default) work.
+- HANDOFF: steps 1/3/4/5 of docs/process/MAGISTRATE_WATCHDOG.md executed from session 3c46c831 with no seat
+  or replay running; handoff inventory at ~/night-custody/magistrate/handoff-<epoch>.json. The relaunched
+  magistrate resumes from RUN_STATE T35 + RELAUNCH RESUME PLAN + these deltas; first night REHEARSAL_STUB.
