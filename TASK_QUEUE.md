@@ -455,6 +455,17 @@ runbook by hand.
 
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
+- **T0-ACID-CLOCK-01 — H1, [AGENT] (2026-09-06):** the acid test
+  `tests/test_arm_readiness_evidence_t0.py::test_acid_real_boot_session_then_real_arm_generator_reaches_go`
+  anchors R0 with `time.monotonic_ns()` under the real clock while the author anchor is
+  `monotonic_raw_ns`; on Darwin the two drift apart across sleep and uptime, so the
+  `T-0 RAW anchor span exceeds 3600000000000 ns` refusal fires once the drift exceeds the
+  fixture margin (passed at uptime 2 d 22 h, fails at 3 d 3 h on main and on the relabel
+  branch; docs/process_traces/2026-09-05-d165-relabel/19-full-replay-221e775a.md). Cure
+  shape: derive the fixture's R0 anchor from the same RAW clock the author uses (or from a
+  synthetic anchor with an explicit offset) and add a regression that fixes the clocks apart by
+  more than the margin. Production arming is unaffected (one clock family within a sequence).
+  Not fenced by D-174: the test guards the unattended-window T-0 path.
 - **D165-CLOSEOUT-ERA-01 — H2, DEFERRED, [AGENT] (2026-09-05):**
   Register only; implementation is fenced by the D-174 submission scope
   freeze until submission or Ed lifts the freeze in writing. Opus S3 in
