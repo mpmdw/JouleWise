@@ -481,3 +481,16 @@ THEN, in order:
 - HANDOFF: steps 1/3/4/5 of docs/process/MAGISTRATE_WATCHDOG.md executed from session 3c46c831 with no seat
   or replay running; handoff inventory at ~/night-custody/magistrate/handoff-<epoch>.json. The relaunched
   magistrate resumes from RUN_STATE T35 + RELAUNCH RESUME PLAN + these deltas; first night REHEARSAL_STUB.
+
+## 2026-09-07 ~07:10 PDT — what actually happened after the handoff (read this first)
+
+- The reaper ran at 03:10 on 09-06 and killed the interactive tree; its receipt says `fail` only because the
+  census counts Ed's other claude sessions (WATCHDOG-CENSUS-01). The watchdog entered FENCED then
+  CLOCK_UNCERTAIN at 03:36 and has stayed there: the MacBook sleeps every ~5 minutes (MAC-SLEEP-01, Ed-only),
+  so wall and monotonic deltas never agree twice. No headless magistrate was launched.
+- The Claude Code background-job daemon resumed session 3c46c831 at 03:23 (pid 71607, `--resume`); that
+  resumed session is the one writing this note and is NOT the lock owner (lock still names dead pid 4453).
+- Sequence once Ed keeps the machine awake: from the resumed session re-run handoff steps 3 → 4 (remove the
+  stale lock after confirming pid 4453 is dead, as the doc allows) → 5, after retiring the bg-job daemon
+  spare so the session is not auto-resumed again; then verify the watchdog leaves CLOCK_UNCERTAIN and spawns.
+- Paper work is complete (main 0f4bfb6d). Nothing else is open.

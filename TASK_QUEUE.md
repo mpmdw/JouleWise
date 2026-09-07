@@ -455,6 +455,24 @@ runbook by hand.
 
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
+- **MAC-SLEEP-01 — H0, [ED] (2026-09-07):** the MacBook sleeps whenever nothing holds it awake
+  (pmset log: ~330 "Maintenance Sleep"/DarkWake cycles per day since 2026-08-31; ~45 s awake per
+  5 min). Every unattended path depends on this: the watchdog sits in CLOCK_UNCERTAIN ("wall and
+  monotonic deltas disagree") because monotonic time pauses in sleep, so it never relaunches; full
+  replays ran at a fraction of real time; the T0 acid fixture and fseventsd symptoms follow from it.
+  Ed-only cure: keep the lid open / attach a display, or `sudo pmset -a disablesleep 1` on AC.
+- **WATCHDOG-CENSUS-01 — H1, [AGENT] (2026-09-07):** the handoff reaper's receipt reads
+  `verdict: fail` with `survivors: []` because `production_census()` counts every `claude` process on
+  the machine (Ed's other sessions, pid 1536 lineage), so the handoff can never pass on a shared
+  machine; and every owned PID was labelled `already_gone` although they were alive at TERM time
+  (the after-TERM snapshot mislabels). Cure: census scoped to the recorded owned tree + lock owner;
+  outcome labels from the per-signal snapshot, not the post-cooperative one. Evidence:
+  ~/night-custody/magistrate/handoff-1788689322.json.verify.log.
+- **RESUME-DAEMON-01 — H1, [AGENT] (2026-09-07):** after the reaper killed the interactive tree
+  (pid 4453) at 03:18 on 2026-09-06, the Claude Code background-job daemon (pid 71666, `daemon run
+  --origin transient`) resumed the same session (`claude --resume`, pid 71607) five minutes later,
+  outside the watchdog's lock. The handoff must also retire the bg-job (`claude daemon` spare) or the
+  relaunch must reconcile a resumed twin; the lock still names the dead pid 4453 as ACTIVE.
 - **T0-ACID-CLOCK-01 — H1, [AGENT] (2026-09-06):** the acid test
   `tests/test_arm_readiness_evidence_t0.py::test_acid_real_boot_session_then_real_arm_generator_reaches_go`
   anchors R0 with `time.monotonic_ns()` under the real clock while the author anchor is
