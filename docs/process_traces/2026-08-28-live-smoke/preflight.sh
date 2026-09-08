@@ -5,7 +5,7 @@
 set -uo pipefail
 
 if [ "$#" -ne 1 ]; then
-  printf 'usage: %s /Users/edr/JouleWise-measurement-20260813\n' "$0" >&2
+  printf 'usage: %s /absolute/path/to/night_plan.json\n' "$0" >&2
   exit 2
 fi
 
@@ -29,49 +29,45 @@ quiet_process_census() {
   '
 }
 
-if [ -z "${REVIEWED_HEAD:-}" ]; then
-  fail 'REVIEWED_HEAD is required'
-elif ! [[ "$REVIEWED_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
-  fail 'REVIEWED_HEAD must be a full 40-character lowercase SHA-1'
-else
-  pass 'REVIEWED_HEAD is present and well formed'
+# Read routing fields without bootstrapping through an untrusted/inherited PY.
+# Full plan authentication remains the night driver's gate.
+NIGHT_PLAN="$1"
+case "$NIGHT_PLAN" in
+  /*) ;;
+  *) fail 'night plan path must be absolute'; exit 1 ;;
+esac
+if ! /usr/bin/jq -e '.schema == "joulewise.night_plan.v2" and .schema_version == 2' "$NIGHT_PLAN" >/dev/null 2>&1; then
+  fail 'night plan must use joulewise.night_plan.v2 with schema_version 2'
+  exit 1
 fi
-
-SMOKE_CHECKOUT="$1"
-required_checkout=/Users/edr/JouleWise-measurement-20260813
-source_python='/Users/edr/code/JouleWise/.venv/bin/python'
-if [ "${PY:-}" != "$source_python" ]; then
-  fail 'PY must name the exact source venv interpreter'
-elif [ ! -x "$source_python" ]; then
-  fail 'source venv Python is missing or not executable'
-else
-  pass 'PY names the exact executable source venv interpreter'
+if ! MEASUREMENT_ROOT="$(/usr/bin/jq -er '.measurement_root | select(type == "string") | select(startswith("/") and (test("[[:cntrl:]]") | not))' "$NIGHT_PLAN" 2>/dev/null)"; then
+  fail 'measurement_root must be a non-empty absolute path'
+  exit 1
 fi
-
-if [ "${PYTHONPATH:-}" != "${SMOKE_CHECKOUT:-}" ] || [ -z "${PYTHONPATH:-}" ]; then
-  fail 'PYTHONPATH must equal SMOKE_CHECKOUT for every Python command'
-else
-  pass 'PYTHONPATH equals SMOKE_CHECKOUT for every Python command'
+if ! MEASUREMENT_HEAD="$(/usr/bin/jq -er '.measurement_head | select(type == "string") | select(length == 40 and test("^[0-9a-f]{40}$"))' "$NIGHT_PLAN" 2>/dev/null)"; then
+  fail 'measurement_head must be a full 40-character lowercase SHA-1'
+  exit 1
 fi
-
-if [ "$SMOKE_CHECKOUT" != "$required_checkout" ]; then
-  fail 'checkout argument must be /Users/edr/JouleWise-measurement-20260813'
-elif [ ! -d "$SMOKE_CHECKOUT/.git" ] && [ ! -f "$SMOKE_CHECKOUT/.git" ]; then
-  fail 'SMOKE_CHECKOUT is not a Git checkout'
-else
-  pass 'checkout argument is the documented measurement Git checkout'
+export MEASUREMENT_ROOT MEASUREMENT_HEAD
+SMOKE_CHECKOUT="$MEASUREMENT_ROOT"
+export PY="$MEASUREMENT_ROOT/.venv/bin/python"
+export PYTHONPATH="$MEASUREMENT_ROOT"
+if ! observed_head="$(git -C "$MEASUREMENT_ROOT" rev-parse --verify HEAD 2>/dev/null)"; then
+  fail 'checkout HEAD cannot be read'
+  exit 1
+elif [ "$observed_head" != "$MEASUREMENT_HEAD" ]; then
+  fail "checkout HEAD does not equal measurement_head (observed $observed_head)"
+  exit 1
 fi
+pass 'checkout HEAD equals measurement_head'
+if [ ! -x "$PY" ]; then
+  fail 'measurement venv Python is missing or not executable'
+  exit 1
+fi
+pass 'PY names the executable measurement venv interpreter derived from measurement_root'
+pass 'PYTHONPATH equals measurement_root for every Python command'
 
 if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
-  if ! observed_head="$(git -C "$SMOKE_CHECKOUT" rev-parse --verify HEAD 2>/dev/null)"; then
-    fail 'checkout HEAD cannot be read'
-    observed_head=''
-  elif [ -n "${REVIEWED_HEAD:-}" ] && [ "$observed_head" = "$REVIEWED_HEAD" ]; then
-    pass 'checkout HEAD equals REVIEWED_HEAD'
-  else
-    fail "checkout HEAD does not equal REVIEWED_HEAD (observed ${observed_head:-unreadable})"
-  fi
-
   if ! dirty="$(git -C "$SMOKE_CHECKOUT" status --porcelain=v1 --untracked-files=all 2>/dev/null)"; then
     fail 'git status probe failed'
   elif [ -z "$dirty" ]; then
@@ -80,16 +76,12 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
     fail 'checkout working tree is not clean'
   fi
 
-  if ! branch_count="$(git -C "$SMOKE_CHECKOUT" branch --list 2>/dev/null | /usr/bin/wc -l | tr -d ' ')"; then
-    fail 'local-branch census failed'
-  elif ! checked_branch="$(git -C "$SMOKE_CHECKOUT" branch --show-current 2>/dev/null)"; then
+  if ! checked_branch="$(git -C "$SMOKE_CHECKOUT" branch --show-current 2>/dev/null)"; then
     fail 'checked-out branch cannot be read'
-  elif ! only_branch="$(git -C "$SMOKE_CHECKOUT" branch --format='%(refname:short)' 2>/dev/null)"; then
-    fail 'local-branch roster cannot be read'
-  elif [ "$branch_count" = 1 ] && [ -n "$checked_branch" ] && [ "$checked_branch" = "$only_branch" ]; then
-    pass 'checkout has exactly one local branch and it is checked out'
+  elif [ -z "$checked_branch" ]; then
+    pass 'measurement checkout is detached at measurement_head'
   else
-    fail 'checkout must have exactly one local branch and it must be checked out'
+    fail 'measurement checkout must be detached at measurement_head'
   fi
 
   lock_path="$SMOKE_CHECKOUT/env/mac-measurement-lock.txt"
@@ -97,16 +89,16 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
     fail 'env/mac-measurement-lock.txt is missing'
   else
     wanted="$(grep -Ev '^(#|[[:space:]]*$)' "$lock_path" | sort)"
-    have="$($source_python -m pip freeze --exclude-editable 2>/dev/null | sort)"
+    have="$("$PY" -m pip freeze --exclude-editable 2>/dev/null | sort)"
     if [ "$wanted" = "$have" ]; then
-      pass 'source venv relock gate is an empty normalized diff against the smoke checkout lock'
+      pass 'measurement venv relock gate is an empty normalized diff against the smoke checkout lock'
     else
-      fail 'source venv relock gate differs from the smoke checkout env/mac-measurement-lock.txt'
+      fail 'measurement venv relock gate differs from the smoke checkout env/mac-measurement-lock.txt'
     fi
   fi
 
-  if [ -x "$source_python" ]; then
-    if ! joulewise_path="$(cd "$SMOKE_CHECKOUT" && "$source_python" -c 'import joulewise,sys; print(joulewise.__file__)' 2>/dev/null)"; then
+  if [ -x "$PY" ]; then
+    if ! joulewise_path="$(cd "$SMOKE_CHECKOUT" && "$PY" -c 'import joulewise,sys; print(joulewise.__file__)' 2>/dev/null)"; then
       fail 'joulewise import probe failed'
     else
       case "$joulewise_path" in
@@ -116,10 +108,10 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
     fi
   fi
 
-  if [ -x "$source_python" ] && "$source_python" -c 'import mlx, mlx_lm' >/dev/null 2>&1; then
-    pass 'mlx and mlx_lm import in the source venv'
+  if [ -x "$PY" ] && "$PY" -c 'import mlx, mlx_lm' >/dev/null 2>&1; then
+    pass 'mlx and mlx_lm import in the measurement venv'
   else
-    fail 'mlx or mlx_lm is not importable in the source venv'
+    fail 'mlx or mlx_lm is not importable in the measurement venv'
   fi
 
   # B10: authenticate the physical calibration ledger against the committed
@@ -130,7 +122,7 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
   # rollback, stale-head, or committed-pin checks.
   ledger_path="$SMOKE_CHECKOUT/runs/calibration_observation_ledger.jsonl"
   ledger_pin="$SMOKE_CHECKOUT/configs/calibration/calibration_ledger_head.json"
-  if "$source_python" - "$ledger_path" "$ledger_pin" "$SMOKE_CHECKOUT" <<'PY'
+  if "$PY" - "$ledger_path" "$ledger_pin" "$SMOKE_CHECKOUT" <<'PY'
 import sys
 from pathlib import Path
 

@@ -416,6 +416,10 @@ def _run_chain_once(
     with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
         environment = os.environ.copy()
         environment["NIGHT_PLAN_ID"] = plan.plan_id
+        environment["MEASUREMENT_ROOT"] = plan.measurement_root
+        environment["MEASUREMENT_HEAD"] = plan.measurement_head
+        # The exact v2 schema has no interpreter field; use the clone's venv.
+        environment["PY"] = f"{plan.measurement_root}/.venv/bin/python"
         try:
             process = subprocess.Popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],

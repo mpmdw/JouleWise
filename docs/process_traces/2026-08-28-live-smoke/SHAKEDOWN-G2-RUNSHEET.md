@@ -164,9 +164,9 @@ Old line 593:
    (`joulewise/analysis_manifest_v3.py:3373`) refuses before the floor is first
    opened (`:3575`).
 
-3. **B3 — RESOLVED by G2 ruling R-5.** `preflight.sh` takes the checkout as its
-   one required argument. The documented and only accepted value for this G2
-   run is `/Users/edr/JouleWise-measurement-20260813`.
+3. **B3 — SUPERSEDED by G2A-CHAIN-ROUTING-01 (2026-09-08).** `preflight.sh`
+   takes the absolute v2 night-plan path as its one required argument. Routing
+   comes from [Plan-derived measurement variables](#plan-derived-measurement-variables).
 
 4. **B10 — physical ledger/pin continuity is a hard gate on every fresh
    checkout.** `runs/calibration_observation_ledger.jsonl` must exist and the
@@ -248,6 +248,8 @@ used consistently as the lexical root; real paths remain the safest advice.
 ├── window-plan/
 └── rehearsal-window-plan/             # throwaway attempt/session ids
 ```
+
+**SUPERSEDED — historical fixed block; do not execute.** Use [Plan-derived measurement variables](#plan-derived-measurement-variables), the emitter's new source.
 
 ```sh
 export MEASUREMENT_CHECKOUT=/Users/edr/JouleWise-measurement-20260813
@@ -696,12 +698,13 @@ equality.
 ### A1 — fixed supply and checkout inspection (MAGISTRATE)
 
 CWD: `$MEASUREMENT_CHECKOUT`. Timing: <2 min. Expected artifact: transcript
-only. Expected refusal: any absent pack/file, non-main head, dirty governed
+only. Expected refusal: any absent pack/file, non-detached head, dirty governed
 path, or B10 refusal.
 
 ```sh
 cd "$MEASUREMENT_CHECKOUT"
-test "$(git branch --show-current)" = main
+test -z "$(git branch --show-current)"
+test "$(git rev-parse HEAD)" = "$MEASUREMENT_HEAD"
 test -f "$PACK_ROOT/analysis_manifest_v3.json"
 test -f "$PACK_ROOT/plan_tree.json"
 test -f "$PACK_ROOT/calibration_plan.json"
@@ -725,7 +728,7 @@ cherry-pick only the PASS text:
 
 ```sh
 "$MEASUREMENT_CHECKOUT/docs/process_traces/2026-08-28-live-smoke/preflight.sh" \
-  /Users/edr/JouleWise-measurement-20260813
+  "$NIGHT_PLAN"
 ```
 
 ### A2 — stage the complete finalizer input tree in custody (MAGISTRATE)
@@ -1446,4 +1449,132 @@ fi
   "${CHECK_FINALIZED_ARGS[@]}" \
   > "$TRANSCRIPT_ROOT/window-provenance.txt"
 /bin/cat "$TRANSCRIPT_ROOT/window-provenance.txt"
+```
+
+## Plan-derived measurement variables
+
+G2A-CHAIN-ROUTING-01 (2026-09-08) supersedes the historical fixed block above.
+The executable block below is the emitter's source; its fence range is pinned
+by `scripts/gen_g2_phase_d.py`, and each emitted source block carries its range.
+The GNU SHA-256 sidecar continues to bind the complete emitted chain.
+
+The v2 night plan owns `measurement_root` and `measurement_head`.
+`joulewise/night_gate.py`'s exact v2 key set has **no interpreter field**;
+`PY` is therefore always derived as `$MEASUREMENT_ROOT/.venv/bin/python`.
+The driver must explicitly overwrite `MEASUREMENT_ROOT` and `MEASUREMENT_HEAD`
+in the child environment from its parsed plan. The chain checks both before
+creating output directories or running any Python, ledger, or measurement step.
+A missing/relative root, malformed/missing head, unreadable or mismatched Git
+HEAD, or missing executable interpreter refuses. Inherited `PY`, `REPO`,
+`MEASUREMENT_CHECKOUT`, and `PYTHONPATH` cannot select another checkout.
+
+**Driver handoff installed:** `scripts/run_night.py::_run_chain_once` exports
+`NIGHT_PLAN_ID`, `MEASUREMENT_ROOT`, `MEASUREMENT_HEAD`, and the derived `PY`
+from the parsed v2 plan, overwriting inherited values in the child environment.
+The emitted chain independently rechecks HEAD and derives the same interpreter.
+No checkout is created by the emitter or the preflight.
+
+The preflight takes the absolute plan filename (set `NIGHT_PLAN` to that
+filename), reads its v2 routing fields using system `jq`, checks Git HEAD,
+and derives `PY` and `PYTHONPATH`. It ignores inherited coordinate overrides.
+Its clean-tree, detached-head, lock comparison, import, ledger, process,
+and privilege gates must all pass before a night can proceed.
+
+### Future measurement clone preparation (lead/operator only)
+
+Use `/Users/edr/JouleWise-measurement-v5-<YYYYMMDD>-<head7>` for a fresh,
+independent `git clone --no-hardlinks` of the canonical repository detached
+at the reviewed full head. Never repurpose the protected historical clone.
+Run this preparation at the desk, before authoring/arming the v2 plan; it is
+an operator recipe, not an instruction to the emitter or a delegated agent.
+Supply `REVIEWED_HEAD` (full reviewed SHA-1) and `NIGHT_DATE` (YYYYMMDD):
+
+```bash
+MEASUREMENT_ROOT="/Users/edr/JouleWise-measurement-v5-${NIGHT_DATE}-${REVIEWED_HEAD:0:7}"
+test ! -e "$MEASUREMENT_ROOT"
+git clone --no-hardlinks /Users/edr/code/JouleWise "$MEASUREMENT_ROOT"
+git -C "$MEASUREMENT_ROOT" checkout --detach "$REVIEWED_HEAD"
+test "$(git -C "$MEASUREMENT_ROOT" rev-parse HEAD)" = "$REVIEWED_HEAD"
+cd "$MEASUREMENT_ROOT"
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -c env/mac-measurement-lock.txt -e ".[mac]"
+.venv/bin/python -m pip install -c env/mac-measurement-lock.txt charset-normalizer requests urllib3
+diff -u <(grep -Ev '^(#|[[:space:]]*$)' env/mac-measurement-lock.txt | sort) \
+  <(.venv/bin/python -m pip freeze --exclude-editable | sort)
+```
+
+These are the existing locked reconstruction commands, including the three
+otherwise unrequired pins recorded in
+[the 2026-08-27 relock](../2026-08-27-t26/venv-relock/README.md).
+The lock is a constraints file, not a second dependency specification.
+The normalized diff must be empty; provision/authenticate the physical
+calibration ledger under B10 separately. The lead authors the plan with this
+root and full head using `joulewise.night_plan_writer.write_night_plan`.
+
+### Emitted routing and common variables
+
+```sh
+# The night driver MUST overwrite these variables from its parsed v2 plan.
+# v2 has no interpreter field: ignore inherited PY and derive the clone venv.
+route_refuse() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
+[ -n "${MEASUREMENT_ROOT:-}" ] || route_refuse 'measurement_root is required'
+case "$MEASUREMENT_ROOT" in
+  /*) ;;
+  *) route_refuse 'measurement_root must be an absolute path' ;;
+esac
+[[ ! "$MEASUREMENT_ROOT" =~ [[:cntrl:]] ]] || route_refuse 'measurement_root contains control characters'
+[[ "${MEASUREMENT_HEAD:-}" =~ ^[0-9a-f]{40}$ ]] || route_refuse 'measurement_head must be a full 40-character lowercase SHA-1'
+export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1
+observed_head="$(git -C "$MEASUREMENT_ROOT" rev-parse --verify HEAD 2>/dev/null)" || route_refuse 'checkout HEAD cannot be read'
+[ "$observed_head" = "$MEASUREMENT_HEAD" ] || route_refuse 'checkout HEAD does not equal measurement_head'
+export MEASUREMENT_CHECKOUT="$MEASUREMENT_ROOT"
+export REPO="$MEASUREMENT_ROOT"
+export PY="$MEASUREMENT_ROOT/.venv/bin/python"
+[ -x "$PY" ] || route_refuse 'measurement venv Python is missing or not executable'
+export PYTHONPATH="$MEASUREMENT_ROOT"
+export SHAKEDOWN_ROOT=/Users/edr/JouleWise-shakedown-g2/2026-08-29
+export CUSTODY_ROOT="$SHAKEDOWN_ROOT/custody"
+export WINDOW_CUSTODY_ROOT="$CUSTODY_ROOT"
+export RUNS_ROOT="$CUSTODY_ROOT/runs"
+export BOUND_RUNS_ROOT="$CUSTODY_ROOT/neg8-bound-runs"
+export ANALYSIS_ROOT="$SHAKEDOWN_ROOT/analysis"
+export CLAIMS_ROOT="$SHAKEDOWN_ROOT/claims"
+export SCRATCH_ROOT="$SHAKEDOWN_ROOT/scratch"
+export QUARANTINE_ROOT="$SHAKEDOWN_ROOT/quarantine"
+export TRANSCRIPT_ROOT="$SHAKEDOWN_ROOT/transcript"
+export WINDOW_PLAN_ROOT="$SHAKEDOWN_ROOT/window-plan"
+export REHEARSAL_PLAN_ROOT="$SHAKEDOWN_ROOT/rehearsal-window-plan"
+export PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+export FLOOR_15_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3-1p7b_v5"
+export FLOOR_7_PACK_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/d117_floor_qwen3-8b_v5"
+export POLICY="$MEASUREMENT_CHECKOUT/configs/campaign_policies/quiet_mac_p2_production.json"
+export CALIBRATION_LEDGER="$MEASUREMENT_CHECKOUT/runs/calibration_observation_ledger.jsonl"
+export LEDGER_HEAD_PIN="$MEASUREMENT_CHECKOUT/configs/calibration/calibration_ledger_head.json"
+export ARM_READINESS_CUSTODY_ROOT="$SHAKEDOWN_ROOT/arm-readiness"
+export FAMILY_PUBLICATION_SOURCE_ROOT='LEAD-SUPPLIED-FROZEN-INPUT'
+export FAMILY_PUBLICATION_ROOT="$ARM_READINESS_CUSTODY_ROOT/family_publication"
+export FAMILY_PUBLICATION_MARKER="$FAMILY_PUBLICATION_ROOT/d117_family_publication_v4.json"
+export STEP6_CONFIRMATION_TABLE="$FAMILY_PUBLICATION_ROOT/d117_step6_confirmation_table_v4.json"
+# Lead carries hC from the real-transaction E4 custody transcript; never hash C here.
+export EXPECTED_CONFIRMATION_DIGEST='LEAD-SUPPLIED-FROZEN-INPUT'
+export BOUND_CONFIG_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/neg8_reference_corpus"
+export BOUND_MANIFEST="$BOUND_CONFIG_ROOT/derivation/settled_corpus.json"
+export FROZEN_PLAN="$CUSTODY_ROOT/prospective/calibration_plan.json"
+export REF_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/window_references"
+export CLAIM_LOG="$RUNS_ROOT/campaign_log.jsonl"
+export BOUND_LOG="$BOUND_RUNS_ROOT/campaign_log.jsonl"
+export NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"
+export FINALIZED_MANIFEST=''
+export CHECK_FINALIZED_ARGS=''
+export WINDOW_ID=d117-g2-shakedown-20260829
+export BRACKET_SESSION_ID=d117-g2-shakedown-20260829-calibration
+export PRE_ATTEMPT_ID=d117-g2-shakedown-20260829-cal-pre
+export POST_ATTEMPT_ID=d117-g2-shakedown-20260829-cal-post
+export REHEARSAL_WINDOW_ID=d117-g2-arm-abort-20260829
+export REHEARSAL_SESSION_ID=d117-g2-arm-abort-throwaway-20260829
+export REHEARSAL_PRE_ATTEMPT_ID=d117-g2-arm-abort-pre-throwaway-20260829
+export REHEARSAL_POST_ATTEMPT_ID=d117-g2-arm-abort-post-throwaway-20260829
+export POWER_POLICY=ac_high_power
+export SETTLE_S=600
+export PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
 ```
