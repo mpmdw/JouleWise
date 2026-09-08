@@ -10,6 +10,14 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T37 (2026-09-08 00:45 PDT) — CHECKPOINT FOR A FRESH, CONTEXT-FREE SESSION.** Paper work is complete and merged
+(main 3de19e3f). The watchdog handoff of 09-06 ran but did not take: the reaper killed the interactive tree, the
+Claude Code background-job daemon auto-resumed the same session (RESUME-DAEMON-01), and the watchdog has sat in
+CLOCK_UNCERTAIN since 03:36 on 09-06 because the MacBook cycles into Maintenance Sleep every ~5 minutes
+(MAC-SLEEP-01). Ed reported a fix on 09-08 ~00:40 PDT, but `pmset -g log` still showed Maintenance Sleep entries at
+00:34 and 00:39 — VERIFY FIRST. A fresh magistrate starts with the CHECKPOINT section at the end of
+`docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md`, which lists the exact commands in order.
+
 **T36 (2026-09-06 early AM PDT) — ALL LANES LANDED; WATCHDOG HANDOFF EXECUTED.** PR #294 (D-165 relabel)
 merged at 0364e6fe; nothing is open. The interactive magistrate (session 3c46c831) executed
 docs/process/MAGISTRATE_WATCHDOG.md §Install handoff steps 0–5 and was reaped by design; launchd relaunches a
