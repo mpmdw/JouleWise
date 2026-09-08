@@ -237,3 +237,14 @@ That is the capture bound. It exactly matches the value in [Section 2, “One di
 - Explain what each stage in the replay diagram computes.
 - Recalculate the maximum edge displacement and add the independent clock-anchor bound.
 - Interpret 43 matches as checked paper values, not recordings.
+
+**2026-09-08 addendum — ICLOUD-BACKUP-PROBE-01.** The replay fence and both
+round-7 producers use the following optional backup-discovery policy.
+`JOULEWISE_BACKUP_ROOTS` is an `os.pathsep`-separated list of optional
+backup roots; an empty value disables all backup roots. If unset, it defaults
+to `/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup`.
+Each (root, call) has one cumulative 2 s budget for `is_dir` and both globs.
+An unresponsive or responsive-but-slow root exceeding that budget is skipped:
+it contributes zero candidates and emits a `backup_root_unavailable` stderr
+line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
+a skip fails closed at the pin check if no matching candidate remains.

@@ -775,11 +775,21 @@ It does not mean RF-fenced: RF remains the Section 2 replay fence and its
 Path abbreviations below are exact:
 
 - XD = docs/paper/round7/excursion-decomposition.json, sha256 21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b (33,765 B), schema joulewise-excursion-decomposition/v1
-- XS = scripts/paper_excursion_decomposition.py, sha256 d6c683fde03c572f0f63b45f6de38f78a03a19275d4c6206837f5f9a5d12623c (R7F-EXIT3-SEMANTICS-01 reviewed producer bytes; supersedes sha256 8733ff03d885f9c9519fddcb0906bc59e8025d7a3a3a969c09d5abe551822c7b from 49b258d2, #240; 2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged)
+- XS = scripts/paper_excursion_decomposition.py, sha256 fc8f17284607621adef3dbf8d14d8c780999fcf74256f46a5934d7b4685b430f (2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged; supersedes sha256 12d0293b2615eaeb872aa5885cad1ac57b853dc975fb5f376a5ce36ef6000688 from 173fe07e, #285; R7F-EXIT3-SEMANTICS-01 reviewed producer bytes; earlier supersedes sha256 8733ff03d885f9c9519fddcb0906bc59e8025d7a3a3a969c09d5abe551822c7b from 49b258d2, #240)
 - F4 = docs/paper/figures/fig4_edge_excursions.svg, sha256 6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf
 - AQ = docs/paper/round7/anchor-correction-quantified.json, sha256 c09077149c66411d1873838de5c21aa1b7c97d8df24ea66a163d679cb31f50fc (54,280 B)
-- AS = scripts/paper_anchor_correction_quantified.py, sha256 3f4f4f122d4992146428696315acbb62341da109f6315285c1a17ef744a33c4b (b36d1e85, #272; 2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged)
+- AS = scripts/paper_anchor_correction_quantified.py, sha256 3844a8f1eefb8b898a30b96f524e0af0da3af98fc2e6d0ecb78ea1d1f8d303f1 (2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged; supersedes sha256 e3e4355c8f388d5e60a4291f3aee4fbd4b4d45217f4156373d6e8dd398b9e693 from b36d1e85, #272; earlier supersedes sha256 41cbbf08176f9bfe1c6cfd526e1776f0324893c62f62cd76d1ff8128b8beb47f from 0438566b, #242)
 - R7F = scripts/check_paper_round7_artifacts.py
+
+**2026-09-08 addendum — ICLOUD-BACKUP-PROBE-01.**
+`JOULEWISE_BACKUP_ROOTS` is an `os.pathsep`-separated list of optional
+backup roots; an empty value disables all backup roots. If unset, it defaults
+to `/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup`.
+Each (root, call) has one cumulative 2 s budget for `is_dir` and both globs.
+An unresponsive or responsive-but-slow root exceeding that budget is skipped:
+it contributes zero candidates and emits a `backup_root_unavailable` stderr
+line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
+a skip fails closed at the pin check if no matching candidate remains.
 
 AS was re-pinned in #272 from 41cbbf08 (0438566b, #242): its `main` now
 returns exit 3 on `PopulationUnavailable` instead of raising; the AQ payload

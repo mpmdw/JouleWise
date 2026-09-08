@@ -15,6 +15,22 @@ from unittest import mock
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/paper_excursion_decomposition.py"
 
 
+class BackupHelperIdentityTests(unittest.TestCase):
+    def test_three_helper_blocks_are_byte_identical(self) -> None:
+        digests = []
+        for name in (
+            "paper_excursion_decomposition.py",
+            "paper_anchor_correction_quantified.py",
+            "check_paper_replay_fence.py",
+        ):
+            source = (SCRIPT.parent / name).read_bytes()
+            start = source.index(b"# Kept verbatim in all three")
+            final_line = b"    return result[0]\n"
+            end = source.index(final_line, start) + len(final_line)
+            digests.append(hashlib.sha256(source[start:end]).hexdigest())
+        self.assertEqual(len(set(digests)), 1, digests)
+
+
 class BackupProbeTests(unittest.TestCase):
     script = SCRIPT
     member_id = "20260722T145535-e941c821"
@@ -68,6 +84,18 @@ class BackupProbeTests(unittest.TestCase):
         self.assertEqual(self.locate(self.root / "absent", hashlib.sha256(raw).hexdigest()), raw)
         with self.assertRaises((RuntimeError, FileNotFoundError)):
             self.locate(self.root / "absent", "0" * 64)
+
+    def test_worker_exceptions_discard_partial_candidates(self) -> None:
+        for exception in (ValueError("bad enumeration"), SystemExit("worker exit")):
+            with self.subTest(exception=type(exception).__name__):
+                def broken_glob(*args):
+                    yield self.root / "partial"
+                    raise exception
+
+                with mock.patch.object(Path, "glob", side_effect=broken_glob):
+                    with self.assertLogs(self.module.__name__, level="WARNING") as logs:
+                        self.assertEqual(self.probe(self.root), ())
+                self.assertIn("backup_root_unavailable reason=worker_error", logs.output[0])
 
     def test_empty_override_disables_all_roots(self) -> None:
         with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}):

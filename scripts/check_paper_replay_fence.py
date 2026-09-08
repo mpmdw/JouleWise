@@ -47,6 +47,15 @@ USAGE
     python3 scripts/check_paper_replay_fence.py [--repository-root DIR]
         [--corpus-root DIR] [--draft PATH] [--literals-only] [--json OUT]
 
+``JOULEWISE_BACKUP_ROOTS`` is an ``os.pathsep``-separated list of optional
+backup roots; an empty value disables all backup roots. If unset, it defaults
+to ``/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup``.
+Each (root, call) has one cumulative 2 s budget for ``is_dir`` and both globs.
+An unresponsive or responsive-but-slow root exceeding that budget is skipped:
+it contributes zero candidates and emits a ``backup_root_unavailable`` stderr
+line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
+a skip fails closed at the pin check if no matching candidate remains.
+
 EXIT CODES
     0  every fenced value re-derived and matched (or, with --literals-only,
        every literal was extracted and the draft-internal identities held)
@@ -339,7 +348,7 @@ def probe_backup_root(
     """
 
     result: list[tuple[Path, ...]] = []
-    errors: list[OSError] = []
+    errors: list[BaseException] = []
 
     def probe() -> None:
         try:
@@ -351,7 +360,7 @@ def probe_backup_root(
                     )
                     candidates.extend(sorted(matches) if sort_matches else matches)
             result.append(tuple(candidates))
-        except OSError as exc:
+        except BaseException as exc:
             errors.append(exc)
 
     worker = threading.Thread(target=probe, daemon=True, name="backup-root-probe")
@@ -362,8 +371,9 @@ def probe_backup_root(
                      root, timeout_s)
         return ()
     if errors:
-        _LOG.warning("backup_root_unavailable reason=os_error root=%s detail=%s",
-                     root, errors[0])
+        reason = "os_error" if isinstance(errors[0], OSError) else "worker_error"
+        _LOG.warning("backup_root_unavailable reason=%s root=%s detail=%s",
+                     reason, root, errors[0])
         return ()
     return result[0]
 
