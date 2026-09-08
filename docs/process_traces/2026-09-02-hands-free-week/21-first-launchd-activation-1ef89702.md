@@ -1,9 +1,9 @@
-# 21 — First watchdog-owned launchd activation of a headless magistrate (2026-09-08 00:51:55 PDT)
+# 21 — First watchdog-owned launchd activation of a headless magistrate (2026-09-08 00:51:55 PDT; events.jsonl seq 3, epoch 1788853915)
 
 Q-C9 evidence item 1 (RELAUNCH RESUME PLAN, file 00 §2026-09-04 ~20:15). Written by the launched magistrate
 itself, activation `1ef89702-8b11-4463-8d6b-3c1400510f1a`, from the primary artifacts copied verbatim into
 `21-activation-1ef89702/` (state.json, events.jsonl, magistrate.lock, heartbeat, the relaunch
-prompt, the attempts listing, the launchd job print, the pmset sleep tail, and the process census at 00:55)
+prompt, the attempts listing, the launchd job print, the pmset sleep tail, and the process census at 00:55, `21-activation-1ef89702/process-census-0055.txt`)
 (notice.ack had already been consumed by the watchdog; no copy exists). <!-- F8 -->
 
 ## What happened, in order (all times PDT, from events.jsonl)
@@ -15,8 +15,8 @@ prompt, the attempts listing, the launchd job print, the pmset sleep tail, and t
 | 3 | CLOCK_UNCERTAIN → LAUNCHING | 1788853915 (2026-09-08 00:51:55) | all launch predicates clear |
 | 4 | LAUNCHING → ACTIVE | 1788853915 | spawned activation 1ef89702-8b11-4463-8d6b-3c1400510f1a |
 
-The watchdog recovered from CLOCK_UNCERTAIN on its own once the lid was opened (Ed, 09-08 ~00:40): state.json
-shows `clock_sane_samples: 36` (copied state.json, last_clock 00:57:27) <!-- F7 -->, `remote_stop.state: CLEAR` ("stop branch absent; positive control present"),
+The watchdog recovered from CLOCK_UNCERTAIN on its own once the lid was opened (Ed, 09-08 ~00:40 per `00-DURABLE-STATE.md` CHECKPOINT step 1): state.json
+shows `clock_sane_samples: 36` (copied state.json, last_clock epoch_s 1788854247.5 = 00:57:27) <!-- F7 -->, `remote_stop.state: CLEAR` ("stop branch absent; positive control present"),
 `backoff_index: 0`, `attempt: 1`. No operator touched the watchdog state, lock, or events.
 
 ## MAGISTRATE_WATCHDOG.md §Install handoff step 6 checks (verified from this activation)
@@ -29,7 +29,7 @@ shows `clock_sane_samples: 36` (copied state.json, last_clock 00:57:27) <!-- F7 
 - launchd job `com.joulewise.magistrate`: `run interval = 300 seconds`, `last exit code = 0`, program
   python3.14 (`launchctl-print.txt`).
 
-Step 6 also says a nonempty census before that tick is a failed handoff (MAGISTRATE_WATCHDOG.md:256); the 00:55 census was nonempty (joulewise-53 and the bg-job daemon tree), so the handoff is not clean under the doc's own clause until WATCHDOG-CENSUS-01 lands (joulewise-53's lane). <!-- F12 -->
+Step 6 also says a nonempty census before that tick is a failed handoff (MAGISTRATE_WATCHDOG.md:256); the 00:55 census (`process-census-0055.txt`) was nonempty (joulewise-53 and the bg-job daemon tree), so the handoff is not clean under the doc's own clause until WATCHDOG-CENSUS-01 lands (joulewise-53's lane). <!-- F12 -->
 
 ## First acts of the activation (MAGISTRATE_RELAUNCH_PROMPT order)
 
@@ -40,7 +40,7 @@ Step 6 also says a nonempty census before that tick is a failed handoff (MAGISTR
 2. Launch email to Ed accepted by Gmail: message id `1a0800383847cde1`, subject "JouleWise — headless magistrate
    LAUNCHED 00:51 PDT (activation 1ef89702); a second live session is on the same lanes". It carried the one
    pending notice (`transition-2-clock_uncertain`) and the resume list.
-3. `notice.ack` written: `{"activation_id":"1ef89702-8b11-4463-8d6b-3c1400510f1a"}` at ~00:55. The watchdog's next
+3. `notice.ack` written: `{"activation_id":"1ef89702-8b11-4463-8d6b-3c1400510f1a"}` before the 00:55:36 ack event (events.jsonl epoch 1788854136.9). The watchdog's next
    tick consumed it: events.jsonl gained `{"kind": "notice_acknowledged", "notice_ids":
    ["transition-2-clock_uncertain"], "epoch_s": 1788854136.9}` (00:55:36) and state.json now reads
    `notice_pending: []`; the ack file is gone from the custody root. The copied state.json/events.jsonl are the
@@ -49,16 +49,16 @@ Step 6 also says a nonempty census before that tick is a failed handoff (MAGISTR
 ## Findings at launch (not defects of the watchdog; recorded for the next handoff)
 
 - TWO MAGISTRATES COEXIST. Ed started an interactive session (`joulewise-53`, session 1d65b6ea, pid 83953) at
-  00:46:54, five minutes before the watchdog's launch predicates cleared, with the prompt "get back to work,
-  fan out". By 00:52 it had created worktrees from the canonical checkout and launched three gpt-6-astra seats
+  00:46:54 (lstart in `process-census-0055.txt`), five minutes before the watchdog's launch predicates cleared, with the prompt "get back to work,
+  fan out". It then created worktrees from the canonical checkout and launched three gpt-6-astra seats
   (WATCHDOG-CENSUS-01 + RESUME-DAEMON-01; T0-ACID-CLOCK-01; a handoff scout). The watchdog's launch predicates
   do not consider an interactive session a reason to hold — consistent with WATCHDOG-CENSUS-01's premise that a
   shared machine always has other `claude` processes, but it means a launch can land on top of a live human-driven
   lead. The headless magistrate messaged that session (cross-session message a869e477) and emailed Ed the
   lane split: the interactive session keeps its claimed seats; the headless one takes only this trace, the
-  durable pointer, and rehearsal-stub preparation. joulewise-53 ACCEPTED at ~00:57 with four conditions, all
+  durable pointer, and rehearsal-stub preparation. joulewise-53 ACCEPTED (cross-session reply) with four conditions, all
   honoured: the headless magistrate does not edit the watchdog script/installer/doc/tests; ARMS NOTHING (not even
-  a rehearsal stub) while joulewise-53 or its seats are alive (expected live until at least 02:30 PDT; it will
+  a rehearsal stub) while joulewise-53 or its seats are alive (by its own estimate live for some hours more; it will
   message when it stands down); lands this trace by PR only; sends Ed no further two-magistrate email. joulewise-53
   also claims the RUN_STATE/TASK_QUEUE rows for the three defect IDs and this relaunch, retirement of the resumed
   twin and bg-job daemon, and the trace dir `docs/process_traces/2026-09-08-handoff-redo/`.

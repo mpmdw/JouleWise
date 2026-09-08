@@ -32,14 +32,14 @@ The first arm email (01:05:21) preceded H (01:10:44) by 5 min 23 s; the pins fol
 whether D-175 cond. 1 is satisfied on the follow-up or requires a new arm notice after H is REFERRED to the
 synthesis author (joulewise-53) by activation 784a764e; NO ARM until that ruling is recorded here. <!-- F1 -->
 
-Ruling now recorded: joulewise-53 selected Option B at 02:03 PDT, as recorded in
+Ruling now recorded: joulewise-53 selected Option B at 02:03 PDT (recorded in commit dbd49c1d), as recorded in
 `21c-ref-295-opus-contract.md` §Ruling of record on F1. ONE consolidated arm notice must be sent on thread
 `1a0800cdb282c3f1` AFTER this fix round is committed. H stays `ae8f074f` for conditions 2 and 6. That notice must
 restate every pin verbatim (t0 epoch and local time, measurement_root, measurement_head ae8f074f, receipt class
 REHEARSAL_STUB, courier deadline, custody_root), say "launches unless NO", and include the corrected primary-source
 timeline (arm email, H, pins follow-up, new notice) and the correction of the earlier times. The NO window runs
 from that notice. NO ARM pending that notice and all other conditions; never before t0 − 60 min
-(01:56 PDT 2026-09-09) or joulewise-53's stand-down message. The new notice's Gmail id and primary-source time
+(01:56 PDT 2026-09-09, epoch 1788944160) or joulewise-53's stand-down message. The new notice's Gmail id and primary-source time
 remain to be recorded here by the lead; this docs-only fix sends nothing and arms nothing. <!-- F1 -->
 
 ## Ruling on the scout's NEEDS_RULING (21a, F1)
@@ -130,7 +130,7 @@ then remove the stub checkout (`git worktree remove`) and the plan root before a
 
 ## NIGHT_HANDBACK.md text for this night
 
-Authoritative text: `git show ae8f074f:docs/process/NIGHT_HANDBACK.md` (committed 01:10:44). The draft that stood here preceded H and differed from it (thread id, courier deadline 03:16 PDT, install-FROM-checkout sentence, pointer to 21b); it is removed to avoid two versions. <!-- F9 -->
+Authoritative text: `git show ae8f074f:docs/process/NIGHT_HANDBACK.md` (committed 01:10:44). The draft that stood here preceded H and differed from it (thread id, courier deadline 03:16 PDT (t0 + 1200 s = 1788948960), install-FROM-checkout sentence, pointer to 21b); it is removed to avoid two versions. <!-- F9 -->
 
 ## Arm email (precondition (a)) — SENT
 
@@ -302,12 +302,12 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
 
 ## Activation succession (2026-09-08 01:48:16 PDT (commit 9a15338e); F2; written by activation 784a764e)
 
-- Activation 1ef89702 (pid 84232) was terminated at 01:33:28 PDT: it ended its last turn holding only monitors and a
+- Activation 1ef89702 (pid 84232) was terminated at 01:33:28 PDT (events.jsonl seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
   45-minute timer, and Claude Code's headless `-p` mode terminates a session 600 s after a turn ends while background
   tasks remain (`attempts/1ef89702-…/attempt-1.stderr.log`: "Background tasks still running after 600s; terminating.
   Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely."). The watchdog recorded `clean activation exit`
   (events seq 5, IDLE), `backoff has not expired` (seq 6, BACKOFF, 300 s), then spawned activation
-  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT; lock pid 83086, supervisor 83075; `attempt: 2`).
+  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075; `attempt: 2`).
 - Consequence for this plan: the arming party is whichever headless activation is live when preconditions (a)+(b)
   hold. The NIGHT_HANDBACK text at H names activation 1ef89702 as the author of the arm request (true: emails
   `1a0800cdb282c3f1`/`1a08012045894ef7` were sent by it); the arm itself is executed and recorded by the live

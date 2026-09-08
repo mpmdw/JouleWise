@@ -1,0 +1,20 @@
+1788860841 2026-09-08 02:47:21 PDT
+lead file-backed benches for delta-3 ENV1 (head a2be9591); scratch under mktemp; nothing under ~/night-custody
+scratch parent /private/tmp/jw-bench3.ihII2Y
+--- bench 1: block B window guard with fake now
+PROCEED
+now=1788945299 rc=0
+ABORT: outside the arm window 01:56-02:15 PDT 2026-09-09 (t0-3600 .. t0-2460)
+now=1788945300 rc=1
+ABORT: outside the arm window 01:56-02:15 PDT 2026-09-09 (t0-3600 .. t0-2460)
+now=1788944159 rc=1
+PROCEED
+now=1788944160 rc=0
+--- bench 2: installer rejects --uninstall when the plan file is absent (why uninstall precedes rm)
+plan not found: /private/tmp/jw-bench3.ihII2Y/absent.json
+rc=2
+--- bench 3: census block from 21b with a file-backed fake lock and fake ps
+reparented daemon: foreign census matches: [(9001, 'claude daemon run')] rc=1 expected=1 PASS
+own tree only: foreign census matches: [] rc=0 expected=0 PASS
+scratch removed; ls ~/night-custody: magistrate magistrate-bench retired-v1
+1788860841 2026-09-08 02:47:21 PDT
