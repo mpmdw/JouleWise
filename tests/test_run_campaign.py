@@ -7421,6 +7421,7 @@ class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
         candidate_loader.assert_called_once_with(
             self.store / self.content_id,
             runs_root=self.root,
+            mode="issuing",
         )
 
     def test_invalid_store_refuses_without_legacy_fallback(self) -> None:
@@ -7750,6 +7751,67 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 else False
             ),
         )
+
+    def test_direct_campaign_bracket_replays_relocated_custody(self):
+        from types import SimpleNamespace
+        from joulewise import calibration_bracketing as bracketing
+        from joulewise import calibration_ledger as ledger
+        from tests.test_calibration_bracketing import _fixture_snapshot
+
+        original_root = self.root / "absent-original"
+        replacement = self.root / "replacement"
+        original = original_root / "runs/member"
+        mapped = replacement / "runs/member"
+        mapped.mkdir(parents=True)
+        (mapped / "marker").write_text("retained candidate")
+        candidate = bracketing.CalibrationCandidate(
+            relative_path=str(original), manifest_sha256="a" * 64,
+            evidence_sha256="b" * 64, protocol_id="fixture",
+            capture_wall_time_s=1.0, b_fiducial_s="0.02",
+            bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+        )
+        snapshot, _ = _fixture_snapshot([candidate])
+        member = self._member("consumer", records=None)
+        binding = self._binding()
+        inspected = []
+
+        def inspect_candidate(directory, *, runs_root):
+            inspected.append(directory)
+            self.assertEqual((directory / "marker").read_text(), "retained candidate")
+            self.assertEqual(runs_root, replacement)
+            return candidate
+
+        for issuing_counterfactual in (False, True):
+            inspected.clear()
+
+            def bracket_call(*args, **kwargs):
+                self.assertEqual(kwargs["mode"], "read_replay")
+                if issuing_counterfactual:
+                    kwargs["mode"] = "issuing"
+                return bracketing.calibration_bracket_for_bundles(*args, **kwargs)
+
+            with (
+                self.subTest(issuing_counterfactual=issuing_counterfactual),
+                patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(replacement)}),
+                patch.object(run_campaign_module, "calibration_bracket_for_bundles",
+                             side_effect=bracket_call),
+                patch.object(bracketing, "BundleReader") as reader,
+                patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                             side_effect=inspect_candidate),
+                patch.object(bracketing, "evaluate_calibration_bracket",
+                             return_value=({"status": "passed", "b_fiducial_s": 0.02}, ())) as evaluate,
+            ):
+                reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
+                reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
+                result = run_campaign_module._idle_admission_core_evaluation(
+                    [member], binding, whole_window=True, runs_root=self.root,
+                    calibration_ledger_snapshot=snapshot)
+                self.assertEqual(inspected, [] if issuing_counterfactual else [mapped])
+                self.assertEqual(len(evaluate.call_args.args[0]), 0 if issuing_counterfactual else 1)
+                self.assertEqual("calibration_ledger_custody_invalid" in result.core["conditions"],
+                                 issuing_counterfactual)
+                self.assertFalse(original.exists())
 
     def test_load_campaign_policy_parses_and_hash_binds_extension(self) -> None:
         path = self._write_extended_sidecar("production")

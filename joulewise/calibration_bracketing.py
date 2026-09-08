@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
 from joulewise.bundle_read import BundleReadError, BundleReader
@@ -1079,7 +1079,8 @@ def _binding_evidence_authentic(
 
 
 def load_calibration_candidate(
-    directory: Path, *, runs_root: Path
+    directory: Path, *, runs_root: Path,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> CalibrationCandidate | None:
     """Probe the locator, then authenticate primary bytes on the caller thread."""
 
@@ -1098,7 +1099,7 @@ def load_calibration_candidate(
                 mapped_runs_root = mapped_runs_root.parent
         return _load_calibration_candidate_unbounded(mapped, runs_root=mapped_runs_root)
 
-    return probe_custody(original, inspect, lambda: None, mode="read_replay")
+    return probe_custody(original, inspect, lambda: None, mode=mode)
 
 
 def _load_calibration_candidate_unbounded(
@@ -1234,7 +1235,8 @@ def _load_calibration_candidate_unbounded(
 
 
 def _candidate_from_observation(
-    observation: LedgerObservation,
+    observation: LedgerObservation, *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> CalibrationCandidate | None:
     """Authenticate one valid ledger observation from its custody locator."""
 
@@ -1244,6 +1246,7 @@ def _candidate_from_observation(
     candidate = load_calibration_candidate(
         custody,
         runs_root=custody.parent.parent,
+        mode=mode,
     )
     if candidate is None:
         return None
@@ -1304,7 +1307,8 @@ def _capture_pipeline_refusal_for_observation(
 
 
 def discover_calibration_candidates(
-    ledger_snapshot: CalibrationLedgerSnapshot,
+    ledger_snapshot: CalibrationLedgerSnapshot, *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> tuple[CalibrationCandidate, ...]:
     """Enumerate valid endpoints from the sole ledger authority.
 
@@ -1335,7 +1339,7 @@ def discover_calibration_candidates(
             continue
         if _capture_pipeline_refusal_for_observation(observation) is not None:
             continue
-        candidate = _candidate_from_observation(observation)
+        candidate = _candidate_from_observation(observation, mode=mode)
         if candidate is None:
             return ()
         candidates.append(candidate)
@@ -2016,6 +2020,7 @@ def calibration_bracket_for_bundles(
     bundle_paths: Sequence[Path],
     policy: CalibrationBracketingPolicy,
     *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     bracket_binding: Mapping[str, Any] | None = None,
     bracket_window_id: str | None = None,
@@ -2081,7 +2086,7 @@ def calibration_bracket_for_bundles(
     if ledger_snapshot is None:
         candidates: tuple[CalibrationCandidate, ...] = ()
     else:
-        candidates = discover_calibration_candidates(ledger_snapshot)
+        candidates = discover_calibration_candidates(ledger_snapshot, mode=mode)
         superseded_observations = [
             observation
             for observation in ledger_snapshot.observations

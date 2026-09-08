@@ -1048,7 +1048,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         }
         with patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
-            side_effect=lambda observation: by_attempt.get(observation.attempt_id),
+            side_effect=lambda observation, *, mode: by_attempt.get(observation.attempt_id),
         ) as authenticate:
             discovered = discover_calibration_candidates(snapshot)
         self.assertEqual(discovered, tuple(registered))
@@ -1706,7 +1706,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         by_attempt = {candidate.attempt_id: candidate for candidate in candidates}
         with patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
-            side_effect=lambda observation: by_attempt[observation.attempt_id],
+            side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
         ):
             open_candidates = discover_calibration_candidates(open_snapshot)
         self.assertEqual(
@@ -1727,7 +1727,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         with patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
-            side_effect=lambda observation: by_attempt[observation.attempt_id],
+            side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
         ):
             discovered = discover_calibration_candidates(aborted_snapshot)
         self.assertEqual(
@@ -2091,7 +2091,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             },
         )
 
-        def discover(source: object) -> tuple[CalibrationCandidate, ...]:
+        def discover(source: object, *, mode: str) -> tuple[CalibrationCandidate, ...]:
             return tuple(registered) if source is snapshot else ()
 
         # Trigger-subject: staleness here must come from the unselected
@@ -2169,7 +2169,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
             patch(
                 "joulewise.calibration_bracketing._candidate_from_observation",
-                side_effect=lambda observation: by_attempt[observation.attempt_id],
+                side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
             ),
             patch(
                 "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
@@ -2221,7 +2221,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
             patch(
                 "joulewise.calibration_bracketing._candidate_from_observation",
-                side_effect=lambda observation: by_attempt[observation.attempt_id],
+                side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
             ),
             patch(
                 "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
@@ -2624,7 +2624,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                     patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
                     patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(root)}),
                 ):
-                    relocated = load_calibration_candidate(original, runs_root=original_root)
+                    relocated = load_calibration_candidate(original, runs_root=original_root, mode="read_replay")
                 self.assertEqual(relocated, candidate)
                 self.assertEqual(candidate.b_fiducial_s, "0.02")
                 self.assertEqual(
@@ -2694,7 +2694,7 @@ class CustodyCandidateProbeTests(unittest.TestCase):
             patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}),
             patch("threading.Thread.start", side_effect=AssertionError("probe")),
         ):
-            self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent))
+            self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent, mode="read_replay"))
         with tempfile.TemporaryDirectory() as temporary:
             backup = Path(temporary).resolve()
             mapped = backup / "runs/instrument_validation/member"
@@ -2704,7 +2704,7 @@ class CustodyCandidateProbeTests(unittest.TestCase):
                 patch("joulewise.calibration_bracketing._load_calibration_candidate_unbounded",
                       return_value=None) as inspect,
             ):
-                self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent))
+                self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent, mode="read_replay"))
                 inspect.assert_called_once_with(mapped, runs_root=backup / "runs")
 
 

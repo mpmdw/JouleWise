@@ -5254,6 +5254,7 @@ def _idle_admission_core_evaluation(
             [evaluation.bundle_path for evaluation in evaluations],
             policy_binding.policy.calibration_bracketing,
             ledger_snapshot=calibration_ledger_snapshot,
+            mode="read_replay",
             bracket_binding=calibration_bracket_binding,
             bracket_window_id=bracket_identity.get("window_id"),
             bracket_plan_id=bracket_identity.get("plan_id"),

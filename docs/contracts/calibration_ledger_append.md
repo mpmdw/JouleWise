@@ -406,6 +406,10 @@ behavior is unchanged. Use overrides for read/replay; unset them for issuance.
 
 ## 2026-09-08 addendum: read/replay-only resolution (part 4)
 
+**Historical table below:** [part 5](#2026-09-08-addendum-issuing-boundary-by-construction-part-5)
+inverted the snapshot default to issuing and supersedes this census. Candidate
+loading and discovery also now default to issuing and forward the session mode.
+
 The root override is a read/replay affordance. The shared resolution helper
 `_custody_probe_paths` and bounded `probe_custody` default to `mode="issuing"`:
 a non-empty replacement list never supplies a probe or inspection path in that
@@ -474,20 +478,33 @@ a new custody probe. Loads with `verify_custody=False` have no custody-mode
 effect; resume-finalize retains its explicit issuing custody-state check after
 loading that durable snapshot.
 
-`extract_cells` forwards the caller's mode to its consumption session; its
-floor-report producer retains the issuing default because its reports feed
-the mint pipeline. The `analyze-claims` CLI chain and the window-duration
+`extract_cells` forwards the caller's mode to its consumption session. The
+retained-corpus `extract_detection_floors` CLI explicitly requests replay; mint
+issuance remains separately guarded. Session bracket evaluation, discovery,
+observation authentication, and candidate loading forward the session mode and
+default to issuing. The `analyze-claims` CLI chain and the window-duration
 margin recorder chain opt in to replay: neither calls a mint, bracket-binding
 publication, calibration-ledger append, or analysis-manifest finalization
-entry. Their exact checked caller chains are recorded in the replay census.
+entry. This boundary excludes claim-verdict derivation: `analyze_claims` writes
+claim verdicts under explicit read/replay, unchanged from base. Their exact
+checked caller chains are recorded in the replay census.
 
 `tests/fixtures/custody_read_replay_allowlist.json` is the executable census of
-explicit replay opt-ins, keyed by repository file and qualified enclosing
-function with a one-line reason. `tests/test_custody_mode_inventory.py` scans
+explicit replay opt-ins, keyed per call by repository file, qualified enclosing
+function, and call line, with a one-line reason for each row.
+`tests/test_custody_mode_inventory.py` scans
 `joulewise/` and `scripts/`, including local keyword dictionaries, and requires
 the observed replay set to equal this allowlist. Calls may omit mode, select
-issuing, or forward the caller's variable named `mode`; a new explicit replay
-opt-in requires a reviewed allowlist edit. Signature-default pins and a real
+issuing, or forward an actual caller mode parameter (including a stored session
+parameter). Local variables named `mode` are resolved through assignments and
+conditionals. Local wrappers have their replay callers censused too. Each new
+replay call, even within an allowlisted function, requires its own reviewed row.
+Unknown keyword factories and forwarded keyword dictionaries are violations;
+runtime-built dictionaries and arbitrary Python dataflow cannot be exhaustively
+proved by this AST census. The runtime issuance guards cover that boundary.
+Recovery abort-session also refuses nonempty overrides before acquiring its
+lease or reading replay status, because it can append an abort receipt.
+Signature-default pins and a real
 ledger fixture with absent original custody and planted valid replacement
 bytes protect the omission boundary independently of the entry guards.
 
@@ -501,7 +518,8 @@ otherwise fail before reaching its private authentication helper.
 
 The empty override retains its existing refuse-only absent shortcut for
 lexical backup-root locators and performs no filesystem work. When that
-shortcut returns absent in issuing mode under `JOULEWISE_BACKUP_ROOTS=""`, it
+shortcut returns absent in issuing mode under `JOULEWISE_BACKUP_ROOTS=""` or
+separator-only values such as `":"` and `"::"`, it
 emits exactly one stderr line per probe:
 `custody_backup_roots_disabled: <path>`. Replay remains silent for this shortcut;
 unrelated local paths and timeout/exception diagnostics are unchanged.

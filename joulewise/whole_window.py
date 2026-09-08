@@ -494,6 +494,7 @@ class AuthenticatedConsumptionSession:
             raise ValueError(
                 f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
             )
+        self.mode = mode
         self.runs_root = Path(runs_root)
         self.referenced_bundle_ids = frozenset(referenced_bundle_ids)
         self.evaluation_basis_sha256 = evaluation_basis_sha256
@@ -693,6 +694,7 @@ class AuthenticatedConsumptionSession:
             self.runs_root,
             [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
             policy.calibration_bracketing,
+            mode=self.mode,
             ledger_snapshot=self.calibration_ledger_snapshot,
             bracket_binding=bracket_binding,
             bracket_window_id=(

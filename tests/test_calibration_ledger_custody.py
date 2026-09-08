@@ -48,6 +48,8 @@ class CustodyProbeTests(unittest.TestCase):
 
     def test_issuance_refuses_override_before_input_access(self):
         calls = (
+            lambda: ledger.abort_calibration_session(None, None, session_id="s",
+                reason="test", plan_path=None),
             lambda: ledger.generate_historical_custody_manifest(roots=(),
                 checkout_root=None, disposition_table_raw=b"",
                 expected_disposition_table_sha256=""),
@@ -615,6 +617,35 @@ class IssuingBoundaryTests(unittest.TestCase):
                 seam.assert_not_called()
                 self.assertEqual(opened, [])
 
+    def test_runtime_dictionary_replay_cannot_bypass_mint_guard(self):
+        from scripts import mint_floor_artifact as mint
+
+        with planted_replacement() as (fixture, _, replacement):
+            # Mutations via arbitrary helpers are beyond the AST census.
+            options = {}
+            def populate(target):
+                target["".join(("mo", "de"))] = "read_replay"
+            populate(options)
+            snapshot = ledger.load_calibration_ledger_snapshot(
+                fixture.ledger, fixture.pin, require_committed_pin=False, **options)
+            self.assertTrue(snapshot.valid, snapshot.refusal_reasons)
+            arguments = {name: None for name, parameter in
+                         inspect.signature(mint.mint_floor_artifact).parameters.items()
+                         if parameter.default is inspect.Parameter.empty}
+            with (
+                replacement_opens(replacement) as opened,
+                mock.patch.object(mint, "_load_json_object", side_effect=AssertionError("input read")),
+                self.assertRaisesRegex(ledger.CalibrationLedgerError,
+                                       "custody_locator_override_mint_forbidden"),
+            ):
+                mint.mint_floor_artifact(**arguments)
+            self.assertEqual(opened, [])
+
+    def test_abort_entry_refuses_override_before_lease_status_or_append(self):
+        self._assert_entry_guard(ledger.abort_calibration_session,
+            (ledger, "CalibrationWriterLease"), None, None,
+            session_id="session", reason="test", plan_path=None)
+
     def test_mint_entry_refuses_planted_replacement_before_probe(self):
         from scripts import mint_floor_artifact as mint
         self._assert_entry_guard(mint.mint_floor_artifact, (mint, "_load_json_object"),
@@ -646,12 +677,13 @@ class IssuingBoundaryTests(unittest.TestCase):
 
     def test_empty_override_diagnostic_is_one_line_only_for_issuing_shortcut(self):
         original = ledger.BACKUP_ROOTS[0] / "runs/member"
-        for mode in ("issuing", "read_replay"):
+        for override, mode in ((value, mode) for value in ("", ":", "::")
+                               for mode in ("issuing", "read_replay")):
             stderr = io.StringIO()
             with (
-                self.subTest(mode=mode),
+                self.subTest(mode=mode, override=override),
                 redirect_stderr(stderr),
-                mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}),
+                mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": override}),
                 mock.patch.object(threading.Thread, "start", side_effect=AssertionError("probe")),
             ):
                 self.assertEqual(ledger._custody_state(original, mode=mode), "absent")

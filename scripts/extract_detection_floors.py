@@ -144,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             evaluation_basis_sha256=args.evaluation_basis_sha256,
             consumption_semantics_id=args.consumption_semantics_id,
             hash_bundles=args.hash_bundles,
+            mode="read_replay",
         )
     except FloorExtractionError as exc:
         print(f"error: {exc}", file=sys.stderr)

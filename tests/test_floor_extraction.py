@@ -5421,6 +5421,69 @@ class ExtractionCliTests(_PermissiveStrictValidatorMixin, unittest.TestCase):
             MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         )
 
+    def test_cli_relocated_custody_does_not_suppress_floors(self):
+        from joulewise import calibration_ledger as ledger
+        from tests.test_calibration_ledger_custody import planted_replacement, replacement_opens
+
+        with planted_replacement() as (fixture, original, replacement):
+            runs_root = fixture.root / "extraction-runs"
+            runs_root.mkdir()
+            bundle_ids = ["relocated-r01", "relocated-r02", "relocated-r03"]
+            install_synthetic_recovered_manifest(runs_root, bundle_ids)
+            for index, bundle_id in enumerate(bundle_ids):
+                write_bundle(runs_root, bundle_id, make_summary(40.0 + 0.1 * index))
+            spec = {"schema_version": EXTRACTION_SPEC_SCHEMA_VERSION, "cells": [{
+                "cell_id": "RELOCATED", "kind": "absolute", "metric": "gross_energy_j",
+                "window_class": "request", "members": [
+                    {"slot": bundle_id, "bundle_id": bundle_id} for bundle_id in bundle_ids],
+            }]}
+            spec_path = fixture.root / "extraction-spec.json"
+            spec_path.write_text(json.dumps(spec))
+
+            def load_snapshot(**kwargs):
+                return ledger.load_calibration_ledger_snapshot(fixture.ledger, fixture.pin,
+                    require_committed_pin=False, mode=kwargs["mode"])
+
+            def custody_admission(*args, consumption_session, **kwargs):
+                # Isolate custody from synthetic bundles' other admission gates.
+                return consumption_session.calibration_ledger_snapshot.refusal_reasons
+
+            for issuing_counterfactual in (False, True):
+                out_path = fixture.root / f"extraction-{issuing_counterfactual}.json"
+
+                def extraction(*args, **kwargs):
+                    self.assertEqual(kwargs["mode"], "read_replay")
+                    if issuing_counterfactual:
+                        kwargs["mode"] = "issuing"
+                    return extract_cells(*args, **kwargs)
+
+                with (
+                    self.subTest(issuing_counterfactual=issuing_counterfactual),
+                    replacement_opens(replacement) as opened,
+                    mock.patch("joulewise.whole_window.load_calibration_ledger_snapshot",
+                               side_effect=load_snapshot),
+                    mock.patch("joulewise.floor_extraction._whole_window_extraction_refusals",
+                               side_effect=custody_admission),
+                    mock.patch("scripts.extract_detection_floors.extract_cells", side_effect=extraction),
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()),
+                ):
+                    code = extract_main(["--runs-root", str(runs_root), "--spec", str(spec_path),
+                                         "--out", str(out_path)])
+                    report = json.loads(out_path.read_text())
+                    cell = report["cells"][0]
+                    if issuing_counterfactual:
+                        self.assertNotEqual(code, 0)
+                        self.assertIsNone(cell["floor"])
+                        self.assertIn("calibration_ledger_custody_invalid", cell["refusal_reasons"])
+                        self.assertEqual(opened, [])
+                    else:
+                        self.assertEqual(code, 0)
+                        self.assertTrue(report["all_cells_extractable"])
+                        self.assertIsNotNone(cell["floor"])
+                        self.assertEqual(cell["n_admitted"], 3)
+                        self.assertTrue(opened)
+                    self.assertFalse(original.exists())
+
     def test_floor_consumer_accepts_the_reducer_mint_envelope_method(self) -> None:
         from joulewise import floor_extraction as floor_module
         from joulewise.reduce import ANCHOR_SHIFT_METHOD

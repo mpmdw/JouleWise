@@ -4766,7 +4766,7 @@ def probe_custody(
 
     paths = _custody_probe_paths(path, mode=mode)
     if not paths:
-        if mode == "issuing" and os.environ.get("JOULEWISE_BACKUP_ROOTS") == "":
+        if mode == "issuing":
             print(f"custody_backup_roots_disabled: {path}", file=sys.stderr)
         return absent()
     result: list[tuple[Path, bool]] = []
@@ -5396,6 +5396,8 @@ def abort_calibration_session(
     repo_root: Path = REPO_ROOT,
 ) -> Mapping[str, Any]:
     """Abort an open session under the writer lease without deleting custody."""
+
+    _refuse_custody_override_mint()
 
     with CalibrationWriterLease(ledger_path):
         repair_calibration_ledger(
