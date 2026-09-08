@@ -1,0 +1,6 @@
+8964:## D-149: Standing conditional T-0 GO (no-hands window automation)
+10470:## D-167: kernel reconciled to live `_v5` state (magistrate, 2026-09-01)
+10499:## D-169: Unattended loop first (Ed, 2026-09-01)
+10621:## D-171: hands-free week — Ed's delegations for unattended windows (Ed, 2026-09-02)
+10729:## D-167 dated addendum (magistrate via lieutenant, 2026-09-03): V4-TRANSACTION-01 is retired by supersession
+10842:## D-167 dated addendum (magistrate via lieutenant, 2026-09-03): ARM-PACKET-01 follows the transaction it was retired behind
