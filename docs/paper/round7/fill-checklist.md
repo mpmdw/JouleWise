@@ -54,8 +54,19 @@ should-fixes) requires live adjudication before any real text substitution.
    `scripts/check_paper_replay_fence.py` before and after each batch and retains
    `COMPARED 43` / `MISMATCHES 0`. Preserve the round-7 artifact fence
    `scripts/check_paper_round7_artifacts.py`, its input identities, mandatory DX
-   diagnostic standing sentence, marker ownership and placement census. Historical
-   zero-placement expectations are 184 full comparisons (181 literals-only);
+   diagnostic standing sentence, marker ownership and placement census.
+
+  R7F also censes all 16 non-identity DX placements once the mandatory standing sentence appears and prints `R7F PLACED n/16` immediately before its `COMPARED` tail.
+  When the DX rows are placed, R7F scans the diagnostic-value (DX) prose
+  region, from the mandatory standing sentence to the next Markdown heading.
+  The mandatory standing sentence is:
+
+  > “The following are diagnostic-era instrument statistics — a desk
+  > re-derivation (XS over XD; AS over AQ) over retained captures whose energy
+  > values D-078 voids for claim use; they characterise the timing calibration
+  > of the instrument and are not evidence for any `_v5` result.”
+
+   Historical zero-placement expectations are 184 full comparisons (181 literals-only);
    the old 16-marker batch expected 200 full comparisons. These are historical
    contracts, not a new successor placement count. S6 must reconcile successor
    placements and expected tails explicitly; literals-only cannot replace full
