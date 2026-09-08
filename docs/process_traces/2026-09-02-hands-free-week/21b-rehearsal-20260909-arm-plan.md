@@ -152,13 +152,14 @@ line was written.
 ## AMENDED arm-time sequence (cold gate AMEND on rehearsal-arming authority, relayed by joulewise-53, 01:20:08 PDT (commit a8cc6e68; F1/F2); supersedes the entire earlier sequence)
 
 Full ruling text: `docs/process_traces/2026-09-08-handoff-redo/09-coldgate-packet-rehearsal-authority/13-magistrate-synthesis.md`
-(branch `feat/2026-09-08-relaunch-prompt-line19`, D-175 PR by joulewise-53). Eight conditions; (1) DISPUTED — see Timeline of record, <!-- F1 --> (4) satisfied by the two emails on thread `1a0800cdb282c3f1`, (6) satisfied while this branch or main
+(branch `feat/2026-09-08-relaunch-prompt-line19`, D-175 PR by joulewise-53). Eight conditions; (1) DISPUTED — see Timeline of record, <!-- F1 --> (4) satisfied only by the consolidated post-fix notice on thread `1a0800cdb282c3f1` once sent (ruling B), (6) satisfied while this branch or main
 holds `ae8f074f`, (7)/(8) are conduct rules. Conditions (2), (3), (5) change the mechanics:
 
 ```zsh
 # 0. Preconditions: no standdown.request; joulewise-53 has messaged stand-down; no NO on thread 1a0800cdb282c3f1;
-#    consolidated post-fix notice recorded above; now >= 2026-09-09 01:56 PDT;
-#    no plan under ~/night-custody/*/night_plan.json; now < 2026-09-09 02:00 PDT. (F1)
+#    consolidated post-fix notice recorded above; 01:56 PDT <= now < 02:15 PDT on 2026-09-09 (floor: the ruling's
+#    t0 - 60 min; ceiling: leaves >= 16 min to record, commit, push and exit before the 02:31 request boundary);
+#    no plan under ~/night-custody/*/night_plan.json. (F1; window widened by the magistrate at 0f3390c9 review)
 test ! -e ~/night-custody/magistrate/standdown.request || { print "ABORT: standdown requested"; exit 1; } # F4
 plans=(~/night-custody/*/night_plan.json(N))
 test ${#plans} -eq 0 || { print "ABORT: existing plan"; exit 1; } # F4
@@ -250,6 +251,19 @@ launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE" "$SCRATCH"
 ```
 On any abort: `rm -rf "$STAGE" "$SCRATCH"` — remove only scratch/staging paths allocated by this attempt;
 if an existence guard found a pre-existing path, preserve it. The real custody root stays untouched before step 6. <!-- F5 -->
+
+## Bench pass 2 (activation 784a764e, ~02:20 PDT 2026-09-08, after fix round 1 landed at 0f3390c9; scratch paths only)
+
+Steps 1–3 of the amended sequence were executed verbatim with every path redirected to a `mktemp -d` parent
+(`/private/tmp/jw-bench-arm.XXXXXX`): a detached worktree at H=`ae8f074f` as `STUB_CHECKOUT`, `NIGHT_CUSTODY` under the
+scratch parent (never the real custody root), `STAGE` and `SCRATCH` under it. Observed: `write_night_plan` wrote both the
+real staged plan and the validation twin (author rc 0); `scripts/install_night_agent.sh … --render-only` run FROM the H
+checkout printed `validated pins: repo_head=ae8f074f… measurement_root=<scratch>/checkout measurement_head=ae8f074f…`
+(rc 0); both rendered plists `plutil -lint` OK; the json diff reported `plan differing fields: ['chain_path',
+'chain_sha256_path', 'custody_root']` (rc 0); the fake real custody path did NOT exist afterwards, while
+`<SCRATCH>/custody/night` did exist (the installer's `mkdir -p "$custody_root/night"`, which is exactly why the twin is
+validated instead of the real plan). The bench worktree and parent were removed; `ls ~/night-custody` afterwards shows
+only `magistrate`, `magistrate-bench`, `retired-v1`. Steps 4–8 were NOT executed (they arm).
 
 Cond. 8: any later re-arm or removal of THIS plan by a headless session repeats steps 2–7; everything else on plans,
 night records and launchd stays barred by relaunch-prompt line 19 (as amended by D-175).
