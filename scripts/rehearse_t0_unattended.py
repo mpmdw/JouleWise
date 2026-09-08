@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise import arm_readiness as readiness  # noqa: E402
 from joulewise import t0_rehearsal  # noqa: E402
+from joulewise.arm_readiness import _production_inventory as _read_production_inventory  # noqa: E402
 
 
 MANIFEST_NAME = "t0-rehearsal-bundle.json"
@@ -105,14 +106,12 @@ def _crawl(root: Path) -> tuple[tuple[t0_rehearsal.EvidenceArtifact, ...], tuple
 
 
 def _production_inventory():
-    """Authenticate the reviewed deployment inventory against this checkout HEAD."""
-    relative = readiness.PRODUCTION_CUSTODY_INVENTORY
-    path = REPO_ROOT / relative
-    raw = _regular_bytes(path, label="production custody inventory")
-    pinned = readiness._git_blob_at_head(REPO_ROOT, relative.as_posix())
-    if pinned is None or pinned != raw:
-        raise BundleLoadError("production-root census incomplete")
-    return readiness.parse_json_bytes(raw)
+    """Preserve the bundle loader's byte-reader seam and error vocabulary."""
+    try:
+        return _read_production_inventory(
+            read_bytes=lambda path: _regular_bytes(path, label="production custody inventory"))
+    except ValueError as exc:
+        raise BundleLoadError(str(exc)) from exc
 
 
 def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_rehearsal.EvidenceBundle:

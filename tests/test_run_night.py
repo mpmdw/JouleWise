@@ -2137,6 +2137,14 @@ class PackNightProducerTests(unittest.TestCase):
             changed = {**state, "authored": {**state["authored"], "receipt_paths": replacement}}
             with self.subTest(replacement=replacement), self.assertRaisesRegex(self.driver.PackNightRefusal, "t0_evidence"):
                 self.driver._pack_evidence(self.plan, changed)
+        evidence = state["arm"]["evidence"]
+        receipt = next(item for item in evidence if str(self.custody / self.pack.name / item["path"]) == paths[0])
+        for replacement in ([item for item in evidence if item is not receipt],
+                            evidence + [receipt],
+                            [{**item, "path": item["path"] + ".substituted"} if item is receipt else item for item in evidence]):
+            changed = {"arm": {**state["arm"], "evidence": replacement}}
+            with self.subTest(evidence=replacement), self.assertRaisesRegex(self.driver.PackNightRefusal, "t0_evidence"):
+                self.driver._pack_evidence(self.plan, changed)
         for path in (Path(paths[0]), self.inputs / next(iter(self.author._CAPTURE_FILES.values()))):
             raw = path.read_bytes()
             path.write_bytes(raw + b" ")
@@ -2145,7 +2153,6 @@ class PackNightProducerTests(unittest.TestCase):
             path.write_bytes(raw)
 
     def test_rehearsal_plan_and_arm_context_roots_follow_sibling_child_rule(self):
-        from scripts import rehearse_t0_unattended as loader
         home = self.root / "home"
         window_id = "rehearsal-t0-unattended-test"
         custody = home / "night-custody" / window_id
@@ -2157,10 +2164,11 @@ class PackNightProducerTests(unittest.TestCase):
         plan = replace(self.plan, custody_root=str(custody), measurement_root=str(measurement))
         arm = {"pack": {"window_id": window_id}, "arm_context": {"custody_root": str(custody), "claim_runs_root": str(claim)}}
         inventory = [{"deployment_id": "production", "measurement_root": str(self.root / "production"), "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
-        with mock.patch.object(Path, "home", return_value=home), mock.patch.object(loader, "_production_inventory", return_value=inventory):
+        with mock.patch.object(Path, "home", return_value=home), mock.patch.object(self.readiness, "_production_inventory", return_value=inventory):
             self.driver._pack_rehearsal_roots(plan, arm, "T0_REHEARSAL")
             # Every non-custody ARM path may live inside this rehearsal child.
-            for key in self.readiness.ARM_CONTEXT_KEYS - self.readiness.ARM_CONTEXT_NON_PATH_KEYS - {"custody_root"}:
+            for key in ("claim_runs_root", "bound_runs_root", "quarantine_root",
+                        "claim_backup_destination", "bound_backup_destination", "waiver_path"):
                 own = custody / key
                 own.mkdir()
                 changed = {**arm, "arm_context": {**arm["arm_context"], key: str(own)}}

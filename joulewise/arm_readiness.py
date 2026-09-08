@@ -245,6 +245,20 @@ PRODUCTION_CUSTODY_ROOTS = (
 # roots are rehearsal inputs to the predicate, not production census members.
 
 
+def _production_inventory(*, read_bytes=None):
+    """Authenticate the reviewed deployment inventory against this checkout HEAD."""
+    repo_root = Path(__file__).resolve().parents[1]
+    relative = PRODUCTION_CUSTODY_INVENTORY
+    path = repo_root / relative
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("production-root census incomplete")
+    raw = path.read_bytes() if read_bytes is None else read_bytes(path)
+    pinned = _git_blob_at_head(repo_root, relative.as_posix())
+    if pinned is None or pinned != raw:
+        raise ValueError("production-root census incomplete")
+    return parse_json_bytes(raw)
+
+
 def production_custody_roots(*, home, inventory):
     """Resolve the frozen census without environment overrides or existence filters.
 

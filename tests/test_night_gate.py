@@ -918,6 +918,22 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual("FAIL", receipt.conditions[0].status)
         self.assertEqual("FAIL", receipt.conditions[1].status)
 
+    def test_pack_import_failure_refuses_instead_of_crashing(self):
+        plan = make_plan("TRANSACTION_PACK", pack_night={
+            "pack_id": "pack-test", "pack_root": "/fixture/pack-test",
+            "pack_sha256": "a" * 64, "attempt_ordinal": 1,
+            "authorization_record": {"path": "/custody/auth.json", "sha256": "b" * 64},
+            "confirmation_record": {"path": "/custody/confirm.json", "sha256": "c" * 64},
+        })
+        for error in (ImportError("dependency unavailable"), ModuleNotFoundError("dependency missing")):
+            with self.subTest(error=type(error).__name__), mock.patch.object(
+                    night_gate, "_evaluate_pack_conditions", side_effect=error):
+                receipt = night_gate.evaluate_night(plan, FakeProbeSource().probes())
+            self.assertEqual("REFUSED", receipt.verdict)
+            self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
+            self.assertIn(str(error), receipt.refusal.detail)
+            self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
+
     def test_pack_refusal_codes_keep_standard_receipt_shape(self):
         from scripts.run_night import _pack_refused_receipt, PackNightRefusal
         from dataclasses import replace

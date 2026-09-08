@@ -789,9 +789,14 @@ def _pack_evidence(plan: NightPlan, arm_state):
     from joulewise import arm_readiness_evidence_t0 as t0_author
     custody = Path(plan.custody_root)
     pack_custody = custody / plan.pack_night["pack_id"]
-    paths = arm_state["authored"].get("receipt_paths")
+    # Gate replay uses the ARM's recorded inventory, independently of the author
+    # row census below. The driver also binds its immediate author result.
+    recorded_paths = [str(pack_custody / item["path"]) for item in arm_state["arm"]["evidence"]
+                      if item.get("namespace") == "WINDOW_CUSTODY"
+                      and Path(item["path"]).parent == Path(t0_author._EVIDENCE_DIRECTORY)]
+    paths = arm_state.get("authored", {}).get("receipt_paths", recorded_paths)
     expected_paths = {str(pack_custody / t0_author._EVIDENCE_DIRECTORY / t0_author._receipt_name(row)) for row in t0_author._EXPECTED_ROWS}
-    if not isinstance(paths, list) or len(paths) != 15 or any(not isinstance(path, str) for path in paths) or set(paths) != expected_paths:
+    if not isinstance(paths, list) or len(paths) != 15 or any(not isinstance(path, str) for path in paths) or set(paths) != expected_paths or len(recorded_paths) != 15 or set(recorded_paths) != expected_paths:
         raise PackNightRefusal("t0_evidence.receipt_paths")
     arm_paths = {str(pack_custody / item["path"]): item["sha256"]
                  for item in arm_state["arm"]["evidence"] if item.get("namespace") == "WINDOW_CUSTODY"}
@@ -829,14 +834,13 @@ def _pack_evidence(plan: NightPlan, arm_state):
 
 def _pack_rehearsal_roots(plan, arm, purpose):
     from joulewise import arm_readiness as readiness, t0_rehearsal
-    from scripts.rehearse_t0_unattended import _production_inventory
     window_id = arm["pack"]["window_id"]
     prefixed = isinstance(window_id, str) and window_id.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX)
     if prefixed != (purpose == "T0_REHEARSAL"):
         raise PackNightRefusal("rehearsal_purpose_on_production_id" if purpose == "T0_REHEARSAL" else "purpose")
     if not prefixed:
         return
-    production = readiness.production_custody_roots(home=Path.home(), inventory=_production_inventory())
+    production = readiness.production_custody_roots(home=Path.home(), inventory=readiness._production_inventory())
     roots = {"measurement_root": plan.measurement_root, "custody_root": plan.custody_root}
     roots.update({"arm_context." + key: value for key, value in arm["arm_context"].items()
                   if key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS})
@@ -866,7 +870,7 @@ def _pack_rehearsal_roots(plan, arm, purpose):
 
 def _evaluate_pack_conditions(plan, probes, rows, arm_path):
     """Derive C1/C2 from bound custody bytes, never caller condition labels."""
-    from joulewise import arm_readiness as readiness, arm_readiness_evidence_t0 as author
+    from joulewise import arm_readiness as readiness
 
     prepared = _authenticate_pack_records(plan)
     rows["C1"] = _MutableCondition("PASS", None,
@@ -897,9 +901,7 @@ def _evaluate_pack_conditions(plan, probes, rows, arm_path):
         raise PackNightRefusal("arm_receipt.boot/expiry")
     _pack_rehearsal_roots(plan, arm, prepared["authorization_record"]["purpose"])
     _pack_no_retry(plan, arm["boot_session_id"], path)
-    expected_paths = [str(custody / author._EVIDENCE_DIRECTORY / author._receipt_name(row))
-                      for row in author._EXPECTED_ROWS]
-    evidence = _pack_evidence(plan, {"arm": arm, "authored": {"receipt_paths": expected_paths}})
+    evidence = _pack_evidence(plan, {"arm": arm})
     rows["C2"] = _MutableCondition("PASS", None,
         [str(path), *(item["path"] for item in evidence)],
         {"arm_sha256": verified["receipt_sha256"]})
@@ -1079,7 +1081,7 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     if plan.receipt_class == "TRANSACTION_PACK":
         try:
             pack_arm = _evaluate_pack_conditions(plan, probes, rows, pack_arm_receipt)
-        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError, ImportError) as exc:
             return _finish(plan, probes, rows, Refusal(
                 getattr(exc, "reason", "launch_go_receipt_invalid"), str(exc), ()))
 
