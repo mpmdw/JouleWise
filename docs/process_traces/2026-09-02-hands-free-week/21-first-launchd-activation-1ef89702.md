@@ -56,9 +56,9 @@ Step 6 also says a nonempty census before that tick is a failed handoff (MAGISTR
   shared machine always has other `claude` processes, but it means a launch can land on top of a live human-driven
   lead. The headless magistrate messaged that session (cross-session message a869e477) and emailed Ed the
   lane split: the interactive session keeps its claimed seats; the headless one takes only this trace, the
-  durable pointer, and rehearsal-stub preparation. joulewise-53 ACCEPTED (cross-session reply) with four conditions, all
+  durable pointer, and rehearsal-stub preparation. joulewise-53 ACCEPTED with four conditions, all
   honoured: the headless magistrate does not edit the watchdog script/installer/doc/tests; ARMS NOTHING (not even
-  a rehearsal stub) while joulewise-53 or its seats are alive (by its own estimate live for some hours more; it will
+  a rehearsal stub) while joulewise-53 or its seats are alive (it will
   message when it stands down); lands this trace by PR only; sends Ed no further two-magistrate email. joulewise-53
   also claims the RUN_STATE/TASK_QUEUE rows for the three defect IDs and this relaunch, retirement of the resumed
   twin and bg-job daemon, and the trace dir `docs/process_traces/2026-09-08-handoff-redo/`.

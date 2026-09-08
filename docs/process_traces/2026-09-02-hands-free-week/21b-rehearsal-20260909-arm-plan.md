@@ -130,7 +130,7 @@ then remove the stub checkout (`git worktree remove`) and the plan root before a
 
 ## NIGHT_HANDBACK.md text for this night
 
-Authoritative text: `git show ae8f074f:docs/process/NIGHT_HANDBACK.md` (committed 01:10:44). The draft that stood here preceded H and differed from it (thread id, courier deadline 03:16 PDT (t0 + 1200 s = 1788948960), install-FROM-checkout sentence, pointer to 21b); it is removed to avoid two versions. <!-- F9 -->
+Authoritative text: `git show ae8f074f:docs/process/NIGHT_HANDBACK.md` (committed 01:10:44). The draft that stood here preceded H; H adds, relative to that draft: the thread id, the courier deadline 03:16 PDT (t0 + 1200 s = 1788948960), the install-FROM-checkout sentence, and the pointer to 21b. The draft is removed to avoid two versions. <!-- F9 -->
 
 ## Arm email (precondition (a)) — SENT
 
