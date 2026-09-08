@@ -1,92 +1,145 @@
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 
-from tests.git_fixture import init_git_fixture
-from pathlib import Path
-
-
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts/window_status.sh"
+SCRIPT = ROOT / 'scripts/window_status.sh'
+START = 'Tue Sep 8 01:02:03 2026'
 
 
 class WindowStatusGuardTests(unittest.TestCase):
-    def setUp(self) -> None:
+    def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.repository = Path(self.temporary.name) / "repository"
+        self.root = Path(self.temporary.name)
+        self.repository = self.root / 'repository unittest'
         self.repository.mkdir()
-        init_git_fixture(self.repository, "-q")
-        self._git("config", "user.name", "JouleWise Test")
-        self._git("config", "user.email", "joulewise-test@example.invalid")
-        (self.repository / "README.md").write_text("initial\n", encoding="utf-8")
-        self._git("add", "README.md")
-        self._git("commit", "-qm", "initial")
+        self.parent = self.root / 'custody'
+        self.night = self.parent / 'unittest spaced plan' / 'night'
+        self.night.mkdir(parents=True)
+        self.sentinel = self.root / 'freeze'
+        self.bin = self.root / 'bin'
+        self.bin.mkdir()
+        self.git_log = self.root / 'git.log'
+        self.ps_log = self.root / 'ps.log'
+        self.probe = self.bin / 'identity probe'
+        self.probe.write_text('#!/bin/sh\nprintf "%s\\n" "${TEST_IDENTITY_OUTPUT}"\nexit "${TEST_IDENTITY_EXIT}"\n')
+        self.probe.chmod(0o755)
+        for name, content in {
+            'ps': '#!/bin/sh\necho forbidden >> "$PS_LOG"\nexit 99\n',
+            'git': '#!/bin/sh\nprintf "%s\\n" "$*" >> "$GIT_LOG"\nif [ "$1" = diff ]; then exit 1; fi\n',
+        }.items():
+            path = self.bin / name
+            path.write_text(content)
+            path.chmod(0o755)
+        self.env = {
+            **os.environ, 'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
+            'JOULEWISE_CUSTODY_PARENT': str(self.parent),
+            'JOULEWISE_ADDITIONAL_CUSTODY_PARENTS': '[]',
+            'JOULEWISE_IDENTITY_PROBE': str(self.probe),
+            'JOULEWISE_STATUS_REPO': str(self.repository),
+            'JOULEWISE_COMMIT_FREEZE_SENTINEL': str(self.sentinel),
+            'TEST_IDENTITY_OUTPUT': START + ' S', 'TEST_IDENTITY_EXIT': '0',
+            'GIT_LOG': str(self.git_log), 'PS_LOG': str(self.ps_log),
+        }
+        self.status = self.repository / 'WINDOW_STATUS.md'
+        self.status.write_text('original status\n')
 
-    def _git(self, *args: str) -> str:
-        return subprocess.run(
-            ("git", *args),
-            cwd=self.repository,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+    def marker(self, value=None):
+        (self.night / 'chain.started').write_text(json.dumps(
+            {'pid': 41, 'start_time': START} if value is None else value))
 
-    def _run_status(self, sentinel: Path) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ("/bin/bash", str(SCRIPT), "idle", "Synthetic status"),
-            cwd=ROOT,
-            env={
-                **os.environ,
-                "JOULEWISE_STATUS_REPO": str(self.repository),
-                "JOULEWISE_COMMIT_FREEZE_SENTINEL": str(sentinel),
-            },
-            capture_output=True,
-            text=True,
-        )
+    def run_status(self, headline='Synthetic status'):
+        result = subprocess.run(['/bin/bash', str(SCRIPT), 'idle', headline],
+                                cwd=self.root, env=self.env, capture_output=True, text=True)
+        self.assertFalse(self.ps_log.exists(), 'status consulted process argv')
+        return result
 
-    def test_present_sentinel_writes_status_without_git_publication(self) -> None:
-        sentinel = Path(self.temporary.name) / "COMMIT_FREEZE_OPEN"
-        sentinel.write_text("open\n", encoding="utf-8")
-        head_before = self._git("rev-parse", "HEAD")
+    def assert_refused(self):
+        result = self.run_status()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.status.read_text(), 'original status\n')
+        self.assertFalse(self.git_log.exists())
+        return result
 
-        completed = self._run_status(sentinel)
+    def assert_published(self):
+        result = self.run_status()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Synthetic status', self.status.read_text())
+        calls = self.git_log.read_text().splitlines()
+        self.assertEqual(calls, ['add WINDOW_STATUS.md', 'diff --cached --quiet',
+                                 'commit -q -m status: idle — Synthetic status', 'push -q origin HEAD'])
+        return result
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertTrue((self.repository / "WINDOW_STATUS.md").is_file())
-        self.assertEqual(self._git("rev-parse", "HEAD"), head_before)
-        self.assertEqual(self._git("diff", "--cached", "--name-only"), "")
-        self.assertEqual(self._git("status", "--short"), "?? WINDOW_STATUS.md")
-        self.assertIn(
-            "freeze span open: status written locally, not published.",
-            completed.stdout,
-        )
+    def test_open_chain_refuses_before_status_or_git_even_with_sent_and_freeze(self):
+        self.marker()
+        (self.night / 'courier.sent').touch()
+        self.sentinel.touch()
+        self.assertIn('live measurement', self.assert_refused().stderr)
 
-    def test_absent_sentinel_commits_status_as_before(self) -> None:
-        sentinel = Path(self.temporary.name) / "sentinel-does-not-exist"
-        commit_count_before = int(self._git("rev-list", "--count", "HEAD"))
+    def test_closed_chain_permits_publication(self):
+        self.marker()
+        (self.night / 'chain.exited').write_text(json.dumps(
+            {'exit_code': 0, 'epoch_s': 1, 'monotonic_ns': 2}))
+        self.assert_published()
 
-        completed = self._run_status(sentinel)
+    def test_reused_pid_warns_and_permits(self):
+        self.marker()
+        self.env['TEST_IDENTITY_OUTPUT'] = 'Tue Sep 8 01:02:04 2026 S'
+        self.assertIn('WARN: stale reused PID', self.assert_published().stderr)
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertTrue((self.repository / "WINDOW_STATUS.md").is_file())
-        self.assertEqual(
-            int(self._git("rev-list", "--count", "HEAD")),
-            commit_count_before + 1,
-        )
-        self.assertEqual(
-            self._git("log", "-1", "--format=%s"),
-            "status: idle — Synthetic status",
-        )
-        self.assertEqual(
-            self._git("show", "--pretty=format:", "--name-only", "HEAD"),
-            "WINDOW_STATUS.md",
-        )
-        self.assertEqual(self._git("status", "--short"), "")
+    def test_dead_pid_warns_and_permits(self):
+        self.marker()
+        self.env.update(TEST_IDENTITY_OUTPUT='', TEST_IDENTITY_EXIT='1')
+        self.assertIn('WARN: stale dead owner', self.assert_published().stderr)
+
+    def test_legacy_and_malformed_open_markers_refuse(self):
+        self.marker({'pid': 41})
+        self.assertIn('indeterminate', self.assert_refused().stderr)
+        (self.night / 'chain.started').write_text('')
+        self.assertIn('indeterminate', self.assert_refused().stderr)
+
+    def test_unrelated_campaign_entry_refuses_without_target_lock(self):
+        registry = self.parent / 'active-campaigns'
+        registry.mkdir()
+        (registry / 'owner.json').write_text(json.dumps({
+            'schema': 'joulewise.active_campaign.v1', 'pid': 42, 'start_time': START,
+            'nonce': 'n', 'runs_root': str(self.root / 'unrelated spaced runs unittest'),
+        }))
+        (self.night / 'courier.sent').touch()
+        self.assertIn('live measurement', self.assert_refused().stderr)
+
+    def test_mentions_do_not_change_output(self):
+        for headline in ('vim run_campaign.py', 'prompt window-chain -- unittest',
+                         'tests/test_run_campaign.py', '/spaced paths/window-chain.zsh'):
+            with self.subTest(headline=headline):
+                result = self.run_status(headline)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(headline, self.status.read_text())
+
+    def test_freeze_writes_locally_without_git(self):
+        self.sentinel.touch()
+        result = self.run_status()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Synthetic status', self.status.read_text())
+        self.assertFalse(self.git_log.exists())
+        self.assertIn('freeze span open', result.stdout)
+
+    def test_root_and_probe_errors_refuse_before_mutation(self):
+        self.env['JOULEWISE_CUSTODY_PARENT'] = str(self.status)
+        self.assertIn('indeterminate', self.assert_refused().stderr)
+        self.env['JOULEWISE_CUSTODY_PARENT'] = str(self.parent)
+        self.marker()
+        self.env['TEST_IDENTITY_EXIT'] = '2'
+        self.assertIn('indeterminate', self.assert_refused().stderr)
+        self.env['JOULEWISE_IDENTITY_PROBE'] = str(self.root / 'missing probe')
+        self.assertIn('indeterminate', self.assert_refused().stderr)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

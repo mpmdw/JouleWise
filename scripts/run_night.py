@@ -25,6 +25,8 @@ if str(REPO_ROOT) in sys.path:
     sys.path.remove(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.measurement_liveness import observe_identity  # noqa: E402
+
 from joulewise.night_gate import (  # noqa: E402
     NIGHT_DRIVER_REASON_CODES,
     NIGHT_GATE_REASON_CODES,
@@ -370,9 +372,11 @@ def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any]) -> in
     # start_new_session=True makes the child the process-group leader.
     pgid = process.pid
     try:
+        identity = observe_identity(process.pid)
         _write_all(
             descriptor,
-            _json_bytes({"pid": process.pid, "pgid": pgid, "epoch_s": time.time()}),
+            _json_bytes({"pid": process.pid, "pgid": pgid, "epoch_s": time.time(),
+                         "start_time": identity.start_time if identity.state == "LIVE" else None}),
         )
     finally:
         os.close(descriptor)

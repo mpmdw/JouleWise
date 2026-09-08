@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
+from joulewise.measurement_liveness import Identity
 from joulewise import night_gate
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
@@ -161,6 +162,11 @@ class NightDriverTests(unittest.TestCase):
         self.driver = _load_driver()
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        identity_patch = mock.patch.object(
+            self.driver, "observe_identity", return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026")
+        )
+        self.identity_mock = identity_patch.start()
+        self.addCleanup(identity_patch.stop)
         self.custody = self.root / "custody"
         self.custody.mkdir()
         self.chain = self.root / "chain.zsh"
@@ -382,7 +388,10 @@ class NightDriverTests(unittest.TestCase):
         night = self.custody / "night"
         claim = json.loads((night / "chain.started").read_text())
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
-        self.assertEqual(set(claim), {"pid", "pgid", "epoch_s"})
+        self.assertEqual(set(claim), {"pid", "pgid", "epoch_s", "start_time"})
+        self.assertEqual(claim["start_time"], "Tue Sep 8 01:02:03 2026")
+        self.identity_mock.assert_called_once_with(claim["pid"])
+        self.assertNotEqual(claim["pid"], os.getpid())
         rerun = list(night.glob("rerun-*.refusal.json"))
         self.assertEqual(len(rerun), 1)
         refusal = json.loads(rerun[0].read_text())
