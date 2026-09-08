@@ -45,6 +45,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise.measurement_liveness import (  # noqa: E402
+    observe_identity, publish_campaign, remove_campaign,
+)
 from joulewise.bundle import sanitize_id_component  # noqa: E402
 from joulewise.arm_readiness import (  # noqa: E402
     LaunchLineageError,
@@ -3147,6 +3150,7 @@ class CampaignLockToken:
     st_ino: int
     nonce: str
     acquisition_id: str
+    start_time: str | None = None
 
 
 _CAMPAIGN_LOCK_OWNERSHIP: dict[Path, CampaignLockToken] = {}
@@ -3159,8 +3163,11 @@ def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
     lock_path = runs_root / "campaign.lock"
     nonce = secrets.token_hex(32)
     acquisition_id = secrets.token_hex(32)
+    identity = observe_identity(os.getpid())
+    start_time = identity.start_time if identity.state == "LIVE" else None
     content = (
-        f"pid={os.getpid()} nonce={nonce} created_at={utc_timestamp()}\n"
+        f"pid={os.getpid()} nonce={nonce} created_at={utc_timestamp()} "
+        f"start_time={json.dumps(start_time)}\n"
     )
     fd = -1
     token: CampaignLockToken | None = None
@@ -3189,6 +3196,7 @@ def acquire_campaign_lock(runs_dir: Path) -> CampaignLockToken:
             st_ino=acquired_stat.st_ino,
             nonce=nonce,
             acquisition_id=acquisition_id,
+            start_time=start_time,
         )
         with _CAMPAIGN_LOCK_OWNERSHIP_LOCK:
             _CAMPAIGN_LOCK_OWNERSHIP[lock_path] = token
@@ -7266,10 +7274,18 @@ def run_axi_spec_campaign(
     else:
         _write_immutable_bytes(manifest_copy_path, manifest_copy_raw)
 
+    registry_entry = None
     lock_path: CampaignLockToken | None = None
     in_flight: BaseException | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
+        try:
+            registry_entry = publish_campaign(
+                lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
+            )
+        except RuntimeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         child_environment: dict[str, str] | None = None
         campaign_provenance_path: Path | None = None
         campaign_provenance: dict[str, Any] | None = None
@@ -8012,8 +8028,11 @@ def run_axi_spec_campaign(
         in_flight = exc
         raise
     finally:
-        if lock_path is not None:
-            release_campaign_lock(lock_path, in_flight=in_flight)
+        try:
+            remove_campaign(registry_entry)
+        finally:
+            if lock_path is not None:
+                release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def run_campaign(args: argparse.Namespace) -> int:
@@ -8213,6 +8232,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         isinstance(item, ConfigInfo) and _is_neg8_reference_start(item)
         for item in items
     )
+    registry_entry = None
     campaign_provenance_path: Path | None = None
     campaign_provenance: dict[str, Any] | None = None
 
@@ -8232,6 +8252,13 @@ def run_campaign(args: argparse.Namespace) -> int:
 
     try:
         if not args.dry_run:
+            try:
+                registry_entry = publish_campaign(
+                    lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
+                )
+            except RuntimeError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
             config_infos = [
                 item for item in items if isinstance(item, ConfigInfo)
             ]
@@ -8923,8 +8950,11 @@ def run_campaign(args: argparse.Namespace) -> int:
         in_flight = exc
         raise
     finally:
-        if lock_path is not None:
-            release_campaign_lock(lock_path, in_flight=in_flight)
+        try:
+            remove_campaign(registry_entry)
+        finally:
+            if lock_path is not None:
+                release_campaign_lock(lock_path, in_flight=in_flight)
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:
