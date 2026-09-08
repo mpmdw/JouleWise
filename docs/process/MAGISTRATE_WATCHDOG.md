@@ -159,14 +159,11 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
    ```
 
-   If the exclusive lock seed fails, the installer restores the preexisting plist (or removes the newly written one). **INTERACTIVE MAGISTRATE / OPERATOR ONLY:** To reconcile the old lock, run exactly the following from an observer Terminal. Headless sessions must not execute these recovery commands: [relaunch prompt, line 19](MAGISTRATE_RELAUNCH_PROMPT.md#L19) forbids their touching watchdog locks. For a corrupt/unparseable or empty-object lock, supply the saved step-3 inventory in `handoff_file`; recovery refuses while any recorded owned pair or resumed twin is live. Missing or invalid inventory fails closed. Preserve that inventory until recovery finishes. It takes the watchdog service lock, validates the ownership record, confirms the recorded PID/start pair is absent, refuses a live resumed twin, rechecks the lock bytes, and only then removes it. If a resident still owns the service lock, stop and let the lead reconcile that resident; do not delete a busy lock. Then repeat the whole install step.
+   If the exclusive lock seed fails, the installer restores the preexisting plist (or removes the newly written one). **INTERACTIVE MAGISTRATE / OPERATOR ONLY:** To reconcile the old lock, run exactly the following from an observer Terminal. Headless sessions must not execute these recovery commands: [relaunch prompt, line 19](MAGISTRATE_RELAUNCH_PROMPT.md#L19) forbids their touching watchdog locks. It takes the watchdog service lock, validates the ownership record, confirms the recorded PID/start pair is absent, refuses a live resumed twin, rechecks the lock bytes, and only then removes it. If a resident still owns the service lock, stop and let the lead reconcile that resident; do not delete a busy lock. Then repeat the whole install step.
 
    ```zsh
    cd /Users/edr/code/JouleWise
-   python3 - "$handoff_file" <<'PY'
-   import json
-   import sys
-   from pathlib import Path
+   python3 - <<'PY'
    from scripts.magistrate_watchdog import (
        DEFAULT_CUSTODY_ROOT, RealProcessTable, Storage, handoff_census,
        handoff_refusals, read_lock, service_lock,
@@ -178,19 +175,8 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
        path = storage.root / "magistrate.lock"
        original = path.read_bytes()
        lock = read_lock(storage)
-       owned = []
-       if lock == {}:
-           inventory = json.loads(Path(sys.argv[1]).read_text())
-           owned = inventory["owned"]
-           if not isinstance(owned, list) or not owned or any(
-               not isinstance(row, dict) or type(row.get("pid")) is not int
-               or row["pid"] <= 0 or not isinstance(row.get("start_time"), str)
-               or not row["start_time"] for row in owned
-           ):
-               raise SystemExit("handoff_lock_not_clear: invalid saved inventory")
-           lock = None
        rows = RealProcessTable().snapshot()
-       census = handoff_census(owned, lock, rows)
+       census = handoff_census([], lock, rows)
        refusals = handoff_refusals([], rows)
        if not census.empty or refusals:
            raise SystemExit(f"handoff_lock_not_clear: {census} {refusals}")
@@ -200,6 +186,22 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
        print("HANDOFF_DEAD_LOCK_REMOVED")
    PY
    ```
+
+   **ED-HANDS ONLY — corrupt-lock recovery:** An unparseable, `{}`, or non-object lock is `handoff_lock_invalid`; the block above refuses with `handoff_lock_not_clear` and leaves the file intact. No mechanism removes a corrupt lock because a saved inventory cannot prove the absence of an unrecorded owner (2026-09-08 delta re-audit, finding R1). Ed must run these verbatim commands from an observer Terminal and inspect both outputs:
+
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   scripts/magistrate_watchdog.py handoff-inventory
+   ps -axo pid,ppid,lstart,command | grep -E "claude|codex"
+   ```
+
+   Both outputs must show no headless resident (`claude -p` with the resident launch options: `--output-format stream-json --verbose --permission-mode auto --permission-prompts none --model fable --effort high --allowedTools ...`) and no resumed twin (`--resume ... --reply-on-resume`). If either is present or the inspection is uncertain, stop and reconcile it; do not remove the lock. Only after Ed verifies both absences may Ed remove the corrupt lock by hand from that observer Terminal:
+
+   ```zsh
+   rm "$HOME/night-custody/magistrate/magistrate.lock"
+   ```
+
+   Then repeat the whole install step from an interactive magistrate.
 
    The watchdog itself preserves a dead-owner lock and returns `HOLD_UNSAFE` with `dead_lock_resumed_twin` when a live resumed twin is visible. Existing locks contain no Claude session ID, so this is deliberately conservative: any interactive `--resume ... --reply-on-resume` is a potential twin, even if it belongs to another session. The watchdog never adopts or signals it by command shape. From the interactive magistrate, inventory again (rc 3 is expected while an unowned twin lives), inspect the printed PID/start/command, and have the operator identify the exact twin to stop. Run the stop block from the observer Terminal, which survives the target's exit. Enter the literal PID and complete start token from that inventory when prompted. Each signal revalidates the token and role; a mismatch stops recovery without signalling the replacement. Do not select a process belonging to another session without accounting for that session.
 

@@ -1485,15 +1485,16 @@ class HandoffDefectTests(WatchdogTestCase):
         self.assertEqual(1, len(matching), marker)
         return textwrap.dedent(matching[0])
 
-    def test_c2_corrupt_lock_recovery_checks_saved_owned_pairs(self) -> None:
-        """Counterfactual input: corrupt lock, with absent owner, live owned child, or late twin."""
+    def test_c2_corrupt_lock_recovery_refuses_even_with_absent_saved_owner(self) -> None:
+        """R1: stale inventory misses live unrecorded headless resident PID 84232."""
         block = self.recovery_block("HANDOFF_DEAD_LOCK_REMOVED")
         inventory = self.temp / "recovery.json"
         inventory.write_text(json.dumps({"owned": [{"pid": 100, "start_time": "old"}]}))
+        resident = wd.ProcessInfo(84232, 1, "unrecorded", " ".join(("claude", "-p", "magistrate", *wd.SESSION_ARGV_AFTER_PROMPT)))
         for raw in ("{torn", "{}", "[]"):
-            for rows, removed in (([], True),
-                    ([wd.ProcessInfo(100, 1, "old", "worker")], False),
-                    ([wd.ProcessInfo(200, 1, "twin", self.TWIN)], False)):
+            for rows in ([], [resident],
+                         [wd.ProcessInfo(100, 1, "old", "worker")],
+                         [wd.ProcessInfo(200, 1, "twin", self.TWIN)]):
                 with self.subTest(raw=raw, rows=rows):
                     path = self.harness.storage.root / "magistrate.lock"
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1502,12 +1503,11 @@ class HandoffDefectTests(WatchdogTestCase):
                          mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
                          mock.patch.object(sys, "argv", ["reconcile", str(inventory)]), \
                          contextlib.redirect_stdout(io.StringIO()):
-                        if removed:
+                        with self.assertRaisesRegex(
+                            SystemExit, "handoff_lock_not_clear: .*handoff_lock_invalid"
+                        ):
                             exec(compile(block, "<step4-corrupt>", "exec"), {})
-                        else:
-                            with self.assertRaisesRegex(SystemExit, "handoff_lock_not_clear"):
-                                exec(compile(block, "<step4-corrupt>", "exec"), {})
-                    self.assertEqual(not removed, path.exists())
+                    self.assertEqual(raw.encode(), path.read_bytes())
 
     def test_c3_documented_twin_stop_revalidates_each_signal(self) -> None:
         """Counterfactual input: selected late twin is reused before TERM or before KILL."""
