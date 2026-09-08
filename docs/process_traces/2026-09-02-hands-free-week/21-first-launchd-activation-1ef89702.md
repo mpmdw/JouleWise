@@ -2,8 +2,9 @@
 
 Q-C9 evidence item 1 (RELAUNCH RESUME PLAN, file 00 §2026-09-04 ~20:15). Written by the launched magistrate
 itself, activation `1ef89702-8b11-4463-8d6b-3c1400510f1a`, from the primary artifacts copied verbatim into
-`21-activation-1ef89702/` (state.json, events.jsonl, magistrate.lock, heartbeat, notice.ack, the relaunch
-prompt, the attempts listing, the launchd job print, the pmset sleep tail, and the process census at 00:55).
+`21-activation-1ef89702/` (state.json, events.jsonl, magistrate.lock, heartbeat, the relaunch
+prompt, the attempts listing, the launchd job print, the pmset sleep tail, and the process census at 00:55)
+(notice.ack had already been consumed by the watchdog; no copy exists). <!-- F8 -->
 
 ## What happened, in order (all times PDT, from events.jsonl)
 
@@ -15,7 +16,7 @@ prompt, the attempts listing, the launchd job print, the pmset sleep tail, and t
 | 4 | LAUNCHING → ACTIVE | 1788853915 | spawned activation 1ef89702-8b11-4463-8d6b-3c1400510f1a |
 
 The watchdog recovered from CLOCK_UNCERTAIN on its own once the lid was opened (Ed, 09-08 ~00:40): state.json
-shows `clock_sane_samples: 4`, `remote_stop.state: CLEAR` ("stop branch absent; positive control present"),
+shows `clock_sane_samples: 36` (copied state.json, last_clock 00:57:27) <!-- F7 -->, `remote_stop.state: CLEAR` ("stop branch absent; positive control present"),
 `backoff_index: 0`, `attempt: 1`. No operator touched the watchdog state, lock, or events.
 
 ## MAGISTRATE_WATCHDOG.md §Install handoff step 6 checks (verified from this activation)
@@ -28,10 +29,14 @@ shows `clock_sane_samples: 4`, `remote_stop.state: CLEAR` ("stop branch absent; 
 - launchd job `com.joulewise.magistrate`: `run interval = 300 seconds`, `last exit code = 0`, program
   python3.14 (`launchctl-print.txt`).
 
+Step 6 also says a nonempty census before that tick is a failed handoff (MAGISTRATE_WATCHDOG.md:256); the 00:55 census was nonempty (joulewise-53 and the bg-job daemon tree), so the handoff is not clean under the doc's own clause until WATCHDOG-CENSUS-01 lands (joulewise-53's lane). <!-- F12 -->
+
 ## First acts of the activation (MAGISTRATE_RELAUNCH_PROMPT order)
 
 1. Heartbeat written at epoch 1788853925 (then corrected to the claude pid 84232 at 1788853935; the first write
-   carried the Bash child's pid — the heartbeat interface wants the session pid the lock names).
+   carried the Bash child's pid). Nothing reads the heartbeat today (no occurrence in
+   scripts/magistrate_watchdog.py; MAGISTRATE_WATCHDOG.md:81 names no fields); activation 1ef89702 wrote `epoch_s`,
+   784a764e wrote `ts` — recorded, not resolved. <!-- F13 -->
 2. Launch email to Ed accepted by Gmail: message id `1a0800383847cde1`, subject "JouleWise — headless magistrate
    LAUNCHED 00:51 PDT (activation 1ef89702); a second live session is on the same lanes". It carried the one
    pending notice (`transition-2-clock_uncertain`) and the resume list.
@@ -39,7 +44,7 @@ shows `clock_sane_samples: 4`, `remote_stop.state: CLEAR` ("stop branch absent; 
    tick consumed it: events.jsonl gained `{"kind": "notice_acknowledged", "notice_ids":
    ["transition-2-clock_uncertain"], "epoch_s": 1788854136.9}` (00:55:36) and state.json now reads
    `notice_pending: []`; the ack file is gone from the custody root. The copied state.json/events.jsonl are the
-   post-acknowledgement versions (`clock_sane_samples: 33` at copy time).
+   post-acknowledgement versions (`clock_sane_samples: 36` at copy time; F7).
 
 ## Findings at launch (not defects of the watchdog; recorded for the next handoff)
 
@@ -62,8 +67,7 @@ shows `clock_sane_samples: 4`, `remote_stop.state: CLEAR` ("stop branch absent; 
 - Sleep hold: at launch the only assertion was the interactive session's `caffeinate -i -t 300`. This activation
   started `caffeinate -i -w 84232` (held while the magistrate pid lives). `pmset -g` shows no `sleepdisabled`.
   Last Maintenance Sleep entry: 00:39:32 (`pmset-sleep-tail.txt`).
-- `python3 …/T/watchdog` pid 48645 (alive since 09-04 04:53) is present in the census; identification is a
-  question in the joulewise-53 scout brief, not repeated here.
+- pid 48645 (python3.14, alive since 09-04 04:53 per the census; identified as the leaked 09-04 test stub by joulewise-53, not from this census). <!-- F15 -->
 
 ## What this does NOT prove
 

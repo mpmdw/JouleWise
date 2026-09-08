@@ -83,3 +83,18 @@ development checkout. Author every new v2 plan with
 authored, every armed plan's canonical `(plan_id, measurement_root,
 measurement_head)` is included in the magistrate relaunch prompt's
 frozen-checkout list until completion.
+
+**Standing rules** <!-- F11 -->
+
+Author every new v2 plan with
+`joulewise.night_plan_writer.write_night_plan`; invalid-plan tests begin with
+that writer's bytes and apply a named mutation. The writer emits both
+`schema: joulewise.night_plan.v2` and integer `schema_version: 2`; either field
+missing or inconsistent makes the plan malformed.
+Installer note: on install the installer checks `repo_head` against the
+driver checkout HEAD and `measurement_head` against the HEAD of the plan's
+`measurement_root`, while `--uninstall` checks neither pin and no longer
+needs `claude` on PATH.
+Ordinary
+daytime work in the dev checkout no longer invalidates an armed night; only
+moving the pinned measurement checkout does.
