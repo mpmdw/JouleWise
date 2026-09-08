@@ -57,7 +57,7 @@ def observe_identity(pid: int) -> Identity:
         )
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return Identity("UNKNOWN")
-    if result.returncode in (0, 1) and not result.stdout.strip() and not result.stderr.strip():
+    if result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip():
         return Identity("DEAD")
     parts = result.stdout.split()
     if result.returncode != 0 or result.stderr.strip() or len(parts) != 6:
@@ -196,6 +196,8 @@ def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identi
         if not _valid_exit(_read_marker(exited)):
             raise ValueError(f"invalid exit marker: {exited}")
         return
+    if _start_token(record.get("start_time")) is None:
+        raise ValueError(f"chain start identity unavailable: {started}")
     _inspect_identity(record, started, result, observer)
 
 
@@ -239,9 +241,12 @@ def census(*, parents: list[Path] | None = None,
             for child in children:
                 if child.name == "active-campaigns":
                     def inspect_registry() -> None:
+                        pending = Census()
                         for path in list(child.iterdir()):
-                            _reconciled(lambda: _inspect_campaign(path, result, observer),
+                            _reconciled(lambda: _inspect_campaign(path, pending, observer),
                                         lambda: _exists(path))
+                        result.refusals.extend(pending.refusals)
+                        result.warnings.extend(pending.warnings)
                     _reconciled(inspect_registry, lambda: _exists(child))
                 else:
                     # stat errors must propagate instead of Path.is_dir swallowing them.

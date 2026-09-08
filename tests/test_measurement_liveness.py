@@ -58,14 +58,12 @@ class MeasurementLivenessTests(unittest.TestCase):
         self.assertTrue(result.clear)
         self.assertIn("reused PID", result.warnings[0])
 
-    def test_dead_and_legacy_dead_warn_and_permit(self):
+    def test_dead_owner_with_start_time_warns_and_permits(self):
         self.observer = lambda pid: live.Identity("DEAD")
-        for value in ({"pid": 41, "start_time": START}, {"pid": 41}):
-            with self.subTest(value=value):
-                self.marker(value)
-                result = self.census()
-                self.assertTrue(result.clear)
-                self.assertIn("dead owner", result.warnings[0])
+        self.marker({"pid": 41, "start_time": START})
+        result = self.census()
+        self.assertTrue(result.clear)
+        self.assertIn("dead owner", result.warnings[0])
 
     def test_uncertain_open_markers_refuse(self):
         for raw in ('', '{', '[]', '{"pid":41}', '{"pid":true}',
@@ -180,11 +178,52 @@ class MeasurementLivenessTests(unittest.TestCase):
         with patch.object(live, "_read_marker", side_effect=disappear):
             self.assertTrue(self.census().clear)
 
+    def test_successful_empty_probe_is_unknown_for_live_pid(self):
+        with patch.dict(os.environ, {live.IDENTITY_PROBE_ENV: "/usr/bin/true"}):
+            self.assertEqual(live.observe_identity(os.getpid()), live.Identity("UNKNOWN"))
+
+    def test_chain_without_start_time_refuses_even_if_pid_is_dead(self):
+        self.marker({"pid": 41, "pgid": 41, "epoch_s": 1})
+        self.observer = lambda pid: live.Identity("DEAD")
+        result = self.census()
+        self.assertFalse(result.clear)
+        self.assertIn("indeterminate", result.refusals[0])
+        self.assertEqual(result.warnings, [])
+
+    def test_registry_retry_does_not_duplicate_diagnostics(self):
+        entries = [self.entry(), self.entry(), self.entry()]
+        registry = entries[0].path.parent
+        original = live._inspect_campaign
+        reads = 0
+        def inspect(path, result, observer):
+            nonlocal reads
+            if path == entries[2].path:
+                reads += 1
+                if reads <= 2:
+                    raise FileNotFoundError("fixture registry race")
+            original(path, result, observer)
+        def observe(pid):
+            # Both warning and refusal from the prefix must survive exactly once.
+            return live.Identity("LIVE", START)
+        def classify(path, result, observer):
+            inspect(path, result, (lambda pid: live.Identity("DEAD"))
+                    if path == entries[0].path else observer)
+        iterdir = Path.iterdir
+        def ordered(path):
+            return iter([entry.path for entry in entries]) if path == registry else iterdir(path)
+        with patch.object(live, "_inspect_campaign", side_effect=classify), patch.object(Path, "iterdir", ordered):
+            result = live.census(observer=observe)
+        self.assertEqual(reads, 3)
+        self.assertEqual(len(result.warnings), 1)
+        self.assertEqual(len(result.refusals), 2)
+        self.assertEqual(len(set(result.refusals)), 2)
+
     def test_probe_is_specific_pid_fixed_locale_no_commands(self):
         for code, stdout, stderr, expected in (
             (0, 'Tue Sep  8 01:02:03 2026 S+\n', '', live.Identity('LIVE', START)),
             (0, 'Tue Sep  8 01:02:03 2026 Z\n', '', live.Identity('DEAD')),
             (1, '', '', live.Identity('DEAD')),
+            (0, '', '', live.Identity('UNKNOWN')),
             (1, '', 'denied', live.Identity('UNKNOWN')),
             (2, '', '', live.Identity('UNKNOWN')),
             (0, 'bad', '', live.Identity('UNKNOWN')),

@@ -82,6 +82,16 @@ class WindowStatusGuardTests(unittest.TestCase):
         self.sentinel.touch()
         self.assertIn('live measurement', self.assert_refused().stderr)
 
+    def test_successful_empty_probe_refuses_live_pid(self):
+        self.marker({'pid': os.getpid(), 'start_time': START})
+        self.env['JOULEWISE_IDENTITY_PROBE'] = '/usr/bin/true'
+        self.assertIn('indeterminate', self.assert_refused().stderr)
+
+    def test_complete_marker_without_start_time_refuses_dead_pid(self):
+        self.marker({'pid': 41, 'pgid': 41, 'epoch_s': 1})
+        self.env.update(TEST_IDENTITY_OUTPUT='', TEST_IDENTITY_EXIT='1')
+        self.assertIn('indeterminate', self.assert_refused().stderr)
+
     def test_closed_chain_permits_publication(self):
         self.marker()
         (self.night / 'chain.exited').write_text(json.dumps(

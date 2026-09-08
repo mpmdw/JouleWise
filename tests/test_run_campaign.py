@@ -68,6 +68,10 @@ COMMAND_TIMEOUT_S = 60
 GENERATOR = ROOT / "scripts" / "generate_matrix.py"
 TEST_CAMPAIGN_POLICY = ROOT / "tests" / "fixtures" / "campaign_policy_test.json"
 
+REAL_CAMPAIGN_LOGS = (
+    Path("/Users/edr/code/JouleWise/runs_window_contrast_20260730/campaign_log.jsonl"),
+    Path("/Users/edr/code/JouleWise/runs/p2_015_floors_window_a/campaign_log.jsonl"),
+)
 
 spec = importlib.util.spec_from_file_location("run_campaign_module", SCRIPT)
 run_campaign_module = importlib.util.module_from_spec(spec)
@@ -204,6 +208,20 @@ class CampaignMeasurementRegistryTests(unittest.TestCase):
             publish.assert_not_called()
             child.assert_not_called()
         self.assertEqual(self.entries(), [])
+
+    def test_failing_identity_probe_refuses_cleanly_and_releases_lock(self):
+        for axi in (False, True):
+            stderr = io.StringIO()
+            with self.subTest(axi=axi), patch.dict(os.environ, {
+                "JOULEWISE_IDENTITY_PROBE": "/usr/bin/true",
+            }), patch.object(run_campaign_module, "observe_identity", wraps=self.live.observe_identity), patch.object(run_campaign_module, "run_authenticated_campaign_child") as child, redirect_stderr(stderr):
+                self.assertEqual(self.invoke(axi=axi), 2)
+                self.assertEqual(stderr.getvalue().splitlines()[-1],
+                                 "error: campaign start identity unavailable")
+                self.assertNotIn("Traceback", stderr.getvalue())
+                self.assertFalse((self.runs / 'campaign.lock').exists())
+                self.assertEqual(self.entries(), [])
+                child.assert_not_called()
 
     def test_registry_publication_error_releases_campaign_lock(self):
         for axi in (False, True):
@@ -702,6 +720,36 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                         self._parse(wire[:boundary]),
                         ([], "torn_prefix"),
                     )
+
+    @unittest.skipUnless(
+        all(path.is_file() for path in REAL_CAMPAIGN_LOGS),
+        "real campaign-log corpus is unavailable",
+    )
+    def test_r7_real_campaign_log_writer_rows_are_complete(self) -> None:
+        for log_path in REAL_CAMPAIGN_LOGS:
+            lines = log_path.read_bytes().splitlines()
+            windows = (
+                range(0, min(5, len(lines))),
+                range(max(0, len(lines) // 2 - 2), min(len(lines), len(lines) // 2 + 3)),
+                range(max(0, len(lines) - 5), len(lines)),
+            )
+            sample_indexes = [
+                min(window, key=lambda index: (len(lines[index]), index))
+                for window in windows
+            ]
+            for row_index in sample_indexes:
+                wire = lines[row_index]
+                self.assertIsInstance(json.loads(wire), dict)
+                for boundary in range(1, len(wire)):
+                    with self.subTest(
+                        log=log_path.name,
+                        row_index=row_index,
+                        boundary=boundary,
+                    ):
+                        self.assertEqual(
+                            self._parse(wire[:boundary]),
+                            ([], "torn_prefix"),
+                        )
 
     def test_r7_fixture_campaign_log_writer_rows_are_complete(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

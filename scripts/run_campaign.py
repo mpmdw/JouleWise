@@ -7279,9 +7279,13 @@ def run_axi_spec_campaign(
     in_flight: BaseException | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
-        registry_entry = publish_campaign(
-            lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
-        )
+        try:
+            registry_entry = publish_campaign(
+                lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
+            )
+        except RuntimeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         child_environment: dict[str, str] | None = None
         campaign_provenance_path: Path | None = None
         campaign_provenance: dict[str, Any] | None = None
@@ -8248,9 +8252,13 @@ def run_campaign(args: argparse.Namespace) -> int:
 
     try:
         if not args.dry_run:
-            registry_entry = publish_campaign(
-                lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
-            )
+            try:
+                registry_entry = publish_campaign(
+                    lock_path.runs_root, lock_path.nonce, start_time=lock_path.start_time
+                )
+            except RuntimeError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
             config_infos = [
                 item for item in items if isinstance(item, ConfigInfo)
             ]
