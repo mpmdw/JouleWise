@@ -103,3 +103,10 @@ driver log `/Users/edr/night-custody/rehearsal-20260909/night.log`; results bran
 records them under NIGHT-REHEARSAL-01, uninstalls both agents with `--uninstall` from the stub checkout, removes the
 stub checkout and plan root, and then sends the stage-1 plan email before any `DIAGNOSTIC_NO_PACK` plan is armed.
 Never re-arm the same plan on the same refusal signature twice.
+
+## Arm email (precondition (a)) — SENT
+
+Gmail id `1a0800cdb282c3f1`, 2026-09-08 ~01:27 PDT, subject "JouleWise — ARM REQUEST: rehearsal-20260909
+(REHEARSAL_STUB) for 02:56 PDT Tue 9 Sep; launches unless you reply NO". Check that thread for a NO immediately before
+step 0 of the arm-time sequence. Precondition (b) (joulewise-53 stand-down message) was still outstanding when this
+line was written.
