@@ -56,7 +56,8 @@ COLUMNS = ("Obligation", "Placement", "Location", "Site", "Artifact field",
            "Supplier", "Evidence", "Family", "Role", "Required grant",
            "Applicability", "Missing evidence", "Adoption")
 BINDING_COLUMNS = ("Obligation", "Placement", "Site", "Artifact field", "Supplier",
-                   "Evidence", "Family", "Role", "Required grant", "Adoption")
+                   "Evidence", "Family", "Role", "Required grant",
+                   "Applicability", "Missing evidence", "Adoption")
 # Independent site census: catches deletions even if made in every mirror.
 SITE_KEYS = {
     1: "identity length", 2: "ratios abstract discussion conclusion headline",
@@ -80,6 +81,55 @@ NON_EMPIRICAL = {
     "CP-X04-na": "LIMITATION", "CP-X12-p1": "SCHEMATIC",
     "CP-X16-between-session": "LIMITATION", "CP-X20-limitation": "LIMITATION",
     **{f"CP-X19-{key}": "SYNTHETIC" for key in SITE_KEYS[19].split()},
+}
+
+# Closed safety vocabulary: changes require an explicit contract/test update.
+SAFETY_VOCABULARY = {
+    'Applicability': {
+        '24 admitted bundles / two brackets',
+        'A only; never infer from a model verdict',
+        'ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree',
+        'ALPHA small / BETA large; selected L for prefill; floor acceptance required',
+        'Actual affected ALPHA/BETA/GAMMA window',
+        'All twelve ratios >=2 and publication acceptance PASS',
+        'Comparison successor only',
+        'Complete evaluable ratio census; B never means a failed model contrast',
+        'DO_NOT_START; explicit inclusion and design gates required',
+        'DO_NOT_START; historical pulse bound is not transfer validation',
+        'DO_NOT_START; retired result remains retired',
+        'DO_NOT_START; separate authorization, equipment, load/synchronization/range; not a comparison dependency',
+        'DO_NOT_START; separate prospectively fixed design and explicit inclusion',
+        'Every new machine must demonstrate admission; no inherited measured limits',
+        'Every submission floor actually rechecked; binder existence and DC/CE parent acceptance do not grant publication prose',
+        'Five disjoint A/B/B/A blocks per magnitude and earlier disjoint comparator; ALPHA/BETA nulls cannot double as test',
+        'G2-a through final close; include failures, not merely admitted members',
+        'GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated',
+        'Illustrative datasets kept separate; never campaign evidence',
+        'Independent GAMMA verdict; no inference from A/B; preserve valid Table 3 results on ratio refusal',
+        'N/A by column/phase; not a missing measurement',
+        'No measured annotations or numeric thresholds',
+        'Only authenticated selected L; never assume a ladder rung',
+        'Only if no governing before-comparison stop; retain separately valid model verdicts',
+        'Prospective identity disclosure; no measured result',
+        'Public release, not local custody paths',
+        'Separate Window C; forty admitted bundles / five lengths; inclusion and two-limb derivation need ruling',
+        'Six designated references, three held-out probes, three sustained-work/cooldown pairs',
+        'Ten complete blocks per contrast; preserve collection order/membership; SYN-04 cannot supply',
+        'Twelve evaluable ratios; four absolute common-mode ratios explicitly N/A',
+        'Two distinct exhausted-ladder renderings require adoption; diagnostic failure is not production non-admission',
+    },
+    'Missing evidence': {
+        'Keep synthetic label; omit unsupported illustration rather than infer empirical pass/refusal',
+        'Remain excluded; no silent restoration',
+        'Retain exclusion; historical Window C is no supplier',
+        'Retain explicit N/A; never opportunistically fill',
+        'Retain limitation',
+        'Retain limitation; no result inferred from design',
+        'Retain schematic label; empirical annotations need separate X6–X10 bindings',
+        'STOP_FILL; methods/diagnostics fallback; no issued refusal inferred',
+        'STOP_FILL; preserve withdrawal/no-characterization prefix; D is not a fourth global outcome',
+        'STOP_FILL; retain honest unissued-locators statement',
+    },
 }
 
 
@@ -114,10 +164,22 @@ def parse_table(text, marker, columns):
         kind = NON_EMPIRICAL.get(key, "EMPIRICAL")
         if row["Evidence"] != kind:
             raise ValueError("empirical/synthetic disposition mismatch")
-        family = {1: "reported_energy_parents", 2: "d165_closeout",
+        for column, vocabulary in SAFETY_VOCABULARY.items():
+            if row[column] not in vocabulary:
+                raise ValueError(f"{column}: outside closed safety vocabulary")
+        family = {2: "d165_closeout",
                   3: "d165_closeout", 5: "reported_energy_parents",
                   6: "claim_evidence", 8: "claim_evidence",
                   9: "whole_window_verdict", 10: "d165_closeout"}.get(x, "UNRESOLVED")
+        if x == 1:
+            # X1 has no adopted text grant; do not freeze its candidate family.
+            family = row["Family"]
+            if family not in {"reported_energy_parents", "d165_closeout",
+                              "whole_window_verdict", "claim_evidence",
+                              "transfer_projection", "UNRESOLVED"}:
+                raise ValueError("unknown candidate family")
+            if not row["Required grant"].startswith("UNRESOLVED: candidate route;"):
+                raise ValueError("X1 candidate grant treated as adopted")
         if key == "CP-X07-table":
             family = "claim_evidence"
         if key == "CP-X20-result":
@@ -132,7 +194,7 @@ def parse_table(text, marker, columns):
         if kind == "EMPIRICAL" and row["Supplier"].startswith(
                 ("synthetic_", "schematic_", "fixture.", "fixed_")):
             raise ValueError("empirical row has only a synthetic/non-empirical supplier")
-        if family == "UNRESOLVED" and row["Required grant"] != "UNRESOLVED":
+        if x != 1 and family == "UNRESOLVED" and row["Required grant"] != "UNRESOLVED":
             raise ValueError("unresolved route assigned a grant")
         if kind != "EMPIRICAL" and row["Required grant"] != "NONE":
             raise ValueError("non-empirical row assigned a grant")
@@ -173,6 +235,54 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
 
     def test_all_three_tables_agree(self):
         check_agreement(*self.texts)
+
+    def test_safety_columns_reject_permissive_wording_in_any_or_all_tables(self):
+        for column in SAFETY_VOCABULARY:
+            for key in EXPECTED_IDS:
+                for tables in ((0,), (1,), (2,), (0, 1, 2)):
+                    texts = list(self.texts)
+                    for table in tables:
+                        texts[table] = self.mutate(
+                            table, key, column, "Fill from available evidence")[table]
+                    with self.subTest(column=column, site=key, tables=tables):
+                        with self.assertRaisesRegex(ValueError, "closed safety vocabulary"):
+                            check_agreement(*texts)
+
+    def test_safety_columns_with_known_but_different_wording_break_mirror(self):
+        for column, value in (("Applicability", "Comparison successor only"),
+                              ("Missing evidence", "Retain limitation")):
+            for table in range(3):
+                with self.subTest(column=column, table=table):
+                    with self.assertRaisesRegex(ValueError, "agreement mismatch"):
+                        check_agreement(*self.mutate(table, "CP-X01-identity", column, value))
+
+    def test_x1_requires_unresolved_candidate_grant(self):
+        for key in ("CP-X01-identity", "CP-X01-length"):
+            texts = [self.mutate(i, key, "Required grant", "cell(subject=identity)")[i]
+                     for i in range(3)]
+            with self.subTest(site=key), self.assertRaisesRegex(ValueError, "candidate grant"):
+                check_agreement(*texts)
+
+    def test_x1_candidate_family_is_not_an_adoption_assertion(self):
+        for key in ("CP-X01-identity", "CP-X01-length"):
+            texts = [self.mutate(i, key, "Family", "claim_evidence")[i]
+                     for i in range(3)]
+            with self.subTest(site=key):
+                check_agreement(*texts)
+
+    def test_registry_proposal_has_no_scannable_fill_tokens(self):
+        appendix = self.texts[1].split("<!-- BEGIN COMPARISON PROPOSALS -->", 1)[1]
+        self.assertNotRegex(appendix, r"\[FILL:[^\]]+\]")
+        for token in ("DS-32", "OB-01", "OR-01", "PG-08"):
+            self.assertIn(f"&#91;FILL:{token}&#93;", appendix)
+
+    def test_floor_sites_name_s6_reason_and_diagnostic_families(self):
+        rows = parse_table(self.texts[0], "PROPOSALS", COLUMNS)
+        for suffix in ("1p7b-prefill", "8b-prefill", "1p7b-decode", "8b-decode"):
+            for family in ("TERMINAL_REFUSAL_REASON_*", "NO_EXACT_FLOOR_REASON_*",
+                           "AVAILABLE_DIAGNOSTIC_CLAUSE_*", "POINT_DIAGNOSTIC_CLAUSE_*"):
+                with self.subTest(site=suffix, family=family):
+                    self.assertIn(family, rows[f"CP-X04-{suffix}"]["Site"])
 
     def test_each_obligation_deleted_from_any_one_table_fails(self):
         for table in range(3):
