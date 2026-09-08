@@ -791,7 +791,7 @@ def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
             continue
         if _contains(production.path, custody) or _contains(custody, production.path):
             return _result("G6", name, GateStatus.FAIL, f"rehearsal custody overlaps production root {production.role}: {production.path}", artifact.citation())
-    return _result("G6", name, GateStatus.PASS, "receipt is non-claim rehearsal authority and resolved custody is disjoint from every enumerated production root", artifact.citation(), bundle.manifest.citation())
+    return _result("G6", name, GateStatus.PASS, "receipt is non-claim rehearsal authority; resolved custody is the named night-custody child and disjoint from every DISJOINT census role", artifact.citation(), bundle.manifest.citation())
 
 
 def evaluate_g7(_bundle: EvidenceBundle) -> GateResult:

@@ -439,6 +439,9 @@ REVIEWED_MAIN_KEYS = {
     "clean",
     "exact_match",
 }
+ARM_CONTEXT_NON_PATH_KEYS = frozenset({
+    "bracket_session_id", "pre_attempt_id", "post_attempt_id", "clock_route",
+})
 ARM_CONTEXT_KEYS = {
     "bracket_session_id",
     "pre_attempt_id",

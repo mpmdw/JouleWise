@@ -1691,6 +1691,20 @@ class ProductionCustodyResolverTests(unittest.TestCase):
         return [{"deployment_id": "clone", "measurement_root": str(root / "retained"),
                  "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
 
+    def test_shipped_inventory_pins_all_four_retained_deployments(self):
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        expected = {
+            "JouleWise": "/Users/edr/code/JouleWise",
+            "JouleWise-measurement-20260813": "/Users/edr/JouleWise-measurement-20260813",
+            "JouleWise-measurement-20260818": "/Users/edr/JouleWise-measurement-20260818",
+            "JouleWise-measurement-v5-20260910-1c83f2a": "/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a",
+        }
+        self.assertEqual(4, len(inventory))
+        self.assertEqual(expected, {item["deployment_id"]: item["measurement_root"] for item in inventory})
+        roots = readiness.production_custody_roots(home=Path("/synthetic-home"), inventory=inventory)
+        self.assertEqual({"deployment_measurement_root:" + key: Path(value) for key, value in expected.items()},
+                         {item.role: item.path for item in roots if item.role.startswith("deployment_measurement_root:")})
+
     def test_frozen_derivations_resolve_every_role_without_existence_filter(self):
         home = Path("/synthetic-home")
         roots = readiness.production_custody_roots(home=home, inventory=self.inventory(home))

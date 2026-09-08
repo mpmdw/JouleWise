@@ -1889,6 +1889,12 @@ class PackNightProducerTests(unittest.TestCase):
             self.assertEqual(ref["sha256"], go[key + "_sha256"])
         if hasattr(self.readiness, "validate_pack_night_go_receipt"):
             self.readiness.validate_pack_night_go_receipt(go)
+        self.assertIs(type(go["issued_epoch_s"]), float)
+        self.assertIs(type(go["issued_monotonic_ns"]), int)
+        self.assertIs(type(go["valid_until_monotonic_ns"]), int)
+        self.assertEqual(["C1", "C2", "C3", "C4", "C5"], [row["condition_id"] for row in go["conditions"]])
+        self.assertEqual(["PASS"] * 5, [row["status"] for row in go["conditions"]])
+        self.assertEqual([None] * 5, [row["basis"] for row in go["conditions"]])
         self.assertEqual(21, len(go["t0_evidence"]))
         census_ref = next(row for row in go["conditions"] if row["condition_id"] == "C3")["evidence"][0]
         census_path = self.custody / census_ref["path"]
@@ -1918,6 +1924,107 @@ class PackNightProducerTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.driver._write_bytes_exclusive(go_path, b"replacement")
         self.assertEqual(go, json.loads(go_path.read_bytes()))
+
+    def test_gate_reauthenticates_c1_and_c2_despite_forged_driver_pass_rows(self):
+        prepared = self.driver._prepare_pack_night(self.plan, self.plan_path, self.raw)
+        state = self.driver._author_pack_arm(self.plan, prepared)
+        forged = {key: night_gate.ConditionRow(key, "PASS", None, (), {"forged": True})
+                  for key in ("C1", "C2")}
+        def evaluate():
+            return night_gate.evaluate_night(self.plan, self.probes,
+                pack_arm_receipt=state["path"], pack_conditions=forged)
+        receipt = evaluate()
+        self.assertEqual("GO", receipt.verdict)
+        self.assertEqual(["PASS"] * 5, [row.status for row in receipt.conditions])
+        self.assertNotIn("forged", receipt.conditions[0].measured)
+        self.assertNotIn("forged", receipt.conditions[1].measured)
+        for key, expected_row in (("authorization_record", 0), ("confirmation_record", 0)):
+            path = Path(self.plan.pack_night[key]["path"])
+            original = path.read_bytes()
+            path.write_bytes(original + b" ")
+            receipt = evaluate()
+            self.assertEqual("REFUSED", receipt.verdict)
+            self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
+            self.assertIn(key, receipt.refusal.detail)
+            self.assertEqual("FAIL", receipt.conditions[expected_row].status)
+            path.write_bytes(original)
+        with mock.patch.object(self.readiness, "_verify_arm_receipt",
+                side_effect=self.readiness.ArmReadinessError("readiness_dependency_refused", "forged ARM")):
+            receipt = evaluate()
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("PASS", receipt.conditions[0].status)
+        self.assertEqual("FAIL", receipt.conditions[1].status)
+        self.assertIn("forged ARM", receipt.refusal.detail)
+        missing = night_gate.evaluate_night(self.plan, self.probes, pack_conditions=forged)
+        self.assertEqual("launch_go_receipt_missing", missing.refusal.reason)
+        self.assertEqual("FAIL", missing.conditions[1].status)
+        path = Path(state["authored"]["receipt_paths"][0])
+        path.write_bytes(path.read_bytes() + b" ")
+        receipt = evaluate()
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("FAIL", receipt.conditions[1].status)
+        self.assertIn("t0_evidence", receipt.refusal.detail)
+
+    def test_pack_standard_refusal_receipt_preserves_each_actual_cause(self):
+        for reason, receipt_reason in (
+            ("night_courier_unavailable", "night_probe_error"),
+            ("night_plan_overruns_deadman", "night_probe_error"),
+            ("night_chain_digest_mismatch", "night_chain_digest_mismatch"),
+            ("night_chain_already_started", "night_probe_error"),
+            ("launch_go_receipt_missing", "launch_go_receipt_missing"),
+            ("launch_go_receipt_invalid", "launch_go_receipt_invalid"),
+        ):
+            with self.subTest(reason=reason):
+                custody = self.root / reason
+                night = custody / "night"
+                night.mkdir(parents=True)
+                plan = replace(self.plan, custody_root=str(custody))
+                self.driver._write_standard_refusal_result(custody, night, plan, reason,
+                    "cause-specific detail", self.plan.t0_epoch_s, 123)
+                receipt = json.loads((night / "receipt.json").read_bytes())
+                refusal = json.loads((night / "refusal.json").read_bytes())
+                self.assertEqual(receipt_reason, receipt["refusal"]["reason"])
+                self.assertEqual(reason, refusal["refusal"]["reason"])
+                self.assertEqual("cause-specific detail", refusal["refusal"]["detail"])
+                self.assertEqual(
+                    f"{refusal['refusal']['reason']}: {refusal['refusal']['detail']}",
+                    receipt["refusal"]["detail"],
+                )
+                result = json.loads((night / "result.json").read_bytes())
+                self.assertEqual(reason, result["aborted_reason"])
+                self.assertEqual("REFUSED", receipt["verdict"])
+                self.assertEqual([], night_gate.validate_receipt(receipt))
+                self.assertFalse((night / "go_receipt.json").exists())
+
+    def test_gate_checks_authorization_fields_and_confirmation_bytes(self):
+        for key, changes in (
+            ("authorization_record", {"attempt_id": "another-plan/1"}),
+            ("authorization_record", {"purpose": "unruled"}),
+            ("authorization_record", {"claim_eligible": True}),
+            ("authorization_record", {"permitted_blocks": 2}),
+            ("authorization_record", {"authority": "unruled"}),
+            ("confirmation_record", {"table_sha256": "0" * 64}),
+            ("confirmation_record", {"confirmed_at": {"epoch_s": "0", "iso8601_utc": "1970-01-01T00:00:00.000000Z"}}),
+        ):
+            with self.subTest(key=key, changes=changes):
+                path = Path(self.plan.pack_night[key]["path"])
+                original = path.read_bytes()
+                ref = self.write(path, {**json.loads(original), **changes})
+                changed = replace(self.plan, pack_night={**self.plan.pack_night, key: ref})
+                receipt = night_gate.evaluate_night(changed, self.probes)
+                self.assertEqual("REFUSED", receipt.verdict)
+                self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
+                self.assertIn(key, receipt.refusal.detail)
+                self.assertEqual("FAIL", receipt.conditions[0].status)
+                path.write_bytes(original)
+        for key in ("authorization_record", "confirmation_record"):
+            path = Path(self.plan.pack_night[key]["path"])
+            original = path.read_bytes()
+            path.unlink()
+            receipt = night_gate.evaluate_night(self.plan, self.probes)
+            self.assertEqual("launch_go_receipt_missing", receipt.refusal.reason)
+            self.assertIn(key, receipt.refusal.detail)
+            path.write_bytes(original)
 
     def test_no_go_on_arm_refusal(self):
         self.readiness.generate_arm_receipt.side_effect = lambda *a, **k: {"status": "REFUSE", "arm_disposition": "NO_GO"}
@@ -2052,6 +2159,22 @@ class PackNightProducerTests(unittest.TestCase):
         inventory = [{"deployment_id": "production", "measurement_root": str(self.root / "production"), "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
         with mock.patch.object(Path, "home", return_value=home), mock.patch.object(loader, "_production_inventory", return_value=inventory):
             self.driver._pack_rehearsal_roots(plan, arm, "T0_REHEARSAL")
+            # Every non-custody ARM path may live inside this rehearsal child.
+            for key in self.readiness.ARM_CONTEXT_KEYS - self.readiness.ARM_CONTEXT_NON_PATH_KEYS - {"custody_root"}:
+                own = custody / key
+                own.mkdir()
+                changed = {**arm, "arm_context": {**arm["arm_context"], key: str(own)}}
+                self.driver._pack_rehearsal_roots(plan, changed, "T0_REHEARSAL")
+                for production in (home / "night-custody/magistrate" / key,
+                                   self.root / "production" / key):
+                    production.mkdir(parents=True)
+                    changed = {**arm, "arm_context": {**arm["arm_context"], key: str(production)}}
+                    with self.subTest(key=key, production=production), self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
+                        self.driver._pack_rehearsal_roots(plan, changed, "T0_REHEARSAL")
+            for production in (self.root / "production", self.root / "production" / "nested", self.root):
+                production.mkdir(parents=True, exist_ok=True)
+                with self.subTest(production=production), self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
+                    self.driver._pack_rehearsal_roots(replace(plan, measurement_root=str(production)), arm, "T0_REHEARSAL")
             for root in (custody.parent, custody / window_id, custody.parent / "another"):
                 root.mkdir(parents=True, exist_ok=True)
                 with self.subTest(root=root), self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
@@ -2066,9 +2189,13 @@ class PackNightProducerTests(unittest.TestCase):
             changed = {**arm, "arm_context": {**arm["arm_context"], "claim_runs_root": str(custody.parent)}}
             with self.assertRaisesRegex(self.driver.PackNightRefusal, "arm_context.claim_runs_root"):
                 self.driver._pack_rehearsal_roots(plan, changed, "T0_REHEARSAL")
-            for purpose, changed_arm in (("G2B_SHAKEDOWN", arm), ("T0_REHEARSAL", {**arm, "pack": {"window_id": "production"}})):
-                with self.assertRaises(self.driver.PackNightRefusal):
+            for purpose, changed_arm, detail in (
+                ("G2B_SHAKEDOWN", arm, "purpose"),
+                ("T0_REHEARSAL", {**arm, "pack": {"window_id": "production"}}, "rehearsal_purpose_on_production_id"),
+            ):
+                with self.assertRaisesRegex(self.driver.PackNightRefusal, detail) as caught:
                     self.driver._pack_rehearsal_roots(plan, changed_arm, purpose)
+                self.assertEqual("launch_go_receipt_invalid", caught.exception.reason)
 
     def test_window_expiring_during_final_authentication_emits_no_go(self):
         def expire(*args, **kwargs):

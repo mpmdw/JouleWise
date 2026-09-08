@@ -1036,9 +1036,12 @@ def _write_standard_refusal_result(
     evidence: Any = None,
 ) -> None:
     if plan.receipt_class == "TRANSACTION_PACK" and not (night_dir / "receipt.json").exists():
+        # §10.3: the frozen gate validator accepts gate codes only. Preserve
+        # the driver cause in detail and in the authoritative refusal.json.
+        receipt_reason = reason if reason in NIGHT_GATE_REASON_CODES else _CODES["probe_error"]
         failed = night_gate.Receipt(night_gate.SCHEMA, plan.receipt_class, plan.plan_id, "REFUSED",
             tuple(night_gate.ConditionRow(key, "FAIL", None, (), {"detail": detail}) for key in night_gate._CONDITION_IDS),
-            night_gate.Refusal("launch_go_receipt_invalid", detail, ()), int(started_monotonic_ns))
+            night_gate.Refusal(receipt_reason, f"{reason}: {detail}", ()), int(started_monotonic_ns))
         _write_bytes_exclusive(night_dir / "receipt.json", failed.to_json_bytes())
     refusal = _write_driver_refusal(
         night_dir / "refusal.json", plan, reason, detail, evidence
@@ -1092,149 +1095,20 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
     )
 
 
-class PackNightRefusal(ValueError):
-    def __init__(self, detail: str, *, missing: bool = False):
-        self.reason = "launch_go_receipt_missing" if missing else "launch_go_receipt_invalid"
-        super().__init__(detail)
-
-
-def _pack_bytes(path: Path, field: str, expected: str | None = None) -> bytes:
-    from joulewise import arm_readiness as readiness
-    try:
-        if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
-            raise PackNightRefusal(field + ": non-absolute or symlinked")
-        raw = path.read_bytes()
-    except FileNotFoundError as exc:
-        raise PackNightRefusal(field, missing=True) from exc
-    except OSError as exc:
-        raise PackNightRefusal(field + ": " + str(exc)) from exc
-    if expected is not None and readiness.sha256_bytes(raw) != expected:
-        raise PackNightRefusal(field + ": sha256 mismatch")
-    return raw
-
-
-def _pack_object(path: Path, field: str, expected: str | None = None):
-    from joulewise import arm_readiness as readiness
-    raw = _pack_bytes(path, field, expected)
-    try:
-        value = readiness.parse_json_bytes(raw)
-        if not isinstance(value, Mapping):
-            raise ValueError("not an object")
-    except (ValueError, TypeError) as exc:
-        raise PackNightRefusal(field + ": invalid JSON") from exc
-    return value
-
-
-def _pack_digest(plan: NightPlan, arm=None) -> Path:
-    from joulewise import arm_readiness as readiness
-    binding = plan.pack_night
-    root = Path(binding["pack_root"])
-    if (not root.is_absolute() or root.name != binding["pack_id"]
-            or any(p.is_symlink() for p in (root, *root.parents))):
-        raise PackNightRefusal("pack_root")
-    try:
-        root = root.resolve(strict=True)
-        digest = readiness.committed_pack_tree_sha256(root)
-    except FileNotFoundError as exc:
-        raise PackNightRefusal("pack_root", missing=True) from exc
-    except (OSError, ValueError, RuntimeError) as exc:
-        raise PackNightRefusal("pack_root: " + str(exc)) from exc
-    if digest != binding["pack_sha256"]:
-        raise PackNightRefusal("pack_root.pack_sha256")
-    if arm is not None and (arm["pack"]["pack_sha256"] != digest
-                            or arm["pack"]["pack_root"] != str(root)
-                            or arm["pack"]["pack_id"] != binding["pack_id"]):
-        raise PackNightRefusal("arm_receipt.pack.pack_root/pack_sha256")
-    return root
+# Shared custody authentication belongs to the gate; preparation and final GO
+# publication re-use the same checks.
+PackNightRefusal = night_gate.PackNightRefusal
+_pack_bytes = night_gate._pack_bytes
+_pack_object = night_gate._pack_object
+_pack_digest = night_gate._pack_digest
+_pack_no_retry = night_gate._pack_no_retry
+_pack_evidence = night_gate._pack_evidence
 
 
 def _prepare_pack_night(plan: NightPlan, plan_path: Path, plan_raw: bytes):
-    """Re-read armed authority; no ARM authoring and no GO occurs here."""
-    from joulewise import arm_readiness as readiness
-    _pack_bytes(plan_path, "plan_sha256", readiness.sha256_bytes(plan_raw))
-    root = _pack_digest(plan)
-    binding = plan.pack_night
-    records = {}
-    for field in ("authorization_record", "confirmation_record"):
-        locator = binding[field]
-        path = Path(locator["path"])
-        try:
-            path.resolve(strict=True).relative_to(Path(plan.custody_root).resolve(strict=True))
-        except FileNotFoundError as exc:
-            raise PackNightRefusal(field, missing=True) from exc
-        except (OSError, ValueError, RuntimeError) as exc:
-            raise PackNightRefusal(field + ".path") from exc
-        records[field] = _pack_object(path, field, locator["sha256"])
-    authorization = records["authorization_record"]
-    keys = {"purpose", "attempt_id", "claim_eligible", "pack_sha256", "permitted_chain_sha256", "permitted_blocks", "authority"}
-    if set(authorization) != keys:
-        raise PackNightRefusal("authorization_record.keys")
-    for field in ("pack_sha256", "permitted_chain_sha256"):
-        if not isinstance(authorization[field], str) or re.fullmatch("[0-9a-f]{64}", authorization[field]) is None:
-            raise PackNightRefusal("authorization_record." + field)
-    if authorization["attempt_id"] != f"{plan.plan_id}/{binding['attempt_ordinal']}":
-        raise PackNightRefusal("authorization_record.attempt_id")
-    if authorization["pack_sha256"] != binding["pack_sha256"]:
-        raise PackNightRefusal("authorization_record.pack_sha256")
-    purpose = authorization["purpose"]
-    if not isinstance(purpose, str) or purpose not in {"G2B_SHAKEDOWN", "CAMPAIGN_TRANSACTION", "T0_REHEARSAL"}:
-        raise PackNightRefusal("authorization_record.purpose")
-    if (type(authorization["claim_eligible"]) is not bool
-            or type(authorization["permitted_blocks"]) is not int or authorization["permitted_blocks"] < 1
-            or not isinstance(authorization["authority"], str) or not authorization["authority"].strip()):
-        raise PackNightRefusal("authorization_record.claim_eligible/permitted_blocks/authority")
-    if purpose != "CAMPAIGN_TRANSACTION" and authorization["claim_eligible"]:
-        raise PackNightRefusal("authorization_record.claim_eligible")
-    if purpose == "G2B_SHAKEDOWN" and (authorization["permitted_blocks"] != 1 or "D-171" not in authorization["authority"]):
-        raise PackNightRefusal("authorization_record.permitted_blocks")
-    if purpose == "CAMPAIGN_TRANSACTION" and authorization["authority"] != "V5-TRANSACTION-GO-01":
-        raise PackNightRefusal("authorization_record.authority")
-    confirmation = records["confirmation_record"]
-    if set(confirmation) != {"table_path", "table_sha256", "transcript_sha256", "confirmed_at"}:
-        raise PackNightRefusal("confirmation_record.keys")
-    for field in ("table_sha256", "transcript_sha256"):
-        if not isinstance(confirmation[field], str) or re.fullmatch("[0-9a-f]{64}", confirmation[field]) is None:
-            raise PackNightRefusal("confirmation_record." + field)
-    event = confirmation["confirmed_at"]
-    if (not isinstance(event, Mapping) or set(event) != {"epoch_s", "iso8601_utc"}
-            or type(event["epoch_s"]) is not float or not math.isfinite(event["epoch_s"])):
-        raise PackNightRefusal("confirmation_record.confirmed_at")
-    try:
-        stamp = datetime.strptime(event["iso8601_utc"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
-        if abs(stamp.timestamp() - event["epoch_s"]) > 0.000001:
-            raise ValueError("timestamps differ")
-    except (TypeError, ValueError) as exc:
-        raise PackNightRefusal("confirmation_record.confirmed_at") from exc
-    if not isinstance(confirmation["table_path"], str):
-        raise PackNightRefusal("confirmation_record.table_path")
-    _pack_bytes(Path(confirmation["table_path"]), "confirmation_record.table_sha256", confirmation["table_sha256"])
-    chain = _pack_bytes(Path(plan.chain_path), "window_chain_sha256", authorization["permitted_chain_sha256"])
-    sidecar = _pack_bytes(Path(plan.chain_sha256_path), "chain_sha256_path").decode("utf-8")
-    if _sidecar_digest(sidecar, Path(plan.chain_path).name) != readiness.sha256_bytes(chain):
-        raise PackNightRefusal("window_chain_sha256: sidecar mismatch")
-    return {"root": root, **records}
-
-
-def _pack_no_retry(plan: NightPlan, boot: str, written: Path | None = None):
-    from joulewise import arm_readiness as readiness
-    pack_custody = Path(plan.custody_root) / plan.pack_night["pack_id"]
-    for directory in (pack_custody, pack_custody / "arm_readiness.receipts", pack_custody / "arm_readiness.consumptions"):
-        if directory.is_symlink():
-            raise PackNightRefusal("arm_receipt: symlinked namespace")
-    for path in pack_custody.rglob("*.consumed.json"):
-        value = _pack_object(path, "consumption")
-        if not isinstance(value.get("boot_session_id"), str):
-            raise PackNightRefusal("consumption.boot_session_id")
-        if value.get("boot_session_id") == boot:
-            raise PackNightRefusal("arm_receipt: consumption this boot")
-    namespace = pack_custody / "arm_readiness.receipts"
-    if not namespace.exists():
-        return
-    for entry in readiness.scan_receipt_namespace(namespace, "arm"):
-        if entry["receipt"]["boot_session_id"] != boot:
-            continue
-        if written is None or entry["number"] > int(written.stem.removeprefix("arm-")):
-            raise PackNightRefusal("arm_receipt: higher-numbered unconsumed receipt or re-arm this boot")
+    """Re-read pinned plan and authority before authoring ARM or publishing GO."""
+    _pack_bytes(plan_path, "plan_sha256", hashlib.sha256(plan_raw).hexdigest())
+    return night_gate._authenticate_pack_records(plan)
 
 
 def _author_pack_arm(plan: NightPlan, prepared):
@@ -1275,49 +1149,6 @@ def _author_pack_arm(plan: NightPlan, prepared):
     return {"path": path, "arm": arm, "sha256": result["receipt_sha256"], "authored": authored}
 
 
-def _pack_evidence(plan: NightPlan, arm_state):
-    from joulewise import arm_readiness as readiness
-    from joulewise import arm_readiness_evidence_t0 as t0_author
-    custody = Path(plan.custody_root)
-    pack_custody = custody / plan.pack_night["pack_id"]
-    paths = arm_state["authored"].get("receipt_paths")
-    expected_paths = {str(pack_custody / t0_author._EVIDENCE_DIRECTORY / t0_author._receipt_name(row)) for row in t0_author._EXPECTED_ROWS}
-    if not isinstance(paths, list) or len(paths) != 15 or any(not isinstance(path, str) for path in paths) or set(paths) != expected_paths:
-        raise PackNightRefusal("t0_evidence.receipt_paths")
-    arm_paths = {str(pack_custody / item["path"]): item["sha256"]
-                 for item in arm_state["arm"]["evidence"] if item.get("namespace") == "WINDOW_CUSTODY"}
-    records = []
-    inputs = {}
-    for text in paths:
-        if text not in arm_paths:
-            raise PackNightRefusal("t0_evidence: author receipt absent from ARM")
-        path = Path(text)
-        value = _pack_object(path, "t0_evidence", arm_paths[text])
-        for fact in value.get("facts", []):
-            if fact.get("source_kind") != "PROBE":
-                continue
-            source = _pack_object(pack_custody / fact["source_path"], "t0_evidence.source", fact["source_sha256"])
-            for item in source.get("input_artifacts", []):
-                if item["path"] in inputs and inputs[item["path"]] != item["sha256"]:
-                    raise PackNightRefusal("t0_evidence.source: conflicting input digest")
-                inputs[item["path"]] = item["sha256"]
-        records.append(path)
-    # This is the author's exact capture inventory, not a caller glob or subset.
-    records.extend(pack_custody / "arm_readiness.t0.inputs" / name for name in t0_author._CAPTURE_FILES.values())
-    result = []
-    for path in records:
-        expected = arm_paths.get(str(path), inputs.get(str(path)))
-        if expected is None:
-            raise PackNightRefusal("t0_evidence.capture: absent from author attestation")
-        raw = _pack_bytes(path, "t0_evidence", expected)
-        try:
-            relative = path.resolve(strict=True).relative_to(custody.resolve(strict=True)).as_posix()
-        except ValueError as exc:
-            raise PackNightRefusal("t0_evidence.path") from exc
-        result.append({"path": relative, "sha256": readiness.sha256_bytes(raw)})
-    return sorted(result, key=lambda item: item["path"])
-
-
 def _pack_launch_references(plan: NightPlan, arm):
     from joulewise import arm_readiness as readiness
     root = Path(plan.pack_night["pack_root"])
@@ -1339,39 +1170,7 @@ def _pack_launch_references(plan: NightPlan, arm):
     return refs
 
 
-def _pack_rehearsal_roots(plan, arm, purpose):
-    from joulewise import arm_readiness as readiness, t0_rehearsal
-    from scripts.rehearse_t0_unattended import _production_inventory
-    window_id = arm["pack"]["window_id"]
-    prefixed = isinstance(window_id, str) and window_id.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX)
-    if prefixed != (purpose == "T0_REHEARSAL"):
-        raise PackNightRefusal("rehearsal_purpose_on_production_id" if purpose == "T0_REHEARSAL" else "purpose")
-    if not prefixed:
-        return
-    production = readiness.production_custody_roots(home=Path.home(), inventory=_production_inventory())
-    roots = {"measurement_root": plan.measurement_root, "custody_root": plan.custody_root}
-    roots.update({"arm_context." + key: value for key, value in arm["arm_context"].items()
-                  if key not in {"bracket_session_id", "pre_attempt_id", "post_attempt_id", "clock_route"}})
-    for field, text in roots.items():
-        path = Path(text)
-        if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
-            raise PackNightRefusal(field)
-        try:
-            path = path.resolve(strict=True)
-        except (OSError, RuntimeError) as exc:
-            raise PackNightRefusal(field + ": resolution_error") from exc
-        for root in production:
-            if root.resolution_error is not None:
-                raise PackNightRefusal("rehearsal_roots_not_disjoint: resolution_error " + root.role)
-            predicate = next((spec.predicate for spec in readiness.PRODUCTION_CUSTODY_ROOTS
-                              if spec.role == root.role.split(":", 1)[0]), None)
-            if predicate not in {"DISJOINT", "SIBLING_CHILD"}:
-                raise PackNightRefusal("rehearsal_roots_not_disjoint: unknown production predicate")
-            if predicate == "SIBLING_CHILD" and field in {"custody_root", "arm_context.custody_root"}:
-                if path.parent != root.path or path.name != window_id:
-                    raise PackNightRefusal("rehearsal_roots_not_disjoint: " + field)
-            elif t0_rehearsal._contains(root.path, path) or t0_rehearsal._contains(path, root.path):
-                raise PackNightRefusal("rehearsal_roots_not_disjoint: " + field)
+_pack_rehearsal_roots = night_gate._pack_rehearsal_roots
 
 
 def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes):
@@ -1562,11 +1361,7 @@ def run_night(
                 raise PackNightRefusal("receipt_class: rehearsal flag requires REHEARSAL_STUB")
             prepared = _prepare_pack_night(plan, plan_path, plan_raw)
             arm_state = _author_pack_arm(plan, prepared)
-            conditions = {
-                "C1": night_gate.ConditionRow("C1", "PASS", None, (str(plan.pack_night["authorization_record"]["path"]),), dict(prepared["authorization_record"])),
-                "C2": night_gate.ConditionRow("C2", "PASS", None, (str(arm_state["path"]),), {"arm_sha256": arm_state["sha256"]}),
-            }
-            receipt = evaluate_night(plan, probes, pack_conditions=conditions)
+            receipt = evaluate_night(plan, probes, pack_arm_receipt=arm_state["path"])
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
             receipt = _pack_refused_receipt(plan, error, probes)
     else:

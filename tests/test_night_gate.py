@@ -903,6 +903,21 @@ class NightGateTests(unittest.TestCase):
         for code in night_gate.NIGHT_DRIVER_REASON_CODES:
             self.assertNotIn(f'"{code}"', body, code)
 
+    def test_valid_v3_pack_without_driver_arguments_lifts_unbuilt_fence(self):
+        plan = make_plan("TRANSACTION_PACK", pack_night={
+            "pack_id": "pack-test", "pack_root": "/fixture/pack-test",
+            "pack_sha256": "a" * 64, "attempt_ordinal": 1,
+            "authorization_record": {"path": "/custody/auth.json", "sha256": "b" * 64},
+            "confirmation_record": {"path": "/custody/confirm.json", "sha256": "c" * 64},
+        })
+        parsed = night_gate.NightPlan.from_mapping(night_plan_mapping(plan))
+        receipt = night_gate.evaluate_night(parsed, FakeProbeSource().probes())
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("launch_go_receipt_missing", receipt.refusal.reason)
+        self.assertIn("pack_root", receipt.refusal.detail)
+        self.assertEqual("FAIL", receipt.conditions[0].status)
+        self.assertEqual("FAIL", receipt.conditions[1].status)
+
     def test_pack_refusal_codes_keep_standard_receipt_shape(self):
         from scripts.run_night import _pack_refused_receipt, PackNightRefusal
         from dataclasses import replace
