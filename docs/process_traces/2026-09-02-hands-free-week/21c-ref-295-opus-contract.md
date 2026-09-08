@@ -236,7 +236,13 @@ SkyComputerUseService, cua_node). Those are Ed's app, never signalled, and they 
 list is informational for the arm. The interactive session's pid 83953 and its codex mcp-server children are treated like any other
 session: absent = fine, present = do not arm. The NIGHT is judged by the driver's own first act, `joulewise.night_gate.agent_census`
 under D-169's documented semantics, exactly as the handback says; the arming session does not pre-empt it. Consequences: (1) if the
-driver's pgrep alternation matches the ChatGPT.app helpers at 02:56, the receipt will be `night_refused_agent_present`, which
+driver's pgrep alternation matches the ChatGPT.app helpers at 02:56 (t0 1788947760), the receipt will be `night_refused_agent_present`, which
 NIGHT_HANDBACK.md classes as acceptable for a stub; (2) the arm-notice follow-up asks Ed to quit the ChatGPT desktop app before
-02:45 PDT on 9 Sep for a clean REHEARSAL_ONLY receipt, and both census outputs are recorded in the arm-time trace either way. Do not
+02:45 PDT (epoch 1788947100) on 9 Sep for a clean REHEARSAL_ONLY receipt, and both census outputs are recorded in the arm-time trace either way. Do not
 hold the arm for the ChatGPT helpers alone.
+
+Delta 5 (21e5) correction to the factual premise of this ruling, by the magistrate from the census artifacts' ppid columns: the
+ChatGPT-pathed `codex app-server` / `cua_node` / computer-use processes present at the stand-down census were descendants of
+joulewise-53's own codex mcp-server (pid 83953 tree), not of Ed's ChatGPT.app (pid 82301). The ruling's rule is unchanged: Ed's
+desktop-app tree is excluded; every other foreign match is a session and blocks the arm; pid 83953 must be gone (Ed asked to close
+its terminal, Gmail `1a081723350aea55`, thread `1a0800cdb282c3f1`).

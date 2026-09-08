@@ -586,7 +586,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - joulewise-53 stood down (its message: main `1c83f2af`; daemon/twin retired; see 21b §Stand-down). Precondition (b) for the arm is met.
   Ed's ChatGPT.app helpers are NOT agent sessions under D-175 cond. 5 (ruling in 21c); 21b step 4 now gates on foreign agent SESSIONS
   only, prints the informational list and the production `pgrep -lf "codex|claude|t3"` output. Follow-up to Ed on the arm thread:
-  Gmail `1a0816757635cf98` (quit the ChatGPT desktop app before 02:45 PDT 9 Sep for a clean REHEARSAL_ONLY receipt).
+  Gmail `1a0816757635cf98` (quit the ChatGPT desktop app before the belt, epoch 1788947100, for a clean REHEARSAL_ONLY receipt) and the correction
+  `1a081723350aea55` asking Ed to CLOSE the joulewise-53 terminal (pid 83953 stays alive until then and blocks the arm while present).
 - NEXT EXACT ACTIONS unchanged from the section above except (1) is done (PR #295 merged `23012b52`) and (2) is done; the arm runs in
   window 1788944160 ≤ now < 1788945300 with no NO on thread `1a0800cdb282c3f1` and no standdown.request. Hazard: a leaked fake
   `vllm serve` test server (pid 58633, since 09-04) matches the production census alternation only by a temp-path substring.
