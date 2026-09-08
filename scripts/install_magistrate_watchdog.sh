@@ -87,6 +87,30 @@ adopt_start=""
 adopt_activation=""
 adopt_version=""
 if [[ "$mode" == "--install" ]]; then
+  # Read-only preflight: retirement is an explicit operator action (step 1).
+  # Refuse before writing a plist or lock if any resume machinery remains.
+  "$python_bin" - <<'PY'
+import re
+import subprocess
+
+result = subprocess.run(
+    ("/bin/ps", "-axo", "pid=,ppid=,lstart=,command="),
+    check=True, capture_output=True, text=True, timeout=10,
+)
+for line in result.stdout.splitlines():
+    parts = line.strip().split(None, 7)
+    if len(parts) != 8:
+        continue
+    command = parts[7]
+    if "<defunct>" in command.casefold():
+        continue
+    match = re.search(r"(?:^|[/\s])claude(?:/versions/\d+\.\d+\.\d+)?(?:\s|$)", command, re.IGNORECASE)
+    tokens = command[match.end():].casefold().split() if match else []
+    if tokens[:2] == ["daemon", "run"] or (tokens and tokens[0] in {
+        "bg-spare", "--bg-spare", "bg-pty-host", "--bg-pty-host"
+    }):
+        raise SystemExit(f"handoff_daemon_not_retired: pid={parts[0]} {command}; complete Install handoff step 1")
+PY
   # File 15 row 10: the installing, Terminal-hosted magistrate is the one
   # exceptional pre-watchdog tree that the first supervisor must adopt.
   read -r adopt_pid adopt_start adopt_activation adopt_version < <(

@@ -886,6 +886,145 @@ def _is_bg_pty_host(command: str) -> bool:
     return role in {"bg-pty-host", "--bg-pty-host"}
 
 
+def handoff_process_role(command: str) -> str | None:
+    """Recognize background resume machinery, independently of its PPID."""
+    suffix = _claude_command_suffix(command)
+    tokens = suffix.split() if suffix is not None else []
+    if tokens[:2] == ["daemon", "run"]:
+        return "daemon"
+    if tokens and tokens[0] in {"bg-spare", "--bg-spare"}:
+        return "bg_spare"
+    if _is_bg_pty_host(command):
+        return "bg_pty_host"
+    if _is_interactive_claude(command) and "--reply-on-resume" in tokens and any(
+        token == "--resume" or token.startswith("--resume=") for token in tokens
+    ):
+        return "resumed_twin"
+    return None
+
+
+def handoff_daemons(processes: Sequence[ProcessInfo]) -> list[ProcessInfo]:
+    return [row for row in processes if "<defunct>" not in row.command.casefold()
+            and handoff_process_role(row.command) in {"daemon", "bg_spare", "bg_pty_host"}]
+
+
+def handoff_refusals(
+    owned: Sequence[Mapping[str, Any]], processes: Sequence[ProcessInfo]
+) -> list[str]:
+    pairs = {(row["pid"], row["start_time"]) for row in owned}
+    refusals = []
+    for row in processes:
+        if "<defunct>" in row.command.casefold():
+            continue
+        role = handoff_process_role(row.command)
+        if role in {"daemon", "bg_spare", "bg_pty_host"}:
+            refusals.append(f"handoff_daemon_not_retired: {role} pid={row.pid}")
+        elif role == "resumed_twin" and (row.pid, row.start_time) not in pairs:
+            refusals.append(f"handoff_unowned_resumed_twin: pid={row.pid}")
+    return refusals
+
+
+def handoff_census(
+    owned: Sequence[Mapping[str, Any]],
+    lock: Mapping[str, Any] | None,
+    processes: Sequence[ProcessInfo],
+) -> CensusObservation:
+    """Handoff ownership only; never substitute this for the night agent census."""
+    pairs = {(row["pid"], row["start_time"]) for row in owned}
+    if lock is not None:
+        if (lock.get("schema") != LOCK_SCHEMA or type(lock.get("pid")) is not int
+                or not isinstance(lock.get("start_time"), str) or not lock["start_time"]):
+            return CensusObservation(False, 3, "", "handoff_lock_invalid")
+        pairs.add((lock["pid"], lock["start_time"]))
+    # Even a defunct recorded pair must disappear from ps before the receipt passes.
+    survivors = [row for row in processes if (row.pid, row.start_time) in pairs]
+    return CensusObservation(not survivors, 0, "\n".join(
+        f"{row.pid} {row.start_time} {row.command}" for row in survivors
+    ), "")
+
+
+def reap_handoff(
+    inventory: Mapping[str, Any],
+    processes: ProcessTable,
+    lock_reader: Callable[[], Mapping[str, Any] | None],
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> dict[str, Any]:
+    """Reap only recorded pairs, retaining each immediate pre-signal observation."""
+    owned = inventory["owned"]
+    expected = {row["pid"]: row["start_time"] for row in owned}
+    root = inventory["interactive_pid"]
+    if root not in expected or len(expected) != len(owned):
+        raise ValueError("handoff_inventory_invalid: missing root or duplicate pid")
+    ordered = [pid for pid in expected if pid != root] + [root]
+    outcomes = {str(pid): "recorded" for pid in ordered}
+    before_signal: dict[str, dict[str, str | None]] = {"term": {}, "kill": {}}
+
+    def snapshot() -> dict[int, str]:
+        return {row.pid: row.start_time for row in processes.snapshot()}
+
+    initial = processes.snapshot()
+    refusals = list(inventory.get("handoff_refusals", []))
+    refusals.extend(handoff_refusals(owned, initial))
+    after_term: dict[int, str] = {}
+    after_kill: dict[int, str] = {}
+    if not refusals:
+        for phase, signum in (("term", signal.SIGTERM), ("kill", signal.SIGKILL)):
+            for pid in ordered:
+                observed = snapshot().get(pid)
+                before_signal[phase][str(pid)] = observed
+                previous = outcomes[str(pid)]
+                if observed != expected[pid]:
+                    # A later snapshot must not overwrite evidence that TERM was sent.
+                    if previous in {"term_sent", "term_exited"}:
+                        outcomes[str(pid)] = "term_exited"
+                    else:
+                        outcomes[str(pid)] = "already_gone" if observed is None else "reused_skipped"
+                    continue
+                try:
+                    processes.send_signal(pid, signum)
+                except ProcessLookupError:
+                    # It existed immediately before this signal, so it was not already gone.
+                    outcomes[str(pid)] = f"{phase}_exited"
+                else:
+                    outcomes[str(pid)] = f"{phase}_sent"
+            if phase == "term":
+                after_term = snapshot()
+                sleep(STOP_COOPERATIVE_S)
+            else:
+                after_kill = snapshot()
+
+    deadline = monotonic() + 30
+    while True:
+        lock = lock_reader()
+        final = processes.snapshot()
+        live_pairs = {(row.pid, row.start_time) for row in final}
+        survivors = [pid for pid, start in expected.items() if (pid, start) in live_pairs]
+        if refusals or not survivors or monotonic() >= deadline:
+            break
+        sleep(1)
+    for pid in expected:
+        if pid in survivors:
+            outcomes[str(pid)] = "survivor"
+        elif outcomes[str(pid)] in {"term_sent", "kill_sent"}:
+            outcomes[str(pid)] = outcomes[str(pid)].replace("_sent", "_exited")
+    refusals.extend(handoff_refusals(owned, final))
+    census = handoff_census(owned, lock, final)
+    return {
+        "schema": "joulewise.magistrate_handoff_receipt.v1",
+        "owned": owned,
+        "outcomes": outcomes,
+        "before_signal": before_signal,
+        "after_term": {str(pid): after_term.get(pid) for pid in expected},
+        "after_kill": {str(pid): after_kill.get(pid) for pid in expected},
+        "survivors": survivors,
+        "census": dataclasses.asdict(census),
+        "refusals": sorted(set(refusals)),
+        "verdict": "pass" if not survivors and census.empty and not refusals else "fail",
+    }
+
+
 def _snapshot_descendants(rows: Sequence[ProcessInfo], roots: Iterable[int]) -> set[int]:
     selected = set(roots)
     changed = True
@@ -936,11 +1075,8 @@ def handoff_inventory(
     orphan_roots = {
         process.pid
         for process in rows
-        if process.ppid == 1
-        and (
-            _is_bg_pty_host(process.command)
-            or "/.claude/shell-snapshots/" in process.command.casefold()
-        )
+        if handoff_process_role(process.command) is not None
+        or (process.ppid == 1 and "/.claude/shell-snapshots/" in process.command.casefold())
     }
     candidate_pids = _snapshot_descendants(rows, orphan_roots)
     candidate_pids.difference_update(tree_pids | inventory_call_chain)
@@ -965,7 +1101,8 @@ def handoff_inventory(
     remaining_candidates = candidate_pids - adopted_pids
 
     def record(process: ProcessInfo, provenance: str) -> dict[str, Any]:
-        return {**dataclasses.asdict(process), "provenance": provenance}
+        return {**dataclasses.asdict(process), "provenance": provenance,
+                "role": handoff_process_role(process.command)}
 
     owned_rows = [process for process in rows if process.pid in owned_pids]
     owned_rows.sort(key=lambda process: process.pid)
@@ -974,6 +1111,9 @@ def handoff_inventory(
     return {
         "schema": "joulewise.magistrate_handoff_inventory.v2",
         "interactive_pid": interactive.pid,
+        "handoff_refusals": handoff_refusals(
+            [dataclasses.asdict(process) for process in owned_rows], rows
+        ),
         "owned": [
             record(
                 process,
@@ -1218,6 +1358,11 @@ def decide(
             return Decision("HOLD_UNSAFE", f"process table unavailable: {exc}")
         owner = owned_process(lock, process_snapshot)
         if owner is None:
+            twins = [row.pid for row in process_snapshot
+                     if "<defunct>" not in row.command.casefold()
+                     and handoff_process_role(row.command) == "resumed_twin"]
+            if twins:
+                return Decision("HOLD_UNSAFE", f"dead_lock_resumed_twin: pids={twins}")
             storage.unlink(storage.root / "magistrate.lock")
             lock = None
 
@@ -1961,6 +2106,12 @@ def adopt_recorded_session_for_drain(
     owner = owned_process(lock_record, deps.processes.snapshot())
     now = deps.wall_now().astimezone()
     if owner is None:
+        if any(handoff_process_role(row.command) == "resumed_twin"
+               and "<defunct>" not in row.command.casefold()
+               for row in deps.processes.snapshot()):
+            # Preserve the ownership evidence even when a plan hold takes precedence
+            # over the named dead-lock refusal in decide().
+            return None
         storage.append_jsonl(
             storage.root / "events.jsonl",
             {
@@ -2107,7 +2258,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=("tick", "handoff-inventory"),
+        choices=("tick", "handoff-inventory", "handoff-daemons"),
         default="tick",
         help="run one watchdog tick or print the read-only install-handoff PID inventory",
     )
@@ -2135,6 +2286,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "handoff-daemons":
+        try:
+            daemons = handoff_daemons(RealProcessTable().snapshot())
+        except Exception as exc:
+            print(f"handoff_daemon_check_failed: {exc}", file=sys.stderr)
+            return 3
+        print(json.dumps([dataclasses.asdict(row) | {"role": handoff_process_role(row.command)}
+                          for row in daemons], sort_keys=True, indent=2))
+        return 3 if daemons else 0
     if args.command == "handoff-inventory":
         if len(args.adopt_pid) != len(args.start):
             print(
@@ -2152,7 +2312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"handoff-inventory failed: {type(exc).__name__}: {exc}", file=sys.stderr)
             return 3
         print(json.dumps(inventory, sort_keys=True, indent=2))
-        return 0
+        return 3 if inventory["handoff_refusals"] else 0
     if args.adopt_pid or args.start:
         print("--adopt-pid/--start require handoff-inventory", file=sys.stderr)
         return 3

@@ -81,6 +81,7 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         ps_stub.write_text(
             "#!/bin/zsh\n"
             "case \"$*\" in\n"
+            '  *-axo*) print -r -- "${HANDOFF_PS_ROWS:-}" ;;\n'
             "  *command=*) print 'claude' ;;\n"
             "  *lstart=*) print 'Thu Sep  4 01:02:03 2026' ;;\n"
             "  *ppid=*) print '1' ;;\n"
@@ -128,6 +129,24 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def test_install_refuses_live_daemon_host_or_spare_before_any_write(self) -> None:
+        """Counterfactual: a transient daemon or spare remains in the shared ps table."""
+        for command in (
+            '/Users/edr/.local/bin/claude daemon run --origin transient --spawned-by {"pid":1536}',
+            'claude bg-spare --bg-spare /tmp/cc-daemon-501/spare.claim.sock',
+            'claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/spare.pty.sock 200 50 -- claude --bg-spare sock',
+            '/Users/edr/.local/share/claude/versions/2.1.263 --bg-spare sock',
+            '/Users/edr/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude --bg-pty-host sock',
+        ):
+            with self.subTest(command=command):
+                self.environment["HANDOFF_PS_ROWS"] = f"71666 1536 Tue Sep 8 00:00:00 2026 {command}"
+                completed = self._run(self.shadow_script, "--install")
+                self.assertNotEqual(0, completed.returncode)
+                self.assertIn("handoff_daemon_not_retired", completed.stderr)
+                self.assertFalse((self.home / "Library/LaunchAgents").exists())
+                self.assertFalse((self.home / "night-custody").exists())
+                self.assertFalse(self.launch_log.exists())
 
     def test_rendered_plist_pins_canonical_checkout(self) -> None:
         render_dir = self.root / "rendered"
