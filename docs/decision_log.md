@@ -219,6 +219,7 @@ be re-derived by a future agent gets an entry here.
 | D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
+| D-177 | Omit empirical Window C characterization; narrow the claim precondition and disclose uncharacterized phase attribution | adjudicated (magistrate synthesis, 2026-09-08) |
 
 ---
 
@@ -11156,3 +11157,70 @@ would `HOLD_UNSAFE`, drain the resident and block every later launch (`scripts/m
 an "already armed" carve-out would strip the session of the re-arm path the 09-03 rehearsal actually needed.
 
 **Evidence:** packet, cold ruling, Opus refutation and synthesis in the trace directory above.
+
+
+## D-177: Omit empirical Window C characterization (magistrate, 2026-09-08)
+
+**Status:** ADJUDICATED by the magistrate synthesis dated 2026-09-08.
+Window C is the separate instrument-characterization campaign: the measured
+checks of the instrument's response to work. The comparison successor omits
+its empirical characterization results. P.2 retains the four questions as
+prospective methods (methods for a future campaign), with their fixed
+calculations and minimum counts labelled design requirements. X13–X16 remain
+`PROPOSED_STOP_FILL`, meaning no proposed
+result site may be filled, and the P.2 summary remains `STOP_FILL`; this is a
+ruled omission, not a pending inclusion decision. No report, result, custody
+family (a class of paper inputs checked against their named sources), producer,
+grant (permission to render a result), placement or supply-map key (an input
+lookup identifier) is adopted.
+
+**Two conditions:**
+
+1. Narrow P.2's universal “before any campaign result may rely on the
+   instrument” precondition to per-token conversion (the fitted joules per
+   output token), issued-floor claims (claims using a published resolution
+   guard for assigned-energy differences), and phase-specific claims
+   (statements about energy assigned to prompt processing or token generation).
+   These are the classes named by P.2's withdrawal clause; failure withdraws
+   the dependent claim in a future campaign.
+2. Disclose the uncharacterized phase attribution, meaning the assignment of
+   energy to phases without a measured check of that assignment. The lead
+   rules that the D-123 mean cells, the average energies assigned to each phase,
+   ARE phase-specific results. The successor must state, adjacent to those
+   placements and in the protocol's limitations section, that phase attribution
+   is reported without an instrument phase-accounting characterization; the
+   phase-accounting check registered in P.2 was not run for this paper; phase
+   energies are per-window accounting under the registered boundary rule
+   (energy assigned by overlap with sampled power records), not independently
+   characterized attributions.
+
+**Wording disposition:** preserve the installed §6 Variant-0 refusal paragraph
+in `docs/paper/fill-rehearsal/rendered-refusal.md` and P.2's paragraph beginning
+“The following are registered characterization methods” verbatim. The synthesis
+adopts the Opus disposition paragraph as the closing paragraph of P.2 and once
+in §6 Variant 0, adding to rather than replacing the installed text.
+
+**Options Considered:** A, omit measured characterization while retaining its
+methods, is adopted with the two conditions above. B, include it through a
+separately designed and authorized campaign, requires a new campaign and a
+future design ruling. C, reuse existing comparison input families to supply
+characterization, is barred by the custody contract: authenticating a parent
+input does not authorize another result, and floor-building blocks cannot
+also be disjoint characterization tests (tests using different evidence).
+
+**Considerations:** the comparison claim gates do not name characterization
+as a general precondition. The former universal sentence would nevertheless
+impose a condition this paper does not meet. The D-123 means also require the
+explicit phase-attribution limitation. Omitting characterization reduces the
+claims the paper can make; an unperformed campaign is not an observed refusal.
+No evidence rule, calculation, minimum count, or publication permission changes.
+
+**Revisit trigger:** any proposal to add measured characterization to this
+successor requires a separate design ruling and new campaign; proposed sites
+and historical retired rows supply no authority to do so.
+
+**Evidence:** governing synthesis
+`docs/process_traces/2026-09-08-handoff-redo/99bc-coldgate-packet-paper-characterization/13-magistrate-synthesis.md`,
+with `10-coldgate-fable-ruling.md` and `11-coldgate-opus-refutation.md` beside it
+in the lead's `/Users/edr/code/JouleWise` checkout. The synthesis governs over
+the two evidence opinions.
