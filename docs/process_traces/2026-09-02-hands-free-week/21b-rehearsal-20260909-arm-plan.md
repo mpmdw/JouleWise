@@ -215,3 +215,12 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
   ceiling) and each relaunch sends Ed a mandated launch email. Activation 784a764e therefore keeps itself alive with
   a bounded background poll (standdown.request, `~/night-custody/*/night_plan.json`, joulewise-53's pid, a 7-minute
   tick) instead of ending its turn idle. Launch email for 784a764e: Gmail `1a080326c4d2f147`.
+- joulewise-53's answers (cross-session message, ~01:52 PDT): (a) the arm-time census must treat the Claude bg-job
+  daemon 71666, bg-pty-hosts 71596/71682, bg-spare 71687 and the resumed twin 71607 as foreign matches that must be
+  gone; joulewise-53 retires them itself as its last act before stand-down (`claude daemon stop --any`, then verify
+  no `claude daemon run|bg-spare|bg-pty-host|--resume` process remains) and states the result in its stand-down
+  message; this activation never signals them. The step-4 regex `codex|claude|t3` already matches every one of those
+  command lines (all carry `claude` in the binary path or argv), so no census change is needed — a non-empty foreign
+  list aborts the arm. (b) PR #296's synthesis (D-175) is the ruling of record for line 19 and the eight conditions
+  before it merges. Expected stand-down: ~1–2 h after 01:52 PDT, addressed to joulewise-magistrate-784a764e-12b, with
+  the main SHAs of whatever merged (census/daemon branch at 298da021 was in delta re-audit 2 + Opus final-head review).
