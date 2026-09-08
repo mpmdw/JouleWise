@@ -1,6 +1,8 @@
 """S6 synthetic contract oracle: no paper renderer, evidence IO or capabilities.
 
 These records exercise semantics only. They are deliberately not D-173 types.
+The production D-168 census is eight ordinary/independent ratios plus four
+comparative R_cm values; these synthetic fixtures preserve that full arity.
 """
 from dataclasses import dataclass, replace
 from decimal import Decimal as D
@@ -70,10 +72,12 @@ class Stop:
 @dataclass(frozen=True)
 class Scenario:
     ratio: str = 'A'
-    ratios: tuple = (D('2'), D('3'))  # complete stipulated synthetic census
+    ratios: tuple = (D('2'),) * 8
+    comparative_ratios: tuple = (D('3'),) * 4
     decode: Comparison = Comparison()
     prefill: Comparison = Comparison()
     stops: tuple = ()
+    stage_order: tuple = ('before comparison', 'at close-out')
     evidence: str = 'verified'
     exhausted_count: int | None = None
     characterization: str = 'collected'
@@ -109,6 +113,9 @@ def check_fixture(case, output):
     """Reject an inconsistent proposed symbolic output; never issue paper text."""
     if len(case.abstract.split()) > 250:
         raise ValueError('abstract exceeds 250')
+    # Knowing chronological order supplies no multi-stage precedence policy.
+    if case.stage_order != ('before comparison', 'at close-out'):
+        raise ValueError('stage order UNBOUND')
     if len(case.stops) > 1:
         raise ValueError('stage precedence UNBOUND or conflicting stages')
     for stop in case.stops:
@@ -126,9 +133,11 @@ def check_fixture(case, output):
     elif case.evidence != 'verified':
         ratio = 'FALLBACK'
     else:
-        if len(case.ratios) != 2 or any(not x.is_finite() or x < 0 for x in case.ratios):
+        if (len(case.ratios) != 8 or len(case.comparative_ratios) != 4
+                or any(not x.is_finite() or x < 0
+                       for x in (*case.ratios, *case.comparative_ratios))):
             raise ValueError('incomplete synthetic ratio census')
-        ratio = 'A' if all(x >= 2 for x in case.ratios) else 'B'
+        ratio = 'A' if all(x >= 2 for x in (*case.ratios, *case.comparative_ratios)) else 'B'
     if case.ratio != ratio:
         raise ValueError('ratio disposition mismatch')
     decode, prefill = model_outcome(case.decode), model_outcome(case.prefill)
@@ -155,6 +164,21 @@ def check_fixture(case, output):
         ratio, decode, prefill, stop=case.stops[0] if case.stops else None,
         evidence=case.evidence, reducer=reducer,
         prefix='NOT_COLLECTED_PREFIX_UNBOUND' if case.characterization == 'not_collected' else None)
+    if case.evidence != 'verified' and (output.ratio == 'REFUSAL' or output.stop):
+        raise ValueError('absence is not issued refusal')
+    if output.stop != canonical.stop:
+        raise ValueError('contradictory stop reason or identity')
+    for phase in ('decode', 'prefill'):
+        proposed, governed = getattr(output, phase), getattr(canonical, phase)
+        if proposed != governed:
+            if proposed == 'directional':
+                raise ValueError('directional claim forbidden by comparison gates')
+            if phase == 'decode' and governed == 'directional':
+                raise ValueError('unaffected decode must survive')
+            raise ValueError('contradictory comparison outcome')
+    if (output.repeated_decode != canonical.repeated_decode
+            or output.repeated_prefill != canonical.repeated_prefill):
+        raise ValueError('repeated verdicts must match byte-for-byte')
     if output != canonical:
         raise ValueError('inconsistent symbolic output')
 
@@ -193,8 +217,8 @@ class PaperComparisonContractTests(unittest.TestCase):
     def test_ratio_crosses_independent_model_outcomes(self):
         for ratio, (decode, dtext), (prefill, ptext) in product(('A', 'B'), OUTCOMES, OUTCOMES):
             with self.subTest(ratio=ratio, decode=dtext, prefill=ptext):
-                case = Scenario(ratio=ratio, ratios=(D('2'), D('3')) if ratio == 'A'
-                                else (D('1.9'), D('3')), decode=decode, prefill=prefill)
+                case = Scenario(ratio=ratio, ratios=(D('2'),) * 8 if ratio == 'A'
+                                else (D('1.9'),) + (D('2'),) * 7, decode=decode, prefill=prefill)
                 check_fixture(case, expected(ratio, dtext, ptext))
 
     def test_two_stop_stages_and_unaffected_decode(self):
@@ -206,7 +230,7 @@ class PaperComparisonContractTests(unittest.TestCase):
                 case = Scenario(ratio='REFUSAL', stops=(stop,))
                 good = expected('REFUSAL', prefill=prefill, stop=stop)
                 check_fixture(case, good)
-                with self.assertRaises(ValueError):
+                with self.assertRaisesRegex(ValueError, 'unaffected decode must survive'):
                     check_fixture(case, replace(good, decode='not_evaluated',
                                                 repeated_decode=('not_evaluated',) * 2))
 
@@ -217,9 +241,9 @@ class PaperComparisonContractTests(unittest.TestCase):
             check_fixture(case, good)
             forged = replace(good, ratio='REFUSAL', stop=Stop(
                 'at close-out', 'invented_missing_ratio', 'ratio:cell-beta'))
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, 'absence is not issued refusal'):
                 check_fixture(case, forged)
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, 'absence is not issued refusal'):
                 check_fixture(replace(case, ratio='REFUSAL', stops=(forged.stop,)), forged)
 
     def test_d166_split_retains_decode_and_two_test_family(self):
@@ -244,11 +268,38 @@ class PaperComparisonContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 check_fixture(Scenario(ratio='REFUSAL', stops=pair), expected('REFUSAL'))
 
+    def test_known_stage_order_does_not_license_contradictions(self):
+        stop = Stop('before comparison', 'synthetic_window_non_admission',
+                    'prefill:model-small:window-beta')
+        case = Scenario(ratio='REFUSAL', stops=(stop,))
+        self.assertEqual(case.stage_order, ('before comparison', 'at close-out'))
+        self.assertEqual(len(case.stops), 1)  # Passes the independent arity guard.
+        good = expected('REFUSAL', prefill='not_evaluated', stop=stop)
+        check_fixture(case, good)
+        with self.assertRaisesRegex(ValueError, 'contradictory stop reason or identity'):
+            check_fixture(case, replace(good, stop=replace(stop, reason='conflict')))
+        with self.assertRaisesRegex(ValueError, 'contradictory comparison outcome'):
+            check_fixture(case, replace(good, prefill='magnitude_failed',
+                                       repeated_prefill=('magnitude_failed',) * 2))
+
+    def test_full_d168_census_and_each_ratio_component(self):
+        case = Scenario()
+        check_fixture(case, expected())
+        for field, size in (('ratios', 8), ('comparative_ratios', 4)):
+            for arity in (size - 1, size + 1):
+                with self.subTest(field=field, arity=arity):
+                    with self.assertRaisesRegex(ValueError, 'incomplete synthetic ratio census'):
+                        check_fixture(replace(case, **{field: (D('2'),) * arity}), expected())
+            for index in range(size):
+                values = list(getattr(case, field))
+                values[index] = D('1.9')
+                check_fixture(replace(case, ratio='B', **{field: tuple(values)}), expected('B'))
+
     def test_characterization_prefix_is_independent(self):
         for ratio in ('A', 'B'):
             for state in ('collected', 'not_collected', 'unavailable', 'invalid'):
-                case = Scenario(ratio=ratio, ratios=(D('2'), D('3')) if ratio == 'A'
-                                else (D('1'), D('3')), characterization=state)
+                case = Scenario(ratio=ratio, ratios=(D('2'),) * 8 if ratio == 'A'
+                                else (D('1'),) + (D('2'),) * 7, characterization=state)
                 check_fixture(case, expected(ratio, prefix='NOT_COLLECTED_PREFIX_UNBOUND'
                                             if state == 'not_collected' else None))
 
@@ -257,7 +308,7 @@ class PaperComparisonContractTests(unittest.TestCase):
             case = Scenario(decode=comparison)
             check_fixture(case, expected(decode=outcome))
             # Ratio A cannot force a directional claim in either repeated slot.
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, 'directional claim forbidden by comparison gates'):
                 check_fixture(case, expected(decode='directional'))
         self.assertEqual(model_outcome(Comparison(estimate=D('-3'))), 'magnitude_failed')
         self.assertEqual(model_outcome(Comparison(decision=(D('0'), D('12')))), 'sign_failed')
@@ -270,12 +321,12 @@ class PaperComparisonContractTests(unittest.TestCase):
         for bad in (replace(good, repeated_decode=('directional', 'Directional')),
                     replace(good, repeated_prefill=('directional', 'directional ')),
                     replace(good, repeated_decode=('directional',))):
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, 'repeated verdicts must match byte-for-byte'):
                 check_fixture(Scenario(), bad)
 
     def test_abstract_after_substitution_boundary(self):
         check_fixture(Scenario(abstract=' '.join(['word'] * 250)), expected())
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'abstract exceeds 250'):
             check_fixture(Scenario(abstract=' '.join(['word'] * 251)), expected())
 
     def test_transaction_no_partial_emission_on_late_failure(self):
@@ -284,10 +335,10 @@ class PaperComparisonContractTests(unittest.TestCase):
             transact(Scenario(), expected(), existing, late_failure=True)
         self.assertEqual(existing, ['existing synthetic artifact'])
         empty = []
-        with self.assertRaises(RuntimeError):
+        with self.assertRaisesRegex(RuntimeError, 'synthetic late failure'):
             transact(Scenario(), expected(), empty, late_failure=True)
         self.assertEqual(empty, [])  # Fails if staging leaks before late failure.
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, 'abstract exceeds 250'):
             transact(Scenario(abstract='word ' * 251), expected(), empty)
         self.assertEqual(empty, [])
         transact(Scenario(), expected(), empty)
