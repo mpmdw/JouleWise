@@ -560,6 +560,11 @@ def make_t0_fixture(
         r0_anchor_read_skew_ns = 1_000
     else:
         real_anchor = t0._clock_reference.sample_anchor()
+        # R0 and the author anchor use RAW; capture ordering stays monotonic.
+        # On Darwin these clock families can diverge across sleep and uptime.
+        r0_anchor_monotonic_raw_ns = (
+            real_anchor.monotonic_raw_ns - t0._MIN_IDLE_NS - 980
+        )
         r0_anchor_realtime_ns = r0_anchor_monotonic_raw_ns + (
             real_anchor.realtime_ns - real_anchor.monotonic_raw_ns
         )
@@ -2330,6 +2335,43 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self._assert_forbidden_process_evidence_expires_before_arm(
             start_real_process=False
         )
+
+    def test_real_clock_fixture_keeps_r0_in_raw_clock_family(self) -> None:
+        """Clock-family offsets must not consume the R0-to-author age margin."""
+
+        ordinary_now = 10 * t0._MAX_T0_SEQUENCE_AGE_NS
+        for offset in (-2, 2):
+            with self.subTest(raw_offset_hours=offset):
+                raw_now = ordinary_now + offset * t0._MAX_T0_SEQUENCE_AGE_NS
+                anchor = SimpleNamespace(
+                    realtime_ns=SYNTHETIC_REALTIME_OFFSET_NS + raw_now,
+                    monotonic_raw_ns=raw_now,
+                    read_skew_ns=1_000,
+                )
+                with mock.patch.object(
+                    t0._clock_reference, "sample_anchor", return_value=anchor
+                ):
+                    temporary, _, _, _, _, inputs = make_t0_fixture(
+                        now_monotonic_ns=ordinary_now, synthetic_clock=False
+                    )
+                self.addCleanup(temporary.cleanup)
+                capture = json.loads(
+                    (inputs / "clock-reference.json").read_text(encoding="utf-8")
+                )
+                reference = json.loads(capture["stdout"])
+                span = raw_now - reference["anchor_monotonic_raw_ns"]
+                self.assertGreaterEqual(span, t0._MIN_IDLE_NS)
+                self.assertLessEqual(span, t0._MAX_T0_SEQUENCE_AGE_NS)
+                self.assertEqual(span, t0._MIN_IDLE_NS + 980)
+                self.assertEqual(
+                    reference["anchor_realtime_ns"]
+                    - reference["anchor_monotonic_raw_ns"],
+                    anchor.realtime_ns - anchor.monotonic_raw_ns,
+                )
+                self.assertEqual(
+                    capture["started_monotonic_ns"],
+                    ordinary_now - t0._MIN_IDLE_NS - 990,
+                )
 
     @unittest.skipUnless(
         sys.platform == "darwin", "requires Darwin's real caffeinate process"
