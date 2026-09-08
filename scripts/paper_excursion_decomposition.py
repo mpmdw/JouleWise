@@ -116,6 +116,8 @@ def _ms(seconds: float) -> float:
     return round(seconds * 1000.0, MS_DECIMALS)
 
 
+# Kept verbatim in all three paper scripts: reviewed producers replay as
+# individually pinned source files. Preserve each caller's candidate ordering.
 BACKUP_PROBE_TIMEOUT_S = 2.0
 _LOG = logging.getLogger(__name__)
 
@@ -130,7 +132,8 @@ def backup_roots() -> tuple[Path, ...]:
 
 
 def probe_backup_root(
-    root: Path, *, timeout_s: float = BACKUP_PROBE_TIMEOUT_S
+    root: Path, validation_id: str, *, sort_matches: bool = False,
+    timeout_s: float = BACKUP_PROBE_TIMEOUT_S
 ) -> tuple[Path, ...]:
     """Bound directory checking AND enumeration of an optional backup root.
 
@@ -146,12 +149,11 @@ def probe_backup_root(
         try:
             candidates: list[Path] = []
             if root.is_dir():
-                candidates.extend(root.glob(
-                    f"*/instrument_validation/{MEMBER_ID}/raw/powermetrics.plist"
-                ))
-                candidates.extend(root.glob(
-                    f"*/*/instrument_validation/{MEMBER_ID}/raw/powermetrics.plist"
-                ))
+                for prefix in ("*", "*/*"):
+                    matches = root.glob(
+                        f"{prefix}/instrument_validation/{validation_id}/raw/powermetrics.plist"
+                    )
+                    candidates.extend(sorted(matches) if sort_matches else matches)
             result.append(tuple(candidates))
         except OSError as exc:
             errors.append(exc)
@@ -177,7 +179,7 @@ def locate_raw_powermetrics(corpus_root: Path, expected_sha256: str) -> bytes:
         corpus_root / SOURCE_DIRECTORY / "raw" / "powermetrics.plist"
     ]
     for root in backup_roots():
-        candidates.extend(probe_backup_root(root))
+        candidates.extend(probe_backup_root(root, MEMBER_ID))
     seen: list[str] = []
     for candidate in candidates:
         if not candidate.is_file():

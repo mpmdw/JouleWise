@@ -22,7 +22,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +34,20 @@ DRAFT = ROOT / "docs" / "paper" / "draft-v2-skeleton.md"
 FENCE_SPEC = importlib.util.spec_from_file_location("check_paper_replay_fence", FENCE_PATH)
 assert FENCE_SPEC is not None and FENCE_SPEC.loader is not None
 FENCE = importlib.util.module_from_spec(FENCE_SPEC)
-FENCE_SPEC.loader.exec_module(FENCE)
+with tempfile.TemporaryDirectory(prefix="replay-fence-backups-import-") as backup_directory:
+    with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": backup_directory}):
+        FENCE_SPEC.loader.exec_module(FENCE)
+
+
+def setUpModule() -> None:
+    backup_directory = tempfile.TemporaryDirectory(prefix="replay-fence-backups-")
+    unittest.addModuleCleanup(backup_directory.cleanup)
+    override = mock.patch.dict(
+        os.environ, {"JOULEWISE_BACKUP_ROOTS": backup_directory.name}
+    )
+    override.start()
+    unittest.addModuleCleanup(override.stop)
+
 
 CORPUS_ROOT = Path(os.environ.get("R7F_CORPUS_ROOT", ROOT))
 CORPUS = CORPUS_ROOT / FENCE.SOURCE_DIRECTORY

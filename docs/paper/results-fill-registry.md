@@ -775,10 +775,10 @@ It does not mean RF-fenced: RF remains the Section 2 replay fence and its
 Path abbreviations below are exact:
 
 - XD = docs/paper/round7/excursion-decomposition.json, sha256 21618026dfc677165b2a1acd511ff0d3130bd3837fa344c9ca9fbac95d7e058b (33,765 B), schema joulewise-excursion-decomposition/v1
-- XS = scripts/paper_excursion_decomposition.py, sha256 1cb13b01a5d54dc60746e310af6ae8d7e260982ea29f5d9f509c66ed6f192c03 (R7F-EXIT3-SEMANTICS-01 reviewed producer bytes; supersedes sha256 8733ff03d885f9c9519fddcb0906bc59e8025d7a3a3a969c09d5abe551822c7b from 49b258d2, #240; 2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged)
+- XS = scripts/paper_excursion_decomposition.py, sha256 d6c683fde03c572f0f63b45f6de38f78a03a19275d4c6206837f5f9a5d12623c (R7F-EXIT3-SEMANTICS-01 reviewed producer bytes; supersedes sha256 8733ff03d885f9c9519fddcb0906bc59e8025d7a3a3a969c09d5abe551822c7b from 49b258d2, #240; 2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged)
 - F4 = docs/paper/figures/fig4_edge_excursions.svg, sha256 6ac9d5c7a84ac1bb8d3c0da036449f77e0e5d2d36564dfc33a1c2812912782cf
 - AQ = docs/paper/round7/anchor-correction-quantified.json, sha256 c09077149c66411d1873838de5c21aa1b7c97d8df24ea66a163d679cb31f50fc (54,280 B)
-- AS = scripts/paper_anchor_correction_quantified.py, sha256 e3e4355c8f388d5e60a4291f3aee4fbd4b4d45217f4156373d6e8dd398b9e693 (b36d1e85, #272)
+- AS = scripts/paper_anchor_correction_quantified.py, sha256 3f4f4f122d4992146428696315acbb62341da109f6315285c1a17ef744a33c4b (b36d1e85, #272; 2026-09-08, ICLOUD-BACKUP-PROBE-01: discovery bounded, arithmetic unchanged)
 - R7F = scripts/check_paper_round7_artifacts.py
 
 AS was re-pinned in #272 from 41cbbf08 (0438566b, #242): its `main` now

@@ -16,6 +16,15 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts/paper_excursion_decompos
 
 
 class BackupProbeTests(unittest.TestCase):
+    script = SCRIPT
+    member_id = "20260722T145535-e941c821"
+
+    def probe(self, root, **kwargs):
+        return self.module.probe_backup_root(root, self.member_id, **kwargs)
+
+    def locate(self, root, digest):
+        return self.module.locate_raw_powermetrics(root, digest)
+
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory(prefix="excursion-backups-")
         self.addCleanup(scratch.cleanup)
@@ -23,9 +32,42 @@ class BackupProbeTests(unittest.TestCase):
         override = mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(self.root)})
         override.start()
         self.addCleanup(override.stop)
-        spec = importlib.util.spec_from_file_location("excursion_probe_test", SCRIPT)
+        spec = importlib.util.spec_from_file_location("backup_probe_" + self.script.stem, self.script)
         self.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.module)
+
+    def test_default_budget_is_two_seconds(self) -> None:
+        self.assertEqual(self.module.BACKUP_PROBE_TIMEOUT_S, 2.0)
+
+    def test_override_does_not_probe_default_roots(self) -> None:
+        checked = []
+
+        def is_dir(path):
+            checked.append(path)
+            return False
+
+        with mock.patch.object(Path, "is_dir", autospec=True, side_effect=is_dir):
+            with self.assertRaises((RuntimeError, FileNotFoundError)):
+                self.locate(self.root, "0" * 64)
+        self.assertEqual(checked, [self.root])
+
+    def test_partial_discovery_is_discarded_on_io_error(self) -> None:
+        def broken_glob(*args):
+            yield self.root / "partial"
+            raise OSError("enumeration unavailable")
+
+        with mock.patch.object(Path, "glob", side_effect=broken_glob):
+            with self.assertLogs(self.module.__name__, level="WARNING"):
+                self.assertEqual(self.probe(self.root), ())
+
+    def test_available_backup_is_hash_verified(self) -> None:
+        raw = b"scratch backup"
+        path = self.root / "archive/instrument_validation" / self.member_id / "raw/powermetrics.plist"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(raw)
+        self.assertEqual(self.locate(self.root / "absent", hashlib.sha256(raw).hexdigest()), raw)
+        with self.assertRaises((RuntimeError, FileNotFoundError)):
+            self.locate(self.root / "absent", "0" * 64)
 
     def test_empty_override_disables_all_roots(self) -> None:
         with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}):
@@ -59,7 +101,7 @@ class BackupProbeTests(unittest.TestCase):
             with mock.patch.object(Path, method, side_effect=block):
                 with self.assertLogs(self.module.__name__, level="WARNING") as logs:
                     started = time.monotonic()
-                    result = self.module.probe_backup_root(self.root, timeout_s=0.05)
+                    result = self.probe(self.root, timeout_s=0.05)
                     elapsed = time.monotonic() - started
             self.assertTrue(entered.is_set())
             self.assertEqual(result, ())
@@ -72,31 +114,32 @@ class BackupProbeTests(unittest.TestCase):
                 worker.join(1)
 
     def test_absent_and_io_error_roots_are_unavailable(self) -> None:
-        self.assertEqual(self.module.probe_backup_root(self.root / "absent"), ())
+        self.assertEqual(self.probe(self.root / "absent"), ())
         with mock.patch.object(Path, "is_dir", side_effect=OSError("offline")):
             with self.assertLogs(self.module.__name__, level="WARNING") as logs:
-                self.assertEqual(self.module.probe_backup_root(self.root), ())
+                self.assertEqual(self.probe(self.root), ())
         self.assertIn("backup_root_unavailable reason=os_error", logs.output[0])
 
     def test_probe_retains_both_search_depths(self) -> None:
         paths = []
         for prefix in ("one", "two/nested"):
-            path = self.root / prefix / "instrument_validation" / self.module.MEMBER_ID / "raw/powermetrics.plist"
+            path = self.root / prefix / "instrument_validation" / self.member_id / "raw/powermetrics.plist"
             path.parent.mkdir(parents=True)
             path.write_bytes(b"fixture")
             paths.append(path)
-        self.assertEqual(self.module.probe_backup_root(self.root), tuple(paths))
+        self.assertEqual(self.probe(self.root), tuple(paths))
 
     def test_unavailable_probe_preserves_absent_root_result(self) -> None:
         raw = b"fixture primary bytes"
-        path = self.root / self.module.SOURCE_DIRECTORY / "raw/powermetrics.plist"
+        path = self.root / Path("runs_window_a_20260722/instrument_validation") / self.member_id / "raw/powermetrics.plist"
         path.parent.mkdir(parents=True)
         path.write_bytes(raw)
         digest = hashlib.sha256(raw).hexdigest()
-        with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}):
-            absent = self.module.locate_raw_powermetrics(self.root, digest)
+        with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}), \
+                mock.patch.object(self.module, "BACKUP_ROOTS", ()):
+            absent = self.locate(self.root, digest)
         with mock.patch.object(self.module, "probe_backup_root", return_value=()):
-            unavailable = self.module.locate_raw_powermetrics(self.root, digest)
+            unavailable = self.locate(self.root, digest)
         self.assertEqual(absent, raw)
         self.assertEqual(unavailable, absent)
 
