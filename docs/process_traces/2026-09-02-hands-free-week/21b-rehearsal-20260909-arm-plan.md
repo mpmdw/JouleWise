@@ -235,8 +235,9 @@ must stop here — delta N10):**
   `21b-rehearsal-20260909-bench/pass3-process-tree-keepalive.txt` — stopped with TaskStop). Confirm
   `ps -axo pid,ppid,command | grep -E "claude (daemon run|bg-spare|bg-pty-host)|--resume"` prints nothing (joulewise-53
   retires those before its stand-down; this session never signals them). A reparented process of this session's own
-  is reported foreign by step 4 and MUST abort the arm — fail-closed by design; the only exclusion is Ed's ChatGPT.app
-  process tree, which condition 5 does not count as an agent session (ruling in 21c). The arm then continues
+  is reported foreign by step 4 and MUST abort the arm — fail-closed by design; the only exclusions are Ed's ChatGPT.app
+  process tree (descendants of its main binary) and that app's own Electron helpers reparented to launchd (Frameworks path), which
+  condition 5 does not count as agent sessions (ruling in 21c); any other ChatGPT-pathed orphan stays a session (fail-closed). The arm then continues
   in the SAME turn (no wake source is needed after this point: block B, record, commit, push, exit).
 - 5 (cond. 4). Re-check Ed's thread `1a0800cdb282c3f1` for a NO (Gmail `get_thread`); a NO aborts here, before any
   write under `~/night-custody`.
@@ -309,9 +310,11 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
   (`e4ce8b3b`, `3c366db7`, `019f9bba`, `481df11c`, `a9a70516`), PR #295 `23012b52`, T38 `eacadff7`, T38b `0f6b1c8b`; retirement per
   the new step 1 done (`handoff-daemons` rc 0; bg-job daemon 71666, spare 71687, both pty-hosts and the resumed twin 71607 gone).
 - This activation's census right after that message: `21b-rehearsal-20260909-bench/pass3-standdown-census.txt` (epoch 1788877254)
-  and, classified by the step-4 block itself, `pass3-census-classified.txt` (delta 5 B1: the ChatGPT-pathed codex app-server /
-  cua_node / computer-use processes are descendants of joulewise-53's codex mcp-server, i.e. of pid 83953, NOT of Ed's ChatGPT.app
-  pid 82301; the artifacts' ppid columns are the evidence, this prose is not). pid 83953 stays alive until Ed closes its terminal
+  and, classified by the step-4 block itself, `pass3-census-classified.txt`. Which ChatGPT-pathed process belongs to which tree is
+  decided per process by the chains printed in that artifact, never by path or by this prose (delta 5 B1, delta 6 D6-1): at capture,
+  7143, 7631–7644, 7901 and 16479 chained to pid 83953 (joulewise-53's codex mcp-server) and are sessions; 82362 (`codex …
+  app-server`), 82551 (SkyComputerUseService) and the renderer helpers chained to 82301 and are Ed's app; 82303/82305 (Frameworks
+  crashpad helpers) had ppid 1 and are Ed's app by the Frameworks path rule. pid 83953 stays alive until Ed closes its terminal
   and, per the ruling, blocks the arm while present; Ed was asked to close it before 1788944160 (Gmail `1a081723350aea55`).
   `handoff-daemons` rc 0 is joulewise-53's own report; this activation's attempt ran from the wrong cwd (ModuleNotFoundError,
   recorded in the same artifact) and is not evidence either way.
