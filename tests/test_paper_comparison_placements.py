@@ -119,7 +119,7 @@ SAFETY_VOCABULARY = {
         'Two distinct exhausted-ladder renderings require adoption; diagnostic failure is not production non-admission',
     },
     'Missing evidence': {
-        'RETIRED_FALLBACK under D-174; no placement restored',
+        'RETIRED_FALLBACK under D-174; no placement restored; D-177 adjacent phase-energy limitation required',
         'Keep synthetic label; omit unsupported illustration rather than infer empirical pass/refusal',
         'Remain excluded; no silent restoration',
         'Retain exclusion; historical Window C is no supplier',
@@ -208,6 +208,8 @@ def check_agreement(placements, registry, custody):
     tables = (parse_table(placements, "PROPOSALS", COLUMNS),
               parse_table(registry, "PROPOSALS", COLUMNS),
               parse_table(custody, "BINDINGS", BINDING_COLUMNS))
+    if any(tuple(table) != tuple(tables[0]) for table in tables[1:]):
+        raise ValueError("placement row-order agreement mismatch")
     if tables[0] != tables[1]:
         raise ValueError("placement/registry agreement mismatch")
     for key, binding in tables[2].items():
@@ -235,7 +237,6 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
         texts[table] = texts[table].replace(row, "|" + "|".join(values) + "|", 1)
         return texts
 
-<<<<<<< HEAD
     def test_claim_tables_pin_v2_verdict_resolution_join(self):
         for text, marker, columns in ((self.texts[0], "PROPOSALS", COLUMNS),
                                       (self.texts[1], "PROPOSALS", COLUMNS),
@@ -246,7 +247,7 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
                     self.assertIn("claim_side_bound.v2 and verdict-resolution source-cell join",
                                   rows[key]["Artifact field"])
                     self.assertEqual(rows[key]["Adoption"], "PROPOSED_STOP_FILL")
-=======
+
     def test_d177_phase_energy_adjacency_block_exists(self):
         self.assertIn(
             '**D-177 phase-energy limitation.** The D-123 mean cells—the average energies\n'
@@ -262,7 +263,25 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
             '> independently characterized attributions.',
             self.texts[0],
         )
->>>>>>> feat/2026-09-08-paper-S7-reconciliation
+
+    def test_merged_x5_and_characterization_dispositions(self):
+        for text, marker, columns in ((self.texts[0], "PROPOSALS", COLUMNS),
+                                      (self.texts[1], "PROPOSALS", COLUMNS),
+                                      (self.texts[2], "BINDINGS", BINDING_COLUMNS)):
+            rows = parse_table(text, marker, columns)
+            for row in rows.values():
+                with self.subTest(marker=marker, key=row["Placement"]):
+                    if row["Obligation"] == "X5":
+                        self.assertIn(
+                            "five fields defined in paper_reported_energy.md; production member replay pending",
+                            row["Artifact field"],
+                        )
+                        self.assertEqual(row["Missing evidence"],
+                            "RETIRED_FALLBACK under D-174; no placement restored; D-177 adjacent phase-energy limitation required")
+                        self.assertEqual(row["Adoption"], "RETIRED_FALLBACK")
+                    if row["Obligation"] in {"X13", "X14", "X15", "X16"}:
+                        self.assertTrue(row["Applicability"].startswith("ruled omission (D-177); "))
+                        self.assertEqual(row["Adoption"], "PROPOSED_STOP_FILL")
 
     def test_all_three_tables_agree(self):
         check_agreement(*self.texts)

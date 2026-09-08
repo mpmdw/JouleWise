@@ -52,22 +52,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "823f8fd5044b82e6ff48798a55594ede3d4a22f95333457a06de4d44f6fb0f83",
-=======
-        "expected_sha256": "98a82431f46b993a17dd8e737484387a64d02bb91688385e05584b63f01657c9",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "8e428955c4af40cbe6fe39958b260d20c6a6cbc87e00442b8ce6fc834aa7905d",
         "path": "claim_evidence/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "7b39094b25b71de13ad8b280df4633bd84d24303ed7d9519bc948d6eea3dbd9e",
-=======
-        "expected_sha256": "02caa57f70c51cf442a8793b6d10f304c201d4bde9f9ecc63d64b841bb49bebd",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "52c9726ef5f4ccd3fe489908ed41347c55334eb38bb8194c11db0c73412c8edc",
         "path": "claim_evidence/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -115,22 +107,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "f96d1f6302a5a4ef9c8af630952917ce6a153d0459f3e92bbc92481105650f16",
-=======
-        "expected_sha256": "b0a4f1c53ee6e6d4cf8c1eb968ac1e20bf5a41f24c320e63a795664978287457",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "b6bc31e8d8f624c1a554d968de74c1c1bb769770d2f7f9d3849a20463246e4f7",
         "path": "d165_closeout/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "8afc5ed12732993abc6c5390f4ee092bd9a08a730fd1b8fa8379c960c791a397",
-=======
-        "expected_sha256": "bdc9d961e2981cd0268562b278d4c0d5039e096388ce49737840f68247c08090",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "e0b37ebd7809bfc2cf73e3eca84e54bc66f290a5bbfd2046b456ca0cfbb74ac3",
         "path": "d165_closeout/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -185,22 +169,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "0d6ef69fa766c97c7785767c23fe8b35bc136ff5db712c3c5d3fb7fb7ff6298f",
-=======
-        "expected_sha256": "7d2a1b49698f8fd5d08f5bd153646037793cf0ab611b6ac22a2a6be44ef52071",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "bc2ee4961ead49b819519b688cff346ee8fd9956513823717ab5670bac32784c",
         "path": "reported_energy_parents/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "4ec84eb074da42b1cab083efc3367db3144d37fedf058bf870b20db0b00645de",
-=======
-        "expected_sha256": "1e8aaf87c379da634265970e3ca653a48426b49fc6d2f578eedefd0e9f8b071a",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "a0f54407f347f8f9533a68805db764d971eb7fecdb42f3d48dbd11be62e17c80",
         "path": "reported_energy_parents/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -262,22 +238,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "2697f43471cd639067e048da495a8741492be98618b498439a192bde09c13379",
-=======
-        "expected_sha256": "b5b95e31c86a308abfdb339b0b390cd259fee219071e68c271b6574b9c3b862c",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "114d05f14a789fa0cdcc52a2f67f1ca7e9032bf4c8058dcd539cebe5019d9dba",
         "path": "transfer_projection/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "dcd44e731c07489cca97fb0b603921d864590f432d79d39190cbd001e472412c",
-=======
-        "expected_sha256": "666fe02ac5c9158955409ef2a60d01811988f7eb05912789574582a14ff044b5",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "e65fb32831db7eb114344f0308d0564e67113f06f2c6077d31fd2abbca3dce2d",
         "path": "transfer_projection/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -325,22 +293,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "23db62b92548a07aa6a5c8c66e5c056239457b5481c1650822d232b1e976d1fb",
-=======
-        "expected_sha256": "457d256e2645bb02c572d8f9b2441b7ed5b395af86a654502254e4d345b673cc",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "d6d4e5679f9f85e3ff271416ab97e8f128e727d63566fb3407a13e33248dfd0b",
         "path": "whole_window_verdict/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-<<<<<<< HEAD
-        "expected_sha256": "fc0477243bc7a095df7bd914d341bb26883f107262a493c44805e253ee59acdf",
-=======
-        "expected_sha256": "574159a2b2b7229f5fc9eb8da8e95fcde7a7f16ff9006d202db66be855f558cc",
->>>>>>> feat/2026-09-08-paper-S3
+        "expected_sha256": "f17966ac4a54a1783b0d2279a98afeed6d0253d1bc91d9e35fcb3cc96ae8066c",
         "path": "whole_window_verdict/inputs/validator_receipt.json"
       },
       "source_census": [
