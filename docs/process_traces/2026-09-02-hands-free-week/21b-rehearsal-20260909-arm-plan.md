@@ -266,10 +266,18 @@ def chain(p):
     return out
 assert me in chain(os.getpid()), "lock pid is not an ancestor of this census process"
 def mine(p): return me in chain(p)
-def eds_app(p): return any(cmd.get(a,"").startswith("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT") for a in chain(p))
+AGENT = re.compile(r"(?i)(^|[\s/.])(codex|claude|t3)(?=$|[\s/.:-])")   # delta 5 B3: dot-paths (.codex/plugins) count; case-insensitive for T3 Code
+APP_MAIN = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"; APP_HELPERS = "/Applications/ChatGPT.app/Contents/Frameworks/"
+def under_session(p): return any(AGENT.search(cmd.get(a,"")) and not cmd.get(a,"").startswith("/Applications/ChatGPT.app/") for a in chain(p)[1:])
+def eds_app(p):
+    # Ed's desktop app = the ChatGPT main binary's descendants, or its own Electron helpers even when reparented to launchd
+    # (delta 5 live run: Codex Framework helpers with ppid 1). ChatGPT-pathed processes spawned UNDER an agent session
+    # (codex app-server / cua_node under a codex mcp-server, delta 5 B1) and their orphans stay sessions (fail-closed).
+    c = cmd.get(p, "")
+    if under_session(p): return False
+    return any(cmd.get(a,"").startswith(APP_MAIN) for a in chain(p)) or c.startswith(APP_HELPERS)
 # cond. 5 counts agent SESSIONS (a magistrate, a codex-run-v3 seat, an interactive Claude or Codex session, their children),
 # not the idle helpers of Ed's ChatGPT desktop app; a path/word boundary keeps 'tmpondt32c8'-style substrings out.
-AGENT = re.compile(r"(?i)(^|[\s/.])(codex|claude|t3)(?=$|[\s/.:-])")   # delta 5 B3: dot-paths (.codex/plugins) count; case-insensitive for T3 Code
 hits = [(p,c) for p,pp,c in rows if re.search(r"(?i)codex|claude|t3", c) and "ps -axo" not in c and not mine(p)]
 sessions = [(p,c[:90]) for p,c in hits if AGENT.search(c) and not eds_app(p)]
 informational = [(p,c[:90]) for p,c in hits if (p,c[:90]) not in sessions]
