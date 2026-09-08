@@ -18,6 +18,8 @@ if str(REPOSITORY_ROOT) not in sys.path:
 from joulewise.arm_readiness import (  # noqa: E402
     ArmReadinessError,
     LaunchLineageError,
+    FamilyPublicationError,
+    validate_pack_night_go_receipt,
     _consume_launch_capability,
     _verify_arm_receipt,
     parse_json_bytes,
@@ -43,6 +45,8 @@ def _parser() -> argparse.ArgumentParser:
         "--arm-readiness-custody-root", type=Path, required=True
     )
     parser.add_argument("--launch-manifest", type=Path, required=True)
+    parser.add_argument("--night-plan", type=Path, help="installer-pinned pack night plan (required for launch)")
+    parser.add_argument("--go-receipt", type=Path, help="pack GO receipt (required for launch)")
     parser.add_argument(
         "--lifecycle-event",
         choices=("start", "settle", "completion"),
@@ -123,6 +127,22 @@ def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
         raise LaunchLineageError(
             "launch_consumption_invalid", f"arm receipt is invalid: {exc}"
         ) from exc
+    # This entry point consumes a frozen pack ARM. Non-pack night classes do
+    # not enter this pack launcher; they retain the night driver's own route.
+    if getattr(args, "night_plan", None) is None or getattr(args, "go_receipt", None) is None:
+        raise ArmReadinessError("readiness_usage_invalid", "--night-plan and --go-receipt are required")
+    if args.step6_confirmation_table is None or args.expected_confirmation_digest is None:
+        raise FamilyPublicationError("confirmation_missing", "both confirmation flags are required")
+    try:
+        go_raw = args.go_receipt.read_bytes()
+    except FileNotFoundError as exc:
+        raise LaunchLineageError("launch_go_receipt_missing", "GO file missing") from exc
+    except OSError as exc:
+        raise LaunchLineageError("launch_go_receipt_invalid", f"go_receipt.path: {exc}") from exc
+    try:
+        go = validate_pack_night_go_receipt(parse_json_bytes(go_raw))
+    except ArmReadinessError as exc:
+        raise LaunchLineageError("launch_go_receipt_invalid", str(exc)) from exc
     verified_arm = _verify_arm_receipt(
         pack_root,
         arm_path,
@@ -152,6 +172,10 @@ def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
         window_root / "window-chain.zsh", "window chain"
     )
     return {
+        "night_plan": args.night_plan,
+        "go_receipt": args.go_receipt,
+        "authenticated_go_receipt": dict(go),
+        "go_receipt_sha256": hashlib.sha256(go_raw).hexdigest(),
         "pack_root": pack_root,
         "arm_receipt": arm_path,
         "authenticated_arm_receipt": dict(arm),
@@ -297,16 +321,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.lifecycle_event is not None:
             return lifecycle(args)
         return launch(args)
-    except LaunchLineageError as exc:
+    except (ArmReadinessError, LaunchLineageError, FamilyPublicationError) as exc:
         refusal = {
             "status": "REFUSE",
-            "reason_codes": [exc.reason_code],
-            "detail": str(exc),
-        }
-    except ArmReadinessError as exc:
-        refusal = {
-            "status": "REFUSE",
-            "reason_codes": [exc.reason_code],
+            "reason_codes": [exc.check_id if isinstance(exc, FamilyPublicationError) else exc.reason_code],
             "detail": str(exc),
         }
     except OSError as exc:

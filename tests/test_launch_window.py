@@ -274,6 +274,10 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 / "operator-confirmation.json",
                 expected_confirmation_digest="e" * 64,
             )
+            go_inputs = fixture._consumer_inputs()
+            for key in ("night_plan", "go_receipt", "step6_confirmation_table", "expected_confirmation_digest"):
+                if getattr(args, key, None) is None:
+                    setattr(args, key, go_inputs[key])
             arm_raw = fixture.arm_path.read_bytes()
             verified_arm = {
                 "status": "PASS",
@@ -343,6 +347,10 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 step6_confirmation_table=None,
                 expected_confirmation_digest=None,
             )
+            go_inputs = fixture._consumer_inputs()
+            for key in ("night_plan", "go_receipt", "step6_confirmation_table", "expected_confirmation_digest"):
+                if getattr(args, key, None) is None:
+                    setattr(args, key, go_inputs[key])
             arm_digest = hashlib.sha256(
                 fixture.arm_path.read_bytes()
             ).hexdigest()
@@ -608,6 +616,18 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             + "from joulewise import arm_readiness_evidence\n"
             + f"arm_readiness_evidence._PACKS_BY_PROFILE = {family!r}\n"
             + "arm_readiness._gate_family_publication = lambda *args, **kwargs: None\n"
+            # This relocation fixture isolates ARM replay. The new GO binder
+            # remains real; its separately tested T0 inventory and seat-2 plan
+            # parser have explicit fixture seams until integrated-head testing.
+            + "from joulewise import night_gate\n"
+            + "_night_plan_parser = night_gate.NightPlan.from_mapping\n"
+            + "def _fixture_plan_parser(value):\n"
+            + "    if value.get('schema') == 'joulewise.night_plan.v3':\n"
+            + "        value = {k: v for k, v in value.items() if k != 'pack_night'}\n"
+            + "        value.update(schema='joulewise.night_plan.v2', schema_version=2)\n"
+            + "    return _night_plan_parser(value)\n"
+            + "night_gate.NightPlan.from_mapping = staticmethod(_fixture_plan_parser)\n"
+            + "arm_readiness._authenticate_go_t0_evidence = lambda *args: None\n"
         )
         producer_path = pack / "producer_contract.json"
         producer_raw = arm_readiness.render_json(
@@ -898,10 +918,16 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         custody: Path,
         manifest_path: Path,
     ) -> subprocess.CompletedProcess[str]:
+        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+            pack, arm_path, manifest_path, custody)
         return subprocess.run(
             [
                 sys.executable,
                 str(repository / "scripts/launch_window.py"),
+                "--night-plan", str(go_inputs["night_plan"]),
+                "--go-receipt", str(go_inputs["go_receipt"]),
+                "--step6-confirmation-table", str(go_inputs["step6_confirmation_table"]),
+                "--expected-confirmation-digest", go_inputs["expected_confirmation_digest"],
                 "--pack-root",
                 str(pack),
                 "--arm-receipt",
@@ -1232,6 +1258,9 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             for item in lifecycle_registry["refusal_vocabulary"]
             if item["role"] == "DEPENDENCY_CHANGED_SET"
         )
+        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+            launch_fixture.pack, launch_fixture.arm_path, launch_fixture.manifest_path,
+            launch_fixture.custody, table_path, hashlib.sha256(table_raw).hexdigest())
         arm_raw = launch_fixture.arm_path.read_bytes()
         return argparse.Namespace(
             repository=repository,
@@ -1251,6 +1280,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 "pack_sha256": launch_fixture.arm["pack"]["pack_sha256"],
             },
             argv=[
+                "--night-plan", str(go_inputs["night_plan"]),
+                "--go-receipt", str(go_inputs["go_receipt"]),
                 "--pack-root",
                 str(launch_fixture.pack),
                 "--arm-receipt",
@@ -1429,6 +1460,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 }
             )
         )
+        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+            pack, arm_path, manifest_path, custody, table_path, hashlib.sha256(table_raw).hexdigest())
         return argparse.Namespace(
             arm_path=arm_path,
             boot_session_id=TEST_BOOT_SESSION_ID,
@@ -1436,6 +1469,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             table_digest=hashlib.sha256(table_raw).hexdigest(),
             table_path=table_path,
             argv=[
+                "--night-plan", str(go_inputs["night_plan"]),
+                "--go-receipt", str(go_inputs["go_receipt"]),
                 "--pack-root",
                 str(pack),
                 "--arm-receipt",
@@ -1514,16 +1549,6 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 ],
                 supply.table_path,
             ),
-            (
-                "auto-resolved custody path",
-                [
-                    "--expected-confirmation-digest",
-                    supply.table_digest,
-                ],
-                supply.arm_path.resolve().parent.parent.parent
-                / "family_publication"
-                / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME,
-            ),
         )
         for label, extra_argv, expected_path in cases:
             with self.subTest(case=label):
@@ -1598,7 +1623,10 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         refusal = json.loads(sink.getvalue())
         self.assertEqual(code, 2)
         self.assertEqual(refusal["status"], "REFUSE")
-        self.assertEqual(refusal["reason_codes"], [supply.changed_set_code])
+        missing_pair = not all(flag in extra_argv for flag in (
+            "--step6-confirmation-table", "--expected-confirmation-digest"))
+        self.assertEqual(refusal["reason_codes"],
+                         ["confirmation_missing" if missing_pair else supply.changed_set_code])
         self.assertFalse(supply.gate_discharged)
         consume.assert_not_called()
         verify_consumed.assert_not_called()
@@ -1641,16 +1669,17 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
     ) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=True)
         for label, extra_argv in (
-            ("digest absent", []),
+            ("digest absent", ["--step6-confirmation-table", str(supply.table_path)]),
             (
                 "digest wrong",
-                ["--expected-confirmation-digest", "0" * 64],
+                ["--step6-confirmation-table", str(supply.table_path), "--expected-confirmation-digest", "0" * 64],
             ),
         ):
             with self.subTest(case=label):
                 self._run_confirmation_refusal(supply, extra_argv)
 
         correct_argv = supply.argv + [
+            "--step6-confirmation-table", str(supply.table_path),
             "--expected-confirmation-digest",
             supply.table_digest,
         ]
@@ -1732,37 +1761,19 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 supply.table_digest,
             )
 
-    def test_launch_cli_leg_b_refuses_correct_digest_without_table_path(
-        self,
-    ) -> None:
+    def test_launch_cli_leg_b_refuses_correct_digest_without_table_path(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
         refusal, verify_arm = self._run_confirmation_refusal(
-            supply,
-            ["--expected-confirmation-digest", supply.table_digest],
-        )
-        self.assertIn("custody artifact is absent", refusal["detail"])
-        self.assertIn(str(supply.default_table_path), refusal["detail"])
-        self.assertNotIn(
-            "table bytes differ from the expected confirmation digest",
-            refusal["detail"],
-        )
-        self.assertIsNone(
-            verify_arm.call_args.kwargs["step6_confirmation_table"]
-        )
+            supply, ["--expected-confirmation-digest", supply.table_digest])
+        self.assertEqual(refusal["reason_codes"], ["confirmation_missing"])
+        verify_arm.assert_not_called()
 
     def test_launch_cli_leg_c_refuses_table_path_without_digest(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
         refusal, verify_arm = self._run_confirmation_refusal(
-            supply,
-            ["--step6-confirmation-table", str(supply.table_path)],
-        )
-        self.assertIn(
-            "no expected confirmation digest supplied", refusal["detail"]
-        )
-        self.assertEqual(
-            verify_arm.call_args.kwargs["step6_confirmation_table"],
-            supply.table_path,
-        )
+            supply, ["--step6-confirmation-table", str(supply.table_path)])
+        self.assertEqual(refusal["reason_codes"], ["confirmation_missing"])
+        verify_arm.assert_not_called()
 
     def test_launch_cli_leg_d_refuses_malformed_digest(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
@@ -1805,15 +1816,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
     def test_launch_cli_leg_f_refuses_when_nothing_is_supplied(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
         refusal, verify_arm = self._run_confirmation_refusal(supply, [])
-        self.assertIn(
-            "no expected confirmation digest supplied", refusal["detail"]
-        )
-        self.assertIsNone(
-            verify_arm.call_args.kwargs["step6_confirmation_table"]
-        )
-        self.assertIsNone(
-            verify_arm.call_args.kwargs["expected_confirmation_digest"]
-        )
+        self.assertEqual(refusal["reason_codes"], ["confirmation_missing"])
+        verify_arm.assert_not_called()
 
 
 class CeremonySkipConsumerTests(unittest.TestCase):
@@ -1958,6 +1962,139 @@ class CeremonySkipConsumerTests(unittest.TestCase):
                 require_completion=True,
             )
         self.assertEqual(reasons, ("launch_lineage_conflict",))
+
+
+class PackNightGoRefusalHandlerTests(unittest.TestCase):
+    # Python 3.14 argparse must not probe the mocked stdout for color support.
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_cli_uses_one_json_handler_for_both_exception_families(self) -> None:
+        argv = ["--pack-root", "/pack", "--arm-receipt", "/arm.json",
+                "--arm-readiness-custody-root", "/custody",
+                "--launch-manifest", "/manifest.json"]
+        for error in (
+            arm_readiness.ArmReadinessError("readiness_usage_invalid", "missing keyword"),
+            arm_readiness.LaunchLineageError("launch_go_receipt_missing", "missing GO"),
+            arm_readiness.LaunchLineageError("launch_go_receipt_invalid", "sha256"),
+        ):
+            with self.subTest(code=error.reason_code):
+                output = io.BytesIO()
+                stdout = mock.Mock(buffer=output)
+                with mock.patch.object(launch_window, "launch", side_effect=error), \
+                     mock.patch.object(launch_window.sys, "stdout", stdout):
+                    self.assertEqual(launch_window.main(argv), 2)
+                self.assertEqual(json.loads(output.getvalue()), {
+                    "status": "REFUSE", "reason_codes": [error.reason_code],
+                    "detail": str(error),
+                })
+
+
+class PackNightLaunchBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        self.case = arm_readiness_tests.PackNightConsumerTests()
+        self.case.setUp()
+        self.addCleanup(self.case.doCleanups)
+        self.fixture = self.case.fixture
+        inputs = self.case.inputs
+        self.base_argv = ["--pack-root", str(self.fixture.pack), "--arm-receipt", str(self.fixture.arm_path),
+            "--arm-readiness-custody-root", str(self.fixture.custody),
+            "--launch-manifest", str(self.fixture.manifest_path)]
+        self.argv = self.base_argv + ["--night-plan", str(inputs["night_plan"]),
+            "--go-receipt", str(inputs["go_receipt"]),
+            "--step6-confirmation-table", str(inputs["step6_confirmation_table"]),
+            "--expected-confirmation-digest", inputs["expected_confirmation_digest"]]
+
+    def arm_patches(self):
+        from contextlib import ExitStack
+        stack = ExitStack()
+        verified = {"status": "PASS", "arm_disposition": "GO", "receipt_path": str(self.fixture.arm_path.resolve()),
+                    "receipt_sha256": self.case.inputs["arm_receipt_sha256"],
+                    "pack_sha256": self.fixture.arm["pack"]["pack_sha256"]}
+        for owner, name, value in (
+            (launch_window, "_verify_arm_receipt", verified),
+            (arm_readiness, "_verify_arm_receipt", verified),
+            (arm_readiness, "reviewed_main", self.fixture.arm["reviewed_main"]),
+            (arm_readiness, "_root_policy_refusals", ([], set())),
+            (arm_readiness, "_derive_arm_semantics_for_verification", (self.fixture.arm["rows"], self.fixture.arm["refusals"])),
+        ):
+            stack.enter_context(mock.patch.object(owner, name, return_value=value))
+        return stack
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_each_required_cli_flag_omission_refuses_before_consumption(self):
+        for flag in ("--night-plan", "--go-receipt", "--step6-confirmation-table", "--expected-confirmation-digest"):
+            with self.subTest(flag=flag):
+                argv = list(self.argv)
+                index = argv.index(flag)
+                del argv[index:index + 2]
+                output = io.BytesIO()
+                with mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)), \
+                     mock.patch.object(launch_window, "_consume_launch_capability") as consume, \
+                     mock.patch.object(launch_window.os, "execve") as execute:
+                    self.assertEqual(launch_window.main(argv), 2)
+                expected = "readiness_usage_invalid" if flag in ("--night-plan", "--go-receipt") else "confirmation_missing"
+                self.assertEqual(json.loads(output.getvalue())["reason_codes"], [expected])
+                consume.assert_not_called()
+                execute.assert_not_called()
+                self.assertFalse(self.case.consumption.exists())
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_cli_then_callee_go_mutation_is_detected_by_the_real_callee(self):
+        real_consume = arm_readiness._consume_launch_capability
+        def mutate_then_consume(**inputs):
+            path = Path(inputs["go_receipt"])
+            path.write_bytes(path.read_bytes() + b" ")
+            return real_consume(**inputs)
+        output = io.BytesIO()
+        with self.arm_patches(), mock.patch.object(launch_window, "_install_handoff"), \
+             mock.patch.object(launch_window, "_consume_launch_capability", side_effect=mutate_then_consume), \
+             mock.patch.object(launch_window.os, "execve") as execute, \
+             mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+            self.assertEqual(launch_window.main(self.argv), 2)
+        self.assertEqual(json.loads(output.getvalue())["reason_codes"], ["launch_go_receipt_invalid"])
+        self.assertIn("sha256", json.loads(output.getvalue())["detail"])
+        execute.assert_not_called()
+        self.assertFalse(self.case.consumption.exists())
+
+    def test_child_start_uses_persisted_confirmation_and_plan_without_environment_transport(self):
+        digest = self.case.inputs["expected_confirmation_digest"]
+        child_output = io.BytesIO()
+        def execute(_program, _argv, environment):
+            self.assertNotIn(digest, environment)
+            self.assertNotIn(digest, environment.values())
+            self.assertNotIn(str(self.case.inputs["step6_confirmation_table"]), environment.values())
+            args = launch_window._parser().parse_args(self.base_argv + ["--lifecycle-event", "start"])
+            self.assertIsNone(args.night_plan)
+            self.assertIsNone(args.go_receipt)
+            self.assertIsNone(args.step6_confirmation_table)
+            self.assertIsNone(args.expected_confirmation_digest)
+            with mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=child_output)):
+                self.assertEqual(launch_window.lifecycle(args), 0)
+            raise SystemExit(0)
+        with self.arm_patches(), mock.patch.object(launch_window.os, "execve", side_effect=execute):
+            with self.assertRaises(SystemExit) as caught:
+                launch_window.main(self.argv)
+        self.assertEqual(caught.exception.code, 0)
+        self.assertTrue(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").is_file())
+        value = json.loads(self.case.consumption.read_bytes())
+        self.assertEqual(value["step6_confirmation"]["table_sha256"], digest)
+        self.assertEqual(value["night_plan"]["path"], str(self.case.inputs["night_plan"]))
+
+    def test_child_refuses_substituted_pair_changed_plan_and_missing_go(self):
+        self.case.consume()
+        with self.assertRaisesRegex(arm_readiness.LaunchLineageError, "table_sha256"):
+            self.case.verify(expected_confirmation_digest="f" * 64)
+        path = self.case.inputs["night_plan"]
+        raw = path.read_bytes()
+        path.write_bytes(raw + b" ")
+        with self.assertRaisesRegex(arm_readiness.LaunchLineageError, "plan_sha256"):
+            self.case.verify()
+        path.write_bytes(raw)
+        self.case.inputs["go_receipt"].unlink()
+        with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+            self.case.verify()
+        self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
+        self.assertFalse(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").exists())
+
 
 
 if __name__ == "__main__":
