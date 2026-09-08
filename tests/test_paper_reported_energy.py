@@ -14,6 +14,7 @@ from joulewise import paper_reported_energy as energy
 from joulewise import paper_custody as custody
 from joulewise.paper_rendering import render_reported_energy
 from tests.test_paper_custody import _FamilyFixture, _json_bytes, _sha
+from tests.git_fixture import init_git_fixture
 
 
 def synthetic_spec(model="qwen3-1p7b"):
@@ -211,7 +212,7 @@ class ReportedEnergyTests(unittest.TestCase):
                     repo = Path(tmp)
                     def git(*args):
                         return subprocess.check_output(["git", "-C", tmp, *args], stderr=subprocess.STDOUT, text=True).strip()
-                    git("init", "-q")
+                    init_git_fixture(repo, "-q")
                     git("config", "user.email", "synthetic@example.invalid")
                     git("config", "user.name", "Synthetic test")
                     registration = repo / "joulewise/paper_reported_energy.py"
