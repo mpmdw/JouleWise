@@ -47,6 +47,15 @@ USAGE
     python3 scripts/check_paper_replay_fence.py [--repository-root DIR]
         [--corpus-root DIR] [--draft PATH] [--literals-only] [--json OUT]
 
+``JOULEWISE_BACKUP_ROOTS`` is an ``os.pathsep``-separated list of optional
+backup roots; an empty value disables all backup roots. If unset, it defaults
+to ``/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup``.
+Each (root, call) has one cumulative 2 s budget for ``is_dir`` and both globs.
+An unresponsive or responsive-but-slow root exceeding that budget is skipped:
+it contributes zero candidates and emits a ``backup_root_unavailable`` stderr
+line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
+a skip fails closed at the pin check if no matching candidate remains.
+
 EXIT CODES
     0  every fenced value re-derived and matched (or, with --literals-only,
        every literal was extracted and the draft-internal identities held)
@@ -59,8 +68,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
+import os
 import re
 import sys
+import threading
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -309,16 +321,69 @@ def _sha256(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+# Kept verbatim in all three paper scripts: reviewed producers replay as
+# individually pinned source files. Preserve each caller's candidate ordering.
+BACKUP_PROBE_TIMEOUT_S = 2.0
+_LOG = logging.getLogger(__name__)
+
+
+def backup_roots() -> tuple[Path, ...]:
+    """Read the pathsep-separated override; an empty value disables backups."""
+
+    override = os.environ.get("JOULEWISE_BACKUP_ROOTS")
+    if override is None:
+        return BACKUP_ROOTS
+    return tuple(Path(part) for part in override.split(os.pathsep) if part)
+
+
+def probe_backup_root(
+    root: Path, validation_id: str, *, sort_matches: bool = False,
+    timeout_s: float = BACKUP_PROBE_TIMEOUT_S
+) -> tuple[Path, ...]:
+    """Bound directory checking AND enumeration of an optional backup root.
+
+    A stalled filesystem call may outlive the budget, so the worker is a
+    daemon and publishes only a complete result. A timeout contributes no
+    candidates, exactly like an absent root, and cannot alter numeric output.
+    """
+
+    result: list[tuple[Path, ...]] = []
+    errors: list[BaseException] = []
+
+    def probe() -> None:
+        try:
+            candidates: list[Path] = []
+            if root.is_dir():
+                for prefix in ("*", "*/*"):
+                    matches = root.glob(
+                        f"{prefix}/instrument_validation/{validation_id}/raw/powermetrics.plist"
+                    )
+                    candidates.extend(sorted(matches) if sort_matches else matches)
+            result.append(tuple(candidates))
+        except BaseException as exc:
+            errors.append(exc)
+
+    worker = threading.Thread(target=probe, daemon=True, name="backup-root-probe")
+    worker.start()
+    worker.join(timeout_s)
+    if worker.is_alive():
+        _LOG.warning("backup_root_unavailable reason=timeout root=%s budget_s=%s",
+                     root, timeout_s)
+        return ()
+    if errors:
+        reason = "os_error" if isinstance(errors[0], OSError) else "worker_error"
+        _LOG.warning("backup_root_unavailable reason=%s root=%s detail=%s",
+                     reason, root, errors[0])
+        return ()
+    return result[0]
+
+
 def locate_raw_powermetrics(corpus_root: Path, expected_sha256: str) -> bytes:
     """Return the retained raw plist bytes, hash-verified against the evidence."""
 
     candidates: list[Path] = [corpus_root / SOURCE_DIRECTORY / "raw" / "powermetrics.plist"]
-    for root in BACKUP_ROOTS:
-        if root.is_dir():
-            candidates.extend(root.glob(f"*/instrument_validation/{MEMBER_ID}/raw/powermetrics.plist"))
-            candidates.extend(
-                root.glob(f"*/*/instrument_validation/{MEMBER_ID}/raw/powermetrics.plist")
-            )
+    for root in backup_roots():
+        candidates.extend(probe_backup_root(root, MEMBER_ID))
     seen: list[str] = []
     for candidate in candidates:
         if not candidate.is_file():

@@ -52,12 +52,21 @@ powermetrics corpora collected before the repair).  Nothing here un-voids them.
 This analysis treats the population purely as PILOT evidence about the size and
 character of the anchor correction itself.
 
-Replay:
+USAGE
 
     /Users/edr/code/JouleWise/.venv/bin/python \\
         scripts/paper_anchor_correction_quantified.py \\
         --corpus-root /Users/edr/code/JouleWise \\
         --out docs/paper/round7/anchor-correction-quantified.json
+
+``JOULEWISE_BACKUP_ROOTS`` is an ``os.pathsep``-separated list of optional
+backup roots; an empty value disables all backup roots. If unset, it defaults
+to ``/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup``.
+Each (root, call) has one cumulative 2 s budget for ``is_dir`` and both globs.
+An unresponsive or responsive-but-slow root exceeding that budget is skipped:
+it contributes zero candidates and emits a ``backup_root_unavailable`` stderr
+line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
+a skip fails closed at the pin check if no matching candidate remains.
 
 Output is deterministic: sorted JSON keys, fixed decimal places on all
 millisecond and percent quantities, and full binary64 ``repr`` on any quantity
@@ -69,9 +78,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import math
+import os
 import statistics
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -200,6 +212,63 @@ def _refusal_token(exc: BaseException) -> str:
 # ---------------------------------------------------------------------------
 
 
+# Kept verbatim in all three paper scripts: reviewed producers replay as
+# individually pinned source files. Preserve each caller's candidate ordering.
+BACKUP_PROBE_TIMEOUT_S = 2.0
+_LOG = logging.getLogger(__name__)
+
+
+def backup_roots() -> tuple[Path, ...]:
+    """Read the pathsep-separated override; an empty value disables backups."""
+
+    override = os.environ.get("JOULEWISE_BACKUP_ROOTS")
+    if override is None:
+        return BACKUP_ROOTS
+    return tuple(Path(part) for part in override.split(os.pathsep) if part)
+
+
+def probe_backup_root(
+    root: Path, validation_id: str, *, sort_matches: bool = False,
+    timeout_s: float = BACKUP_PROBE_TIMEOUT_S
+) -> tuple[Path, ...]:
+    """Bound directory checking AND enumeration of an optional backup root.
+
+    A stalled filesystem call may outlive the budget, so the worker is a
+    daemon and publishes only a complete result. A timeout contributes no
+    candidates, exactly like an absent root, and cannot alter numeric output.
+    """
+
+    result: list[tuple[Path, ...]] = []
+    errors: list[BaseException] = []
+
+    def probe() -> None:
+        try:
+            candidates: list[Path] = []
+            if root.is_dir():
+                for prefix in ("*", "*/*"):
+                    matches = root.glob(
+                        f"{prefix}/instrument_validation/{validation_id}/raw/powermetrics.plist"
+                    )
+                    candidates.extend(sorted(matches) if sort_matches else matches)
+            result.append(tuple(candidates))
+        except BaseException as exc:
+            errors.append(exc)
+
+    worker = threading.Thread(target=probe, daemon=True, name="backup-root-probe")
+    worker.start()
+    worker.join(timeout_s)
+    if worker.is_alive():
+        _LOG.warning("backup_root_unavailable reason=timeout root=%s budget_s=%s",
+                     root, timeout_s)
+        return ()
+    if errors:
+        reason = "os_error" if isinstance(errors[0], OSError) else "worker_error"
+        _LOG.warning("backup_root_unavailable reason=%s root=%s detail=%s",
+                     reason, root, errors[0])
+        return ()
+    return result[0]
+
+
 def locate_raw_powermetrics(
     corpus_root: Path, validation_id: str, expected_sha256: str
 ) -> tuple[bytes, str]:
@@ -223,23 +292,8 @@ def locate_raw_powermetrics(
             / "raw"
             / "powermetrics.plist"
         )
-    for root in BACKUP_ROOTS:
-        if not root.is_dir():
-            continue
-        candidates.extend(
-            sorted(
-                root.glob(
-                    f"*/instrument_validation/{validation_id}/raw/powermetrics.plist"
-                )
-            )
-        )
-        candidates.extend(
-            sorted(
-                root.glob(
-                    f"*/*/instrument_validation/{validation_id}/raw/powermetrics.plist"
-                )
-            )
-        )
+    for root in backup_roots():
+        candidates.extend(probe_backup_root(root, validation_id, sort_matches=True))
     inspected: list[str] = []
     for candidate in candidates:
         if not candidate.is_file():
