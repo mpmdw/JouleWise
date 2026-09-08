@@ -80,9 +80,14 @@ should-fixes) requires live adjudication before any real text substitution.
 
 ## Retained replay environment note
 
-`JOULEWISE_BACKUP_ROOTS` is an `os.pathsep`-separated list of optional backup
-roots; an empty value disables them. If unset, the historical default is
-`/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup`.
-Each root/call has a cumulative 2 s discovery budget. An unavailable or slow
-root contributes zero candidates and emits `backup_root_unavailable`; missing
-byte-pinned artifacts still fail closed. This policy grants no desk replay gate.
+**2026-09-08 addendum — ICLOUD-BACKUP-PROBE-01.** The replay fence and both
+round-7 producers use the following optional backup-discovery policy.
+`JOULEWISE_BACKUP_ROOTS` is an `os.pathsep`-separated list of optional
+backup roots; an empty value disables all backup roots. If unset, it defaults
+to `/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup`.
+Each (root, call) has one cumulative 2 s budget for `is_dir` and both globs.
+An unresponsive or responsive-but-slow root exceeding that budget is skipped:
+it contributes zero candidates and emits a `backup_root_unavailable` stderr
+line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
+a skip fails closed at the pin check if no matching candidate remains. This
+policy grants no desk replay gate.
