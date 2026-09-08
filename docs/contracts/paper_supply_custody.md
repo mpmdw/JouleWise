@@ -100,6 +100,13 @@ renderers. Public suppliers accept refs and use the opener.
 
 ## Custody-bound registry rows
 
+The [incomplete successor proposal](paper_comparison_placements.md) is separate
+from this live census. It grants no comparison placements and does not satisfy
+the pending paper-side acceptance below. Floor-cell, measured-dependence and
+characterization routes remain unresolved; related authenticated parents do not
+extend a family's rendering grants. Archive completeness and public availability
+cannot be established by a partial family census.
+
 A `results-fill-registry.md` row is **custody-bound** when its supplier column names a
 `paper_custody` family and role as `<family>/<supply role>`. Every claim-bearing row must
 be custody-bound before its value renders; a row naming no family and role is

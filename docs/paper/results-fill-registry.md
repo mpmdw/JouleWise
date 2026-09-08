@@ -53,6 +53,12 @@ unresolved until the G2-a selection record issues.
 
 ## Rules and source index
 
+Successor preparation is tracked separately in the
+[incomplete comparison placement proposal](../contracts/paper_comparison_placements.md).
+It is non-fillable, is outside the live custody-bound census, and does not
+reactivate the dated retirement rows below. X1–X22 mappings await the lead's
+authoritative crosswalk; no successor supplier binding has been installed.
+
 Fill-rule vocabulary is closed:
 
 - `MEASURED`: copy or conservatively render an authenticated issued artifact
