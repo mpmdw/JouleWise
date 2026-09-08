@@ -520,3 +520,7 @@ unattended-window path. Session 3c46c831 (resumed twin, pid 71607) ends here; it
 5. Model routing: astra (gpt-6-astra) default for seats and reviews; Opus for contract-lens deltas and worktree
    merges; Fable merges. Seats via codex-run-v3 (memory codex-seat-launch-rules.md). Gate every bench chain on
    the unittest exit code, never on a grep pipeline.
+
+- 2026-09-08 00:55 PDT addendum (Ed): the sleep cycling was an accident — the laptop lid was closed at home while Ed
+  was away. Ed rules NO change to the handoff or live-experiment procedure for this; the fresh session only
+  verifies the machine is awake (checkpoint step 1) and proceeds.

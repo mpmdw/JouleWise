@@ -455,7 +455,9 @@ runbook by hand.
 
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
-- **MAC-SLEEP-01 — H0, [ED] (2026-09-07):** the MacBook sleeps whenever nothing holds it awake
+- **MAC-SLEEP-01 — RESOLVED 2026-09-08, cause known, no procedure change (Ed):** the lid had been closed by
+  accident (housekeepers) while Ed was away; not a handoff or watchdog defect. Original note kept for the symptom
+  chain: the MacBook sleeps whenever nothing holds it awake
   (pmset log: ~330 "Maintenance Sleep"/DarkWake cycles per day since 2026-08-31; ~45 s awake per
   5 min). Every unattended path depends on this: the watchdog sits in CLOCK_UNCERTAIN ("wall and
   monotonic deltas disagree") because monotonic time pauses in sleep, so it never relaunches; full
