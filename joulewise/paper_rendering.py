@@ -39,7 +39,11 @@ def _field(value: _FrozenObject, name: str):
 
 @_issued_renderer(VerifiedReportedEnergyParents, "cell")
 def render_reported_energy(value: VerifiedReportedEnergyParents) -> str:
-    cells = _field(_field(value._payload, "reported_energy_projection"), "cells")
+    from joulewise.paper_reported_energy import PaperReportedEnergyRefusal
+    projection = value.reported_energy_projection
+    if projection is None:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_projection_absent")
+    cells = _field(projection, "cells")
     assert type(cells) is _FrozenArray
     selected = {subject for subject in value.evidence.subjects}
     return "\n".join(f'{_field(cell, "cell_id")}: {_field(cell, "mean_j")}'

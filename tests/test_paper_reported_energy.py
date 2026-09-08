@@ -1,10 +1,12 @@
 """D-179 adversarial synthetic controls; these confer no production acceptance."""
+from contextlib import contextmanager
 from copy import deepcopy
 import json
 import math
 from pathlib import Path
 import statistics
 import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -78,6 +80,13 @@ class ReportedEnergyTests(unittest.TestCase):
     def project(self):
         return energy._project_cell(self.cell, self.rows, self.binding)
 
+    @contextmanager
+    def assert_code(self, reason):
+        with self.assertRaises(energy.PaperReportedEnergyRefusal) as raised:
+            yield
+        self.assertEqual(raised.exception.code, "paper_reported_energy_" + reason)
+        self.assertEqual(raised.exception.rendered_output, ())
+
     def test_complete_control_and_stratified_half_width_not_pooled(self):
         result = self.project()
         # Independent closed sums: s_r²=55/6, s_b²=440/3, weighted mean=42.5.
@@ -97,19 +106,19 @@ class ReportedEnergyTests(unittest.TestCase):
 
     def test_49_member_mean_refuses(self):
         self.rows.pop()
-        with self.assertRaisesRegex(ValueError, "never 49"):
+        with self.assert_code("member_count_invalid"):
             self.project()
 
     def test_omitted_registered_member_refuses(self):
         self.cell["members"].pop()
-        with self.assertRaisesRegex(ValueError, "50-member"):
+        with self.assert_code("member_count_invalid"):
             self.project()
 
     def test_equal_block_repeat_weighting_changes_value(self):
         self.assertEqual((14.5 + 49.5) / 2, 32)
         self.assertNotEqual(self.project()["mean_j"], 32)
         self.cell["projection_registration"]["stratum_weights"] = [0.5, 0.5]
-        with self.assertRaisesRegex(ValueError, "semantics"):
+        with self.assert_code("registration_invalid"):
             self.project()
 
     def test_zeroed_bound_kind_moves_endpoints(self):
@@ -123,22 +132,22 @@ class ReportedEnergyTests(unittest.TestCase):
 
     def test_absent_bound_kind_refuses(self):
         del self.rows[0]["bounds_j"][energy.BOUND_KINDS[1]]
-        with self.assertRaisesRegex(ValueError, "bounds_j"):
+        with self.assert_code("schema_invalid"):
             self.project()
 
     def test_prediction_term_substitution_refuses_by_name(self):
         self.cell["projection_registration"]["interval_method"] = energy.EXCLUDED_PREDICTION_TERM
-        with self.assertRaisesRegex(ValueError, "prediction-term substitution"):
+        with self.assert_code("registration_invalid"):
             self.project()
         self.cell["projection_registration"] = energy.reported_energy_registration(self.cell["cell_id"])
         value = self.rows[0]["bounds_j"].pop(energy.BOUND_KINDS[0])
         self.rows[0]["bounds_j"][energy.EXCLUDED_PREDICTION_TERM] = value
-        with self.assertRaisesRegex(ValueError, "prediction term forbidden"):
+        with self.assert_code("schema_invalid"):
             self.project()
 
     def test_configured_absent_zero_and_malformed_denominators_refuse_ratio_only(self):
         for key, value in (("source", "config"), ("source", "fallback"), ("output", 0),
-                           ("output", None), ("output", True), ("tokenize_end", 99)):
+                           ("output", None), ("output", True)):
             with self.subTest(key=key, value=value):
                 saved = deepcopy(self.rows)
                 self.rows[0]["tokens"][key] = value
@@ -147,14 +156,99 @@ class ReportedEnergyTests(unittest.TestCase):
                 self.assertEqual(result["per_token"]["status"], "refused")
                 self.assertIsNone(result["per_token"]["j_per_token"])
                 self.assertIsNone(result["per_token"]["observed_token_sum"])
+                self.assertEqual(result["per_token"]["reason"], "paper_reported_energy_denominator_invalid")
                 self.rows = saved
+
+    def test_decode_ignores_prompt_surfaces_but_prefill_requires_agreement(self):
+        for mutation in ({"tokenize_end": (42, 99)}, {"total": None},
+                         {"prompt_realized": 0, "prefill_start": ()}):
+            for index in (0, 1):
+                data = synthetic_input()
+                data["cells"][index]["rows"][0]["tokens"].update(mutation)
+                result = energy._project_cell(data["spec"]["reported_energy_cells"][index], **data["cells"][index])
+                with self.subTest(index=index, mutation=mutation):
+                    self.assertEqual(result["mean_j"], 42.5)
+                    self.assertEqual(result["per_token"]["status"], "computed" if index == 0 else "refused")
+                    expected_reason = (None if index == 0 else "paper_reported_energy_" +
+                                       ("prompt_surfaces_disagree" if "tokenize_end" in mutation else "denominator_invalid"))
+                    self.assertEqual(result["per_token"]["reason"], expected_reason)
+                    if index == 0:
+                        self.assertAlmostEqual(result["per_token"]["j_per_token"], 2125 / 1275)
+        for row in self.rows:
+            row["tokens"] = {key: row["tokens"][key] for key in
+                             ("source", "output", "tokenizer_sha256", "output_policy_sha256")}
+        self.assertEqual(self.project()["per_token"]["status"], "computed")
+
+    def test_prefill_tuple_surfaces_collapse_or_refuse_named_code(self):
+        data = self.input["cells"][1]
+        cell = self.input["spec"]["reported_energy_cells"][1]
+        for row in data["rows"]:
+            row["tokens"].update(tokenize_end=(42, 42), prefill_start=(42, 42, 42))
+        self.assertEqual(energy._collapse_prompt_tokens(data["rows"][0]["tokens"]), 42)
+        self.assertEqual(energy._project_cell(cell, **data)["per_token"]["status"], "computed")
+        data["rows"][0]["tokens"]["prefill_start"] = (42, 43)
+        with self.assert_code("prompt_surfaces_disagree"):
+            energy._collapse_prompt_tokens(data["rows"][0]["tokens"])
+        result = energy._project_cell(cell, **data)
+        self.assertEqual(result["per_token"]["reason"], "paper_reported_energy_prompt_surfaces_disagree")
+        self.assertEqual(result["mean_j"], 42.5)
+
+    def test_closed_refusal_vocabulary_matches_contract(self):
+        import re
+        contract = (Path(__file__).resolve().parents[1] / "docs/contracts/paper_reported_energy.md").read_text()
+        self.assertEqual(set(re.findall(r"`(paper_reported_energy_[a-z_]+)`", contract)),
+                         energy.PAPER_REPORTED_ENERGY_REFUSAL_CODES)
+        self.assertEqual(energy.PaperReportedEnergyRefusal("invented").code,
+                         "paper_reported_energy_request_invalid")
+        with self.assert_code("request_invalid"):
+            energy._validate_projection({"bad": object()}, self.cell, self.rows, self.binding)
+
+    def test_registration_ordering_in_synthetic_git_repositories(self):
+        source = Path(energy.__file__).read_bytes()
+        for model in energy.MODELS:
+            for order in ("registration_first", "spec_first", "same_commit", "digest_mismatch", "absent_spec"):
+                with self.subTest(model=model, order=order), tempfile.TemporaryDirectory() as tmp:
+                    repo = Path(tmp)
+                    def git(*args):
+                        return subprocess.check_output(["git", "-C", tmp, *args], stderr=subprocess.STDOUT, text=True).strip()
+                    git("init", "-q")
+                    git("config", "user.email", "synthetic@example.invalid")
+                    git("config", "user.name", "Synthetic test")
+                    registration = repo / "joulewise/paper_reported_energy.py"
+                    spec = repo / f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
+                    registration.parent.mkdir(parents=True)
+                    spec.parent.mkdir(parents=True)
+                    spec_bytes = json.dumps({"reported_energy_registration": {"registration_sha256":
+                        "0" * 64 if order == "digest_mismatch" else energy.registration_sha256(model)}}).encode()
+                    paths = [(registration, source), (spec, spec_bytes)]
+                    if order == "spec_first":
+                        paths.reverse()
+                    if order == "absent_spec":
+                        paths = paths[:1]
+                    for path, raw in paths:
+                        path.write_bytes(raw)
+                        if order != "same_commit":
+                            git("add", ".")
+                            git("commit", "-qm", path.name)
+                    if order == "same_commit":
+                        git("add", ".")
+                        git("commit", "-qm", "both")
+                    if order == "registration_first":
+                        result = energy.verify_registration_ordering(repo, model)
+                        self.assertEqual(result["registration_sha256"], energy.registration_sha256(model))
+                        self.assertNotEqual(result["registration_commit"], result["spec_commit"])
+                    else:
+                        reason = {"digest_mismatch": "registration_digest_mismatch", "absent_spec": "ordering_history_invalid"}.get(
+                            order, "registration_not_before_spec")
+                        with self.assert_code(reason):
+                            energy.verify_registration_ordering(repo, model)
 
     def test_mean_of_ratios_changes_decode_value(self):
         wrong = statistics.fmean(row["energy_j"] / row["tokens"]["output"] for row in self.rows)
         self.assertGreater(abs(wrong - self.project()["per_token"]["j_per_token"]), 0.2)
         result = self.project()
         result["per_token"]["j_per_token"] = wrong
-        with self.assertRaisesRegex(ValueError, "recomputation mismatch"):
+        with self.assert_code("projection_mismatch"):
             energy._validate_projection(result, self.cell, self.rows, self.binding)
 
     def test_reordered_and_duplicated_member_refuse(self):
@@ -164,7 +258,7 @@ class ReportedEnergyTests(unittest.TestCase):
                 self.rows[1] = deepcopy(self.rows[0])
             else:
                 self.rows[0], self.rows[1] = self.rows[1], self.rows[0]
-            with self.assertRaisesRegex(ValueError, "ordered identity"):
+            with self.assert_code("record_identity_mismatch"):
                 self.project()
             self.rows = saved
 
@@ -173,7 +267,7 @@ class ReportedEnergyTests(unittest.TestCase):
                            ("selection_sha256", "f" * 64), ("whole_window_basis_sha256", "f" * 64), ("strict_valid", False)):
             saved = deepcopy(self.rows)
             self.rows[0][key] = value
-            with self.subTest(key=key), self.assertRaises(ValueError):
+            with self.subTest(key=key), self.assert_code("record_invalid" if key == "strict_valid" else "record_identity_mismatch"):
                 self.project()
             self.rows = saved
 
@@ -181,11 +275,11 @@ class ReportedEnergyTests(unittest.TestCase):
         for key, value in (("lower_j", 42.4), ("upper_j", 42.6), ("n_bundles", 10), ("extra", 1)):
             result = self.project()
             result[key] = value
-            with self.subTest(key=key), self.assertRaisesRegex(ValueError, "recomputation mismatch"):
+            with self.subTest(key=key), self.assert_code("projection_mismatch"):
                 energy._validate_projection(result, self.cell, self.rows, self.binding)
         result = self.project()
         result["per_token"]["observed_token_sum"] = 50 * 512
-        with self.assertRaisesRegex(ValueError, "recomputation mismatch"):
+        with self.assert_code("projection_mismatch"):
             energy._validate_projection(result, self.cell, self.rows, self.binding)
 
     def test_missing_token_object_and_scope_drift_preserve_mean(self):
@@ -196,12 +290,14 @@ class ReportedEnergyTests(unittest.TestCase):
             result = self.project()
             self.assertEqual(result["mean_j"], 42.5)
             self.assertEqual(result["per_token"]["status"], "refused")
+            self.assertEqual(result["per_token"]["reason"], "paper_reported_energy_" +
+                             ("denominator_invalid" if not tokens else "token_scope_mismatch"))
             self.rows = saved
 
     def test_floor_cell_swapped_model_refuses(self):
         spec = self.input["spec"]
         spec["cells"][0]["cell_id"] = "d117-df-ph-decode-qwen3-8b-absolute"
-        with self.assertRaisesRegex(ValueError, "model/phase cell identity"):
+        with self.assert_code("floor_identity_mismatch"):
             energy._validate_registered_spec(spec)
 
     def test_attribution_floor_is_beside_never_composed(self):
@@ -219,7 +315,7 @@ class ReportedEnergyTests(unittest.TestCase):
             validate_ratio_estimand(ratio)
         for mutation in ({**ratio, "denominator": "configured_output_tokens"}, {**ratio, "extra": 1},
                          {**ratio, "cell_id": "prefill"}, {**ratio, "form": "mean_of_request_ratios"}):
-            with self.assertRaises(ValueError):
+            with self.assert_code("cell_identity_invalid" if mutation["cell_id"] == "prefill" else "ratio_estimand_invalid"):
                 energy.validate_phase_ratio_estimand(mutation)
 
     def test_independent_floor_census_rejects_coordinated_report_reordering(self):
@@ -228,7 +324,7 @@ class ReportedEnergyTests(unittest.TestCase):
         members = spec["reported_energy_cells"][0]["members"]
         members[0], members[1] = members[1], members[0]
         members[0]["ordinal"], members[1]["ordinal"] = 1, 2
-        with self.assertRaisesRegex(ValueError, "floor/config census"):
+        with self.assert_code("floor_member_mismatch"):
             energy._validate_registered_spec(spec)
 
     def test_both_models_three_cells_and_prefill_observed_totals(self):
@@ -277,7 +373,7 @@ class ReportedEnergyTests(unittest.TestCase):
         fixture.head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=fixture.anchor_root, text=True).strip()
         value = custody.open_paper_input(fixture.ref)
         self.assertIs(type(value), custody.FixtureReportedEnergyParents)
-        projection = dict(value._payload.fields)["reported_energy_projection"]
+        projection = value.reported_energy_projection
         self.assertIn("cells", dict(projection.fields))
         with self.assertRaises(custody.PaperCustodyRefusal):
             render_reported_energy(value)

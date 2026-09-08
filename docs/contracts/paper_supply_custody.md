@@ -203,11 +203,14 @@ Each returns its distinct `Fixture*` type. The reported-energy fixture exercises
 a repository `git_blob` extraction spec, and every fixture has a transitive
 source read in its census. These are synthetic authentication controls.
 
-The production role `production.reported_energy_parents.qwen3-1p7b.v5` is
-**pending**, recorded only in `pending_roles`, which grants no lookup or
-issuance authority. Its prospective `EXTRACTION_SPEC` is
-`configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json`. Desk-day
-registration must use the real reviewed/committed blob and full production
+Both production roles `production.reported_energy_parents.qwen3-1p7b.v5` and
+`production.reported_energy_parents.qwen3-8b.v5` are **pending**, recorded only
+in `pending_roles`, which grants no lookup or issuance authority. The 8b role
+is included by the S2 fix ruling because both models are cells of the D-179
+registration. Their prospective `EXTRACTION_SPEC` blobs are respectively
+`configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` and
+`configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json`. Desk-day
+registration must use each real reviewed/committed blob and full production
 census under D-138/D-166 successor naming; a fixture or old pack cannot replace
 it. Production Git-blob coverage remains unfulfilled until that registration.
 
@@ -293,9 +296,10 @@ production joins remain pending. The future reported-energy gate must replay `va
 `validate_d117_mint_consumption_report`. Its production entry must also
 inventory the full ordered extraction-spec `reported_energy_cells[].members` universe and every
 strict-bundle input consumed by the projection. The closed mint-consumption
-report is unchanged; computed results belong to the separate frozen payload
-`reported_energy_projection`, never to an invented report field. The new owner
-module, phase-ratio validator, bundle reader and typed whole-window owner are
+report is unchanged; computed results belong to the separate typed frozen field
+`reported_energy_projection` on both reported-energy result types, never to an
+invented report field. The new owner module, phase-ratio validator, bundle
+reader and typed whole-window owner are
 in the transitive source census. Optional fixture `projection_input` is
 synthetic-only and cannot issue a cell. D-179 fixes the fifty-member mean,
 stratified t9 interval and observed ratio of totals, but authentic production

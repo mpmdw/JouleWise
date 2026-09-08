@@ -149,6 +149,7 @@ _CAPABILITY_FIELDS = frozenset(
         "subjects",
         "evidence",
         "_payload",
+        "reported_energy_projection",
     }
 )
 
@@ -186,6 +187,7 @@ def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
         output_type: type,
         evidence: object,
         payload: object,
+        reported_energy_projection: _FrozenObject | None = None,
     ) -> object:
         if presented is not token:
             raise PaperCustodyRefusal("paper_custody_request_invalid")
@@ -206,6 +208,10 @@ def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
         result = object.__new__(output_type)
         object.__setattr__(result, "evidence", evidence)
         object.__setattr__(result, "_payload", payload)
+        if spec.family == "reported_energy_parents":
+            if reported_energy_projection is not None and type(reported_energy_projection) is not _FrozenObject:
+                raise PaperCustodyRefusal("paper_custody_request_invalid")
+            object.__setattr__(result, "reported_energy_projection", reported_energy_projection)
         object.__setattr__(result, "_custody_token", token)
         return result
 
@@ -255,7 +261,7 @@ class _CustodyResult:
 
 @dataclass(frozen=True, init=False, slots=True)
 class VerifiedReportedEnergyParents(_CustodyResult):
-    pass
+    reported_energy_projection: _FrozenObject | None
 
 
 @dataclass(frozen=True, init=False, slots=True)
@@ -280,7 +286,7 @@ class VerifiedTransferProjection(_CustodyResult):
 
 @dataclass(frozen=True, init=False, slots=True)
 class FixtureReportedEnergyParents(_CustodyResult):
-    pass
+    reported_energy_projection: _FrozenObject | None
 
 
 @dataclass(frozen=True, init=False, slots=True)
@@ -475,6 +481,7 @@ class _FamilyReplay:
     admitted: bool
     grants: tuple[_RenderGrant, ...]
     validator_codes: tuple[str, ...]
+    reported_energy_projection: _FrozenObject | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1468,14 +1475,14 @@ def _open_paper_input_impl(
         )
         payload = _FrozenObject(tuple((binding.role.value, _freeze_json(_json_object(raws[binding.role])))
                                       for binding in sources))
+        projection = replay.reported_energy_projection
         if spec.family == "reported_energy_parents" and mode == "test_fixture_non_issuing":
             document = _json_object(raws[InputRole.EXTRACTION_SPEC])
             if "projection_input" in document:
                 from joulewise.paper_reported_energy import _synthetic_projection
-                projection = _synthetic_projection(document["projection_input"])
-                payload = _FrozenObject((*payload.fields, ("reported_energy_projection", _freeze_json(projection))))
+                projection = _freeze_json(_synthetic_projection(document["projection_input"]))
         output_type = spec.issuing_type if mode == "production" else spec.fixture_type
-        return _construct_verified(_custody_token, output_type, evidence, payload)
+        return _construct_verified(_custody_token, output_type, evidence, payload, projection)
 
 
 __all__ = [

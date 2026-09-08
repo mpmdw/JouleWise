@@ -705,7 +705,7 @@ def _assert_refusal_census(source: str, expected: set[str]) -> None:
         raise AssertionError("refusal constructor/registry/contract census mismatch")
 
 
-def _issued_control(fixture: _FamilyFixture, *, grants=None, subjects=None, payload=None):
+def _issued_control(fixture: _FamilyFixture, *, grants=None, subjects=None, payload=None, projection=None):
     """Deliberate private reconstruction for wrapper controls, never live evidence."""
     opened = custody.open_paper_input(fixture.ref)
     spec = custody._FAMILY_SPECS[type(fixture.ref)]
@@ -717,7 +717,8 @@ def _issued_control(fixture: _FamilyFixture, *, grants=None, subjects=None, payl
     values.update(mode="production", issuance_authorized=True, subjects=subjects, grants=grants)
     evidence = custody._construct_custody_evidence(token, **values)
     return custody._construct_verified(token, spec.issuing_type, evidence,
-                                       opened._payload if payload is None else custody._freeze_json(payload))
+                                       opened._payload if payload is None else custody._freeze_json(payload),
+                                       None if projection is None else custody._freeze_json(projection))
 
 
 class RoundFiveTests(unittest.TestCase):
@@ -954,21 +955,22 @@ class RoundFiveTests(unittest.TestCase):
 
     def test_production_git_blob_coverage(self):
         supply = json.loads(SUPPLY_MAP.read_bytes())
-        role = "production.reported_energy_parents.qwen3-1p7b.v5"
-        path = "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json"
-        if role not in supply["roles"]:
-            self.assertEqual(supply["pending_roles"][role], {
-                "status": "pending_desk_day", "family": "reported_energy_parents", "input_role": "extraction_spec",
-                "base": "repository", "authority": "git_blob", "path": path})
-            self.assertTrue(all(entry["mode"] == "test_fixture_non_issuing" for entry in supply["roles"].values()))
-            print("PENDING production Git-blob role: fixture coverage is not production coverage")
-        else:
-            entry = supply["roles"][role]
-            self.assertEqual(entry["mode"], "production")
-            row = next(row for row in entry["inputs"] if row["role"] == "extraction_spec")
-            self.assertEqual((row["base"], row["authority"], row["path"]), ("repository", "git_blob", path))
-            self.assertEqual(_sha(custody._git_blob(ROOT, "HEAD", path)), row["expected_sha256"])
-            self.assertTrue(entry["source_census"])
+        for model in ("qwen3-1p7b", "qwen3-8b"):
+            role = f"production.reported_energy_parents.{model}.v5"
+            path = f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
+            if role not in supply["roles"]:
+                self.assertEqual(supply["pending_roles"][role], {
+                    "status": "pending_desk_day", "family": "reported_energy_parents", "input_role": "extraction_spec",
+                    "base": "repository", "authority": "git_blob", "path": path})
+                self.assertTrue(all(entry["mode"] == "test_fixture_non_issuing" for entry in supply["roles"].values()))
+                print("PENDING production Git-blob role: fixture coverage is not production coverage")
+            else:
+                entry = supply["roles"][role]
+                self.assertEqual(entry["mode"], "production")
+                row = next(row for row in entry["inputs"] if row["role"] == "extraction_spec")
+                self.assertEqual((row["base"], row["authority"], row["path"]), ("repository", "git_blob", path))
+                self.assertEqual(_sha(custody._git_blob(ROOT, "HEAD", path)), row["expected_sha256"])
+                self.assertTrue(entry["source_census"])
 
     def test_git_blob_dispatch_checks_blob_before_parse_and_worktree(self):
         fixture = self.fixture("reported_energy_parents")

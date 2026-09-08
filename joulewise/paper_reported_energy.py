@@ -11,6 +11,8 @@ import json
 import math
 import re
 import statistics
+import subprocess
+from functools import wraps
 
 
 SCHEMA = "joulewise.paper_reported_energy_projection.v1"
@@ -28,23 +30,79 @@ CELL_RE = re.compile(r"d117-reported-mean-ph-(decode|prefill-p42|prefill-p512)-(
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 
 
+PAPER_REPORTED_ENERGY_REFUSAL_CODES = frozenset({
+    "paper_reported_energy_binding_mismatch",
+    "paper_reported_energy_cell_census_invalid",
+    "paper_reported_energy_cell_identity_invalid",
+    "paper_reported_energy_cell_registration_mismatch",
+    "paper_reported_energy_denominator_invalid",
+    "paper_reported_energy_digest_invalid",
+    "paper_reported_energy_floor_census_invalid",
+    "paper_reported_energy_floor_identity_mismatch",
+    "paper_reported_energy_floor_member_mismatch",
+    "paper_reported_energy_floor_stratum_mismatch",
+    "paper_reported_energy_member_count_invalid",
+    "paper_reported_energy_member_duplicate",
+    "paper_reported_energy_member_identity_invalid",
+    "paper_reported_energy_member_order_invalid",
+    "paper_reported_energy_model_invalid",
+    "paper_reported_energy_number_invalid",
+    "paper_reported_energy_ordering_history_invalid",
+    "paper_reported_energy_projection_absent",
+    "paper_reported_energy_projection_mismatch",
+    "paper_reported_energy_prompt_surfaces_disagree",
+    "paper_reported_energy_ratio_estimand_invalid",
+    "paper_reported_energy_record_identity_mismatch",
+    "paper_reported_energy_record_invalid",
+    "paper_reported_energy_registration_digest_mismatch",
+    "paper_reported_energy_registration_invalid",
+    "paper_reported_energy_registration_not_before_spec",
+    "paper_reported_energy_request_invalid",
+    "paper_reported_energy_schema_invalid",
+    "paper_reported_energy_spec_binding_mismatch",
+    "paper_reported_energy_spec_invalid",
+    "paper_reported_energy_token_scope_mismatch",
+})
+
+
+class PaperReportedEnergyRefusal(ValueError):
+    """Closed, out-of-band diagnostic; never a paper result or capability."""
+
+    def __init__(self, code):
+        self.code = code if code in PAPER_REPORTED_ENERGY_REFUSAL_CODES else "paper_reported_energy_request_invalid"
+        self.rendered_output = ()
+        super().__init__(self.code)
+
+
+def _closed_refusals(fn):
+    @wraps(fn)
+    def checked(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except PaperReportedEnergyRefusal:
+            raise
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, ArithmeticError) as exc:
+            raise PaperReportedEnergyRefusal("paper_reported_energy_request_invalid") from exc
+    return checked
+
+
 def _exact(value, keys, label):
     if type(value) is not dict or set(value) != set(keys):
-        raise ValueError(f"{label}: exact keys required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_schema_invalid")
     return value
 
 
 def _number(value, label, *, nonnegative=False):
     if type(value) not in (int, float) or not math.isfinite(value):
-        raise ValueError(f"{label}: finite non-boolean number required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_number_invalid")
     if nonnegative and value < 0:
-        raise ValueError(f"{label}: negative value")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_number_invalid")
     return value
 
 
 def _sha(value, label):
     if type(value) is not str or SHA_RE.fullmatch(value) is None:
-        raise ValueError(f"{label}: SHA-256 required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_digest_invalid")
     return value
 
 
@@ -56,7 +114,7 @@ def _digest(value):
 def _cell_identity(cell_id):
     match = CELL_RE.fullmatch(cell_id) if type(cell_id) is str else None
     if match is None:
-        raise ValueError("cell_id: exact registered model/phase/length required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_identity_invalid")
     role, model = match.groups()
     return model, "decode" if role == "decode" else "prefill"
 
@@ -74,10 +132,11 @@ def phase_ratio_estimand(cell_id):
     }
 
 
+@_closed_refusals
 def validate_phase_ratio_estimand(value):
     """Exact sibling schema; the existing B8 ratio_estimand stays untouched."""
     if type(value) is not dict or value != phase_ratio_estimand(value.get("cell_id")):
-        raise ValueError("phase_ratio_estimand: exact registered ratio_of_totals required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_ratio_estimand_invalid")
     return value
 
 
@@ -99,7 +158,7 @@ def reported_energy_registration(cell_id):
 
 def registration_manifest(model):
     if model not in MODELS:
-        raise ValueError("unregistered model")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_model_invalid")
     return [reported_energy_registration(f"d117-reported-mean-ph-{role}-{model}")
             for role in ("decode", "prefill-p42", "prefill-p512")]
 
@@ -108,11 +167,51 @@ def registration_sha256(model):
     return _digest(registration_manifest(model))
 
 
+def verify_registration_ordering(repository, model):
+    """Read committed history only; this check grants no evidence custody."""
+    expected = registration_sha256(model)
+    source = "joulewise/paper_reported_energy.py"
+    spec = f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
+
+    def git(*args):
+        result = subprocess.run(["git", "-C", str(repository), *args], capture_output=True, text=True)
+        if result.returncode:
+            raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
+        return result.stdout.strip()
+
+    try:
+        # Require a complete, unambiguous addition history; never infer dates.
+        if git("rev-parse", "--is-shallow-repository") != "false":
+            raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
+        additions = [git("log", "--format=%H", "--diff-filter=A", "--no-renames", "HEAD", "--", path).splitlines()
+                     for path in (source, spec)]
+        if any(len(commits) != 1 for commits in additions):
+            raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
+        registration_commit, spec_commit = (commits[0] for commits in additions)
+        ancestor = subprocess.run(["git", "-C", str(repository), "merge-base", "--is-ancestor",
+                                   registration_commit, spec_commit], capture_output=True)
+        if ancestor.returncode not in (0, 1):
+            raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
+        if registration_commit == spec_commit or ancestor.returncode == 1:
+            raise PaperReportedEnergyRefusal("paper_reported_energy_registration_not_before_spec")
+        # Both the first blob and current frozen blob must bind this registration.
+        for revision in (spec_commit, "HEAD"):
+            document = json.loads(git("show", f"{revision}:{spec}"))
+            if document["reported_energy_registration"]["registration_sha256"] != expected:
+                raise PaperReportedEnergyRefusal("paper_reported_energy_registration_digest_mismatch")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        if isinstance(exc, PaperReportedEnergyRefusal):
+            raise
+        raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid") from exc
+    return {"registration_commit": registration_commit, "spec_commit": spec_commit,
+            "registration_sha256": expected}
+
+
 def _validate_registration(value):
     if type(value) is not dict:
-        raise ValueError("registration: exact object required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_registration_invalid")
     if value != reported_energy_registration(value.get("cell_id")):
-        raise ValueError("registration: changed registered semantics; prediction-term substitution forbidden")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_registration_invalid")
     validate_phase_ratio_estimand(value["phase_ratio_estimand"])
 
 
@@ -129,94 +228,113 @@ def _validate_members(cell):
         or cell["reducer"] != reg["reducer"] or type(cell["expected_n"]) is not int
         or cell["expected_n"] != 50 or cell["missing_or_invalid_member"] != reg["missing_or_invalid_member"]
         or cell["phase_ratio_estimand"] != reg["phase_ratio_estimand"]):
-        raise ValueError("reported cell: identity or registration mismatch")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_registration_mismatch")
     members = cell["members"]
     if type(members) is not list or len(members) != 50:
-        raise ValueError("members: complete 50-member universe required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_member_count_invalid")
     ids = []
     for ordinal, member in enumerate(members, 1):
         _exact(member, {"ordinal", "bundle_id", "config_sha256"}, "member")
         if type(member["ordinal"]) is not int or member["ordinal"] != ordinal:
-            raise ValueError("member: ordered ordinal mismatch")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_member_order_invalid")
         if type(member["bundle_id"]) is not str or not member["bundle_id"]:
-            raise ValueError("member: bundle identity required")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_member_identity_invalid")
         _sha(member["config_sha256"], "config_sha256")
         ids.append(member["bundle_id"])
     if len(set(ids)) != 50:
-        raise ValueError("members: duplicate bundle")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_member_duplicate")
     return model, phase
 
 
+@_closed_refusals
 def _validate_registered_spec(spec):
     """Corroborate membership against the independent floor census, in order."""
     from joulewise.floor_extraction import validate_extraction_spec
     errors = validate_extraction_spec(spec)
     if errors:
-        raise ValueError(f"extraction_spec: {errors}")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_spec_invalid")
     cells = spec.get("reported_energy_cells")
     if type(cells) is not list or len(cells) != 3:
-        raise ValueError("reported_energy_cells: three registered cells per model required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
     model, _ = _validate_members(cells[0])
     if [cell.get("cell_id") for cell in cells] != [r["cell_id"] for r in registration_manifest(model)]:
-        raise ValueError("reported_energy_cells: ordered model/cell census mismatch")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
     if spec.get("reported_energy_registration", {}).get("registration_sha256") != registration_sha256(model):
-        raise ValueError("registration digest mismatch")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_registration_digest_mismatch")
     if len(spec["cells"]) != 6:
-        raise ValueError("floor census: exactly six cells required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_floor_census_invalid")
     for index, cell in enumerate(cells):
         _validate_members(cell)
         absolute, comparative = spec["cells"][index * 2:index * 2 + 2]
         role = ("decode", "prefill-p42", "prefill-p512")[index]
         if (absolute["cell_id"] != f"d117-df-ph-{role}-{model}-absolute"
             or comparative["cell_id"] != f"d117-df-cmp-abba-ph-{role}-{model}"):
-            raise ValueError("floor census: model/phase cell identity mismatch")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_floor_identity_mismatch")
         if (absolute["kind"] != "absolute" or comparative["kind"] != "comparative"
             or type(absolute["expected_n"]) is not int or absolute["expected_n"] != 10
             or type(comparative["expected_n"]) is not int or comparative["expected_n"] != 10
             or len(absolute["members"]) != 10 or len(comparative["blocks"]) != 10
             or absolute["metric"] != cell["metric"] or comparative["metric"] != cell["metric"]):
-            raise ValueError("floor census: stratum shape/phase mismatch")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_floor_stratum_mismatch")
         ordered = [row["bundle_id"] for row in absolute["members"]]
         ordered += [block["members"][position] for block in comparative["blocks"]
                     for position in ("A1", "B1", "B2", "A2")]
         pins = absolute["member_config_sha256"] + comparative["member_config_sha256"]
         if ([row["bundle_id"] for row in cell["members"]] != ordered
             or [{k: row[k] for k in ("bundle_id", "config_sha256")} for row in cell["members"]] != pins):
-            raise ValueError("members: exact ordered floor/config census mismatch")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_floor_member_mismatch")
+
+
+def _collapse_prompt_tokens(value):
+    """Collapse bundle_read's four prompt surfaces to one agreed integer."""
+    counts = [value.get("prompt_realized")]
+    for name in ("tokenize_end", "prefill_start"):
+        surface = value.get(name)
+        if type(surface) in (tuple, list):
+            if not surface:
+                raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
+            counts.extend(surface)
+        else:
+            counts.append(surface)
+    total, output = value.get("total"), value.get("output")
+    if any(type(n) is not int or n < 0 for n in (total, output, *counts)):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
+    prompt = total - output
+    if any(n != prompt for n in counts):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_prompt_surfaces_disagree")
+    if prompt <= 0:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
+    return prompt
 
 
 def _observed_tokens(row, phase):
     value = row["tokens"]
-    _exact(value, {"source", "total", "output", "prompt_realized", "tokenize_end",
-                   "prefill_start", "tokenizer_sha256", "output_policy_sha256"}, "tokens")
-    if value["source"] != "runtime_observed":
-        raise ValueError("tokens: configured/fallback denominator forbidden")
-    for name in ("total", "output", "prompt_realized", "tokenize_end", "prefill_start"):
-        if type(value[name]) is not int or value[name] < 0:
-            raise ValueError("tokens: absent or malformed denominator")
-    prompt = value["total"] - value["output"]
-    if prompt <= 0 or any(value[name] != prompt for name in ("prompt_realized", "tokenize_end", "prefill_start")):
-        raise ValueError("tokens: four prompt surfaces disagree")
+    required = {"source", "output", "tokenizer_sha256", "output_policy_sha256"}
+    prompt_keys = {"total", "prompt_realized", "tokenize_end", "prefill_start"}
+    if (type(value) is not dict or not required <= value.keys()
+        or not value.keys() <= required | prompt_keys or value["source"] != "runtime_observed"):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
     for name in ("tokenizer_sha256", "output_policy_sha256"):
         _sha(value[name], name)
-    denominator = value["output"] if phase == "decode" else prompt
-    if denominator <= 0:
-        raise ValueError("tokens: zero denominator")
+    denominator = value["output"] if phase == "decode" else _collapse_prompt_tokens(value)
+    if type(denominator) is not int or denominator <= 0:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
     return denominator
 
 
+@_closed_refusals
 def _project_cell(cell, rows, binding):
     """Private normalized arithmetic kernel, never an evidence admission API."""
     model, phase = _validate_members(cell)
     _exact(binding, {"model", "cell_id", "extraction_spec_sha256", "selection_sha256",
                      "prompt_pin_sha256", "whole_window_basis_sha256", "attribution_floor_j"}, "binding")
     if binding["model"] != model or binding["cell_id"] != cell["cell_id"]:
-        raise ValueError("binding: swapped model/phase")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_binding_mismatch")
     for name in ("extraction_spec_sha256", "selection_sha256", "prompt_pin_sha256", "whole_window_basis_sha256"):
         _sha(binding[name], name)
     _number(binding["attribution_floor_j"], "attribution_floor_j", nonnegative=True)
     if type(rows) is not list or len(rows) != 50:
-        raise ValueError("members: missing/invalid member refuses mean; never 49")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_member_count_invalid")
     energy, bounds, tokens = [], {kind: [] for kind in BOUND_KINDS}, []
     token_error = None
     token_scope = None
@@ -225,12 +343,12 @@ def _project_cell(cell, rows, binding):
                      "whole_window_basis_sha256", "strict_valid", "unit", "energy_j", "bounds_j", "tokens"}, "record")
         if (row["member"] != member or row["model"] != model or row["phase"] != phase
             or any(row[name] != binding[name] for name in ("selection_sha256", "prompt_pin_sha256", "whole_window_basis_sha256"))):
-            raise ValueError("record: ordered identity/provenance mismatch")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_record_identity_mismatch")
         expected_unit = {"kind": "repeat", "index": index + 1, "position": None} if index < 10 else {
             "kind": "abba", "index": (index - 10) // 4 + 1, "position": ("A1", "B1", "B2", "A2")[(index - 10) % 4]}
         if (row["strict_valid"] is not True or row["unit"] != expected_unit
             or type(row["unit"]["index"]) is not int):
-            raise ValueError("record: invalid member or incomplete/reordered ABBA unit")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_record_invalid")
         energy.append(_number(row["energy_j"], "energy_j", nonnegative=True))
         _exact(row["bounds_j"], BOUND_KINDS, "bounds_j (prediction term forbidden)")
         for kind in BOUND_KINDS:
@@ -239,10 +357,10 @@ def _project_cell(cell, rows, binding):
             tokens.append(_observed_tokens(row, phase))
             scope = tuple(row["tokens"][key] for key in ("tokenizer_sha256", "output_policy_sha256"))
             if token_scope is not None and token_scope != scope:
-                raise ValueError("tokens: tokenizer/output-policy scope mismatch")
+                raise PaperReportedEnergyRefusal("paper_reported_energy_token_scope_mismatch")
             token_scope = scope
-        except (ValueError, KeyError, TypeError) as exc:
-            token_error = str(exc)
+        except PaperReportedEnergyRefusal as exc:
+            token_error = exc.code
     repeats = energy[:10]
     blocks = [statistics.fmean(energy[start:start + 4]) for start in range(10, 50, 4)]
     mean = statistics.fmean(energy)
@@ -254,7 +372,7 @@ def _project_cell(cell, rows, binding):
     result = {
         "cell_id": cell["cell_id"], "model": model, "phase": phase,
         "members": cell["members"], "mean_j": mean, "lower_j": mean - half - bound,
-        "upper_j": mean + half + bound, "n_bundles": 50, "independence_units": 20,
+        "upper_j": mean + half + bound, "n_bundles": cell["projection_registration"]["expected_n"], "independence_units": 20,
         "interval": {"method": INTERVAL_METHOD, "n_r": 10, "n_b": 10, "df": 9,
                      "s_r": s_r, "s_b": s_b, "variance": variance, "h_j": half,
                      "kind_averages_j": terms, "B_j": bound},
@@ -263,7 +381,7 @@ def _project_cell(cell, rows, binding):
                       "energy_sum_j": math.fsum(energy),
                       "observed_token_sum": None if token_error else sum(tokens),
                       "j_per_token": None if token_error else math.fsum(energy) / sum(tokens),
-                      "reason": "runtime_observed_denominator_invalid" if token_error else None},
+                      "reason": token_error},
         "binding": dict(binding), "attribution_floor_composed": False,
     }
     # Reject overflow in intermediate arithmetic, including otherwise plausible endpoints.
@@ -271,27 +389,30 @@ def _project_cell(cell, rows, binding):
     return result
 
 
+@_closed_refusals
 def _validate_projection(projection, cell, rows, binding):
     expected = _project_cell(cell, rows, binding)
     if type(projection) is not dict or _digest(projection) != _digest(expected):
-        raise ValueError("projection: recomputation mismatch (schema, endpoints, ratio, count or provenance)")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_projection_mismatch")
 
 
+@_closed_refusals
 def _synthetic_projection(documents):
     """Called only inside D-173 fixture replay. No production dispatch exists."""
     _exact(documents, {"spec", "cells"}, "synthetic projection input")
     _validate_registered_spec(documents["spec"])
     cells = documents["cells"]
     if type(cells) is not list or len(cells) != 3:
-        raise ValueError("synthetic cells: exact census required")
+        raise PaperReportedEnergyRefusal("paper_reported_energy_cell_census_invalid")
     results = []
     for cell, data in zip(documents["spec"]["reported_energy_cells"], cells):
         _exact(data, {"rows", "binding"}, "synthetic cell")
         if data["binding"]["extraction_spec_sha256"] != _digest(documents["spec"]):
-            raise ValueError("frozen extraction spec binding mismatch")
+            raise PaperReportedEnergyRefusal("paper_reported_energy_spec_binding_mismatch")
         results.append(_project_cell(cell, data["rows"], data["binding"]))
     return {"schema_version": SCHEMA, "mode": "test_fixture_non_issuing", "cells": results}
 
 
 __all__ = ["phase_ratio_estimand", "validate_phase_ratio_estimand", "reported_energy_registration",
-           "registration_manifest", "registration_sha256"]
+           "registration_manifest", "registration_sha256", "verify_registration_ordering",
+           "PaperReportedEnergyRefusal", "PAPER_REPORTED_ENERGY_REFUSAL_CODES"]

@@ -119,6 +119,7 @@ SAFETY_VOCABULARY = {
         'Two distinct exhausted-ladder renderings require adoption; diagnostic failure is not production non-admission',
     },
     'Missing evidence': {
+        'RETIRED_FALLBACK under D-174; no placement restored',
         'Keep synthetic label; omit unsupported illustration rather than infer empirical pass/refusal',
         'Remain excluded; no silent restoration',
         'Retain exclusion; historical Window C is no supplier',
@@ -189,7 +190,7 @@ def parse_table(text, marker, columns):
         role = family if family in ("NONE", "UNRESOLVED") else "UNREGISTERED"
         if (row["Family"], row["Role"]) != (family, role):
             raise ValueError("family/role mismatch")
-        if row["Adoption"] != "PROPOSED_STOP_FILL":
+        if row["Adoption"] != ("RETIRED_FALLBACK" if x == 5 else "PROPOSED_STOP_FILL"):
             raise ValueError("proposal treated as active")
         if kind == "EMPIRICAL" and row["Supplier"].startswith(
                 ("synthetic_", "schematic_", "fixture.", "fixed_")):

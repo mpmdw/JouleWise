@@ -219,7 +219,7 @@ be re-derived by a future agent gets an entry here.
 | D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
-| D-179 | Reported phase-energy supplier semantics | adjudicated |
+| D-179 | REPORTED PHASE ENERGY — fixed ordered 50-member mean; 20 independent units (10 repeats + 10 ABBA blocks), stratified t9 interval plus recorded kind bounds; attribution floor beside; runtime-observed ratio of totals; both Qwen3 v5 registrations before frozen specs; closed typed refusals through D-173 custody; X5 remains RETIRED_FALLBACK; normative home `docs/contracts/paper_reported_energy.md` | adjudicated (magistrate synthesis, 2026-09-08; S2 fix rulings installed; production issuance unregistered) |
 
 ---
 
@@ -11174,7 +11174,8 @@ records rulings 1–7; it does not issue measurements or restore retired placeme
 2. The independence unit census is 20 per cell: ten absolute repeats and ten
    complete A/B/B/A blocks. The fifty bundles are not fifty independent draws.
 3. With block energies averaged over their four members,
-   `m = 0.2 mean(r) + 0.8 mean(b)` and
+   canonical `m = statistics.fmean(ordered_50_energies)` (algebraically
+   `0.2 mean(r) + 0.8 mean(b)`) and
    `V = 0.2² s_r²/10 + 0.8² s_b²/10`. Use conservative reference `ν = 9`
    and `h = t(0.975,9) sqrt(V)`. Reject the pooled `s/sqrt(20)` form: it
    weights units equally in the variance but not in the mean. A synthetic
