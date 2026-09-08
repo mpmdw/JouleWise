@@ -2,7 +2,7 @@
 
 Status: **DRAFT for the Opus contract refuter; wire details ruled by the
 interactive magistrate on 2026-09-08 and installed in §§8 and 10. (The
-second-pass §10 addendum governs amended wire details.)** No code or live gate
+third-pass §10.1 rulings govern amended wire details; F3 lineage mode awaits the flagged ruling.)** No code or live gate
 is closed by this document. D-176 is adopted by cold gate + Opus refuter +
 magistrate synthesis 2026-09-08 (Ed may veto).
 
@@ -26,11 +26,13 @@ A **pack** is the frozen set of inputs for one governed measurement plan.
 `scripts/install_night_agent.sh` and read by `scripts/run_night.py`. It is
 written by `joulewise/night_plan_writer.py::write_night_plan`, validated by
 `joulewise/night_gate.py::NightPlan.from_mapping`, and armed through the
-D-127/D-175 magistrate email-then-arm procedure. For a pack night its schema is
+D-127/D-175 magistrate email-then-arm procedure. The arming reader at
+`scripts/magistrate_watchdog.py:686` is a read-only dependency; seat 2 must
+check its tolerance of a v3 pack plan (§7.1). For a pack night its schema is
 `joulewise.night_plan.v3`: the v2 exact-key set plus the one `pack_night`
 sub-object specified below. Its file-byte digest is `plan_sha256`, carried by
 GO and the consumption GO reference and recomputed by the consumer from the
-launch context's pinned plan path. The plan is the C1/C5 root of trust;
+installer-pinned plan path passed by the driver as `--night-plan`. The plan is the C1/C5 root of trust;
 rewriting it after arm requires that governed arming procedure (D-161).
 A **pack night** uses receipt class `TRANSACTION_PACK` (the full pack-bound
 transaction class). **ARM** is the authenticated, perishable readiness
@@ -126,10 +128,18 @@ grandfathered, including at rehearsal gate G5. `receipt_id` is included by the
 record's GO reference; GO itself has nested record/evidence paths and no
 top-level `path`. `window_id` is not a GO top-level key. The window identity is
 the verified ARM receipt's `receipt["pack"]["window_id"]`, and controls the
-rehearsal-purpose predicate in §6. For a pack night the GO receipt IS the
-night-gate receipt: the driver writes one `night/receipt.json` file under the
-transaction custody root, using this GO schema and the shared condition shape.
-It does not wrap or emit a second night-gate receipt for that pack night.
+rehearsal-purpose predicate in §6. The GO receipt is a SEPARATE create-once, mode-0600 file
+`night/go_receipt.json` under the transaction custody root. `night/receipt.json`
+retains night_gate's exact `_RECEIPT_KEYS` shape for EVERY class, including a
+refused pack night. A refused pack night writes NO GO file; its refusal remains
+in `night/receipt.json`. The night_gate receipt validator is NOT modified
+(`joulewise/night_gate.py:122–130,979–985`). Only the condition shape is shared.
+
+| Custody locator | Schema / transport |
+|---|---|
+| `night/receipt.json` under plan `custody_root` | Exact night_gate keys `schema, receipt_class, plan_id, verdict, conditions, refusal, authored_monotonic_ns`; unchanged validator, including pack refusal |
+| `night/go_receipt.json` under plan `custody_root` | Separate 26-key GO schema below; create-once 0600, only after GO; absolute path passed as `--go-receipt` and retained in consumption `go_receipt.path` |
+| Installer-pinned absolute night-plan path | Driver passes it as `--night-plan`; consumer keyword `night_plan` supplies the bytes checked against GO `plan_sha256` |
 
 The plan retains the v2 exact-key set `_PLAN_KEYS` at
 `joulewise/night_gate.py:106–121`: `schema, schema_version, plan_id,
@@ -148,8 +158,10 @@ field types and validation remain in force.
 | `pack_night.confirmation_record` | `path`: absolute path string inside plan `custody_root`; `sha256`: SHA-256 string | Re-read these bytes, hash them, and compare the GO confirmation locator/digest and authenticated table pair |
 
 The driver extends `write_night_plan` to persist these bindings. Installation
-keeps its existing absolute plan-path pin. The consumer reads that launch-context
-path, validates the plan, and compares its byte digest to GO `plan_sha256`;
+keeps its existing absolute plan-path pin. The driver passes that pinned path
+by `--night-plan` argv, and the launcher supplies the required `night_plan`
+keyword. The consumer re-reads those bytes, validates the plan, and compares
+its byte digest to GO `plan_sha256`;
 replay also compares consumption `go_receipt.plan_sha256`. Any mismatch refuses
 `launch_go_receipt_invalid`, detail `plan_sha256`. A caller-supplied replacement
 plan or authorization does not replace the armed plan's authority.
@@ -190,7 +202,7 @@ and exhaustive:
 |---|---|---|
 | `arm_receipt` | `receipt_id`: string; `sha256`: SHA-256 string; `valid_until_monotonic_ns`: integer | Equal the ARM receipt that itself replays to PASS/GO in custody; GO expiry cannot exceed ARM expiry |
 | `confirmation_record` | `path`: absolute path string inside transaction custody root; `sha256`: SHA-256 string | Re-read by path; compare digest to plan `pack_night.confirmation_record.sha256` and GO, then parse the §5 record and verify its table pair |
-| `authorization` | `path`: absolute path string inside transaction custody root; `sha256`: SHA-256 string; `purpose`: string; `attempt_id`: string; `claim_eligible`: boolean | Re-read `authorization.path`, equal to plan `pack_night.authorization_record.path`, and re-digest against `sha256` and the plan; copy the other three fields from that record and re-verify them against its parsed bytes, with attempt equal to the plan's attempt and purpose equal to GO purpose |
+| `authorization` | `path`: absolute `night/go_receipt.json` path string inside transaction custody root; `sha256`: SHA-256 string; `purpose`: string; `attempt_id`: string; `claim_eligible`: boolean | Re-read `authorization.path`, equal to plan `pack_night.authorization_record.path`, and re-digest against `sha256` and the plan; copy the other three fields from that record and re-verify them against its parsed bytes, with attempt equal to the plan's attempt and purpose equal to GO purpose |
 | Each `conditions.evidence` entry | `path`: string relative to transaction custody root; `sha256`: SHA-256 string | Re-read within plan `custody_root`, compare SHA-256, and evaluate C1–C5 using the concrete checks following this table |
 | Each `t0_evidence` item | `path`: string relative to transaction custody root; `sha256`: SHA-256 string | Require exact membership in the author's fifteen `receipt_paths` plus inventoried capture-step record files, resolve within plan `custody_root`, re-read and hash every member, and recompute `t0_evidence_set_sha256`; missing, extra, duplicate or changed members refuse |
 | `census` | `argv`: array of strings; `exit_code`: integer; `stdout_sha256`: SHA-256 string; `monotonic_ns`: integer | Governed production predicate, exactly exit 1 and empty stdout, with authenticated timestamp lineage; an exit 0, output on exit 1, exit 2 or timeout cannot establish absence |
@@ -217,26 +229,30 @@ then evaluate C1–C5 without `no_pack_by_design`.
 
 ## 3. Consumption and replay
 
-`_consume_launch_capability` gains three required keyword arguments:
+`_consume_launch_capability` gains four required keyword arguments:
 `go_receipt` (the GO file path), `authenticated_go_receipt` (the caller's parsed
-authenticated GO object), and `go_receipt_sha256` (the caller's digest of those
-bytes). Each defaults to `_MISSING_LAUNCH_CONTEXT`, the existing
+authenticated GO object), `go_receipt_sha256` (the caller's digest of those
+bytes), and `night_plan` (the installer-pinned absolute night-plan path). Each defaults to `_MISSING_LAUNCH_CONTEXT`, the existing
 missing-argument sentinel. An omitted keyword refuses with
 `readiness_usage_invalid`; no caller can skip GO validation by taking a direct
 callee route.
 
-For a pack night GO IS the night-gate receipt; the driver writes one file and
-the callee authenticates that file. The consumer check order is mandatory:
+The driver passes the absolute `night/go_receipt.json` path with
+`--go-receipt` and its installer-pinned plan path with `--night-plan` to
+`scripts/launch_window.py`; both flags are required for pack launch, with
+omission-refusal regressions for each. The launcher supplies the four callee
+keywords; the callee authenticates the separate GO file, never substitutes
+`night/receipt.json`. The consumer check order is mandatory:
 
 1. Read GO bytes and recompute SHA-256; compare with `go_receipt_sha256`.
 2. Parse JSON.
 3. Read `schema_version`. If it equals
    `joulewise.t0_unattended_rehearsal_receipt.v1`, refuse
-   `launch_go_receipt_invalid` with `detail = "class=<value of its class field>"`
+   `launch_go_receipt_invalid` with `detail = "class=<value of its receipt_class field>"`
    BEFORE GO exact-key validation.
 4. Validate the exact keys/types of `joulewise.pack_night_go_receipt.v1`.
 5. Compare the parsed object to `authenticated_go_receipt` and check bindings:
-   read the pinned launch-context plan path, validate it with
+   read the absolute `night_plan` path supplied through the ruled argv route, validate it with
    `NightPlan.from_mapping`, and compare its byte SHA-256 to `plan_sha256`;
    compare GO plan/pack ids, pack digest, heads and measurement root to that
    plan; compare ARM id, byte digest, pack id/digest and boot to the verified
@@ -297,7 +313,7 @@ baseline `bfedd6fa196f06591d70c48e4c9443c120d5aaab`. Retain those bindings, set
 
 | Addition | Required nested keys and types | Purpose |
 |---|---|---|
-| `go_receipt` | `receipt_id`: UUID4 string; `path`: absolute path string inside transaction custody root; `sha256`: SHA-256 string; `purpose`: string; `receipt_class`: string; `claim_eligible`: boolean; `plan_sha256`: SHA-256 string | Exact constant `GO_RECEIPT_REFERENCE_KEYS` (seven keys); persist the authenticated plan digest, GO identity, locator, digest, purpose and class at the ARM one-use write; copy `claim_eligible` from GO `authorization.claim_eligible` |
+| `go_receipt` | `receipt_id`: UUID4 string; `path`: absolute `night/go_receipt.json` path string inside transaction custody root; `sha256`: SHA-256 string; `purpose`: string; `receipt_class`: string; `claim_eligible`: boolean; `plan_sha256`: SHA-256 string | Exact constant `GO_RECEIPT_REFERENCE_KEYS` (seven keys); persist the authenticated plan digest, GO identity, locator, digest, purpose and class at the ARM one-use write; copy `claim_eligible` from GO `authorization.claim_eligible` |
 | `step6_confirmation` | `table_path`: path string; `table_sha256`: SHA-256 string | Persist the authenticated confirmation pair for the child |
 
 The authenticated `purpose` and `claim_eligible` are both bound into consumption
@@ -315,9 +331,20 @@ legacy branch untouched. Rename/extend `_read_v2_consumption`
 (`joulewise/arm_readiness.py:8975–8992`) to accept v3 always and v2 ONLY with
 `require_current_boot=False` for historical replay; live v2 refuses with
 `LaunchLineageError("launch_go_receipt_missing", ...)`. Schema acceptance does
-not bypass any other binding or boot check. Update its callers, including
-`verify_consumed_launch` and `_lifecycle_receipt_path` (:9796–9802), to read v3
-and enforce the live/historical distinction. For v3,
+not bypass any other binding or boot check. The exhaustive four call sites of
+`_read_v2_consumption` in `joulewise/arm_readiness.py` at the inspected head are:
+
+| Call site | Ruled `require_current_boot` for the extended reader |
+|---|---|
+| `verify_consumed_launch`, `joulewise/arm_readiness.py:9470` | Forward its mode: True on live replay (default at :9457); False only on explicit historical replay |
+| `_lifecycle_receipt_path`, `joulewise/arm_readiness.py:9797` | True for the live consumer/child path; v2 refuses |
+| Lifecycle-receipt append, `joulewise/arm_readiness.py:9939` | False (historical ARM replay at :9945); preserve the separate current-boot guard at :9950–9955 |
+| `authenticate_launch_lineage`, `joulewise/arm_readiness.py:10145` | False for historical lineage verification; **NEEDS_RULING** for its live caller: :10111 defaults False but :10156 forwards the mode, and :10536–10540 explicitly requests True. Do not silently weaken that route; report 85 records the question. |
+
+The live `_consume_launch_capability` path requires current-boot validation
+(True); it is not an additional `_read_v2_consumption` call site. Seat 3 updates
+all four calls, preserving live/historical separation; the exceptional lineage
+mode is blocked on the lead's ruling. For v3,
 `verify_consumed_launch` must re-read GO bytes from `go_receipt.path`, recompute SHA-256 and parse those bytes. A digest
 mismatch OR a parsed `receipt_id` mismatch with the recorded identity refuses
 with `launch_go_receipt_invalid`; `detail` names `sha256` or `receipt_id`,
@@ -383,7 +410,9 @@ whatever table happens to be present at T-0. Both `--step6-confirmation-table`
 and `--expected-confirmation-digest` are REQUIRED for a `TRANSACTION_PACK`
 launch, including when there are no digest-conditional paths (changed files
 whose launch permission depends on the confirmed digest). The driver passes both
-to the launcher by argv. Regressions must prove refusal when either is omitted.
+to the launcher by argv, alongside `--night-plan` (installer-pinned absolute
+plan) and `--go-receipt` (absolute `night/go_receipt.json` path). Regressions
+must prove refusal when any of these four transport flags is omitted.
 
 The child chain's `--lifecycle-event start` reads `step6_confirmation` from the
 authenticated v3 consumption record when the flags are absent, then re-hashes
@@ -443,9 +472,9 @@ validation. The driver writes `night/g7_refusal.json` under plan `custody_root`:
 |---|---|
 | `schema` | string, `joulewise.g7_refusal_record.v1` |
 | `presented_schema` | string, the presented receipt's `schema_version` |
-| `presented_class` | string, the presented receipt's `class` |
+| `presented_class` | string, the presented receipt's `receipt_class` |
 | `refusal_code` | string, `launch_go_receipt_invalid` |
-| `detail` | string, `class=<value of its class field>` |
+| `detail` | string, `class=<value of its receipt_class field>` |
 | `consumed_json_absent` | boolean, no `.consumed.json` exists under transaction custody |
 | `capture_absent` | boolean, no `chain.started` marker exists under the custody root |
 | `epoch_s` | number (float), recorded Unix epoch seconds |
@@ -459,7 +488,10 @@ refusal.
 G1–G10 all must PASS on authenticated producer evidence; no `UNRULED` (not
 adjudicated) or `INCOMPLETE` (missing required evidence) counts as success. G5
 evaluates `joulewise.pack_night_go_receipt.v1` and recomputes C1–C5 from
-authenticated evidence. The privileged-anchor positive control remains Ed-owned
+authenticated evidence from `night/go_receipt.json`; it does not reinterpret
+`night/receipt.json` as GO. Seat 4 owns `joulewise/t0_rehearsal.py:48,86–87,714–730`
+(`D149_SCHEMA`, `_D149_KEYS`, `_D149_CONDITION_KEYS`, `evaluate_g5`) for the
+new schema and C1–C5 recomputation. The privileged-anchor positive control remains Ed-owned
 and must be surfaced as NEEDS-ED (requires Ed's action), never assumed or
 replaced by software fixtures. The ARM T-0 evidence author is substantially
 implemented; the GO producer and rehearsal-bundle producers are unwritten at the
@@ -523,23 +555,26 @@ the GO check is deleted to close both `UNATTENDED-LAUNCH-01` and **S9-06**, the
 These are the exhaustive file lists to place in each successor's lead-issued
 `WRITE_SCOPE`; they do not expand this docs-only installer's allowlist or issue
 code scope before contract refutation and landing. Line numbers below identify
-seams at `bfedd6fa196f06591d70c48e4c9443c120d5aaab`, not completed implementation
+seams from the earlier baseline, with third-pass changed pins re-read at
+`d3cab2d4c2937886a25659756374483c7a8dc578`, not completed implementation
 locations. Each seat must pin final production/test lines in §9 on return.
 Whole-file entries allow the associated focused regressions and validator
 call-site repairs within that file; unrelated edits remain excluded.
 
 | Seat | WRITE_SCOPE (repository-relative files) | Owned file:line seams and addendum work |
 |---|---|---|
-| 1 — this contract install | `docs/contracts/pack_night_go_receipt.md`; `docs/decision_log.md`; `docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md` | Contract §§1–10; `docs/decision_log.md:11161` D-176 dated addendum; report `:1`. No runtime edits. |
-| 2 — producer, plan and night orchestration | `joulewise/night_plan_writer.py`; `joulewise/night_gate.py`; `scripts/install_night_agent.sh`; `scripts/run_night.py`; `joulewise/arm_readiness.py`; `joulewise/t0_rehearsal.py`; `tests/test_night_gate.py`; `tests/test_install_night_agent.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/night_plan_writer.py:15–66` mapping/serialization/`write_night_plan`; `joulewise/night_gate.py:21–23,106–136,187–300` v3 `NightPlan` and exact keys, `:313–350,979–1038` shared condition shape/validation, `:583,738–746` valid-pack-only fence lift and C1–C5; `scripts/install_night_agent.sh:39–75,132–141` validated absolute plan-path installation; `scripts/run_night.py:891,1149–1181` persisted plan attempt/byte hash, ARM-before-GO production, record locators, exact T-0 evidence set/digest, one night GO file and launcher transport; `joulewise/arm_readiness.py:223` constants area ONLY for new frozen `PRODUCTION_CUSTODY_ROOTS`; `joulewise/t0_rehearsal.py:190–207,779–787` derive G6 census/read shared constant; each listed test file `:1` focused producer/plan/G6 regressions; contract §9 final pins. B1/B5/S2/S3/S4/S6/N1. |
-| 3 — consumer, v3 consumption, replay and child | `joulewise/arm_readiness.py`; `scripts/launch_window.py`; `docs/contracts/d078_reason_registry_amendment.md`; `tests/test_arm_readiness_schemas.py`; `tests/test_arm_readiness_lifecycle.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/arm_readiness.py:223–231` launch reason registry, `:670–702` untouched legacy / distinct v2 / v3 and `GO_RECEIPT_REFERENCE_KEYS`, `:1048–1062,1103–1112` correct exception families, `:2587` validator branches, `:8975–8992` renamed/extended reader and its callers, `:9451–9495` replay (ARM window id `:9486`), `:9573–9791` callee keywords, B4 ordered GO checks, pinned plan read/digest, both record locators and copied fields, exact T-0 set/digest, C1–C5, shared-root purpose predicate, v3 one-use write (ARM window id `:9748`), `:9796–9802` child v3 reader; `scripts/launch_window.py:102,239–312` launch context/GO/confirmation transport, child path, shared JSON refusal handler; registry amendment `:1` R-8 documentation of both GO codes; each listed test file `:1` focused schema/live-historical/consumer/CLI/child regressions; contract §9 final pins. B1–B5/S1/S3–S6/N1/N2. |
-| 4 — rehearsal purpose/G7 producer and acceptance | `scripts/run_night.py`; `joulewise/t0_rehearsal.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `scripts/run_night.py:61–64,1149–1181` real production-launcher G7 presentation and exact `night/g7_refusal.json` with custody-wide consumption/`chain.started` absence; `joulewise/t0_rehearsal.py:38,50,88–95` existing rehearsal schema/class and `:792` G7 artifact acceptance; each listed test file `:1` authentic producer G7/class-order and four-case purpose/root regressions through the seat-3 consumer; contract §9 final pins. B4/S1/S4/N1; uses seat-2 producer and seat-3 consumer. |
+| 1 — this third-pass contract install | `docs/contracts/pack_night_go_receipt.md`; `docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md`; `docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md` | Contract §§1–10.1; report third pass. Preserve file 15 body unchanged. No runtime or decision-log edits. |
+| 2 — producer, plan and night orchestration | `joulewise/night_plan_writer.py`; `joulewise/night_gate.py`; `scripts/install_night_agent.sh`; `scripts/run_night.py`; `joulewise/arm_readiness.py`; `joulewise/t0_rehearsal.py`; `tests/test_night_gate.py`; `tests/test_install_night_agent.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/night_plan_writer.py:15–66` mapping/serialization/`write_night_plan`; `joulewise/night_gate.py:21–23,106–136,187–300` v3 `NightPlan` and exact keys, `:313–350` shared condition shape; `:979–1038` receipt validator is read-only and NOT modified, `:583,738–746` valid-pack-only fence lift and C1–C5; `scripts/install_night_agent.sh:39–75,132–141` validated absolute plan-path installation; `scripts/run_night.py:891,1149–1181` persisted plan attempt/byte hash, ARM-before-GO production, record locators, exact T-0 evidence set/digest, separate create-once 0600 `night/go_receipt.json`, unchanged `night/receipt.json` for every class and refusal (no GO on refusal), and `--night-plan`/`--go-receipt` argv transport; `joulewise/arm_readiness.py:223` constants area ONLY for new frozen `PRODUCTION_CUSTODY_ROOTS`; `joulewise/t0_rehearsal.py:190–207,779–787` derive G6 census/read shared constant; each listed test file `:1` focused producer/plan/G6 regressions; contract §9 final pins. B1/B5/S2/S3/S4/S6/N1. |
+| 3 — consumer, v3 consumption, replay and child | `joulewise/arm_readiness.py`; `scripts/launch_window.py`; `docs/contracts/d078_reason_registry_amendment.md`; `tests/test_arm_readiness_schemas.py`; `tests/test_arm_readiness_lifecycle.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/arm_readiness.py:223–231` launch reason registry, `:670–702` untouched legacy / distinct v2 / v3 and `GO_RECEIPT_REFERENCE_KEYS`, `:1048–1062,1103–1112` correct exception families, `:2587` validator branches, `:8975–8992` renamed/extended reader and its callers, `:9451–9495` replay (ARM window id `:9486`), `:9573–9791` callee keywords, B4 ordered GO checks, pinned plan read/digest, both record locators and copied fields, exact T-0 set/digest, C1–C5, shared-root purpose predicate, v3 one-use write (ARM window id `:9748`), `:9470,9797,9939,10145` exhaustive reader calls/modes in §3 (lineage exception awaits ruling); `:9796–9802` child v3 reader; `scripts/launch_window.py:39–58` required `--night-plan`/`--go-receipt` flags and omission-refusal regressions; `:102,239–312` launch context/GO/confirmation transport, child path, shared JSON refusal handler; registry amendment `:1` R-8 documentation of both GO codes; each listed test file `:1` focused schema/live-historical/consumer/CLI/child regressions; contract §9 final pins. B1–B5/S1/S3–S6/N1/N2. |
+| 4 — rehearsal purpose/G7 producer and acceptance | `scripts/run_night.py`; `joulewise/t0_rehearsal.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `scripts/run_night.py:61–64,1149–1181` real production-launcher G7 presentation and exact `night/g7_refusal.json` with custody-wide consumption/`chain.started` absence; `joulewise/t0_rehearsal.py:38,49,88–95` existing rehearsal schema/class; `:48,86–87,714–730` G5 schema/key sets and C1–C5 recomputation and `:792` G7 artifact acceptance; each listed test file `:1` authentic producer G7/class-order and four-case purpose/root regressions through the seat-3 consumer; contract §9 final pins. B4/S1/S4/N1; uses seat-2 producer and seat-3 consumer. |
 
 Read-only dependencies include
 `joulewise/arm_readiness_evidence_t0.py:2245–2420`
 (`author_arm_readiness_evidence_t0`, its fifteen `receipt_paths` and inventoried
 capture-step records), `joulewise/night_gate.py:134–135` condition order/status
-vocabulary, and the retained confirmation transcript. S6 consumes the existing
+vocabulary, `scripts/magistrate_watchdog.py:686` (`NightPlan.from_mapping`;
+seat 2 owns the read-only v3-pack-plan tolerance check), and the retained
+confirmation transcript. S6 consumes the existing
 author's exact file inventory; it does not assign authority to fabricate a new
 receipt list. Seat 4 uses the production consumer's B4 check order; that callee
 change belongs to seat 3, while the G7 driver/artifact belongs to seat 4.
@@ -548,7 +583,12 @@ Seats 2 and 3 use separate worktrees. Their shared `arm_readiness.py` scope is
 split by symbol: seat 2 owns only the frozen production-root constant; seat 3
 owns the consumer, schema and replay changes and imports that constant. Seat 4
 follows seat 2 and integrates against seat 3's consumer for executable G7
-acceptance. The lead reconciles shared-file changes and contract-map pins before
+acceptance. In `tests/test_launch_window.py`, seat 3 owns consumer/CLI/child
+and omission-refusal tests; seat 4 owns G7 production-entry and rehearsal
+purpose/root tests. In `scripts/run_night.py`, seat 2 owns plan/GO production
+and transport; seat 4 owns G7 presentation and refusal-artifact production.
+These shared files are split by symbol/test method in separate worktrees;
+seat 4 builds on seat 2 and consumes seat 3's interface. The lead reconciles shared-file changes and contract-map pins before
 integration; no simultaneous writers share a working tree. Additional files
 require a prospective lead scope expansion.
 
@@ -566,7 +606,7 @@ it inside the GO file bytes. GO identity is the pair (`receipt_id`, SHA-256 of
 those file bytes). The consumption v3 `go_receipt` object has exactly
 `{receipt_id, path, sha256, purpose, receipt_class, claim_eligible, plan_sha256}`
 (the §10 B1/N2 amendment, `GO_RECEIPT_REFERENCE_KEYS`). `path` is
-the absolute GO file path inside the transaction custody root. The consumer
+the absolute `night/go_receipt.json` path inside the transaction custody root. The consumer
 persists the id parsed from its own authenticated read and the digest of those
 bytes.
 
@@ -667,7 +707,7 @@ map rule. Graph installation assertions are in the installation report.
 | J:9 “t0_evidence [{path, sha256}]” | G §2 nested evidence row | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Omit a required evidence member or accept wrong bytes |
 | J:9 “census {argv, exit_code, stdout_sha256, monotonic_ns}” | G §2 nested census row | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Treat erroneous or output-bearing census as absence |
 | J:9 C1–C5, amended by §10 S3/N1 to `{condition_id, status, basis, evidence, measured}` | G §2 nested conditions row | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Accept missing condition or unauthenticated PASS label |
-| J:11 “three required keywords” / “readiness_usage_invalid” | G §3 keyword paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Direct caller omits any GO keyword and consumes |
+| J:11 “three required keywords”, amended by §10.1 F1 to four / “readiness_usage_invalid” | G §3 keyword paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Direct caller omits any GO keyword and consumes |
 | J:11 “re-reads the bytes, recomputes the digest” | G §3 callee paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Mutate GO between CLI and callee and still consume |
 | J:11 “now_monotonic ∈ [issued, valid_until)” | G §3 callee paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Accept before issuance or at expiry |
 | J:11 “launch_go_receipt_missing” | G §3 refusal table | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Missing file reaches consumption |
@@ -721,23 +761,34 @@ map rule. Graph installation assertions are in the installation report.
 | §10 B1: plan root of trust and byte digest | G §§1–3, 10 B1 | Baseline targets: seat 2 `joulewise/night_gate.py:106–121,203`, `joulewise/night_plan_writer.py:15–66`, `scripts/install_night_agent.sh:39–75,132–141`, `scripts/run_night.py:891,1149–1150`; seat 3 `joulewise/arm_readiness.py:9451,9573` | NOT PINNED: plan/authorization swap and ordinal replay regressions | Accept swapped authorization, changed plan bytes or recomputed attempt |
 | §10 B2: distinct 8/20/22-key consumption schemas | G §3, 10 B2 | Seat 3 `joulewise/arm_readiness.py:670–702,2587,8975–8992,9451` | NOT PINNED: live v2 refused with missing code, historical v2 succeeds, v3 validates | Route 20-key v2 through the 8-key branch or refuse historical v2 after v3 flip |
 | §10 B3: registered exception and launcher refusal | G §3, 10 B3 | Seat 3 `joulewise/arm_readiness.py:223–231,1048–1062,1103–1112,9573`; `scripts/launch_window.py:294–312`; `docs/contracts/d078_reason_registry_amendment.md` R-8 additions | NOT PINNED: both GO codes rendered by real launch CLI | Raise GO code as ArmReadinessError or miss its JSON handler |
-| §10 B4: consumer order and G7 artifact | G §§3, 6, 10 B4 | Seat 3 consumer `joulewise/arm_readiness.py:9573`; seat 4 `scripts/run_night.py:1149–1181`, `joulewise/t0_rehearsal.py:38,792` | NOT PINNED: real rehearsal schema receives class detail and exact eight-key artifact | Validate GO exact keys before rehearsal class, or write capture/consumption on refusal |
+| §10 B4: consumer order and G7 artifact | G §§3, 6, 10 B4 | Seat 3 consumer `joulewise/arm_readiness.py:9573`; seat 4 `scripts/run_night.py:1149–1181`, `joulewise/t0_rehearsal.py:38,49,792` | NOT PINNED: real rehearsal schema receives class detail and exact eight-key artifact | Validate GO exact keys before rehearsal class, or write capture/consumption on refusal |
 | §10 B5: readable custody record locators | G §§2–5, 10 B5 | Seats 2/3 producer and consumer seams in §7.1 | NOT PINNED: both path/digest and parsed-field mutation regressions | Supply an unreadable locator, escape custody or trust copied fields |
 | §10 S1: authenticated ARM window id | G §§2, 6, 10 S1 | Seat 3 `joulewise/arm_readiness.py:9486,9748` | NOT PINNED: prefix predicate uses ARM pack window id | Trust an unauthenticated window label |
 | §10 S2: conditional pack fence lift | G §2, 10 S2 | Seat 2 `joulewise/night_gate.py:738–746` | NOT PINNED: valid pack evaluates C1–C5; absent/invalid pack object refuses | Leave every pack unbuilt or grant a packless exemption |
-| §10 S3: one receipt and shared five-key condition shape | G §§2–3, 10 S3 | Seat 2 `joulewise/night_gate.py:122–136,313–350,979–1038`; `scripts/run_night.py:1149–1150`; seat 3 consumer | NOT PINNED: single emitted file, shared shape and all-five-PASS regression | Emit competing GO/night receipts or accept a three-key condition |
+| §10 S3 amended by §10.1 F2: separate receipts, shared condition shape | G §§2–3, 10 S3, 10.1 F2 | Seat 2 `scripts/run_night.py:1149–1150`; unchanged validator dependency `joulewise/night_gate.py:122–136,979–985`; seat 3 consumer | NOT PINNED: distinct schemas/paths, create-once 0600 GO, refusal emits no GO, all-five-PASS regression | Put GO keys in night/receipt.json, modify its validator, or emit GO on refusal |
 | §10 S4: shared frozen roots and complete purpose table | G §6, 10 S4 | Seat 2 new constant in `joulewise/arm_readiness.py:223` constants area and `joulewise/t0_rehearsal.py:779–787`; seat 3 consumer at :9573; seat 4 G6/G7 tests | NOT PINNED: all four table rows and both plan roots | Accept production-root rehearsal or caller-supplied production census |
 | §10 S5: child v3 reader | G §§3, 5, 10 S5 | Seat 3 `joulewise/arm_readiness.py:9796–9802`; `scripts/launch_window.py:270` | NOT PINNED: child reads v3 pair; live v2 gets missing code | Break child v3 resolution or permit v2 live lifecycle |
 | §10 S6: exact author evidence set and digest | G §2, 10 S6 | Seat 2 `scripts/run_night.py:1149` consuming `joulewise/arm_readiness_evidence_t0.py:2245,2420`; seat 3 consumer at :9573 | NOT PINNED: missing/extra/changed receipt and capture-step members, set-digest mutation | Treat a subset or self-declared array as complete T-0 evidence |
 | §10 N1: numeric epochs, vocabulary/order/uniqueness | G §§2, 5–6, 8.3, 10 N1 | Seats 2/3 serializers and validators; seat 4 G7 artifact | NOT PINNED: wrong epoch types, status, duplicate/reordered conditions refuse | Accept inconsistent primitive or condition wire shape |
 | §10 N2: named seven-key GO reference | G §§3, 8.1, 10 N2 | Seat 3 new `GO_RECEIPT_REFERENCE_KEYS` at `joulewise/arm_readiness.py:681–702` | NOT PINNED: seven-key exactness, including plan digest | Reuse two-key reference validator or omit plan digest |
+| §10.1 F1: fourth keyword and installer-pinned plan argv | G §§2–3, 5, 7.1 | Seat 2 driver `scripts/run_night.py:1149–1181`; seat 3 parser `scripts/launch_window.py:39–58` and callee `joulewise/arm_readiness.py:9573–9608` | NOT PINNED: substituted-plan digest refusal and omitted night_plan/--night-plan refusal | consumer accepts a caller-substituted plan |
+| §10.1 F2: separate create-once 0600 GO custody | G §§2–3, 7.1; S3 amendment | Seat 2 `scripts/run_night.py:1149–1150`; read-only validator `joulewise/night_gate.py:979–985` | NOT PINNED: permissions/no-clobber and every-class/refused-pack receipt validation | Overwrite GO, broaden night_gate receipt keys, or create GO on refusal |
+| §10.1 F3: exhaustive four reader call modes | G §§3, 5, 7.1 | Seat 3 `joulewise/arm_readiness.py:9470,9797,9939,10145` | NOT PINNED: live-v2 refusal and historical-v2 replay; live lineage exception NEEDS_RULING | Omit one call-site migration or weaken a live replay to historical |
+| §10.1 F4/F5: actual rehearsal receipt_class/schema | G §§3, 6; B4 correction | Seat 3 callee `joulewise/arm_readiness.py:9573`; seat 4 schema dependency `joulewise/t0_rehearsal.py:38,49,88–95` | NOT PINNED: class-specific production refusal and G7 presented_class equality | Read nonexistent class instead of receipt_class |
+| §10.1 F6: G5 schema and full C1–C5 evaluation | G §§6, 7.1 | Seat 4 `joulewise/t0_rehearsal.py:48,86–87,714–730` | NOT PINNED: new GO accepted only after evidence recomputation; legacy schema refused | Keep G5's legacy schema or three-key condition validation |
+| §10.1 F7: GO argv omission refusal | G §§3, 5, 7.1 | Seat 3 `scripts/launch_window.py:39–58`; seat 2 driver transport | NOT PINNED: real CLI refuses omitted --go-receipt before consumption | Launch without --go-receipt |
+| §10.1 F8/F9: durable provenance and seven-key editorial note | G §10 | Documentation installation; file 15 preserved and brief 86 linked | Inspection: both relative citation targets exist; seven-key note present | Leave a dead provenance link or ambiguous key count |
+| §10.1 F10: shared symbol/test ownership | G §7.1 | Successor scope specifications (lead reconciles) | Inspection: tests/test_launch_window.py seats 3/4 and scripts/run_night.py seats 2/4 splits explicit | Assign overlapping symbols without an integration owner |
+| §10.1 F11: watchdog v3-plan tolerance dependency | G §§1, 7.1 | Seat 2 read-only `scripts/magistrate_watchdog.py:686` | NOT PINNED: v3 pack plan survives watchdog parsing via NightPlan.from_mapping | Producer writes v3 plan that watchdog rejects |
 
 ## 10. Wire addendum (ruled 2026-09-08, second pass)
 
 MAGISTRATE RULING (interactive, 2026-09-08 ~11:00 PDT; within the cold gate's
-envelope). The following B1–B5, S1–S6 and N1–N2 text is installed verbatim from
-the seat brief in response to the
+envelope). The following B1–B5, S1–S6 and N1–N2 text is retained from
+the seat brief (with third-pass F4/F5/F9 editorial corrections and F2 superseding
+S3 below) in response to the
 [Opus contract refutation](../process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md).
+The second citation is [seat brief 86](../process_traces/2026-09-08-handoff-redo/86-brief-d176-install-astra.md).
 It amends the earlier wire lists; the operative tables, clause map and seat
 scopes incorporate these changes without reopening the adopted outcomes.
 
@@ -764,8 +815,8 @@ codes (`LAUNCH_LINEAGE_REASON_CODES`); `scripts/launch_window.py` catches `ArmRe
 `LaunchLineageError` at the same site and renders the same refusal JSON shape. Seat 3's scope names both files.
 
 B4 — check ORDER in the consumer: (1) read bytes, recompute sha256; (2) parse JSON; (3) read `schema_version`; if it
-equals the rehearsal receipt schema `joulewise.t0_unattended_rehearsal_receipt.v1` (`joulewise/t0_rehearsal.py:38`)
-refuse `launch_go_receipt_invalid` with `detail = "class=<value of its class field>"` BEFORE exact-key validation;
+equals the rehearsal receipt schema `joulewise.t0_unattended_rehearsal_receipt.v1` (`joulewise/t0_rehearsal.py:49`, verified schema constant; supplied :50 was stale)
+refuse `launch_go_receipt_invalid` with `detail = "class=<value of its receipt_class field>"` BEFORE exact-key validation;
 (4) exact-key validation of `pack_night_go_receipt.v1`; (5) bindings. G7 artifact: the driver writes
 `night/g7_refusal.json` = exact keys `{schema: "joulewise.g7_refusal_record.v1", presented_schema, presented_class,
 refusal_code, detail, consumed_json_absent (bool), capture_absent (bool), epoch_s}` where "capture absent" means no
@@ -783,8 +834,9 @@ S2 — seat 2's scope includes `joulewise/night_gate.py:738-746`: the unconditio
 lifted ONLY for plans carrying a valid `pack_night` object, and C1-C5 are then evaluated (no `no_pack_by_design`).
 
 S3 — GO conditions REUSE night_gate's condition shape `{condition_id, status, basis, evidence, measured}` with
-`_CONDITION_IDS` ordering, `_STATUSES` vocabulary, no duplicates; for a pack night the GO receipt IS the night-gate
-receipt (the driver writes one file); state this in §2 and §3.
+`_CONDITION_IDS` ordering, `_STATUSES` vocabulary, no duplicates. [Superseded by §10.1 F2: GO is a separate
+create-once 0600 `night/go_receipt.json`; `night/receipt.json` retains `_RECEIPT_KEYS` for EVERY class,
+including refused pack nights, which emit NO GO file. The night_gate receipt validator is NOT modified.]
 
 S4 — "disjoint roots": a NEW frozen constant `PRODUCTION_CUSTODY_ROOTS` in `joulewise/arm_readiness.py` (the list
 G6 consumes today via `bundle.production_roots`, `t0_rehearsal.py:779-787`, is derived from it — seat 2 makes G6
@@ -802,4 +854,54 @@ fifteen ARM_ONLY receipts) plus the capture-step record files it inventories; th
 canonical JSON of the sorted array; the consumer recomputes both and refuses on any mismatch or missing file.
 
 N1 — `epoch_s` is `number` (float) everywhere; `status` ∈ `_STATUSES`; conditions ordered by `_CONDITION_IDS`, no
-duplicates. N2 — the six/seven-key `go_receipt` block's constant is `GO_RECEIPT_REFERENCE_KEYS`.
+duplicates. N2 — the six/seven-key [seven, per B1] `go_receipt` block's constant is `GO_RECEIPT_REFERENCE_KEYS`.
+
+
+### 10.1 third-pass rulings (2026-09-08)
+
+The magistrate adopts F1–F11 from the second Opus contract refutation, subject
+to the express F2 ruling and the code-contradiction escalation in F3. This block
+supersedes conflicting second-pass wording; §§2/3/5/6/7.1/9 carry its operative
+requirements. The supplied scratchpad refutation was read first; file 15 is the
+retained earlier refutation and its body is unchanged.
+
+- **F1 — ADOPTED.** Add fourth required consumer keyword `night_plan`, an
+  absolute path with `_MISSING_LAUNCH_CONTEXT` default. Add `--night-plan` to
+  `scripts/launch_window.py:39–58`; the driver passes the installer-pinned path
+  by argv. The consumer re-reads the bytes and compares to GO `plan_sha256`.
+  The clause-map counterfactual is “consumer accepts a caller-substituted plan”.
+- **F2 — RULED.** GO is a SEPARATE create-once 0600 `night/go_receipt.json`.
+  `night/receipt.json` retains `_RECEIPT_KEYS` for EVERY class, including a
+  refused pack night. Refused pack nights write NO GO file; their refusal lives
+  in `night/receipt.json`. The night_gate receipt validator is NOT modified.
+  S3 retains only its shared condition shape/order/vocabulary requirement and
+  now states this separate-file rule. The custody and consumption locator tables
+  and seat 2 seams name the GO path.
+- **F3 — ADOPTED, live-lineage exception NEEDS_RULING.** §3 exhaustively lists
+  all four reader call sites and their ruled modes: live consumer/child and
+  `verify_consumed_launch` live replay True; lifecycle-receipt append and
+  historical lineage verification False. The code also supports a live lineage
+  route requesting True; report 85 asks the lead to rule it rather than guessing.
+  B2/S5's reader migration uses this exhaustive list, not an open-ended list.
+- **F4 — ADOPTED.** The G7 source field is `receipt_class`, including the
+  consumer detail and `presented_class`; corrected in §§3/6 and B4.
+- **F5 — ADOPTED with verified pin correction.** B4 names
+  `REHEARSAL_RECEIPT_SCHEMA` at `joulewise/t0_rehearsal.py:49`. The supplied
+  :50 names `PROCESS_LINEAGE_SCHEMA` at this head, so it is not inherited.
+- **F6 — ADOPTED with verified pin correction.** Seat 4 owns G5's
+  `D149_SCHEMA` at `joulewise/t0_rehearsal.py:48` (supplied :49 is the rehearsal
+  schema), `_D149_KEYS`/`_D149_CONDITION_KEYS` at :86–87 and evaluator at
+  :714–730; replace legacy acceptance and recompute C1–C5 under the new GO schema.
+- **F7 — ADOPTED.** The driver passes the GO path by `--go-receipt`; seat 3
+  adds that flag at `scripts/launch_window.py:39–58` and an omission-refusal
+  regression. This accompanies the F1 plan flag and §5 confirmation flags.
+- **F8 — ADOPTED.** Keep the existing file-15 citation and its unchanged body;
+  add the second citation to brief 86 in §10. The pre-existing untracked file
+  remains for the lead to stage; this round makes no commit.
+- **F9 — ADOPTED.** N2 carries “[seven, per B1]”.
+- **F10 — ADOPTED.** §7.1 splits shared test methods in
+  `tests/test_launch_window.py` between seats 3/4 and driver symbols in
+  `scripts/run_night.py` between seats 2/4; lead integration owns reconciliation.
+- **F11 — ADOPTED.** `scripts/magistrate_watchdog.py:686` is a read-only
+  dependency. Seat 2 checks v3-pack-plan tolerance through `NightPlan.from_mapping`;
+  this does not grant watchdog write scope.

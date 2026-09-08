@@ -2,28 +2,27 @@
 {
   "schema": "claude-codex-report/v1",
   "genre": "implementation",
-  "status": "clean",
-  "completion": "complete",
-  "summary": "Installed the D-176 second-pass B1–B5, S1–S6 and N1–N2 wire ruling across the contract and successor scopes.",
+  "status": "blocked",
+  "completion": "partial",
+  "summary": "Installed independent D-176 third-pass fixes; F3 live lineage mode requires the magistrate ruling requested by the brief.",
   "workspace": {
-    "base_requested": "bfedd6fa",
+    "base_requested": "d3cab2d4",
     "base_mode": "exact",
-    "head_start": "bfedd6fa196f06591d70c48e4c9443c120d5aaab",
-    "head_end": "bfedd6fa196f06591d70c48e4c9443c120d5aaab",
+    "head_start": "d3cab2d4c2937886a25659756374483c7a8dc578",
+    "head_end": "d3cab2d4c2937886a25659756374483c7a8dc578",
     "upstream_end": null,
     "branch": "feat/2026-09-08-d176-stage3-ruling"
   },
   "pathspec": [
     "docs/contracts/pack_night_go_receipt.md",
-    "docs/decision_log.md",
     "docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md"
   ],
   "unowned_dirty": [
-    "docs/process_traces/2026-09-08-handoff-redo/86-brief-d176-install-astra.md"
+    "docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md"
   ],
   "verdict": {
-    "implementation": "implemented",
-    "acceptance": "ready"
+    "implementation": "partial",
+    "acceptance": "needs_ruling"
   },
   "verification": [
     {
@@ -59,7 +58,22 @@
       }
     }
   ],
-  "flags": []
+  "flags": [
+    {
+      "id": "F3",
+      "kind": "lead_ruling",
+      "level": "blocking",
+      "text": "NEEDS_RULING: authenticate_launch_lineage defaults to historical False but forwards require_current_boot, and its live locator caller explicitly passes True. An unconditional historical reader mode conflicts with this live route.",
+      "needs": "Rule whether the extended reader forwards the lineage mode (recommended) or always uses False while retaining the separate live boot checks."
+    },
+    {
+      "id": "F5-F6",
+      "kind": "baseline_drift",
+      "level": "nonblocking",
+      "text": "Verified t0_rehearsal.py pins differ from the supplied refutation: REHEARSAL_RECEIPT_SCHEMA is line 49 and D149_SCHEMA line 48; line 50 is PROCESS_LINEAGE_SCHEMA. Installed actual code pins.",
+      "needs": ""
+    }
+  ]
 }
 ```
 
@@ -315,5 +329,90 @@ $ python3 -m unittest tests.test_docs_freshness
 Ran 31 tests in 0.900s
 
 OK
+rc=0
+```
+
+
+### Third pass (2026-09-08) — F1–F11 fix round
+
+This section and the current header describe this turn; prior sections retain
+historical installation evidence. Exact requested head matched d3cab2d4.
+Mission M0 found no active stop card or global selection gate; this explicit
+bounded [AGENT] fix brief selects the documentation work. Only the contract and
+this report were modified. File 15 was already present and untracked at intake;
+its body is preserved. No commit, code change, quiet-machine work or external
+consult ran. Queue, restart and decision-log updates remain outside this scope.
+
+| Finding | Third-pass change / disposition |
+|---|---|
+| F1 | §§2/3/5/7.1 specify fourth missing-sentinel keyword `night_plan`, absolute installer-pinned `--night-plan` argv, callee byte re-read/digest comparison, and omission refusal; §9 adds the exact caller-substituted-plan counterfactual. |
+| F2 | §§2/3 and S3 separate create-once 0600 `night/go_receipt.json` from unchanged exact-key `night/receipt.json` for every class. Refused pack nights emit no GO. Custody/consumption tables and seat 2 specify the separate path; night_gate receipt validator is explicitly NOT modified. |
+| F3 | §3 lists all four reader call sites and modes; §7.1 and §9 propagate the migration. NEEDS_RULING below records the actual live-lineage exception. Lifecycle append's historical ARM replay is at `joulewise/arm_readiness.py:9945`, not inherited :9950; its separate boot guard remains. |
+| F4 | Replaced the nonexistent rehearsal `class` source with `receipt_class` in §3, §6 and B4, including `presented_class`. |
+| F5 | Read the constants: `joulewise/t0_rehearsal.py:49` is REHEARSAL_RECEIPT_SCHEMA; :50 is PROCESS_LINEAGE_SCHEMA. Installed :49, reporting the supplied pin mismatch. |
+| F6 | Seat 4 now owns G5 schema/key-set/evaluator migration in §§6/7.1/9. Verified `joulewise/t0_rehearsal.py:48` is D149_SCHEMA, :86–87 the key sets, and :714–730 the evaluator seam. The supplied :49 is the rehearsal schema. |
+| F7 | Named `--go-receipt` alongside `--night-plan`, with its own omission-refusal regression, driver transport, and separate GO path. |
+| F8 | Retained the existing file-15 link and unchanged pre-existing file; added brief 86 as a second §10 citation. Both targets were read and exist. Staging/commit remains lead-owned. |
+| F9 | Added “[seven, per B1]” to N2. |
+| F10 | §7.1 explicitly splits tests/test_launch_window.py methods between seats 3/4 and scripts/run_night.py symbols between seats 2/4, with lead reconciliation and separate worktrees. |
+| F11 | Read `scripts/magistrate_watchdog.py:686`: NightPlan.from_mapping parses the plan. §§1/7.1/9 assign the read-only v3-pack-plan tolerance check to seat 2. |
+
+### NEEDS_RULING — F3 live lineage exception
+
+**Question:** Should the extended reader at
+`joulewise/arm_readiness.py:10145` forward `authenticate_launch_lineage`'s
+`require_current_boot`, or always use False for lineage verification?
+
+**Code evidence:** the function defaults False at :10111, forwards the mode to
+ARM replay at :10156, and the live locator route explicitly calls it with True
+at :10536–10540. This contradicts an unconditional classification of all lineage
+verification as historical. The other sites are :9470 (verify replay, live
+default True at :9457), :9797 (live child resolution), and :9939 (lifecycle
+append, historical ARM replay False at :9945 with a separate boot comparison
+at :9950–9955). The current reader has no mode parameter; these are migration
+requirements, not claims of implemented v3 behavior.
+
+**Options considered:** forward the lineage caller's mode, preserving historical
+False and live True; or use False for the schema reader on every lineage path
+while retaining downstream live boot checks. The latter would permit historical
+schema acceptance on a live route and needs explicit lead authorization.
+
+**Recommendation:** forward the caller's mode, as verify_consumed_launch does.
+**Blocked work:** final F3 lineage-mode contract wording and acceptance as ready
+for successor code scopes. All independent authorized fixes are complete.
+Next exact step: the magistrate rules this exception, then the contract receives
+its refutation/landing gate. Runtime clause-map assertions remain NOT PINNED;
+this documentation pass does not establish live behavior.
+
+### Clause map — third-pass delta
+
+Contract §9 adds explicit F1–F11 rows (F4/F5 and F8/F9 grouped) with installation
+sections, inspected baseline seams, future biting assertions and counterfactuals.
+It also updates the prior keyword, B4 and S3 rows. In particular, F1's
+counterfactual is “consumer accepts a caller-substituted plan”; F2 covers schema
+separation, refusal/no-GO and create-once permissions; F3 identifies the blocked
+live-lineage mode; F7 requires an actual CLI omission refusal. No future runtime
+test or production implementation is claimed to exist.
+
+### Third-pass verification log
+
+Docs-only scope uses the requested focused suite; the full repository suite is
+not needed for these contract/report edits. The initial post-edit run passed
+31 tests (rc 0); the final captured process output follows. The log is embedded
+here to avoid writing an unlisted repository log file.
+
+```text
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_docs_freshness
+...............................
+----------------------------------------------------------------------
+Ran 31 tests in 0.922s
+
+OK
+rc=0
+```
+
+```text
+$ git diff --check
+(no output)
 rc=0
 ```
