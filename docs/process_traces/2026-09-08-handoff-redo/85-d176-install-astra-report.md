@@ -4,12 +4,12 @@
   "genre": "implementation",
   "status": "clean",
   "completion": "complete",
-  "summary": "Installed all three D-176 wire rulings and completed the contract first-use inspection.",
+  "summary": "Installed the D-176 second-pass B1–B5, S1–S6 and N1–N2 wire ruling across the contract and successor scopes.",
   "workspace": {
-    "base_requested": null,
-    "base_mode": null,
-    "head_start": "e3745079eb26649283f10f384409c699d3fd5b08",
-    "head_end": "e3745079eb26649283f10f384409c699d3fd5b08",
+    "base_requested": "bfedd6fa",
+    "base_mode": "exact",
+    "head_start": "bfedd6fa196f06591d70c48e4c9443c120d5aaab",
+    "head_end": "bfedd6fa196f06591d70c48e4c9443c120d5aaab",
     "upstream_end": null,
     "branch": "feat/2026-09-08-d176-stage3-ruling"
   },
@@ -29,7 +29,7 @@
     {
       "id": "V1",
       "kind": "test",
-      "cmd": "python3 -m unittest tests.test_docs_freshness",
+      "cmd": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_docs_freshness",
       "cwd": ".",
       "observed": {
         "result": "pass",
@@ -42,6 +42,21 @@
         "exit_code": 0,
         "tail_regex": "OK$"
       }
+    },
+    {
+      "id": "V2",
+      "kind": "inspection",
+      "cmd": "git diff --check",
+      "cwd": ".",
+      "observed": {
+        "result": "pass",
+        "exit_code": 0,
+        "tail": []
+      },
+      "expected": {
+        "exit_code": 0,
+        "tail_regex": "^$"
+      }
     }
   ],
   "flags": []
@@ -49,6 +64,66 @@
 ```
 
 ## Change
+
+Part 3, 2026-09-08: installed the interactive magistrate's approximately 11:00
+PDT ruling verbatim as contract §10, resolving the Opus refutation's B1–B5,
+S1–S6 and N1–N2 documentation findings. Propagated the ruling into §§1–8 and
+the §9 clause map; appended the dated D-176 decision-log line. GO has 26 exact
+top-level keys; its authorization locator has five keys, confirmation locator
+two, conditions five, and consumption GO reference seven. The consumption
+schemas retain distinct 8/20/22-key sets. G7 has an exact eight-key artifact.
+
+The contract now defines the pinned v3 plan and its authentication route,
+plan-persisted attempt ordinal, custody-root resolution, capture marker and
+evidence namespace at first use. It specifies both record reads, plan-byte
+hash equality, ordered consumer checks, exact author evidence membership and
+set digest, shared condition shape/order/status vocabulary, conditional pack
+fence lift, ARM-derived window id, shared frozen production roots, all four
+rehearsal purpose/root cases, and live-v2 versus historical replay behavior.
+§7.1 names each successor's exhaustive WRITE_SCOPE, baseline file:line seams,
+focused regression files, shared-file symbol ownership and read-only inputs.
+These are successor scope specifications; this turn edited no runtime files.
+
+The §9 B1–B5/S1–S6/N1–N2 rows map every finding to installed clauses, runtime
+seams and counterfactual regressions. Runtime tests and final implementation
+lines remain NOT PINNED for the implementing seats; documentation installation
+does not establish runtime behavior or close a live gate.
+
+Intake: Mission M0 found no active stop card or global selection gate. The
+explicit seat brief selects this bounded [AGENT] documentation work over the
+ordinary queue. HEAD exactly matches the requested parts-1–2 baseline. The
+pre-existing untracked brief is preserved; no upstream is configured. The
+exhaustive delegated scope leaves kernel/restart/queue bookkeeping lead-owned.
+
+Next exact step: the lead sends this amended contract to the Opus refuter and
+performs the contract landing gate before issuing successor code scopes. No
+commit, repository-wide suite, hardware measurement or external consult ran.
+
+**Part-3 verification:** the requested docs-freshness suite passed at baseline
+(31 tests, rc 0) and after installation (31 tests, rc 0). `git diff --check`
+passed. A read-only contract inspection confirmed 26 unique exact GO keys, all
+13 addendum clauses and corresponding clause-map rows, the unchanged verbatim
+replay list, replacement of the three gesture clauses, and exactly the three
+authorized modified paths. No runtime behavior was tested in this docs-only turn.
+
+Captured post-install acceptance (bytecode writing disabled):
+
+```text
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_docs_freshness
+...............................
+----------------------------------------------------------------------
+Ran 31 tests in 0.950s
+
+OK
+rc=0
+```
+
+### Historical parts 1–2 evidence
+
+The following preserves prior installation evidence and its then-current wire
+counts/status. Part 3 and contract §10 supersede those earlier wire summaries;
+prior tests are not represented as checks performed in this turn.
+
 
 Part 2, 2026-09-08: installed the interactive magistrate's approximately 10:20
 PDT wire ruling within the three authorized documentation paths. Contract §8
@@ -224,7 +299,7 @@ repository scope; the hashes below preserve the session's artifact identities):
 | `/private/tmp/d176-acceptance-rwx2j4__/test-gen-state-final.log` | `e5f8fcf96c5ba4bde8a1f0634e2941003df0f55eec7668f9b9f182316fbd6666` |
 | `/private/tmp/d176-acceptance-rwx2j4__/test-gen-state.log` | `b6488e01d51ed70d40dc373bb2573fbdb77cdafd4b8597213deb0062e80a7707` |
 
-## Verification notes
+### Historical part-2 verification notes
 
 Part-2 acceptance uses only the requested focused documentation suite. Its
 combined stdout/stderr and process return code are logged below in this
