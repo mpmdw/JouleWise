@@ -74,6 +74,19 @@ class PaperRenderingTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "paper_reported_energy_projection_absent")
         self.assertEqual(raised.exception.rendered_output, ())
 
+    def test_reported_energy_missing_or_malformed_cells_refuses_with_closed_code(self):
+        from joulewise.paper_reported_energy import PaperReportedEnergyRefusal
+        fixture = _FamilyFixture("reported_energy_parents")
+        self.addCleanup(fixture.close)
+        for projection in ({}, {"cells": None}, {"cells": {}}):
+            with self.subTest(projection=projection):
+                value = _issued_control(fixture, projection=projection)
+                self.assertIsNotNone(value.reported_energy_projection)
+                with self.assertRaises(PaperReportedEnergyRefusal) as raised:
+                    rendering.render_reported_energy(value)
+                self.assertEqual(raised.exception.code, "paper_reported_energy_projection_mismatch")
+                self.assertEqual(raised.exception.rendered_output, ())
+
     def test_non_admission_carrier_is_deferred(self):
         self.assertFalse(hasattr(rendering, "render_non_admission"))
         self.assertNotIn(("whole_window_verdict", "whole-window.v1"), custody._ISSUANCE_GATES)

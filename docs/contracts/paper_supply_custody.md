@@ -408,8 +408,10 @@ contract failure.
 | `paper_custody_evidence_ambiguous` | Duplicate paths/roles or a non-exact inventory census prevents unique evidence selection |
 | `paper_custody_input_changed` | Reopen detects replacement, removal, grammar/digest change, or different bytes after replay |
 
-Every public-entry failure is `PaperCustodyRefusal` with a code from the closed
-`paper_custody_*` set and empty `rendered_output`. This includes malformed
+Every custody-seam and renderer-guard failure is `PaperCustodyRefusal` with a code
+from the closed `paper_custody_*` set; a reported-energy renderer body may
+additionally raise the closed `paper_reported_energy_*` vocabulary of D-179, also
+with empty `rendered_output`. Custody-seam failures include malformed
 primitive types before regex/path operations, Git/subprocess failures, supply
 map failures, JSON/UTF-8 failures, missing files, nested or already-active
 authentication sessions, validator exceptions, replay changes, and private

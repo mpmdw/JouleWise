@@ -33,8 +33,11 @@ def _issued_renderer(expected_type, required_grant):
     return decorate
 
 
-def _field(value: _FrozenObject, name: str):
-    return next(child for key, child in value.fields if key == name)
+_MISSING = object()
+
+
+def _field(value: _FrozenObject, name: str, default=_MISSING):
+    return next((child for key, child in value.fields if key == name), default)
 
 
 @_issued_renderer(VerifiedReportedEnergyParents, "cell")
@@ -44,7 +47,8 @@ def render_reported_energy(value: VerifiedReportedEnergyParents) -> str:
     if projection is None:
         raise PaperReportedEnergyRefusal("paper_reported_energy_projection_absent")
     cells = _field(projection, "cells")
-    assert type(cells) is _FrozenArray
+    if type(cells) is not _FrozenArray:
+        raise PaperReportedEnergyRefusal("paper_reported_energy_projection_mismatch")
     selected = {subject for subject in value.evidence.subjects}
     return "\n".join(f'{_field(cell, "cell_id")}: {_field(cell, "mean_j")}'
                      for cell in cells.items if _field(cell, "cell_id") in selected)

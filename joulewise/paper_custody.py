@@ -664,12 +664,25 @@ _ISSUANCE_GATES: dict[tuple[str, str], Callable[[_GateContext], _FamilyReplay]] 
 }
 
 
+def _register_reported_energy_gate(gate_id: str, gate, *, repository: Path) -> None:
+    """Prospective registration only; no production energy gate is installed."""
+    from joulewise.paper_reported_energy import _verify_gate_ordering
+    _verify_gate_ordering(repository)
+    if not isinstance(gate_id, str) or not gate_id or not callable(gate):
+        raise PaperCustodyRefusal("paper_custody_issuance_gate_unregistered")
+    _ISSUANCE_GATES[("reported_energy_parents", gate_id)] = gate
+
+
 def _run_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     if ctx.mode != "production":
         raise PaperCustodyRefusal("paper_custody_not_issuable")
     gate = _ISSUANCE_GATES.get((ctx.family, ctx.issuance_gate_id))
     if gate is None:
         raise PaperCustodyRefusal("paper_custody_issuance_gate_unregistered")
+    if ctx.family == "reported_energy_parents":
+        from joulewise.paper_reported_energy import _verify_gate_ordering
+        # Recheck this repository: direct registry insertion cannot omit the fence.
+        _verify_gate_ordering(ctx.repository)
     replay = gate(ctx)
     if (type(replay) is not _FamilyReplay or type(replay.authentic) is not bool
         or type(replay.admitted) is not bool or type(replay.validator_codes) is not tuple
@@ -727,7 +740,7 @@ def _validator_source_census(
     common: tuple[tuple[str, Callable[..., object]], ...] = tuple(
         (f"paper_custody.{member.__name__}", member) for member in (
             _replay_family, _validate_fixture_documents, _validate_production_documents,
-            _run_issuance_gate, _validate_grants, _validate_floor_acceptance,
+            _run_issuance_gate, _register_reported_energy_gate, _validate_grants, _validate_floor_acceptance,
             _floor_binder_source_sha256, _d165_issuance_gate, _claim_issuance_gate,
             _make_custody_capability_mint, _FamilySpec, _load_supply_entry,
             _read_once, _open_paper_input_impl,

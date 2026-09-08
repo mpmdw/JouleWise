@@ -207,6 +207,19 @@ def verify_registration_ordering(repository, model):
             "registration_sha256": expected}
 
 
+@_closed_refusals
+def _verify_gate_ordering(repository):
+    """Require an ordering result for both models before gate registration/use."""
+    for model in MODELS:
+        proof = verify_registration_ordering(repository, model)
+        if (type(proof) is not dict
+            or set(proof) != {"registration_commit", "spec_commit", "registration_sha256"}
+            or not proof["registration_commit"] or not proof["spec_commit"]
+            or proof["registration_commit"] == proof["spec_commit"]
+            or proof["registration_sha256"] != registration_sha256(model)):
+            raise PaperReportedEnergyRefusal("paper_reported_energy_ordering_history_invalid")
+
+
 def _validate_registration(value):
     if type(value) is not dict:
         raise PaperReportedEnergyRefusal("paper_reported_energy_registration_invalid")
@@ -300,10 +313,10 @@ def _collapse_prompt_tokens(value):
     if any(type(n) is not int or n < 0 for n in (total, output, *counts)):
         raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
     prompt = total - output
-    if any(n != prompt for n in counts):
-        raise PaperReportedEnergyRefusal("paper_reported_energy_prompt_surfaces_disagree")
     if prompt <= 0:
         raise PaperReportedEnergyRefusal("paper_reported_energy_denominator_invalid")
+    if any(n != prompt for n in counts):
+        raise PaperReportedEnergyRefusal("paper_reported_energy_prompt_surfaces_disagree")
     return prompt
 
 

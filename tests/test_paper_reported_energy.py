@@ -194,6 +194,22 @@ class ReportedEnergyTests(unittest.TestCase):
         self.assertEqual(result["per_token"]["reason"], "paper_reported_energy_prompt_surfaces_disagree")
         self.assertEqual(result["mean_j"], 42.5)
 
+    def test_nonpositive_prefill_denominator_precedes_surface_disagreement(self):
+        for total in (0, 1):
+            with self.subTest(total=total):
+                data = synthetic_input()
+                record = data["cells"][1]
+                tokens = record["rows"][0]["tokens"]
+                tokens.update(total=total, output=1, prompt_realized=42,
+                              tokenize_end=(42, 42), prefill_start=(42, 42))
+                with self.assert_code("denominator_invalid"):
+                    energy._collapse_prompt_tokens(tokens)
+                result = energy._project_cell(data["spec"]["reported_energy_cells"][1], **record)
+                self.assertEqual(result["mean_j"], 42.5)
+                self.assertEqual(result["per_token"]["status"], "refused")
+                self.assertIsNone(result["per_token"]["j_per_token"])
+                self.assertEqual(result["per_token"]["reason"], "paper_reported_energy_denominator_invalid")
+
     def test_closed_refusal_vocabulary_matches_contract(self):
         import re
         contract = (Path(__file__).resolve().parents[1] / "docs/contracts/paper_reported_energy.md").read_text()
@@ -203,6 +219,48 @@ class ReportedEnergyTests(unittest.TestCase):
                          "paper_reported_energy_request_invalid")
         with self.assert_code("request_invalid"):
             energy._validate_projection({"bad": object()}, self.cell, self.rows, self.binding)
+
+    def test_gate_registration_and_dispatch_require_ordering_for_both_models(self):
+        from types import SimpleNamespace
+        key = ("reported_energy_parents", "synthetic-ordering.v1")
+        gate = mock.Mock(return_value=custody._FamilyReplay(True, False, (), ()))
+        repository = Path("synthetic-repository")
+        ctx = SimpleNamespace(family=key[0], issuance_gate_id=key[1],
+                              mode="production", repository=repository)
+        def proof(repo, model):
+            self.assertEqual(repo, repository)
+            return {"registration_commit": "a" * 40, "spec_commit": "b" * 40,
+                    "registration_sha256": energy.registration_sha256(model)}
+        with mock.patch.dict(custody._ISSUANCE_GATES, clear=True):
+            for missing in (True, False):
+                with self.subTest(missing=missing):
+                    def check(repo, model):
+                        if model == energy.MODELS[0]:
+                            return proof(repo, model)
+                        if missing:
+                            return None
+                        raise energy.PaperReportedEnergyRefusal(
+                            "paper_reported_energy_registration_not_before_spec")
+                    reason = "ordering_history_invalid" if missing else "registration_not_before_spec"
+                    with mock.patch.object(energy, "verify_registration_ordering", side_effect=check):
+                        with self.assert_code(reason):
+                            custody._register_reported_energy_gate(key[1], gate, repository=repository)
+                        self.assertNotIn(key, custody._ISSUANCE_GATES)
+                        # A direct insertion still cannot invoke an unchecked gate.
+                        custody._ISSUANCE_GATES[key] = gate
+                        with self.assert_code(reason):
+                            custody._run_issuance_gate(ctx)
+                        gate.assert_not_called()
+                        del custody._ISSUANCE_GATES[key]
+            with mock.patch.object(energy, "verify_registration_ordering", side_effect=proof) as checked:
+                custody._register_reported_energy_gate(key[1], gate, repository=repository)
+                self.assertEqual(checked.call_args_list,
+                                 [mock.call(repository, model) for model in energy.MODELS])
+                checked.reset_mock()
+                self.assertIs(custody._run_issuance_gate(ctx), gate.return_value)
+                self.assertEqual(checked.call_args_list,
+                                 [mock.call(repository, model) for model in energy.MODELS])
+                gate.assert_called_once_with(ctx)
 
     def test_registration_ordering_in_synthetic_git_repositories(self):
         source = Path(energy.__file__).read_bytes()

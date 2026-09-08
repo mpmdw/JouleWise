@@ -31,9 +31,13 @@ committed spec blob and the HEAD spec blob must contain
 Missing, shallow or ambiguous addition history refuses; a later digest repair
 cannot erase a spec that first existed with the wrong digest. This is a check
 of committed Git ancestry, not author timestamps or a claim about untracked
-files. Source introduction on this lane is `720b166c4766bc95eb5328f95696a0716f97f7e7`.
-Before registering production issuance the gate must call this check alongside
-its authenticated spec reads. The absent specification still blocks numbers;
+files.
+`paper_custody._register_reported_energy_gate` calls `_verify_gate_ordering`,
+which requires a successful ordering result for both registered models before
+inserting a gate. The custody dispatcher repeats this check against the current
+repository before invoking a reported-energy gate, including one inserted
+directly into the registry. Failed or absent ordering results refuse before the
+gate body runs. The absent specification still blocks numbers;
 this increment neither creates a frozen spec nor registers production issuance.
 
 Every registration binds the full identifier
@@ -159,6 +163,8 @@ The custody constructor initializes it in both branches; the future production
 branch carries it from `_FamilyReplay.reported_energy_projection`. The renderer
 consumes this field only after its existing exact-type/token/grant checks.
 None raises `paper_reported_energy_projection_absent`, never `StopIteration`.
+A non-None projection with missing or non-array `cells` raises
+`paper_reported_energy_projection_mismatch` with empty `rendered_output`.
 Private synthetic issuing controls exercise positive rendering; real fixture
 capabilities remain non-issuing and cannot pass the public renderer's guard.
 
@@ -217,7 +223,7 @@ D-173 authentication refusals retain their separate custody vocabulary.
 | `paper_reported_energy_number_invalid` | Energy, floor or bound is nonfinite, boolean, ill-typed or negative. |
 | `paper_reported_energy_ordering_history_invalid` | Git read fails, history is shallow/ambiguous/absent, or spec metadata cannot be read. |
 | `paper_reported_energy_projection_absent` | The typed projection field is None after the renderer custody guard. |
-| `paper_reported_energy_projection_mismatch` | The supplied projection differs from canonical recomputation. |
+| `paper_reported_energy_projection_mismatch` | The supplied projection differs from canonical recomputation, or a renderer projection has missing or non-array `cells`. |
 | `paper_reported_energy_prompt_surfaces_disagree` | Prefill scalar counts or any tuple elements disagree. |
 | `paper_reported_energy_ratio_estimand_invalid` | The sibling estimand differs from its exact registered object. |
 | `paper_reported_energy_record_identity_mismatch` | Row order, member, model, phase or provenance pin differs. |
