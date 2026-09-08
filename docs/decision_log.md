@@ -219,6 +219,7 @@ be re-derived by a future agent gets an entry here.
 | D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
+| D-178 | Claim-side v2 copy-only deterministic widening, exact numeral custody and verdict-resolution join | adopted |
 
 ---
 
@@ -11156,3 +11157,57 @@ would `HOLD_UNSAFE`, drain the resident and block every later launch (`scripts/m
 an "already armed" carve-out would strip the session of the re-arm path the 09-03 rehearsal actually needed.
 
 **Evidence:** packet, cold ruling, Opus refutation and synthesis in the trace directory above.
+
+
+## D-178: claim-side deterministic widening under the cold-gate ruling (magistrate, 2026-09-08)
+
+**Status:** adopted. Governing authority: the interactive magistrate's
+`13-magistrate-synthesis.md`, in the lead checkout's
+`docs/process_traces/2026-09-08-handoff-redo/99bb-coldgate-packet-paper-s3/`,
+with cold Fable ruling 10 and Opus contract refutation 11 as evidence.
+The implementation instruction defers renderer projection to a later seat
+after S2 lands; X6/X7 remain `PROPOSED_STOP_FILL`.
+
+**Named failure:** the scaffold joined a nonexistent v3 manifest cell key,
+allowed tolerant arithmetic to stand in for source identity, and conflated
+the complete estimator bound with a clock-anchor planning token. The existing
+custody gate had no completed sidecar producer/contract. The smallest repair
+is the v2 copy producer and exact validator, used by the existing claim gate.
+
+**Ruling, items 1–7:**
+
+1. Adopt B, the complete estimator deterministic-bound total, copied from
+   verdict `deterministic_bounds.total`; copy every `{name, bound}` term from
+   `deterministic_bounds.terms`. Do not recompute either quantity in S3.
+2. Name it `deterministic_widening_total`, typed by `unit`, `estimator_id`,
+   `ratio_estimand`, with per-kind `deterministic_bounds`. DS-29 binds to this
+   field. The S6 `claim_side_bound_j` token keeps its non-gating clock-anchor
+   planning meaning within F+B. The judge's propagation-channel interpretation
+   is recorded as dissent; the Opus naming/type interpretation governs.
+3. Join to verdict `floor.resolutions[].source_cell_ids` by ordered
+   concatenation without sort/dedup, requiring exact/transported resolutions
+   and injectivity across contrasts. The manifest schema does not change.
+4. Require exact verdict JSON numeral bytes; reject bool; `isclose` is
+   diagnostic only. Adopt `joulewise.claim_side_bound.v2`, never issue v1.
+   This overrides Opus's tolerant-equality proposal and the judge's v1 proposal.
+5. Copy decision endpoints without another expansion; bind metrology endpoints
+   to verdict `estimator.metrology_aware_CI95` inside the S3 contract. Require
+   the anchor term in the list; term sums remain the verdict owner's job.
+6. Install the union of judge 6 and Opus 6(a–h) regressions: anchor-only,
+   omitted kind, sum-for-mean, precedence flip, double widening, decision-as-CI,
+   changed/permuted/deduplicated/refused-resolution cells, 1e-13 drift, coherently
+   edited interval/scalar, J/token into a J cell, and sign flip. The contract's
+   clause-to-test table and scoped kill runner specify each counterfactual.
+7. Complete the producer/validator before registering `claim-evidence.v1`;
+   reevaluate only from verdicts. Replace the invented manifest-key fixture,
+   document DS-26/28/29 bindings, and retain the display stop. Per the explicit
+   implementation-seat instruction, no renderer projection lands in S3.
+
+**Implementation and verification ownership:**
+[paper_claim_side_bound.md](contracts/paper_claim_side_bound.md) owns symbols,
+formulas, wire, API, refusals, custody boundary and regression mapping.
+Applicability is a claim-evidence supply using a deterministic-bound sidecar;
+this is a bounded implementation and test increment, with no new review layer
+or quiet-machine work. The lead retains final verification, integration,
+receipt reissuance and renderer authorization. Retire the v2 layer only with
+an explicitly governed successor preserving its source-identity guarantees.

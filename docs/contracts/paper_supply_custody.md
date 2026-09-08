@@ -74,7 +74,7 @@ Every reference has exactly two fields, in this order: `role: str` and
 | `ReportedEnergyParentsRef` | `VerifiedReportedEnergyParents` | **D-123**, the ratified decision to preregister and report phase-energy mean cells, together with its governed parents ([decision log](../decision_log.md#d-123-ruling-2-yes--the-signal-size-doctrine--the-overnight-license-ed-2026-08-08)) |
 | `D165CloseoutRef` | `VerifiedD165Closeout` | **D-165**, the adopted falsifier requiring every attribution-dominance ratio to reach the fixed twofold threshold before licensing the headline ([decision log](../decision_log.md#d-165-the-falsifier-magistrate--cold-gate-2026-08-28)) |
 | `WholeWindowVerdictRef` | `VerifiedWholeWindowVerdict` | One authenticated whole-window admission verdict row and its provenance |
-| `ClaimEvidenceRef` | `VerifiedClaimEvidence` | `claim_verdicts.v1`, `claim_side_bound.v1`, and their authenticated parents |
+| `ClaimEvidenceRef` | `VerifiedClaimEvidence` | `claim_verdicts.v1`, `claim_side_bound.v2`, and their authenticated parents |
 | `TransferProjectionRef` | `VerifiedTransferProjection` | The diagnostic inserted-gap transfer projection used by **TR-01**, the branch-independent paper fill that states whether the measured transfer supports applying the pulse-derived timing bound ([registry row](../paper/results-fill-registry.md#tr-01)) |
 
 The module exports no path/digest **binding** class usable for lookup and no receipt reference class; the exported
@@ -306,19 +306,21 @@ only A with recomputed licensing flags grants dominance sentence/subtitle.
 Branch null does not license an empirical refusal. B is not Q6. The subject is
 the exact supply role.
 
-Claims have an unregistered candidate gate with disk manifest validation,
+Claims register `claim-evidence.v1` with disk manifest validation,
 `validate_claim_verdicts`, reevaluation via `evaluate_claim`, embedded-floor
-byte equality and `validate_claim_side_bound`. The sidecar scaffold checks the
-reader digest, explicit registered contrast/source-cell join, floor identity
-and decision-bound arithmetic; the gate compares those bounds to verdict
-fields. Missing explicit source-cell registration refuses. This candidate
-wire is not an adopted sidecar contract/producer, so `claim-evidence.v1`
-remains absent. Outcome grants require each selected contrast to be current,
-confirmatory and structurally valid; L2 additionally needs reevaluated
-readiness/ceiling. Mixed subjects never share licensing.
+byte equality, floor acceptance and `validate_claim_side_bound`. The adopted
+[claim-side contract](paper_claim_side_bound.md) owns the copy-only v2 producer,
+verdict-resolution ordered join, required anchor kind, typed complete widening
+and exact numeral-byte equality for bounds, components and both intervals.
+The gate regenerates that projection from authenticated verdict bytes and
+reevaluates claims from verdict fields only. Outcome grants require each
+selected contrast to be current, confirmatory and structurally valid; L2
+additionally needs reevaluated readiness/ceiling. Mixed subjects never share
+licensing. This registration adds no production supply-map role or renderer;
+X6/X7 remain PROPOSED_STOP_FILL pending the later post-S2 rendering seat.
 
-Reported-energy joins, the claim-sidecar contract/producer, whole-window F6
-and transfer acceptance are incomplete, so their gates remain unregistered.
+Reported-energy joins, whole-window F6 and transfer acceptance are incomplete,
+so their gates remain unregistered.
 The whole-window typed validator remains in the source census; no flattened
 empty-code result can replace its authenticity/admission semantics. F6 and its
 empirical non-admission renderer are not implemented in Round 5.
@@ -447,8 +449,8 @@ and schematic suppliers cannot discharge empirical obligations.
 | X5 | CP-X05-8b-prefill | DS-13/14/16; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 8b/prefill: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X5 | CP-X05-1p7b-decode | DS-17/18/20; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 1p7b/decode: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X5 | CP-X05-8b-decode | DS-21/22/24; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 8b/decode: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
-| X6 | CP-X06-table | DS-25–32; point, endpoints, floor, signed clearance/shortfall, claim-side bound, floor gate, direction/Holm and verdict | claim_verdicts.json contrasts[decode].claim_evaluation.outcome; finalized manifest; claim_side_bound.v1 and source-cell join; numeric projection fields UNRESOLVED | claim_table_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast); l2 where required; UNRESOLVED: numeric/table projection scope | GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
-| X7 | CP-X07-table | DS-33; PG-01/02/04–08 (no PG-03); point, endpoints, floor, signed clearance/shortfall, claim-side bound, floor gate, direction/Holm and verdict | claim_verdicts.json contrasts[prefill].claim_evaluation.outcome; finalized manifest; claim_side_bound.v1 and source-cell join; numeric projection fields UNRESOLVED | claim_table_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast); l2 where required; UNRESOLVED: numeric/table projection scope | GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
+| X6 | CP-X06-table | DS-25–32; point, endpoints, floor, signed clearance/shortfall, claim-side bound, floor gate, direction/Holm and verdict | claim_verdicts.json contrasts[decode].claim_evaluation.outcome; finalized manifest; claim_side_bound.v2 and verdict-resolution source-cell join; numeric projection fields UNRESOLVED | claim_table_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast); l2 where required; UNRESOLVED: numeric/table projection scope | GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
+| X7 | CP-X07-table | DS-33; PG-01/02/04–08 (no PG-03); point, endpoints, floor, signed clearance/shortfall, claim-side bound, floor gate, direction/Holm and verdict | claim_verdicts.json contrasts[prefill].claim_evaluation.outcome; finalized manifest; claim_side_bound.v2 and verdict-resolution source-cell join; numeric projection fields UNRESOLVED | claim_table_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast); l2 where required; UNRESOLVED: numeric/table projection scope | GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X7 | CP-X07-split | D-166 split-refusal sentence; guarded prefill token family UNRESOLVED | G2-a selection/prompt-pin and issued affected prefill evidence; split-refusal field/route UNRESOLVED | prefill_split_refusal_projection | EMPIRICAL | UNRESOLVED | UNRESOLVED | UNRESOLVED | Two distinct exhausted-ladder renderings require adoption; diagnostic failure is not production non-admission | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X8 | CP-X08-decode-a-abstract | &#91;FILL:DS-32&#93; @ A/abstract | claim_verdicts.json contrasts[decode].claim_evaluation.outcome; identical rendering to Table 3 | claim_verdict_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast) | Independent GAMMA verdict; no inference from A/B; preserve valid Table 3 results on ratio refusal | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X8 | CP-X08-decode-a-discussion | &#91;FILL:DS-32&#93; @ A/discussion | claim_verdicts.json contrasts[decode].claim_evaluation.outcome; identical rendering to Table 3 | claim_verdict_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast) | Independent GAMMA verdict; no inference from A/B; preserve valid Table 3 results on ratio refusal | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |

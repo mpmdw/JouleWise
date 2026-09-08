@@ -588,7 +588,7 @@ def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
 
 
 def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
-    """Candidate only: no registry entry until sidecar contract/producer lands."""
+    """Authenticate the v2 copy, then reevaluate claims only from verdicts."""
     from joulewise.analysis_engine.artifact import validate_claim_verdicts
     from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound
     from joulewise.analysis_engine.claims import evaluate_claim
@@ -598,12 +598,12 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     manifest = _json_object(ctx.raws[InputRole.FINALIZED_MANIFEST])
     artifact = _json_object(ctx.raws[InputRole.CLAIM_VERDICTS])
     floor = _json_object(ctx.raws[InputRole.FLOOR_ARTIFACT])
-    sidecar = _json_object(ctx.raws[InputRole.CLAIM_SIDE_BOUND])
+    sidecar = ctx.raws[InputRole.CLAIM_SIDE_BOUND]
     codes = list(validate_finalized_analysis_manifest_v3(
         manifest, manifest_path=_binding_root(manifest_binding, ctx.repository, ctx.runs_root) / manifest_binding.path,
         custody_root=ctx.runs_root))
     codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest))
-    codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_sha256=_sha256(ctx.raws[InputRole.CLAIM_VERDICTS]),
+    codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_raw=ctx.raws[InputRole.CLAIM_VERDICTS],
                                            finalized_manifest=manifest, floor_artifact=floor))
     embedded = artifact.get("inputs", {}).get("floor_artifact", {}).get("embedded_bytes_base64")
     try:
@@ -616,17 +616,12 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
         return _FamilyReplay(False, False, (), tuple(codes))
     _validate_floor_acceptance(ctx)
     contrasts = {row["contrast_id"]: row for row in artifact["contrasts"]}
-    bounds = {row["contrast_id"]: row for row in sidecar["contrasts"]}
-    if not ctx.subjects or any(subject not in contrasts or subject not in bounds for subject in ctx.subjects):
+    if not ctx.subjects or any(subject not in contrasts for subject in ctx.subjects):
         raise PaperCustodyRefusal("paper_custody_binding_mismatch")
     grants = []
     for subject in ctx.subjects:
         contrast = contrasts[subject]
         deterministic = contrast["deterministic_bounds"]
-        if (bounds[subject]["claim_side_bound_j"] != deterministic["total"]
-            or bounds[subject]["decision_interval"] != deterministic["decision_interval"]
-            or bounds[subject]["metrology_aware_CI95"] != contrast["estimator"]["metrology_aware_CI95"]):
-            raise PaperCustodyRefusal("paper_custody_binding_mismatch")
         if artifact["evidence_class"] != "current" or contrast["sampling"]["confirmatory_status"] != "confirmatory":
             continue
         floor_metadata_keys = {"floor_limit_class", "floor_source", "point_floor_diagnostics", "single_count_discipline"}
@@ -651,9 +646,10 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
 
 
 # Register only completed gate implementations. Maps still contain no production
-# roles. Energy joins, claim sidecar producer, F6, and transfer remain absent.
+# roles. Energy joins, F6, and transfer remain absent.
 _ISSUANCE_GATES: dict[tuple[str, str], Callable[[_GateContext], _FamilyReplay]] = {
     ("d165_closeout", "d165-closeout.v1"): _d165_issuance_gate,
+    ("claim_evidence", "claim-evidence.v1"): _claim_issuance_gate,
 }
 
 
@@ -783,7 +779,7 @@ def _validator_source_census(
     elif family == "claim_evidence":
         from joulewise.analysis_engine.artifact import validate_claim_verdicts, _validate_cross_field_claim_semantics
         from joulewise.analysis_engine.claims import evaluate_claim
-        from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound, _interval
+        from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound, produce_claim_side_bound, _interval
         from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
         owners = (
@@ -791,6 +787,7 @@ def _validator_source_census(
             ("analysis_engine.artifact._validate_cross_field_claim_semantics", _validate_cross_field_claim_semantics),
             ("analysis_engine.claim_side_bound.validate_claim_side_bound", validate_claim_side_bound),
             ("analysis_engine.claim_side_bound._interval", _interval),
+            ("analysis_engine.claim_side_bound.produce_claim_side_bound", produce_claim_side_bound),
             ("analysis_manifest_v3.validate_finalized_analysis_manifest_v3", validate_finalized_analysis_manifest_v3),
             ("analysis_engine.artifact.validate_claim_verdicts", validate_claim_verdicts),
         )
