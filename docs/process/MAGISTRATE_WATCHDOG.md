@@ -159,14 +159,15 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
    ```
 
-   If the exclusive lock seed fails, the installer restores the preexisting plist (or removes the newly written one). **INTERACTIVE MAGISTRATE / OPERATOR ONLY:** To reconcile the old lock, run exactly the following from an observer Terminal. Headless sessions must not execute these recovery commands: [relaunch prompt, line 19](MAGISTRATE_RELAUNCH_PROMPT.md#L19) forbids their touching watchdog locks. It takes the watchdog service lock, validates the ownership record, confirms the recorded PID/start pair is absent, refuses a live resumed twin, rechecks the lock bytes, and only then removes it. If a resident still owns the service lock, stop and let the lead reconcile that resident; do not delete a busy lock. Then repeat the whole install step.
+   If the exclusive lock seed fails, the installer restores the preexisting plist (or removes the newly written one). **INTERACTIVE MAGISTRATE / OPERATOR ONLY:** To reconcile the old lock, run exactly the following from an observer Terminal. Headless sessions must not execute these recovery commands: [relaunch prompt, line 19](MAGISTRATE_RELAUNCH_PROMPT.md#L19) forbids their touching watchdog locks. It takes the watchdog service lock, validates the ownership record, confirms the recorded PID/start pair is absent, refuses any live resumed twin or daemon machinery, rechecks the lock bytes, and only then removes it. For an unparseable or malformed lock (including `{torn`, `{}`, and `[]`), both this block and the watchdog tick use only `state.json`’s durable `resident_session` record, never the step-3 inventory. A missing or malformed record refuses with `corrupt_lock_no_record`; a present PID/start pair refuses with `corrupt_lock_resident_live`; any live resumed twin or daemon/host/spare refuses with `corrupt_lock_resumed_twin` or `corrupt_lock_daemon_live`. The record must carry the lock schema, a positive integer PID, a nonempty start token, and a nonempty activation ID. Only an absent PID or a different start token, with no live twin or daemon machinery, permits removal. Each corrupt-lock tick refusal is recorded in `events.jsonl` and retained in `notice_pending` for the next launch notice. If a resident still owns the service lock, stop and let the lead reconcile that resident; do not delete a busy lock. Then repeat the whole install step.
 
    ```zsh
    cd /Users/edr/code/JouleWise
    python3 - <<'PY'
    from scripts.magistrate_watchdog import (
        DEFAULT_CUSTODY_ROOT, RealProcessTable, Storage, handoff_census,
-       handoff_refusals, read_lock, service_lock,
+       corrupt_lock_refusal, handoff_refusals, load_state, read_lock,
+       service_lock, valid_lock_pair,
    )
    storage = Storage(DEFAULT_CUSTODY_ROOT)
    with service_lock(storage) as descriptor:
@@ -176,10 +177,15 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
        original = path.read_bytes()
        lock = read_lock(storage)
        rows = RealProcessTable().snapshot()
-       census = handoff_census([], lock, rows)
-       refusals = handoff_refusals([], rows)
-       if not census.empty or refusals:
-           raise SystemExit(f"handoff_lock_not_clear: {census} {refusals}")
+       if lock is not None and not valid_lock_pair(lock):
+           refusal = corrupt_lock_refusal(load_state(storage), rows)
+           if refusal is not None:
+               raise SystemExit(f"handoff_lock_not_clear: {refusal}")
+       else:
+           census = handoff_census([], lock, rows)
+           refusals = handoff_refusals([], rows)
+           if not census.empty or refusals:
+               raise SystemExit(f"handoff_lock_not_clear: {census} {refusals}")
        if path.read_bytes() != original:
            raise SystemExit("handoff_lock_changed: retry inspection")
        storage.unlink(path)
@@ -187,7 +193,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    PY
    ```
 
-   **ED-HANDS ONLY — corrupt-lock recovery:** An unparseable, `{}`, or non-object lock is `handoff_lock_invalid`; the block above refuses with `handoff_lock_not_clear` and leaves the file intact. No mechanism removes a corrupt lock because a saved inventory cannot prove the absence of an unrecorded owner (2026-09-08 delta re-audit, finding R1). Ed must run these verbatim commands from an observer Terminal and inspect both outputs:
+   **ED-HANDS ONLY — both records unreadable:** This manual fallback applies only when the lock is unparseable or malformed **and** `state.json` is missing or malformed, so durable ownership cannot be recovered. If `state.json` is readable but `resident_session` is missing or malformed, preserve the lock and have the lead reconcile the durable record; the manual removal below is not authorized for that case. With a usable durable record, use the reconciliation block above. For the both-unreadable case, Ed must run these verbatim commands from an observer Terminal and inspect both outputs:
 
    ```zsh
    cd /Users/edr/code/JouleWise
@@ -195,7 +201,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    ps -axo pid,ppid,lstart,command | grep -E "claude|codex"
    ```
 
-   Both outputs must show no headless resident (`claude -p` with the resident launch options: `--output-format stream-json --verbose --permission-mode auto --permission-prompts none --model fable --effort high --allowedTools ...`) and no resumed twin (`--resume ... --reply-on-resume`). If either is present or the inspection is uncertain, stop and reconcile it; do not remove the lock. Only after Ed verifies both absences may Ed remove the corrupt lock by hand from that observer Terminal:
+   Both outputs must show no headless resident (`claude -p` with the resident launch options: `--output-format stream-json --verbose --permission-mode auto --permission-prompts none --model fable --effort high --allowedTools ...`), no resumed twin (`--resume ... --reply-on-resume`), and no daemon, host, or spare. If any is present or the inspection is uncertain, stop and reconcile it; do not remove the lock. Only in this both-unreadable case, after Ed verifies those absences, may Ed remove the corrupt lock by hand from that observer Terminal:
 
    ```zsh
    rm "$HOME/night-custody/magistrate/magistrate.lock"

@@ -908,6 +908,38 @@ def handoff_daemons(processes: Sequence[ProcessInfo]) -> list[ProcessInfo]:
             and handoff_process_role(row.command) in {"daemon", "bg_spare", "bg_pty_host"}]
 
 
+def valid_lock_pair(record: Any) -> bool:
+    """An ownership record must identify a real PID and a nonempty start token."""
+    return (isinstance(record, Mapping) and record.get("schema") == LOCK_SCHEMA
+            and type(record.get("pid")) is int and record["pid"] > 0
+            and isinstance(record.get("start_time"), str)
+            and bool(record["start_time"].strip()))
+
+
+def corrupt_lock_refusal(state: Mapping[str, Any], processes: Sequence[ProcessInfo]) -> str | None:
+    """Bind recovery to durable ownership, never to a command-shaped inventory.
+
+    None proves the recorded pair absent from this snapshot and no live resume
+    machinery present. Even an observed defunct pair is not proof of absence.
+    """
+    record = state.get("resident_session")
+    if (not valid_lock_pair(record)
+            or not isinstance(record.get("activation_id"), str)
+            or not record["activation_id"].strip()):
+        return "corrupt_lock_no_record"
+    if any(row.pid == record["pid"] and row.start_time == record["start_time"]
+           for row in processes):
+        return f"corrupt_lock_resident_live: pid={record['pid']}"
+    twins = [row.pid for row in processes if "<defunct>" not in row.command.casefold()
+             and handoff_process_role(row.command) == "resumed_twin"]
+    if twins:
+        return f"corrupt_lock_resumed_twin: pids={twins}"
+    daemons = handoff_daemons(processes)
+    if daemons:
+        return f"corrupt_lock_daemon_live: pids={[row.pid for row in daemons]}"
+    return None
+
+
 def handoff_refusals(
     owned: Sequence[Mapping[str, Any]], processes: Sequence[ProcessInfo]
 ) -> list[str]:
@@ -1358,8 +1390,15 @@ def decide(
             process_snapshot = deps.processes.snapshot()
         except Exception as exc:
             return Decision("HOLD_UNSAFE", f"process table unavailable: {exc}")
-        owner = owned_process(lock, process_snapshot)
-        if owner is None:
+        if not valid_lock_pair(lock):
+            refusal = corrupt_lock_refusal(state, process_snapshot)
+            if refusal is not None:
+                return Decision("HOLD_UNSAFE", refusal)
+            storage.unlink(storage.root / "magistrate.lock")
+            lock = None
+        else:
+            owner = owned_process(lock, process_snapshot)
+        if lock is not None and owner is None:
             twins = [row.pid for row in process_snapshot
                      if "<defunct>" not in row.command.casefold()
                      and handoff_process_role(row.command) == "resumed_twin"]
@@ -2098,6 +2137,11 @@ def adopt_recorded_session_for_drain(
 ) -> ResidentSupervisor | None:
     """Adopt one state-recorded child for a single durable drain step."""
 
+    current_lock = read_lock(storage)
+    if current_lock is not None and not valid_lock_pair(current_lock):
+        # A corrupt-lock refusal must retain the durable recovery record, even
+        # when an earlier plan hold took precedence in decide().
+        return None
     recorded = state.get("resident_session")
     if not isinstance(recorded, Mapping) or recorded.get("schema") != LOCK_SCHEMA:
         return None
@@ -2210,6 +2254,24 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
         notice = decision.state.lower()
     elif decision.reason.startswith("plan_conflict:"):
         notice = "plan_conflict"
+    elif decision.reason.startswith("corrupt_lock_"):
+        notice = decision.reason.split(":", 1)[0]
+        # transition() suppresses repeated states, including an unreadable
+        # state.json initialized as HOLD_UNSAFE. Always retain this refusal.
+        storage.append_jsonl(storage.root / "events.jsonl", {
+            "schema": EVENT_SCHEMA,
+            "kind": "corrupt_lock_refusal",
+            "reason": decision.reason,
+            "epoch_s": now.timestamp(),
+        })
+        pending = state.setdefault("notice_pending", [])
+        if not any(isinstance(item, dict) and item.get("reason") == decision.reason
+                   for item in pending):
+            pending.append({"id": f"corrupt-lock-{notice}", "kind": notice,
+                            "reason": decision.reason, "epoch_s": now.timestamp()})
+        # The refusal already has an event and a notice, so avoid a duplicate
+        # notice when this tick also changes state.
+        notice = None
     transition(storage, state, decision.state, decision.reason, now, notice=notice)
     storage.atomic_json(storage.root / "state.json", state)
     if dry_run:

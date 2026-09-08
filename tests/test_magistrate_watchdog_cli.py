@@ -78,6 +78,41 @@ class HandoffCliDefectTests(unittest.TestCase):
             rc = wd.main(list(args))
         return rc, json.loads(output.getvalue())
 
+    def test_corrupt_lock_cli_refusal_survives_unreadable_state_and_repeated_hold(self):
+        """Counterfactual: corrupt lock plus missing/torn state launches, or an existing
+        HOLD_UNSAFE suppresses the corrupt-lock event and next-launch notice.
+        """
+        from tests.test_magistrate_watchdog import Harness
+        import datetime as dt
+
+        with tempfile.TemporaryDirectory() as temporary:
+            harness = Harness(Path(temporary), dt.datetime(2026, 9, 4, 1, tzinfo=dt.timezone.utc))
+            for raw in ("{torn", "{}", "[]"):
+                for state_raw in (None, "{torn", "[]", json.dumps({
+                    **wd.initial_state(), "state": "HOLD_UNSAFE", "reason": "earlier hold"})):
+                    with self.subTest(lock=raw, state=state_raw):
+                        lock_path = harness.storage.root / "magistrate.lock"
+                        state_path = harness.storage.root / "state.json"
+                        lock_path.write_text(raw)
+                        if state_raw is None:
+                            state_path.unlink(missing_ok=True)
+                        else:
+                            state_path.write_text(state_raw)
+                        with mock.patch.object(wd, "real_dependencies", return_value=harness.deps), \
+                             mock.patch.object(wd.os, "fork", return_value=12345):
+                            for _ in range(2):
+                                self.assertEqual(0, wd.main(["tick", "--custody-root", temporary]))
+                                self.assertEqual(raw, lock_path.read_text())
+                                state = wd.load_state(harness.storage)
+                                self.assertEqual("HOLD_UNSAFE", state["state"])
+                                self.assertTrue(any("corrupt_lock_no_record" in item["reason"]
+                                                    for item in state["notice_pending"]))
+                        events = [json.loads(line) for line in
+                                  (harness.storage.root / "events.jsonl").read_text().splitlines()]
+                        self.assertTrue(any("corrupt_lock_no_record" in item.get("reason", "")
+                                            for item in events))
+                        self.assertEqual([], harness.spawn_calls)
+
     def test_daemon_enumeration_refuses_until_every_host_and_spare_is_absent(self):
         """Counterfactual: daemon stops but its bg-pty-host or versioned spare remains."""
         for command, role in (

@@ -1485,29 +1485,86 @@ class HandoffDefectTests(WatchdogTestCase):
         self.assertEqual(1, len(matching), marker)
         return textwrap.dedent(matching[0])
 
-    def test_c2_corrupt_lock_recovery_refuses_even_with_absent_saved_owner(self) -> None:
-        """R1: stale inventory misses live unrecorded headless resident PID 84232."""
-        block = self.recovery_block("HANDOFF_DEAD_LOCK_REMOVED")
-        inventory = self.temp / "recovery.json"
-        inventory.write_text(json.dumps({"owned": [{"pid": 100, "start_time": "old"}]}))
-        resident = wd.ProcessInfo(84232, 1, "unrecorded", " ".join(("claude", "-p", "magistrate", *wd.SESSION_ARGV_AFTER_PROMPT)))
+    def corrupt_lock_cases(self):
+        record = {"schema": wd.LOCK_SCHEMA, "activation_id": "activation-a",
+                  "pid": 100, "start_time": "old"}
+        resident = wd.ProcessInfo(100, 1, "old", " ".join(
+            ("claude", "-p", "magistrate", *wd.SESSION_ARGV_AFTER_PROMPT)))
+        yield "live", record, [resident], "corrupt_lock_resident_live"
+        yield "absent-record", None, [], "corrupt_lock_no_record"
+        yield "gone", record, [], None
+        yield "reused", record, [wd.ProcessInfo(100, 1, "new", "other")], None
+        yield "twin", record, [wd.ProcessInfo(200, 1, "twin", self.TWIN)], "corrupt_lock_resumed_twin"
+        for command in ("claude daemon run --origin transient", "claude bg-pty-host sock",
+                        "claude --bg-spare sock"):
+            yield command, record, [wd.ProcessInfo(200, 1, "daemon", command)], "corrupt_lock_daemon_live"
+        # An observed pair, even defunct, is not a proof that the pair is absent.
+        yield "defunct", record, [wd.ProcessInfo(100, 1, "old", "claude <defunct>")], "corrupt_lock_resident_live"
+        for field, value in (("schema", "wrong"), ("pid", True), ("pid", -1),
+                             ("pid", "100"), ("start_time", ""), ("start_time", None),
+                             ("activation_id", ""), ("activation_id", None)):
+            yield f"bad-{field}-{value}", dict(record, **{field: value}), [], "corrupt_lock_no_record"
+        for malformed in ([], "record", {}):
+            yield "malformed", malformed, [], "corrupt_lock_no_record"
+
+    def test_corrupt_lock_tick_matrix_binds_durable_resident(self) -> None:
+        """Counterfactual: torn lock launches over live headless resident or absent/bad record;
+        gone/reused pairs may clear only without resumed twins or daemon machinery.
+        """
         for raw in ("{torn", "{}", "[]"):
-            for rows in ([], [resident],
-                         [wd.ProcessInfo(100, 1, "old", "worker")],
-                         [wd.ProcessInfo(200, 1, "twin", self.TWIN)]):
-                with self.subTest(raw=raw, rows=rows):
-                    path = self.harness.storage.root / "magistrate.lock"
-                    path.parent.mkdir(parents=True, exist_ok=True)
+            for label, record, rows, refusal in self.corrupt_lock_cases():
+                with self.subTest(raw=raw, case=label):
+                    storage = self.harness.storage
+                    state = wd.initial_state()
+                    state["resident_session"] = record
+                    storage.atomic_json(storage.root / "state.json", state)
+                    path = storage.root / "magistrate.lock"
+                    path.write_text(raw)
+                    self.harness.processes.rows = rows
+                    # Prevent real forks even if the baseline wrongly allows launch.
+                    with mock.patch.object(wd.os, "fork", return_value=12345):
+                        decision = wd.tick(storage, self.harness.deps)
+                    self.assertEqual("HOLD_UNSAFE" if refusal else "LAUNCHING", decision.state)
+                    self.assertEqual(refusal is None, decision.launch)
+                    self.assertEqual(refusal is not None, path.exists())
+                    if refusal:
+                        self.assertIn(refusal, decision.reason)
+                        self.assertEqual(raw, path.read_text())
+                        saved = wd.load_state(storage)
+                        self.assertEqual(record, saved["resident_session"])
+                        self.assertTrue(any(item["reason"] == decision.reason
+                                            for item in saved["notice_pending"]))
+                        events = [json.loads(line) for line in
+                                  (storage.root / "events.jsonl").read_text().splitlines()]
+                        self.assertTrue(any(item.get("reason") == decision.reason for item in events))
+                    self.assertEqual([], self.harness.processes.signals)
+                    self.assertEqual([], self.harness.spawn_calls)
+
+    def test_corrupt_lock_documented_matrix_binds_durable_resident(self) -> None:
+        """Counterfactual: step 4 refuses a provably absent durable resident, or trusts
+        an inventory instead of refusing a live headless pair/missing durable record.
+        """
+        block = self.recovery_block("HANDOFF_DEAD_LOCK_REMOVED")
+        for raw in ("{torn", "{}", "[]"):
+            for label, record, rows, refusal in self.corrupt_lock_cases():
+                with self.subTest(raw=raw, case=label):
+                    storage = self.harness.storage
+                    state = wd.initial_state()
+                    state["resident_session"] = record
+                    storage.atomic_json(storage.root / "state.json", state)
+                    path = storage.root / "magistrate.lock"
                     path.write_text(raw)
                     with mock.patch.object(wd, "DEFAULT_CUSTODY_ROOT", path.parent), \
                          mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
-                         mock.patch.object(sys, "argv", ["reconcile", str(inventory)]), \
                          contextlib.redirect_stdout(io.StringIO()):
-                        with self.assertRaisesRegex(
-                            SystemExit, "handoff_lock_not_clear: .*handoff_lock_invalid"
-                        ):
+                        if refusal:
+                            with self.assertRaisesRegex(SystemExit, refusal):
+                                exec(compile(block, "<step4-corrupt>", "exec"), {})
+                        else:
                             exec(compile(block, "<step4-corrupt>", "exec"), {})
-                    self.assertEqual(raw.encode(), path.read_bytes())
+                    self.assertEqual(refusal is not None, path.exists())
+                    if refusal:
+                        self.assertEqual(raw, path.read_text())
 
     def test_c3_documented_twin_stop_revalidates_each_signal(self) -> None:
         """Counterfactual input: selected late twin is reused before TERM or before KILL."""
