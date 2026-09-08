@@ -21,8 +21,8 @@ joulewise-53 has messaged that it stood down (its condition 2: no arming while i
 | commit b0c88632 | 01:11:22 | git |
 | commit a8cc6e68 (cold-gate AMEND relayed) | 01:20:08 | git |
 | commit 2987a626 | 01:20:19 | git |
-| activation 1ef89702 terminated | 01:33:28 | events.jsonl seq 5 epoch 1788856408.777 |
-| activation 784a764e spawned | 01:41:58 | events.jsonl seq 8 epoch 1788856918.677 |
+| activation 1ef89702 terminated | 01:33:28 | 21-activation-784a764e/events.jsonl seq 5 epoch 1788856408.777 |
+| activation 784a764e spawned | 01:41:58 | 21-activation-784a764e/events.jsonl seq 8 epoch 1788856918.677 |
 | commits 9a15338e / a6bff232 / 83b3ec5e | 01:48:16 / 01:48:47 / 02:01:16 | git |
 | commit dbd49c1d (21c: ruling B recorded) | 02:03:37 | git |
 | commit 0f3390c9 (fix round 1 landed) | 02:10:06 | git |
@@ -235,7 +235,9 @@ must stop here — delta N10):**
   `21b-rehearsal-20260909-bench/pass3-process-tree-keepalive.txt` — stopped with TaskStop). Confirm
   `ps -axo pid,ppid,command | grep -E "claude (daemon run|bg-spare|bg-pty-host)|--resume"` prints nothing (joulewise-53
   retires those before its stand-down; this session never signals them). A reparented process of this session's own
-  is reported foreign by step 4 and MUST abort the arm — fail-closed by design, no allowlist. The arm then continues
+  is reported foreign by step 4 and MUST abort the arm — fail-closed by design; the only exclusions are Ed's ChatGPT.app
+  process tree (descendants of its main binary) and that app's own Electron helpers reparented to launchd (Frameworks path), which
+  condition 5 does not count as agent sessions (ruling in 21c); any other ChatGPT-pathed orphan stays a session (fail-closed). The arm then continues
   in the SAME turn (no wake source is needed after this point: block B, record, commit, push, exit).
 - 5 (cond. 4). Re-check Ed's thread `1a0800cdb282c3f1` for a NO (Gmail `get_thread`); a NO aborts here, before any
   write under `~/night-custody`.
@@ -252,21 +254,39 @@ plans=(~/night-custody/*/night_plan.json(N)); test ${#plans} -eq 0 || { print "A
 test "$(git -C "$STUB_CHECKOUT" rev-parse HEAD)" = "$H" || { print "ABORT: checkout pin mismatch"; exit 1; }
 test ! -e "$NIGHT_CUSTODY" || { print "ABORT: real custody exists"; exit 1; }
 # 4. Census immediately before the move (cond. 5): every codex|claude|t3 match must be this magistrate's own tree.
-python3 - <<'PY' || { print "ABORT: foreign census or census failure"; exit 1; } # F3/F4
-import json, os, subprocess, sys
+python3 - <<'PY' || { print "ABORT: foreign agent session or census failure"; exit 1; } # F3/F4; cond. 5 as ruled (21c §Ruling of record on condition 5)
+import json, os, re, subprocess, sys
 # F3: derive the live activation from its lock.
 me = json.load(open(os.path.expanduser("~/night-custody/magistrate/magistrate.lock")))["pid"]
 ps = subprocess.run(["ps","-axo","pid=,ppid=,command="], capture_output=True, text=True, check=True).stdout.splitlines()
 rows = [(int(l.split(None,2)[0]), int(l.split(None,2)[1]), l.split(None,2)[2] if len(l.split(None,2))>2 else "") for l in ps if l.strip()]
-parent = {p:pp for p,pp,_ in rows}
-def mine(p):
-    while p and p != 1:
-        if p == me: return True
-        p = parent.get(p, 1)
-    return False
-import re
-foreign = [(p,c[:90]) for p,pp,c in rows if re.search(r"codex|claude|t3", c) and not mine(p) and "ps -axo" not in c]
-print("foreign census matches:", foreign); sys.exit(1 if foreign else 0)
+cmd = {p:c for p,pp,c in rows}; parent = {p:pp for p,pp,_ in rows}
+def chain(p):
+    out = []
+    while p and p != 1 and p in parent and p not in out and len(out) < 512: out.append(p); p = parent[p]
+    return out
+assert me in chain(os.getpid()), "lock pid is not an ancestor of this census process"
+def mine(p): return me in chain(p)
+AGENT = re.compile(r"(?i)(^|[\s/.])(codex|claude|t3)(?=$|[\s/.:-])")   # delta 5 B3: dot-paths (.codex/plugins) count; case-insensitive for T3 Code
+APP_MAIN = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT"; APP_HELPERS = "/Applications/ChatGPT.app/Contents/Frameworks/"
+def under_session(p): return any(AGENT.search(cmd.get(a,"")) and not cmd.get(a,"").startswith("/Applications/ChatGPT.app/") for a in chain(p)[1:])
+def eds_app(p):
+    # Ed's desktop app = the ChatGPT main binary's descendants, or its own Electron helpers even when reparented to launchd
+    # (delta 5 live run: Codex Framework helpers with ppid 1). ChatGPT-pathed processes spawned UNDER an agent session
+    # (codex app-server / cua_node under a codex mcp-server, delta 5 B1) and their orphans stay sessions (fail-closed).
+    c = cmd.get(p, "")
+    if under_session(p): return False
+    return any(cmd.get(a,"").startswith(APP_MAIN) for a in chain(p)) or c.startswith(APP_HELPERS)
+# cond. 5 counts agent SESSIONS (a magistrate, a codex-run-v3 seat, an interactive Claude or Codex session, their children),
+# not the idle helpers of Ed's ChatGPT desktop app; a path/word boundary keeps 'tmpondt32c8'-style substrings out.
+hits = [(p,c) for p,pp,c in rows if re.search(r"(?i)codex|claude|t3", c) and "ps -axo" not in c and not mine(p)]
+sessions = [(p,c[:90]) for p,c in hits if AGENT.search(c) and not eds_app(p)]
+informational = [(p,c[:90]) for p,c in hits if (p,c[:90]) not in sessions]
+print("foreign agent sessions (cond. 5, must be empty):", sessions)
+print("informational matches (Ed's ChatGPT.app tree / substring false positives):", informational)
+prod = subprocess.run(["/usr/bin/pgrep","-lf","codex|claude|t3"], capture_output=True, text=True)
+print("production agent_census argv output (pgrep exit %d) — recorded, not gating the arm:" % prod.returncode); print(prod.stdout.strip()[:4000])
+sys.exit(1 if sessions else 0)
 PY
 # (step 5, the NO check, was executed between the blocks.)
 # 6. THE MOVE: atomic rename into the plan directory (same volume as /private/tmp — verified: both device 16777233 per stat -f %d).
@@ -283,6 +303,31 @@ launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE" "$SCRATCH"
 On any abort: `git -C "$DRIVER_SOURCE" worktree remove --force "$STUB_CHECKOUT"; rm -rf "$STAGE" "$SCRATCH"` — remove only the
 checkout/scratch/staging paths this attempt created (delta N3); if an existence guard found a pre-existing path, preserve it. The real custody root stays untouched before step 6. <!-- F5 -->
 
+## Stand-down of the interactive magistrate received; condition 5 ruled
+
+- joulewise-53 (session 018PXMANyqqMtpXYryP26pEm, pid 83953) sent its STAND-DOWN message (precondition (b)); it names main
+  `1c83f2af` (CI green) with D-175 `a969e526`, PR #297 `138e7edb`, PR #298 `d477e138`, PR #299 `c9e2981c`, T0-ACID-CLOCK-01/02/03
+  (`e4ce8b3b`, `3c366db7`, `019f9bba`, `481df11c`, `a9a70516`), PR #295 `23012b52`, T38 `eacadff7`, T38b `0f6b1c8b`; retirement per
+  the new step 1 done (`handoff-daemons` rc 0; bg-job daemon 71666, spare 71687, both pty-hosts and the resumed twin 71607 gone — its report; pids per `21-activation-1ef89702/process-census-0055.txt`, absence per `pass3-standdown-census.txt`).
+- This activation's census right after that message: `21b-rehearsal-20260909-bench/pass3-standdown-census.txt` (epoch 1788877254)
+  and, classified by the step-4 block itself, `pass3-census-classified.txt`. Tree membership of every process is read from the chains
+  printed in that artifact and the ppid column of `pass3-standdown-census.txt`; no pid is restated in prose (deltas 5–7: every
+  restatement contradicted its artifact). pid 83953 stays alive until Ed closes its terminal and, per the ruling, blocks the arm
+  while present; Ed was asked to close it before 1788944160 (Gmail `1a081723350aea55`).
+  `handoff-daemons` rc 0 is joulewise-53's own report; this activation's attempt ran from the wrong cwd (ModuleNotFoundError,
+  recorded in the same artifact) and is not evidence either way.
+- STAND-DOWN VOID for now: Ed resumed the interactive magistrate for daytime desk work (message preserved verbatim in
+  `pass3`-adjacent artifact `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`, with `ps -p 83953` at capture). Hold the arm
+  while pid 83953 lives; a fresh stand-down message is promised by 1788941700 (01:15 PDT 2026-09-09); if none has arrived by
+  1788942600 (01:30 PDT), its absence is judged ONLY by `ps -p 83953` showing the pid gone. Precondition (b) is therefore OPEN again.
+- Condition 5 ruling by the synthesis author (recorded in 21c §Ruling of record on condition 5, with a bracketed D6-2 note): agent SESSIONS count;
+  Ed's ChatGPT.app helpers do not; the regex list is informational; the night is judged by `joulewise.night_gate.agent_census`
+  (`pgrep -lf "codex|claude|t3"`, night_gate.py:38); ask Ed to quit the ChatGPT desktop app before the belt (02:45 PDT = epoch 1788947100) for a clean
+  REHEARSAL_ONLY receipt (follow-ups on thread `1a0800cdb282c3f1`: `1a0816757635cf98`; the correction `1a081723350aea55` asking Ed to CLOSE the
+  joulewise-53 terminal before 1788944160; the refinement `1a0817fbc66d8737` asking that any app quit happen after 1788945300 and
+  before 1788947100, D6-2); record both census outputs at arm time. Step 4 above now
+  implements exactly that (sessions gate, informational list, production pgrep output printed).
+
 ## Bench pass 2 (activation 784a764e; first run recorded by commit 82622e70 at 02:11:53 PDT without copied artifacts — delta N2; re-run with artifacts captured under `21b-rehearsal-20260909-bench/pass2-*`, time and epoch in `pass2-bench-output.txt`; scratch paths only)
 
 Steps 1–3 of the amended sequence were executed verbatim with every path redirected to a `mktemp -d` parent
@@ -295,6 +340,7 @@ checkout printed `validated pins: repo_head=ae8f074f… measurement_root=<scratc
 `<SCRATCH>/custody/night` did exist (the installer's `mkdir -p "$custody_root/night"`, which is exactly why the twin is
 validated instead of the real plan). The bench worktree and parent were removed; `ls ~/night-custody` afterwards shows
 only `magistrate`, `magistrate-bench`, `retired-v1`. Steps 4–8 were NOT executed (they arm).
+- Step-4 classifier bench (nine mocked process tables, verbatim block): `pass3-step4-bench.txt`.
 - Artifacts of the re-run: `pass2-bench-output.txt` (full transcript with start/finish times), `pass2-real-staged-night_plan.json`,
   `pass2-twin-night_plan.json`, `pass2-render-com.joulewise.night.plist`, `pass2-render-com.joulewise.night.deadman.plist`.
 
@@ -303,12 +349,12 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
 
 ## Activation succession (2026-09-08 01:48:16 PDT (commit 9a15338e); F2; written by activation 784a764e)
 
-- Activation 1ef89702 (pid 84232) was terminated at 01:33:28 PDT (events.jsonl seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
+- Activation 1ef89702 (pid 84232 per `21-activation-1ef89702/magistrate.lock.json`) was terminated at 01:33:28 PDT (`21-activation-784a764e/events.jsonl` seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
   45-minute timer, and Claude Code's headless `-p` mode terminates a session 600 s after a turn ends while background
   tasks remain (`attempts/1ef89702-…/attempt-1.stderr.log`: "Background tasks still running after 600s; terminating.
   Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely."). The watchdog recorded `clean activation exit`
   (events seq 5, IDLE), `backoff has not expired` (seq 6, BACKOFF, 300 s), then spawned activation
-  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075; `attempt: 2`).
+  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (`21-activation-784a764e/events.jsonl` seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075 per `21-activation-784a764e/magistrate.lock.json`; `attempt: 2`).
 - Consequence for this plan: the arming party is whichever headless activation is live when preconditions (a)+(b)
   hold. The NIGHT_HANDBACK text at H names activation 1ef89702 as the author of the arm request (true: emails
   `1a0800cdb282c3f1`/`1a08012045894ef7` were sent by it); the arm itself is executed and recorded by the live
@@ -321,7 +367,7 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
   tick) instead of ending its turn idle; that poll is a direct child of the session pid and is stopped at step 3b
   before the census (delta N8). Launch email for 784a764e: Gmail `1a080326c4d2f147`.
 - joulewise-53's answers (cross-session message, 01:48 PDT (recorded in a6bff232 at 01:48:47); F2): (a) the arm-time census must treat the Claude bg-job
-  daemon 71666, bg-pty-hosts 71596/71682, bg-spare 71687 and the resumed twin 71607 as foreign matches that must be
+  daemon 71666, bg-pty-hosts 71596/71682, bg-spare 71687 and the resumed twin 71607 (all in `21-activation-1ef89702/process-census-0055.txt`) as foreign matches that must be
   gone; joulewise-53 retires them itself as its last act before stand-down (`claude daemon stop --any`, then verify
   no `claude daemon run|bg-spare|bg-pty-host|--resume` process remains) and states the result in its stand-down
   message; this activation never signals them. The step-4 regex `codex|claude|t3` already matches every one of those

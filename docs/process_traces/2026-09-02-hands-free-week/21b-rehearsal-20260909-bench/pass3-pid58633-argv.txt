@@ -1,0 +1,6 @@
+1788880595 2026-09-08 08:16:35 PDT
+full argv of pid 58633 (ps -o pid,ppid,lstart,command -ww):
+  PID  PPID STARTED                      COMMAND
+58633     1 Fri Sep  4 08:54:47 2026     /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpondt32c8/bin/vllm serve /fake/model --host 127.0.0.1 --port 54902 --served-model-name nv5-fake-model --revision test --tensor-parallel-size 1 --gpu-memory-utilization 0.1
+production census alternation match in that argv:
+   1 t3
