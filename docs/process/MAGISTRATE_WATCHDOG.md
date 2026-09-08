@@ -89,7 +89,7 @@ No status branch, checkout, plan, night result, `courier.sent`, or repository fi
 
 Installation is authorized only after the built-artifact gauntlet and cold gate pass. The acting magistrate emails Ed the install notice, quotes the D-171 authorization and the stop instructions above, then follows this checklist without waiting for a reply. Do not arm any plan during this handoff.
 
-0. Land the watchdog branch on `main` through the normal twelve-row gate: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 3, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
+0. Land the watchdog branch on `main` through the normal twelve-row gate: replay the integration on `int/2026-09-04-watchdog`, open the PR, require CI and the merge gate, and merge only under the lead's authority. Then update the canonical checkout with `git -C /Users/edr/code/JouleWise pull --ff-only`. Before step 1 executes any pinned file, verify SHA-256 byte identity for the five pinned files against the merge commit on `main` that landed this branch, not against the earlier packet exhibits. Run these exact commands, record both digest/path lines for every file, and stop if any command fails. Do not substitute this development worktree for the canonical checkout.
 
    ```zsh
    cd /Users/edr/code/JouleWise
@@ -114,7 +114,18 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    echo STEP0_OK
    ```
 
-1. In the magistrate session, stop every background task and wait for each stop to complete. Repeat the session's background-task listing until it is empty; do not proceed while any Codex child, task, monitor, or background shell remains active.
+1. In the magistrate session, stop every background task and wait for each stop to complete. Repeat the session's background-task listing until it is empty; do not proceed while any Codex child, task, monitor, or background shell remains active. Then explicitly retire the Claude Code background-job daemon, including its workers and spare. This is a shared-user daemon: inventory may include hosts of other sessions. The operator must account for those sessions before stopping it; do not use `--keep-workers`, which leaves the resume path alive. A background-hosted magistrate may exit during this command, so perform retirement from an observer Terminal and continue the handoff from a fresh Terminal-hosted magistrate if needed.
+
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   # Read-only enumeration: rc 3 with rows means retirement is required.
+   scripts/magistrate_watchdog.py handoff-daemons
+   /Users/edr/.local/bin/claude daemon stop --any
+   # Required gate: rc 0 and [] only; ps failure or remaining rows refuses.
+   scripts/magistrate_watchdog.py handoff-daemons || { echo STEP1_DAEMON_RETIREMENT_FAILED >&2; exit 3; }
+   ```
+
+   If stop reports no daemon, the final enumeration still must pass. Never restart the daemon during the handoff. The installer and reaper independently refuse `handoff_daemon_not_retired` if any live `claude daemon run`, `bg-spare`/`--bg-spare`, or `bg-pty-host`/`--bg-pty-host` remains, regardless of PPID. The helper only enumerates; it never stops a process.
 
 2. Preserve the two retired-v1 custody trees below a directory the watchdog's one-level plan glob cannot reach:
 
@@ -127,7 +138,7 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    done
    ```
 
-3. First `cd /Users/edr/code/JouleWise`, the canonical checkout, then from the Terminal- or background-host-hosted interactive magistrate (a claude binary or a versioned claude/versions/<ver> binary in the caller's ancestry) record the exact handoff inventory. The read-only helper places the interactive twin and its ancestry-closed descendants in `owned`; PPID-1 command-shape matches and their descendants are only `unclassified_candidates`. It excludes the helper's transient call chain and rejects a headless `claude -p` ancestor. Inspect every candidate. Promote one only by repeating the command with its exact `--adopt-pid P --start T`; that explicit adoption and its descendants then appear in `owned` with provenance. Keep PID, start-time, command, and provenance together so PID reuse can be rejected:
+3. First `cd /Users/edr/code/JouleWise`, the canonical checkout, then from the Terminal- or background-host-hosted interactive magistrate (a claude binary or a versioned claude/versions/<ver> binary in the caller's ancestry) record the exact handoff inventory. The read-only helper places the interactive twin and its ancestry-closed descendants in `owned`; daemon, host, spare, and resumed-twin command-shape matches at any PPID, plus PPID-1 shell snapshots and their descendants, are only `unclassified_candidates` unless ancestry or explicit adoption proves ownership. It excludes the helper's transient call chain and rejects a headless `claude -p` ancestor. Inspect every candidate. Promote one only by repeating the command with its exact `--adopt-pid P --start T`; that explicit adoption and its descendants then appear in `owned` with provenance. Keep PID, start-time, command, role, and provenance together so PID reuse can be rejected. A resumed twin is an interactive `--resume` (including `--resume=...`) with `--reply-on-resume`; an unowned one returns rc 3 with `handoff_unowned_resumed_twin`. Daemon/host/spare presence always refuses, even if owned. Output JSON is retained on refusal for inspection; regenerate after retirement or adoption and require rc 0 and empty `handoff_refusals` before proceeding:
 
    ```zsh
    cd /Users/edr/code/JouleWise
@@ -148,9 +159,102 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
    python3 -m json.tool "$HOME/night-custody/magistrate/magistrate.lock"
    ```
 
-   If the exclusive lock seed fails, the installer removes the plist written by that attempt. Inspect the existing lock and remove it only after confirming that its PID/start owner is not live; then repeat the whole install step.
+   If the exclusive lock seed fails, the installer restores the preexisting plist (or removes the newly written one). **INTERACTIVE MAGISTRATE / OPERATOR ONLY:** To reconcile the old lock, run exactly the following from an observer Terminal. Headless sessions must not execute these recovery commands: [relaunch prompt, line 19](MAGISTRATE_RELAUNCH_PROMPT.md#L19) forbids their touching watchdog locks. It takes the watchdog service lock, validates the ownership record, confirms the recorded PID/start pair is absent, refuses any live resumed twin or daemon machinery, rechecks the lock bytes, and only then removes it. For an unparseable or malformed lock (including `{torn`, `{}`, and `[]`), both this block and the watchdog tick use only `state.json`’s durable `resident_session` record, never the step-3 inventory. A missing or malformed record refuses with `corrupt_lock_no_record`; a present PID/start pair refuses with `corrupt_lock_resident_live`; any live resumed twin or daemon/host/spare refuses with `corrupt_lock_resumed_twin` or `corrupt_lock_daemon_live`. The record must carry the lock schema, a positive integer PID, a nonempty start token, and a nonempty activation ID. Only an absent PID or a different start token, with no live twin or daemon machinery, permits removal. Each corrupt-lock tick refusal is recorded in `events.jsonl` and retained in `notice_pending` for the next launch notice. If a resident still owns the service lock, stop and let the lead reconcile that resident; do not delete a busy lock. Then repeat the whole install step.
 
-5. Have the magistrate start this detached, non-agent reaper. It imports the installed implementation from the recorded absolute checkout, revalidates each `(pid,start_time)` immediately before each signal, signals only `owned` with the interactive root last, waits the full `STOP_COOPERATIVE_S`, re-snapshots after TERM and KILL, and requires every recorded pair absent independently of the final census. Absence is success; a changed start token is PID reuse and is skipped. The watchdog never signals an unclassified or census PID. The final JSON receipt records every per-PID outcome, survivor, census, and verdict:
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   python3 - <<'PY'
+   from scripts.magistrate_watchdog import (
+       DEFAULT_CUSTODY_ROOT, RealProcessTable, Storage, handoff_census,
+       corrupt_lock_refusal, handoff_refusals, load_state, read_lock,
+       service_lock, valid_lock_pair,
+   )
+   storage = Storage(DEFAULT_CUSTODY_ROOT)
+   with service_lock(storage) as descriptor:
+       if descriptor is None:
+           raise SystemExit("handoff_lock_busy: resident supervisor still holds watchdog.lock")
+       path = storage.root / "magistrate.lock"
+       original = path.read_bytes()
+       lock = read_lock(storage)
+       rows = RealProcessTable().snapshot()
+       if lock is not None and not valid_lock_pair(lock):
+           refusal = corrupt_lock_refusal(load_state(storage), rows)
+           if refusal is not None:
+               raise SystemExit(f"handoff_lock_not_clear: {refusal}")
+       else:
+           census = handoff_census([], lock, rows)
+           refusals = handoff_refusals([], rows)
+           if not census.empty or refusals:
+               raise SystemExit(f"handoff_lock_not_clear: {census} {refusals}")
+       if path.read_bytes() != original:
+           raise SystemExit("handoff_lock_changed: retry inspection")
+       storage.unlink(path)
+       print("HANDOFF_DEAD_LOCK_REMOVED")
+   PY
+   ```
+
+   **ED-HANDS ONLY — both records unreadable:** This manual fallback applies only when the lock is unparseable or malformed **and** the durable record is gone: `state.json` is missing or malformed, **or** it parses but carries a non-null `state_error` with `resident_session` null (the first watchdog tick after a corrupted `state.json` rewrites it from `initial_state()` with `state_error` set and no `resident_session`, so the missing-or-malformed condition disappears within one 300 s tick; the `state_error` marker is what survives). Ed determines the case with this verbatim command: `python3 -m json.tool "$HOME/night-custody/magistrate/state.json"` — it qualifies if the command fails, or if the output is not a JSON object carrying `"schema": "joulewise.magistrate_watchdog_state.v1"` (`{}` and `[]` parse but are malformed to the watchdog, which classifies any object without that schema as invalid), or if the output shows `"state_error"` non-null and `"resident_session": null`. Note that `state_error` is never cleared, so it survives a later recovery; with `resident_session` null there is no durable owner to reconcile, and the inventory and `ps` absence checks below still gate removal. If `state.json` parses with that schema, `state_error` null, but `resident_session` missing or malformed, preserve the lock and have the lead reconcile the durable record; the manual removal below is not authorized for that case. With a usable durable record, use the reconciliation block above. For the qualifying case, Ed must run these verbatim commands from an observer Terminal and inspect both outputs:
+
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   scripts/magistrate_watchdog.py handoff-inventory
+   ps -axo pid,ppid,lstart,command | grep -E "claude|codex"
+   ```
+
+   Both outputs must show no headless resident (`claude -p` with the resident launch options: `--output-format stream-json --verbose --permission-mode auto --permission-prompts none --model fable --effort high --allowedTools ...`), no resumed twin (`--resume ... --reply-on-resume`), and no daemon, host, or spare. If any is present or the inspection is uncertain, stop and reconcile it; do not remove the lock. Only in this both-unreadable case, after Ed verifies those absences, may Ed remove the corrupt lock by hand from that observer Terminal:
+
+   ```zsh
+   rm "$HOME/night-custody/magistrate/magistrate.lock"
+   ```
+
+   Then repeat the whole install step from an interactive magistrate.
+
+   The watchdog itself preserves a dead-owner lock and returns `HOLD_UNSAFE` with `dead_lock_resumed_twin` when a live resumed twin is visible. Existing locks contain no Claude session ID, so this is deliberately conservative: any interactive `--resume ... --reply-on-resume` is a potential twin, even if it belongs to another session. The watchdog never adopts or signals it by command shape. From the interactive magistrate, inventory again (rc 3 is expected while an unowned twin lives), inspect the printed PID/start/command, and have the operator identify the exact twin to stop. Run the stop block from the observer Terminal, which survives the target's exit. Enter the literal PID and complete start token from that inventory when prompted. Each signal revalidates the token and role; a mismatch stops recovery without signalling the replacement. Do not select a process belonging to another session without accounting for that session.
+
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   scripts/magistrate_watchdog.py handoff-inventory > "$handoff_file.recovery"
+   python3 -m json.tool "$handoff_file.recovery"
+   ```
+
+   Then, in the observer Terminal:
+
+   ```zsh
+   cd /Users/edr/code/JouleWise
+   read 'candidate_pid?Exact twin PID from inventory: '
+   read 'candidate_start?Exact complete start_time from inventory: '
+   python3 - "$candidate_pid" "$candidate_start" <<'PY'
+   import signal
+   import sys
+   import time
+   from scripts.magistrate_watchdog import RealProcessTable, STOP_COOPERATIVE_S, handoff_process_role
+   pid, expected = int(sys.argv[1]), sys.argv[2]
+   if pid <= 0 or not expected:
+       raise SystemExit("handoff_twin_invalid_selection")
+   table = RealProcessTable()
+   for signum in (signal.SIGTERM, signal.SIGKILL):
+       row = next((row for row in table.snapshot() if row.pid == pid), None)
+       if row is None:
+           break
+       if row.start_time != expected:
+           raise SystemExit("handoff_twin_token_mismatch: re-inventory; no signal sent to replacement")
+       if handoff_process_role(row.command) != "resumed_twin":
+           raise SystemExit("handoff_twin_role_mismatch: re-inventory")
+       try:
+           table.send_signal(pid, signum)
+       except ProcessLookupError:
+           break
+       time.sleep(STOP_COOPERATIVE_S if signum == signal.SIGTERM else 1)
+   if any(row.pid == pid for row in table.snapshot()):
+       raise SystemExit("handoff_twin_still_present: re-inventory; do not clear lock")
+   print("HANDOFF_TWIN_ABSENT")
+   PY
+   scripts/magistrate_watchdog.py handoff-daemons || { echo RECOVERY_DAEMONS_REMAIN >&2; exit 3; }
+   ```
+
+   Re-run the step-4 lock reconciliation block, which repeats the owned-pair and twin checks under the service lock. After it passes, repeat the whole install step from an interactive magistrate. If the stopped twin was that magistrate, start a fresh Terminal-hosted magistrate and repeat step 3 first.
+
+5. Have the magistrate start this detached, non-agent reaper. It imports the installed implementation from the recorded absolute checkout, revalidates each `(pid,start_time)` immediately before each signal, signals only `owned` with the interactive root last, waits the full `STOP_COOPERATIVE_S`, re-snapshots after TERM and KILL, and requires every recorded pair absent independently of the final census. Absence is success; a changed start token is PID reuse and is skipped. The watchdog never signals an unclassified or census PID. The final JSON receipt records every per-PID outcome, survivor, census, and verdict. `before_signal.term` and `before_signal.kill` retain the immediate pre-signal start tokens. A process present before TERM that exits during the cooperative wait is `term_exited`; one present before KILL that exits is `kill_exited`. `already_gone` means absent before any attempted signal, while a changed token is `reused_skipped`. Every recorded pair, including a defunct row, must be absent. The handoff census covers only recorded owned pairs plus the current lock owner; unrelated Claude/Codex processes do not fail it. Daemon retirement and unowned resumed-twin checks are separate mandatory gates, repeated before signalling and at receipt time. The night-time `production_census()` / `agent_census` retains its machine-wide semantics:
 
    ```zsh
    watchdog_checkout="$(/usr/bin/git rev-parse --show-toplevel)"
@@ -164,96 +268,32 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
        reaper_detachment = "already_process_group_leader"
 
    import json
-   import signal
-   import subprocess
    import sys
-   import time
    from pathlib import Path
 
    checkout = str(Path(sys.argv[2]).resolve(strict=True))
    sys.path.insert(0, checkout)
-   from scripts.magistrate_watchdog import STOP_COOPERATIVE_S, production_census
+   from scripts.magistrate_watchdog import RealProcessTable, Storage, read_lock, reap_handoff
 
-   inventory = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-   owned = inventory["owned"]
-   expected = {row["pid"]: row["start_time"] for row in owned}
-   root = inventory["interactive_pid"]
-   ordered = [row["pid"] for row in owned if row["pid"] != root] + [root]
-   outcomes = {str(pid): "recorded" for pid in ordered}
-
-   def snapshot():
-       result = subprocess.run(
-           ("/bin/ps", "-axo", "pid=,ppid=,lstart=,command="),
-           check=True, capture_output=True, text=True,
-       )
-       rows = {}
-       for line in result.stdout.splitlines():
-           parts = line.strip().split(None, 7)
-           if len(parts) == 8:
-               rows[int(parts[0])] = " ".join(parts[2:7])
-       return rows
-
-   def signal_matching(pid, signum):
-       observed = snapshot().get(pid)
-       if observed is None:
-           outcomes[str(pid)] = "already_gone"
-           return
-       if observed != expected[pid]:
-           outcomes[str(pid)] = "reused_skipped"
-           return
-       try:
-           os.kill(pid, signum)
-       except ProcessLookupError:
-           outcomes[str(pid)] = "already_gone"
-       else:
-           outcomes[str(pid)] = "term_sent" if signum == signal.SIGTERM else "kill_sent"
-
-   for pid in ordered:
-       signal_matching(pid, signal.SIGTERM)
-   after_term = snapshot()
-   time.sleep(STOP_COOPERATIVE_S)
-   for pid in ordered:
-       signal_matching(pid, signal.SIGKILL)
-   after_kill = snapshot()
-
-   deadline = time.monotonic() + 30
-   while True:
-       final_snapshot = snapshot()
-       survivors = [pid for pid, start in expected.items()
-                    if final_snapshot.get(pid) == start]
-       if not survivors or time.monotonic() >= deadline:
-           break
-       time.sleep(1)
-   for pid in survivors:
-       outcomes[str(pid)] = "survivor"
-   for pid, start in expected.items():
-       if pid not in survivors and outcomes[str(pid)] == "term_sent":
-           outcomes[str(pid)] = "termed"
-       elif pid not in survivors and outcomes[str(pid)] == "kill_sent":
-           outcomes[str(pid)] = "killed"
-   census = production_census()
-   verdict = "pass" if not survivors and census.empty else "fail"
-   print(json.dumps({
+   inventory_path = Path(sys.argv[1]).resolve(strict=True)
+   inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+   storage = Storage(inventory_path.parent, dry_run=True)
+   receipt = reap_handoff(inventory, RealProcessTable(), lambda: read_lock(storage))
+   receipt.update({
        "schema": "joulewise.magistrate_handoff_receipt.v1",
        "reaper_pid": os.getpid(),
        "initial_process_group_id": initial_process_group_id,
        "reaper_session_id": os.getsid(0),
        "reaper_detachment": reaper_detachment,
        "checkout": checkout,
-       "owned": owned,
-       "outcomes": outcomes,
-       "after_term": {str(pid): after_term.get(pid) for pid in expected},
-       "after_kill": {str(pid): after_kill.get(pid) for pid in expected},
-       "survivors": survivors,
-       "census": census.__dict__,
-       "verdict": verdict,
-   }, sort_keys=True), flush=True)
-   raise SystemExit(0 if verdict == "pass" else 4)
+   })
+   print(json.dumps(receipt, sort_keys=True), flush=True)
+   raise SystemExit(0 if receipt["verdict"] == "pass" else 4)
    PY
    disown
    ```
 
-6. Read the verification log from an observer after the magistrate exits. The already-proved launchd path (`docs/process_traces/2026-09-02-hands-free-week/17n-bench-launchd-spawn.md` on main) means the next five-minute tick must create the first watchdog-owned one-turn `-p` magistrate. Verify a new `attempts/<activation>/` and a `magistrate.lock` without `first_install_adoption`; a nonempty census before that tick or absence of the new attempt after it is a failed handoff.
+6. Read the verification log from an observer after the magistrate exits. The already-proved launchd path (`docs/process_traces/2026-09-02-hands-free-week/17n-bench-launchd-spawn.md` on main) means the next five-minute tick must create the first watchdog-owned one-turn `-p` magistrate. Verify a new `attempts/<activation>/` and a `magistrate.lock` without `first_install_adoption`; a failed handoff receipt or absence of the new attempt after an otherwise eligible tick is a failed handoff. Night fences, stop conditions, and backoff still take precedence; unrelated daytime Claude sessions do not fail the handoff receipt.
 
 The first real window must not be armed until a reviewed v2 plan pins its measurement checkout and both night agents have been installed FROM that plan's `measurement_root` at `measurement_head`. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move, but their documented `/private/tmp/...` measurement roots are deliberately fake and must never be reused by a real plan. Remove every `REHEARSAL_STUB` plan root before arming any real plan. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
 
@@ -335,7 +375,7 @@ test ! -s "$tmp_root/no-tty.stderr"
 
 Expected: exit 0, one assistant `OK`, terminal `end_turn`, no permission prompt or stderr. Preserve the output with the bench record; do not install if any expectation differs.
 
-The first-tree adoption rehearsal is a separate, lead-controlled install gate. Its named twin is the **Terminal-hosted interactive magistrate session plus the `claude daemon` and all spares it parents**. In an observer Terminal, capture the exact production census and tree before install:
+The first-tree adoption rehearsal is a separate, lead-controlled install gate. Its named twin is the **Terminal-hosted interactive magistrate session and its recorded descendants**. Complete Install handoff step 1 first: retire the daemon, hosts, and spares and require the empty enumeration. This night-fence rehearsal still requires a machine-wide empty production census after stand-down, unlike the install-handoff receipt. In an observer Terminal, capture the exact production census and tree before install:
 
 ```sh
 python3 - <<'PY'
@@ -345,7 +385,7 @@ PY
 /bin/ps -axo pid=,ppid=,lstart=,command= | grep -E '[c]laude|[c]odex|[t]3'
 ```
 
-Expected before: `empty=False`, with the Terminal-hosted interactive root, its `claude daemon`, and its spares visible. From that interactive magistrate session—not from the observer—run the authorized installation, then inspect the exclusive adoption record from the observer:
+Expected before: `empty=False`, with the Terminal-hosted interactive root visible and the daemon/hosts/spares absent. From that interactive magistrate session—not from the observer—run the authorized installation, then inspect the exclusive adoption record from the observer:
 
 ```sh
 scripts/install_magistrate_watchdog.sh --install

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -12,6 +14,7 @@ import time
 import unittest
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 from joulewise.night_gate import NightPlan
 from joulewise.night_plan_writer import write_night_plan
@@ -64,6 +67,86 @@ def _drop_field(path: Path, field: str) -> None:
     mapping = json.loads(path.read_text(encoding="utf-8"))
     del mapping[field]
     path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
+
+
+class HandoffCliDefectTests(unittest.TestCase):
+    def invoke(self, rows, *args):
+        output = io.StringIO()
+        with mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
+             mock.patch.object(wd.os, "getpid", return_value=900), \
+             contextlib.redirect_stdout(output):
+            rc = wd.main(list(args))
+        return rc, json.loads(output.getvalue())
+
+    def test_corrupt_lock_cli_refusal_survives_unreadable_state_and_repeated_hold(self):
+        """Counterfactual: corrupt lock plus missing/torn state launches, or an existing
+        HOLD_UNSAFE suppresses the corrupt-lock event and next-launch notice.
+        """
+        from tests.test_magistrate_watchdog import Harness
+        import datetime as dt
+
+        with tempfile.TemporaryDirectory() as temporary:
+            harness = Harness(Path(temporary), dt.datetime(2026, 9, 4, 1, tzinfo=dt.timezone.utc))
+            for raw in ("{torn", "{}", "[]"):
+                for state_raw in (None, "{torn", "[]", json.dumps({
+                    **wd.initial_state(), "state": "HOLD_UNSAFE", "reason": "earlier hold"})):
+                    with self.subTest(lock=raw, state=state_raw):
+                        lock_path = harness.storage.root / "magistrate.lock"
+                        state_path = harness.storage.root / "state.json"
+                        lock_path.write_text(raw)
+                        if state_raw is None:
+                            state_path.unlink(missing_ok=True)
+                        else:
+                            state_path.write_text(state_raw)
+                        with mock.patch.object(wd, "real_dependencies", return_value=harness.deps), \
+                             mock.patch.object(wd.os, "fork", return_value=12345):
+                            for _ in range(2):
+                                self.assertEqual(0, wd.main(["tick", "--custody-root", temporary]))
+                                self.assertEqual(raw, lock_path.read_text())
+                                state = wd.load_state(harness.storage)
+                                self.assertEqual("HOLD_UNSAFE", state["state"])
+                                self.assertTrue(any("corrupt_lock_no_record" in item["reason"]
+                                                    for item in state["notice_pending"]))
+                        events = [json.loads(line) for line in
+                                  (harness.storage.root / "events.jsonl").read_text().splitlines()]
+                        self.assertTrue(any("corrupt_lock_no_record" in item.get("reason", "")
+                                            for item in events))
+                        self.assertEqual([], harness.spawn_calls)
+
+    def test_daemon_enumeration_refuses_until_every_host_and_spare_is_absent(self):
+        """Counterfactual: daemon stops but its bg-pty-host or versioned spare remains."""
+        for command, role in (
+            ('/Users/edr/.local/bin/claude daemon run --origin transient --spawned-by {"pid":1536}', "daemon"),
+            ('claude bg-pty-host --bg-pty-host sock 200 50 -- claude --bg-spare sock', "bg_pty_host"),
+            ('/Users/edr/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude --bg-pty-host sock', "bg_pty_host"),
+            ('claude bg-spare --bg-spare sock', "bg_spare"),
+            ('/Users/edr/.local/share/claude/versions/2.1.263 --bg-spare sock', "bg_spare"),
+        ):
+            with self.subTest(command=command):
+                rc, payload = self.invoke([wd.ProcessInfo(71666, 1536, "start", command)], "handoff-daemons")
+                self.assertEqual(3, rc)
+                self.assertEqual(role, payload[0]["role"])
+        self.assertEqual((0, []), self.invoke([wd.ProcessInfo(1536, 1, "other", "claude")], "handoff-daemons"))
+        with mock.patch.object(wd.RealProcessTable, "snapshot", side_effect=RuntimeError("ps denied")), \
+             contextlib.redirect_stderr(io.StringIO()) as error:
+            self.assertEqual(3, wd.main(["handoff-daemons"]))
+        self.assertIn("handoff_daemon_check_failed", error.getvalue())
+
+    def test_inventory_cli_nonzero_unless_resumed_twin_is_explicitly_owned(self):
+        """Counterfactual: --resume=file --reply-on-resume twin lives outside caller ancestry."""
+        rows = [wd.ProcessInfo(900, 100, "helper", "python handoff-inventory"),
+                wd.ProcessInfo(100, 50, "owner", "claude"),
+                wd.ProcessInfo(700, 50, "twin", "claude --resume=/sessions/magistrate.jsonl --reply-on-resume")]
+        rc, payload = self.invoke(rows, "handoff-inventory")
+        self.assertEqual(3, rc)
+        self.assertIn("handoff_unowned_resumed_twin", payload["handoff_refusals"][0])
+        rc, payload = self.invoke(rows, "handoff-inventory", "--adopt-pid", "700", "--start", "twin")
+        self.assertEqual(0, rc)
+        self.assertEqual({100, 700}, {row["pid"] for row in payload["owned"]})
+        rows.append(wd.ProcessInfo(710, 100, "daemon", "claude daemon run --origin transient"))
+        rc, payload = self.invoke(rows, "handoff-inventory", "--adopt-pid", "700", "--start", "twin")
+        self.assertEqual(3, rc, "even an ancestry-owned daemon must be retired first")
+        self.assertIn("handoff_daemon_not_retired", payload["handoff_refusals"][0])
 
 
 class MagistrateWatchdogCliTests(unittest.TestCase):
