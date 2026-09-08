@@ -19,7 +19,7 @@ import re
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -74,6 +74,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     load_calibration_acceptance_bound,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
+    _refuse_custody_override_mint,
     CUSTODY_STORE_MANIFEST_SCHEMA,
     CalibrationLedgerSnapshot,
     load_calibration_ledger_snapshot,
@@ -956,6 +957,7 @@ def _authenticate_component(
     ),
     allowance_deriver: AllowanceDeriver = whole_window_drift_allowances,
     expected_consumption_semantics_id: str | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> AuthenticatedComponent:
@@ -967,6 +969,7 @@ def _authenticate_component(
             else None
         )
         calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            mode=mode,
             baseline_sequence=(
                 cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
             ),
@@ -1725,6 +1728,7 @@ def bind_floor_artifact_evidence(
     evidence_roots: Mapping[str, Path],
     *,
     strict_validator: StrictValidator,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
     calibration_bracket_binding: Mapping[str, Any] | None = None,
 ) -> Mapping[str, tuple[str, ...]]:
@@ -1743,6 +1747,7 @@ def bind_floor_artifact_evidence(
             else None
         )
         calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            mode=mode,
             baseline_sequence=(
                 cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
             ),
@@ -2023,6 +2028,7 @@ def mint_floor_artifact(
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate, gate, construct, rebind, validate, and write mint #1."""
+    _refuse_custody_override_mint()
 
     plan, plan_raw = _load_json_object(calibration_plan_path, "calibration plan")
     plan_sha256 = _sha256(plan_raw)

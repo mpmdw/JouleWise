@@ -3,8 +3,9 @@
 from contextvars import ContextVar
 import os
 import io
-from contextlib import redirect_stderr
+from contextlib import contextmanager, redirect_stderr
 import hashlib
+import inspect
 from types import SimpleNamespace
 from pathlib import Path
 import tempfile
@@ -425,13 +426,13 @@ class CustodyReadCoverageTests(unittest.TestCase):
                 self.assertEqual(ledger._custody_state(original, mode="read_replay"), "complete")
                 with self.assertRaisesRegex(ledger.CalibrationLedgerError, "custody_locator_override_mint_forbidden"):
                     ledger.artifact_hashes(original)
-                self.assertEqual(ledger._custody_reasons([observation], backup), set())
+                self.assertEqual(ledger._custody_reasons([observation], backup, mode="read_replay"), set())
                 # A present but corrupt first root cannot be skipped for a good one.
                 bad = backup / "bad/runs/member"
                 bad.mkdir(parents=True)
                 (bad / "manifest.json").write_bytes(b"corrupt")
                 os.environ["JOULEWISE_BACKUP_ROOTS"] = str(backup / "bad") + os.pathsep + str(backup)
-                self.assertEqual(ledger._custody_reasons([observation], backup),
+                self.assertEqual(ledger._custody_reasons([observation], backup, mode="read_replay"),
                                  {"calibration_ledger_custody_invalid"})
 
     def test_governed_reads_run_on_caller_and_preserve_authentication_session(self):
@@ -520,3 +521,139 @@ class CustodyReadCoverageTests(unittest.TestCase):
             release.set()
             for worker in workers:
                 worker.join(1)
+
+
+@contextmanager
+def planted_replacement():
+    """A real hash-chained observation whose original custody was removed."""
+    from tests.test_calibration_ledger import CalibrationLedgerTests
+
+    fixture = CalibrationLedgerTests()
+    fixture.setUp()
+    try:
+        with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}):
+            original = fixture._custody("planted")
+            fixture._reserve("planted", original)
+            receipt = fixture._finalize("planted", original)
+            fixture._write_pin({
+                "sequence": receipt["sequence"],
+                "head_digest": receipt["receipt_digest"],
+                "ledger_schema": ledger.LEDGER_SCHEMA,
+            })
+            assert fixture._snapshot().valid
+        original_root = fixture.root / "another-root"
+        replacement_root = fixture.root / "replacement"
+        original_root.rename(replacement_root)
+        assert not original.exists()
+        with (
+            mock.patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+            mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(replacement_root)}),
+        ):
+            yield fixture, original, replacement_root
+    finally:
+        fixture.tearDown()
+
+
+@contextmanager
+def replacement_opens(root):
+    opened = []
+
+    def track(operation):
+        def wrapped(path, *args, **kwargs):
+            if isinstance(path, (str, os.PathLike)) and Path(path).is_relative_to(root):
+                opened.append(str(path))
+            return operation(path, *args, **kwargs)
+        return wrapped
+
+    with (
+        mock.patch.object(Path, "open", track(Path.open)),
+        mock.patch.object(os, "open", track(os.open)),
+    ):
+        yield opened
+
+
+class IssuingBoundaryTests(unittest.TestCase):
+    def test_signature_defaults_are_issuing(self):
+        for name in ("load_calibration_ledger_snapshot", "_custody_reasons",
+                     "probe_custody", "_custody_probe_paths", "_custody_state"):
+            with self.subTest(function=name):
+                self.assertEqual(inspect.signature(getattr(ledger, name)).parameters["mode"].default,
+                                 "issuing")
+
+    def test_bare_snapshot_rejects_planted_replacement_without_opening_it(self):
+        with planted_replacement() as (fixture, original, replacement):
+            with replacement_opens(replacement) as opened:
+                snapshot = ledger.load_calibration_ledger_snapshot(
+                    fixture.ledger, fixture.pin, require_committed_pin=False,
+                    verify_custody=True,
+                )
+                self.assertFalse(snapshot.valid)
+                self.assertEqual(snapshot.refusal_reasons, ("calibration_ledger_custody_invalid",))
+                self.assertEqual(opened, [])
+                replay = ledger.load_calibration_ledger_snapshot(
+                    fixture.ledger, fixture.pin, require_committed_pin=False,
+                    verify_custody=True, mode="read_replay",
+                )
+                self.assertTrue(replay.valid, replay.refusal_reasons)
+                self.assertTrue(opened, "replay must authenticate actual replacement bytes")
+                self.assertFalse(original.exists())
+
+    def _assert_entry_guard(self, entry, first_seam, *args, **kwargs):
+        with planted_replacement() as (_, original, replacement):
+            with (
+                replacement_opens(replacement) as opened,
+                mock.patch.object(ledger, "probe_custody", side_effect=AssertionError("probe attempted")) as probe,
+                mock.patch.object(Path, "exists", side_effect=AssertionError("path probe attempted")),
+                mock.patch.object(Path, "resolve", side_effect=AssertionError("path resolution attempted")),
+                mock.patch.object(threading.Thread, "start", side_effect=AssertionError("worker started")),
+                mock.patch.object(*first_seam, side_effect=AssertionError("entry work before guard")) as seam,
+            ):
+                with self.assertRaisesRegex(ledger.CalibrationLedgerError,
+                                            "custody_locator_override_mint_forbidden"):
+                    entry(*args, **kwargs)
+                probe.assert_not_called()
+                seam.assert_not_called()
+                self.assertEqual(opened, [])
+
+    def test_mint_entry_refuses_planted_replacement_before_probe(self):
+        from scripts import mint_floor_artifact as mint
+        self._assert_entry_guard(mint.mint_floor_artifact, (mint, "_load_json_object"),
+            artifact_id="planted", floor_path=None, statement_path=None,
+            calibration_plan_path=None, calibration_plan_relative_path="plan.json",
+            absolute_paths=None, comparative_paths=None, project_commit="",
+            project_tree_state="", strict_validator=None)
+
+    def test_multi_cell_entry_refuses_planted_replacement_before_probe(self):
+        from scripts import mint_floor_artifact_generalized as mint
+        self._assert_entry_guard(mint.mint_multi_cell_floor_artifact,
+            (mint, "active_v2_authentication_session"), pinset_path=None,
+            pinset_sha256="", input_manifest_path=None, floor_path=None,
+            statement_path=None, project_commit="", project_tree_state="",
+            strict_validator=None)
+
+    def test_binding_entry_refuses_planted_replacement_before_probe(self):
+        from scripts import build_bracket_binding as binding
+        self._assert_entry_guard(binding.main, (binding, "build_parser"), [])
+
+    def test_finalization_entry_refuses_planted_replacement_before_probe(self):
+        from joulewise import analysis_manifest_v3 as manifest
+        self._assert_entry_guard(manifest.finalize_prospective_analysis_manifest_v3,
+            (manifest, "_path_under_root"), Path("/unused/prospective.json"),
+            plan_tree_path=None, custody_root=Path("/unused"), runs_root=None,
+            whole_window_verdict_path=None, bracket_binding_path=None,
+            calibration_ledger_path=None, aggregate_floor_artifact_path=None,
+            output_dir=Path("/unused"))
+
+    def test_empty_override_diagnostic_is_one_line_only_for_issuing_shortcut(self):
+        original = ledger.BACKUP_ROOTS[0] / "runs/member"
+        for mode in ("issuing", "read_replay"):
+            stderr = io.StringIO()
+            with (
+                self.subTest(mode=mode),
+                redirect_stderr(stderr),
+                mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}),
+                mock.patch.object(threading.Thread, "start", side_effect=AssertionError("probe")),
+            ):
+                self.assertEqual(ledger._custody_state(original, mode=mode), "absent")
+            self.assertEqual(stderr.getvalue(),
+                f"custody_backup_roots_disabled: {original}\n" if mode == "issuing" else "")

@@ -1775,7 +1775,8 @@ def _target_state_transition_is_valid(
 
 
 def _custody_reasons(
-    observations: Sequence[LedgerObservation], repo_root: Path, *, mode: Literal["read_replay", "issuing"] = "read_replay",
+    observations: Sequence[LedgerObservation], repo_root: Path, *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> set[str]:
     for observation in observations:
         if not observation.artifact_sha256:
@@ -1972,7 +1973,8 @@ def load_calibration_ledger_snapshot(
     require_committed_pin: bool = True,
     verify_custody: bool = True,
     repo_root: Path = REPO_ROOT,
-    calibration_custody_store: Path | None = None, mode: Literal["read_replay", "issuing"] = "read_replay",
+    calibration_custody_store: Path | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -4764,6 +4766,8 @@ def probe_custody(
 
     paths = _custody_probe_paths(path, mode=mode)
     if not paths:
+        if mode == "issuing" and os.environ.get("JOULEWISE_BACKUP_ROOTS") == "":
+            print(f"custody_backup_roots_disabled: {path}", file=sys.stderr)
         return absent()
     result: list[tuple[Path, bool]] = []
     failed: list[bool] = []
@@ -4855,6 +4859,7 @@ def calibration_session_status(
         head_pin_path,
         require_committed_pin=require_committed_pin,
         verify_custody=False,
+        mode="read_replay",
         repo_root=repo_root,
     )
     session = snapshot.bracket_session_by_id.get(session_id)
@@ -4964,6 +4969,7 @@ def calibration_readiness(
         )
     if enforcing_under_lease and _current_writer_lease(ledger_path) is None:
         raise CalibrationLedgerError(RefusalCode.PRE_SLOT_NOT_READY)
+    mode = "issuing" if enforcing_under_lease else "read_replay"
     inspection = inspect_calibration_ledger(ledger_path)
     snapshot = load_calibration_ledger_snapshot(
         ledger_path,
@@ -4972,7 +4978,7 @@ def calibration_readiness(
         # The enforcing gate authenticates every finalized observation in the
         # snapshot, not merely the custody path for the upcoming slot.
         verify_custody=enforcing_under_lease,
-        mode="issuing" if enforcing_under_lease else "read_replay",
+        mode=mode,
         repo_root=repo_root,
     )
     relation = _pin_relation(snapshot)
@@ -5022,7 +5028,7 @@ def calibration_readiness(
             if isinstance(reserved, Mapping):
                 custody_state = _custody_state(
                     Path(str(reserved["custody_locator"])),
-                    mode="issuing" if enforcing_under_lease else "read_replay",
+                    mode=mode,
                 )
             claims = [
                 receipt
@@ -5244,6 +5250,7 @@ def resume_finalize_bracket_session(
             head_pin_path,
             require_committed_pin=require_committed_pin,
             verify_custody=False,
+            mode="read_replay",
             repo_root=repo_root,
         )
         session = snapshot.bracket_session_by_id.get(session_id)

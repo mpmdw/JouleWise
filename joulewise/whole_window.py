@@ -20,7 +20,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -481,6 +481,7 @@ class AuthenticatedConsumptionSession:
         *,
         evaluation_basis_sha256: str | None = None,
         consumption_semantics_id: str = MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        mode: Literal["read_replay", "issuing"] = "issuing",
         calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
         calibration_bracket_binding: Mapping[str, Any] | None = None,
         _allow_unissued_calibration_fixture: bool = False,
@@ -510,6 +511,7 @@ class AuthenticatedConsumptionSession:
                 else None
             )
             self.calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+                mode=mode,
                 baseline_sequence=(
                     cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
                 ),

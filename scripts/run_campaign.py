@@ -4815,6 +4815,7 @@ def _load_calibration_snapshot_for_evaluation(
         else None
     )
     loader_arguments: dict[str, Any] = {
+        "mode": "read_replay",
         "baseline_sequence": (
             cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
         ),
@@ -6238,6 +6239,7 @@ def _run_whole_window_verdict_locked(
         consumption_session = AuthenticatedConsumptionSession(
             runs_dir,
             {evaluation.bundle_id for evaluation in included},
+            mode="read_replay",
             consumption_semantics_id=consumption_semantics_id,
             calibration_ledger_snapshot=calibration_snapshot,
             calibration_bracket_binding=bracket_binding,

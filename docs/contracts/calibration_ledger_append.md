@@ -454,3 +454,54 @@ snapshot resolution, including its early validation before lease acquisition.
 Its enforcing readiness check also uses issuing resolution for both finalized
 observations and the reserved slot. `rederive_artifact` does not call the
 resolution helper: its direct reads use the supplied `source_dir` unchanged.
+
+
+## 2026-09-08 addendum: issuing boundary by construction (part 5)
+
+This addendum supersedes part 4's replay-default snapshot description and
+its two-module prose census. `load_calibration_ledger_snapshot` and
+`_custody_reasons` now default to `mode="issuing"`, as do `probe_custody`,
+`_custody_probe_paths`, and `_custody_state`. Omission therefore cannot select
+replacement bytes. A non-empty override maps custody only when the caller
+explicitly selects `mode="read_replay"`.
+
+Shared validators (`AuthenticatedConsumptionSession`, analysis input loading
+and floor-evidence binding, `floor_extraction.extract_cells`, and the mint
+core's component authentication and floor-evidence binding) accept a caller-supplied mode defaulting to issuing
+and forward it to their snapshot loads. Issuing callers retain that default;
+replay callers must opt in explicitly. A pre-supplied snapshot does not cause
+a new custody probe. Loads with `verify_custody=False` have no custody-mode
+effect; resume-finalize retains its explicit issuing custody-state check after
+loading that durable snapshot.
+
+`extract_cells` forwards the caller's mode to its consumption session; its
+floor-report producer retains the issuing default because its reports feed
+the mint pipeline. The `analyze-claims` CLI chain and the window-duration
+margin recorder chain opt in to replay: neither calls a mint, bracket-binding
+publication, calibration-ledger append, or analysis-manifest finalization
+entry. Their exact checked caller chains are recorded in the replay census.
+
+`tests/fixtures/custody_read_replay_allowlist.json` is the executable census of
+explicit replay opt-ins, keyed by repository file and qualified enclosing
+function with a one-line reason. `tests/test_custody_mode_inventory.py` scans
+`joulewise/` and `scripts/`, including local keyword dictionaries, and requires
+the observed replay set to equal this allowlist. Calls may omit mode, select
+issuing, or forward the caller's variable named `mode`; a new explicit replay
+opt-in requires a reviewed allowlist edit. Signature-default pins and a real
+ledger fixture with absent original custody and planted valid replacement
+bytes protect the omission boundary independently of the entry guards.
+
+The guards at `mint_floor_artifact`, `mint_multi_cell_floor_artifact`,
+`build_bracket_binding.main`, and
+`finalize_prospective_analysis_manifest_v3` refuse a non-empty override before
+input access or probing. These are defence in depth, not the invariant or the
+census. The public finalization entry is guarded before path resolution, so
+all callers receive the same early refusal, including callers that would
+otherwise fail before reaching its private authentication helper.
+
+The empty override retains its existing refuse-only absent shortcut for
+lexical backup-root locators and performs no filesystem work. When that
+shortcut returns absent in issuing mode under `JOULEWISE_BACKUP_ROOTS=""`, it
+emits exactly one stderr line per probe:
+`custody_backup_roots_disabled: <path>`. Replay remains silent for this shortcut;
+unrelated local paths and timeout/exception diagnostics are unchanged.

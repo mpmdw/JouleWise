@@ -861,6 +861,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             runs_root,
             selected_ids,
             evaluation_basis_sha256=basis_sha if isinstance(basis_sha, str) else None,
+            mode="read_replay",
             consumption_semantics_id=str(semantics_id),
             calibration_ledger_snapshot=snapshot,
         )

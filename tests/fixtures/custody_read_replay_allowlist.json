@@ -1,0 +1,25 @@
+{
+  "joulewise/analysis_engine/__init__.py": {
+    "analyze_claims": "Replay-only caller chain: cli.main analyze-claims dispatch -> _cmd_analyze_claims -> analyze_claims; no mint, binding publication, ledger append, or analysis-manifest finalization caller."
+  },
+  "joulewise/calibration_bracketing.py": {
+    "load_calibration_candidate": "Reauthenticate an existing candidate from retained custody for replay."
+  },
+  "joulewise/calibration_ledger.py": {
+    "calibration_session_status": "Read-only session inspection; snapshot custody is inert and slot state is replayed.",
+    "resume_finalize_bracket_session": "Replay only the durable snapshot with verify_custody=False; guarded finalization retains the explicit issuing custody-state check."
+  },
+  "joulewise/window_duration_margins.py": {
+    "_authenticate_b_operative": "Replay-only caller chain: record_window_duration_margins CLI -> record_window_duration_margins -> derive_window_duration_margins -> _authenticate_b_operative; no mint, binding publication, ledger append, or analysis-manifest finalization caller."
+  },
+  "scripts/check_window_provenance.py": {
+    "_run_assertions.check_f52": "Replay the existing whole-window verdict against its already-loaded ledger snapshot."
+  },
+  "scripts/recover_calibration_ledger.py": {
+    "main": "The audit and audit-observations commands reauthenticate existing ledger custody without issuing receipts."
+  },
+  "scripts/run_campaign.py": {
+    "_load_calibration_snapshot_for_evaluation": "Replay existing calibration custody for campaign evaluation, including keyword-dictionary loading.",
+    "_run_whole_window_verdict_locked": "Re-evaluate retained campaign members using the existing calibration snapshot."
+  }
+}

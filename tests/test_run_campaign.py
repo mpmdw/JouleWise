@@ -10240,6 +10240,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         session_type.assert_called_once_with(
             self.root,
             set(),
+            mode="read_replay",
             consumption_semantics_id=(
                 run_campaign_module.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
             ),
