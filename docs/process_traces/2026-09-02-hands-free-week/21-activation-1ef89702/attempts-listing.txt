@@ -1,0 +1,6 @@
+total 784
+drwxr-xr-x@ 5 edr  staff     160 Sep  8 00:51 .
+drwxr-xr-x@ 3 edr  staff      96 Sep  8 00:51 ..
+-rw-r--r--@ 1 edr  staff       0 Sep  8 00:51 attempt-1.stderr.log
+-rw-r--r--@ 1 edr  staff  361221 Sep  8 00:56 attempt-1.stream.jsonl
+-rw-------@ 1 edr  staff    3344 Sep  8 00:51 prompt.md

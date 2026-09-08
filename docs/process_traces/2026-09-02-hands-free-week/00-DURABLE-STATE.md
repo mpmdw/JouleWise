@@ -524,3 +524,14 @@ unattended-window path. Session 3c46c831 (resumed twin, pid 71607) ends here; it
 - 2026-09-08 00:55 PDT addendum (Ed): the sleep cycling was an accident — the laptop lid was closed at home while Ed
   was away. Ed rules NO change to the handoff or live-experiment procedure for this; the fresh session only
   verifies the machine is awake (checkpoint step 1) and proceeds.
+
+## 2026-09-08 00:51:55 PDT — WATCHDOG LAUNCHED the first headless magistrate (activation 1ef89702)
+
+- The 09-06 handoff took once the lid was open: events seq 3 "all launch predicates clear" → seq 4 spawned
+  activation 1ef89702; lock names pid 84232; launch email `1a0800383847cde1`; notice acknowledged at 00:55:36.
+  Full evidence and the activation's own next-action pointer: `21-first-launchd-activation-1ef89702.md` (+
+  `21-activation-1ef89702/`). Q-C9 evidence item 1 is DONE.
+- Ed's interactive session (joulewise-53, started 00:46:54) is live on the same machine and owns the three defect
+  fixes (WATCHDOG-CENSUS-01, RESUME-DAEMON-01, T0-ACID-CLOCK-01), the RUN_STATE/TASK_QUEUE rows for them and for
+  this relaunch, and `docs/process_traces/2026-09-08-handoff-redo/`. The headless magistrate holds: NO arming while
+  that session or its seats are alive; rehearsal-stub prep resumes after it stands down (email-then-arm).
