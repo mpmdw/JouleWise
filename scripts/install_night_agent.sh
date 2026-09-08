@@ -37,7 +37,7 @@ template="$repo/configs/launchd/com.joulewise.night.plist.template"
   exit 3
 }
 plan="${plan:A}"
-custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
+custody_root=""
 courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
@@ -70,13 +70,14 @@ try:
 except PlanError as exc:
     print(f"{exc.reason}: {exc.detail}", file=sys.stderr)
     raise SystemExit(3)
-for value in (parsed.repo_head, parsed.measurement_root, parsed.measurement_head):
+for value in (parsed.repo_head, parsed.measurement_root, parsed.measurement_head, parsed.custody_root):
     print(base64.b64encode(value.encode("utf-8")).decode("ascii"))
 PY
   )}") || exit $?
   plan_head="$(print -rn -- "$plan_fields[1]" | /usr/bin/base64 --decode)"
   measurement_root="$(print -rn -- "$plan_fields[2]" | /usr/bin/base64 --decode)"
   plan_measurement_head="$(print -rn -- "$plan_fields[3]" | /usr/bin/base64 --decode)"
+  custody_root="$(print -rn -- "$plan_fields[4]" | /usr/bin/base64 --decode)"
   if ! actual_head="$(/usr/bin/git -C "$repo" rev-parse HEAD)"; then
     print "unable to read repo_head from driver checkout" >&2
     exit 3
@@ -100,6 +101,8 @@ PY
   }
   courier_path="${courier_bin:h}:/usr/bin:/bin:/usr/sbin:/sbin"
   courier_bin="${courier_bin:A}"
+else
+  custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
 fi
 read -r deadman_hour deadman_minute < <(
   cd "$repo"

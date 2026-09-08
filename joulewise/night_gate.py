@@ -14,12 +14,15 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
 
 SCHEMA = "joulewise.unattended_night_receipt.v2"
 PLAN_SCHEMA = "joulewise.night_plan.v2"
 PLAN_SCHEMA_VERSION = 2
+PACK_PLAN_SCHEMA = "joulewise.night_plan.v3"
+PACK_PLAN_SCHEMA_VERSION = 3
 RECEIPT_CLASSES = (
     "DIAGNOSTIC_NO_PACK",
     "REHEARSAL_STUB",
@@ -119,6 +122,11 @@ _PLAN_KEYS = {
     "custody_root",
     "registration_path",
 }
+_PACK_NIGHT_KEYS = {
+    "pack_id", "pack_sha256", "attempt_ordinal",
+    "authorization_record", "confirmation_record",
+}
+_PACK_RECORD_KEYS = {"path", "sha256"}
 _RECEIPT_KEYS = {
     "schema",
     "receipt_class",
@@ -194,40 +202,44 @@ class NightPlan:
     chain_sha256_path: str
     custody_root: str
     registration_path: str | None
+    pack_night: dict[str, object] | None = None
 
     @staticmethod
     def from_mapping(value: Mapping[str, object]) -> "NightPlan":
         if not isinstance(value, Mapping):
             raise PlanError("night_plan_malformed", "plan must be an object")
         keys = set(value)
-        if keys != _PLAN_KEYS:
-            missing = sorted(repr(item) for item in _PLAN_KEYS - keys)
-            extra = sorted(repr(item) for item in keys - _PLAN_KEYS)
+        is_pack = value.get("receipt_class") == "TRANSACTION_PACK"
+        expected_keys = _PLAN_KEYS | {"pack_night"} if is_pack else _PLAN_KEYS
+        expected_schema = PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA
+        expected_version = PACK_PLAN_SCHEMA_VERSION if is_pack else PLAN_SCHEMA_VERSION
+        if keys != expected_keys:
+            missing = sorted(repr(item) for item in expected_keys - keys)
+            extra = sorted(repr(item) for item in keys - expected_keys)
             retired = (
                 "; joulewise.night_plan.v1 is retired and the plan must be "
-                "re-authored under joulewise.night_plan.v2"
-                if value.get("schema") != PLAN_SCHEMA
+                f"re-authored under {expected_schema}"
+                if value.get("schema") == "joulewise.night_plan.v1"
                 else ""
             )
             raise PlanError(
                 "night_plan_malformed",
                 f"plan keys are not exact (missing={missing}, extra={extra}){retired}",
             )
-        if value.get("schema") != PLAN_SCHEMA:
+        if value.get("schema") != expected_schema:
             raise PlanError(
                 "night_plan_malformed",
-                "schema joulewise.night_plan.v1 is retired and the plan must be "
-                "re-authored under joulewise.night_plan.v2",
+                f"schema must be {expected_schema} for {value.get('receipt_class')}",
             )
         schema_version = value.get("schema_version")
         if (
             isinstance(schema_version, bool)
             or not isinstance(schema_version, int)
-            or schema_version != PLAN_SCHEMA_VERSION
+            or schema_version != expected_version
         ):
             raise PlanError(
                 "night_plan_malformed",
-                f"schema_version must be integer {PLAN_SCHEMA_VERSION}",
+                f"schema_version must be integer {expected_version}",
             )
 
         def require_text(name: str) -> str:
@@ -275,6 +287,43 @@ class NightPlan:
         chain_path = require_text("chain_path")
         chain_sha256_path = require_text("chain_sha256_path")
         custody_root = require_text("custody_root")
+        pack_night = None
+        if is_pack:
+            binding = value.get("pack_night")
+            if not isinstance(binding, Mapping) or set(binding) != _PACK_NIGHT_KEYS:
+                raise PlanError("night_plan_malformed", "pack_night keys must be exact")
+            pack_id = binding["pack_id"]
+            if not isinstance(pack_id, str) or not pack_id:
+                raise PlanError("night_plan_malformed", "pack_night.pack_id must be a non-empty string")
+            pack_sha256 = binding["pack_sha256"]
+            if not isinstance(pack_sha256, str) or _SHA256_RE.fullmatch(pack_sha256) is None:
+                raise PlanError("night_plan_malformed", "pack_night.pack_sha256 must be SHA-256")
+            ordinal = binding["attempt_ordinal"]
+            if type(ordinal) is not int or ordinal < 1:
+                raise PlanError("night_plan_malformed", "pack_night.attempt_ordinal must be integer >= 1")
+            if not os.path.isabs(custody_root):
+                raise PlanError("night_plan_malformed", "pack custody_root must be an absolute path")
+            pack_night = {
+                "pack_id": pack_id,
+                "pack_sha256": pack_sha256,
+                "attempt_ordinal": ordinal,
+            }
+            for name in ("authorization_record", "confirmation_record"):
+                record = binding[name]
+                if not isinstance(record, Mapping) or set(record) != _PACK_RECORD_KEYS:
+                    raise PlanError("night_plan_malformed", f"pack_night.{name} keys must be exact")
+                path, digest = record["path"], record["sha256"]
+                if not isinstance(path, str) or not os.path.isabs(path):
+                    raise PlanError("night_plan_malformed", f"pack_night.{name}.path must be absolute")
+                try:
+                    relative = Path(path).resolve().relative_to(Path(custody_root).resolve())
+                    if relative == Path("."):
+                        raise ValueError("record is the custody root")
+                except (OSError, RuntimeError, ValueError) as exc:
+                    raise PlanError("night_plan_malformed", f"pack_night.{name}.path escapes custody") from exc
+                if not isinstance(digest, str) or _SHA256_RE.fullmatch(digest) is None:
+                    raise PlanError("night_plan_malformed", f"pack_night.{name}.sha256 must be SHA-256")
+                pack_night[name] = {"path": path, "sha256": digest}
         registration = value.get("registration_path")
         if registration is not None and (not isinstance(registration, str) or not registration):
             raise PlanError(
@@ -298,6 +347,7 @@ class NightPlan:
             chain_sha256_path=chain_sha256_path,
             custody_root=custody_root,
             registration_path=registration,
+            pack_night=pack_night,
         )
 
 

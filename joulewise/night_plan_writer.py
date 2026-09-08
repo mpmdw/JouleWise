@@ -1,4 +1,4 @@
-"""Canonical production writer for frozen v2 night plans."""
+"""Canonical writer for frozen v2 packless and v3 pack night plans."""
 
 from __future__ import annotations
 
@@ -9,18 +9,25 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from joulewise.night_gate import PLAN_SCHEMA, PLAN_SCHEMA_VERSION, NightPlan
+from joulewise.night_gate import (
+    PACK_PLAN_SCHEMA, PACK_PLAN_SCHEMA_VERSION, PLAN_SCHEMA,
+    PLAN_SCHEMA_VERSION, NightPlan,
+)
 
 
 def night_plan_mapping(plan: NightPlan) -> dict[str, Any]:
-    """Return the one canonical mapping for a production v2 plan."""
+    """Return the exact class-specific mapping, preserving the armed attempt."""
 
     if not isinstance(plan, NightPlan):
         raise TypeError("plan must be a NightPlan")
+    fields = dataclasses.asdict(plan)
+    is_pack = plan.receipt_class == "TRANSACTION_PACK"
+    if not is_pack and plan.pack_night is None:
+        del fields["pack_night"]
     value = {
-        "schema": PLAN_SCHEMA,
-        "schema_version": PLAN_SCHEMA_VERSION,
-        **dataclasses.asdict(plan),
+        "schema": PACK_PLAN_SCHEMA if is_pack else PLAN_SCHEMA,
+        "schema_version": PACK_PLAN_SCHEMA_VERSION if is_pack else PLAN_SCHEMA_VERSION,
+        **fields,
     }
     # Keep the producer and consumer in one executable contract.
     NightPlan.from_mapping(value)

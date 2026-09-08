@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import subprocess
 import tempfile
 import time
@@ -92,6 +93,19 @@ class InstallNightAgentTests(unittest.TestCase):
             chain_sha256_path="/tmp/install-night-agent-test.sha256",
             custody_root=str(self.root / "custody"),
             registration_path=None,
+            pack_night={
+                "pack_id": "install-pack",
+                "pack_sha256": "a" * 64,
+                "attempt_ordinal": 1,
+                "authorization_record": {
+                    "path": str(self.root / "custody" / "authorization.json"),
+                    "sha256": "b" * 64,
+                },
+                "confirmation_record": {
+                    "path": str(self.root / "custody" / "step6_confirmation_record.json"),
+                    "sha256": "c" * 64,
+                },
+            },
         )
         path = self.root / f"plan-{len(list(self.root.glob('plan-*.json')))}.json"
         write_night_plan(path, plan)
@@ -134,6 +148,32 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn(f"measurement_head={self.measurement_head}", completed.stdout)
         self.assertTrue((self.rendered / "com.joulewise.night.plist").is_file())
         self.assertTrue((self.rendered / "com.joulewise.night.deadman.plist").is_file())
+
+    def test_v3_install_pins_resolved_absolute_plan_in_both_agents(self) -> None:
+        plan = self._write_plan()
+        self.assertEqual("joulewise.night_plan.v3", json.loads(plan.read_text())["schema"])
+        alias = self.root / "linked plan.json"
+        alias.symlink_to(plan)
+        completed = self._run(Path(os.path.relpath(alias, REPO_ROOT)))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        for path in sorted(self.rendered.glob("*.plist")):
+            with self.subTest(agent=path.name):
+                document = plistlib.loads(path.read_bytes())
+                argv = document["ProgramArguments"]
+                self.assertEqual(str(plan.resolve()), argv[argv.index("--plan") + 1])
+
+    def test_install_rejects_v2_pack_and_invalid_v3_before_creating_custody(self) -> None:
+        for changes in (
+            {"schema": "joulewise.night_plan.v2", "schema_version": 2},
+            {"pack_night": None},
+            {"pack_night": {}},
+        ):
+            with self.subTest(changes=changes):
+                completed = self._run(self._write_plan(**changes))
+                self.assertEqual(3, completed.returncode, completed.stderr)
+                self.assertIn("night_plan_malformed", completed.stderr)
+                self.assertFalse(self.rendered.exists())
+                self.assertFalse((self.root / "custody").exists())
 
     def test_install_refuses_plan_authored_40_hours_ago_as_stale(self) -> None:
         completed = self._run(
