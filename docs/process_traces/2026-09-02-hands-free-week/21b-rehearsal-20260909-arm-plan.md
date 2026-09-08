@@ -113,7 +113,7 @@ print(write_night_plan(root/"night_plan.json", plan))
 PY
 # 4. Install both night agents FROM the disposable checkout (the installer derives the driver checkout from its own path).
 cd "$STUB_CHECKOUT" || { print "ABORT: checkout unavailable"; exit 1; }
-scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 || { print "ABORT: agent install failed AFTER the move — un-publishing the plan this session authored (D-175 line 19 (a) / cond. 8)"; rm -f "$NIGHT_CUSTODY/night_plan.json"; rmdir "$NIGHT_CUSTODY/night" "$NIGHT_CUSTODY" 2>/dev/null; launchctl list | grep -E "com.joulewise.night" || true; exit 1; } # delta N4
+scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 || { print "ABORT: agent install failed"; exit 1; }
 launchctl list | grep -E "com.joulewise.night" ; cat "$NIGHT_CUSTODY/night_plan.json"
 # 5. Push H (branch), record the arm (plan json copy, launchctl list, email id) in this trace dir, commit, push.
 # 6. Stop every Codex child and background process; end the loop; exit. The LaunchAgent is the wake source.
@@ -230,8 +230,8 @@ PY
 must stop here — delta N10):**
 
 - 3b (F6, delta N8). Stop every Codex child (`codex-run-v3` seats are reparented to pid 1 and would be foreign) and
-  every background task of this session, INCLUDING its own keepalive Monitor (a direct child of the session pid —
-  verified at 02:00 PDT: pid 16456 ppid 83086 — stopped with TaskStop). Confirm
+  every background task of this session, INCLUDING its own keepalive Monitor (a direct child of the session pid — see
+  `21b-rehearsal-20260909-bench/pass3-process-tree-keepalive.txt` — stopped with TaskStop). Confirm
   `ps -axo pid,ppid,command | grep -E "claude (daemon run|bg-spare|bg-pty-host)|--resume"` prints nothing (joulewise-53
   retires those before its stand-down; this session never signals them). A reparented process of this session's own
   is reported foreign by step 4 and MUST abort the arm — fail-closed by design, no allowlist. The arm then continues
@@ -245,6 +245,9 @@ export H=ae8f074ffa554707a9eac95995ab8ec03235d118 DRIVER_SOURCE=/Users/edr/code/
 export STUB_CHECKOUT=/private/tmp/joulewise-rehearsal-20260909-checkout NIGHT_CUSTODY=/Users/edr/night-custody/rehearsal-20260909
 export STAGE=/private/tmp/joulewise-rehearsal-20260909-staging SCRATCH=/private/tmp/joulewise-rehearsal-20260909-validate
 test -f "$STAGE/night_plan.json" || { print "ABORT: staged plan missing (block A did not complete)"; exit 1; }
+now=$(date +%s); test "$now" -ge 1788944160 -a "$now" -lt 1788945300 || { print "ABORT: outside the arm window 01:56-02:15 PDT 2026-09-09 (t0-3600 .. t0-2460)"; exit 1; } # D2
+test ! -e ~/night-custody/magistrate/standdown.request || { print "ABORT: standdown requested"; exit 1; } # D4
+plans=(~/night-custody/*/night_plan.json(N)); test ${#plans} -eq 0 || { print "ABORT: existing plan"; exit 1; } # D4
 test "$(git -C "$STUB_CHECKOUT" rev-parse HEAD)" = "$H" || { print "ABORT: checkout pin mismatch"; exit 1; }
 test ! -e "$NIGHT_CUSTODY" || { print "ABORT: real custody exists"; exit 1; }
 # 4. Census immediately before the move (cond. 5): every codex|claude|t3 match must be this magistrate's own tree.
@@ -271,7 +274,7 @@ mkdir -p "$NIGHT_CUSTODY" || { print "ABORT: real custody creation failed"; exit
 python3 -c 'import os,sys; os.replace(sys.argv[1], sys.argv[2]); print("moved", sys.argv[2])' "$STAGE/night_plan.json" "$NIGHT_CUSTODY/night_plan.json" || { print "ABORT: atomic move failed"; exit 1; }
 # 7. Install both agents FROM the stub checkout with --hour/--minute == t0 local (cond. 3).
 cd "$STUB_CHECKOUT" || { print "ABORT: checkout unavailable"; exit 1; }
-scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 || { print "ABORT: agent install failed"; exit 1; }
+scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 || { print "ABORT: agent install failed AFTER the move — un-publishing the plan this session authored (D-175 line 19 (a) / cond. 8)"; scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 --uninstall || true; rm -f "$NIGHT_CUSTODY/night_plan.json"; rmdir "$NIGHT_CUSTODY/night" "$NIGHT_CUSTODY" 2>/dev/null; launchctl list | grep -E "com.joulewise.night" || true; exit 1; } # delta N4 / D1 / D5
 launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE" "$SCRATCH"
 # 8. Record (plan json copy, launchctl list, census output) in this trace dir; commit; push. Stop every child and
 #    background process; exit. Request boundary 02:31 PDT 2026-09-09 = t0 − 25 min (cond. 7).
