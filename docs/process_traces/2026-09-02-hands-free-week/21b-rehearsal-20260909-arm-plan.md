@@ -124,3 +124,72 @@ line was written.
   activation proceeds under it and stops if Ed or a cold gate overturns it. Its condition 4 (no arm until it messages
   stand-down) still binds. pid 48645 (leaked 09-04 test stub magistrate) was retired by joulewise-53; re-check
   `ps -p 48645` at arm time and never signal it from this activation.
+
+## AMENDED arm-time sequence (cold gate AMEND on rehearsal-arming authority, relayed by joulewise-53 ~01:50 PDT; supersedes steps 3–4 above)
+
+Full ruling text: `docs/process_traces/2026-09-08-handoff-redo/09-coldgate-packet-rehearsal-authority/13-magistrate-synthesis.md`
+(branch `feat/2026-09-08-relaunch-prompt-line19`, D-175 PR by joulewise-53). Eight conditions; (1) satisfied at
+`ae8f074f`, (4) satisfied by the two emails on thread `1a0800cdb282c3f1`, (6) satisfied while this branch or main
+holds `ae8f074f`, (7)/(8) are conduct rules. Conditions (2), (3), (5) change the mechanics:
+
+```zsh
+# 0. Preconditions: no standdown.request; joulewise-53 has messaged stand-down; no NO on thread 1a0800cdb282c3f1;
+#    no plan under ~/night-custody/*/night_plan.json; now < 2026-09-09 02:00 PDT.
+ls ~/night-custody/magistrate/standdown.request 2>/dev/null && exit 1
+ls ~/night-custody/*/night_plan.json 2>/dev/null && exit 1
+export H=ae8f074ffa554707a9eac95995ab8ec03235d118           # the handback commit; pinned EXPLICITLY (cond. 1)
+export DRIVER_SOURCE=/Users/edr/code/JouleWise-wt-magistrate-1ef89702
+git -C "$DRIVER_SOURCE" cat-file -e "$H^{commit}"           # cond. 6: H reachable
+# 1. Disposable checkout at H (measurement_root; the installer must be run FROM it).
+export STUB_CHECKOUT=/private/tmp/joulewise-rehearsal-20260909-checkout; test ! -e "$STUB_CHECKOUT"
+git -C "$DRIVER_SOURCE" worktree add --detach "$STUB_CHECKOUT" "$H"
+test "$(git -C "$STUB_CHECKOUT" rev-parse HEAD)" = "$H"
+# 2. Author to a STAGING path the watchdog glob (~/night-custody/*/night_plan.json) does not match (cond. 2).
+export NIGHT_CUSTODY=/Users/edr/night-custody/rehearsal-20260909; test ! -e "$NIGHT_CUSTODY"   # cond. 3: no prior record
+export STAGE=/private/tmp/joulewise-rehearsal-20260909-staging; test ! -e "$STAGE"; mkdir -p "$STAGE"
+cd "$STUB_CHECKOUT" && PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+import os, time
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+from joulewise.night_gate import NightPlan
+from joulewise.night_plan_writer import write_night_plan
+root = Path(os.environ["NIGHT_CUSTODY"]); H = os.environ["H"]; stage = Path(os.environ["STAGE"])
+t0 = datetime(2026, 9, 9, 2, 56, 0, tzinfo=ZoneInfo("America/Los_Angeles")).timestamp(); assert t0 == 1788947760
+now = time.time(); assert now < t0 - 25 * 60
+plan = NightPlan(plan_id="rehearsal-20260909", receipt_class="REHEARSAL_STUB", t0_epoch_s=t0, window_max_s=900,
+    authored_epoch_s=now, repo_head=H, measurement_root=os.environ["STUB_CHECKOUT"], measurement_head=H,
+    chain_path=str(root/"chain.zsh"), chain_sha256_path=str(root/"chain.zsh.sha256"), custody_root=str(root),
+    registration_path="configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json")
+print(write_night_plan(stage/"night_plan.json", plan))      # staged, NOT yet discoverable
+PY
+# 3. Validate the STAGED plan from the stub checkout (cond. 2) — pins, schema, age, dead-man hour, courier binary.
+cd "$STUB_CHECKOUT" && scripts/install_night_agent.sh --plan "$STAGE/night_plan.json" --hour 2 --minute 56 --render-only "$STAGE/render"
+for p in "$STAGE"/render/*.plist; do /usr/bin/plutil -lint "$p"; done
+# 4. Census immediately before the move (cond. 5): every codex|claude|t3 match must be this magistrate's own tree.
+python3 - <<'PY'
+import subprocess, sys
+me = 84232
+ps = subprocess.run(["ps","-axo","pid=,ppid=,command="], capture_output=True, text=True).stdout.splitlines()
+rows = [(int(l.split(None,2)[0]), int(l.split(None,2)[1]), l.split(None,2)[2] if len(l.split(None,2))>2 else "") for l in ps if l.strip()]
+parent = {p:pp for p,pp,_ in rows}
+def mine(p):
+    while p and p != 1:
+        if p == me: return True
+        p = parent.get(p, 1)
+    return False
+import re
+foreign = [(p,c[:90]) for p,pp,c in rows if re.search(r"codex|claude|t3", c) and not mine(p) and "ps -axo" not in c]
+print("foreign census matches:", foreign); sys.exit(1 if foreign else 0)
+PY
+# 5. Re-check Ed's thread for NO (Gmail search on thread 1a0800cdb282c3f1) — abort on NO (cond. 4).
+# 6. THE MOVE: atomic rename into the plan directory (same volume as /private/tmp — verified: both device 16777231).
+mkdir -p "$NIGHT_CUSTODY" && python3 -c 'import os,sys; os.replace(sys.argv[1], sys.argv[2]); print("moved", sys.argv[2])' "$STAGE/night_plan.json" "$NIGHT_CUSTODY/night_plan.json"
+# 7. Install both agents FROM the stub checkout with --hour/--minute == t0 local (cond. 3).
+cd "$STUB_CHECKOUT" && scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56
+launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE"
+# 8. Record (plan json copy, launchctl list, census output) in this trace dir; commit; push. Stop every child and
+#    background process; exit. Request boundary 02:31 PDT 2026-09-09 = t0 − 25 min (cond. 7).
+```
+Cond. 8: any later re-arm or removal of THIS plan by a headless session repeats steps 2–7; everything else on plans,
+night records and launchd stays barred by relaunch-prompt line 19 (as amended by D-175).
