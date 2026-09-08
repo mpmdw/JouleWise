@@ -10,8 +10,9 @@ not active groups. Neither that selector nor the skeleton is changed here.
 ## Authority and unresolved bindings
 
 Owning sources: [registry](../paper/results-fill-registry.md), especially
-floor-cell branches; DS-25–DS-33 (decode comparison quantities/verdict and
-prefill identity); PG-01–PG-08 (prefill comparison quantities/verdict, with
+floor-cell branches; DS-25–DS-33 (decode comparison quantities/verdict, with
+DS-33 the prefill claim-floor slot whose token stays unresolved until its G2-a
+binding exists); PG-01–PG-08 (prefill comparison quantities/verdict, with
 PG-03 a consolidated endpoint tombstone); OB-01 (failed ratio-component list);
 and OR-01 (staged refusal reason and affected identities);
 [prospective protocol](../paper/protocol/prospective-comparison-protocol.md)
@@ -26,8 +27,9 @@ a named instrument-characterization criterion in protocol P.2), and successor to
 where absent are UNBOUND. Historical Table 3, Abstract, Sections 4/7/10 and
 DS-32/PG-08 are semantic references, not permission to restore those sites.
 **S3 dependency:** quantity meaning, units, precision, normalization, source-field
-mapping, and interval/clearance display vocabulary are UNBOUND until supplied
-by S3. Existing mathematical gates are preserved; synthetic joule values below
+mapping, and interval/clearance display vocabulary (clearance: how far a result
+clears its governed criterion; shortfall: how far it misses) are UNBOUND until
+supplied by S3. Existing mathematical gates are preserved; synthetic joule values below
 are illustrative, not an S3 quantity ruling. The executable fixtures use
 logical slots and symbolic outcomes, never professor-facing prose.
 An UNBOUND field cannot be defaulted, guessed, or used for issuance.
