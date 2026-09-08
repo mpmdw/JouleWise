@@ -491,7 +491,8 @@ checked caller chains are recorded in the replay census.
 
 `tests/fixtures/custody_read_replay_allowlist.json` is the executable census of
 explicit replay opt-ins, keyed per call by repository file, qualified enclosing
-function, and call line, with a one-line reason for each row.
+function, and replay-call ordinal within that function, with a one-line reason
+for each row. The call line is informational and is not compared.
 `tests/test_custody_mode_inventory.py` scans
 `joulewise/` and `scripts/`, including local keyword dictionaries, and requires
 the observed replay set to equal this allowlist. Calls may omit mode, select
@@ -507,6 +508,15 @@ lease or reading replay status, because it can append an abort receipt.
 Signature-default pins and a real
 ledger fixture with absent original custody and planted valid replacement
 bytes protect the omission boundary independently of the entry guards.
+
+**Census limits (ruled 2026-09-08).** The census does not detect forwarding
+through a parameter not named `mode`; omitted replay defaults on wrappers;
+callable-container dispatch; or runtime-built dicts. The invariant is the
+issuing default + caller-supplied modes + entry guards + planted-replacement
+fixture; the census is a governance aid. These limits do not require further
+census detection. Campaign core bracket evaluation defaults to issuing for
+live AXI claim-readiness emission; only the completed-window replay caller
+explicitly selects replay for that shared evaluation.
 
 The guards at `mint_floor_artifact`, `mint_multi_cell_floor_artifact`,
 `build_bracket_binding.main`, and

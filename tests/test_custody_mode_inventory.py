@@ -133,7 +133,7 @@ def _keyword_modes(expression, scope, seen=frozenset(), *, keywords=False,
 
 
 def inventory(source_overrides=None):
-    """Return replay (file, qualified function, call line) keys and violations."""
+    """Return replay (file, qualified function, replay-call ordinal) keys."""
     overrides = source_overrides or {}
     replay, violations = set(), []
     for directory in ("joulewise", "scripts"):
@@ -174,6 +174,8 @@ def inventory(source_overrides=None):
                     break
                 calls.update(wrappers)
 
+            replay_ordinals = {}
+
             def visit(node, names=(), scope=tree, class_scope=None):
                 if isinstance(node, ast.ClassDef):
                     names = (*names, node.name)
@@ -196,16 +198,21 @@ def inventory(source_overrides=None):
                             if keyword.arg in {"mode", None}:
                                 modes.extend(_keyword_modes(keyword.value, scope,
                                     keywords=keyword.arg is None, class_scope=class_scope))
+                        has_replay = False
                         for mode in modes:
                             if mode is FORWARDED_MODE:
                                 continue
                             if isinstance(mode, ast.Constant) and mode.value == "issuing":
                                 continue
-                            key = (relative, ".".join(names) or "<module>", node.lineno)
                             if isinstance(mode, ast.Constant) and mode.value == "read_replay":
-                                replay.add(key)
+                                has_replay = True
                             else:
                                 violations.append(f"{relative}:{node.lineno}: {ast.unparse(mode)}")
+                        if has_replay:
+                            function = ".".join(names) or "<module>"
+                            ordinal = replay_ordinals.get(function, 0) + 1
+                            replay_ordinals[function] = ordinal
+                            replay.add((relative, function, ordinal))
                 for child in ast.iter_child_nodes(node):
                     visit(child, names, scope, class_scope)
 
@@ -216,12 +223,16 @@ def inventory(source_overrides=None):
 def allowed_replay():
     allowed = set()
     for row in json.loads(ALLOWLIST.read_text()):
-        file, function, line, reason = (row[key] for key in ("file", "function", "line", "reason"))
+        file, function, ordinal, line, reason = (
+            row[key] for key in ("file", "function", "ordinal", "line", "reason")
+        )
         if not isinstance(reason, str) or not reason.strip() or "\n" in reason:
             raise AssertionError(f"{file}:{function}:{line}: expected one-line replay reason")
         if not isinstance(line, int) or line < 1:
             raise AssertionError("expected positive call line")
-        key = (file, function, line)
+        if not isinstance(ordinal, int) or ordinal < 1:
+            raise AssertionError("expected positive replay-call ordinal")
+        key = (file, function, ordinal)
         if key in allowed:
             raise AssertionError(f"duplicate replay call: {key}")
         allowed.add(key)
@@ -301,7 +312,7 @@ class CustodyModeInventoryTests(unittest.TestCase):
                 if name in {"factory_kwargs", "forwarded_kwargs"}:
                     self.assertTrue(violations, name)
                 else:
-                    self.assertIn((path, "counterfeit", 2), actual)
+                    self.assertIn((path, "counterfeit", 1), actual)
 
     def test_shared_parameter_replay_is_censused_at_issuing_caller(self):
         path = "scripts/mint_floor_artifact.py"
@@ -313,8 +324,15 @@ def issuing_entry():
     shared({argument})
 '''})
                 self.assertEqual(violations, [])
-                self.assertIn((path, "issuing_entry", 4), actual - allowed_replay())
-                self.assertNotIn((path, "shared", 2), actual)
+                self.assertIn((path, "issuing_entry", 1), actual - allowed_replay())
+                self.assertNotIn((path, "shared", 1), actual)
+
+    def test_line_shift_does_not_require_allowlist_edit(self):
+        path = "joulewise/analysis_engine/__init__.py"
+        source = (REPO_ROOT / path).read_text()
+        actual, violations = inventory({path: "# Unrelated comment above listed calls.\n" + source})
+        self.assertEqual(violations, [])
+        self.assertEqual(actual, allowed_replay())
 
     def test_second_call_requires_its_own_allowlist_row(self):
         path = "joulewise/analysis_engine/__init__.py"
@@ -327,4 +345,4 @@ def issuing_entry():
         lines.insert(entry.end_lineno, '    load_calibration_ledger_snapshot(mode="read_replay")\n')
         actual, violations = inventory({path: "".join(lines)})
         self.assertEqual(violations, [])
-        self.assertEqual(actual - allowed_replay(), {(path, "analyze_claims", entry.end_lineno + 1)})
+        self.assertEqual(actual - allowed_replay(), {(path, "analyze_claims", 2)})

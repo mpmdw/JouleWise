@@ -2,85 +2,99 @@
   {
     "file": "joulewise/analysis_engine/__init__.py",
     "function": "analyze_claims",
+    "ordinal": 1,
     "line": 1685,
     "reason": "Replay-only caller chain: cli.main analyze-claims dispatch -> _cmd_analyze_claims -> analyze_claims; no mint, binding publication, ledger append, or analysis-manifest finalization caller."
   },
   {
     "file": "joulewise/calibration_ledger.py",
     "function": "calibration_readiness",
+    "ordinal": 1,
     "line": 4974,
     "reason": "Advisory recovery readiness selects replay; enforcing_under_lease selects issuing for both snapshot and slot state. Snapshot custody verification is enabled only under the lease."
   },
   {
     "file": "joulewise/calibration_ledger.py",
     "function": "calibration_readiness",
+    "ordinal": 2,
     "line": 5029,
     "reason": "Advisory recovery readiness selects replay; enforcing_under_lease selects issuing for both snapshot and slot state. Snapshot custody verification is enabled only under the lease."
   },
   {
     "file": "joulewise/calibration_ledger.py",
     "function": "calibration_session_status",
+    "ordinal": 1,
     "line": 4857,
     "reason": "Recovery status and reservation inspect durable state; verify_custody=False makes this snapshot custody-inert. Abort-session can append, but refuses nonempty overrides before its lease or status call."
   },
   {
     "file": "joulewise/calibration_ledger.py",
     "function": "calibration_session_status",
+    "ordinal": 2,
     "line": 4891,
     "reason": "Recovery status and reservation inspect slot state in replay; abort-session can append but its entry guard refuses nonempty overrides before status or any mutation."
   },
   {
     "file": "joulewise/calibration_ledger.py",
     "function": "resume_finalize_bracket_session",
+    "ordinal": 1,
     "line": 5248,
     "reason": "Replay only the durable snapshot with verify_custody=False; guarded finalization retains the explicit issuing custody-state check."
   },
   {
     "file": "joulewise/window_duration_margins.py",
     "function": "_authenticate_b_operative",
+    "ordinal": 1,
     "line": 713,
     "reason": "Replay-only caller chain: record_window_duration_margins CLI -> record_window_duration_margins -> derive_window_duration_margins -> _authenticate_b_operative; no mint, binding publication, ledger append, or analysis-manifest finalization caller."
   },
   {
     "file": "scripts/check_window_provenance.py",
     "function": "_run_assertions.check_f52",
+    "ordinal": 1,
     "line": 860,
     "reason": "Replay the existing whole-window verdict against its already-loaded ledger snapshot."
   },
   {
     "file": "scripts/extract_detection_floors.py",
     "function": "main",
+    "ordinal": 1,
     "line": 140,
     "reason": "Retained-corpus CLI main -> extract_cells -> AuthenticatedConsumptionSession -> snapshot and bracket candidate discovery; derives extraction reports without mint, ledger append, binding publication, or analysis-manifest finalization."
   },
   {
     "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
+    "ordinal": 1,
     "line": 233,
     "reason": "The audit and audit-observations commands reauthenticate existing ledger custody without issuing receipts."
   },
   {
     "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
+    "ordinal": 2,
     "line": 265,
     "reason": "The audit and audit-observations commands reauthenticate existing ledger custody without issuing receipts."
   },
   {
     "file": "scripts/run_campaign.py",
-    "function": "_idle_admission_core_evaluation",
-    "line": 5248,
-    "reason": "Whole-window replay branches: main -> run_whole_window_verdict -> _run_whole_window_verdict_locked, or main -> run_campaign -> run_axi_spec_campaign post-run evaluation -> _idle_admission_core_evaluation -> calibration_bracket_for_bundles. These branches emit campaign evaluation records, with no mint, binding publication, calibration-ledger append, or analysis-manifest finalization; ordinary run_campaign -> idle_admission_core_verdict leaves whole_window=False."
-  },
-  {
-    "file": "scripts/run_campaign.py",
     "function": "_load_calibration_snapshot_for_evaluation",
+    "ordinal": 1,
     "line": 4830,
     "reason": "Replay existing calibration custody for campaign evaluation, including keyword-dictionary loading."
   },
   {
     "file": "scripts/run_campaign.py",
     "function": "_run_whole_window_verdict_locked",
-    "line": 6240,
+    "ordinal": 1,
+    "line": 6241,
     "reason": "Re-evaluate retained campaign members using the existing calibration snapshot."
+  },
+  {
+    "file": "scripts/run_campaign.py",
+    "function": "_run_whole_window_verdict_locked",
+    "ordinal": 2,
+    "line": 6284,
+    "reason": "Completed-window replay -> _idle_admission_core_evaluation -> calibration_bracket_for_bundles explicitly permits replacement custody for claim-readiness emission. Live AXI claim-readiness emission and the compatibility wrapper retain the issuing default."
   }
 ]
