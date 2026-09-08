@@ -1469,6 +1469,85 @@ class HandoffDefectTests(WatchdogTestCase):
         self.assertEqual([], self.harness.processes.signals)
         self.assertEqual([], self.harness.spawn_calls)
 
+    def test_c1_reused_pid_disappears_before_kill(self) -> None:
+        """Counterfactual input: old PID has a new token at TERM and vanishes before KILL."""
+        table = FakeProcessTable([wd.ProcessInfo(100, 1, "new", "other")])
+        result = wd.reap_handoff({"interactive_pid": 100, "owned": [
+            {"pid": 100, "start_time": "old"}]}, table, lambda: None,
+            sleep=lambda _: table.rows.clear())
+        self.assertEqual("reused_skipped", result["outcomes"]["100"])
+        self.assertEqual([], table.signals)
+
+    def recovery_block(self, marker: str) -> str:
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        blocks = re.findall(r"<<'PY'.*?\n(.*?)\n\s*PY$", document, re.DOTALL | re.MULTILINE)
+        matching = [block for block in blocks if marker in block]
+        self.assertEqual(1, len(matching), marker)
+        return textwrap.dedent(matching[0])
+
+    def test_c2_corrupt_lock_recovery_checks_saved_owned_pairs(self) -> None:
+        """Counterfactual input: corrupt lock, with absent owner, live owned child, or late twin."""
+        block = self.recovery_block("HANDOFF_DEAD_LOCK_REMOVED")
+        inventory = self.temp / "recovery.json"
+        inventory.write_text(json.dumps({"owned": [{"pid": 100, "start_time": "old"}]}))
+        for raw in ("{torn", "{}", "[]"):
+            for rows, removed in (([], True),
+                    ([wd.ProcessInfo(100, 1, "old", "worker")], False),
+                    ([wd.ProcessInfo(200, 1, "twin", self.TWIN)], False)):
+                with self.subTest(raw=raw, rows=rows):
+                    path = self.harness.storage.root / "magistrate.lock"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(raw)
+                    with mock.patch.object(wd, "DEFAULT_CUSTODY_ROOT", path.parent), \
+                         mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
+                         mock.patch.object(sys, "argv", ["reconcile", str(inventory)]), \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        if removed:
+                            exec(compile(block, "<step4-corrupt>", "exec"), {})
+                        else:
+                            with self.assertRaisesRegex(SystemExit, "handoff_lock_not_clear"):
+                                exec(compile(block, "<step4-corrupt>", "exec"), {})
+                    self.assertEqual(not removed, path.exists())
+
+    def test_c3_documented_twin_stop_revalidates_each_signal(self) -> None:
+        """Counterfactual input: selected late twin is reused before TERM or before KILL."""
+        block = self.recovery_block("HANDOFF_TWIN_ABSENT")
+        for replacement in ("before_term", "before_kill", "none"):
+            with self.subTest(replacement=replacement):
+                table = FakeProcessTable([wd.ProcessInfo(200, 1,
+                    "new" if replacement == "before_term" else "old", self.TWIN)])
+                def wait(_):
+                    if replacement == "before_kill":
+                        table.rows = [wd.ProcessInfo(200, 1, "new", self.TWIN)]
+                with mock.patch.object(wd, "RealProcessTable", return_value=table), \
+                     mock.patch.object(time, "sleep", side_effect=wait), \
+                     mock.patch.object(sys, "argv", ["stop-twin", "200", "old"]), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if replacement == "none":
+                        exec(compile(block, "<stop-twin>", "exec"), {})
+                    else:
+                        with self.assertRaisesRegex(SystemExit, "handoff_twin_token_mismatch"):
+                            exec(compile(block, "<stop-twin>", "exec"), {})
+                expected = [] if replacement == "before_term" else [(200, signal.SIGTERM)]
+                if replacement == "none":
+                    expected.append((200, signal.SIGKILL))
+                self.assertEqual(expected, table.signals)
+
+    def test_c7_digest_gate_precedes_first_pinned_execution(self) -> None:
+        """Counterfactual input: operator defers byte verification until step 3, after step 1 runs code."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        step0 = document.split("0. Land the watchdog", 1)[1].split("1. In the magistrate", 1)[0]
+        self.assertIn("Before step 1 executes any pinned file, verify SHA-256", step0)
+        self.assertNotIn("Before step 3", step0)
+
+    def test_c4_lock_recovery_is_interactive_operator_only(self) -> None:
+        """Counterfactual input: a headless relaunch reads step 4 as permission to clear locks."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        step4 = document.split("4. Install from", 1)[1].split("5. Have the magistrate", 1)[0]
+        self.assertIn("INTERACTIVE MAGISTRATE / OPERATOR ONLY", step4)
+        self.assertIn("MAGISTRATE_RELAUNCH_PROMPT.md#L19", step4)
+        self.assertIn("Headless sessions must not execute", step4)
+
     def test_documented_dead_lock_reconciliation_only_removes_proved_absent_owner(self) -> None:
         """Counterfactual: an operator follows step 4 with a live, reused, or dead owner."""
         document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()

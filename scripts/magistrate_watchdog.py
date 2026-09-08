@@ -979,6 +979,8 @@ def reap_handoff(
                     # A later snapshot must not overwrite evidence that TERM was sent.
                     if previous in {"term_sent", "term_exited"}:
                         outcomes[str(pid)] = "term_exited"
+                    elif previous == "reused_skipped":
+                        outcomes[str(pid)] = "reused_skipped"
                     else:
                         outcomes[str(pid)] = "already_gone" if observed is None else "reused_skipped"
                     continue
