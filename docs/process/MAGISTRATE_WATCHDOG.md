@@ -2,6 +2,15 @@
 
 `com.joulewise.magistrate` is a user LaunchAgent that evaluates a short Python tick at load and every 300 seconds. A safe tick forks a new session and leaves a resident supervisor running at 10-second resolution. The service never writes a repository tree. Its default mutable root is `~/night-custody/magistrate/`; `MAGISTRATE_WATCHDOG_CUSTODY_ROOT` or `--custody-root` may replace that root for a rehearsal.
 
+When the magistrate publishes a window update with `scripts/window_status.sh`,
+that script first invokes the measurement-owner census (the inventory of
+recorded chain and campaign processes). A live or indeterminate owner refuses
+before `WINDOW_STATUS.md` or Git changes, including during a commit freeze.
+The watchdog's launch fences and agent census remain separate. See the
+[window-liveness contract](../contracts/window_liveness.md) for shared custody
+settings, the `active-campaigns` registry, identity matching, and operator-owned
+stale-entry repair.
+
 ## Safety model and state machine
 
 The tick reads every sibling `*/night_plan.json` with the production `NightPlan.from_mapping`, the associated `night/chain.started`, `night/chain.exited`, and `night/courier.sent` markers, the local service state and locks, the local `STOP` file, the remote stop refs, local civil time, monotonic time, and the process table. A v2 plan carries both schema `joulewise.night_plan.v2` and integer `schema_version: 2`; a missing or different version is malformed. Only a decoded mapping whose complete key shape exactly matches the golden retired-v1 fixture is ignored, with a `plan_retired_v1` event; a v1 label attached to any v2-only key is not retired evidence. Unreadable JSON holds as `night_plan_unreadable`; an invalid v2 or future authorship holds as `night_plan_malformed`. Each diagnostic is keyed by the activation id and spawn epoch, plan directory, kind, and detail digest, so changed failures and later activations are reported independently. Every spawn mints a fresh activation id and spawn epoch. The watchdog's valid-plan set intentionally contains every plan the night gate could run and may conservatively contain a stale plan the gate would refuse. Inside a valid-v2 plan span the watchdog invokes the exact production `agent_census`; outside a span, an unrelated census hit does not prevent daytime work. A live `magistrate.lock` is validated by both PID and the process's start-time token so PID reuse grants no authority.

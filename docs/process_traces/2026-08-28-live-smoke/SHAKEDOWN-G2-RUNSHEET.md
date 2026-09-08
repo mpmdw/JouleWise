@@ -7,6 +7,8 @@ executes the claim family’s first consuming launch as a one-block, non-claim
 shakedown on its own runs root and proves exact finalizer refusal. No command
 in a live section may run while an agent session is active.
 
+Before publishing a window update, `scripts/window_status.sh` applies the [window-liveness guard](../../contracts/window_liveness.md); share the measurement custody parent and follow its operator-owned stale-registry repair procedure.
+
 G2 is **diagnostic and non-claim by construction**: `$RUNS_ROOT` is its own
 shakedown root, never the campaign runs root, and no mint or claim artifact may
 consume it. G2 PASS means exact refusal-set equality from

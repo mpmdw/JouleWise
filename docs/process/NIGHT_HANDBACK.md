@@ -21,6 +21,15 @@ and its last `state` decision without importing the watchdog. Operational
 liveness is 15 minutes: an age greater than 900 seconds, a missing file, or an
 unreadable decision means the watchdog is dead and must be reported as such.
 
+For a status update through `scripts/window_status.sh`, the script invokes a
+measurement-owner census (an inventory of recorded chain and campaign
+processes) before any status-file or Git change. Handback delivery alone does
+not clear it: `courier.sent` closes neither rule, and a valid `chain.exited`
+closes only the chain rule. Live or indeterminate campaign ownership still
+refuses publication. See the [window-liveness contract](../contracts/window_liveness.md)
+for the shared custody-parent settings, registry lifecycle, decision table,
+and operator-owned stale-entry repair.
+
 ## Purpose of this night
 
 Plan `rehearsal-20260909`, class `REHEARSAL_STUB`, armed by the headless
