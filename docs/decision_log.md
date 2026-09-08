@@ -219,6 +219,7 @@ be re-derived by a future agent gets an entry here.
 | D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
+| D-176 | Unattended pack-night GO: authenticated consumption, purpose-bound authorization, confirmation custody and staged rehearsal | adopted by cold gate + Opus refuter + magistrate synthesis 2026-09-08 (Ed may veto) |
 
 ---
 
@@ -11156,3 +11157,112 @@ would `HOLD_UNSAFE`, drain the resident and block every later launch (`scripts/m
 an "already armed" carve-out would strip the session of the re-arm path the 09-03 rehearsal actually needed.
 
 **Evidence:** packet, cold ruling, Opus refutation and synthesis in the trace directory above.
+
+## D-176: unattended pack-night GO, confirmation custody and staged rehearsal (D-169 stage 3, 2026-09-08; Ed may veto)
+
+**Trigger:** the stage-3 cold gate found that the legacy D-149 receipt binds no pack, no GO producer or launch consumer exists, confirmation is optional on an unchanged conditional-path set, and the kernel leaves the implementation and rehearsal graph unresolved.
+
+**Decision:** adopted by cold gate + Opus refuter + magistrate synthesis 2026-09-08 (Ed may veto). The six decisions below install the synthesis of record. Adoption authorizes the staged build; runtime clauses remain to be implemented and the live obligations remain open through `D169-STAGE3-01`.
+
+### 1. GO receipt and consumption
+
+The GO receipt is ONE new versioned schema, `joulewise.pack_night_go_receipt.v1`, produced only by the night driver after ARM verify, and it is the D-149 receipt (the template's C1 line is amended to cite D-167 + this ruling). Required exact keys: `schema_version, receipt_class (TRANSACTION_PACK), purpose, plan_id, pack_id, pack_sha256, arm_receipt {receipt_id, sha256, valid_until_monotonic_ns}, boot_session_id, t0_evidence [{path, sha256}] (the fifteen ARM_ONLY receipts + capture-step records), launch_manifest_sha256, window_environment_sha256, window_chain_sha256, repo_head, measurement_root, measurement_head, confirmation_record_sha256, authorization_record_sha256, census {argv, exit_code, stdout_sha256, monotonic_ns}, issued_epoch_s, issued_monotonic_ns, valid_until_monotonic_ns (≤ arm valid_until), conditions [C1..C5 each {condition_id, status, evidence[]}], verdict`.
+
+Consumer: `_consume_launch_capability` gains three required keywords `go_receipt, authenticated_go_receipt, go_receipt_sha256` defaulting to `_MISSING_LAUNCH_CONTEXT` (absent → `readiness_usage_invalid`, so no caller can skip it). Inside the callee it re-reads the bytes, recomputes the digest, and refuses unless every binding equals the value it already holds: arm `receipt_id` and `sha256`, `pack_sha256`, `boot_session_id`, the three launch sha256s, `verdict == GO`, all five `PASS`, `receipt_class == TRANSACTION_PACK`, and `now_monotonic ∈ [issued, valid_until)`. Missing file → `launch_go_receipt_missing`; anything else → `launch_go_receipt_invalid` (detail names the field). Only those two ruled codes; registered by R-8's three steps before emission. The consumption record becomes schema v3 adding `go_receipt {receipt_id, sha256, purpose, receipt_class}` and `step6_confirmation {table_path, table_sha256}`; v2 joins the legacy branch of `validate_consumption_receipt` and replays historically only with `require_current_boot=False`. `verify_consumed_launch` re-reads the GO bytes by the recorded path, re-checks the digest and bindings, and refuses a live replay of any record lacking `go_receipt`.
+
+Fence tests: a forged receipt fails because it must carry the sha256 of an arm receipt that itself replays to PASS/GO in custody; replayed receipt fails because the arm `receipt_id` is single-use at the existing O_EXCL point and a new arm has a new id; CLI-then-callee mutation is closed because the callee trusts only bytes it read itself. No second lock.
+
+
+Synthesis amendment: `joulewise.t0_unattended_d149_go_receipt.v1` is RETIRED and REFUSED, never grandfathered. The existing O_EXCL consumption write is the single-use linearization point.
+
+### 2. G2-b transaction authorization
+
+Stage-1 R-4's C1 cell for `TRANSACTION_PACK` is amended to: "C1 = an authenticated, purpose-bound *transaction authorization record* (mode 0600, create-once, in transaction custody, sha256-bound into the pack-night plan) with `purpose ∈ {G2B_SHAKEDOWN, CAMPAIGN_TRANSACTION, T0_REHEARSAL}`, `claim_eligible`, `pack_sha256`, `permitted_chain_sha256`, `permitted_blocks`, `authority`." `G2B_SHAKEDOWN`: authority D-167 cl.1 + D-171 §3, `claim_eligible=false`, `permitted_blocks=1`. `CAMPAIGN_TRANSACTION`: authority `V5-TRANSACTION-GO-01` as delegated by D-171 §3, issuable only after G2-b's verdict is custodied. C2–C5 identical for both. The consumer binds purpose and `claim_eligible` into the consumption record; the launch-realization recheck and L10 read them, so a shakedown can never be promoted to a claim by relabeling. `DIAGNOSTIC_NO_PACK` for G2-b is REJECTED (coldgate-e10 d.1 stands).
+
+
+Adopted Opus §2 amendment: "The G2-b C1 artifact is a magistrate authorization under D-171 item 3 naming the exact pack, attempt, permitted chain and `claim_eligible: false`; it is not `V5-TRANSACTION-GO-01` and does not discharge it."
+
+### 3. Step-6 confirmation custody
+
+Source: the existing transcript `085-ed-step6-confirmed-sha256.txt` in transaction custody, plus a new create-once `step6_confirmation_record.json` {table_path, table_sha256 (= hC), transcript_sha256, confirmed_at}. The pack-night plan binds that record's sha256; the driver reads hC from it and passes `--step6-confirmation-table/--expected-confirmation-digest` to the launcher by argv. Child supply: the chain's `--lifecycle-event start` reads `step6_confirmation` from the authenticated v3 consumption record when the flags are absent, then re-hashes the table against it. Passing hC through `execve`'s environment is REJECTED: it leaks to every descendant and `window.env`'s 25-key allowlist stays exact. The runbook's "never store hC in an env file" sentence is amended to "hC lives only in transaction custody; it reaches the launcher by argv and the child by the consumption record." Relaunch survival: the plan and record are on disk, nothing in session memory.
+
+
+Synthesis adoption of Opus F6: for a `TRANSACTION_PACK` launch both `--step6-confirmation-table` and `--expected-confirmation-digest` become REQUIRED, with an omission-refusal regression, including when the changed set contains no digest-conditional path. Only this mandatory-pair amendment is adopted; the judge's rejection of the environment route governs. The confirmation record is mode 0600.
+
+### 4. Rehearsal obligations
+
+G2-a discharges NO gate. It may contribute observational records (G1 execution record, G8 census lineage, G9 launch/courier/dead-man) only after `run_night.py` sets `stdin=subprocess.DEVNULL`. The closing rehearsal is one isolated pack-bound night run by the driver against a rehearsal pack whose window id carries `rehearsal-t0-unattended-` and whose custody is disjoint from the production-root census (G6). Its GO receipt has `purpose=T0_REHEARSAL`; the consumer accepts that purpose ONLY on a prefixed id with disjoint roots and refuses every other purpose on a prefixed id (`launch_go_receipt_invalid`). G7 is then real: the driver presents a valid `T0_UNATTENDED_SUPERVISED_REHEARSAL`-class receipt (exhibit schema) to the production launcher and records the class refusal plus the absence of any `.consumed.json`. No `--allow-rehearsal` flag on the launcher. G5 is amended to evaluate `joulewise.pack_night_go_receipt.v1` (the v1 d149 schema has no producer and is retired). The privileged-anchor positive control stays Ed-owned; surfaced as NEEDS-ED, not assumed.
+
+
+Adopted Opus F3 correction: "the ARM T-0 evidence author (`arm_readiness_evidence_t0.py:2245`) is substantially implemented; the D-149 GO producer and every rehearsal-bundle producer are unwritten (F3)." G1–G10 must all PASS; no UNRULED counts as success. Preserve dedicated identity, custody, ledger, runs and backups, real machine-authored clock evidence, zero operator actions and zero agents at T-0/capture, software falsifiers, and launch/relaunch evidence.
+
+### 5. Kernel graph
+
+- `UNATTENDED-LAUNCH-01`: hard-start on `T0-UNATTENDED-01` REPLACED by hard-start `kind: decision` on this ruling; `T0-UNATTENDED-01` becomes a close dependency. Owns the consumer (decision 1) and closes S9-06 against the same producer regression (a test that fails when the GO check is deleted).
+- `S9-06-WINDOW-T0-GO-RECEIPT-GATE-01`: closes by `UNATTENDED-LAUNCH-01`'s PR; no separate implementation.
+- `D169-STAGE3-01`: start satisfied by this ruling; close = decisions 1–4 merged and `NIGHT-PACK-REHEARSAL-01` harvested.
+- NEW `NIGHT-PACK-REHEARSAL-01`: the decision-4 night; hard-start on `UNATTENDED-LAUNCH-01` merged AND `NIGHT-REHEARSAL-01` harvested. `V5-G2B-SHAKEDOWN-01` hard-starts on it.
+- `T0-UNATTENDED-01`: its hard-start on `NIGHT-REHEARSAL-01` is replaced by this ruling; the stale `REHEARSAL_PRODUCER_WORK_ORDER` pointer in `T0-REHEARSAL-PRODUCERS-01` is replaced by exhibit A's §R4 table and G4 preservation paragraph (exhibit-A-consult-astra.md:161–181), linked directly per the 2026-09-08 installation brief; no copied trace file is authorized; that row's "G7 stays UNRULED" fence is released by dated addendum when `UNATTENDED-LAUNCH-01` merges.
+- `T0-LIVENESS-BOUND-EMPIRICAL-01`: registered limitation through G2-b; the rehearsal, the ARM-ABORT, and G2-b supply the three bundles; it must close or be reruled before ALPHA.
+- `V5-TRANSACTION-GO-01`: text amended to "satisfied by the magistrate's `CAMPAIGN_TRANSACTION` authorization record after G2-b (D-171 §3)."
+
+
+Installation rule (synthesis adopting Opus F8): each clause names its file, symbol or kernel JSON pointer; the bookkeeping acceptance includes `tests.test_gen_state`. The exact graph installation points follow.
+
+| File | JSON pointer(s) | Installed clause |
+|---|---|---|
+| `docs/process/state_kernel.json` | `/tasks/UNATTENDED-LAUNCH-01/authority`, `/tasks/UNATTENDED-LAUNCH-01/dependencies` | D-176 hard-start decision; T0-UNATTENDED-01 hard close; consumer and S9-06 share the GO-check-deletion regression. |
+| `docs/process/state_kernel.json` | `/tasks/S9-06-WINDOW-T0-GO-RECEIPT-GATE-01/dependencies`, `/tasks/S9-06-WINDOW-T0-GO-RECEIPT-GATE-01/acceptance` | Close through UNATTENDED-LAUNCH-01's PR; no separate implementation. |
+| `docs/process/state_kernel.json` | `/tasks/D169-STAGE3-01/authority`, `/tasks/D169-STAGE3-01/dependencies`, `/tasks/D169-STAGE3-01/acceptance` | D-176 satisfies start; decisions 1–4 merged AND NIGHT-PACK-REHEARSAL-01 harvested close the row. |
+| `docs/process/state_kernel.json` | `/tasks/NIGHT-PACK-REHEARSAL-01` | Decision-4 night; agent lane, p1_phase_gate; hard-start on UNATTENDED-LAUNCH-01 merged AND NIGHT-REHEARSAL-01 harvested; copied NIGHT-REHEARSAL-01 fences. |
+| `docs/process/state_kernel.json` | `/tasks/V5-G2B-SHAKEDOWN-01/dependencies` | Hard-start on NIGHT-PACK-REHEARSAL-01 harvested. |
+| `docs/process/state_kernel.json` | `/tasks/T0-UNATTENDED-01/dependencies` | Replace NIGHT-REHEARSAL-01 hard-start by D-176. |
+| `docs/process/state_kernel.json` | `/tasks/T0-REHEARSAL-PRODUCERS-01/authority`, `/tasks/T0-REHEARSAL-PRODUCERS-01/acceptance/evidence/0`, `/tasks/T0-REHEARSAL-PRODUCERS-01/dependencies`, `/tasks/T0-REHEARSAL-PRODUCERS-01/status_note` | Replace the stale work-order pointer with exhibit A §R4, lines 161–181; release G7 UNRULED fence only by a dated addendum when UNATTENDED-LAUNCH-01 merges. |
+| `docs/process/state_kernel.json` | `/tasks/T0-LIVENESS-BOUND-EMPIRICAL-01/status_note` | Registered limitation through G2-b, not a launch gate; rehearsal, ARM-ABORT and G2-b supply three bundles; close or rerule before ALPHA. |
+| `docs/process/state_kernel.json` | `/tasks/V5-TRANSACTION-GO-01/goal` | Satisfied by the magistrate's CAMPAIGN_TRANSACTION authorization record after G2-b (D-171 §3). |
+
+### 6. Order and gate shape
+
+Seat 1 (lead, before code): contract `docs/contracts/pack_night_go_receipt.md` with the exact key list above and a D-170 clause map; Opus contract refuter. Seats 2 and 3 run in parallel worktrees after the contract lands; seat 4 after seat 2. Every seat: C-028 gauntlet, mutation-shaped audit, and the consult's replay list verbatim, plus three additions: (a) a rehearsal-prefixed id with a non-rehearsal purpose refused; (b) a v2 consumption record refused on live replay; (c) hC absent from the child's environment asserted. Build may precede `NIGHT-REHEARSAL-01`'s harvest; no live obligation is declared met by code. A second cold gate on the integrated head and the real plan bytes precedes the first pack-bound night.
+
+
+The synthesis fixes seat 2 as producer + night-driver orchestration and seat 3 as consumer + consumption v3 + verify replay. Seat 1 is drafted from decisions 1–4 and refuted by Opus before any code scope is issued.
+
+Focused replay list (exhibit A, verbatim):
+
+- Missing GO, malformed/incomplete receipt, each failed C condition, expired evidence, wrong boot/head/pack/ARM/manifest/confirmation.
+- A fully valid rehearsal receipt refused **by class**, before consumption.
+- Mutation between CLI verification and callee consumption.
+- Duplicate timers and crashes before/after consumption: at most one launch; no automatic re-arm.
+- Confirmation transport through the real child start route.
+- Agent-census exit 0, exit 1 with output, exit 2, timeout, and helper-name variants.
+- Dead-man before the night, during preparation/capture, and with ambiguous termination; no premature courier.
+- Producer-emitted rehearsal evidence only, with omitted/wrong namespace, stale HID evidence, arbitrary PASS labels, incomplete root census and fabricated positive-control fields rejected.
+- Author/ARM timing boundaries and refusal codes, without substituting software fixtures for the physical positive control.
+- Historical strict-schema replay and clean-clone pack proof at the final integrated head.
+
+**Failure-mode tests:** forged receipt: it must carry the sha256 of an ARM receipt that replays to PASS/GO in custody. Replayed receipt: the ARM receipt id is single-use at the existing O_EXCL point, and a new ARM has a new id. CLI-then-callee mutation: the callee trusts only bytes it read itself. Census bypass: the census remains the driver's first act. Pre-registration drift: pack sha256 and chain sha256 are bound into GO and rechecked at consumption. Class relabeling: purpose and claim_eligible are bound into the consumption record and read by the launch-realization recheck and L10. Regressions additionally refuse a rehearsal-prefixed id with non-rehearsal purpose and a live v2 consumption replay, and assert hC absent from the child environment. These are required implementation tests, not claims of live validation in this installation.
+
+**Why:** authentication at the existing atomic consumption boundary prevents a GO label from becoming reusable authority; purpose-bound authorization removes the G2-b bootstrap conflict without weakening C2–C5; disk custody preserves confirmation across relaunches; a separate pack rehearsal closes actual qualification obligations. No second lock, class exemption, environment transport or code-only live closure is introduced.
+
+**Evidence:** ruling of record `docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/13-magistrate-synthesis.md`; governing judge text `docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/10-coldgate-fable-ruling.md` §§1–6; adopted refuter amendments `docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/11-coldgate-opus-refutation.md` F1–F8 and §§2–5; exhibit A §R4 (lines 161–181) and replay list (lines 279–290). Seat-1 draft: `docs/contracts/pack_night_go_receipt.md`. Installation and verification: `docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md`.
+
+**2026-09-08 ~10:20 PDT wire ruling (interactive magistrate):** the normative amendments to the original key lists—GO UUID4 identity and absolute replay path, authorization attempt/copied-field binding and consumption claim eligibility, and exact JSON encodings—are installed in [pack-night GO contract §8](contracts/pack_night_go_receipt.md#8-wire-details-ruled-2026-09-08); all three wire questions are closed within the adopted cold-gate envelope, with no decision reopened.
+
+**2026-09-08 ~11:00 PDT second-pass wire ruling (interactive magistrate):** B1–B5, S1–S6 and N1–N2 of the Opus contract refutation are installed verbatim in [pack-night GO contract §10](contracts/pack_night_go_receipt.md#10-wire-addendum-ruled-2026-09-08-second-pass), with propagation into the exact-key tables, D-170 clause map and §7.1 seat WRITE_SCOPEs: v3 plan root of trust and persisted attempt, plan digest in GO/consumption, distinct 8/20/22-key consumption versions and live-v2 refusal, LaunchLineageError/CLI handling, schema-first G7 class refusal and eight-key artifact, readable custody locators, authenticated ARM window id, conditional pack-fence lift, one GO/night-gate receipt with shared condition shape, frozen production-root source and four-case purpose predicate, child v3 reading, exact T-0 evidence set/digest, numeric epochs and GO_RECEIPT_REFERENCE_KEYS. This is a normative wire amendment within the adopted cold-gate envelope; no code or live gate is closed.
+
+### Addendum 2026-09-08 — third-pass wire rulings (seat-1 installation)
+
+The consumer requires four keywords: `go_receipt`, `authenticated_go_receipt`,
+`go_receipt_sha256`, and `night_plan`, each defaulting to
+`_MISSING_LAUNCH_CONTEXT`. The added `--night-plan` flag carries the
+installer-pinned plan path from the driver to the launcher and consumer.
+GO lives in the separate create-once mode-0600 `night/go_receipt.json`;
+the D-149 `night/receipt.json` shape (`_RECEIPT_KEYS`) is unchanged for every
+class, including refused pack nights, which emit no GO file. This supersedes
+the earlier one-GO/night-gate-receipt wording. The
+[contract §10](contracts/pack_night_go_receipt.md#10-wire-addendum-ruled-2026-09-08-second-pass)
+and [§10.1](contracts/pack_night_go_receipt.md#101-third-pass-rulings-2026-09-08)
+rulings govern where they refine this decision's §1; §10.1 supersedes conflicting
+second-pass wording. Seat 1 owns this addendum. The original decision and
+earlier dated rulings remain preserved above; no code or live gate is closed.
