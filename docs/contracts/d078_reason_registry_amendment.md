@@ -9,3 +9,14 @@ a claim.
 | `capture_pipeline_superseded` | Capture-pipeline evidence is authentically stored and names a retired, non-claim-bearing capture method. |
 | `capture_pipeline_absent` | No capture-pipeline evidence presentation is available for claim admission. |
 | `instrument_calibration_capture_time_mismatch` | The declared calibration capture time disagrees with the immutable, hashed calibration-event chronology. |
+
+## D-176 launch-family registration — 2026-09-08 (stage-1 R-8)
+
+These codes belong to `LAUNCH_LINEAGE_REASON_CODES`, not the frozen readiness
+row registry or `REASON_CODE_COVERAGE`. They are raised as `LaunchLineageError`
+and rendered by the launcher's shared JSON refusal handler.
+
+| Reason code | Semantics |
+| --- | --- |
+| `launch_go_receipt_missing` | The GO file is missing, or live replay presents a v2 or GO-less consumption record. |
+| `launch_go_receipt_invalid` | Any other GO authentication, binding, class, purpose, condition or validity failure; detail identifies the field, or `class=<receipt_class>` for a rehearsal receipt. |

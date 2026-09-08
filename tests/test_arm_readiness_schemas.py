@@ -1684,5 +1684,195 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertNotIn("clock_probe_failed", READINESS_REASON_CODES)
 
 
+
+def sample_pack_night_go() -> dict[str, Any]:
+    """Wire fixture only: it makes no machine/evidence authentication claim."""
+    ref = {"path": "/custody/record.json", "sha256": ZERO_SHA}
+    return {
+        "schema_version": readiness.PACK_NIGHT_GO_RECEIPT_SCHEMA,
+        "receipt_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "receipt_class": "TRANSACTION_PACK", "purpose": "G2B_SHAKEDOWN",
+        "plan_id": "plan", "plan_sha256": ZERO_SHA,
+        "pack_id": "pack", "pack_sha256": ZERO_SHA,
+        "arm_receipt": {"receipt_id": "arm", "sha256": ZERO_SHA,
+                        "valid_until_monotonic_ns": 100},
+        "boot_session_id": TEST_BOOT_SESSION_ID,
+        "t0_evidence": [{"path": "evidence.json", "sha256": ZERO_SHA}],
+        "t0_evidence_set_sha256": ZERO_SHA,
+        "launch_manifest_sha256": ZERO_SHA, "window_environment_sha256": ZERO_SHA,
+        "window_chain_sha256": ZERO_SHA, "repo_head": "a" * 40,
+        "measurement_root": "/measurement", "measurement_head": "a" * 40,
+        "confirmation_record": dict(ref),
+        "authorization": {**ref, "purpose": "G2B_SHAKEDOWN", "attempt_id": "plan/1",
+                          "claim_eligible": False},
+        "census": {"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"],
+                   "exit_code": 1, "stdout_sha256": ZERO_SHA, "monotonic_ns": 1},
+        "issued_epoch_s": 1.0, "issued_monotonic_ns": 2,
+        "valid_until_monotonic_ns": 99,
+        "conditions": [{"condition_id": f"C{i}", "status": "PASS", "basis": None,
+                        "evidence": [], "measured": {}} for i in range(1, 6)],
+        "verdict": "GO",
+    }
+
+
+class PackNightGoSchemaTests(unittest.TestCase):
+    def test_go_exact_keys_at_every_object(self) -> None:
+        go = sample_pack_night_go()
+        self.assertEqual(len(go), 26)
+        self.assertEqual(readiness.validate_pack_night_go_receipt(go), go)
+        for name in (None, "arm_receipt", "confirmation_record", "authorization",
+                     "census", "conditions", "t0_evidence"):
+            for mutation in ("extra", "missing"):
+                with self.subTest(name=name, mutation=mutation):
+                    changed = copy.deepcopy(go)
+                    target = changed if name is None else changed[name]
+                    if isinstance(target, list):
+                        target = target[0]
+                    if mutation == "extra":
+                        target["unregistered"] = True
+                    else:
+                        target.pop(next(iter(target)))
+                    with self.assertRaises(readiness.LaunchLineageError) as caught:
+                        readiness.validate_pack_night_go_receipt(changed)
+                    self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+
+    def test_go_primitive_class_verdict_and_condition_mutations(self) -> None:
+        mutations = [
+            ("receipt_id", "aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa"),
+            ("receipt_class", "DIAGNOSTIC_NO_PACK"),
+            ("schema_version", "joulewise.t0_unattended_d149_go_receipt.v1"),
+            ("purpose", "UNKNOWN"), ("verdict", "REFUSE"),
+            ("plan_sha256", "A" * 64), ("issued_monotonic_ns", True),
+            ("issued_epoch_s", 1), ("issued_epoch_s", float("nan")),
+            ("valid_until_monotonic_ns", 101), ("valid_until_monotonic_ns", 2),
+            ("measurement_root", "relative"),
+        ]
+        for name, value in mutations:
+            with self.subTest(name=name, value=value):
+                go = sample_pack_night_go()
+                go[name] = value
+                with self.assertRaises(readiness.LaunchLineageError):
+                    readiness.validate_pack_night_go_receipt(go)
+        for i in range(5):
+            for status in ("FAIL", "NOT_APPLICABLE", "UNKNOWN", True):
+                with self.subTest(condition=i, status=status):
+                    go = sample_pack_night_go()
+                    go["conditions"][i]["status"] = status
+                    with self.assertRaisesRegex(readiness.LaunchLineageError, "conditions"):
+                        readiness.validate_pack_night_go_receipt(go)
+        for mutation in ("order", "duplicate", "boolean", "absolute_evidence"):
+            with self.subTest(mutation=mutation):
+                go = sample_pack_night_go()
+                if mutation == "order":
+                    go["conditions"].reverse()
+                elif mutation == "duplicate":
+                    go["t0_evidence"] *= 2
+                elif mutation == "boolean":
+                    go["authorization"]["claim_eligible"] = 0
+                else:
+                    go["t0_evidence"][0]["path"] = "/escape"
+                with self.assertRaises(readiness.LaunchLineageError):
+                    readiness.validate_pack_night_go_receipt(go)
+
+    def test_rehearsal_class_precedes_go_exact_keys(self) -> None:
+        with self.assertRaisesRegex(readiness.LaunchLineageError,
+                                   "^class=T0_UNATTENDED_SUPERVISED_REHEARSAL$"):
+            readiness.validate_pack_night_go_receipt({
+                "schema_version": "joulewise.t0_unattended_rehearsal_receipt.v1",
+                "receipt_class": "T0_UNATTENDED_SUPERVISED_REHEARSAL",
+            })
+
+    def test_v3_consumption_has_23_keys_and_v2_retains_20(self) -> None:
+        from tests.test_arm_readiness import LaunchConsumptionV2Tests
+        fixture = LaunchConsumptionV2Tests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        result = fixture._consume()
+        v2 = parse_json_bytes(Path(result["consumption_path"]).read_bytes())
+        for key in ("go_receipt", "night_plan", "step6_confirmation"):
+            v2.pop(key)
+        v2["schema_version"] = readiness.CONSUMPTION_RECEIPT_SCHEMA_V2
+        readiness.validate_consumption_receipt(v2)
+        self.assertEqual(len(readiness.LEGACY_CONSUMPTION_RECEIPT_KEYS), 8)
+        self.assertEqual(len(v2), 20)
+        v3 = copy.deepcopy(v2)
+        v3.update({
+            "schema_version": readiness.CONSUMPTION_RECEIPT_SCHEMA_V3,
+            "night_plan": {"path": "/custody/plan.json", "sha256": ZERO_SHA},
+            "step6_confirmation": {"table_path": "/custody/table.json", "table_sha256": ZERO_SHA},
+            "go_receipt": {"receipt_id": sample_pack_night_go()["receipt_id"],
+                           "path": "/custody/night/go_receipt.json", "sha256": ZERO_SHA,
+                           "purpose": "G2B_SHAKEDOWN", "receipt_class": "TRANSACTION_PACK",
+                           "claim_eligible": False, "plan_sha256": ZERO_SHA},
+        })
+        self.assertEqual(len(v3), 23)
+        self.assertEqual(len(v3["go_receipt"]), 7)
+        readiness.validate_consumption_receipt(v3)
+        for key in ("go_receipt", "step6_confirmation", "night_plan"):
+            for mutation in ("missing", "extra", "field"):
+                with self.subTest(key=key, mutation=mutation):
+                    changed = copy.deepcopy(v3)
+                    if mutation == "missing":
+                        del changed[key]
+                    elif mutation == "extra":
+                        changed[key]["extra"] = None
+                    elif key == "go_receipt":
+                        changed[key]["claim_eligible"] = 0
+                    elif key == "night_plan":
+                        changed[key]["path"] = "relative"
+                    else:
+                        changed[key]["table_sha256"] = "bad"
+                    with self.assertRaises(ArmReadinessError):
+                        readiness.validate_consumption_receipt(changed)
+
+    def test_go_registration_precedes_emission_and_is_separate_from_readiness(self) -> None:
+        text = (ROOT / "docs/contracts/d078_reason_registry_amendment.md").read_text()
+        for code in ("launch_go_receipt_missing", "launch_go_receipt_invalid"):
+            self.assertIn(f"`{code}`", text)
+            self.assertIn(code, readiness.LAUNCH_LINEAGE_REASON_CODES)
+            self.assertNotIn(code, readiness.READINESS_REASON_CODES)
+            readiness.LaunchLineageError(code, "registered")
+            with mock.patch.object(readiness, "LAUNCH_LINEAGE_REASON_CODES",
+                                   readiness.LAUNCH_LINEAGE_REASON_CODES - {code}):
+                with self.assertRaisesRegex(ValueError, "unregistered"):
+                    readiness.LaunchLineageError(code, "must refuse registry drift")
+
+    def test_go_input_rereads_bytes_and_compares_the_callers_object(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "go.json"
+            go = sample_pack_night_go()
+            raw = render_json(go)
+            path.write_bytes(raw)
+            kwargs = {"expected_sha256": hashlib.sha256(raw).hexdigest(),
+                      "authenticated_go_receipt": go}
+            self.assertEqual(readiness._read_pack_night_go_input(path, **kwargs)[0], go)
+            path.write_bytes(raw + b" ")
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "^sha256$"):
+                readiness._read_pack_night_go_input(path, **kwargs)
+            path.write_bytes(raw)
+            changed = copy.deepcopy(go)
+            changed["receipt_id"] = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+            kwargs["authenticated_go_receipt"] = changed
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "authenticated_go_receipt"):
+                readiness._read_pack_night_go_input(path, **kwargs)
+            path.unlink()
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                readiness._read_pack_night_go_input(path, **kwargs)
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
+
+
+    def test_basis_uses_the_shared_string_or_null_wire_type(self) -> None:
+        go = sample_pack_night_go()
+        go["conditions"][0]["basis"] = ""
+        readiness.validate_pack_night_go_receipt(go)
+        go["conditions"][0]["basis"] = 0
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "conditions.basis"):
+            readiness.validate_pack_night_go_receipt(go)
+        go = sample_pack_night_go()
+        go["purpose"] = []
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "purpose"):
+            readiness.validate_pack_night_go_receipt(go)
+
+
 if __name__ == "__main__":
     unittest.main()

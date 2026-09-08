@@ -87,7 +87,9 @@ S0_CANDIDATE_MANIFEST_NAME = "s0-candidate-manifest.json"
 LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_launch_consumption.v1"
 )
-CONSUMPTION_RECEIPT_SCHEMA = "joulewise.arm_readiness_launch_consumption.v2"
+CONSUMPTION_RECEIPT_SCHEMA_V2 = "joulewise.arm_readiness_launch_consumption.v2"
+CONSUMPTION_RECEIPT_SCHEMA_V3 = "joulewise.arm_readiness_launch_consumption.v3"
+CONSUMPTION_RECEIPT_SCHEMA = CONSUMPTION_RECEIPT_SCHEMA_V3
 LAUNCH_MANIFEST_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
 LAUNCH_LINEAGE_SCHEMA = "joulewise.launch_lineage.v1"
 LAUNCH_LINEAGE_LOCATOR_SCHEMA = "joulewise.launch_lineage_locator.v1"
@@ -678,7 +680,7 @@ LEGACY_CONSUMPTION_RECEIPT_KEYS = {
     "assurance",
 }
 LAUNCH_ARTIFACT_REFERENCE_KEYS = {"path", "sha256"}
-CONSUMPTION_RECEIPT_KEYS = {
+CONSUMPTION_RECEIPT_KEYS_V2 = {
     "schema_version",
     "receipt_kind",
     "consumption_id",
@@ -700,6 +702,28 @@ CONSUMPTION_RECEIPT_KEYS = {
     "volatile_checks",
     "assurance",
 }
+CONSUMPTION_RECEIPT_KEYS_V3 = CONSUMPTION_RECEIPT_KEYS_V2 | {
+    "go_receipt", "step6_confirmation", "night_plan",
+}
+CONSUMPTION_RECEIPT_KEYS = CONSUMPTION_RECEIPT_KEYS_V3
+GO_RECEIPT_REFERENCE_KEYS = {
+    "receipt_id", "path", "sha256", "purpose", "receipt_class",
+    "claim_eligible", "plan_sha256",
+}
+PACK_NIGHT_GO_RECEIPT_SCHEMA = "joulewise.pack_night_go_receipt.v1"
+PACK_NIGHT_GO_RECEIPT_KEYS = {
+    "schema_version", "receipt_id", "receipt_class", "purpose", "plan_id",
+    "plan_sha256", "pack_id", "pack_sha256", "arm_receipt", "boot_session_id",
+    "t0_evidence", "t0_evidence_set_sha256", "launch_manifest_sha256",
+    "window_environment_sha256", "window_chain_sha256", "repo_head",
+    "measurement_root", "measurement_head", "confirmation_record",
+    "authorization", "census", "issued_epoch_s", "issued_monotonic_ns",
+    "valid_until_monotonic_ns", "conditions", "verdict",
+}
+_PACK_NIGHT_GO_PURPOSES = frozenset({
+    "G2B_SHAKEDOWN", "CAMPAIGN_TRANSACTION", "T0_REHEARSAL",
+})
+
 LAUNCH_MANIFEST_KEYS = {
     "schema_version",
     "boot_session_id",
@@ -1099,6 +1123,13 @@ class EvidenceLifecycleError(ValueError):
             "row_id": self.row_id,
             "evidence_id": self.evidence_id,
         }
+
+
+# D-176 / stage-1 R-8 registration. Keep this extension outside seat 2's
+# production-root constants area; no readiness-row vocabulary is extended.
+LAUNCH_LINEAGE_REASON_CODES = LAUNCH_LINEAGE_REASON_CODES | frozenset({
+    "launch_go_receipt_missing", "launch_go_receipt_invalid",
+})
 
 
 class LaunchLineageError(ValueError):
@@ -2584,6 +2615,165 @@ def validate_launch_manifest(value: object) -> Mapping[str, Any]:
     return manifest
 
 
+
+def _require_uuid4(value: object, where: str) -> None:
+    _require_string(value, where)
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError as exc:
+        raise ArmReadinessError("readiness_schema_invalid", f"{where} must be UUID4") from exc
+    if parsed.version != 4 or str(parsed) != value:
+        raise ArmReadinessError("readiness_schema_invalid", f"{where} must be UUID4")
+
+
+def _validate_go_reference(value: object) -> Mapping[str, Any]:
+    reference = _require_exact_keys(value, GO_RECEIPT_REFERENCE_KEYS, "go_receipt")
+    _require_uuid4(reference["receipt_id"], "go_receipt.receipt_id")
+    _validate_launch_artifact_reference(
+        {name: reference[name] for name in ("path", "sha256")}, "go_receipt"
+    )
+    _require_lower_sha256(reference["plan_sha256"], "go_receipt.plan_sha256")
+    if reference["receipt_class"] != "TRANSACTION_PACK":
+        raise ArmReadinessError("readiness_schema_invalid", "go_receipt.receipt_class")
+    _require_string(reference["purpose"], "go_receipt.purpose")
+    if reference["purpose"] not in _PACK_NIGHT_GO_PURPOSES:
+        raise ArmReadinessError("readiness_schema_invalid", "go_receipt.purpose")
+    if type(reference["claim_eligible"]) is not bool:
+        raise ArmReadinessError("readiness_schema_invalid", "go_receipt.claim_eligible")
+    return reference
+
+
+def validate_pack_night_go_receipt(value: object) -> Mapping[str, Any]:
+    """Validate the GO wire shape; this alone grants no launch authority.
+
+    Binding/evidence replay and monotonic admission belong to the consumer.
+    The rehearsal schema check precedes exact keys as required by G7.
+    """
+    if isinstance(value, Mapping) and value.get("schema_version") == (
+        "joulewise.t0_unattended_rehearsal_receipt.v1"
+    ):
+        raise LaunchLineageError(
+            "launch_go_receipt_invalid", f"class={value.get('receipt_class')}"
+        )
+    try:
+        go = _require_exact_keys(value, PACK_NIGHT_GO_RECEIPT_KEYS, "go_receipt")
+        if go["schema_version"] != PACK_NIGHT_GO_RECEIPT_SCHEMA:
+            raise ArmReadinessError("readiness_schema_invalid", "schema_version")
+        _require_uuid4(go["receipt_id"], "receipt_id")
+        if go["receipt_class"] != "TRANSACTION_PACK":
+            raise ArmReadinessError("readiness_schema_invalid", "receipt_class")
+        if not isinstance(go["purpose"], str) or go["purpose"] not in _PACK_NIGHT_GO_PURPOSES:
+            raise ArmReadinessError("readiness_schema_invalid", "purpose")
+        if go["verdict"] != "GO":
+            raise ArmReadinessError("readiness_schema_invalid", "verdict")
+        for name in ("plan_id", "pack_id", "measurement_root"):
+            _require_string(go[name], name)
+        if not Path(go["measurement_root"]).is_absolute():
+            raise ArmReadinessError("readiness_schema_invalid", "measurement_root")
+        for name in ("plan_sha256", "pack_sha256", "t0_evidence_set_sha256",
+                     "launch_manifest_sha256", "window_environment_sha256",
+                     "window_chain_sha256"):
+            _require_lower_sha256(go[name], name)
+        for name in ("repo_head", "measurement_head"):
+            _require_lower_git_oid(go[name], name)
+        _require_boot_session_id(go["boot_session_id"], "boot_session_id")
+        for name in ("issued_monotonic_ns", "valid_until_monotonic_ns"):
+            _require_int(go[name], name)
+        if not (type(go["issued_epoch_s"]) is float and math.isfinite(go["issued_epoch_s"])):
+            raise ArmReadinessError("readiness_schema_invalid", "issued_epoch_s")
+        arm = _require_exact_keys(
+            go["arm_receipt"], {"receipt_id", "sha256", "valid_until_monotonic_ns"},
+            "arm_receipt",
+        )
+        _require_string(arm["receipt_id"], "arm_receipt.receipt_id")
+        _require_lower_sha256(arm["sha256"], "arm_receipt.sha256")
+        _require_int(arm["valid_until_monotonic_ns"], "arm_receipt.valid_until_monotonic_ns")
+        if not (go["issued_monotonic_ns"] < go["valid_until_monotonic_ns"]
+                <= arm["valid_until_monotonic_ns"]):
+            raise ArmReadinessError("readiness_schema_invalid", "valid_until_monotonic_ns")
+        _validate_launch_artifact_reference(go["confirmation_record"], "confirmation_record")
+        authorization = _require_exact_keys(
+            go["authorization"], {"path", "sha256", "purpose", "attempt_id", "claim_eligible"},
+            "authorization",
+        )
+        _validate_launch_artifact_reference(
+            {name: authorization[name] for name in ("path", "sha256")}, "authorization"
+        )
+        _require_string(authorization["attempt_id"], "authorization.attempt_id")
+        if authorization["purpose"] != go["purpose"]:
+            raise ArmReadinessError("readiness_schema_invalid", "authorization.purpose")
+        if type(authorization["claim_eligible"]) is not bool:
+            raise ArmReadinessError("readiness_schema_invalid", "authorization.claim_eligible")
+        census = _require_exact_keys(
+            go["census"], {"argv", "exit_code", "stdout_sha256", "monotonic_ns"}, "census"
+        )
+        _validate_string_argv(census["argv"], "census.argv")
+        _require_int(census["exit_code"], "census.exit_code")
+        _require_lower_sha256(census["stdout_sha256"], "census.stdout_sha256")
+        _require_int(census["monotonic_ns"], "census.monotonic_ns")
+
+        def evidence(items: object, where: str) -> None:
+            if not isinstance(items, list):
+                raise ArmReadinessError("readiness_schema_invalid", where)
+            paths = []
+            for item in items:
+                ref = _require_exact_keys(item, {"path", "sha256"}, where)
+                paths.append(_require_relative_path(ref["path"], f"{where}.path"))
+                _require_lower_sha256(ref["sha256"], f"{where}.sha256")
+            if len(paths) != len(set(paths)):
+                raise ArmReadinessError("readiness_schema_invalid", f"{where} duplicate path")
+
+        evidence(go["t0_evidence"], "t0_evidence")
+        conditions = go["conditions"]
+        if not isinstance(conditions, list) or len(conditions) != 5:
+            raise ArmReadinessError("readiness_schema_invalid", "conditions")
+        for number, item in enumerate(conditions, 1):
+            condition = _require_exact_keys(
+                item, {"condition_id", "status", "basis", "evidence", "measured"},
+                "conditions",
+            )
+            if condition["condition_id"] != f"C{number}" or condition["status"] != "PASS":
+                raise ArmReadinessError("readiness_schema_invalid", f"conditions.C{number}")
+            if condition["basis"] is not None and not isinstance(condition["basis"], str):
+                raise ArmReadinessError("readiness_schema_invalid", "conditions.basis")
+            if not isinstance(condition["measured"], Mapping):
+                raise ArmReadinessError("readiness_schema_invalid", "conditions.measured")
+            evidence(condition["evidence"], "conditions.evidence")
+        return go
+    except (ArmReadinessError, TypeError) as exc:
+        raise LaunchLineageError("launch_go_receipt_invalid", str(exc)) from exc
+
+
+def _read_pack_night_go_input(
+    path: Path | str, *, expected_sha256: str,
+    authenticated_go_receipt: Mapping[str, Any],
+) -> tuple[Mapping[str, Any], bytes, str, Path]:
+    """Re-read GO bytes and reject changes since caller authentication."""
+    try:
+        source = Path(path)
+        if not source.is_absolute() or source.is_symlink():
+            raise LaunchLineageError("launch_go_receipt_invalid", "path")
+        resolved = source.resolve(strict=True)
+        raw = resolved.read_bytes()
+    except FileNotFoundError as exc:
+        raise LaunchLineageError("launch_go_receipt_missing", "GO file missing") from exc
+    except (OSError, ValueError, TypeError, RuntimeError) as exc:
+        if isinstance(exc, LaunchLineageError):
+            raise
+        raise LaunchLineageError("launch_go_receipt_invalid", f"path: {exc}") from exc
+    digest = sha256_bytes(raw)
+    if digest != expected_sha256:
+        raise LaunchLineageError("launch_go_receipt_invalid", "sha256")
+    try:
+        parsed = parse_json_bytes(raw, require_canonical=False)
+    except ArmReadinessError as exc:
+        raise LaunchLineageError("launch_go_receipt_invalid", f"JSON: {exc}") from exc
+    go = validate_pack_night_go_receipt(parsed)
+    if go != authenticated_go_receipt:
+        raise LaunchLineageError("launch_go_receipt_invalid", "authenticated_go_receipt")
+    return go, raw, digest, resolved
+
+
 def validate_consumption_receipt(value: object) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ArmReadinessError(
@@ -2593,12 +2783,15 @@ def validate_consumption_receipt(value: object) -> Mapping[str, Any]:
     keys = (
         LEGACY_CONSUMPTION_RECEIPT_KEYS
         if schema == LEGACY_CONSUMPTION_RECEIPT_SCHEMA
-        else CONSUMPTION_RECEIPT_KEYS
+        else CONSUMPTION_RECEIPT_KEYS_V2
+        if schema == CONSUMPTION_RECEIPT_SCHEMA_V2
+        else CONSUMPTION_RECEIPT_KEYS_V3
     )
     receipt = _require_exact_keys(value, keys, "consumption receipt")
     if schema not in {
         LEGACY_CONSUMPTION_RECEIPT_SCHEMA,
-        CONSUMPTION_RECEIPT_SCHEMA,
+        CONSUMPTION_RECEIPT_SCHEMA_V2,
+        CONSUMPTION_RECEIPT_SCHEMA_V3,
     } or receipt["receipt_kind"] != "launch_consumption":
         raise ArmReadinessError(
             "readiness_receipt_kind_invalid", "consumption receipt kind is invalid"
@@ -2610,7 +2803,7 @@ def validate_consumption_receipt(value: object) -> Mapping[str, Any]:
     _require_lower_sha256(arm["sha256"], "arm_receipt.sha256")
     _require_lower_sha256(receipt["pack_sha256"], "consumption receipt.pack_sha256")
     _require_lower_git_oid(receipt["head_commit"], "consumption receipt.head_commit")
-    if schema == CONSUMPTION_RECEIPT_SCHEMA:
+    if schema in {CONSUMPTION_RECEIPT_SCHEMA_V2, CONSUMPTION_RECEIPT_SCHEMA_V3}:
         _require_string(receipt["consumption_id"], "consumption receipt.consumption_id")
         _require_int(
             receipt["consumed_at_monotonic_ns"],
@@ -2639,6 +2832,15 @@ def validate_consumption_receipt(value: object) -> Mapping[str, Any]:
             receipt["handoff_token_sha256"],
             "consumption receipt.handoff_token_sha256",
         )
+    if schema == CONSUMPTION_RECEIPT_SCHEMA_V3:
+        _validate_go_reference(receipt["go_receipt"])
+        pair = _require_exact_keys(
+            receipt["step6_confirmation"], {"table_path", "table_sha256"},
+            "step6_confirmation",
+        )
+        _require_string(pair["table_path"], "step6_confirmation.table_path")
+        _require_lower_sha256(pair["table_sha256"], "step6_confirmation.table_sha256")
+        _validate_launch_artifact_reference(receipt["night_plan"], "night_plan")
     if not isinstance(receipt["volatile_checks"], list) or receipt["volatile_checks"] != sorted(set(receipt["volatile_checks"])):
         raise ArmReadinessError(
             "readiness_schema_invalid", "volatile_checks must be sorted and unique"
@@ -8972,20 +9174,25 @@ def _load_launch_manifest_for_consumption(
     return manifest, manifest_reference, env_reference, chain_reference
 
 
-def _read_v2_consumption(
-    consumption_receipt: Path | str,
+def _read_launch_consumption(
+    consumption_receipt: Path | str, *, require_current_boot: bool,
 ) -> tuple[Mapping[str, Any], bytes, str, Path]:
     path = Path(consumption_receipt).resolve(strict=False)
     value, raw, digest = _read_launch_lineage_primary(
         path, missing_code="launch_consumption_missing"
     )
+    if require_current_boot and (
+        not isinstance(value, Mapping) or "go_receipt" not in value
+        or value.get("schema_version") != CONSUMPTION_RECEIPT_SCHEMA_V3
+    ):
+        raise LaunchLineageError("launch_go_receipt_missing", "live replay requires v3 GO")
     try:
         receipt = validate_consumption_receipt(value)
     except ArmReadinessError as exc:
         raise LaunchLineageError(
             "launch_consumption_invalid", f"invalid consumption receipt: {exc}"
         ) from exc
-    if receipt["schema_version"] != CONSUMPTION_RECEIPT_SCHEMA:
+    if receipt["schema_version"] not in {CONSUMPTION_RECEIPT_SCHEMA_V2, CONSUMPTION_RECEIPT_SCHEMA_V3}:
         raise LaunchLineageError(
             "launch_consumption_invalid",
             "legacy consumption receipts do not authorize a physical launch",
@@ -9448,6 +9655,317 @@ def _replay_consumed_arm(
     return arm, arm_path, recorded_pack_root, authenticated_pack
 
 
+def _go_invalid(detail: str) -> LaunchLineageError:
+    return LaunchLineageError("launch_go_receipt_invalid", detail)
+
+
+def _go_file(path: Path | str, label: str, *, root: Path | None = None,
+             max_bytes: int | None = None, cache: dict[Path, bytes] | None = None) -> tuple[Path, bytes]:
+    try:
+        candidate = Path(path)
+        if not candidate.is_absolute() or candidate.is_symlink():
+            raise _go_invalid(f"{label}.path")
+        resolved = candidate.resolve(strict=True)
+        if root is not None and not resolved.is_relative_to(root):
+            raise _go_invalid(f"{label}.path outside custody root")
+        if not resolved.is_file():
+            raise _go_invalid(f"{label}.path not a regular file")
+        raw = resolved.read_bytes() if max_bytes is None else _read_launch_binding_artifact(
+            resolved, max_bytes=max_bytes, label=label, cache=cache if cache is not None else {}
+        )
+        return resolved, raw
+    except LaunchLineageError:
+        raise
+    except (OSError, ValueError, TypeError, RuntimeError) as exc:
+        raise _go_invalid(f"{label}: {exc}") from exc
+
+
+def _go_record(reference: Mapping[str, Any], label: str, root: Path) -> Mapping[str, Any]:
+    _path, raw = _go_file(reference["path"], label, root=root)
+    if sha256_bytes(raw) != reference["sha256"]:
+        raise _go_invalid(f"{label}.sha256")
+    value = parse_json_bytes(raw)
+    if not isinstance(value, Mapping):
+        raise _go_invalid(label)
+    return value
+
+
+def _consumed_confirmation_pair(consumption, table, digest):
+    if consumption["schema_version"] != CONSUMPTION_RECEIPT_SCHEMA_V3:
+        return table, digest
+    pair = consumption["step6_confirmation"]
+    if table is not None and Path(table).resolve() != Path(pair["table_path"]).resolve():
+        raise _go_invalid("step6_confirmation.table_path")
+    if digest is not None and digest != pair["table_sha256"]:
+        raise _go_invalid("step6_confirmation.table_sha256")
+    return pair["table_path"], pair["table_sha256"]
+
+
+def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: Path, at: int) -> None:
+    # Inventory comes from the existing author, never from the presented GO list.
+    from joulewise import arm_readiness_evidence_t0 as author
+
+    receipt_paths = [custody_pack_root / author._EVIDENCE_DIRECTORY / author._receipt_name(row)
+                     for row in author._EXPECTED_ROWS]
+    capture_paths = [custody_pack_root / author._INPUT_DIRECTORY / name
+                     for name in author._CAPTURE_FILES.values()]
+    expected = []
+    for path in receipt_paths + capture_paths:
+        resolved, raw = _go_file(path, "t0_evidence", root=night_root)
+        expected.append({"path": resolved.relative_to(night_root).as_posix(),
+                         "sha256": sha256_bytes(raw)})
+    expected.sort(key=lambda item: item["path"])
+    if sorted(go["t0_evidence"], key=lambda item: item["path"]) != expected:
+        raise _go_invalid("t0_evidence membership/sha256")
+    if sha256_bytes(render_json(expected)) != go["t0_evidence_set_sha256"]:
+        raise _go_invalid("t0_evidence_set_sha256")
+    arm_items = {item["path"]: item for item in arm["evidence"]
+                 if item["namespace"] == "WINDOW_CUSTODY"}
+    for row, path in zip(author._EXPECTED_ROWS, receipt_paths, strict=True):
+        raw = path.read_bytes()
+        relative = path.relative_to(custody_pack_root).as_posix()
+        item = arm_items.get(relative)
+        if item is None or item["sha256"] != sha256_bytes(raw):
+            raise _go_invalid("t0_evidence ARM binding")
+        receipt = validate_evidence_receipt(parse_json_bytes(raw, require_canonical=True))
+        if (receipt["status"] != "PASS" or receipt["boot_session_id"] != arm["boot_session_id"]
+                or receipt["pack_sha256"] != arm["pack"]["pack_sha256"]
+                or receipt["head_commit"] != arm["reviewed_main"]["head_commit"]
+                or receipt["valid_until_monotonic_ns"] < at
+                or receipt["kind"] != author._ROW_KIND[row]):
+            raise _go_invalid("t0_evidence receipt binding/expiry")
+    previous = -1
+    for step, path in zip(author._CAPTURE_FILES, capture_paths, strict=True):
+        value = _require_exact_keys(parse_json_bytes(path.read_bytes()), author._CAPTURE_KEYS,
+                                    "t0_evidence.capture")
+        start, end = value["started_monotonic_ns"], value["finished_monotonic_ns"]
+        if (value["schema_version"] != author._COMMAND_SCHEMA or value["step_id"] != step
+                or value["boot_session_id"] != arm["boot_session_id"]
+                or type(start) is not int or type(end) is not int
+                or not previous <= start <= end <= at
+                or at - end > author._MAX_T0_SEQUENCE_AGE_NS
+                or type(value["exit_code"]) is not int or value["exit_code"] != 0):
+            raise _go_invalid("t0_evidence capture binding/order/expiry")
+        previous = end
+
+
+def _authenticate_go_purpose(go, arm, plan) -> None:
+    prefixed = arm["pack"]["window_id"].startswith("rehearsal-t0-unattended-")
+    rehearsal = go["purpose"] == "T0_REHEARSAL"
+    if rehearsal and not prefixed:
+        raise _go_invalid("rehearsal_purpose_on_production_id")
+    if prefixed and not rehearsal:
+        raise _go_invalid("purpose")
+    if rehearsal:
+        # Seat 2 owns this frozen census; absence never becomes an empty census.
+        roots = globals().get("PRODUCTION_CUSTODY_ROOTS")
+        if not roots or any(not isinstance(root, (str, os.PathLike)) for root in roots):
+            raise _go_invalid("production_root_census_unavailable")
+        for name in ("measurement_root", "custody_root"):
+            candidate = Path(plan[name]).resolve()
+            if any(candidate.is_relative_to(Path(root).resolve()) for root in roots):
+                raise _go_invalid("rehearsal_roots_not_disjoint")
+
+
+def _authenticate_pack_launch_go(
+    *, night_plan, go_receipt, authenticated_go_receipt, go_receipt_sha256,
+    arm, arm_sha256, custody_pack_root, manifest_ref, env_ref, chain_ref,
+    step6_confirmation_table, expected_confirmation_digest,
+    require_current_boot: bool, at_monotonic_ns: int,
+    expected_plan_sha256: str | None = None,
+    launch_binding_cache: dict[Path, bytes] | None = None,
+) -> tuple[dict[str, Any], tuple[int, int]]:
+    """Re-read every GO binding before the one existing consumption write."""
+    from joulewise.night_gate import NightPlan, PlanError, AGENT_CENSUS_ARGV
+
+    try:
+        go, _raw, digest, go_path = _read_pack_night_go_input(
+            go_receipt, expected_sha256=go_receipt_sha256,
+            authenticated_go_receipt=authenticated_go_receipt,
+        )
+        plan_path, plan_raw = _go_file(night_plan, "night_plan")
+        plan_digest = sha256_bytes(plan_raw)
+        if plan_digest != go["plan_sha256"] or (
+            expected_plan_sha256 is not None and plan_digest != expected_plan_sha256
+        ):
+            raise _go_invalid("plan_sha256")
+        plan = parse_json_bytes(plan_raw)
+        NightPlan.from_mapping(plan)
+        if plan["receipt_class"] != "TRANSACTION_PACK":
+            raise _go_invalid("receipt_class")
+        binding = _require_exact_keys(plan["pack_night"], {
+            "pack_id", "pack_sha256", "attempt_ordinal", "authorization_record", "confirmation_record",
+        }, "pack_night")
+        _require_int(binding["attempt_ordinal"], "pack_night.attempt_ordinal", minimum=1)
+        night_root = Path(plan["custody_root"]).resolve(strict=True)
+        if not plan_path.is_relative_to(night_root):
+            raise _go_invalid("night_plan.path outside custody root")
+        if go_path != night_root / "night" / "go_receipt.json":
+            raise _go_invalid("go_receipt.path")
+        if not custody_pack_root.resolve().is_relative_to(night_root):
+            raise _go_invalid("night_plan.custody_root")
+        expected = {
+            "plan_id": arm["pack"]["plan_id"], "pack_id": arm["pack"]["pack_id"],
+            "pack_sha256": arm["pack"]["pack_sha256"],
+            "repo_head": arm["reviewed_main"]["head_commit"],
+            "boot_session_id": arm["boot_session_id"],
+            "launch_manifest_sha256": manifest_ref["sha256"],
+            "window_environment_sha256": env_ref["sha256"],
+            "window_chain_sha256": chain_ref["sha256"],
+        }
+        for key, value in expected.items():
+            if go[key] != value:
+                raise _go_invalid(key)
+        for key in ("plan_id", "repo_head", "measurement_root", "measurement_head"):
+            if go[key] != plan[key]:
+                raise _go_invalid(key)
+        for key in ("pack_id", "pack_sha256"):
+            if binding[key] != go[key]:
+                raise _go_invalid(key)
+        if go["arm_receipt"] != {
+            "receipt_id": arm["receipt_id"], "sha256": arm_sha256,
+            "valid_until_monotonic_ns": arm["valid_until_monotonic_ns"],
+        }:
+            raise _go_invalid("arm_receipt")
+        if arm["status"] != "PASS" or arm["arm_disposition"] != "GO":
+            raise _go_invalid("arm_receipt.status")
+        if require_current_boot and go["boot_session_id"] != _current_boot_session_id():
+            raise _go_invalid("boot_session_id")
+        if not go["issued_monotonic_ns"] <= at_monotonic_ns < go["valid_until_monotonic_ns"]:
+            raise _go_invalid("monotonic_ns")
+        for ref, key in ((manifest_ref, "launch_manifest"), (env_ref, "window_environment"),
+                         (chain_ref, "window_chain")):
+            cap = {"launch_manifest": _LAUNCH_BINDING_MANIFEST_MAX_BYTES,
+                   "window_environment": _LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES,
+                   "window_chain": _LAUNCH_BINDING_CHAIN_MAX_BYTES}[key]
+            _path, raw = _go_file(ref["path"], key, max_bytes=cap, cache=launch_binding_cache)
+            if sha256_bytes(raw) != go[f"{key}_sha256"]:
+                raise _go_invalid(f"{key}_sha256")
+        if Path(plan["chain_path"]).resolve() != Path(chain_ref["path"]).resolve():
+            raise _go_invalid("night_plan.chain_path")
+        for name, go_key in (("authorization_record", "authorization"),
+                             ("confirmation_record", "confirmation_record")):
+            reference = _validate_launch_artifact_reference(binding[name], f"pack_night.{name}")
+            if any(go[go_key][key] != reference[key] for key in ("path", "sha256")):
+                raise _go_invalid(go_key)
+        authorization = _go_record(go["authorization"], "authorization", night_root)
+        _require_exact_keys(authorization, {"purpose", "attempt_id", "claim_eligible", "pack_sha256",
+            "permitted_chain_sha256", "permitted_blocks", "authority"}, "authorization")
+        for key in ("purpose", "attempt_id", "claim_eligible"):
+            if type(authorization[key]) is not type(go["authorization"][key]) or authorization[key] != go["authorization"][key]:
+                raise _go_invalid(f"authorization.{key}")
+        if authorization["attempt_id"] != f"{plan['plan_id']}/{binding['attempt_ordinal']}":
+            raise _go_invalid("authorization.attempt_id")
+        if authorization["pack_sha256"] != go["pack_sha256"]:
+            raise _go_invalid("authorization.pack_sha256")
+        if authorization["permitted_chain_sha256"] != go["window_chain_sha256"]:
+            raise _go_invalid("authorization.permitted_chain_sha256")
+        _require_int(authorization["permitted_blocks"], "authorization.permitted_blocks", minimum=1)
+        _require_string(authorization["authority"], "authorization.authority")
+        if go["purpose"] == "G2B_SHAKEDOWN" and (
+            authorization["claim_eligible"] or authorization["permitted_blocks"] != 1
+            or "D-171" not in authorization["authority"]
+        ):
+            raise _go_invalid("authorization.G2B_SHAKEDOWN")
+        if go["purpose"] == "CAMPAIGN_TRANSACTION" and authorization["authority"] != "V5-TRANSACTION-GO-01":
+            raise _go_invalid("authorization.authority")
+        if go["purpose"] == "T0_REHEARSAL" and authorization["claim_eligible"]:
+            raise _go_invalid("authorization.claim_eligible")
+        confirmation = _go_record(go["confirmation_record"], "confirmation_record", night_root)
+        _require_exact_keys(confirmation, {"table_path", "table_sha256", "transcript_sha256", "confirmed_at"}, "confirmation_record")
+        _require_lower_sha256(confirmation["transcript_sha256"], "confirmation_record.transcript_sha256")
+        confirmed_at = _require_exact_keys(confirmation["confirmed_at"], {"epoch_s", "iso8601_utc"}, "confirmed_at")
+        if type(confirmed_at["epoch_s"]) is not float or not math.isfinite(confirmed_at["epoch_s"]):
+            raise _go_invalid("confirmed_at.epoch_s")
+        if (not isinstance(confirmed_at["iso8601_utc"], str) or re.fullmatch(
+                r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z", confirmed_at["iso8601_utc"]) is None):
+            raise _go_invalid("confirmed_at.iso8601_utc")
+        moment = datetime.strptime(confirmed_at["iso8601_utc"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+        if abs(moment.timestamp() - confirmed_at["epoch_s"]) > 0.000001:
+            raise _go_invalid("confirmed_at")
+        table_path, table_raw = _go_file(step6_confirmation_table, "step6_confirmation")
+        if (table_path != Path(confirmation["table_path"]).resolve()
+                or expected_confirmation_digest != confirmation["table_sha256"]
+                or sha256_bytes(table_raw) != confirmation["table_sha256"]):
+            raise _go_invalid("step6_confirmation")
+        _authenticate_go_t0_evidence(go, arm, custody_pack_root, night_root, at_monotonic_ns)
+        census = go["census"]
+        if (census["argv"] != list(AGENT_CENSUS_ARGV) or census["exit_code"] != 1
+                or census["stdout_sha256"] != sha256_bytes(b"")
+                or not 0 <= census["monotonic_ns"] <= go["issued_monotonic_ns"]):
+            raise _go_invalid("census")
+        census_matched = False
+        for condition in go["conditions"]:
+            for ref in condition["evidence"]:
+                _path, raw = _go_file(night_root / ref["path"], "conditions.evidence", root=night_root)
+                if sha256_bytes(raw) != ref["sha256"]:
+                    raise _go_invalid("conditions.evidence.sha256")
+                if condition["condition_id"] == "C3":
+                    # Existing run_night._census_record transport, retained as
+                    # JSON or a JSONL census journal; hash the entire file first.
+                    try:
+                        records = [parse_json_bytes(raw)]
+                    except ArmReadinessError:
+                        records = [parse_json_bytes(line) for line in raw.splitlines() if line.strip()]
+                    census_matched |= any(isinstance(record, Mapping) and
+                        record.get("argv") == census["argv"] and type(record.get("exit_code")) is int and
+                        record["exit_code"] == 1 and record.get("stdout") == "" and
+                        type(record.get("monotonic_ns")) is int and
+                        record["monotonic_ns"] == census["monotonic_ns"] and
+                        record.get("refusal") is None for record in records)
+        if not census_matched:
+            raise _go_invalid("census.timestamp_lineage")
+        _authenticate_go_purpose(go, arm, plan)
+        return {
+            "go_receipt": {"receipt_id": go["receipt_id"], "path": str(go_path), "sha256": digest,
+                "purpose": go["purpose"], "receipt_class": go["receipt_class"],
+                "claim_eligible": authorization["claim_eligible"], "plan_sha256": plan_digest},
+            "night_plan": {"path": str(plan_path), "sha256": plan_digest},
+            "step6_confirmation": {"table_path": str(table_path), "table_sha256": confirmation["table_sha256"]},
+        }, (go["issued_monotonic_ns"], go["valid_until_monotonic_ns"])
+    except LaunchLineageError:
+        raise
+    except (ArmReadinessError, PlanError, OSError, ValueError, TypeError, KeyError) as exc:
+        raise _go_invalid(str(exc)) from exc
+
+
+def _replay_consumed_go(consumption, arm, path, *, require_current_boot, require_unexpired=True,
+                        launch_binding_cache=None):
+    reference = consumption["go_receipt"]
+    try:
+        raw = Path(reference["path"]).read_bytes()
+    except FileNotFoundError as exc:
+        raise LaunchLineageError("launch_go_receipt_missing", "GO file missing") from exc
+    except OSError as exc:
+        raise _go_invalid(f"go_receipt.path: {exc}") from exc
+    if sha256_bytes(raw) != reference["sha256"]:
+        raise _go_invalid("sha256")
+    try:
+        go = parse_json_bytes(raw)
+    except ArmReadinessError as exc:
+        raise _go_invalid(str(exc)) from exc
+    if not isinstance(go, Mapping) or go.get("receipt_id") != reference["receipt_id"]:
+        raise _go_invalid("receipt_id")
+    fields, _bounds = _authenticate_pack_launch_go(
+        night_plan=consumption["night_plan"]["path"], go_receipt=reference["path"],
+        authenticated_go_receipt=go, go_receipt_sha256=reference["sha256"],
+        arm=arm, arm_sha256=consumption["arm_receipt"]["sha256"], custody_pack_root=path.parent.parent,
+        manifest_ref=consumption["launch_manifest"], env_ref=consumption["window_environment"],
+        chain_ref=consumption["window_chain"],
+        step6_confirmation_table=consumption["step6_confirmation"]["table_path"],
+        expected_confirmation_digest=consumption["step6_confirmation"]["table_sha256"],
+        expected_plan_sha256=consumption["night_plan"]["sha256"],
+        launch_binding_cache=launch_binding_cache,
+        require_current_boot=require_current_boot,
+        at_monotonic_ns=time.monotonic_ns() if require_current_boot and require_unexpired
+                        else consumption["consumed_at_monotonic_ns"],
+    )
+    for name, field in fields.items():
+        if field != consumption[name]:
+            raise _go_invalid(name)
+
+
+
 def verify_consumed_launch(
     pack_root: Path | str,
     consumption_receipt: Path | str,
@@ -9458,7 +9976,7 @@ def verify_consumed_launch(
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
-    """Replay a v2 consumption without treating its arm as unconsumed."""
+    """Replay v3 live authority, or an explicit historical v2 consumption."""
 
     launch_binding_cache: dict[Path, bytes] = {}
     try:
@@ -9467,7 +9985,12 @@ def verify_consumed_launch(
         raise LaunchLineageError(
             "launch_binding_mismatch", f"pack root is unavailable: {exc}"
         ) from exc
-    consumption, _raw, digest, path = _read_v2_consumption(consumption_receipt)
+    consumption, _raw, digest, path = _read_launch_consumption(
+        consumption_receipt, require_current_boot=require_current_boot
+    )
+    step6_confirmation_table, expected_confirmation_digest = _consumed_confirmation_pair(
+        consumption, step6_confirmation_table, expected_confirmation_digest
+    )
     arm, _arm_path, _recorded_pack_root, pack = _replay_consumed_arm(
         root,
         consumption,
@@ -9479,6 +10002,9 @@ def verify_consumed_launch(
         step6_confirmation_table=step6_confirmation_table,
         expected_confirmation_digest=expected_confirmation_digest,
     )
+    if consumption["schema_version"] == CONSUMPTION_RECEIPT_SCHEMA_V3:
+        _replay_consumed_go(consumption, arm, path, require_current_boot=require_current_boot,
+                            launch_binding_cache=launch_binding_cache)
     expected_identity = {
         "pack_id": pack["pack_id"],
         "pack_sha256": pack["pack_sha256"],
@@ -9585,8 +10111,12 @@ def _consume_launch_capability(
     window_chain_sha256: str = _MISSING_LAUNCH_CONTEXT,
     exec_argv: Sequence[str] = _MISSING_LAUNCH_CONTEXT,
     handoff_token_sha256: str = _MISSING_LAUNCH_CONTEXT,
-    step6_confirmation_table: Path | str | None = None,
-    expected_confirmation_digest: str | None = None,
+    night_plan: Path | str = _MISSING_LAUNCH_CONTEXT,
+    go_receipt: Path | str = _MISSING_LAUNCH_CONTEXT,
+    authenticated_go_receipt: Mapping[str, Any] = _MISSING_LAUNCH_CONTEXT,
+    go_receipt_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    step6_confirmation_table: Path | str | None = _MISSING_LAUNCH_CONTEXT,
+    expected_confirmation_digest: str | None = _MISSING_LAUNCH_CONTEXT,
 ) -> dict[str, Any]:
     """Reauthenticate complete launch inputs, then atomically claim one GO."""
 
@@ -9606,12 +10136,17 @@ def _consume_launch_capability(
             window_chain_sha256,
             exec_argv,
             handoff_token_sha256,
+            night_plan, go_receipt, authenticated_go_receipt, go_receipt_sha256,
         )
     ):
         raise ArmReadinessError(
             "readiness_usage_invalid",
             "complete authenticated launch context is required",
         )
+    if any(value is _MISSING_LAUNCH_CONTEXT or value is None for value in (
+        step6_confirmation_table, expected_confirmation_digest,
+    )):
+        raise FamilyPublicationError("confirmation_missing", "both confirmation inputs are required")
     if not isinstance(authenticated_arm_receipt, Mapping):
         raise ArmReadinessError(
             "readiness_usage_invalid",
@@ -9735,12 +10270,24 @@ def _consume_launch_capability(
         launch_binding_cache=launch_binding_cache,
     )
     pack = receipt["pack"]
+    consumed_at = time.monotonic_ns()
+    go_fields, go_bounds = _authenticate_pack_launch_go(
+        night_plan=night_plan, go_receipt=go_receipt,
+        authenticated_go_receipt=authenticated_go_receipt,
+        go_receipt_sha256=go_receipt_sha256, arm=receipt, arm_sha256=digest,
+        custody_pack_root=custody_pack_root, manifest_ref=manifest_ref,
+        env_ref=env_ref, chain_ref=chain_ref,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
+        require_current_boot=True, at_monotonic_ns=consumed_at,
+        launch_binding_cache=launch_binding_cache,
+    )
     consumption = {
         "schema_version": CONSUMPTION_RECEIPT_SCHEMA,
         "receipt_kind": "launch_consumption",
         "consumption_id": f"{receipt['receipt_id']}-launch",
         "consumed_at_utc": _utc_now(),
-        "consumed_at_monotonic_ns": time.monotonic_ns(),
+        "consumed_at_monotonic_ns": consumed_at,
         "boot_session_id": receipt["boot_session_id"],
         "pack_id": pack["pack_id"],
         "pack_sha256": verified["pack_sha256"],
@@ -9761,6 +10308,7 @@ def _consume_launch_capability(
         "volatile_checks": volatile_checks,
         "assurance": copy.deepcopy(ASSURANCE),
     }
+    consumption.update(go_fields)
     validate_consumption_receipt(consumption)
     raw = render_json(consumption)
     consumption_dir = custody_pack_root / "arm_readiness.consumptions"
@@ -9770,6 +10318,11 @@ def _consume_launch_capability(
     # Python caller identity is not authenticated here.  This atomic
     # no-clobber primary is the only real enforcement and the single-use
     # linearization point; every later complete caller must lose this write.
+    consumed_at = time.monotonic_ns()
+    if not go_bounds[0] <= consumed_at < go_bounds[1]:
+        raise _go_invalid("monotonic_ns")
+    consumption["consumed_at_monotonic_ns"] = consumed_at
+    raw = render_json(consumption)
     try:
         _exclusive_write(consumption_path, raw)
     except ArmReadinessError as exc:
@@ -9793,8 +10346,12 @@ def _consume_launch_capability(
     }
 
 
-def _lifecycle_receipt_path(consumption_path: Path, event: str) -> Path:
-    consumption, _raw, _digest, resolved = _read_v2_consumption(consumption_path)
+def _lifecycle_receipt_path(
+    consumption_path: Path, event: str, *, require_current_boot: bool = True,
+) -> Path:
+    consumption, _raw, _digest, resolved = _read_launch_consumption(
+        consumption_path, require_current_boot=require_current_boot
+    )
     return (
         resolved.parent.parent
         / "arm_readiness.launch_lifecycle"
@@ -9835,7 +10392,7 @@ def _launch_lineage_for_event(
     event_path: Path,
     event_digest: str,
 ) -> dict[str, Any]:
-    start_path = _lifecycle_receipt_path(consumption_path, "start")
+    start_path = _lifecycle_receipt_path(consumption_path, "start", require_current_boot=False)
     start_reference = (
         _reference_for_existing_receipt(event_path, event_digest)
         if event == "start"
@@ -9852,7 +10409,7 @@ def _launch_lineage_for_event(
             event_path, event_digest
         )
     elif event == "completion":
-        settle_path = _lifecycle_receipt_path(consumption_path, "settle")
+        settle_path = _lifecycle_receipt_path(consumption_path, "settle", require_current_boot=False)
         settle_reference = _reference_for_existing_receipt(
             settle_path,
             _read_lifecycle_receipt(
@@ -9936,7 +10493,7 @@ def record_launch_lifecycle_event(
             "launch_consumption_invalid", f"unknown launch lifecycle event {event!r}"
         )
     consumption, _raw, consumption_digest, consumption_path = (
-        _read_v2_consumption(consumption_receipt)
+        _read_launch_consumption(consumption_receipt, require_current_boot=False)
     )
     arm, _arm_path, _recorded_pack_root, _pack = _replay_consumed_arm(
         Path(pack_root),
@@ -9972,7 +10529,7 @@ def record_launch_lifecycle_event(
         predecessor_event = "start" if event == "settle" else "settle"
         predecessor_kind = f"launch_{predecessor_event}"
         predecessor_path = _lifecycle_receipt_path(
-            consumption_path, predecessor_event
+            consumption_path, predecessor_event, require_current_boot=False
         )
         predecessor_receipt, predecessor_digest, predecessor_path = (
             _read_lifecycle_receipt(
@@ -10018,7 +10575,7 @@ def record_launch_lifecycle_event(
         "assurance": copy.deepcopy(ASSURANCE),
     }
     validate_launch_lifecycle_receipt(receipt)
-    path = _lifecycle_receipt_path(consumption_path, event)
+    path = _lifecycle_receipt_path(consumption_path, event, require_current_boot=False)
     path.parent.mkdir(parents=True, exist_ok=True)
     _fsync_directory(path.parent.parent)
     raw = render_json(receipt)
@@ -10142,8 +10699,8 @@ def authenticate_launch_lineage(
     consumption_ref = _validate_lineage_reference(
         value["consumption"], "consumption", missing_code="launch_consumption_missing"
     )
-    consumption, _raw, consumption_digest, consumption_path = _read_v2_consumption(
-        str(consumption_ref["path"])
+    consumption, _raw, consumption_digest, consumption_path = _read_launch_consumption(
+        str(consumption_ref["path"]), require_current_boot=require_current_boot
     )
     if consumption_digest != consumption_ref["sha256"]:
         raise LaunchLineageError(
@@ -10157,6 +10714,9 @@ def authenticate_launch_lineage(
         require_unexpired=False,
         replay_arm_semantics=False,
     )
+    if consumption["schema_version"] == CONSUMPTION_RECEIPT_SCHEMA_V3:
+        _replay_consumed_go(consumption, arm, consumption_path,
+                            require_current_boot=require_current_boot, require_unexpired=False)
     expected_identity = {
         "collection_boot_session_id": consumption["boot_session_id"],
         "pack_id": consumption["pack_id"],
@@ -10308,7 +10868,9 @@ def authenticate_launch_lineage(
 
     completion: Mapping[str, Any] | None = None
     completion_ref = value["completion"]
-    completion_path = _lifecycle_receipt_path(consumption_path, "completion")
+    completion_path = _lifecycle_receipt_path(
+        consumption_path, "completion", require_current_boot=require_current_boot
+    )
     completion_sidecar = completion_path.with_name(
         f"{completion_path.name}.sha256"
     )
