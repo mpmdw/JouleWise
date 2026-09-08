@@ -502,7 +502,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _candidate(observation) -> CalibrationCandidate:
+    def _candidate(observation, *, mode="issuing") -> CalibrationCandidate:
         return CalibrationCandidate(
             relative_path=observation.custody_locator,
             manifest_sha256=observation.artifact_sha256["manifest.json"],
@@ -776,42 +776,52 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 "instrument_calibration": {"bindings": dict(self.t1)}
             },
         )
-        with (
-            patch(
-                "joulewise.calibration_bracketing.BundleReader",
-                return_value=reader,
-            ),
-            patch(
-                "joulewise.calibration_bracketing._candidate_from_observation",
-                side_effect=self._candidate,
-            ),
-            patch(
-                "joulewise.calibration_bracketing.discover_calibration_candidates",
-                wraps=discover_calibration_candidates,
-            ) as discover,
-            patch(
-                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-                return_value=self.acceptance,
-            ),
+        for expected_mode, mode_kwargs in (
+            ("issuing", {}),
+            ("read_replay", {"mode": "read_replay"}),
         ):
-            result, reasons = calibration_bracket_for_bundles(
-                Path(window["runs_root"]),
-                [Path(window["runs_root"]) / "science-member"],
-                self.policy,
-                ledger_snapshot=self.snapshot,
-                bracket_binding=self.bindings["gamma"],
-                bracket_window_id=window["window_id"],
-                bracket_plan_id=window["plan_id"],
-                bracket_plan_sha256=window["plan_sha256"],
-                bracket_evidence_root_id=window["evidence_root_id"],
-            )
-        discover.assert_called_once_with(self.snapshot)
-        self.assertEqual(reasons, ())
-        self.assertEqual(result["status"], "passed")
-        self.assertEqual(
-            [result[slot]["attempt_id"] for slot in ("pre", "post")],
-            ["d117-gamma-pre", "d117-gamma-post"],
-        )
+            with self.subTest(mode=expected_mode):
+                with (
+                    patch(
+                        "joulewise.calibration_bracketing.BundleReader",
+                        return_value=reader,
+                    ),
+                    patch(
+                        "joulewise.calibration_bracketing._candidate_from_observation",
+                        side_effect=self._candidate,
+                    ) as authenticate,
+                    patch(
+                        "joulewise.calibration_bracketing.discover_calibration_candidates",
+                        wraps=discover_calibration_candidates,
+                    ) as discover,
+                    patch(
+                        "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                        return_value=self.acceptance,
+                    ),
+                ):
+                    result, reasons = calibration_bracket_for_bundles(
+                        Path(window["runs_root"]),
+                        [Path(window["runs_root"]) / "science-member"],
+                        self.policy,
+                        **mode_kwargs,
+                        ledger_snapshot=self.snapshot,
+                        bracket_binding=self.bindings["gamma"],
+                        bracket_window_id=window["window_id"],
+                        bracket_plan_id=window["plan_id"],
+                        bracket_plan_sha256=window["plan_sha256"],
+                        bracket_evidence_root_id=window["evidence_root_id"],
+                    )
+                discover.assert_called_once_with(self.snapshot, mode=expected_mode)
+                self.assertEqual(
+                    [call.kwargs["mode"] for call in authenticate.call_args_list],
+                    [expected_mode] * len(self.candidates),
+                )
+                self.assertEqual(reasons, ())
+                self.assertEqual(result["status"], "passed")
+                self.assertEqual(
+                    [result[slot]["attempt_id"] for slot in ("pre", "post")],
+                    ["d117-gamma-pre", "d117-gamma-post"],
+                )
 
     def test_alpha_beta_gamma_each_bind_only_their_own_pre_post_pair(self) -> None:
         for name, window in self.windows.items():
