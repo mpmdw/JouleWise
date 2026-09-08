@@ -65,7 +65,10 @@ class BackupProbeTests(unittest.TestCase):
         with mock.patch.object(Path, "is_dir", autospec=True, side_effect=is_dir):
             with self.assertRaises((RuntimeError, FileNotFoundError)):
                 self.locate(self.root, "0" * 64)
-        self.assertEqual(checked, [self.root])
+        # pathlib may consult is_dir on the same root more than once (Linux
+        # glob internals differ from Darwin), so assert the SET of probed
+        # roots: only the override root, never a default backup root.
+        self.assertEqual(set(checked), {self.root})
 
     def test_partial_discovery_is_discarded_on_io_error(self) -> None:
         def broken_glob(*args):
