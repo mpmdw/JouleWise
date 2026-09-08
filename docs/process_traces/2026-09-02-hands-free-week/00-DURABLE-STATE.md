@@ -494,3 +494,29 @@ THEN, in order:
   stale lock after confirming pid 4453 is dead, as the doc allows) → 5, after retiring the bg-job daemon
   spare so the session is not auto-resumed again; then verify the watchdog leaves CLOCK_UNCERTAIN and spawns.
 - Paper work is complete (main 0f4bfb6d). Nothing else is open.
+
+## CHECKPOINT 2026-09-08 00:45 PDT — start here in a fresh, context-free session
+
+State: paper complete (main 3de19e3f; PRs #288/#289/#290/#292/#293/#294 merged). Open work is only the
+unattended-window path. Session 3c46c831 (resumed twin, pid 71607) ends here; its memory files are current.
+
+1. Verify the machine stays awake (Ed said fixed 09-08 ~00:40; not yet visible at 00:42):
+   `pmset -g log | grep "Entering Sleep state" | tail -3` — the newest entry must be older than 15 minutes, and
+   `pmset -g | grep -i sleepdisabled` should show 1 if Ed used disablesleep. If it still sleeps, email Ed (the
+   memory file ed-notification-channel-email.md) and stop; nothing unattended works on a sleeping Mac.
+2. Confirm the watchdog left CLOCK_UNCERTAIN: `python3 -m json.tool ~/night-custody/magistrate/state.json |
+   grep -E '"state"|clock_sane'` (needs two sane samples, one per 300 s tick). Events:
+   `~/night-custody/magistrate/events.jsonl`.
+3. The lock `~/night-custody/magistrate/magistrate.lock` names pid 4453 ACTIVE; that pid is dead. Per
+   docs/process/MAGISTRATE_WATCHDOG.md step 4, remove the lock only after confirming the owner is not live
+   (`ps -p 4453`), then redo the handoff from the canonical checkout /Users/edr/code/JouleWise in this order:
+   step 0 block (HEAD must be a merge commit on main — land any bookkeeping via `git merge --no-ff` of a branch),
+   step 1 (no background tasks; also retire the Claude Code bg-job spare so the reaped session is not
+   auto-resumed: `ps -axo pid,command | grep -E "claude (daemon run|bg-spare)"` and stop those first),
+   step 3 inventory, step 4 install, step 5 reaper (extract the zsh block from the doc between the
+   `watchdog_checkout=` line and the `   PY` terminator, strip the three-space indent, `zsh -n`, then run).
+4. Known defects to fix before trusting a receipt: WATCHDOG-CENSUS-01 (census counts Ed's other claude
+   sessions → verdict fail), RESUME-DAEMON-01, T0-ACID-CLOCK-01 (see TASK_QUEUE.md). First night = REHEARSAL_STUB.
+5. Model routing: astra (gpt-6-astra) default for seats and reviews; Opus for contract-lens deltas and worktree
+   merges; Fable merges. Seats via codex-run-v3 (memory codex-seat-launch-rules.md). Gate every bench chain on
+   the unittest exit code, never on a grep pipeline.
