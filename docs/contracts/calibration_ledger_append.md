@@ -374,3 +374,31 @@ the writer lease, validates the exact slot under that lease, and uses the
 stable claim identity. Automatic physical recovery is the normal path;
 cross-layer disposition uses the registered public exit and never message
 matching or in-memory lifecycle reuse.
+
+
+## 2026-09-08 addendum: bounded custody locators and replay overrides
+
+Ledger read/replay probes honor `JOULEWISE_BACKUP_ROOTS`. When unset, locators
+retain their original spelling. When set, the platform-path-separator-delimited
+roots lexically replace the configured backup root, preserving the relative
+suffix; the original mount is never resolved or probed. The first existing
+replacement is authoritative, including when corrupt. Empty entries are ignored;
+an empty value (or only separators) treats backup-rooted locators as absent
+without starting a probe. Other locators are unchanged.
+
+`CUSTODY_PROBE_TIMEOUT_S` is the ledger's 2-second exists/is_dir probe budget,
+not an environment setting or an authenticated-read deadline. A complete,
+responsive but slow tree exceeding that budget is reported absent. Timeout and
+probe exceptions retain exactly the absent decision/state, but emit
+`custody_locator_unreachable reason=timeout|exception locator=… budget_s=…`
+on stderr. Genuine absence emits no such line. Receipt fields are unchanged.
+Inspection/authentication remains synchronous on the caller; a mount that stalls
+after the successful probe can still block an authenticated read.
+
+Issuance hashing (`artifact_hashes`), historical import preparation/bootstrap,
+custody-manifest generation, fresh-process resume-finalize, and receipt
+finalization refuse an active non-empty root override with
+`custody_locator_override_mint_forbidden` before hashing or mutation. Refusal
+keeps evidence fail-closed: a new receipt must never name original locator L
+while authenticating bytes under replacement M. Unset/empty override issuance
+behavior is unchanged. Use overrides for read/replay; unset them for issuance.

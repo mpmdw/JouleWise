@@ -270,6 +270,13 @@ def content_id_from_artifact_hashes(artifact_sha256: Mapping[str, Any]) -> str |
     return canonical_sha256(identity)
 
 
+def artifact_hashes(custody_dir: Path) -> dict[str, str]:
+    """Hash governed artifacts for issuance; refuse relocated custody roots."""
+
+    _refuse_custody_override_mint()
+    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict)
+
+
 def _artifact_hashes_unbounded(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for relative in GOVERNED_ARTIFACTS:
@@ -2318,6 +2325,13 @@ def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(sorted(directories, key=lambda path: path.as_posix()))
 
 
+def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
+    return probe_custody(
+        directory, _assert_absolute_nonsymlink_directory_unbounded,
+        lambda: _missing_custody(directory),
+    )
+
+
 def _assert_absolute_nonsymlink_directory_unbounded(directory: Path) -> Path:
     path = Path(directory)
     if not path.is_absolute():
@@ -2529,6 +2543,8 @@ def generate_historical_custody_manifest(
 ) -> Mapping[str, Any]:
     """Apply the lexicographic selection rule for a lead-reviewed manifest."""
 
+    _refuse_custody_override_mint()
+
     table = _authenticated_json_object(
         disposition_table_raw,
         expected_disposition_table_sha256,
@@ -2586,6 +2602,8 @@ def prepare_historical_import(
     expected_custody_manifest_sha256: str,
 ) -> HistoricalImportPlan:
     """Authenticate reviewed inputs and prepare the canonical genesis chain."""
+
+    _refuse_custody_override_mint()
 
     disposition_table = _authenticated_json_object(
         disposition_table_raw,
@@ -3438,6 +3456,8 @@ def bootstrap_historical_import(
     complete chain outside the reader-visible ledger path, then atomically
     replaces the empty ledger. The head pin is never written.
     """
+
+    _refuse_custody_override_mint()
 
     ledger = Path(ledger_path)
     pin = Path(head_pin_path)
@@ -4378,6 +4398,8 @@ def finalize_bracket_session_slot(
 ) -> Mapping[str, Any]:
     """Fill exactly one reserved session slot in mandatory pre/post order."""
 
+    _refuse_custody_override_mint()
+
     if slot not in BRACKET_SESSION_SLOTS:
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
@@ -4656,6 +4678,13 @@ CUSTODY_PROBE_TIMEOUT_S = 2.0
 _CustodyResult = TypeVar("_CustodyResult")
 
 
+def _refuse_custody_override_mint() -> None:
+    """Never issue original locators authenticated using replacement bytes."""
+
+    if any(os.environ.get("JOULEWISE_BACKUP_ROOTS", "").split(os.pathsep)):
+        raise CalibrationLedgerError("custody_locator_override_mint_forbidden")
+
+
 def _custody_probe_paths(path: Path) -> tuple[Path, ...]:
     """Replace default backup roots lexically; never resolve the old mount."""
 
@@ -4672,12 +4701,6 @@ def _custody_probe_paths(path: Path) -> tuple[Path, ...]:
 
 def _custody_backup_disabled(path: Path) -> bool:
     return not _custody_probe_paths(path)
-
-
-def artifact_hashes(custody_dir: Path) -> dict[str, str]:
-    """Hash every governed artifact present in one finalized custody tree."""
-
-    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict)
 
 
 def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
@@ -4701,13 +4724,6 @@ def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> 
     return set()
 
 
-def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
-    return probe_custody(
-        directory, _assert_absolute_nonsymlink_directory_unbounded,
-        lambda: _missing_custody(directory),
-    )
-
-
 def probe_custody(
     path: Path,
     inspect: Callable[[Path], _CustodyResult],
@@ -4719,9 +4735,13 @@ def probe_custody(
 
     The daemon performs only exists/is_dir filesystem calls, without entering
     an authentication session, inheriting its context, or acquiring its locks.
-    Timeout or any probe exception is exactly absence. Backup overrides retain
+    Timeout or any probe exception has the same decision as absence, with a
+    distinguishable stderr diagnostic. Backup overrides retain
     the suffix; the first existing replacement remains authoritative even if
     invalid. An empty override skips default backup locators without probing.
+
+    A responsive but slow complete tree is also reported absent when exists
+    or is_dir takes longer than CUSTODY_PROBE_TIMEOUT_S (2 seconds).
 
     Accepted race: a mount can stall between a successful probe and the
     unchanged, unbounded authenticated read (the roughly two-second post-probe
@@ -4734,6 +4754,7 @@ def probe_custody(
     if not paths:
         return absent()
     result: list[tuple[Path, bool]] = []
+    failed: list[bool] = []
 
     def probe() -> None:
         try:
@@ -4742,6 +4763,7 @@ def probe_custody(
                     result.append((candidate, candidate.is_dir()))
                     return
         except BaseException:
+            failed.append(True)
             # No partial selection, authentication, or caller callback escapes
             # a failed path probe, including failures other than OSError.
             return
@@ -4751,7 +4773,15 @@ def probe_custody(
     )
     worker.start()
     worker.join(CUSTODY_PROBE_TIMEOUT_S)
-    if worker.is_alive() or not result:
+    reason = "timeout" if worker.is_alive() else "exception" if failed else None
+    if reason is not None:
+        print(
+            f"custody_locator_unreachable reason={reason} locator={path} "
+            f"budget_s={CUSTODY_PROBE_TIMEOUT_S}",
+            file=sys.stderr,
+        )
+        return absent()
+    if not result:
         return absent()
     selected, is_directory = result[0]
     if not is_directory and not_directory is not None:
@@ -5182,6 +5212,8 @@ def resume_finalize_bracket_session(
 ) -> Mapping[str, Any]:
     """Finalize authenticated complete custody from a fresh process."""
 
+    _refuse_custody_override_mint()
+
     with CalibrationWriterLease(ledger_path):
         repair_calibration_ledger(
             ledger_path,
@@ -5514,6 +5546,8 @@ def finalize_attempt_receipt(
 ) -> Mapping[str, Any]:
     """Append the sole final state for a previously reserved attempt."""
 
+    _refuse_custody_override_mint()
+
     if disposition not in FINAL_DISPOSITIONS:
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
@@ -5666,6 +5700,7 @@ __all__ = [
     "claim_bracket_session_slot",
     "abort_bracket_session",
     "artifact_hashes",
+    "probe_custody",
     "calibration_custody_store_manifest",
     "calibration_custody_store_manifest_bytes",
     "bootstrap_historical_import",

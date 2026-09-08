@@ -440,3 +440,5 @@ An unresponsive or responsive-but-slow root exceeding that budget is skipped:
 it contributes zero candidates and emits a `backup_root_unavailable` stderr
 line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
 a skip fails closed at the pin check if no matching candidate remains.
+
+2026-09-08: Ledger `JOULEWISE_BACKUP_ROOTS` lexically replaces backup roots for replay (empty means absent without probing); `CUSTODY_PROBE_TIMEOUT_S` is 2 seconds, and non-empty overrides refuse issuance; see [the dated custody addendum](../../contracts/calibration_ledger_append.md#2026-09-08-addendum-bounded-custody-locators-and-replay-overrides).

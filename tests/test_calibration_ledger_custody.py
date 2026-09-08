@@ -2,6 +2,8 @@
 
 from contextvars import ContextVar
 import os
+import io
+from contextlib import redirect_stderr
 import hashlib
 from types import SimpleNamespace
 from pathlib import Path
@@ -15,8 +17,61 @@ from joulewise import calibration_ledger as ledger
 
 
 class CustodyProbeTests(unittest.TestCase):
-    def test_production_budget_matches_paper_probe(self):
-        self.assertEqual(ledger.CUSTODY_PROBE_TIMEOUT_S, 2.0)
+    def test_probe_is_exported(self):
+        self.assertIn("probe_custody", ledger.__all__)
+
+    def test_unreachable_diagnostics_distinguish_absence(self):
+        for reason in ("timeout", "exception", "absent"):
+            with self.subTest(reason=reason):
+                stderr = io.StringIO()
+                with (
+                    redirect_stderr(stderr),
+                    mock.patch.object(Path, "exists", side_effect=OSError("offline") if reason == "exception" else None, return_value=False),
+                    mock.patch.object(threading.Thread, "is_alive", return_value=reason == "timeout"),
+                ):
+                    self.assertEqual(ledger._custody_state(Path("/mock/custody")), "absent")
+                if reason == "absent":
+                    self.assertEqual(stderr.getvalue(), "")
+                else:
+                    self.assertEqual(stderr.getvalue(),
+                        f"custody_locator_unreachable reason={reason} locator=/mock/custody budget_s=2.0\n")
+
+    def test_mint_hashes_refuse_override_before_any_probe_or_read(self):
+        with (
+            mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": "/mock/relocated"}),
+            mock.patch.object(ledger, "probe_custody", side_effect=AssertionError("probe attempted")),
+            mock.patch.object(ledger, "_artifact_hashes_unbounded", side_effect=AssertionError("hash attempted")),
+        ):
+            with self.assertRaisesRegex(ledger.CalibrationLedgerError, "custody_locator_override_mint_forbidden"):
+                ledger.artifact_hashes(Path("/mock/original"))
+
+    def test_issuance_refuses_override_before_input_access(self):
+        calls = (
+            lambda: ledger.resume_finalize_bracket_session(None, None,
+                session_id="s", slot="pre", plan_path=None, systematic_screen_s=None),
+            lambda: ledger.finalize_attempt_receipt(None, attempt_id="a",
+                disposition="valid", custody_locator="/mock/original"),
+            lambda: ledger.finalize_bracket_session_slot(None, session_id="s",
+                slot="pre", disposition="valid", custody_locator="/mock/original"),
+            lambda: ledger.prepare_historical_import(disposition_table_raw=b"",
+                expected_disposition_table_sha256="", custody_manifest_raw=b"",
+                expected_custody_manifest_sha256=""),
+        )
+        with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": "/mock/relocated"}):
+            for call in calls:
+                with self.subTest(call=call), self.assertRaisesRegex(
+                    ledger.CalibrationLedgerError, "custody_locator_override_mint_forbidden"
+                ):
+                    call()
+
+    def test_empty_override_preserves_local_mint_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(
+            os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}
+        ):
+            root = Path(temporary)
+            (root / "manifest.json").write_bytes(b"{}")
+            self.assertEqual(ledger.artifact_hashes(root),
+                {"manifest.json": hashlib.sha256(b"{}").hexdigest()})
 
     def test_blocked_operations_have_absent_state_within_one_budget(self):
         for operation in ("exists", "is_dir"):
@@ -229,7 +284,8 @@ class CustodyReadCoverageTests(unittest.TestCase):
                 mock.patch.object(Path, "exists", safe_exists),
             ):
                 self.assertEqual(ledger._custody_state(original), "complete")
-                self.assertEqual(ledger.artifact_hashes(original), ledger.artifact_hashes(mapped))
+                with self.assertRaisesRegex(ledger.CalibrationLedgerError, "custody_locator_override_mint_forbidden"):
+                    ledger.artifact_hashes(original)
                 self.assertEqual(ledger._custody_reasons([observation], backup), set())
                 self.assertEqual(ledger._governed_raw_nofollow(original),
                                  {name: b"{}" for name in ledger.GOVERNED_ARTIFACTS})
