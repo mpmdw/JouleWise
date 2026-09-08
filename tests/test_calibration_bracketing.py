@@ -2635,15 +2635,14 @@ class CalibrationBracketingTests(unittest.TestCase):
 
 
 class CustodyCandidateProbeTests(unittest.TestCase):
-    def test_candidate_resolve_and_read_timeout_return_none(self):
+    def test_candidate_path_probe_timeout_returns_none(self):
         import threading
         import time
         from joulewise import calibration_ledger as ledger
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            for target in ("pathlib.Path.resolve",
-                           "joulewise.calibration_bracketing.read_authentication_input"):
+            for target in ("pathlib.Path.exists", "pathlib.Path.is_dir"):
                 with self.subTest(target=target):
                     release = threading.Event()
                     entered = threading.Event()
@@ -2659,6 +2658,8 @@ class CustodyCandidateProbeTests(unittest.TestCase):
                         with (
                             patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
                             patch(target, side_effect=blocked),
+                            patch("joulewise.calibration_bracketing.read_authentication_input",
+                                  side_effect=AssertionError("read attempted")) as read,
                         ):
                             started = time.monotonic()
                             self.assertIsNone(load_calibration_candidate(root, runs_root=root.parent))
@@ -2667,6 +2668,7 @@ class CustodyCandidateProbeTests(unittest.TestCase):
                             self.assertTrue(workers[0].daemon)
                             release.set()
                             workers[0].join(1)
+                            read.assert_not_called()
                     finally:
                         release.set()
                         for worker in workers:

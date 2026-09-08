@@ -36,7 +36,6 @@ import tempfile
 import threading
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
-from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -269,12 +268,6 @@ def content_id_from_artifact_hashes(artifact_sha256: Mapping[str, Any]) -> str |
     if any(not _is_sha256(value) for value in identity.values()):
         return None
     return canonical_sha256(identity)
-
-
-def artifact_hashes(custody_dir: Path) -> dict[str, str]:
-    """Hash every governed artifact present in one finalized custody tree."""
-
-    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict)
 
 
 def _artifact_hashes_unbounded(root: Path) -> dict[str, str]:
@@ -1794,27 +1787,6 @@ def _custody_reasons(
     return set()
 
 
-def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
-    for relative, expected in observation.artifact_sha256.items():
-        path = root / relative
-        try:
-            actual = hashlib.sha256(
-                read_authentication_input(
-                    path,
-                    grammar="raw",
-                    label=(
-                        f"calibration ledger custody {observation.attempt_id} "
-                        f"artifact {relative}"
-                    ),
-                )
-            ).hexdigest()
-        except OSError:
-            return {"calibration_ledger_custody_invalid"}
-        if actual != expected:
-            return {"calibration_ledger_custody_invalid"}
-    return set()
-
-
 def _custody_observations(
     observations: Sequence[LedgerObservation],
     bracket_sessions: Sequence[CalibrationBracketSession],
@@ -2346,13 +2318,6 @@ def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
     return tuple(sorted(directories, key=lambda path: path.as_posix()))
 
 
-def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
-    return probe_custody(
-        directory, _assert_absolute_nonsymlink_directory_unbounded,
-        lambda: _missing_custody(directory),
-    )
-
-
 def _assert_absolute_nonsymlink_directory_unbounded(directory: Path) -> Path:
     path = Path(directory)
     if not path.is_absolute():
@@ -2382,7 +2347,7 @@ def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
 
 
 def _read_contained_nofollow_unbounded(directory: Path, relative: str) -> bytes:
-    root = _assert_absolute_nonsymlink_directory(directory)
+    root = _assert_absolute_nonsymlink_directory_unbounded(directory)
     try:
         return read_authentication_input_nofollow(
             root,
@@ -2405,7 +2370,7 @@ def _governed_raw_nofollow(directory: Path) -> dict[str, bytes]:
 
 def _governed_raw_nofollow_unbounded(directory: Path) -> dict[str, bytes]:
     return {
-        relative: _read_contained_nofollow(directory, relative)
+        relative: _read_contained_nofollow_unbounded(directory, relative)
         for relative in GOVERNED_ARTIFACTS
     }
 
@@ -4689,7 +4654,6 @@ CUSTODY_PROBE_TIMEOUT_S = 2.0
 
 
 _CustodyResult = TypeVar("_CustodyResult")
-_CUSTODY_PROBE_ACTIVE: ContextVar[bool] = ContextVar("custody_probe_active", default=False)
 
 
 def _custody_probe_paths(path: Path) -> tuple[Path, ...]:
@@ -4710,57 +4674,89 @@ def _custody_backup_disabled(path: Path) -> bool:
     return not _custody_probe_paths(path)
 
 
+def artifact_hashes(custody_dir: Path) -> dict[str, str]:
+    """Hash every governed artifact present in one finalized custody tree."""
+
+    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict)
+
+
+def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
+    for relative, expected in observation.artifact_sha256.items():
+        path = root / relative
+        try:
+            actual = hashlib.sha256(
+                read_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=(
+                        f"calibration ledger custody {observation.attempt_id} "
+                        f"artifact {relative}"
+                    ),
+                )
+            ).hexdigest()
+        except OSError:
+            return {"calibration_ledger_custody_invalid"}
+        if actual != expected:
+            return {"calibration_ledger_custody_invalid"}
+    return set()
+
+
+def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
+    return probe_custody(
+        directory, _assert_absolute_nonsymlink_directory_unbounded,
+        lambda: _missing_custody(directory),
+    )
+
+
 def probe_custody(
     path: Path,
     inspect: Callable[[Path], _CustodyResult],
     absent: Callable[[], _CustodyResult],
+    *,
+    not_directory: Callable[[], _CustodyResult] | None = None,
 ) -> _CustodyResult:
-    """Run one read-only custody inspection within a shared two-second budget.
+    """Bound only a pure path probe; inspect synchronously on the caller.
 
-    Backup overrides preserve the suffix under the default root. The first
-    existing replacement is authoritative, including any integrity failure.
-    Empty overrides and timeouts invoke the caller's existing absent outcome.
-    Nested reads stay inside the outer worker and budget. A stalled daemon
-    may outlive the call, but cannot publish a partial result to the caller.
+    The daemon performs only exists/is_dir filesystem calls, without entering
+    an authentication session, inheriting its context, or acquiring its locks.
+    Timeout or any probe exception is exactly absence. Backup overrides retain
+    the suffix; the first existing replacement remains authoritative even if
+    invalid. An empty override skips default backup locators without probing.
+
+    Accepted race: a mount can stall between a successful probe and the
+    unchanged, unbounded authenticated read (the roughly two-second post-probe
+    window). This narrows the hang window; it does not bound reads. No timed-out
+    worker can retain an authentication lock. Existing non-directory outcomes
+    remain the caller's responsibility.
     """
 
-    if _CUSTODY_PROBE_ACTIVE.get():
-        return inspect(path)
     paths = _custody_probe_paths(path)
     if not paths:
         return absent()
-    result: list[_CustodyResult] = []
-    errors: list[BaseException] = []
+    result: list[tuple[Path, bool]] = []
 
     def probe() -> None:
-        token = _CUSTODY_PROBE_ACTIVE.set(True)
         try:
-            if paths == (path,):
-                result.append(inspect(path))
-            else:
-                for candidate in paths:
-                    if candidate.exists():
-                        result.append(inspect(candidate))
-                        break
-                else:
-                    result.append(absent())
-        except BaseException as exc:
-            errors.append(exc)
-        finally:
-            _CUSTODY_PROBE_ACTIVE.reset(token)
+            for candidate in paths:
+                if candidate.exists():
+                    result.append((candidate, candidate.is_dir()))
+                    return
+        except BaseException:
+            # No partial selection, authentication, or caller callback escapes
+            # a failed path probe, including failures other than OSError.
+            return
 
-    # Authentication reads use context-local custody accounting.
-    context = copy_context()
     worker = threading.Thread(
-        target=context.run, args=(probe,), daemon=True, name="custody-locator-probe"
+        target=probe, daemon=True, name="custody-locator-probe"
     )
     worker.start()
     worker.join(CUSTODY_PROBE_TIMEOUT_S)
-    if worker.is_alive():
+    if worker.is_alive() or not result:
         return absent()
-    if errors:
-        raise errors[0]
-    return result[0]
+    selected, is_directory = result[0]
+    if not is_directory and not_directory is not None:
+        return not_directory()
+    return inspect(selected)
 
 
 def _missing_custody(path: Path) -> Any:
@@ -4768,7 +4764,10 @@ def _missing_custody(path: Path) -> Any:
 
 
 def _custody_state(path: Path) -> str:
-    return probe_custody(path, _custody_state_unbounded, lambda: "absent")
+    return probe_custody(
+        path, _custody_state_unbounded, lambda: "absent",
+        not_directory=lambda: "unreadable",
+    )
 
 
 def _custody_state_unbounded(path: Path) -> str:
@@ -4784,7 +4783,7 @@ def _custody_state_unbounded(path: Path) -> str:
         return "empty"
     if present == set(GOVERNED_ARTIFACTS):
         try:
-            raw_by_name = _governed_raw_nofollow(path)
+            raw_by_name = _governed_raw_nofollow_unbounded(path)
             manifest = json.loads(raw_by_name["manifest.json"])
             evidence = json.loads(raw_by_name["instrument_evidence.json"])
         except (CalibrationLedgerError, UnicodeDecodeError, json.JSONDecodeError):

@@ -1081,7 +1081,7 @@ def _binding_evidence_authentic(
 def load_calibration_candidate(
     directory: Path, *, runs_root: Path
 ) -> CalibrationCandidate | None:
-    """Authenticate one standalone validation directory from primary bytes."""
+    """Probe the locator, then authenticate primary bytes on the caller thread."""
 
     original = Path(directory)
 

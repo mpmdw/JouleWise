@@ -19,7 +19,7 @@ class CustodyProbeTests(unittest.TestCase):
         self.assertEqual(ledger.CUSTODY_PROBE_TIMEOUT_S, 2.0)
 
     def test_blocked_operations_have_absent_state_within_one_budget(self):
-        for operation in ("exists", "is_dir", "is_file", "read"):
+        for operation in ("exists", "is_dir"):
             with self.subTest(operation=operation):
                 entered = threading.Event()
                 release = threading.Event()
@@ -31,8 +31,6 @@ class CustodyProbeTests(unittest.TestCase):
                     entered.set()
                     release.wait()
                     finished.set()
-                    if operation == "read":
-                        return {name: b"{}" for name in ledger.GOVERNED_ARTIFACTS}
                     return True
 
                 try:
@@ -40,8 +38,8 @@ class CustodyProbeTests(unittest.TestCase):
                         mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
                         mock.patch.object(Path, "exists", side_effect=blocked if operation == "exists" else None, return_value=True),
                         mock.patch.object(Path, "is_dir", side_effect=blocked if operation == "is_dir" else None, return_value=True),
-                        mock.patch.object(Path, "is_file", side_effect=blocked if operation == "is_file" else None, return_value=True),
-                        mock.patch.object(ledger, "_governed_raw_nofollow", side_effect=blocked if operation == "read" else None, return_value={name: b"{}" for name in ledger.GOVERNED_ARTIFACTS}),
+                        mock.patch.object(Path, "is_file", side_effect=AssertionError("inspection attempted")),
+                        mock.patch.object(ledger, "_governed_raw_nofollow_unbounded", side_effect=AssertionError("read attempted")),
                     ):
                         started = time.monotonic()
                         self.assertEqual(ledger._custody_state(Path("/mock/custody")), "absent")
@@ -89,13 +87,19 @@ class CustodyProbeTests(unittest.TestCase):
             sibling = Path(str(ledger.BACKUP_ROOTS[0]) + "-sibling")
             self.assertFalse(ledger._custody_backup_disabled(sibling))
 
-    def test_worker_preserves_caller_context_and_errors(self):
+    def test_inspection_runs_on_caller_with_original_context_and_errors(self):
         context_value = ContextVar("custody-test", default="missing")
         token = context_value.set("caller")
+        caller = threading.current_thread()
+
+        def inspect(path):
+            self.assertIs(threading.current_thread(), caller)
+            return context_value.get()
+
         try:
-            with mock.patch.object(ledger, "_custody_state_unbounded", side_effect=lambda path: context_value.get()):
+            with mock.patch.object(Path, "exists", return_value=True), mock.patch.object(Path, "is_dir", return_value=True), mock.patch.object(ledger, "_custody_state_unbounded", side_effect=inspect):
                 self.assertEqual(ledger._custody_state(Path("/mock/custody")), "caller")
-            with mock.patch.object(ledger, "_custody_state_unbounded", side_effect=ValueError("original")):
+            with mock.patch.object(Path, "exists", return_value=True), mock.patch.object(Path, "is_dir", return_value=True), mock.patch.object(ledger, "_custody_state_unbounded", side_effect=ValueError("original")):
                 with self.assertRaisesRegex(ValueError, "original"):
                     ledger._custody_state(Path("/mock/custody"))
         finally:
@@ -117,7 +121,7 @@ class CustodyReadCoverageTests(unittest.TestCase):
         except ledger.CalibrationLedgerError as exc:
             return (type(exc), str(exc))
 
-    def test_remaining_reads_timeout_like_missing_custody(self):
+    def test_path_probe_timeouts_match_each_entrypoints_missing_outcome(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve() / "missing"
             observation = self.observation(root)
@@ -126,48 +130,62 @@ class CustodyReadCoverageTests(unittest.TestCase):
                 "custody_locator": str(root), "artifact_sha256": {},
             }])
             cases = (
-                (lambda: ledger.artifact_hashes(root), Path, "is_file"),
-                (lambda: ledger._custody_reasons([observation], root.parent),
-                 ledger, "read_authentication_input"),
-                (lambda: ledger._assert_absolute_nonsymlink_directory(root), os, "lstat"),
-                (lambda: ledger._read_contained_nofollow(root, "manifest.json"),
-                 ledger, "read_authentication_input_nofollow"),
-                (lambda: ledger._governed_raw_nofollow(root),
-                 ledger, "read_authentication_input_nofollow"),
-                (lambda: ledger._reauthenticate_historical_import_plan(plan),
-                 ledger, "read_authentication_input_nofollow"),
+                lambda: ledger.artifact_hashes(root),
+                lambda: ledger._custody_reasons([observation], root.parent),
+                lambda: ledger._assert_absolute_nonsymlink_directory(root),
+                lambda: ledger._read_contained_nofollow(root, "manifest.json"),
+                lambda: ledger._governed_raw_nofollow(root),
+                lambda: ledger._reauthenticate_historical_import_plan(plan),
             )
-            for call, target, name in cases:
-                with self.subTest(probe=name, call=call):
-                    expected = self.outcome(call)
-                    root.mkdir()
-                    release = threading.Event()
-                    entered = threading.Event()
-                    workers = []
+            for call in cases:
+                expected = self.outcome(call)
+                for operation in ("exists", "is_dir"):
+                    with self.subTest(call=call, operation=operation):
+                        release = threading.Event()
+                        entered = threading.Event()
+                        workers = []
 
-                    def blocked(*args, **kwargs):
-                        workers.append(threading.current_thread())
-                        entered.set()
-                        release.wait()
-                        raise FileNotFoundError("released synthetic probe")
+                        def blocked(*args, **kwargs):
+                            workers.append(threading.current_thread())
+                            entered.set()
+                            release.wait()
+                            return True
 
-                    try:
-                        with (
-                            mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
-                            mock.patch.object(target, name, side_effect=blocked),
-                        ):
-                            started = time.monotonic()
-                            self.assertEqual(self.outcome(call), expected)
-                            self.assertLess(time.monotonic() - started, 0.5)
-                            self.assertTrue(entered.is_set())
-                            self.assertTrue(workers[0].daemon)
+                        try:
+                            with (
+                                mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+                                mock.patch.object(Path, "exists", return_value=True),
+                                mock.patch.object(Path, operation, side_effect=blocked),
+                                mock.patch.object(ledger, "read_authentication_input", side_effect=AssertionError("read attempted")) as read,
+                                mock.patch.object(ledger, "read_authentication_input_nofollow", side_effect=AssertionError("read attempted")) as nofollow,
+                            ):
+                                started = time.monotonic()
+                                self.assertEqual(self.outcome(call), expected)
+                                self.assertLess(time.monotonic() - started, 0.5)
+                                self.assertTrue(entered.is_set())
+                                self.assertTrue(workers[0].daemon)
+                                read.assert_not_called()
+                                nofollow.assert_not_called()
+                                release.set()
+                                workers[0].join(1)
+                                read.assert_not_called()
+                                nofollow.assert_not_called()
+                        finally:
                             release.set()
-                            workers[0].join(1)
-                    finally:
-                        release.set()
-                        for worker in workers:
-                            worker.join(1)
-                        root.rmdir()
+                            for worker in workers:
+                                worker.join(1)
+
+    def test_probe_exceptions_are_absent_without_authentication(self):
+        for operation in ("exists", "is_dir"):
+            for error in (OSError("mount"), ValueError("path"), RuntimeError("probe")):
+                with (
+                    self.subTest(operation=operation, error=error),
+                    mock.patch.object(Path, "exists", return_value=True),
+                    mock.patch.object(Path, operation, side_effect=error),
+                ):
+                    inspect = mock.Mock(side_effect=AssertionError("inspection attempted"))
+                    self.assertEqual(ledger.probe_custody(Path("/mock/custody"), inspect, lambda: "absent"), "absent")
+                    inspect.assert_not_called()
 
     def test_empty_override_skips_all_read_entrypoints(self):
         root = ledger.BACKUP_ROOTS[0] / "runs/member"
@@ -223,7 +241,7 @@ class CustodyReadCoverageTests(unittest.TestCase):
                 self.assertEqual(ledger._custody_reasons([observation], backup),
                                  {"calibration_ledger_custody_invalid"})
 
-    def test_governed_reads_share_one_worker_and_preserve_authentication_session(self):
+    def test_governed_reads_run_on_caller_and_preserve_authentication_session(self):
         from joulewise.authentication_io import V2AuthenticationReadSession
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -232,47 +250,79 @@ class CustodyReadCoverageTests(unittest.TestCase):
                 artifact = root / name
                 artifact.parent.mkdir(parents=True, exist_ok=True)
                 artifact.write_bytes(b"{}")
-            real_thread = threading.Thread
+            caller = threading.current_thread()
+            real_read = ledger.read_authentication_input_nofollow
+
+            def read(*args, **kwargs):
+                self.assertIs(threading.current_thread(), caller)
+                return real_read(*args, **kwargs)
+
             with V2AuthenticationReadSession() as session, mock.patch.object(
-                threading, "Thread", wraps=real_thread
-            ) as thread:
+                ledger, "read_authentication_input_nofollow", side_effect=read
+            ) as authenticated_read:
                 ledger._governed_raw_nofollow(root)
-                self.assertEqual(thread.call_count, 1)
+                self.assertEqual(authenticated_read.call_count, len(ledger.GOVERNED_ARTIFACTS))
                 self.assertEqual(len(session.records), len(ledger.GOVERNED_ARTIFACTS))
 
 
-    def test_timed_out_authenticated_read_does_not_pin_session_lock(self):
-        from joulewise.authentication_io import V2AuthenticationReadSession
+    def test_timed_out_probe_leaves_authentication_available_before_worker_exits(self):
+        from joulewise.authentication_io import (
+            V2AuthenticationReadSession, active_v2_authentication_session,
+        )
 
         release = threading.Event()
         entered = threading.Event()
         workers = []
-
-        def blocked(*args, **kwargs):
-            workers.append(threading.current_thread())
-            entered.set()
-            release.wait()
-            raise FileNotFoundError("released synthetic read")
+        worker_sessions = []
+        real_exists = Path.exists
 
         try:
             with tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
+                blocked_root = root / "blocked"
+                other = root / "other"
+                other.mkdir()
+                (other / "manifest.json").write_bytes(b"{}")
+
+                def blocked(path):
+                    if path != blocked_root:
+                        return real_exists(path)
+                    workers.append(threading.current_thread())
+                    worker_sessions.append(active_v2_authentication_session())
+                    entered.set()
+                    release.wait()
+                    return True
+
                 with (
                     V2AuthenticationReadSession() as session,
                     mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
-                    mock.patch("joulewise.authentication_io._read_nofollow_bytes",
-                               side_effect=blocked),
+                    mock.patch.object(Path, "exists", blocked),
+                    mock.patch.object(ledger, "read_authentication_input_nofollow",
+                                      wraps=ledger.read_authentication_input_nofollow) as read,
                 ):
                     with self.assertRaisesRegex(ledger.CalibrationLedgerError,
                                                 "custody locator is missing"):
-                        ledger._governed_raw_nofollow(root)
+                        ledger._governed_raw_nofollow(blocked_root)
                     self.assertTrue(entered.is_set())
+                    self.assertEqual(worker_sessions, [None])
+                    read.assert_not_called()
+                    self.assertTrue(workers[0].is_alive())
                     acquired = session._lock.acquire(blocking=False)
+                    self.assertTrue(acquired, "timed-out probe retained authentication lock")
                     if acquired:
                         session._lock.release()
-                    release.set()
-                    workers[0].join(1)
-                    self.assertTrue(acquired, "timed-out read pins the shared authentication lock")
+                    self.assertEqual(ledger._read_contained_nofollow(other, "manifest.json"), b"{}")
+                    self.assertEqual(len(session.records), 1)
+                    read.assert_called_once()
+                # A subsequent session also authenticates another locator before
+                # the timed-out path probe is allowed to finish.
+                with V2AuthenticationReadSession() as subsequent:
+                    self.assertEqual(ledger._read_contained_nofollow(other, "manifest.json"), b"{}")
+                    self.assertEqual(len(subsequent.records), 1)
+                self.assertTrue(workers[0].is_alive())
+                release.set()
+                workers[0].join(1)
+                read.assert_called_once()
         finally:
             release.set()
             for worker in workers:
