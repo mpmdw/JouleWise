@@ -127,6 +127,7 @@ SAFETY_VOCABULARY = {
         'Retain limitation; no result inferred from design',
         'Retain schematic label; empirical annotations need separate X6–X10 bindings',
         'STOP_FILL; methods/diagnostics fallback; no issued refusal inferred',
+        'STOP_FILL; methods/diagnostics fallback; no issued refusal inferred; D-177 adjacent phase-energy limitation required',
         'STOP_FILL; preserve withdrawal/no-characterization prefix; D is not a fourth global outcome',
         'STOP_FILL; retain honest unissued-locators statement',
     },
@@ -232,6 +233,22 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
         values[columns.index(column)] = f" {value} "
         texts[table] = texts[table].replace(row, "|" + "|".join(values) + "|", 1)
         return texts
+
+    def test_d177_phase_energy_adjacency_block_exists(self):
+        self.assertIn(
+            '**D-177 phase-energy limitation.** The D-123 mean cells—the average energies\n'
+            'assigned to each phase—are phase-specific results. Every X5 placement below\n'
+            'requires this adjacent note in the successor:\n'
+            '\n'
+            '> Phase attribution—assigning energy to prompt processing or token generation—is\n'
+            '> reported without an instrument phase-accounting characterization, a measured\n'
+            '> check of how those phase energies account for the enclosing request. The\n'
+            '> phase-accounting check registered in P.2 was not run for this paper. Phase\n'
+            '> energies are per-window accounting under the registered boundary rule—energy\n'
+            '> assigned to each phase from its overlap with sampled power records—not\n'
+            '> independently characterized attributions.',
+            self.texts[0],
+        )
 
     def test_all_three_tables_agree(self):
         check_agreement(*self.texts)

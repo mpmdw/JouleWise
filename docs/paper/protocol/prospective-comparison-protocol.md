@@ -58,8 +58,8 @@ generality claim. No result for that pair is reported here.
 <!-- Source: characterization_result_schema_v1; reviewer D3 and C5. -->
 
 Instrument characterization asks four physical questions before relying on
-per-token conversion (the fitted joules per output token), an issued floor
-(a published resolution guard for assigned-energy differences), or a
+per-token conversion (the fitted joules per output token), a floor
+(the registered resolution guard for assigned-energy differences, called the cell floor in P.3), or a
 phase-specific claim (a statement about energy assigned to prompt processing
 or token generation). Does energy change with the amount of work
 in the planned way? Under identical conditions, do repeated paired blocks stay
@@ -457,15 +457,14 @@ and P.8 here specify the prospective characterization and contrast route.
 
 ## P.5 Campaign dependence and custody limitations
 
-Phase attribution—assigning energy to prompt processing or token generation—is
-reported without an instrument phase-accounting characterization, a measured
+Where the successor reports phase attribution—assigning energy to prompt
+processing or token generation—it is reported without an instrument
+phase-accounting characterization, a measured
 check of how those phase energies account for the enclosing request. The
 phase-accounting check registered in P.2 was not run for this paper. Phase
 energies are per-window accounting under the registered boundary rule—energy
 assigned to each phase from its overlap with sampled power records—not
-independently characterized attributions. <!-- D-177: applies to the D-123
-phase-energy means if placed in the comparison successor; this prospective
-protocol supplies no empirical mean. -->
+independently characterized attributions.
 
 The prospective design's ten blocks in one measurement window would not automatically be ten
 independent physical draws. Consecutive member runs inside a block share the same

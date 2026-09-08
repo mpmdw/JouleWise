@@ -219,7 +219,7 @@ be re-derived by a future agent gets an entry here.
 | D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
-| D-177 | Omit empirical Window C characterization; narrow the claim precondition and disclose uncharacterized phase attribution | adjudicated (magistrate synthesis, 2026-09-08) |
+| D-177 | Omit empirical Window C characterization; narrow the claim precondition and disclose uncharacterized phase attribution | adopted (magistrate synthesis, 2026-09-08) |
 
 ---
 

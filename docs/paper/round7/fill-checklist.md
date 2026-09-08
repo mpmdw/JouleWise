@@ -11,7 +11,7 @@ Prospective counts are design requirements, not observed counts.
 D-177 rules omission of empirical Window C characterization—the measured
 checks from the separate instrument-characterization campaign. X13–X16 remain
 `PROPOSED_STOP_FILL` (no proposed result site may be filled), and the P.2
-summary remains `STOP_FILL`. Keep P.2's four methods and registered minimum
+summary remains `STOP_FILL` (the summary may not be filled). Keep P.2's four methods and registered minimum
 counts as design requirements. Any placement of the D-123 means, the average
 energies assigned to each phase, must carry the adjacent limitation on phase
 attribution (assigning energy to phases) specified in
