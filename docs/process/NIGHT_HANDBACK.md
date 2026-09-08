@@ -7,13 +7,18 @@ and commits the rewrite with the night's plan. Between nights the sections
 hold the standing template text, so a courier that reads this file on a
 night nobody armed reports exactly that.
 
-The courier does not decide anything from this file. The verdict, the chain
-exit code, and every refusal reason come from the result record under the
-night's custody root: `night/result.json`, then `night/receipt.json` or
+The courier does not decide anything from this file. A **chain** is the child
+process running the night's measurements and pauses; its **exit code** is the
+integer result returned when it ends. The verdict, that exit code, and every
+refusal reason come from the result record under the night's **custody root**,
+the directory retaining that night's records: `night/result.json`, then
+`night/receipt.json` or
 `night/refusal.json` as `result.json` directs. If this file and the result
 record disagree, the result record is right and the courier says so.
 
-The night driver independently reads the plan-configured sibling path
+The **custody parent** is the directory containing those per-night record
+directories. The night driver independently reads the plan-configured sibling
+path
 `<custody-parent>/magistrate/state.json` when it constructs every courier
 message; for the production plan layout this is
 `~/night-custody/magistrate/state.json`. The email body reports that file's age
@@ -21,14 +26,18 @@ and its last `state` decision without importing the watchdog. Operational
 liveness is 15 minutes: an age greater than 900 seconds, a missing file, or an
 unreadable decision means the watchdog is dead and must be reported as such.
 
-For a status update through `scripts/window_status.sh`, the script invokes a
-measurement-owner census (an inventory of recorded chain and campaign
-processes) before any status-file or Git change. Handback delivery alone does
-not clear it: `courier.sent` closes neither rule, and a valid `chain.exited`
-closes only the chain rule. Live or indeterminate campaign ownership still
-refuses publication. See the [window-liveness contract](../contracts/window_liveness.md)
-for the shared custody-parent settings, registry lifecycle, decision table,
-and operator-owned stale-entry repair.
+For a status update through `scripts/window_status.sh`, the script inventories
+recorded measurement processes before any status-file or Git change. A
+**campaign** is one execution of the program controlling a set of measurements,
+within a chain or launched separately. Handback delivery alone does not permit
+an update: `courier.sent`, the delivery record, does not clear either process
+check; `chain.exited`, the chain's end record, clears only the chain check when
+its required fields are acceptable. A running recorded campaign, or
+**indeterminate** evidence (insufficient to establish whether it still runs),
+still stops the update. The [window-liveness contract](../contracts/window_liveness.md)
+gives the exact record checks, shared custody-parent settings, decision table,
+and operator repair for records whose processes have ended or whose numbers
+have been assigned to later processes.
 
 ## Purpose of this night
 

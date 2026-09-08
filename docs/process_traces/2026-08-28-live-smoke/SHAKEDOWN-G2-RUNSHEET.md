@@ -7,7 +7,16 @@ executes the claim family’s first consuming launch as a one-block, non-claim
 shakedown on its own runs root and proves exact finalizer refusal. No command
 in a live section may run while an agent session is active.
 
-Before publishing a window update, `scripts/window_status.sh` applies the [window-liveness guard](../../contracts/window_liveness.md); share the measurement custody parent and follow its operator-owned stale-registry repair procedure.
+Before writing and sending a progress update, `scripts/window_status.sh`
+checks recorded measurement processes. A **chain** runs a night's measurements
+and pauses; a **campaign** runs one set of measurements. A **custody parent**
+is the directory holding per-night records and the shared list of campaign
+processes; use the same parent for measurement and status work. A running
+recorded process, or **indeterminate** evidence (insufficient to decide whether
+it is still running), stops the update. The
+[window-liveness contract](../../contracts/window_liveness.md) supplies the exact
+checks and the operator's repair command for a record whose process has ended
+or whose number has been assigned to a later process.
 
 G2 is **diagnostic and non-claim by construction**: `$RUNS_ROOT` is its own
 shakedown root, never the campaign runs root, and no mint or claim artifact may

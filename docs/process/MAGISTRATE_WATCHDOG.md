@@ -2,14 +2,19 @@
 
 `com.joulewise.magistrate` is a user LaunchAgent that evaluates a short Python tick at load and every 300 seconds. A safe tick forks a new session and leaves a resident supervisor running at 10-second resolution. The service never writes a repository tree. Its default mutable root is `~/night-custody/magistrate/`; `MAGISTRATE_WATCHDOG_CUSTODY_ROOT` or `--custody-root` may replace that root for a rehearsal.
 
-When the magistrate publishes a window update with `scripts/window_status.sh`,
-that script first invokes the measurement-owner census (the inventory of
-recorded chain and campaign processes). A live or indeterminate owner refuses
-before `WINDOW_STATUS.md` or Git changes, including during a commit freeze.
-The watchdog's launch fences and agent census remain separate. See the
-[window-liveness contract](../contracts/window_liveness.md) for shared custody
-settings, the `active-campaigns` registry, identity matching, and operator-owned
-stale-entry repair.
+When the magistrate writes and sends a progress update with
+`scripts/window_status.sh`, that script first inventories recorded measurement
+processes: a **chain** runs the night's measurements and pauses; a **campaign**
+runs one set of measurements. A **custody parent** is the directory holding
+each night's records and the shared list of campaign processes. A recorded
+process still running, or **indeterminate** evidence (not enough information
+to decide whether it is still running), stops the update before any status-file
+or Git changes. This also applies when a file is present to suppress Git work.
+The watchdog's separate checks for agent processes and rules forbidding their
+launch still apply. The [window-liveness contract](../contracts/window_liveness.md)
+explains the shared directory settings, process checks, and operator repair
+when a recorded process has ended or its number has been assigned to a later
+process.
 
 ## Safety model and state machine
 
