@@ -1628,3 +1628,54 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class D179V5ReportedEnergyRegistrationTests(unittest.TestCase):
+    def test_both_v5_generators_install_cell_bound_registrations_before_spec(self):
+        from joulewise.paper_reported_energy import (
+            _validate_registered_spec, registration_sha256, reported_energy_registration,
+        )
+        from tests.test_d117_floor_qwen3_v5_generate import load_generator
+        for model in ("qwen3-1p7b", "qwen3-8b"):
+            with self.subTest(model=model):
+                generator = load_generator(f"d117_floor_{model}_v5")
+                generator.load_and_verify_families()
+                absolute = [f"repeat-{i}" for i in range(10)]
+                blocks = [{"block_id": f"block-{i}", "members": {
+                    position: f"block-{i}-{position}" for position in ("A1", "B1", "B2", "A2")}}
+                    for i in range(10)]
+                p512_absolute = [f"p512-{item}" for item in absolute]
+                p512_blocks = [{"block_id": f"p512-{b['block_id']}", "members": {
+                    position: f"p512-{item}" for position, item in b["members"].items()}} for b in blocks]
+                ids = absolute + [v for b in blocks for v in b["members"].values()]
+                ids += p512_absolute + [v for b in p512_blocks for v in b["members"].values()]
+                rows = [{"bundle_id": item, "config_sha256": f"{i:064x}"} for i, item in enumerate(ids)]
+                spec = generator.build_extraction_spec(
+                    generator.decode_family_definition(), generator.prefill_family_definition(),
+                    generator.p512_family_definition(), absolute, blocks, p512_absolute,
+                    p512_blocks, rows, "a" * 64)
+                _validate_registered_spec(spec)
+                self.assertEqual(spec["reported_energy_registration"]["registration_sha256"],
+                                 registration_sha256(model))
+                pinned_digest = {
+                    "qwen3-1p7b": "d89011dbda01172c41ebaa200d2410b37419fc2ee626700945a811d51b136952",
+                    "qwen3-8b": "88e0f5c179a7ecccb1f048f209e25ed0f239772cc078cf650c50957beceab138",
+                }[model]
+                self.assertEqual(registration_sha256(model), pinned_digest)
+                self.assertIn(pinned_digest, (ROOT / "docs/contracts/paper_reported_energy.md").read_text())
+                self.assertEqual(spec["reported_energy_registration"]["registration_ordering"],
+                                 "registration_digest_must_predate_first_frozen_spec")
+                for cell in spec["reported_energy_cells"]:
+                    self.assertEqual(cell["projection_registration"], reported_energy_registration(cell["cell_id"]))
+                    self.assertEqual(cell["phase_ratio_estimand"], cell["projection_registration"]["phase_ratio_estimand"])
+                    self.assertIsNone(cell["numeric_value"])
+                # Counterfactual: removing a generator registration must refuse,
+                # while the independent frozen floor validator still accepts.
+                missing = deepcopy(spec)
+                del missing["reported_energy_cells"][0]["phase_ratio_estimand"]
+                with self.assertRaises(ValueError):
+                    _validate_registered_spec(missing)
+                self.assertEqual(validate_extraction_spec(missing), [])
+                self.assertEqual(spec["cells"], missing["cells"])
+                self.assertFalse((ROOT / generator.SPEC_REL).exists(),
+                                 "registration-first proof must be revisited at first spec freeze")

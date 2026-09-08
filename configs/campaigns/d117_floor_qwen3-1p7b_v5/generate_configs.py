@@ -44,6 +44,9 @@ from joulewise.dominance_closeout import (  # noqa: E402
     DOMINANCE_THRESHOLD,
     DOMINANCE_ZERO_DENOMINATOR_REASON,
 )
+from joulewise.paper_reported_energy import (
+    reported_energy_registration, phase_ratio_estimand, registration_sha256,
+)
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
     validate_extraction_spec,
@@ -2110,6 +2113,11 @@ def build_extraction_spec(
             "numeric_value": None,
         },
     ]
+    # D-179: executable pre-registration, installed before the first frozen spec.
+    # These sibling registrations do not alter the floor cells or B8 ratios.
+    for cell in reported_cells:
+        cell["projection_registration"] = reported_energy_registration(cell["cell_id"])
+        cell["phase_ratio_estimand"] = phase_ratio_estimand(cell["cell_id"])
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
         # The frozen plan test pins the extraction-spec artifact SHA.
@@ -2118,7 +2126,9 @@ def build_extraction_spec(
         "cells": cells,
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
-            "authority": "D-123",
+            "authority": "D-123 / D-179",
+            "registration_sha256": registration_sha256("qwen3-1p7b"),
+            "registration_ordering": "registration_digest_must_predate_first_frozen_spec",
             "procedure_only": True,
             "postcollection_numeric_values": "structurally_absent_until_governed_reduction",
             "floor_projection_sha256": canonical_sha256(cells),

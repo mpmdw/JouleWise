@@ -203,11 +203,14 @@ Each returns its distinct `Fixture*` type. The reported-energy fixture exercises
 a repository `git_blob` extraction spec, and every fixture has a transitive
 source read in its census. These are synthetic authentication controls.
 
-The production role `production.reported_energy_parents.qwen3-1p7b.v5` is
-**pending**, recorded only in `pending_roles`, which grants no lookup or
-issuance authority. Its prospective `EXTRACTION_SPEC` is
-`configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json`. Desk-day
-registration must use the real reviewed/committed blob and full production
+Both production roles `production.reported_energy_parents.qwen3-1p7b.v5` and
+`production.reported_energy_parents.qwen3-8b.v5` are **pending**, recorded only
+in `pending_roles`, which grants no lookup or issuance authority. The 8b role
+is included by the S2 fix ruling because both models are cells of the D-179
+registration. Their prospective `EXTRACTION_SPEC` blobs are respectively
+`configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json` and
+`configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json`. Desk-day
+registration must use each real reviewed/committed blob and full production
 census under D-138/D-166 successor naming; a fixture or old pack cannot replace
 it. Production Git-blob coverage remains unfulfilled until that registration.
 
@@ -287,10 +290,20 @@ Whole-window issuance, admitted or non-admitted, remains stopped until a registe
 
 ## Family replay requirements
 
-The future reported-energy gate must replay `validate_extraction_spec` and
+The separate D-179 projection contract is `docs/contracts/paper_reported_energy.md`.
+Its executable registrations and non-issuing synthetic kernel are installed;
+production joins remain pending. The future reported-energy gate must replay `validate_extraction_spec` and
 `validate_d117_mint_consumption_report`. Its production entry must also
-inventory the full ordered `reported_energy_cells[].members` universe and every
-strict-bundle input consumed by the projection.
+inventory the full ordered extraction-spec `reported_energy_cells[].members` universe and every
+strict-bundle input consumed by the projection. The closed mint-consumption
+report is unchanged; computed results belong to the separate typed frozen field
+`reported_energy_projection` on both reported-energy result types, never to an
+invented report field. The new owner module, phase-ratio validator, bundle
+reader and typed whole-window owner are
+in the transitive source census. Optional fixture `projection_input` is
+synthetic-only and cannot issue a cell. D-179 fixes the fifty-member mean,
+stratified t9 interval and observed ratio of totals, but authentic production
+replay and registration-before-spec proof still gate issuance.
 
 D-165 replays the finalized-manifest validator, floor authentication,
 `validate_d165_replay_sidecar`, and `validate_d165_closeout`. The adapter and
@@ -395,8 +408,10 @@ contract failure.
 | `paper_custody_evidence_ambiguous` | Duplicate paths/roles or a non-exact inventory census prevents unique evidence selection |
 | `paper_custody_input_changed` | Reopen detects replacement, removal, grammar/digest change, or different bytes after replay |
 
-Every public-entry failure is `PaperCustodyRefusal` with a code from the closed
-`paper_custody_*` set and empty `rendered_output`. This includes malformed
+Every custody-seam and renderer-guard failure is `PaperCustodyRefusal` with a code
+from the closed `paper_custody_*` set; a reported-energy renderer body may
+additionally raise the closed `paper_reported_energy_*` vocabulary of D-179, also
+with empty `rendered_output`. Custody-seam failures include malformed
 primitive types before regex/path operations, Git/subprocess failures, supply
 map failures, JSON/UTF-8 failures, missing files, nested or already-active
 authentication sessions, validator exceptions, replay changes, and private
@@ -443,10 +458,10 @@ and schematic suppliers cannot discharge empirical obligations.
 | X4 | CP-X04-8b-decode | DS-23; d117-qwen3-8b-decode-floor-v5; associated F_* and TERM tokens; TERMINAL_REFUSAL_REASON_*; NO_EXACT_FLOOR_REASON_*; AVAILABLE_DIAGNOSTIC_CLAUSE_*; POINT_DIAGNOSTIC_CLAUSE_* | detection-floor-extraction.json and minted v2 floor: cell components, operative floor and label; exact projection field contract UNRESOLVED | floor_cell_projection | EMPIRICAL | UNRESOLVED | UNRESOLVED | UNRESOLVED | ALPHA small / BETA large; selected L for prefill; floor acceptance required | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X4 | CP-X04-composition | DS-01; empirical component composition and cell labels | Minted floor component census; exact standalone projection fields UNRESOLVED | floor_cell_projection | EMPIRICAL | UNRESOLVED | UNRESOLVED | UNRESOLVED | Comparison successor only | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X4 | CP-X04-na | Prefill J/output-token and decode J/input-token companion sites | No artifact field: phase-inapplicable companion cells | fixed_applicability_text | LIMITATION | NONE | NONE | NONE | N/A by column/phase; not a missing measurement | Retain explicit N/A; never opportunistically fill | PROPOSED_STOP_FILL |
-| X5 | CP-X05-1p7b-prefill | DS-09/10/12; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 1p7b/prefill: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
-| X5 | CP-X05-8b-prefill | DS-13/14/16; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 8b/prefill: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
-| X5 | CP-X05-1p7b-decode | DS-17/18/20; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 1p7b/decode: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
-| X5 | CP-X05-8b-decode | DS-21/22/24; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 8b/decode: five values, exact field names/member joins UNRESOLVED | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
+| X5 | CP-X05-1p7b-prefill | DS-09/10/12; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 1p7b/prefill: five fields defined in paper_reported_energy.md; production member replay pending | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | RETIRED_FALLBACK under D-174; no placement restored | RETIRED_FALLBACK |
+| X5 | CP-X05-8b-prefill | DS-13/14/16; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 8b/prefill: five fields defined in paper_reported_energy.md; production member replay pending | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | RETIRED_FALLBACK under D-174; no placement restored | RETIRED_FALLBACK |
+| X5 | CP-X05-1p7b-decode | DS-17/18/20; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 1p7b/decode: five fields defined in paper_reported_energy.md; production member replay pending | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | RETIRED_FALLBACK under D-174; no placement restored | RETIRED_FALLBACK |
+| X5 | CP-X05-8b-decode | DS-21/22/24; gross mean + two endpoints + per-token value + count | extraction_spec.json; mint-consumption extraction_report; proposed reported_energy_cells for 8b/decode: five fields defined in paper_reported_energy.md; production member replay pending | reported_energy_projection | EMPIRICAL | reported_energy_parents | UNREGISTERED | cell(subject=exact registered model/phase cell) | ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree | RETIRED_FALLBACK under D-174; no placement restored | RETIRED_FALLBACK |
 | X6 | CP-X06-table | DS-25–32; point, endpoints, floor, signed clearance/shortfall, claim-side bound, floor gate, direction/Holm and verdict | claim_verdicts.json contrasts[decode].claim_evaluation.outcome; finalized manifest; claim_side_bound.v1 and source-cell join; numeric projection fields UNRESOLVED | claim_table_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast); l2 where required; UNRESOLVED: numeric/table projection scope | GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X7 | CP-X07-table | DS-33; PG-01/02/04–08 (no PG-03); point, endpoints, floor, signed clearance/shortfall, claim-side bound, floor gate, direction/Holm and verdict | claim_verdicts.json contrasts[prefill].claim_evaluation.outcome; finalized manifest; claim_side_bound.v1 and source-cell join; numeric projection fields UNRESOLVED | claim_table_projection | EMPIRICAL | claim_evidence | UNREGISTERED | outcome(subject=exact contrast); l2 where required; UNRESOLVED: numeric/table projection scope | GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |
 | X7 | CP-X07-split | D-166 split-refusal sentence; guarded prefill token family UNRESOLVED | G2-a selection/prompt-pin and issued affected prefill evidence; split-refusal field/route UNRESOLVED | prefill_split_refusal_projection | EMPIRICAL | UNRESOLVED | UNRESOLVED | UNRESOLVED | Two distinct exhausted-ladder renderings require adoption; diagnostic failure is not production non-admission | STOP_FILL; methods/diagnostics fallback; no issued refusal inferred | PROPOSED_STOP_FILL |

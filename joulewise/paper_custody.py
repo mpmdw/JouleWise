@@ -149,6 +149,7 @@ _CAPABILITY_FIELDS = frozenset(
         "subjects",
         "evidence",
         "_payload",
+        "reported_energy_projection",
     }
 )
 
@@ -186,6 +187,7 @@ def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
         output_type: type,
         evidence: object,
         payload: object,
+        reported_energy_projection: _FrozenObject | None = None,
     ) -> object:
         if presented is not token:
             raise PaperCustodyRefusal("paper_custody_request_invalid")
@@ -206,6 +208,10 @@ def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
         result = object.__new__(output_type)
         object.__setattr__(result, "evidence", evidence)
         object.__setattr__(result, "_payload", payload)
+        if spec.family == "reported_energy_parents":
+            if reported_energy_projection is not None and type(reported_energy_projection) is not _FrozenObject:
+                raise PaperCustodyRefusal("paper_custody_request_invalid")
+            object.__setattr__(result, "reported_energy_projection", reported_energy_projection)
         object.__setattr__(result, "_custody_token", token)
         return result
 
@@ -255,7 +261,7 @@ class _CustodyResult:
 
 @dataclass(frozen=True, init=False, slots=True)
 class VerifiedReportedEnergyParents(_CustodyResult):
-    pass
+    reported_energy_projection: _FrozenObject | None
 
 
 @dataclass(frozen=True, init=False, slots=True)
@@ -280,7 +286,7 @@ class VerifiedTransferProjection(_CustodyResult):
 
 @dataclass(frozen=True, init=False, slots=True)
 class FixtureReportedEnergyParents(_CustodyResult):
-    pass
+    reported_energy_projection: _FrozenObject | None
 
 
 @dataclass(frozen=True, init=False, slots=True)
@@ -475,6 +481,7 @@ class _FamilyReplay:
     admitted: bool
     grants: tuple[_RenderGrant, ...]
     validator_codes: tuple[str, ...]
+    reported_energy_projection: _FrozenObject | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -657,12 +664,25 @@ _ISSUANCE_GATES: dict[tuple[str, str], Callable[[_GateContext], _FamilyReplay]] 
 }
 
 
+def _register_reported_energy_gate(gate_id: str, gate, *, repository: Path) -> None:
+    """Prospective registration only; no production energy gate is installed."""
+    from joulewise.paper_reported_energy import _verify_gate_ordering
+    _verify_gate_ordering(repository)
+    if not isinstance(gate_id, str) or not gate_id or not callable(gate):
+        raise PaperCustodyRefusal("paper_custody_issuance_gate_unregistered")
+    _ISSUANCE_GATES[("reported_energy_parents", gate_id)] = gate
+
+
 def _run_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     if ctx.mode != "production":
         raise PaperCustodyRefusal("paper_custody_not_issuable")
     gate = _ISSUANCE_GATES.get((ctx.family, ctx.issuance_gate_id))
     if gate is None:
         raise PaperCustodyRefusal("paper_custody_issuance_gate_unregistered")
+    if ctx.family == "reported_energy_parents":
+        from joulewise.paper_reported_energy import _verify_gate_ordering
+        # Recheck this repository: direct registry insertion cannot omit the fence.
+        _verify_gate_ordering(ctx.repository)
     replay = gate(ctx)
     if (type(replay) is not _FamilyReplay or type(replay.authentic) is not bool
         or type(replay.admitted) is not bool or type(replay.validator_codes) is not tuple
@@ -720,7 +740,7 @@ def _validator_source_census(
     common: tuple[tuple[str, Callable[..., object]], ...] = tuple(
         (f"paper_custody.{member.__name__}", member) for member in (
             _replay_family, _validate_fixture_documents, _validate_production_documents,
-            _run_issuance_gate, _validate_grants, _validate_floor_acceptance,
+            _run_issuance_gate, _register_reported_energy_gate, _validate_grants, _validate_floor_acceptance,
             _floor_binder_source_sha256, _d165_issuance_gate, _claim_issuance_gate,
             _make_custody_capability_mint, _FamilySpec, _load_supply_entry,
             _read_once, _open_paper_input_impl,
@@ -732,7 +752,23 @@ def _validator_source_census(
             validate_extraction_spec,
         )
 
+        from joulewise.paper_reported_energy import (
+            _validate_registered_spec, _project_cell, _validate_projection,
+            _synthetic_projection, validate_phase_ratio_estimand,
+        )
+        from joulewise.bundle_read import BundleReader
+        from joulewise.analysis_engine.inputs import deterministic_bounds
+        from joulewise.whole_window import validate_whole_window_verdict_row
+
         owners = (
+            ("paper_reported_energy._validate_registered_spec", _validate_registered_spec),
+            ("paper_reported_energy._project_cell", _project_cell),
+            ("paper_reported_energy._validate_projection", _validate_projection),
+            ("paper_reported_energy._synthetic_projection", _synthetic_projection),
+            ("paper_reported_energy.validate_phase_ratio_estimand", validate_phase_ratio_estimand),
+            ("bundle_read.BundleReader", BundleReader),
+            ("analysis_engine.inputs.deterministic_bounds", deterministic_bounds),
+            ("whole_window.validate_whole_window_verdict_row", validate_whole_window_verdict_row),
             ("floor_extraction.validate_extraction_spec", validate_extraction_spec),
             (
                 "floor_extraction.validate_d117_mint_consumption_report",
@@ -1279,6 +1315,13 @@ def _validate_fixture_documents(
         except (UnicodeError, json.JSONDecodeError, ValueError):
             errors.append(f"{binding.role.value}_invalid")
             continue
+        if (family == "reported_energy_parents" and binding.role is InputRole.EXTRACTION_SPEC
+            and "projection_input" in value):
+            from joulewise.paper_reported_energy import _synthetic_projection
+            try:
+                _synthetic_projection(value.pop("projection_input"))
+            except (ValueError, KeyError, TypeError, ArithmeticError):
+                errors.append("reported_energy_projection_invalid")
         if value != {
             "family": family,
             "marker": "synthetic-no-measurement-value",
@@ -1445,8 +1488,14 @@ def _open_paper_input_impl(
         )
         payload = _FrozenObject(tuple((binding.role.value, _freeze_json(_json_object(raws[binding.role])))
                                       for binding in sources))
+        projection = replay.reported_energy_projection
+        if spec.family == "reported_energy_parents" and mode == "test_fixture_non_issuing":
+            document = _json_object(raws[InputRole.EXTRACTION_SPEC])
+            if "projection_input" in document:
+                from joulewise.paper_reported_energy import _synthetic_projection
+                projection = _freeze_json(_synthetic_projection(document["projection_input"]))
         output_type = spec.issuing_type if mode == "production" else spec.fixture_type
-        return _construct_verified(_custody_token, output_type, evidence, payload)
+        return _construct_verified(_custody_token, output_type, evidence, payload, projection)
 
 
 __all__ = [
