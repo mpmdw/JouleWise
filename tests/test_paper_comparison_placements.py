@@ -234,6 +234,17 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
         texts[table] = texts[table].replace(row, "|" + "|".join(values) + "|", 1)
         return texts
 
+    def test_claim_tables_pin_v2_verdict_resolution_join(self):
+        for text, marker, columns in ((self.texts[0], "PROPOSALS", COLUMNS),
+                                      (self.texts[1], "PROPOSALS", COLUMNS),
+                                      (self.texts[2], "BINDINGS", BINDING_COLUMNS)):
+            rows = parse_table(text, marker, columns)
+            for key in ("CP-X06-table", "CP-X07-table"):
+                with self.subTest(marker=marker, key=key):
+                    self.assertIn("claim_side_bound.v2 and verdict-resolution source-cell join",
+                                  rows[key]["Artifact field"])
+                    self.assertEqual(rows[key]["Adoption"], "PROPOSED_STOP_FILL")
+
     def test_all_three_tables_agree(self):
         check_agreement(*self.texts)
 
