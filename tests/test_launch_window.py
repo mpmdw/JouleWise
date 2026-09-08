@@ -427,6 +427,24 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
 
 
 class ProductionArmRelocationLaunchTests(unittest.TestCase):
+    def test_mint_keeps_raw_anchors_separate_from_sequence_clock(self) -> None:
+        anchor = clock_reference.sample_anchor()
+        two_hours_ns = 2 * 60 * 60 * 1_000_000_000
+        for offset_ns in (0, -two_hours_ns, two_hours_ns):
+            with self.subTest(ordinary_minus_raw_ns=offset_ns):
+                with (
+                    mock.patch.object(
+                        time,
+                        "monotonic_ns",
+                        return_value=anchor.monotonic_raw_ns + offset_ns,
+                    ),
+                    mock.patch.object(
+                        clock_reference, "sample_anchor", return_value=anchor
+                    ),
+                ):
+                    temporary, *_ = self._mint_v4_arm()
+                temporary.cleanup()
+
     def _mint_v4_arm(
         self,
     ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path, Path]:
@@ -459,7 +477,10 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         # ten-minute history even when a Linux runner booted only seconds ago.
         # The subprocess clock remains live: this offset is confined to the
         # in-process T-0 author and cannot mint the arm capability deadline.
-        fixture_now = live_fixture_now + t0_evidence._MIN_IDLE_NS + 1_000
+        # The clock-separation regression can deliberately put ordinary time
+        # below zero on a freshly booted host. Only the capture timeline needs
+        # this floor; keep the live RAW/REALTIME anchors intact for ARM replay.
+        fixture_now = max(live_fixture_now, 0) + t0_evidence._MIN_IDLE_NS + 1_000
         temporary, repository, pack, custody, context, input_root = (
             make_t0_fixture(
                 now_monotonic_ns=fixture_now,
@@ -717,7 +738,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             arm_readiness.render_json(reservation_capture)
         )
         # Main now derives the attestation from this captured R0 reference.
-        # Preserve the fixture's synthetic timeline, but give it the ambient
+        # Keep capture ordering on the synthetic ordinary-monotonic timeline
+        # and R0/author duration on RAW, as in make_t0_fixture. Give R0 the ambient
         # REALTIME-minus-MONOTONIC_RAW relation that the real ARM subprocess
         # independently resamples and checks within the production 5 ms gate.
         # Sample here, immediately before authoring and ARM, so Linux clock
@@ -737,15 +759,10 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             "utf-8"
         )
         clock_capture_path.write_bytes(arm_readiness.render_json(clock_capture))
-        author_clock_anchor = clock_reference.ClockAnchor(
-            realtime_ns=live_clock_offset_ns + fixture_now,
-            monotonic_raw_ns=fixture_now,
-            read_skew_ns=1_000,
-        )
         with author_environment(
             repository,
             now_monotonic_ns=fixture_now,
-            sample_anchor=lambda: author_clock_anchor,
+            sample_anchor=lambda: live_clock_anchor,
         ):
             authored_t0 = author_arm_readiness_evidence_t0(pack, custody)
         self.assertEqual(authored_t0["status"], "PASS", authored_t0)
