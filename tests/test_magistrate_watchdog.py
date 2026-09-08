@@ -1293,9 +1293,337 @@ class ClaudeHostIdentificationTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 self._assert_bench()
         source = self._installer_source()
-        self.assertEqual(source.count(self.NEW_REGEX), 1)
+        # The installer uses the same shape for retirement and ancestry checks.
+        self.assertEqual(source.count(self.NEW_REGEX), 2)
         with self.assertRaises(AssertionError):
             self._assert_bench(source.replace(self.NEW_REGEX, self.OLD_REGEX))
+
+
+class HandoffDefectTests(WatchdogTestCase):
+    TWIN = "/Users/edr/.local/share/claude/versions/2.1.261 --resume /Users/edr/.claude/projects/-Users-edr-code-JouleWise/3c46c831.jsonl --reply-on-resume"
+
+    def test_handoff_census_ignores_unrelated_claude_but_requires_owned_and_lock_absence(self) -> None:
+        """Counterfactual: unrelated Claude survives, while owned and lock pairs vanish."""
+        owned = [{"pid": 100, "start_time": "owned"}]
+        unrelated = wd.ProcessInfo(1536, 1, "other", "claude")
+        lock = {"schema": wd.LOCK_SCHEMA, "pid": 200, "start_time": "lock"}
+        self.assertTrue(wd.handoff_census(owned, lock, [unrelated]).empty)
+        for row in (wd.ProcessInfo(100, 1, "owned", "claude"),
+                    wd.ProcessInfo(200, 1, "lock", "claude"),
+                    wd.ProcessInfo(100, 1, "owned", "claude <defunct>")):
+            with self.subTest(row=row):
+                self.assertFalse(wd.handoff_census(owned, lock, [row, unrelated]).empty)
+        reused = wd.ProcessInfo(100, 1, "new-start", "unrelated")
+        self.assertTrue(wd.handoff_census(owned, None, [reused, unrelated]).empty)
+        self.assertFalse(wd.handoff_census(owned, {}, [unrelated]).empty)
+        # The same unrelated machine-wide hit must still close the night gate.
+        self.make_plan(t0=self.base.timestamp() + 60)
+        self.harness.census = wd.CensusObservation(False, 0, "1536 claude", "")
+        self.assertEqual("HOLD_CENSUS", wd.decide(
+            self.harness.storage, self.harness.deps, wd.initial_state()).state)
+
+    def test_inventory_classifies_nonorphan_daemon_and_resumed_twin(self) -> None:
+        """Counterfactual: daemon and resumed twin have live parents outside the owned tree."""
+        rows = [wd.ProcessInfo(900, 100, "helper", "python handoff-inventory"),
+                wd.ProcessInfo(100, 50, "owned", "claude"),
+                wd.ProcessInfo(1536, 1, "other", "claude"),
+                wd.ProcessInfo(71666, 1536, "daemon", "claude daemon run --origin transient"),
+                wd.ProcessInfo(71682, 71666, "host", "claude bg-pty-host --bg-pty-host sock"),
+                wd.ProcessInfo(71687, 71682, "spare", "claude bg-spare --bg-spare sock"),
+                wd.ProcessInfo(71607, 777, "resumed", self.TWIN),
+                wd.ProcessInfo(71633, 71607, "child", "codex mcp-server")]
+        inventory = wd.handoff_inventory(rows, 900)
+        roles = {row["pid"]: row["role"] for row in inventory["unclassified_candidates"]}
+        self.assertEqual({71666: "daemon", 71682: "bg_pty_host", 71687: "bg_spare",
+                          71607: "resumed_twin", 71633: None}, roles)
+        self.assertEqual(4, len(inventory["handoff_refusals"]))
+        retired = [row for row in rows if row.pid not in {71666, 71682, 71687}]
+        adopted = wd.handoff_inventory(retired, 900, adoptions=[(71607, "resumed")])
+        self.assertEqual([], adopted["handoff_refusals"])
+        self.assertEqual({100, 71607, 71633}, {row["pid"] for row in adopted["owned"]})
+        with self.assertRaisesRegex(RuntimeError, "mismatch"):
+            wd.handoff_inventory(retired, 900, adoptions=[(71607, "reused")])
+
+    def test_reaper_preserves_signal_time_evidence_and_passes_with_unrelated_claude(self) -> None:
+        """Counterfactual: PID alive at TERM disappears before KILL; unrelated Claude remains."""
+        table = FakeProcessTable([
+            wd.ProcessInfo(100, 1, "term", "claude"),
+            wd.ProcessInfo(200, 100, "kill", "codex"),
+            wd.ProcessInfo(400, 1, "reused", "other"),
+            wd.ProcessInfo(1536, 1, "unrelated", "claude"),
+        ])
+        inventory = {"interactive_pid": 100, "owned": [
+            {"pid": pid, "start_time": start}
+            for pid, start in ((100, "term"), (200, "kill"), (300, "gone"), (400, "old"))]}
+
+        def cooperative(seconds):
+            self.assertEqual(wd.STOP_COOPERATIVE_S, seconds)
+            table.rows = [row for row in table.rows if row.pid != 100]
+
+        receipt = wd.reap_handoff(inventory, table, lambda: None, sleep=cooperative)
+        self.assertEqual("pass", receipt["verdict"])
+        self.assertEqual({"100": "term_exited", "200": "kill_exited", "300": "already_gone",
+                          "400": "reused_skipped"}, receipt["outcomes"])
+        self.assertEqual("term", receipt["before_signal"]["term"]["100"])
+        self.assertIsNone(receipt["before_signal"]["kill"]["100"])
+        self.assertEqual([(200, signal.SIGTERM), (100, signal.SIGTERM),
+                          (200, signal.SIGKILL)], table.signals)
+        self.assertEqual([], receipt["survivors"])
+
+    def test_reaper_signal_race_is_exited_not_already_gone(self) -> None:
+        """Counterfactual: a PID exits between its pre-TERM snapshot and signal syscall."""
+        table = FakeProcessTable([wd.ProcessInfo(100, 1, "start", "claude")])
+        def race(pid, signum):
+            table.rows = []
+            raise ProcessLookupError(pid)
+        table.send_signal = race
+        result = wd.reap_handoff({"interactive_pid": 100, "owned": [
+            {"pid": 100, "start_time": "start"}]}, table, lambda: None, sleep=lambda _: None)
+        self.assertEqual("term_exited", result["outcomes"]["100"])
+
+    def test_documented_reaper_uses_owned_census_and_signal_time_outcomes(self) -> None:
+        """Counterfactual: unrelated Claude remains after the documented TERM kills the owner."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        block = document.split('   watchdog_checkout=', 1)[1].split("   PY\n", 1)[0]
+        block = textwrap.dedent(block.split("<<'PY' &\n", 1)[1])
+        inventory_path = self.temp / "handoff.json"
+        inventory_path.write_text(json.dumps({"interactive_pid": 100, "owned": [
+            {"pid": 100, "start_time": "owner"}]}))
+        table = FakeProcessTable([wd.ProcessInfo(100, 1, "owner", "claude"),
+                                  wd.ProcessInfo(1536, 1, "other", "claude")])
+        table.exit_on_term = True
+        real_reap = wd.reap_handoff
+        output = io.StringIO()
+        with mock.patch.object(wd, "RealProcessTable", return_value=table), \
+             mock.patch.object(wd, "reap_handoff", side_effect=lambda *args: real_reap(*args, sleep=lambda _: None)), \
+             mock.patch.object(os, "getpgid", return_value=os.getpid()), \
+             mock.patch.object(os, "setsid", side_effect=AssertionError("no live detachment")), \
+             mock.patch.object(sys, "argv", ["reaper", str(inventory_path), str(wd.REPO_ROOT)]), \
+             mock.patch.object(sys, "path", list(sys.path)), \
+             contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as exited:
+                exec(compile(block, "<documented-reaper>", "exec"), {})
+        self.assertEqual(0, exited.exception.code)
+        receipt = json.loads(output.getvalue())
+        self.assertEqual("pass", receipt["verdict"])
+        self.assertEqual("term_exited", receipt["outcomes"]["100"])
+        self.assertEqual([(100, signal.SIGTERM)], table.signals)
+
+    def test_reaper_cannot_pass_with_recorded_pair_still_present(self) -> None:
+        """Counterfactual: owned defunct PID/start remains despite successful signal calls."""
+        table = FakeProcessTable([wd.ProcessInfo(100, 1, "owner", "claude <defunct>")])
+        table.send_signal = lambda pid, signum: None
+        clock = iter([0, 31])
+        result = wd.reap_handoff({"interactive_pid": 100, "owned": [
+            {"pid": 100, "start_time": "owner"}]}, table, lambda: None,
+            sleep=lambda _: None, monotonic=lambda: next(clock))
+        self.assertEqual("fail", result["verdict"])
+        self.assertEqual([100], result["survivors"])
+        self.assertEqual("survivor", result["outcomes"]["100"])
+
+    def test_reaper_refuses_daemon_or_new_unowned_twin_before_signalling(self) -> None:
+        """Counterfactual: resume machinery appears after the recorded inventory was taken."""
+        for command in ("claude daemon run --origin transient", self.TWIN):
+            with self.subTest(command=command):
+                table = FakeProcessTable([wd.ProcessInfo(100, 1, "owned", "claude"),
+                                          wd.ProcessInfo(700, 1, "late", command)])
+                result = wd.reap_handoff({"interactive_pid": 100, "owned": [
+                    {"pid": 100, "start_time": "owned"}]}, table, lambda: None)
+                self.assertEqual("fail", result["verdict"])
+                self.assertTrue(result["refusals"])
+                self.assertEqual([], table.signals)
+
+    def test_reaper_final_gate_rejects_late_daemon_twin_or_lock_owner(self) -> None:
+        """Counterfactual: a daemon, resumed twin, or new lock owner arrives during the wait."""
+        for command, lock in (("claude daemon run --origin transient", None), (self.TWIN, None),
+                              ("claude -p magistrate", {"schema": wd.LOCK_SCHEMA,
+                               "pid": 700, "start_time": "late"})):
+            with self.subTest(command=command):
+                table = FakeProcessTable([wd.ProcessInfo(100, 1, "owned", "claude")])
+                table.exit_on_term = True
+                def arrive(_):
+                    table.rows.append(wd.ProcessInfo(700, 1, "late", command))
+                result = wd.reap_handoff({"interactive_pid": 100, "owned": [
+                    {"pid": 100, "start_time": "owned"}]}, table, lambda: lock, sleep=arrive)
+                self.assertEqual("fail", result["verdict"])
+                self.assertEqual([], result["survivors"])
+                self.assertNotIn(700, [pid for pid, _ in table.signals])
+
+    def test_dead_lock_resumed_twin_refusal_survives_repeated_ticks_and_plan_hold(self) -> None:
+        """Counterfactual: dead PID in ACTIVE lock/state, but a detached resumed twin is live."""
+        lock = self.write_live_lock(pid=4453)
+        state = wd.initial_state()
+        state["resident_session"] = lock
+        self.harness.storage.atomic_json(self.harness.storage.root / "state.json", state)
+        self.harness.processes.rows = [wd.ProcessInfo(71607, 1, "resumed", self.TWIN)]
+        for _ in range(2):
+            decision = wd.tick(self.harness.storage, self.harness.deps)
+            self.assertEqual("HOLD_UNSAFE", decision.state)
+            self.assertIn("dead_lock_resumed_twin", decision.reason)
+            self.assertEqual(lock, wd.read_lock(self.harness.storage))
+            self.assertFalse(decision.launch)
+        self.make_plan()
+        (self.temp / "night-a/night_plan.json").write_text("{torn")
+        wd.tick(self.harness.storage, self.harness.deps)
+        self.assertEqual(lock, wd.read_lock(self.harness.storage))
+        self.assertEqual([], self.harness.processes.signals)
+        self.assertEqual([], self.harness.spawn_calls)
+
+    def test_c1_reused_pid_disappears_before_kill(self) -> None:
+        """Counterfactual input: old PID has a new token at TERM and vanishes before KILL."""
+        table = FakeProcessTable([wd.ProcessInfo(100, 1, "new", "other")])
+        result = wd.reap_handoff({"interactive_pid": 100, "owned": [
+            {"pid": 100, "start_time": "old"}]}, table, lambda: None,
+            sleep=lambda _: table.rows.clear())
+        self.assertEqual("reused_skipped", result["outcomes"]["100"])
+        self.assertEqual([], table.signals)
+
+    def recovery_block(self, marker: str) -> str:
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        blocks = re.findall(r"<<'PY'.*?\n(.*?)\n\s*PY$", document, re.DOTALL | re.MULTILINE)
+        matching = [block for block in blocks if marker in block]
+        self.assertEqual(1, len(matching), marker)
+        return textwrap.dedent(matching[0])
+
+    def corrupt_lock_cases(self):
+        record = {"schema": wd.LOCK_SCHEMA, "activation_id": "activation-a",
+                  "pid": 100, "start_time": "old"}
+        resident = wd.ProcessInfo(100, 1, "old", " ".join(
+            ("claude", "-p", "magistrate", *wd.SESSION_ARGV_AFTER_PROMPT)))
+        yield "live", record, [resident], "corrupt_lock_resident_live"
+        yield "absent-record", None, [], "corrupt_lock_no_record"
+        yield "gone", record, [], None
+        yield "reused", record, [wd.ProcessInfo(100, 1, "new", "other")], None
+        yield "twin", record, [wd.ProcessInfo(200, 1, "twin", self.TWIN)], "corrupt_lock_resumed_twin"
+        for command in ("claude daemon run --origin transient", "claude bg-pty-host sock",
+                        "claude --bg-spare sock"):
+            yield command, record, [wd.ProcessInfo(200, 1, "daemon", command)], "corrupt_lock_daemon_live"
+        # An observed pair, even defunct, is not a proof that the pair is absent.
+        yield "defunct", record, [wd.ProcessInfo(100, 1, "old", "claude <defunct>")], "corrupt_lock_resident_live"
+        for field, value in (("schema", "wrong"), ("pid", True), ("pid", -1),
+                             ("pid", "100"), ("start_time", ""), ("start_time", None),
+                             ("activation_id", ""), ("activation_id", None)):
+            yield f"bad-{field}-{value}", dict(record, **{field: value}), [], "corrupt_lock_no_record"
+        for malformed in ([], "record", {}):
+            yield "malformed", malformed, [], "corrupt_lock_no_record"
+
+    def test_corrupt_lock_tick_matrix_binds_durable_resident(self) -> None:
+        """Counterfactual: torn lock launches over live headless resident or absent/bad record;
+        gone/reused pairs may clear only without resumed twins or daemon machinery.
+        """
+        for raw in ("{torn", "{}", "[]"):
+            for label, record, rows, refusal in self.corrupt_lock_cases():
+                with self.subTest(raw=raw, case=label):
+                    storage = self.harness.storage
+                    state = wd.initial_state()
+                    state["resident_session"] = record
+                    storage.atomic_json(storage.root / "state.json", state)
+                    path = storage.root / "magistrate.lock"
+                    path.write_text(raw)
+                    self.harness.processes.rows = rows
+                    # Prevent real forks even if the baseline wrongly allows launch.
+                    with mock.patch.object(wd.os, "fork", return_value=12345):
+                        decision = wd.tick(storage, self.harness.deps)
+                    self.assertEqual("HOLD_UNSAFE" if refusal else "LAUNCHING", decision.state)
+                    self.assertEqual(refusal is None, decision.launch)
+                    self.assertEqual(refusal is not None, path.exists())
+                    if refusal:
+                        self.assertIn(refusal, decision.reason)
+                        self.assertEqual(raw, path.read_text())
+                        saved = wd.load_state(storage)
+                        self.assertEqual(record, saved["resident_session"])
+                        self.assertTrue(any(item["reason"] == decision.reason
+                                            for item in saved["notice_pending"]))
+                        events = [json.loads(line) for line in
+                                  (storage.root / "events.jsonl").read_text().splitlines()]
+                        self.assertTrue(any(item.get("reason") == decision.reason for item in events))
+                    self.assertEqual([], self.harness.processes.signals)
+                    self.assertEqual([], self.harness.spawn_calls)
+
+    def test_corrupt_lock_documented_matrix_binds_durable_resident(self) -> None:
+        """Counterfactual: step 4 refuses a provably absent durable resident, or trusts
+        an inventory instead of refusing a live headless pair/missing durable record.
+        """
+        block = self.recovery_block("HANDOFF_DEAD_LOCK_REMOVED")
+        for raw in ("{torn", "{}", "[]"):
+            for label, record, rows, refusal in self.corrupt_lock_cases():
+                with self.subTest(raw=raw, case=label):
+                    storage = self.harness.storage
+                    state = wd.initial_state()
+                    state["resident_session"] = record
+                    storage.atomic_json(storage.root / "state.json", state)
+                    path = storage.root / "magistrate.lock"
+                    path.write_text(raw)
+                    with mock.patch.object(wd, "DEFAULT_CUSTODY_ROOT", path.parent), \
+                         mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
+                         contextlib.redirect_stdout(io.StringIO()):
+                        if refusal:
+                            with self.assertRaisesRegex(SystemExit, refusal):
+                                exec(compile(block, "<step4-corrupt>", "exec"), {})
+                        else:
+                            exec(compile(block, "<step4-corrupt>", "exec"), {})
+                    self.assertEqual(refusal is not None, path.exists())
+                    if refusal:
+                        self.assertEqual(raw, path.read_text())
+
+    def test_c3_documented_twin_stop_revalidates_each_signal(self) -> None:
+        """Counterfactual input: selected late twin is reused before TERM or before KILL."""
+        block = self.recovery_block("HANDOFF_TWIN_ABSENT")
+        for replacement in ("before_term", "before_kill", "none"):
+            with self.subTest(replacement=replacement):
+                table = FakeProcessTable([wd.ProcessInfo(200, 1,
+                    "new" if replacement == "before_term" else "old", self.TWIN)])
+                def wait(_):
+                    if replacement == "before_kill":
+                        table.rows = [wd.ProcessInfo(200, 1, "new", self.TWIN)]
+                with mock.patch.object(wd, "RealProcessTable", return_value=table), \
+                     mock.patch.object(time, "sleep", side_effect=wait), \
+                     mock.patch.object(sys, "argv", ["stop-twin", "200", "old"]), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if replacement == "none":
+                        exec(compile(block, "<stop-twin>", "exec"), {})
+                    else:
+                        with self.assertRaisesRegex(SystemExit, "handoff_twin_token_mismatch"):
+                            exec(compile(block, "<stop-twin>", "exec"), {})
+                expected = [] if replacement == "before_term" else [(200, signal.SIGTERM)]
+                if replacement == "none":
+                    expected.append((200, signal.SIGKILL))
+                self.assertEqual(expected, table.signals)
+
+    def test_c7_digest_gate_precedes_first_pinned_execution(self) -> None:
+        """Counterfactual input: operator defers byte verification until step 3, after step 1 runs code."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        step0 = document.split("0. Land the watchdog", 1)[1].split("1. In the magistrate", 1)[0]
+        self.assertIn("Before step 1 executes any pinned file, verify SHA-256", step0)
+        self.assertNotIn("Before step 3", step0)
+
+    def test_c4_lock_recovery_is_interactive_operator_only(self) -> None:
+        """Counterfactual input: a headless relaunch reads step 4 as permission to clear locks."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        step4 = document.split("4. Install from", 1)[1].split("5. Have the magistrate", 1)[0]
+        self.assertIn("INTERACTIVE MAGISTRATE / OPERATOR ONLY", step4)
+        self.assertIn("MAGISTRATE_RELAUNCH_PROMPT.md#L19", step4)
+        self.assertIn("Headless sessions must not execute", step4)
+
+    def test_documented_dead_lock_reconciliation_only_removes_proved_absent_owner(self) -> None:
+        """Counterfactual: an operator follows step 4 with a live, reused, or dead owner."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        blocks = re.findall(r"<<'PY'.*?\n(.*?)\n\s*PY$", document, re.DOTALL | re.MULTILINE)
+        block = textwrap.dedent(next(block for block in blocks if "HANDOFF_DEAD_LOCK_REMOVED" in block))
+        for rows, removed in (([], True), ([wd.ProcessInfo(100, 1, "token-a", "claude")], False),
+                              ([wd.ProcessInfo(100, 1, "reused", "other")], True),
+                              ([wd.ProcessInfo(71607, 1, "twin", self.TWIN)], False)):
+            with self.subTest(rows=rows):
+                self.write_live_lock()
+                with mock.patch.object(wd, "DEFAULT_CUSTODY_ROOT", self.harness.storage.root), \
+                     mock.patch.object(wd.RealProcessTable, "snapshot", return_value=rows), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    if removed:
+                        exec(compile(block, "<step4>", "exec"), {})
+                    else:
+                        with self.assertRaisesRegex(SystemExit, "handoff_lock_not_clear"):
+                            exec(compile(block, "<step4>", "exec"), {})
+                self.assertEqual(not removed, (self.harness.storage.root / "magistrate.lock").exists())
 
 
 class ContractTests(WatchdogTestCase):
@@ -1532,11 +1860,12 @@ class ContractTests(WatchdogTestCase):
         module = shadow / "scripts" / "magistrate_watchdog.py"
         module.parent.mkdir(parents=True)
         module.write_text(
-            "STOP_COOPERATIVE_S = 0\n"
-            "class Census:\n"
-            "    empty = True\n"
-            "    def __init__(self): self.detail = 'empty'\n"
-            "def production_census(): return Census()\n",
+            "class RealProcessTable: pass\n"
+            "class Storage:\n"
+            "    def __init__(self, *args, **kwargs): pass\n"
+            "def read_lock(storage): return None\n"
+            "def reap_handoff(*args):\n"
+            "    return {'verdict': 'pass', 'after_term': {}, 'after_kill': {}}\n",
             encoding="utf-8",
         )
         (shadow / "subprocess.py").write_text(
@@ -1595,6 +1924,7 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("courier email for the next window", watchdog)
 
     def test_install_handoff_is_ordered_and_measurement_checkout_owned(self) -> None:
+        """Counterfactual: install proceeds without first enumerating and stopping the daemon."""
         repo = Path(__file__).resolve().parents[1]
         watchdog = (repo / "docs" / "process" / "MAGISTRATE_WATCHDOG.md").read_text(
             encoding="utf-8"
@@ -1604,6 +1934,9 @@ class ContractTests(WatchdogTestCase):
             "pull --ff-only",
             "five pinned files",
             "stop every background task",
+            "magistrate_watchdog.py handoff-daemons",
+            "claude daemon stop --any",
+            "STEP1_DAEMON_RETIREMENT_FAILED",
             'mv "$HOME/night-custody/$name" "$HOME/night-custody/retired-v1/$name"',
             "magistrate_watchdog.py handoff-inventory",
             "install_magistrate_watchdog.sh --install",
