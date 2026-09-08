@@ -1,0 +1,42 @@
+1788877254 2026-09-08 07:20:54 PDT
+census after joulewise-53's stand-down message (interactive pid 83953); lock pid = 83086
+--- pid 83953: ALIVE
+--- daemon/spare/pty-host/resume processes:
+(end)
+--- every codex|claude|t3 process with ancestry (me = lock pid):
+  7143  83977 FOREIGN /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/cache/openai-bundled/
+  7631   7210 FOREIGN /Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inherit="all" -c defaul
+  7632   7210 FOREIGN /Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inherit="all" -c defaul
+  7633   7631 FOREIGN /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folders/p3/fpwjr
+  7634   7632 FOREIGN /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folders/p3/fpwjr
+  7644   7210 FOREIGN /Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://
+  7901  83977 FOREIGN /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darw
+ 15932  83086 MINE    /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true
+ 16456  83086 MINE    /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true
+ 16479  83977 FOREIGN /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/cache/openai-bundled/
+ 58633      1 FOREIGN /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Content
+ 82317  82301 FOREIGN /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.7977.83/Helpers/Codex (
+ 82318  82301 FOREIGN /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.7977.83/Helpers/Codex (
+ 82362  82301 FOREIGN /Applications/ChatGPT.app/Contents/Resources/codex -c features.code_mode_host=true app-server --analytics-defa
+ 82386  82301 FOREIGN /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.7977.83/Helpers/Codex (
+ 82387  82301 FOREIGN /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.7977.83/Helpers/Codex (
+ 82551  82301 FOREIGN /Users/edr/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService
+ 83044  82301 FOREIGN /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.7977.83/Helpers/Codex (
+ 83054  82301 FOREIGN /Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.7977.83/Helpers/Codex (
+ 83086  83075 MINE    /Users/edr/.local/bin/claude -p You are the top-level JouleWise magistrate, relaunched headless at 2026-09-08T
+ 83123  83086 MINE    node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers
+ 83143  83123 MINE    /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darw
+ 83953   1282 FOREIGN claude
+ 83975  83953 FOREIGN node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers
+ 83977  83975 FOREIGN /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darw
+--- handoff-daemons preflight (main checkout of record is origin/main; run from this worktree at c2c9e000):
+  File "/private/tmp/mag784/magistrate_watchdog_main.py", line 37, in <module>
+    from joulewise.night_gate import (  # noqa: E402
+    ...<5 lines>...
+    )
+ModuleNotFoundError: No module named 'joulewise'
+handoff-daemons rc=1
+--- launchctl night agents: 0
+(eval):17: no matches found: /Users/edr/night-custody/*/night_plan.json
+--- plans:
+1788877255 2026-09-08 07:20:55 PDT

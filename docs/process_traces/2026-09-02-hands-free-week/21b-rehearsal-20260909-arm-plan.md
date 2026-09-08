@@ -235,7 +235,8 @@ must stop here — delta N10):**
   `21b-rehearsal-20260909-bench/pass3-process-tree-keepalive.txt` — stopped with TaskStop). Confirm
   `ps -axo pid,ppid,command | grep -E "claude (daemon run|bg-spare|bg-pty-host)|--resume"` prints nothing (joulewise-53
   retires those before its stand-down; this session never signals them). A reparented process of this session's own
-  is reported foreign by step 4 and MUST abort the arm — fail-closed by design, no allowlist. The arm then continues
+  is reported foreign by step 4 and MUST abort the arm — fail-closed by design; the only exclusion is Ed's ChatGPT.app
+  process tree, which condition 5 does not count as an agent session (ruling in 21c). The arm then continues
   in the SAME turn (no wake source is needed after this point: block B, record, commit, push, exit).
 - 5 (cond. 4). Re-check Ed's thread `1a0800cdb282c3f1` for a NO (Gmail `get_thread`); a NO aborts here, before any
   write under `~/night-custody`.
@@ -252,21 +253,30 @@ plans=(~/night-custody/*/night_plan.json(N)); test ${#plans} -eq 0 || { print "A
 test "$(git -C "$STUB_CHECKOUT" rev-parse HEAD)" = "$H" || { print "ABORT: checkout pin mismatch"; exit 1; }
 test ! -e "$NIGHT_CUSTODY" || { print "ABORT: real custody exists"; exit 1; }
 # 4. Census immediately before the move (cond. 5): every codex|claude|t3 match must be this magistrate's own tree.
-python3 - <<'PY' || { print "ABORT: foreign census or census failure"; exit 1; } # F3/F4
-import json, os, subprocess, sys
+python3 - <<'PY' || { print "ABORT: foreign agent session or census failure"; exit 1; } # F3/F4; cond. 5 as ruled (21c §Ruling of record on condition 5)
+import json, os, re, subprocess, sys
 # F3: derive the live activation from its lock.
 me = json.load(open(os.path.expanduser("~/night-custody/magistrate/magistrate.lock")))["pid"]
 ps = subprocess.run(["ps","-axo","pid=,ppid=,command="], capture_output=True, text=True, check=True).stdout.splitlines()
 rows = [(int(l.split(None,2)[0]), int(l.split(None,2)[1]), l.split(None,2)[2] if len(l.split(None,2))>2 else "") for l in ps if l.strip()]
-parent = {p:pp for p,pp,_ in rows}
-def mine(p):
-    while p and p != 1:
-        if p == me: return True
-        p = parent.get(p, 1)
-    return False
-import re
-foreign = [(p,c[:90]) for p,pp,c in rows if re.search(r"codex|claude|t3", c) and not mine(p) and "ps -axo" not in c]
-print("foreign census matches:", foreign); sys.exit(1 if foreign else 0)
+cmd = {p:c for p,pp,c in rows}; parent = {p:pp for p,pp,_ in rows}
+def chain(p):
+    out = []
+    while p and p != 1 and p in parent: out.append(p); p = parent[p]
+    return out
+def mine(p): return me in chain(p)
+def eds_app(p): return any(cmd.get(a,"").startswith("/Applications/ChatGPT.app/Contents/MacOS/ChatGPT") for a in chain(p))
+# cond. 5 counts agent SESSIONS (a magistrate, a codex-run-v3 seat, an interactive Claude or Codex session, their children),
+# not the idle helpers of Ed's ChatGPT desktop app; a path/word boundary keeps 'tmpondt32c8'-style substrings out.
+AGENT = re.compile(r"(^|[\s/])(codex|claude|t3)(?=$|[\s/.:-])")
+hits = [(p,c) for p,pp,c in rows if re.search(r"codex|claude|t3", c) and "ps -axo" not in c and not mine(p)]
+sessions = [(p,c[:90]) for p,c in hits if AGENT.search(c) and not eds_app(p)]
+informational = [(p,c[:90]) for p,c in hits if (p,c[:90]) not in sessions]
+print("foreign agent sessions (cond. 5, must be empty):", sessions)
+print("informational matches (Ed's ChatGPT.app tree / substring false positives):", informational)
+prod = subprocess.run(["/usr/bin/pgrep","-lf","codex|claude|t3"], capture_output=True, text=True)
+print("production agent_census argv output (pgrep exit %d) — recorded, not gating the arm:" % prod.returncode); print(prod.stdout.strip()[:4000])
+sys.exit(1 if sessions else 0)
 PY
 # (step 5, the NO check, was executed between the blocks.)
 # 6. THE MOVE: atomic rename into the plan directory (same volume as /private/tmp — verified: both device 16777233 per stat -f %d).
@@ -282,6 +292,22 @@ launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE" "$SCRATCH"
 ```
 On any abort: `git -C "$DRIVER_SOURCE" worktree remove --force "$STUB_CHECKOUT"; rm -rf "$STAGE" "$SCRATCH"` — remove only the
 checkout/scratch/staging paths this attempt created (delta N3); if an existence guard found a pre-existing path, preserve it. The real custody root stays untouched before step 6. <!-- F5 -->
+
+## Stand-down of the interactive magistrate received; condition 5 ruled
+
+- joulewise-53 (session 018PXMANyqqMtpXYryP26pEm, pid 83953) sent its STAND-DOWN message (precondition (b)); it names main
+  `1c83f2af` (CI green) with D-175 `a969e526`, PR #297 `138e7edb`, PR #298 `d477e138`, PR #299 `c9e2981c`, T0-ACID-CLOCK-01/02/03
+  (`e4ce8b3b`, `3c366db7`, `019f9bba`, `481df11c`, `a9a70516`), PR #295 `23012b52`, T38 `eacadff7`, T38b `0f6b1c8b`; retirement per
+  the new step 1 done (`handoff-daemons` rc 0; bg-job daemon 71666, spare 71687, both pty-hosts and the resumed twin 71607 gone).
+- This activation's census right after that message: `21b-rehearsal-20260909-bench/pass3-standdown-census.txt` (epoch 1788877254):
+  no daemon/spare/pty-host/--resume process; pid 83953 and its codex mcp-server children still present at that instant (they end
+  when the terminal closes); Ed's ChatGPT.app tree (pid 82301) present; pid 58633 = a leaked fake `vllm serve` test server from
+  09-04 whose temp path contains "t3" (substring false positive).
+- Condition 5 ruling by the synthesis author (recorded verbatim in 21c §Ruling of record on condition 5): agent SESSIONS count;
+  Ed's ChatGPT.app helpers do not; the regex list is informational; the night is judged by `joulewise.night_gate.agent_census`
+  (`pgrep -lf "codex|claude|t3"`, night_gate.py:38); ask Ed to quit the ChatGPT desktop app before 02:45 PDT for a clean
+  REHEARSAL_ONLY receipt (follow-up sent on thread `1a0800cdb282c3f1`); record both census outputs at arm time. Step 4 above now
+  implements exactly that (sessions gate, informational list, production pgrep output printed).
 
 ## Bench pass 2 (activation 784a764e; first run recorded by commit 82622e70 at 02:11:53 PDT without copied artifacts — delta N2; re-run with artifacts captured under `21b-rehearsal-20260909-bench/pass2-*`, time and epoch in `pass2-bench-output.txt`; scratch paths only)
 

@@ -580,3 +580,13 @@ The headless branch already has its own dated append. This section appends to th
 All four interactive session lanes have landed (census/daemon at T38; clock, routing and iCloud now closed). Since T38 `eacadff7`, main `c9e2981c` includes the two-parent merges `f3a5001c` + `f3a1b344` (fidelity IDs/count; gate on the process rc, never a pipeline), `481df11c` (clock regression prune), `23012b52` (PR #295 headless evidence/handback), `d477e138` (PR #298 routing), `a9a70516` (deterministic clock regression), and `c9e2981c` (PR #299 bounded backup discovery and pin lineage). Per the closing directive, the interactive magistrate stands down after this delta. Twin 71607 and daemon/spare 71666/71682/71687 retirement is **pending at this write**; the magistrate records the result in a follow-up commit. Headless activation `784a764e` or its successor retains the conditional 01:56–02:15 PDT 9 Sep rehearsal-20260909 arm window after Ed’s no-NO and confirmed stand-down. Next: G2A-FIRST-WINDOW-01 after rehearsal acceptance; D169-STAGE3-01 requires a ruling. Verification gaps, including the residual handback conflict marker: [T38b report](../2026-09-08-handoff-redo/64-bookkeeping-t38b-astra.md).
 
 - 2026-09-08 ~07:40 PDT (interactive magistrate, stand-down record): retired the Claude Code bg-job machinery per the new MAGISTRATE_WATCHDOG.md step 1 — `scripts/magistrate_watchdog.py handoff-daemons` listed daemon 71666, bg-spare 71687 and two bg-pty-hosts (rc 3); `claude daemon stop --any` terminated 2 background sessions; the re-check returned rc 0 and pids 71607/71596/71666/71682/71687 are absent. The interactive session stands down after this commit; the headless magistrate (784a764e) is the only magistrate on the machine.
+
+## 2026-09-08 activation 784a764e — interactive stand-down received; condition 5 ruled; step 4 amended
+
+- joulewise-53 stood down (its message: main `1c83f2af`; daemon/twin retired; see 21b §Stand-down). Precondition (b) for the arm is met.
+  Ed's ChatGPT.app helpers are NOT agent sessions under D-175 cond. 5 (ruling in 21c); 21b step 4 now gates on foreign agent SESSIONS
+  only, prints the informational list and the production `pgrep -lf "codex|claude|t3"` output. Follow-up to Ed on the arm thread:
+  Gmail `1a0816757635cf98` (quit the ChatGPT desktop app before 02:45 PDT 9 Sep for a clean REHEARSAL_ONLY receipt).
+- NEXT EXACT ACTIONS unchanged from the section above except (1) is done (PR #295 merged `23012b52`) and (2) is done; the arm runs in
+  window 1788944160 ≤ now < 1788945300 with no NO on thread `1a0800cdb282c3f1` and no standdown.request. Hazard: a leaked fake
+  `vllm serve` test server (pid 58633, since 09-04) matches the production census alternation only by a temp-path substring.
