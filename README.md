@@ -13,9 +13,7 @@ result when a required gate or piece of evidence fails.
 honestly as energy assigned to inference phases from interval-average power records, with
 its sensitivity to allowed timing changes, reports both historical model stacks, and keeps
 everything that presumed the unperformed comparison in a separate prospective protocol
-document. The retired dominance language is cleaned up repository-wide. Overnight
-measurement is now handed to an unattended watchdog that relaunches the automated
-magistrate; the first night is a rehearsal only. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+document. The retired dominance language is cleaned up repository-wide. The watchdog is live with a headless magistrate resident, and the first rehearsal night is being prepared. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
 That file's generated state-kernel view owns current work selection.
 
 ## Current State
