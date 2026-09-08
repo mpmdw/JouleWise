@@ -26,6 +26,8 @@ from tests import test_arm_readiness as arm_readiness_tests
 from tests.git_fixture import init_git_fixture
 
 
+REAL_GO_T0_AUTHENTICATOR = arm_readiness._authenticate_go_t0_evidence
+
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
     "launch_window_script", ROOT / "scripts/launch_window.py"
@@ -617,16 +619,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             + f"arm_readiness_evidence._PACKS_BY_PROFILE = {family!r}\n"
             + "arm_readiness._gate_family_publication = lambda *args, **kwargs: None\n"
             # This relocation fixture isolates ARM replay. The new GO binder
-            # remains real; its separately tested T0 inventory and seat-2 plan
-            # parser have explicit fixture seams until integrated-head testing.
-            + "from joulewise import night_gate\n"
-            + "_night_plan_parser = night_gate.NightPlan.from_mapping\n"
-            + "def _fixture_plan_parser(value):\n"
-            + "    if value.get('schema') == 'joulewise.night_plan.v3':\n"
-            + "        value = {k: v for k, v in value.items() if k != 'pack_night'}\n"
-            + "        value.update(schema='joulewise.night_plan.v2', schema_version=2)\n"
-            + "    return _night_plan_parser(value)\n"
-            + "night_gate.NightPlan.from_mapping = staticmethod(_fixture_plan_parser)\n"
+            # remains real, including the integrated v3 plan parser. The T0
+            # inventory has a separate synthetic evidence boundary here.
             + "arm_readiness._authenticate_go_t0_evidence = lambda *args: None\n"
         )
         producer_path = pack / "producer_contract.json"
@@ -917,9 +911,11 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         arm_path: Path,
         custody: Path,
         manifest_path: Path,
+        go_inputs=None,
     ) -> subprocess.CompletedProcess[str]:
-        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
-            pack, arm_path, manifest_path, custody)
+        if go_inputs is None:
+            go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+                pack, arm_path, manifest_path, custody)
         return subprocess.run(
             [
                 sys.executable,
@@ -948,7 +944,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             text=True,
         )
 
-    def test_real_minted_v4_launch_accepts_relocation_and_refuses_content_change(
+    def test_real_minted_v4_go_binds_root_and_refuses_content_change(
         self,
     ) -> None:
         temporary, repository, pack, custody, arm_path, manifest_path = (
@@ -957,6 +953,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         pack_relative = pack.relative_to(repository)
+        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+            pack, arm_path, manifest_path, custody)
 
         content_repository = root / "content-different-repository"
         self._clone_repository(repository, content_repository)
@@ -979,6 +977,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             arm_path,
             custody,
             manifest_path,
+            go_inputs,
         )
         self.assertEqual(refused.returncode, 2, refused.stderr)
         refusal = json.loads(refused.stdout)
@@ -996,13 +995,23 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         relocated_pack = relocated_repository / pack_relative
         shutil.rmtree(pack)
         pack.symlink_to(relocated_pack, target_is_directory=True)
-        accepted = self._run_launch(
+        relocated = self._run_launch(
             relocated_repository,
             relocated_pack,
             arm_path,
             custody,
             manifest_path,
+            go_inputs,
         )
+        self.assertEqual(relocated.returncode, 2, relocated.stderr)
+        refusal = json.loads(relocated.stdout)
+        self.assertEqual(refusal["reason_codes"], ["launch_go_receipt_invalid"])
+        self.assertIn("pack_root", refusal["detail"])
+        # D-176 binds an absolute pack locator. Restore the original locator
+        # without changing the ARM or GO bytes; its real launch still succeeds.
+        pack.unlink()
+        shutil.copytree(relocated_pack, pack)
+        accepted = self._run_launch(repository, pack, arm_path, custody, manifest_path, go_inputs)
         self.assertEqual(
             accepted.returncode,
             0,
@@ -2018,6 +2027,139 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         ):
             stack.enter_context(mock.patch.object(owner, name, return_value=value))
         return stack
+
+    def test_integrated_driver_arm_go_launcher_consumption_and_replay(self):
+        """Real driver/parser/GO/consumer/replay; synthetic ARM and machine probes."""
+        from dataclasses import replace
+        from datetime import datetime
+        from joulewise import night_gate
+        from joulewise.measurement_liveness import Identity
+        from tests.test_run_night import _load_driver, ProbeSource, FakeProcess, _probe
+        from tests.test_arm_readiness_schemas import sample_evidence
+
+        driver = _load_driver()
+        fixture = self.fixture
+        events = []
+        custody_pack = fixture.custody / fixture.pack.name
+        input_root = custody_pack / t0_evidence._INPUT_DIRECTORY
+        fixture.arm["arm_context"]["custody_root"] = str(fixture.custody)
+        (input_root / "arm-context.json").write_bytes(arm_readiness.render_json(fixture.arm["arm_context"]))
+        plan_path = self.case.inputs["night_plan"]
+        plan = json.loads(plan_path.read_bytes())
+        plan["t0_epoch_s"] = datetime(2026, 9, 2, 1, 0).timestamp()
+        plan["authored_epoch_s"] = plan["t0_epoch_s"] - 1
+        plan_path.write_bytes(arm_readiness.render_json(plan))
+        for name in ("go_receipt.json", "go-census.json"):
+            (fixture.custody / "night" / name).unlink()
+        fixture.arm_path.unlink()
+        fixture.arm_path.with_name(fixture.arm_path.name + ".sha256").unlink()
+
+        def author(pack, custody):
+            events.append("T0")
+            now = time.monotonic_ns()
+            captures = []
+            for index, (step, name) in enumerate(t0_evidence._CAPTURE_FILES.items()):
+                path = input_root / name
+                path.write_bytes(arm_readiness.render_json({
+                    "schema_version": t0_evidence._COMMAND_SCHEMA, "step_id": step,
+                    "argv": ["/fixture/probe"], "cwd": str(custody), "exit_code": 0,
+                    "stdout": "", "stderr": "", "started_monotonic_ns": now - 100 + index * 2,
+                    "finished_monotonic_ns": now - 99 + index * 2,
+                    "boot_session_id": fixture.arm["boot_session_id"]}))
+                captures.append(fixture._artifact(path))
+            recipe_path = custody_pack / fixture.arm["evidence"][0]["path"]
+            recipe = json.loads(recipe_path.read_bytes())
+            source_path = custody_pack / recipe["facts"][0]["source_path"]
+            source = json.loads(source_path.read_bytes())
+            source["input_artifacts"].extend(captures)
+            source_path.write_bytes(arm_readiness.render_json(source))
+            source_digest = fixture._artifact(source_path)["sha256"]
+            paths = []
+            fixture.arm["evidence"] = []
+            for row in t0_evidence._EXPECTED_ROWS:
+                value = copy.deepcopy(recipe) if row == "t0.single_launch_capability" else sample_evidence()
+                value.update(evidence_id=t0_evidence._evidence_id(row), kind=t0_evidence._ROW_KIND[row],
+                             pack_sha256=fixture.arm["pack"]["pack_sha256"],
+                             head_commit=fixture.arm["reviewed_main"]["head_commit"],
+                             valid_until_monotonic_ns=fixture.arm["valid_until_monotonic_ns"])
+                for fact in value["facts"]:
+                    fact.update(source_kind="PROBE", source_path=str(source_path.relative_to(custody_pack)),
+                                source_sha256=source_digest)
+                path = custody_pack / t0_evidence._EVIDENCE_DIRECTORY / t0_evidence._receipt_name(row)
+                path.write_bytes(arm_readiness.render_json(value))
+                digest = fixture._artifact(path)["sha256"]
+                path.with_name(path.name + ".sha256").write_bytes(arm_readiness.gnu_sidecar(digest, path.name))
+                fixture.arm["evidence"].append({"evidence_id": value["evidence_id"],
+                    "receipt_kind": value["kind"], "namespace": "WINDOW_CUSTODY",
+                    "path": str(path.relative_to(custody_pack)), "sha256": digest,
+                    "schema_version": value["schema_version"], "status": "PASS"})
+                paths.append(str(path))
+            return {"status": "PASS", "receipt_paths": paths}
+
+        def mint_arm(*args, **kwargs):
+            events.append("ARM")
+            fixture._rewrite_arm()
+            return verified()
+
+        def verified(*args, **kwargs):
+            return {"status": "PASS", "arm_disposition": "GO", "receipt_path": str(fixture.arm_path),
+                    "receipt_sha256": fixture._artifact(fixture.arm_path)["sha256"],
+                    "pack_sha256": fixture.arm["pack"]["pack_sha256"]}
+
+        source = ProbeSource(plan["t0_epoch_s"] + 1)
+        source.results[night_gate.BOOT_SESSION_ARGV] = _probe(night_gate.BOOT_SESSION_ARGV,
+            stdout=fixture.arm["boot_session_id"] + "\n")
+        probes = replace(source.probes(), checkout_head=lambda: plan["repo_head"],
+                         measurement_head=lambda root: plan["measurement_head"])
+        real_prepare = driver._prepare_pack_night
+        def prepare(*args):
+            events.append("PREPARE")
+            return real_prepare(*args)
+
+        def execute(*args):
+            events.append("CONSUMED")
+            raise SystemExit(0)
+
+        real_popen = subprocess.Popen
+        def spawn(command, **kwargs):
+            if not any(str(arg).endswith("scripts/launch_window.py") for arg in command):
+                return real_popen(command, **kwargs)
+            events.append("GO_ARGV")
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(len(command[2:]), 16)
+            self.assertTrue((fixture.custody / "night/go_receipt.json").is_file())
+            with mock.patch.object(launch_window.os, "execve", side_effect=execute):
+                with self.assertRaises(SystemExit) as caught:
+                    launch_window.main(command[2:])
+            self.assertEqual(caught.exception.code, 0)
+            replay = arm_readiness.verify_consumed_launch(fixture.pack, self.case.consumption)
+            self.assertEqual(replay["status"], "PASS")
+            events.append("REPLAY")
+            return FakeProcess(command)
+
+        with mock.patch.object(driver, "make_probes", return_value=probes), \
+             mock.patch.object(driver, "_prepare_pack_night", side_effect=prepare), \
+             mock.patch.object(driver, "_resolve_courier_bin", return_value=(Path("/fixture/courier"), None, None)), \
+             mock.patch.object(driver, "_finish_reporting", side_effect=lambda c, n, p, code, *a, **k: code), \
+             mock.patch.object(driver, "observe_identity", return_value=Identity("LIVE", "fixture-start")), \
+             mock.patch.object(driver.subprocess, "Popen", side_effect=spawn), \
+             mock.patch.object(t0_evidence, "author_arm_readiness_evidence_t0", side_effect=author), \
+             mock.patch.object(arm_readiness, "generate_arm_receipt", side_effect=mint_arm), \
+             mock.patch.object(arm_readiness, "_verify_arm_receipt", side_effect=verified), \
+             mock.patch.object(launch_window, "_verify_arm_receipt", side_effect=verified), \
+             mock.patch.object(arm_readiness, "_authenticate_go_t0_evidence", REAL_GO_T0_AUTHENTICATOR), \
+             mock.patch.object(arm_readiness, "reviewed_main", return_value=fixture.arm["reviewed_main"]), \
+             mock.patch.object(arm_readiness, "_root_policy_refusals", return_value=([], set())), \
+             mock.patch.object(arm_readiness, "_derive_arm_semantics_for_verification", return_value=(fixture.arm["rows"], fixture.arm["refusals"])):
+            result = driver.run_night(plan_path)
+            self.assertEqual(result, driver.EXIT_GO, (fixture.custody / "night/receipt.json").read_text() if result else events)
+        self.assertEqual(events, ["PREPARE", "T0", "ARM", "PREPARE", "GO_ARGV", "CONSUMED", "REPLAY"])
+        consumption = json.loads(self.case.consumption.read_bytes())
+        go_path = fixture.custody / "night/go_receipt.json"
+        go = json.loads(go_path.read_bytes())
+        self.assertEqual(len(go["t0_evidence"]), 21)
+        self.assertEqual(consumption["go_receipt"]["sha256"], fixture._artifact(go_path)["sha256"])
+        self.assertEqual(consumption["night_plan"]["sha256"], fixture._artifact(plan_path)["sha256"])
 
     @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
     def test_each_required_cli_flag_omission_refuses_before_consumption(self):

@@ -1685,7 +1685,6 @@ class ArmReadinessSchemaTests(unittest.TestCase):
 
 
 
-<<<<<<< HEAD
 
 class ProductionCustodyResolverTests(unittest.TestCase):
     def inventory(self, root):
@@ -1747,7 +1746,6 @@ class ProductionCustodyResolverTests(unittest.TestCase):
             (home / "night-custody").symlink_to(home / "night-custody")
             roots = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
             self.assertTrue(next(item for item in roots if item.role == "night_custody_parent").resolution_error)
-=======
 def sample_pack_night_go() -> dict[str, Any]:
     """Wire fixture only: it makes no machine/evidence authentication claim."""
     ref = {"path": "/custody/record.json", "sha256": ZERO_SHA}
@@ -1935,7 +1933,6 @@ class PackNightGoSchemaTests(unittest.TestCase):
         go["purpose"] = []
         with self.assertRaisesRegex(readiness.LaunchLineageError, "purpose"):
             readiness.validate_pack_night_go_receipt(go)
->>>>>>> feat/2026-09-08-d176-seat3-consumer
 
 
 if __name__ == "__main__":

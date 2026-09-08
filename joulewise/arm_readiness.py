@@ -9853,14 +9853,37 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
     if prefixed and not rehearsal:
         raise _go_invalid("purpose")
     if rehearsal:
-        # Seat 2 owns this frozen census; absence never becomes an empty census.
-        roots = globals().get("PRODUCTION_CUSTODY_ROOTS")
-        if not roots or any(not isinstance(root, (str, os.PathLike)) for root in roots):
-            raise _go_invalid("production_root_census_unavailable")
-        for name in ("measurement_root", "custody_root"):
-            candidate = Path(plan[name]).resolve()
-            if any(candidate.is_relative_to(Path(root).resolve()) for root in roots):
-                raise _go_invalid("rehearsal_roots_not_disjoint")
+        from joulewise.t0_rehearsal import _contains
+
+        try:
+            production = production_custody_roots(home=Path.home(), inventory=_production_inventory())
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise _go_invalid("rehearsal_roots_not_disjoint") from exc
+        if not production:
+            raise _go_invalid("rehearsal_roots_not_disjoint")
+        roots = {name: plan[name] for name in ("measurement_root", "custody_root")}
+        roots.update({"arm_context." + key: arm["arm_context"][key]
+                      for key in ARM_CONTEXT_KEYS - ARM_CONTEXT_NON_PATH_KEYS})
+        for field, value in roots.items():
+            path = Path(value)
+            if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
+                raise _go_invalid(field)
+            try:
+                path = path.resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise _go_invalid(field + ": resolution_error") from exc
+            for root in production:
+                predicate = next((spec.predicate for spec in PRODUCTION_CUSTODY_ROOTS
+                                  if spec.role == root.role.split(":", 1)[0]), None)
+                if root.resolution_error is not None or predicate not in {"DISJOINT", "SIBLING_CHILD"}:
+                    raise _go_invalid("rehearsal_roots_not_disjoint")
+                if predicate == "SIBLING_CHILD" and field in {"custody_root", "arm_context.custody_root"}:
+                    if path.parent != root.path or path.name != arm["pack"]["window_id"]:
+                        raise _go_invalid("rehearsal_roots_not_disjoint")
+                elif predicate == "SIBLING_CHILD" and field != "measurement_root":
+                    continue
+                elif _contains(root.path, path) or _contains(path, root.path):
+                    raise _go_invalid("rehearsal_roots_not_disjoint")
 
 
 def _authenticate_pack_launch_go(
@@ -9890,9 +9913,18 @@ def _authenticate_pack_launch_go(
         if plan["receipt_class"] != "TRANSACTION_PACK":
             raise _go_invalid("receipt_class")
         binding = _require_exact_keys(plan["pack_night"], {
-            "pack_id", "pack_sha256", "attempt_ordinal", "authorization_record", "confirmation_record",
+            "pack_id", "pack_root", "pack_sha256", "attempt_ordinal", "authorization_record", "confirmation_record",
         }, "pack_night")
         _require_int(binding["attempt_ordinal"], "pack_night.attempt_ordinal", minimum=1)
+        pack_root = Path(binding["pack_root"]).resolve(strict=True)
+        try:
+            pack_digest = committed_pack_tree_sha256(pack_root)
+        except (ArmReadinessError, OSError, RuntimeError) as exc:
+            raise _go_invalid("pack_night.pack_root.pack_sha256: " + str(exc)) from exc
+        if pack_digest != binding["pack_sha256"] or pack_digest != arm["pack"]["pack_sha256"]:
+            raise _go_invalid("pack_night.pack_root.pack_sha256")
+        if arm["pack"]["pack_root"] != str(pack_root):
+            raise _go_invalid("arm_receipt.pack.pack_root")
         night_root = Path(plan["custody_root"]).resolve(strict=True)
         if not plan_path.is_relative_to(night_root):
             raise _go_invalid("night_plan.path outside custody root")

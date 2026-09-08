@@ -2205,6 +2205,14 @@ class PackNightProducerTests(unittest.TestCase):
                     self.driver._pack_rehearsal_roots(plan, changed_arm, purpose)
                 self.assertEqual("launch_go_receipt_invalid", caught.exception.reason)
 
+    def test_pack_gate_requires_absolute_strict_custody_root(self):
+        alias = self.root / "custody-alias"
+        alias.symlink_to(self.custody, target_is_directory=True)
+        for root in ("relative-custody", str(self.root / "missing-custody"), str(alias)):
+            with self.subTest(root=root), self.assertRaisesRegex(night_gate.PackNightRefusal, "custody_root") as caught:
+                night_gate._authenticate_pack_records(replace(self.plan, custody_root=root))
+            self.assertEqual(caught.exception.reason, "launch_go_receipt_invalid")
+
     def test_window_expiring_during_final_authentication_emits_no_go(self):
         def expire(*args, **kwargs):
             self.probe_source.now_epoch_s = self.plan.t0_epoch_s + self.plan.window_max_s + 1

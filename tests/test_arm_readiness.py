@@ -4,12 +4,14 @@ import copy
 import hashlib
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+from tests.git_fixture import init_git_fixture
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
     probe_clock_value,
@@ -73,7 +75,7 @@ def install_pack_night_launch_inputs(pack, arm_path, manifest_path, custody,
                                      table=None, confirmation_digest=None):
     """Synthetic custody for launch tests, never live hardware evidence."""
     import time
-    import uuid
+    pack, arm_path, manifest_path = (Path(path).resolve(strict=True) for path in (pack, arm_path, manifest_path))
     arm = readiness.parse_json_bytes(arm_path.read_bytes())
     manifest = readiness.parse_json_bytes(manifest_path.read_bytes())
     window_root = Path(manifest["window_plan_root"])
@@ -109,67 +111,53 @@ def install_pack_night_launch_inputs(pack, arm_path, manifest_path, custody,
         "t0_epoch_s": time.time(), "authored_epoch_s": time.time(), "window_max_s": 60,
         "repo_head": arm["reviewed_main"]["head_commit"],
         "measurement_root": str(pack.resolve()), "measurement_head": arm["reviewed_main"]["head_commit"],
-        "chain_path": str(chain.resolve()), "chain_sha256_path": str(chain) + ".sha256",
+        "chain_path": str(chain.resolve()), "chain_sha256_path": str(chain.resolve()) + ".sha256",
         "custody_root": str(custody), "registration_path": None,
-        "pack_night": {"pack_id": arm["pack"]["pack_id"], "pack_sha256": arm["pack"]["pack_sha256"],
+        "pack_night": {"pack_id": arm["pack"]["pack_id"], "pack_root": str(pack.resolve()), "pack_sha256": arm["pack"]["pack_sha256"],
             "attempt_ordinal": 1, "authorization_record": artifact(authorization_path),
             "confirmation_record": artifact(confirmation_path)},
     }
     plan_path.write_bytes(readiness.render_json(plan))
-    census_time = time.monotonic_ns()
-    census = {"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1,
-              "stdout": "", "stderr": "", "monotonic_ns": census_time, "refusal": None}
-    census_path = night_dir / "census.jsonl"
-    census_path.write_text(json.dumps(census) + "\n")
-    go = {
-        "schema_version": readiness.PACK_NIGHT_GO_RECEIPT_SCHEMA,
-        "receipt_id": str(uuid.uuid4()), "receipt_class": "TRANSACTION_PACK", "purpose": authorization["purpose"],
-        "plan_id": plan["plan_id"], "plan_sha256": artifact(plan_path)["sha256"],
-        "pack_id": arm["pack"]["pack_id"], "pack_sha256": arm["pack"]["pack_sha256"],
-        "arm_receipt": {"receipt_id": arm["receipt_id"], "sha256": artifact(arm_path)["sha256"],
-                        "valid_until_monotonic_ns": arm["valid_until_monotonic_ns"]},
-        "boot_session_id": arm["boot_session_id"], "t0_evidence": [],
-        "t0_evidence_set_sha256": hashlib.sha256(readiness.render_json([])).hexdigest(),
-        "launch_manifest_sha256": artifact(manifest_path)["sha256"],
-        "window_environment_sha256": artifact(window_root / "window.env")["sha256"],
-        "window_chain_sha256": artifact(chain)["sha256"], "repo_head": plan["repo_head"],
-        "measurement_root": plan["measurement_root"], "measurement_head": plan["measurement_head"],
-        "confirmation_record": artifact(confirmation_path),
-        "authorization": {**artifact(authorization_path), **{key: authorization[key] for key in ("purpose", "attempt_id", "claim_eligible")}},
-        "census": {"argv": census["argv"], "exit_code": 1,
-                   "stdout_sha256": hashlib.sha256(b"").hexdigest(), "monotonic_ns": census_time},
-        "issued_epoch_s": time.time(), "issued_monotonic_ns": census_time,
-        "valid_until_monotonic_ns": arm["valid_until_monotonic_ns"],
-        "conditions": [{"condition_id": f"C{i}", "status": "PASS", "basis": None,
-            "evidence": [{"path": "night/census.jsonl", "sha256": artifact(census_path)["sha256"]}] if i == 3 else [],
-            "measured": {}} for i in range(1, 6)], "verdict": "GO",
-    }
+    # Produce the actual GO wire through seat 2. These lightweight fixtures
+    # isolate ARM/T0 prerequisites; the integrated driver test supplies the
+    # full author inventory and traverses ARM-before-GO as well.
+    from dataclasses import replace
+    from joulewise import night_gate
+    from tests.test_run_night import _load_driver, ProbeSource
+    driver = _load_driver()
+    parsed_plan = night_gate.NightPlan.from_mapping(plan)
+    sidecar = Path(plan["chain_sha256_path"])
+    if not sidecar.exists():
+        sidecar.write_bytes(readiness.gnu_sidecar(artifact(chain)["sha256"], chain.name))
+    source = ProbeSource(plan["t0_epoch_s"] + 1)
+    probes = replace(source.probes(), checkout_head=lambda: plan["repo_head"])
+    receipt = night_gate.Receipt(night_gate.SCHEMA, "TRANSACTION_PACK", plan["plan_id"], "GO",
+        tuple(night_gate.ConditionRow(f"C{i}", "PASS", None, (),
+              {"boot_session_uuid": arm["boot_session_id"]} if i == 4 else {}) for i in range(1, 6)),
+        None, time.monotonic_ns())
+    state = {"path": arm_path, "arm": arm, "sha256": artifact(arm_path)["sha256"]}
+    references = {"launch_manifest": artifact(manifest_path),
+                  "window_environment": artifact(window_root / "window.env"),
+                  "window_chain": artifact(chain)}
     go_path = night_dir / "go_receipt.json"
-    go_path.write_bytes(readiness.render_json(go))
+    for name in ("go_receipt.json", "go-census.json"):
+        (night_dir / name).unlink(missing_ok=True)
+    with mock.patch.object(readiness, "_verify_arm_receipt"), \
+         mock.patch.object(readiness, "_current_boot_session_id", return_value=arm["boot_session_id"]), \
+         mock.patch.object(driver, "_pack_no_retry"), \
+         mock.patch.object(driver, "_pack_launch_references", return_value=references), \
+         mock.patch.object(driver, "_pack_evidence", return_value=[]):
+        prepared = driver._prepare_pack_night(parsed_plan, plan_path, plan_path.read_bytes())
+        driver._produce_pack_go(parsed_plan, plan_path, plan_path.read_bytes(), prepared, state, receipt, probes)
+    go = readiness.parse_json_bytes(go_path.read_bytes())
     return {"night_plan": plan_path, "go_receipt": go_path, "authenticated_go_receipt": go,
             "go_receipt_sha256": artifact(go_path)["sha256"], "step6_confirmation_table": table,
             "expected_confirmation_digest": confirmation_digest}
 
 
 def patch_pack_night_dependencies(case):
-    """Explicit seams for seat-2's absent plan parser and unrelated T0 author.
-
-    GO binding, record authentication, census, deadlines and O_EXCL are real.
-    Dedicated inventory tests exercise the unpatched T0 authenticator.
-    """
-    from joulewise import night_gate
-    original = night_gate.NightPlan.from_mapping
-
-    def plan_parser(value):
-        if value.get("schema") == "joulewise.night_plan.v3":
-            legacy = dict(value)
-            legacy.pop("pack_night")
-            legacy.update(schema="joulewise.night_plan.v2", schema_version=2)
-            return original(legacy)
-        return original(value)
-
+    """Synthetic T0/boot boundaries; the integrated v3 parser stays real."""
     for patch in (
-        mock.patch.object(night_gate.NightPlan, "from_mapping", side_effect=plan_parser),
         mock.patch.object(readiness, "_authenticate_go_t0_evidence"),
         mock.patch.object(readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID),
     ):
@@ -184,13 +172,21 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         patch_pack_night_dependencies(self)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        root = Path(self.temporary.name)
-        self.pack = root / "pack-v2"
+        root = Path(self.temporary.name).resolve()
+        self.pack = root / sample_arm(root / "context")["pack"]["pack_id"]
         self.pack.mkdir()
         self.custody = root / "arm-custody"
         self.arm = sample_arm(root / "context")
         self.arm["boot_session_id"] = TEST_BOOT_SESSION_ID
         self.arm["pack"]["pack_root"] = str(self.pack)
+        (self.pack / "committed.txt").write_text("integration fixture\n")
+        (self.pack / "member.json").write_text('{"run_id":"member"}\n')
+        init_git_fixture(root, "-q")
+        for args in (("add", self.pack.name),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")):
+            subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+        self.arm["pack"]["pack_sha256"] = readiness.committed_pack_tree_sha256(self.pack)
         pack_record_patch = mock.patch.object(
             readiness, "_pack_record", return_value=self.arm["pack"]
         )
@@ -2334,16 +2330,146 @@ class PackNightConsumerTests(unittest.TestCase):
         with self.assertRaisesRegex(readiness.LaunchLineageError, "purpose"):
             readiness._authenticate_go_purpose(go, arm, plan)
         go["purpose"] = "T0_REHEARSAL"
-        with mock.patch.object(readiness, "PRODUCTION_CUSTODY_ROOTS", (Path("/production"),), create=True):
+        home = Path(self.fixture.temporary.name).resolve() / "home"
+        custody = home / "night-custody" / arm["pack"]["window_id"]
+        custody.mkdir(parents=True)
+        plan["custody_root"] = str(custody)
+        arm["arm_context"]["custody_root"] = str(custody)
+        inventory = [{"deployment_id": "fixture", "measurement_root": str(home / "production"),
+                      "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+        with mock.patch.object(Path, "home", return_value=home), \
+             mock.patch.object(readiness, "_production_inventory", return_value=inventory):
             readiness._authenticate_go_purpose(go, arm, plan)
-            for key in ("custody_root", "measurement_root"):
-                changed = dict(plan)
-                changed[key] = "/production/rehearsal"
-                with self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
-                    readiness._authenticate_go_purpose(go, arm, changed)
-        with mock.patch.object(readiness, "PRODUCTION_CUSTODY_ROOTS", (), create=True):
-            with self.assertRaisesRegex(readiness.LaunchLineageError, "production_root_census_unavailable"):
+            fields = {key: plan for key in ("measurement_root", "custody_root")}
+            fields.update({"arm_context." + key: arm["arm_context"]
+                           for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS})
+            production_roots = readiness.production_custody_roots(home=home, inventory=inventory)
+            # Keep the SIBLING_CHILD candidate valid while each DISJOINT
+            # production role overlaps it, so custody cannot fail for the
+            # sibling rule and mask a missing DISJOINT check.
+            from dataclasses import replace
+            for production in production_roots:
+                if production.role == "night_custody_parent":
+                    continue
+                census = tuple(replace(item, path=custody) if item == production else item
+                               for item in production_roots)
+                with self.subTest(custody_overlap=production.role), \
+                     mock.patch.object(readiness, "production_custody_roots", return_value=census), \
+                     self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$"):
+                    readiness._authenticate_go_purpose(go, arm, plan)
+            for field, target in fields.items():
+                key = field.removeprefix("arm_context.")
+                original = target[key]
+                for production in production_roots:
+                    if production.role == "night_custody_parent":
+                        continue
+                    # A synthetic census exercises each frozen role without
+                    # creating directories in the real machine's custody.
+                    production_path = home / "synthetic" / production.role.replace(":", "-")
+                    production_path.mkdir(parents=True, exist_ok=True)
+                    census = tuple(replace(item, path=production_path) if item == production else item
+                                   for item in production_roots)
+                    for candidate in (production_path, production_path / "child", production_path.parent):
+                        candidate.mkdir(exist_ok=True)
+                        target[key] = str(candidate)
+                        with self.subTest(field=field, role=production.role, candidate=candidate), \
+                             mock.patch.object(readiness, "production_custody_roots", return_value=census), \
+                             self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$"):
+                            readiness._authenticate_go_purpose(go, arm, plan)
+                for candidate in ("relative", str(home / "absent")):
+                    target[key] = candidate
+                    with self.subTest(field=field, candidate=candidate), self.assertRaisesRegex(readiness.LaunchLineageError, field):
+                        readiness._authenticate_go_purpose(go, arm, plan)
+                alias = home / (field + "-alias")
+                alias.symlink_to(Path(original))
+                target[key] = str(alias)
+                with self.subTest(field=field, candidate="symlink"), self.assertRaisesRegex(readiness.LaunchLineageError, field):
+                    readiness._authenticate_go_purpose(go, arm, plan)
+                target[key] = original
+            for field, target in (("custody_root", plan), ("custody_root", arm["arm_context"]),
+                                  ("measurement_root", plan)):
+                original = target[field]
+                candidates = (custody.parent, custody / "nested", custody.parent / "wrong-name")
+                for candidate in candidates:
+                    candidate.mkdir(exist_ok=True)
+                    target[field] = str(candidate)
+                    with self.subTest(field=field, candidate=candidate), self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
+                        readiness._authenticate_go_purpose(go, arm, plan)
+                target[field] = original
+            for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS - {"custody_root"}:
+                own = custody / key
+                own.mkdir()
+                arm["arm_context"][key] = str(own)
+            readiness._authenticate_go_purpose(go, arm, plan)
+            with mock.patch.object(readiness, "_production_inventory", return_value=[]), \
+                 self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
                 readiness._authenticate_go_purpose(go, arm, plan)
+            broken = (replace(production_roots[0], resolution_error="loop"), *production_roots[1:])
+            with mock.patch.object(readiness, "production_custody_roots", return_value=broken), \
+                 self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
+                readiness._authenticate_go_purpose(go, arm, plan)
+
+    def test_consumer_applies_rehearsal_census_before_one_use_write(self):
+        self.fixture.arm["pack"]["window_id"] = "rehearsal-t0-unattended-fixture"
+        self.fixture._rewrite_arm()
+        arm_digest = hashlib.sha256(self.fixture.arm_path.read_bytes()).hexdigest()
+        self.inputs.update(authenticated_arm_receipt=copy.deepcopy(self.fixture.arm),
+                           arm_receipt_sha256=arm_digest)
+        plan_path = self.inputs["night_plan"]
+        plan = json.loads(plan_path.read_bytes())
+        authorization_path = Path(plan["pack_night"]["authorization_record"]["path"])
+        authorization = json.loads(authorization_path.read_bytes())
+        authorization["purpose"] = "T0_REHEARSAL"
+        authorization_path.write_bytes(readiness.render_json(authorization))
+        auth_digest = hashlib.sha256(authorization_path.read_bytes()).hexdigest()
+        plan["pack_night"]["authorization_record"]["sha256"] = auth_digest
+        plan_path.write_bytes(readiness.render_json(plan))
+        def bind(go):
+            go["purpose"] = "T0_REHEARSAL"
+            go["authorization"].update(purpose="T0_REHEARSAL", sha256=auth_digest)
+            go["plan_sha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+            go["arm_receipt"]["sha256"] = arm_digest
+            for condition in go["conditions"]:
+                for reference in condition["evidence"]:
+                    path = self.fixture.custody / reference["path"]
+                    reference["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.rewrite_go(bind)
+        home = self.fixture.pack.parent / "synthetic-home"
+        inventory = [{"deployment_id": "fixture", "measurement_root": str(home / "production"),
+                      "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+        with mock.patch.object(Path, "home", return_value=home), \
+             mock.patch.object(readiness, "_production_inventory", return_value=inventory), \
+             self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$") as caught:
+            # The fixture's custody is outside the required named sibling.
+            self.consume()
+        self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+        self.assertFalse(self.consumption.exists())
+
+    def test_consumption_recomputes_committed_pack_after_go(self):
+        # ARM and GO remain unchanged; only the committed pack bytes change.
+        (self.fixture.pack / "committed.txt").write_text("mutated after GO\n")
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "pack"):
+            self.consume()
+        self.assertFalse(self.consumption.exists())
+
+    def test_plan_pack_root_and_arm_digest_bindings_are_rechecked(self):
+        plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
+        other = self.fixture.pack.parent / "substitute" / self.fixture.pack.name
+        shutil.copytree(self.fixture.pack, other)
+        for args in (("add", "substitute"),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "-c", "commit.gpgsign=false", "commit", "-qm", "substitute fixture")):
+            subprocess.run(["git", "-C", str(self.fixture.pack.parent), *args], check=True, capture_output=True)
+        self.assertEqual(readiness.committed_pack_tree_sha256(other), plan["pack_night"]["pack_sha256"])
+        for mutate in (lambda p: p["pack_night"].update(pack_root=str(other)),
+                       lambda p: p["pack_night"].update(pack_sha256="f" * 64)):
+            changed = copy.deepcopy(plan)
+            mutate(changed)
+            self.inputs["night_plan"].write_bytes(readiness.render_json(changed))
+            self.rewrite_go(lambda go: go.update(plan_sha256=hashlib.sha256(self.inputs["night_plan"].read_bytes()).hexdigest()))
+            with self.assertRaises(readiness.LaunchLineageError):
+                self.consume()
+            self.assertFalse(self.consumption.exists())
 
 
 

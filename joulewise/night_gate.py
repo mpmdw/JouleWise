@@ -697,6 +697,13 @@ def _pack_digest(plan: NightPlan, arm=None) -> Path:
 
 def _authenticate_pack_records(plan: NightPlan):
     from joulewise import arm_readiness as readiness
+    custody = Path(plan.custody_root)
+    if not custody.is_absolute() or any(p.is_symlink() for p in (custody, *custody.parents)):
+        raise PackNightRefusal("custody_root: non-absolute or symlinked")
+    try:
+        custody.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise PackNightRefusal("custody_root: resolution_error") from exc
     root = _pack_digest(plan)
     binding = plan.pack_night
     records = {}

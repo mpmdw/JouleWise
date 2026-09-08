@@ -913,8 +913,8 @@ class NightGateTests(unittest.TestCase):
         parsed = night_gate.NightPlan.from_mapping(night_plan_mapping(plan))
         receipt = night_gate.evaluate_night(parsed, FakeProbeSource().probes())
         self.assertEqual("REFUSED", receipt.verdict)
-        self.assertEqual("launch_go_receipt_missing", receipt.refusal.reason)
-        self.assertIn("pack_root", receipt.refusal.detail)
+        self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
+        self.assertIn("custody_root", receipt.refusal.detail)
         self.assertEqual("FAIL", receipt.conditions[0].status)
         self.assertEqual("FAIL", receipt.conditions[1].status)
 

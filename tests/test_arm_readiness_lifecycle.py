@@ -979,8 +979,8 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
 
     def test_consume_collision_never_emits_defensive_lock_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            pack = root / "pack"
+            root = Path(temporary).resolve()
+            pack = root / sample_arm(root / "context")["pack"]["pack_id"]
             pack.mkdir()
             custody = root / "custody"
             arm_path = (
@@ -991,6 +991,12 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             )
             arm_path.parent.mkdir(parents=True)
             receipt = sample_arm(root / "context")
+            (pack / "committed.txt").write_text("collision fixture\n")
+            init_git_fixture(root)
+            git(root, "add", pack.name)
+            git(root, "commit", "-qm", "collision fixture")
+            receipt["pack"]["pack_root"] = str(pack)
+            receipt["pack"]["pack_sha256"] = readiness.committed_pack_tree_sha256(pack)
             arm_raw = render_json(receipt)
             arm_path.write_bytes(arm_raw)
             arm_digest = hashlib.sha256(arm_raw).hexdigest()
