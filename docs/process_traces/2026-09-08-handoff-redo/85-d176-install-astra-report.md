@@ -2,68 +2,34 @@
 {
   "schema": "claude-codex-report/v1",
   "genre": "implementation",
-  "status": "blocked",
-  "completion": "partial",
-  "summary": "Installed D-176 decision and kernel graph; all requested checks pass; seat-1 contract draft needs lead wire rulings.",
+  "status": "clean",
+  "completion": "complete",
+  "summary": "Installed all three D-176 wire rulings and completed the contract first-use inspection.",
   "workspace": {
     "base_requested": null,
     "base_mode": null,
-    "head_start": "952dc74123aa1c221cee7dca7bd41ddbd617bb53",
-    "head_end": "952dc74123aa1c221cee7dca7bd41ddbd617bb53",
+    "head_start": "e3745079eb26649283f10f384409c699d3fd5b08",
+    "head_end": "e3745079eb26649283f10f384409c699d3fd5b08",
     "upstream_end": null,
     "branch": "feat/2026-09-08-d176-stage3-ruling"
   },
   "pathspec": [
-    "docs/decision_log.md",
-    "docs/process/state_kernel.json",
-    "TASK_QUEUE.md",
-    "RUN_STATE.md",
-    "tests/test_gen_state.py",
     "docs/contracts/pack_night_go_receipt.md",
+    "docs/decision_log.md",
     "docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md"
   ],
   "unowned_dirty": [
     "docs/process_traces/2026-09-08-handoff-redo/86-brief-d176-install-astra.md"
   ],
   "verdict": {
-    "implementation": "partial",
-    "acceptance": "needs_ruling"
+    "implementation": "implemented",
+    "acceptance": "ready"
   },
   "verification": [
     {
       "id": "V1",
-      "kind": "other",
-      "cmd": "python3 scripts/gen_state.py > /private/tmp/d176-acceptance-rwx2j4__/generate.log 2>&1",
-      "cwd": ".",
-      "observed": {
-        "result": "pass",
-        "exit_code": 0,
-        "tail": []
-      },
-      "expected": {
-        "exit_code": 0,
-        "tail_regex": "^$"
-      }
-    },
-    {
-      "id": "V2",
-      "kind": "other",
-      "cmd": "python3 scripts/gen_state.py --check > /private/tmp/d176-acceptance-rwx2j4__/final-gen-state-check.log 2>&1",
-      "cwd": ".",
-      "observed": {
-        "result": "pass",
-        "exit_code": 0,
-        "tail": []
-      },
-      "expected": {
-        "exit_code": 0,
-        "tail_regex": "^$"
-      }
-    },
-    {
-      "id": "V3",
       "kind": "test",
-      "cmd": "python3 -m unittest tests.test_gen_state > /private/tmp/d176-acceptance-rwx2j4__/test-gen-state-final.log 2>&1",
+      "cmd": "python3 -m unittest tests.test_docs_freshness",
       "cwd": ".",
       "observed": {
         "result": "pass",
@@ -75,78 +41,63 @@
       "expected": {
         "exit_code": 0,
         "tail_regex": "OK$"
-      }
-    },
-    {
-      "id": "V4",
-      "kind": "test",
-      "cmd": "python3 -m unittest tests.test_docs_freshness > /private/tmp/d176-acceptance-rwx2j4__/final-test-docs-freshness.log 2>&1",
-      "cwd": ".",
-      "observed": {
-        "result": "pass",
-        "exit_code": 0,
-        "tail": [
-          "OK"
-        ]
-      },
-      "expected": {
-        "exit_code": 0,
-        "tail_regex": "OK$"
-      }
-    },
-    {
-      "id": "V5",
-      "kind": "inspection",
-      "cmd": "PYTHONPATH=. python3 /private/tmp/d176-acceptance-rwx2j4__/audit_installation.py > /private/tmp/d176-acceptance-rwx2j4__/audit-installation.log 2>&1",
-      "cwd": ".",
-      "observed": {
-        "result": "pass",
-        "exit_code": 0,
-        "tail": [
-          "PASS: 10 dependency deletions rejected; exact 23 GO keys and both verbatim replay lists verified"
-        ]
-      },
-      "expected": {
-        "exit_code": 0,
-        "tail_regex": "^PASS: 10 dependency deletions rejected;"
-      }
-    },
-    {
-      "id": "V6",
-      "kind": "inspection",
-      "cmd": "git diff --check > /private/tmp/d176-acceptance-rwx2j4__/diff-check.log 2>&1",
-      "cwd": ".",
-      "observed": {
-        "result": "pass",
-        "exit_code": 0,
-        "tail": []
-      },
-      "expected": {
-        "exit_code": 0,
-        "tail_regex": "^$"
       }
     }
   ],
-  "flags": [
-    {
-      "id": "F1",
-      "kind": "lead_ruling",
-      "level": "blocking",
-      "text": "NEEDS_RULING: judge §1 requires replay by a recorded GO path, but its exact v3 go_receipt list has no path and its GO schema has no receipt_id. The draft preserves the ruled lists and cannot define reproducible identity/replay without a ruling.",
-      "needs": "Rule the recorded GO path and receipt_id derivation; recommended: adopt Opus go_receipt.path and explicitly pin identity derivation."
-    },
-    {
-      "id": "F2",
-      "kind": "lead_ruling",
-      "level": "blocking",
-      "text": "NEEDS_RULING: judge §2 requires claim_eligible in consumption and synthesis §2 requires exact-attempt authorization, but their wire placements are not pinned. Authorization authority, confirmation confirmed_at and condition evidence entry encodings are also unspecified.",
-      "needs": "Pin these fields/references and JSON encodings in contract §8, then have the Opus refuter review the seat-1 draft before landing or code scope."
-    }
-  ]
+  "flags": []
 }
 ```
 
 ## Change
+
+Part 2, 2026-09-08: installed the interactive magistrate's approximately 10:20
+PDT wire ruling within the three authorized documentation paths. Contract §8
+now gives normative answers: producer-issued UUID4 plus file digest identity;
+absolute custody replay locator and independent digest/id refusal; the exact
+four-key authorization object with record-copied purpose, attempt and claim
+eligibility; the seven-key authorization record including attempt_id; the
+six-key consumption GO reference; and exact authority, timestamp, evidence,
+digest, monotonic and boolean encodings. GO now has 24 required top-level keys.
+The old authorization_record_sha256 scalar is retired in favor of authorization.
+
+Propagated the ruling into §§1–5 and the D-170 clause map. Appended one dated
+D-176 decision-log line identifying these as normative amendments to the earlier
+key lists and pointing to §8. No adopted outcome was reopened.
+
+**First-use inspection:** read the complete contract, including its replay list
+and clause map, for unexplained terms and producer/consumer/replay continuity.
+Added definitions for the measurement stages versus rehearsal gates, attempt and
+custody root, authorization/confirmation records, UUID4 identity, monotonic/boot
+and UTC timing, launch artifacts, claim rechecks, courier/dead-man, HID and
+positive controls, registration references, and implementation/qualification
+labels. The retained consumption-v2 key list now has an explicit baseline and
+owning validator reference. The producer's issue order, callee's own reads,
+record-to-GO-to-consumption equality chain, replay path and both mismatch
+refusals are explicit. This is documentation inspection, not runtime proof.
+
+**Clause map — part-2 installation**
+
+| Clause | Installation site | Verification / counterfactual |
+|---|---|---|
+| Q1 | Contract §§1, 2, 3, 8.1, 9 | Inspected producer-issued id, six-key GO reference, absolute custody path, and separate digest/id refusal; omission would break replay identity. |
+| Q2 | Contract §§1–4, 8.2, 9 | Inspected seven-key authorization record and four-key GO copy, exact plan/ordinal binding and consumption eligibility; an altered copy must refuse. |
+| Q3 | Contract §§2, 4, 5, 8.3, 9 | Inspected exact nested keys, authority string, dual timestamp, relative evidence path and primitive encodings; extra keys or wrong types must refuse. |
+| Dated ruling | D-176 final dated line | V1 checks documentation freshness and decision references; contract §8 owns the amended wire details. |
+
+Next exact step: lead sends the completed wire contract to the Opus refuter,
+then performs the contract landing gate before issuing code scope. Runtime
+production/test cells remain NOT PINNED for their implementing seats. No code,
+live qualification, commit, repository-wide suite or out-of-scope bookkeeping
+was performed. The pre-existing untracked brief is preserved. There is no
+configured upstream.
+
+### Part-1 evidence retained (historical; superseded wire status)
+
+The following records the committed part-1 installation, not work or tests
+performed in part 2. Its pending-wire statements, 23-key inspection and old line
+numbers describe that historical draft. The ruling above resolves both former
+NEEDS_RULING flags; §8 is now ready for the assigned contract refutation.
+
 
 Installed the six adopted D-176 decisions in full, the index row and failure-mode
 replays; installed the synthesis §5 graph; regenerated the queue and restart
@@ -231,7 +182,7 @@ person was performed. The packet is immutable: exhibit A is linked at §R4 lines
 `14-g1-g10-table.md` is created. The pre-existing untracked brief is preserved.
 There is no configured branch upstream. No scope expansion is requested.
 
-## Verification notes
+### Part-1 verification notes (historical)
 
 The process return codes, not a pipeline's return code, are recorded in the
 header. Each requested acceptance command writes a separate log. Baseline:
@@ -273,24 +224,21 @@ repository scope; the hashes below preserve the session's artifact identities):
 | `/private/tmp/d176-acceptance-rwx2j4__/test-gen-state-final.log` | `e5f8fcf96c5ba4bde8a1f0634e2941003df0f55eec7668f9b9f182316fbd6666` |
 | `/private/tmp/d176-acceptance-rwx2j4__/test-gen-state.log` | `b6488e01d51ed70d40dc373bb2573fbdb77cdafd4b8597213deb0062e80a7707` |
 
-## Residual risk
+## Verification notes
 
-**NEEDS_RULING F1:** the GO receipt has no receipt_id and the judge's v3
-reference has no path, although replay requires the recorded path. Options:
-explicit Opus-style `go_receipt.path` plus a ruled identity derivation, or a
-ruled deterministic locator/identity over existing fields. Recommended: the
-explicit path with lead-pinned identity derivation. Blocked: a reproducible exact
-v3 identity/replay contract.
+Part-2 acceptance uses only the requested focused documentation suite. Its
+combined stdout/stderr and process return code are logged below in this
+allowlisted report, avoiding any additional repository log path. Bytecode
+writing is disabled through PYTHONDONTWRITEBYTECODE for the captured run.
+The prior interactive invocation produced progress output but its return code
+was not retained; the captured run below is the authoritative acceptance.
 
-**NEEDS_RULING F2:** pin the exact-attempt authorization binding, consumption
-claim_eligible placement, and authority/confirmed_at/condition-evidence JSON
-encodings. Options: explicit fields and types, or exact references to existing
-schemas with named mappings. Recommended: reuse existing formats where applicable
-but specify their mappings explicitly. Blocked: a byte/schema-compatible seat-1
-contract usable independently by producer and consumer implementers.
+```text
+$ python3 -m unittest tests.test_docs_freshness
+...............................
+----------------------------------------------------------------------
+Ran 31 tests in 0.900s
 
-Completed authorized work: decision entry/index, graph, generated views, fidelity
-pins/regression, the ruled portion of the contract, and this report. Next exact
-step: the lead answers contract §8, resumes this seat to install the exact wire
-ruling, then sends the completed contract to the Opus refuter before contract
-landing and code scope. No further repository paths are needed for that answer.
+OK
+rc=0
+```
