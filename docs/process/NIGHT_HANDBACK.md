@@ -107,4 +107,3 @@ interpreter field: the driver, chain, and preflight always derive
 HEAD against `measurement_head`. The preflight's sole argument is the absolute
 v2 plan filename. Future clone naming and the exact locked venv creation
 commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
->>>>>>> feat/2026-09-08-g2a-chain-routing
