@@ -1,0 +1,8 @@
+	state = not running
+	program = /opt/homebrew/opt/python@3.14/bin/python3.14
+	last exit code = 0
+		state = active
+		state = active
+	jetsamproperties category = daemon
+	run interval = 300 seconds
+	properties = runatload | inferred program

@@ -1,0 +1,2 @@
+1788861499 2026-09-08 02:58:19 PDT
+verbatim copies of the custody root for activation 784a764e follow (this file is the capture header)

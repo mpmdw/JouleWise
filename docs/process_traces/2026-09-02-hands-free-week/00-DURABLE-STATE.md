@@ -525,6 +525,38 @@ unattended-window path. Session 3c46c831 (resumed twin, pid 71607) ends here; it
   was away. Ed rules NO change to the handoff or live-experiment procedure for this; the fresh session only
   verifies the machine is awake (checkpoint step 1) and proceeds.
 
+## 2026-09-08 00:51:55 PDT — WATCHDOG LAUNCHED the first headless magistrate (activation 1ef89702)
+
+- The 09-06 handoff took once the lid was open: events seq 3 "all launch predicates clear" → seq 4 spawned
+  activation 1ef89702; lock names pid 84232; launch email `1a0800383847cde1`; notice acknowledged at 00:55:36.
+  Full evidence and the activation's own next-action pointer: `21-first-launchd-activation-1ef89702.md` (+
+  `21-activation-1ef89702/`). Q-C9 evidence item 1 is DONE.
+- Ed's interactive session (joulewise-53, started 00:46:54) is live on the same machine and owns the three defect
+  fixes (WATCHDOG-CENSUS-01, RESUME-DAEMON-01, T0-ACID-CLOCK-01), the RUN_STATE/TASK_QUEUE rows for them and for
+  this relaunch, and `docs/process_traces/2026-09-08-handoff-redo/`. The headless magistrate holds: NO arming while
+  that session or its seats are alive; rehearsal-stub prep resumes after it stands down (email-then-arm).
+- 2026-09-08 01:42 PDT: activation 1ef89702 was terminated by the headless 600 s background-task ceiling at 01:33
+  (recorded `clean activation exit`); the watchdog relaunched activation 784a764e at 01:41:58 (launch email
+  `1a080326c4d2f147`). Same lane, same conditions; the arm plan 21b carries a succession addendum (census `me` from
+  the lock, not a constant). Arm request thread `1a0800cdb282c3f1` has no NO. Nothing armed.
+
+## 2026-09-08 activation 784a764e (spawned epoch 1788856918; events.jsonl seq 8) — PR #295 gauntlet complete; consolidated arm notice sent
+
+- PR #295 (`bookkeeping/2026-09-08-activation-evidence`): trace 21/21a/21b + handback H=ae8f074f, refutation 21c, fix round 21d,
+  deltas 21e/21e2/21e3/21e4, consult 21f-consult, terminal review 21f, replays 21g; origin/main a969e526 merged in at 260f997b;
+  twelve-row ledger installed (rows 11/12 pinned to the head named in the PR body). Integration replay: 5271 tests, 2 environmental
+  failures (iCloud backup root blocks `paper_excursion_decomposition.py`; idle-admission load flake) — see 21g.
+- Consolidated arm notice (ruling B, 21c): Gmail `1a080d1adf46c7b2`, internalDate 1788867620, thread `1a0800cdb282c3f1`. DO NOT
+  resend; a successor activation only checks that thread for a NO.
+- NEXT EXACT ACTIONS: (1) when PR #295 CI is green, merge it (D-072 gate shape satisfied; docs only); (2) hold for joulewise-53's
+  stand-down message (it names the main SHAs of PR #297 138e7edb, PR #298, the iCloud-probe branch, and confirms the twin 71607 and
+  the bg-job daemon/spare are retired); (3) in the window 1788944160 ≤ now < 1788945300 (01:56–02:15 PDT 2026-09-09), with no NO on
+  the thread and no standdown.request, run 21b block A → manual 3b/5 → block B, record the arm (plan json copy, launchctl list,
+  census output) here, commit, push, stop every child, exit before 1788946260 (02:31 PDT); (4) the morning after: harvest per 21b
+  "Morning after". A successor activation resumes from THIS section and 21b; its own pid comes from the lock, never a constant.
+- Hazards for the code/tests lane (joulewise-53): iCloud path `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup`
+  blocks directory access (0 CPU, `__opendir2`); `IdleAdmissionCoreVerdictTests` fail under load ≥ ~8 and pass alone.
+
 ## 2026-09-08 ~04:45 PDT — handoff-redo session (interactive magistrate)
 
 **T38 (2026-09-08 ~04:45 PDT) — HANDOFF TOOK; WATCHDOG RESIDENT AND REHEARSAL PREP.** At main `138e7edb`, the 09-06 install has taken: activation-branch trace 21 records CLOCK_UNCERTAIN → LAUNCHING → ACTIVE at 00:51:55 PDT (seq 3–4, `1ef89702`, pid 84232); trace 21b records the 600 s background-task ceiling at 01:33:28 and relaunch `784a764e` (pid 83086) at 01:41:58 after 300 s backoff. MAC-SLEEP-01 is resolved (accidentally closed lid). Two magistrate lanes coexist: headless owns traces 21/21b/21c, reported PR #295 and rehearsal-20260909 preparation/email-then-arm; interactive owns this checkpoint and the implementation lanes. Headless arms NOTHING until interactive stand-down and the NIGHT_HANDBACK/no-NO conditions hold. Rehearsal t0 is 2026-09-09 02:56 PDT; no real plan is armed in the recorded evidence.

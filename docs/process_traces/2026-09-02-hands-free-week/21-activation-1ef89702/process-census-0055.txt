@@ -1,0 +1,28 @@
+48645     1 Fri Sep  4 04:53:15 2026     /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.
+71596     1 Sun Sep  6 03:18:42 2026     /Users/edr/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude --bg-pty-host /tmp/cc-daemon-50
+71666     1 Sun Sep  6 03:23:20 2026     /Users/edr/.local/bin/claude daemon run --origin transient --spawned-by {"label":"claude","cwd":"/U
+71682 71666 Sun Sep  6 03:23:24 2026     claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/14ebf21c/spare/88735e15.pty.sock 200 50 -- /Use
+71687 71682 Sun Sep  6 03:23:24 2026     claude bg-spare --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/88735e15.claim.sock
+84232 84229 Tue Sep  8 00:51:55 2026     /Users/edr/.local/bin/claude -p You are the top-level JouleWise magistrate, relaunched headless at 
+84246 84232 Tue Sep  8 00:51:55 2026     node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c 
+84259 84246 Tue Sep  8 00:51:55 2026     /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64
+85065 84865 Tue Sep  8 00:52:42 2026     node scripts/claude-bridge-mcp.mjs
+85066 84888 Tue Sep  8 00:52:42 2026     node scripts/claude-bridge-mcp.mjs
+85087 84788 Tue Sep  8 00:52:42 2026     node scripts/claude-bridge-mcp.mjs
+89443 83953 Tue Sep  8 00:54:59 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788853711717-uo3w08.sh 2>/dev/n
+89450 89443 Tue Sep  8 00:54:59 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788853711717-uo3w08.sh 2>/dev/n
+90367 84232 Tue Sep  8 00:55:11 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788853925608-kh09o9.sh 2>/dev/n
+90369 90367 Tue Sep  8 00:55:11 2026     caffeinate -i -w 84232
+90614 89555 Tue Sep  8 00:55:15 2026     /Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inherit="all
+90616 89555 Tue Sep  8 00:55:15 2026     /Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inherit="all
+90618 90614 Tue Sep  8 00:55:15 2026     /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folde
+90619 90616 Tue Sep  8 00:55:15 2026     /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folde
+91534 83953 Tue Sep  8 00:55:29 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788853711717-uo3w08.sh 2>/dev/n
+94574 83953 Tue Sep  8 00:56:14 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788853711717-uo3w08.sh 2>/dev/n
+83953  1282 Tue Sep  8 00:46:54 2026     claude
+83975 83953 Tue Sep  8 00:46:55 2026     node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c 
+83977 83975 Tue Sep  8 00:46:55 2026     /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64
+95165 83953 Tue Sep  8 00:56:23 2026     caffeinate -i -t 300
+71607 71596 Sun Sep  6 03:18:44 2026     /Users/edr/.local/share/claude/versions/2.1.261 --resume /Users/edr/.claude/projects/-Users-edr-cod
+71633 71607 Sun Sep  6 03:18:44 2026     node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c 
+71635 71633 Sun Sep  6 03:18:44 2026     /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64

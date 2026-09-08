@@ -1,0 +1,16 @@
+bench pass 2 re-run with artifacts; started 2026-09-08 02:23:36 PDT epoch 1788859416; activation 784a764e; parent /private/tmp/jw-bench-arm.AZAwVU
+checkout HEAD ae8f074ffa554707a9eac95995ab8ec03235d118
+/private/tmp/jw-bench-arm.AZAwVU/staging/night_plan.json
+/private/tmp/jw-bench-arm.AZAwVU/scratch/night_plan.json
+author rc=0
+validated pins: repo_head=ae8f074ffa554707a9eac95995ab8ec03235d118 measurement_root=/private/tmp/jw-bench-arm.AZAwVU/checkout measurement_head=ae8f074ffa554707a9eac95995ab8ec03235d118
+render rc=0
+/private/tmp/jw-bench-arm.AZAwVU/scratch/render/com.joulewise.night.deadman.plist: OK
+/private/tmp/jw-bench-arm.AZAwVU/scratch/render/com.joulewise.night.plist: OK
+plan differing fields: ['chain_path', 'chain_sha256_path', 'custody_root']
+diff rc=0
+real (fake) custody exists? no
+scratch custody contents: night
+bench parent removed
+ls ~/night-custody: magistrate magistrate-bench retired-v1 
+finished 2026-09-08 02:23:38 PDT

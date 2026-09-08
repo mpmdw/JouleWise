@@ -1,0 +1,8 @@
+1788865352 2026-09-08 04:02:32 PDT
+integration replay on 260f997b: excursion child stalled on the iCloud backup root; own-descendant check + probe + TERM
+  PID  PPID ELAPSED      TIME STAT COMMAND
+49033 30571   04:09   0:00.25 S    /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Users/edr/code/JouleWise-wt-magistrate-1ef89702/scripts/paper_excursi
+ancestry: [49033, 30571, 30564, 20535, 83086, 83075] -> mine
+iCloud root: STILL BLOCKED >5s
+SIGTERM sent to 49033
+1788865357 2026-09-08 04:02:37 PDT

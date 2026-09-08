@@ -1,0 +1,12 @@
+{
+  "activation_id": "1ef89702-8b11-4463-8d6b-3c1400510f1a",
+  "activation_spawn_epoch_s": 1788853915.407023,
+  "binary_symlink": "/Users/edr/.local/bin/claude",
+  "binary_version": "2.1.263 (Claude Code)",
+  "launch_epoch_s": 1788853915.407023,
+  "pid": 84232,
+  "schema": "joulewise.magistrate_lock.v1",
+  "start_time": "Tue Sep 8 00:51:55 2026",
+  "status": "ACTIVE",
+  "supervisor_pid": 84229
+}

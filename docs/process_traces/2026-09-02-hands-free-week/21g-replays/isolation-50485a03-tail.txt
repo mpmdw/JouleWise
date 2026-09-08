@@ -1,0 +1,27 @@
+isolation re-run head=50485a03 start=2026-09-08 03:25:07
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_ambiguous_reference
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: adapter_observations_missing
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+  condition: whole_window_campaign_membership_unresolved
+NEG-8 WHOLE-WINDOW VERDICT: flagged
+  decision: passed
+rc=1 end=2026-09-08 03:27:47

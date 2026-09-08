@@ -1,0 +1,15 @@
+/Users/edr/night-custody/magistrate/attempts/1ef89702-8b11-4463-8d6b-3c1400510f1a/:
+total 1512
+drwxr-xr-x@ 5 edr  staff     160 Sep  8 00:51 .
+drwxr-xr-x@ 4 edr  staff     128 Sep  8 01:41 ..
+-rw-r--r--@ 1 edr  staff     121 Sep  8 01:33 attempt-1.stderr.log
+-rw-r--r--@ 1 edr  staff  765720 Sep  8 01:33 attempt-1.stream.jsonl
+-rw-------@ 1 edr  staff    3344 Sep  8 00:51 prompt.md
+
+/Users/edr/night-custody/magistrate/attempts/784a764e-12b2-4c9a-a96d-9b8690d6abad/:
+total 6216
+drwxr-xr-x@ 5 edr  staff      160 Sep  8 01:41 .
+drwxr-xr-x@ 4 edr  staff      128 Sep  8 01:41 ..
+-rw-r--r--@ 1 edr  staff        0 Sep  8 01:41 attempt-2.stderr.log
+-rw-r--r--@ 1 edr  staff  2712283 Sep  8 02:58 attempt-2.stream.jsonl
+-rw-------@ 1 edr  staff     3201 Sep  8 01:41 prompt.md
