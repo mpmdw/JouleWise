@@ -427,13 +427,100 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
 
 
 class ProductionArmRelocationLaunchTests(unittest.TestCase):
-    # 2026-09-08 (T0-ACID-CLOCK-03): the ±2 h clock-family regression that
-    # lived here patched the PARENT's monotonic clock while the arm step runs
-    # in a child process reading real clocks, so its outcome depended on the
-    # host's real RAW/monotonic drift and on elapsed wall time (flaky on Linux
-    # CI and on this Mac under load, always as readiness_clock_preflight_refused).
-    # Pruned pending the rule-11 consult's deterministic design; the fixture
-    # fixes in _mint_v4_arm (RAW-derived R0, floored capture origin) stay.
+    # Inspect authored clock evidence with fixed readers, then stop before ARM
+    # samples live subprocess clocks. This isolates clock-family arithmetic
+    # from the independent live drift and sampling-skew gates.
+    def test_mint_keeps_raw_anchors_separate_from_sequence_clock(self) -> None:
+        from tests import test_arm_readiness_evidence_t0 as fixtures
+
+        class AuthoringChecked(Exception):
+            pass
+
+        make_fixture = fixtures.make_t0_fixture
+        author = fixtures.author_arm_readiness_evidence_t0
+        two_hours = 7_200_000_000_000
+        cases = (
+            (10_000_000_000_000, -two_hours),
+            (10_000_000_000_000, 0),
+            (10_000_000_000_000, two_hours),
+            (60_000_000_000, -two_hours),  # Exercise the capture floor.
+        )
+
+        for raw_now, offset in cases:
+            with self.subTest(raw_now=raw_now, ordinary_minus_raw_ns=offset):
+                ordinary = raw_now + offset
+                sequence_now = (
+                    max(ordinary, 0) + t0_evidence._MIN_IDLE_NS + 1_000
+                )
+                anchor = clock_reference.ClockAnchor(
+                    realtime_ns=1_700_000_000_000_000_000 + raw_now,
+                    monotonic_raw_ns=raw_now,
+                    read_skew_ns=1_000,
+                )
+                inputs = []
+
+                def tracked_fixture(**kwargs):
+                    result = make_fixture(**kwargs)
+                    self.addCleanup(result[0].cleanup)
+                    inputs.append(result[-1])
+                    return result
+
+                def check_author(*args, **kwargs):
+                    result = author(*args, **kwargs)
+                    self.assertEqual(result["status"], "PASS", result)
+                    self.assertEqual(len(result["authored_rows"]), 15)
+                    receipts = [
+                        json.loads(Path(p).read_text())
+                        for p in result["receipt_paths"]
+                    ]
+                    receipt = next(
+                        r for r in receipts if r["kind"] == "CLOCK_ATTESTATION"
+                    )
+                    value = receipt["facts"][0]["value"]
+                    capture = json.loads(
+                        (inputs[0] / "clock-reference.json").read_text()
+                    )
+                    self.assertEqual(
+                        capture["started_monotonic_ns"], max(ordinary, 0) + 10
+                    )
+                    expected = {
+                        "r0_anchor_monotonic_raw_ns":
+                            raw_now - t0_evidence._MIN_IDLE_NS - 980,
+                        "anchor_monotonic_raw_ns": raw_now,
+                        "anchor_realtime_ns": anchor.realtime_ns,
+                        "t0_span_ns": t0_evidence._MIN_IDLE_NS + 980,
+                        "anchor_delta_ns": 0,
+                        "r1_batch_started_monotonic_raw_ns": raw_now,
+                        "r1_batch_finished_monotonic_raw_ns": raw_now,
+                        "r1_batch_duration_ns": 0,
+                        "r1_batch_finished_monotonic_ns": sequence_now,
+                    }
+                    for field, expected_value in expected.items():
+                        self.assertEqual(value[field], expected_value, field)
+                    self.assertEqual(
+                        receipt["valid_until_monotonic_ns"],
+                        sequence_now + 21_600_000_000_000,
+                    )
+                    raise AuthoringChecked
+
+                with (
+                    mock.patch.object(
+                        time, "monotonic_ns", return_value=ordinary
+                    ),
+                    mock.patch.object(
+                        clock_reference, "sample_anchor", return_value=anchor
+                    ),
+                    mock.patch.object(
+                        fixtures, "make_t0_fixture", side_effect=tracked_fixture
+                    ),
+                    mock.patch.object(
+                        fixtures,
+                        "author_arm_readiness_evidence_t0",
+                        side_effect=check_author,
+                    ),
+                    self.assertRaises(AuthoringChecked),
+                ):
+                    self._mint_v4_arm()
 
     def _mint_v4_arm(
         self,
