@@ -23,7 +23,10 @@ joulewise-53 has messaged that it stood down (its condition 2: no arming while i
 | commit 2987a626 | 01:20:19 | git |
 | activation 1ef89702 terminated | 01:33:28 | events.jsonl seq 5 epoch 1788856408.777 |
 | activation 784a764e spawned | 01:41:58 | events.jsonl seq 8 epoch 1788856918.677 |
-| commits 9a15338e / a6bff232 / 83b3ec5e | 01:48:16 / 01:48:47 / ~01:58 | git |
+| commits 9a15338e / a6bff232 / 83b3ec5e | 01:48:16 / 01:48:47 / 02:01:16 | git |
+| commit dbd49c1d (21c: ruling B recorded) | 02:03:37 | git |
+| commit 0f3390c9 (fix round 1 landed) | 02:10:06 | git |
+| commit 82622e70 (magistrate review of the landing) | 02:11:53 | git |
 
 The first arm email (01:05:21) preceded H (01:10:44) by 5 min 23 s; the pins follow-up (01:10:59) followed H by 15 s;
 whether D-175 cond. 1 is satisfied on the follow-up or requires a new arm notice after H is REFERRED to the
@@ -110,7 +113,7 @@ print(write_night_plan(root/"night_plan.json", plan))
 PY
 # 4. Install both night agents FROM the disposable checkout (the installer derives the driver checkout from its own path).
 cd "$STUB_CHECKOUT" || { print "ABORT: checkout unavailable"; exit 1; }
-scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 || { print "ABORT: agent install failed"; exit 1; }
+scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56 || { print "ABORT: agent install failed AFTER the move — un-publishing the plan this session authored (D-175 line 19 (a) / cond. 8)"; rm -f "$NIGHT_CUSTODY/night_plan.json"; rmdir "$NIGHT_CUSTODY/night" "$NIGHT_CUSTODY" 2>/dev/null; launchctl list | grep -E "com.joulewise.night" || true; exit 1; } # delta N4
 launchctl list | grep -E "com.joulewise.night" ; cat "$NIGHT_CUSTODY/night_plan.json"
 # 5. Push H (branch), record the arm (plan json copy, launchctl list, email id) in this trace dir, commit, push.
 # 6. Stop every Codex child and background process; end the loop; exit. The LaunchAgent is the wake source.
@@ -152,7 +155,7 @@ line was written.
 ## AMENDED arm-time sequence (cold gate AMEND on rehearsal-arming authority, relayed by joulewise-53, 01:20:08 PDT (commit a8cc6e68; F1/F2); supersedes the entire earlier sequence)
 
 Full ruling text: `docs/process_traces/2026-09-08-handoff-redo/09-coldgate-packet-rehearsal-authority/13-magistrate-synthesis.md`
-(branch `feat/2026-09-08-relaunch-prompt-line19`, D-175 PR by joulewise-53). Eight conditions; (1) DISPUTED — see Timeline of record, <!-- F1 --> (4) satisfied only by the consolidated post-fix notice on thread `1a0800cdb282c3f1` once sent (ruling B), (6) satisfied while this branch or main
+(branch `feat/2026-09-08-relaunch-prompt-line19`, D-175 PR by joulewise-53). Eight conditions; (1) satisfied when the consolidated post-fix notice is sent on thread `1a0800cdb282c3f1` (ruling B, 21c; see Timeline of record), (4) satisfied by that same notice, which precedes the move, (6) satisfied while this branch or main
 holds `ae8f074f`, (7)/(8) are conduct rules. Conditions (2), (3), (5) change the mechanics:
 
 ```zsh
@@ -166,6 +169,8 @@ test ${#plans} -eq 0 || { print "ABORT: existing plan"; exit 1; } # F4
 export H=ae8f074ffa554707a9eac95995ab8ec03235d118           # the handback commit; pinned EXPLICITLY (cond. 1)
 export DRIVER_SOURCE=/Users/edr/code/JouleWise-wt-magistrate-1ef89702
 git -C "$DRIVER_SOURCE" cat-file -e "$H^{commit}" || { print "ABORT: H unavailable"; exit 1; } # F4; cond. 6
+now=$(date +%s); test "$now" -ge 1788944160 -a "$now" -lt 1788945300 || { print "ABORT: outside the arm window 01:56-02:15 PDT 2026-09-09 (t0-3600 .. t0-2460)"; exit 1; } # delta N5: enforced floor (ruling B) and ceiling
+if ps -p 48645 >/dev/null 2>&1; then print "ABORT: leaked 09-04 python stub pid 48645 alive (not matched by the census regex)"; exit 1; fi # delta N11
 # 1. Disposable checkout at H (measurement_root; the installer must be run FROM it).
 export STUB_CHECKOUT=/private/tmp/joulewise-rehearsal-20260909-checkout; test ! -e "$STUB_CHECKOUT" || { print "ABORT: stub checkout exists"; exit 1; } # F4
 git -C "$DRIVER_SOURCE" worktree add --detach "$STUB_CHECKOUT" "$H" || { print "ABORT: checkout creation failed"; exit 1; } # F4
@@ -175,9 +180,9 @@ export NIGHT_CUSTODY=/Users/edr/night-custody/rehearsal-20260909; test ! -e "$NI
 export STAGE=/private/tmp/joulewise-rehearsal-20260909-staging
 test ! -e "$STAGE" || { print "ABORT: staging path exists"; exit 1; } # F4
 mkdir -p "$STAGE" || { print "ABORT: staging creation failed"; exit 1; } # F4
-SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/jw-rehearsal-validate.XXXXXX") || { print "ABORT: scratch creation failed"; exit 1; }
-export SCRATCH
-# F5: On any abort: rm -rf "$STAGE" "$SCRATCH" (only this attempt's allocated paths).
+export SCRATCH=/private/tmp/joulewise-rehearsal-20260909-validate; test ! -e "$SCRATCH" || { print "ABORT: scratch path exists"; exit 1; } # N10: fixed path so block B can re-derive it
+mkdir -p "$SCRATCH" || { print "ABORT: scratch creation failed"; exit 1; }
+# F5/N3: On any abort after step 1: git -C "$DRIVER_SOURCE" worktree remove --force "$STUB_CHECKOUT"; rm -rf "$STAGE" "$SCRATCH" (only paths this attempt created).
 cd "$STUB_CHECKOUT" || { print "ABORT: checkout unavailable"; exit 1; }
 PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY' || { print "ABORT: plan authoring failed"; exit 1; }
 import os, time
@@ -201,7 +206,9 @@ twin = replace(plan, custody_root=str(twin_root), chain_path=str(twin_root/"chai
 print(write_night_plan(stage/"night_plan.json", plan))      # REAL plan, staged and undiscoverable
 print(write_night_plan(scratch/"night_plan.json", twin))    # VALIDATION TWIN, never armed
 PY
-# 3. Validate the TWIN only (F5; cond. 2 covers the whole validation).
+# 3. Validate the TWIN only (F5; cond. 2 covers the whole validation). Stated deviation (delta N9): D-175 cond. 2 literally
+#    says `--plan <staged>`; ruling B requirement 3 (21c) authorizes validating the twin instead, and the json diff below
+#    proves the twin and the staged real plan differ only in the three custody paths.
 # install_night_agent.sh:119-122 creates custody_root/night under SCRATCH, never real custody.
 cd "$STUB_CHECKOUT" || { print "ABORT: checkout unavailable"; exit 1; }
 scripts/install_night_agent.sh --plan "$SCRATCH/night_plan.json" --hour 2 --minute 56 --render-only "$SCRATCH/render" || { print "ABORT: twin validation failed"; exit 1; }
@@ -217,9 +224,29 @@ diff = {k for k in real.keys() | twin.keys() if k not in real or k not in twin o
 print("plan differing fields:", sorted(diff))
 sys.exit(0 if diff == allowed else 1)
 PY
-# 3b. Stop every Codex child and every background task of this session BEFORE the census; a
-# reparented process of this session's own (ppid 1) is reported foreign by step 4 and MUST abort
-# the arm — this is fail-closed by design, no allowlist. (F6)
+```
+
+**Between the blocks (manual steps, executed by the arming magistrate with its own tools; the whole-block paste
+must stop here — delta N10):**
+
+- 3b (F6, delta N8). Stop every Codex child (`codex-run-v3` seats are reparented to pid 1 and would be foreign) and
+  every background task of this session, INCLUDING its own keepalive Monitor (a direct child of the session pid —
+  verified at 02:00 PDT: pid 16456 ppid 83086 — stopped with TaskStop). Confirm
+  `ps -axo pid,ppid,command | grep -E "claude (daemon run|bg-spare|bg-pty-host)|--resume"` prints nothing (joulewise-53
+  retires those before its stand-down; this session never signals them). A reparented process of this session's own
+  is reported foreign by step 4 and MUST abort the arm — fail-closed by design, no allowlist. The arm then continues
+  in the SAME turn (no wake source is needed after this point: block B, record, commit, push, exit).
+- 5 (cond. 4). Re-check Ed's thread `1a0800cdb282c3f1` for a NO (Gmail `get_thread`); a NO aborts here, before any
+  write under `~/night-custody`.
+
+```zsh
+# Block B (re-derive every variable; tool shells do not persist exports)
+export H=ae8f074ffa554707a9eac95995ab8ec03235d118 DRIVER_SOURCE=/Users/edr/code/JouleWise-wt-magistrate-1ef89702
+export STUB_CHECKOUT=/private/tmp/joulewise-rehearsal-20260909-checkout NIGHT_CUSTODY=/Users/edr/night-custody/rehearsal-20260909
+export STAGE=/private/tmp/joulewise-rehearsal-20260909-staging SCRATCH=/private/tmp/joulewise-rehearsal-20260909-validate
+test -f "$STAGE/night_plan.json" || { print "ABORT: staged plan missing (block A did not complete)"; exit 1; }
+test "$(git -C "$STUB_CHECKOUT" rev-parse HEAD)" = "$H" || { print "ABORT: checkout pin mismatch"; exit 1; }
+test ! -e "$NIGHT_CUSTODY" || { print "ABORT: real custody exists"; exit 1; }
 # 4. Census immediately before the move (cond. 5): every codex|claude|t3 match must be this magistrate's own tree.
 python3 - <<'PY' || { print "ABORT: foreign census or census failure"; exit 1; } # F3/F4
 import json, os, subprocess, sys
@@ -237,7 +264,7 @@ import re
 foreign = [(p,c[:90]) for p,pp,c in rows if re.search(r"codex|claude|t3", c) and not mine(p) and "ps -axo" not in c]
 print("foreign census matches:", foreign); sys.exit(1 if foreign else 0)
 PY
-# 5. Re-check Ed's thread for NO (Gmail search on thread 1a0800cdb282c3f1) — abort on NO (cond. 4).
+# (step 5, the NO check, was executed between the blocks.)
 # 6. THE MOVE: atomic rename into the plan directory (same volume as /private/tmp — verified: both device 16777233 per stat -f %d).
 # F5: the real custody root is first created by this mkdir immediately before os.replace.
 mkdir -p "$NIGHT_CUSTODY" || { print "ABORT: real custody creation failed"; exit 1; } # F4
@@ -249,10 +276,10 @@ launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE" "$SCRATCH"
 # 8. Record (plan json copy, launchctl list, census output) in this trace dir; commit; push. Stop every child and
 #    background process; exit. Request boundary 02:31 PDT 2026-09-09 = t0 − 25 min (cond. 7).
 ```
-On any abort: `rm -rf "$STAGE" "$SCRATCH"` — remove only scratch/staging paths allocated by this attempt;
-if an existence guard found a pre-existing path, preserve it. The real custody root stays untouched before step 6. <!-- F5 -->
+On any abort: `git -C "$DRIVER_SOURCE" worktree remove --force "$STUB_CHECKOUT"; rm -rf "$STAGE" "$SCRATCH"` — remove only the
+checkout/scratch/staging paths this attempt created (delta N3); if an existence guard found a pre-existing path, preserve it. The real custody root stays untouched before step 6. <!-- F5 -->
 
-## Bench pass 2 (activation 784a764e, ~02:20 PDT 2026-09-08, after fix round 1 landed at 0f3390c9; scratch paths only)
+## Bench pass 2 (activation 784a764e; first run recorded by commit 82622e70 at 02:11:53 PDT without copied artifacts — delta N2; re-run with artifacts captured under `21b-rehearsal-20260909-bench/pass2-*`, time and epoch in `pass2-bench-output.txt`; scratch paths only)
 
 Steps 1–3 of the amended sequence were executed verbatim with every path redirected to a `mktemp -d` parent
 (`/private/tmp/jw-bench-arm.XXXXXX`): a detached worktree at H=`ae8f074f` as `STUB_CHECKOUT`, `NIGHT_CUSTODY` under the
@@ -264,6 +291,8 @@ checkout printed `validated pins: repo_head=ae8f074f… measurement_root=<scratc
 `<SCRATCH>/custody/night` did exist (the installer's `mkdir -p "$custody_root/night"`, which is exactly why the twin is
 validated instead of the real plan). The bench worktree and parent were removed; `ls ~/night-custody` afterwards shows
 only `magistrate`, `magistrate-bench`, `retired-v1`. Steps 4–8 were NOT executed (they arm).
+- Artifacts of the re-run: `pass2-bench-output.txt` (full transcript with start/finish times), `pass2-real-staged-night_plan.json`,
+  `pass2-twin-night_plan.json`, `pass2-render-com.joulewise.night.plist`, `pass2-render-com.joulewise.night.deadman.plist`.
 
 Cond. 8: any later re-arm or removal of THIS plan by a headless session repeats steps 2–7; everything else on plans,
 night records and launchd stays barred by relaunch-prompt line 19 (as amended by D-175).
@@ -285,7 +314,8 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
   600 s ceiling, a headless magistrate that ends its turn while waiting is relaunched every ~10 min (5-min backoff +
   ceiling) and each relaunch sends Ed a mandated launch email. Activation 784a764e therefore keeps itself alive with
   a bounded background poll (standdown.request, `~/night-custody/*/night_plan.json`, joulewise-53's pid, a 7-minute
-  tick) instead of ending its turn idle. Launch email for 784a764e: Gmail `1a080326c4d2f147`.
+  tick) instead of ending its turn idle; that poll is a direct child of the session pid and is stopped at step 3b
+  before the census (delta N8). Launch email for 784a764e: Gmail `1a080326c4d2f147`.
 - joulewise-53's answers (cross-session message, 01:48 PDT (recorded in a6bff232 at 01:48:47); F2): (a) the arm-time census must treat the Claude bg-job
   daemon 71666, bg-pty-hosts 71596/71682, bg-spare 71687 and the resumed twin 71607 as foreign matches that must be
   gone; joulewise-53 retires them itself as its last act before stand-down (`claude daemon stop --any`, then verify

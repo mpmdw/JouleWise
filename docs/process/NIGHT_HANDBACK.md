@@ -77,9 +77,7 @@ before re-arming; never re-arm the same plan on the same signature twice.
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's
 `measurement_head`; never install the two night agents from the
-development checkout. Author every new v2 plan with
-`joulewise.night_plan_writer.write_night_plan`; the writer emits both
-`schema: joulewise.night_plan.v2` and integer `schema_version: 2`. Once
+development checkout. Once
 authored, every armed plan's canonical `(plan_id, measurement_root,
 measurement_head)` is included in the magistrate relaunch prompt's
 frozen-checkout list until completion.
