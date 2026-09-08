@@ -6,17 +6,22 @@ spelling. This module neither estimates bounds nor licenses paper rendering.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import math
+
+from .ratio import validate_ratio_estimand
 
 
 _SCHEMA = "joulewise.claim_side_bound.v2"
 _ROW_KEYS = {"contrast_id", "source_cell_ids", "floor_artifact_id",
              "deterministic_widening_total", "unit", "estimator_id", "ratio_estimand",
-             "deterministic_bounds", "metrology_aware_CI95", "decision_interval"}
+             "deterministic_terms", "metrology_aware_CI95", "decision_interval"}
 _ANCHOR = "E_clock_anchor_shift_bound_j"
+# Pinned against both ap_spec_*_front.v2 registries by the regression suite;
+# production projection consumes authenticated bytes only, never registry paths.
+_UNITS = frozenset({"J", "J/committed_output_token", "J/accepted_draft_token"})
 
 
 class ClaimSideBoundRefusal(ValueError):
@@ -64,9 +69,16 @@ def _encode(value):
     return json.dumps(value, ensure_ascii=True, allow_nan=False)
 
 
+def _decimal(token):
+    try:
+        return Decimal(token)
+    except InvalidOperation as exc:
+        raise ClaimSideBoundRefusal("paper_claim_side_bound_numeral_unparseable") from exc
+
+
 def _number(value, *, nonnegative=False):
     return (isinstance(value, _JsonNumber) and math.isfinite(float(value.token))
-            and (not nonnegative or Decimal(value.token) >= 0))
+            and (not nonnegative or _decimal(value.token) >= 0))
 
 
 def _interval(value):
@@ -74,7 +86,7 @@ def _interval(value):
         or not all(_number(item) for item in value.values())):
         return None
     lower, upper = float(value["lower"].token), float(value["upper"].token)
-    return ((lower, upper) if Decimal(value["lower"].token) <= Decimal(value["upper"].token) else None)
+    return ((lower, upper) if _decimal(value["lower"].token) <= _decimal(value["upper"].token) else None)
 
 
 def _project(claim_verdicts, finalized_manifest, floor_artifact):
@@ -108,15 +120,22 @@ def _project(claim_verdicts, finalized_manifest, floor_artifact):
                 or (resolution["status"] == "exact" and len(cells) != 1)):
                 raise ClaimSideBoundRefusal("paper_claim_side_bound_cell_mismatch")
             sources.extend(cells)
-        # Repeated cells across resolutions are preserved, never deduplicated.
-        if tuple(sources) in joins:
-            raise ClaimSideBoundRefusal("paper_claim_side_bound_join_not_injective")
-        joins.add(tuple(sources))
         metric, estimator = contrast["metric"], contrast["estimator"]
         unit, ratio = metric["unit"], metric["ratio_estimand"]
-        if not ((unit == "J" and ratio is None) or
-                (unit == "J/token" and ratio in {"mean_of_request_ratios", "ratio_of_totals"})):
+        if type(unit) is not str or unit not in _UNITS or (unit == "J" and ratio is not None):
             raise ClaimSideBoundRefusal("paper_claim_side_bound_unit_mismatch")
+        if unit != "J":
+            try:
+                validate_ratio_estimand(ratio)
+            except (TypeError, ValueError) as exc:
+                raise ClaimSideBoundRefusal("paper_claim_side_bound_unit_mismatch") from exc
+        # Absolute and per-token companions may use the same ordered cells.
+        # Repeated cells across resolutions are preserved, never deduplicated.
+        estimand_kind = ratio["form"] if ratio is not None else None
+        join = (estimand_kind, tuple(sources))
+        if join in joins:
+            raise ClaimSideBoundRefusal("paper_claim_side_bound_join_not_injective")
+        joins.add(join)
         if type(estimator["name"]) is not str or not estimator["name"]:
             raise ClaimSideBoundRefusal("paper_claim_side_bound_shape_invalid")
         deterministic = contrast["deterministic_bounds"]
@@ -136,7 +155,7 @@ def _project(claim_verdicts, finalized_manifest, floor_artifact):
                      "floor_artifact_id": floor_id,
                      "deterministic_widening_total": deterministic["total"],
                      "unit": unit, "estimator_id": estimator["name"], "ratio_estimand": ratio,
-                     "deterministic_bounds": terms,
+                     "deterministic_terms": terms,
                      "metrology_aware_CI95": estimator["metrology_aware_CI95"],
                      "decision_interval": deterministic["decision_interval"]})
     return rows
@@ -198,7 +217,7 @@ def claim_side_bound_diagnostics(value: bytes) -> tuple[str, ...]:
         for row in _parse(value)["contrasts"]:
             bound = float(row["deterministic_widening_total"].token)
             interval, decision = _interval(row["metrology_aware_CI95"]), _interval(row["decision_interval"])
-            total = math.fsum(float(term["bound"].token) for term in row["deterministic_bounds"])
+            total = math.fsum(float(term["bound"].token) for term in row["deterministic_terms"])
             if (interval is None or decision is None
                 or not math.isclose(total, bound, rel_tol=1e-12, abs_tol=1e-12)
                 or not math.isclose(decision[0], interval[0] - bound, rel_tol=1e-12, abs_tol=1e-12)

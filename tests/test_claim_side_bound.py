@@ -5,9 +5,12 @@ import copy
 from dataclasses import asdict
 import hashlib
 import json
+from pathlib import Path
 import unittest
 
 from joulewise.analysis_engine import claim_side_bound as bound
+from joulewise.analysis_engine.ratio import RATIO_ESTIMAND_KEYS, validate_ratio_estimand
+from tests.test_analysis_manifest import ratio_estimand
 from joulewise.analysis_engine.estimators import (
     DeterministicBoundTerm, PairedObservation, estimate_paired_blocks,
 )
@@ -67,7 +70,7 @@ class ClaimSideBoundTests(unittest.TestCase):
         row = self.sidecar["contrasts"][0]
         self.assertEqual(contrast["deterministic_bounds"]["total"], 4.0)
         self.assertEqual(row["deterministic_widening_total"], 4.0)
-        self.assertEqual(row["deterministic_bounds"], contrast["deterministic_bounds"]["terms"])
+        self.assertEqual(row["deterministic_terms"], contrast["deterministic_bounds"]["terms"])
         self.assertEqual(row["decision_interval"], contrast["deterministic_bounds"]["decision_interval"])
         self.assertEqual(row["metrology_aware_CI95"], contrast["estimator"]["metrology_aware_CI95"])
         self.assertEqual(row["source_cell_ids"], ["a", "b", "a"])
@@ -82,7 +85,7 @@ class ClaimSideBoundTests(unittest.TestCase):
         self.mutate(lambda row: row.update(deterministic_widening_total=1.0))
 
     def test_dropped_kind(self):
-        self.mutate(lambda row: row["deterministic_bounds"].pop())
+        self.mutate(lambda row: row["deterministic_terms"].pop())
 
     def test_sum_for_mean(self):
         self.mutate(lambda row: row.update(deterministic_widening_total=8.0))
@@ -150,28 +153,95 @@ class ClaimSideBoundTests(unittest.TestCase):
         self.manifest["contrasts"].append({"contrast_id": "other", "floor_estimator_registration": {}})
         self.assert_source_refuses("paper_claim_side_bound_join_not_injective")
 
+    def registry_units(self):
+        root = Path(__file__).resolve().parents[1] / "configs/analysis_registry"
+        vocabularies = [
+            {row["unit"] for row in json.loads((root / name).read_bytes())["estimands"]}
+            for name in ("ap_spec_draft_front.v2.json", "ap_spec_native_mtp_front.v2.json")
+        ]
+        self.assertEqual(vocabularies[0], vocabularies[1])
+        return vocabularies[0]
+
+    def test_unit_vocabulary_matches_both_registries(self):
+        self.assertEqual(bound._UNITS, self.registry_units())
+        for unit in ("J/token", "kJ", "", None):
+            with self.subTest(unit=unit):
+                self.verdicts["contrasts"][0]["metric"]["unit"] = unit
+                self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
+
     def test_ratio_in_j_cell(self):
-        for ratio, estimator in (("mean_of_request_ratios", "paired_mean_student_t_v1"),
-                                 ("ratio_of_totals", "ratio_of_totals_delete_one_block_jackknife_t_v1")):
-            with self.subTest(ratio=ratio):
-                row = self.verdicts["contrasts"][0]
-                row["metric"].update(unit="J/token", ratio_estimand=ratio)
-                row["estimator"]["name"] = estimator
-                self.raw = encoded(self.verdicts)
-                self.sidecar_raw = self.produce(); self.sidecar = json.loads(self.sidecar_raw)
-                self.mutate(lambda row: row.update(unit="J"), "paper_claim_side_bound_unit_mismatch")
-                bad = copy.deepcopy(self.sidecar)
-                bad["contrasts"][0]["claim_side_bound_j"] = bad["contrasts"][0].pop("deterministic_widening_total")
-                self.assertEqual(self.validate(encoded(bad)), ("paper_claim_side_bound_shape_invalid",))
+        for unit in sorted(self.registry_units() - {"J"}):
+            for form, estimator in (("mean_of_request_ratios", "paired_mean_student_t_v1"),
+                                    ("ratio_of_totals", "ratio_of_totals_delete_one_block_jackknife_t_v1")):
+                with self.subTest(unit=unit, form=form):
+                    # Use the existing B8 fixture and validate it with its owner.
+                    ratio = ratio_estimand(form)
+                    self.assertEqual(set(ratio), RATIO_ESTIMAND_KEYS)
+                    self.assertEqual(validate_ratio_estimand(ratio), ratio)
+                    row = self.verdicts["contrasts"][0]
+                    row["metric"].update(unit=unit, ratio_estimand=ratio)
+                    row["estimator"]["name"] = estimator
+                    self.raw = encoded(self.verdicts)
+                    self.sidecar_raw = self.produce(); self.sidecar = json.loads(self.sidecar_raw)
+                    self.assertEqual(self.sidecar["contrasts"][0]["ratio_estimand"], ratio)
+                    self.assertEqual(self.sidecar["contrasts"][0]["unit"], unit)
+                    self.mutate(lambda row: row.update(unit="J"), "paper_claim_side_bound_unit_mismatch")
+                    for key in ("claim_side_bound_j", "another_j", "B_decode_claim_J"):
+                        bad = copy.deepcopy(self.sidecar)
+                        bad["contrasts"][0][key] = bad["contrasts"][0].pop("deterministic_widening_total")
+                        self.assertEqual(self.validate(encoded(bad)), ("paper_claim_side_bound_shape_invalid",))
         self.verdicts["contrasts"][0]["metric"]["unit"] = "J"
         self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
 
+    def test_ratio_requires_exact_b8_object(self):
+        valid = ratio_estimand("ratio_of_totals")
+        for ratio in (None, "ratio_of_totals", {"form": "ratio_of_totals"},
+                      dict(valid, extra="value"), dict(valid, denominator="invented")):
+            with self.subTest(ratio=ratio):
+                self.verdicts["contrasts"][0]["metric"].update(
+                    unit="J/committed_output_token", ratio_estimand=ratio)
+                self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
+
+    def test_companion_estimands_share_ordered_cells(self):
+        for form in ("mean_of_request_ratios", "ratio_of_totals"):
+            companion = copy.deepcopy(self.verdicts["contrasts"][0])
+            companion["contrast_id"] = form
+            companion["metric"].update(unit="J/committed_output_token", ratio_estimand=ratio_estimand(form))
+            self.verdicts["contrasts"].append(companion)
+            self.manifest["contrasts"].append({"contrast_id": form, "floor_estimator_registration": {}})
+        raw = encoded(self.verdicts)
+        result = self.produce(raw)
+        self.assertEqual(self.validate(result, raw), ())
+        rows = json.loads(result)["contrasts"]
+        self.assertEqual(len(rows), 3)
+        self.assertIsNone(rows[0]["ratio_estimand"])
+        self.assertTrue(all(row["source_cell_ids"] == ["a", "b", "a"] for row in rows))
+        # Same ratio kind still collides even if the registered unit differs.
+        duplicate = copy.deepcopy(self.verdicts["contrasts"][-1])
+        duplicate["contrast_id"] = "same-kind-other-unit"
+        duplicate["metric"]["unit"] = "J/accepted_draft_token"
+        self.verdicts["contrasts"].append(duplicate)
+        self.manifest["contrasts"].append({"contrast_id": duplicate["contrast_id"]})
+        self.assert_source_refuses("paper_claim_side_bound_join_not_injective")
+
+    def test_extreme_exponents_refuse_through_both_apis(self):
+        for token in (b"0e9999999999999999999", b"1e-9999999999999999999"):
+            for old in (b'"total":4.0', b'"lower":4.147', b'"upper":16.853'):
+                with self.subTest(token=token, field=old):
+                    raw = self.raw.replace(old, old.split(b":")[0] + b":" + token)
+                    self.assertNotEqual(raw, self.raw)
+                    with self.assertRaises(bound.ClaimSideBoundRefusal) as raised:
+                        self.produce(raw)
+                    self.assertEqual(raised.exception.code, "paper_claim_side_bound_numeral_unparseable")
+                    self.assertEqual(self.validate(self.sidecar_raw, raw),
+                                     ("paper_claim_side_bound_numeral_unparseable",))
+
     def test_bool_rejected(self):
-        for key in ("deterministic_widening_total", "decision_interval", "metrology_aware_CI95", "deterministic_bounds"):
+        for key in ("deterministic_widening_total", "decision_interval", "metrology_aware_CI95", "deterministic_terms"):
             def change(row):
                 if key in {"decision_interval", "metrology_aware_CI95"}:
                     row[key]["lower"] = True
-                elif key == "deterministic_bounds":
+                elif key == "deterministic_terms":
                     row[key][0]["bound"] = True
                 else:
                     row[key] = True

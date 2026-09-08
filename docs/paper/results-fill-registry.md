@@ -1136,8 +1136,11 @@ No numeric renderer projection is implemented in S3; that seat follows S2.
   acceptance; its clock-anchor term is not the complete deterministic total.
 - **DS-29:** the complete widening binds explicitly to v2
   `deterministic_widening_total`, copied from verdict `deterministic_bounds.total`,
-  accompanied by `unit`, `estimator_id`, `ratio_estimand` and the complete
-  per-kind `deterministic_bounds` list. A J/token quantity cannot fill the
+  accompanied by copied `unit`, `estimator_id`, the verbatim six-key B8
+  `ratio_estimand` mapping (kind from `["form"]`; null for absolute J), and
+  the complete per-kind `deterministic_terms` list. The registry-pinned units
+  are `J`, `J/committed_output_token`, and `J/accepted_draft_token`. Any
+  per-token quantity (`unit != "J"`) cannot fill the
   historical `B_decode_claim_J`/`claim_side_bound_j` cell. S6's
   `claim_side_bound_j` retains its clock-anchor planning meaning within F+B.
 

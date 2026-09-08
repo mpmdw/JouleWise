@@ -780,6 +780,7 @@ def _validator_source_census(
         from joulewise.analysis_engine.artifact import validate_claim_verdicts, _validate_cross_field_claim_semantics
         from joulewise.analysis_engine.claims import evaluate_claim
         from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound, produce_claim_side_bound, _interval
+        from joulewise.analysis_engine.ratio import validate_ratio_estimand
         from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
         owners = (
@@ -788,6 +789,7 @@ def _validator_source_census(
             ("analysis_engine.claim_side_bound.validate_claim_side_bound", validate_claim_side_bound),
             ("analysis_engine.claim_side_bound._interval", _interval),
             ("analysis_engine.claim_side_bound.produce_claim_side_bound", produce_claim_side_bound),
+            ("analysis_engine.ratio.validate_ratio_estimand", validate_ratio_estimand),
             ("analysis_manifest_v3.validate_finalized_analysis_manifest_v3", validate_finalized_analysis_manifest_v3),
             ("analysis_engine.artifact.validate_claim_verdicts", validate_claim_verdicts),
         )

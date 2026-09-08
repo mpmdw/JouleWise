@@ -118,7 +118,7 @@ S3_MUTATIONS = [
      'False', 'test_refused_resolution'),
     ("anchor_required", 'if _ANCHOR not in {term["name"] for term in terms}:',
      'if False:', 'test_anchor_required'),
-    ("join_injective", 'if tuple(sources) in joins:', 'if False:', 'test_join_injective'),
+    ("join_injective", 'if join in joins:', 'if False:', 'test_join_injective'),
     ("ratio_in_j_cell", 'if any(row[key] != source[key] for key in ("unit", "estimator_id", "ratio_estimand")):',
      'if False:', 'test_ratio_in_j_cell'),
     ("bool_rejected", 'or not _number(deterministic["total"], nonnegative=True)',
@@ -137,6 +137,7 @@ def run_s3_kills():
     source = original.decode()
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
     records = []
+    distinct_guards = len({old for _, old, _, _ in S3_MUTATIONS})
     for identity, old, new, method in S3_MUTATIONS:
         if source.count(old) != 1:
             raise ValueError(f'{identity}: mutation target count {source.count(old)}')
@@ -157,7 +158,7 @@ def run_s3_kills():
             path.write_bytes(original)
     Path('/tmp/paper-s3-kills.json').write_text(json.dumps(records, indent=2) + '\n')
     passed = bool(records) and all(row['killed'] for row in records)
-    print(f'S3 KILL SUMMARY: {sum(row["killed"] for row in records)}/{len(records)} killed; scoped bytes restored.')
+    print(f'S3 KILL SUMMARY: {sum(row["killed"] for row in records)}/{len(records)} killed; {len(records)} mutations over {distinct_guards} distinct guards (including producer sites); scoped bytes restored.')
     return 0 if passed else 1
 
 

@@ -29,7 +29,7 @@ whole-window drift. Their complete recorded list travels with B, including
 
 For `mean_of_request_ratios` and `ratio_of_totals`, the corresponding existing
 ratio estimator owns normalization/propagation and serializes B and I/D in
-J/token. The formulas above define the absolute-energy estimator, not a new
+`J/committed_output_token` or `J/accepted_draft_token`. The formulas above define the absolute-energy estimator, not a new
 ratio estimator. S3 performs no division by tokens and no estimator arithmetic.
 The meanings and algorithms remain in `analysis_engine/estimators.py` and the
 [comparison protocol](../paper/protocol/prospective-comparison-protocol.md).
@@ -48,18 +48,20 @@ exactly these fields:
 | `source_cell_ids` | Ordered concatenation defined below |
 | `floor_artifact_id` | Supplied authenticated floor artifact's nonempty `artifact_id` |
 | `deterministic_widening_total` | Copy of verdict `deterministic_bounds.total`, finite nonnegative JSON number |
-| `unit` | Copy of verdict `metric.unit`: `J` or `J/token` |
+| `unit` | Copy of verdict `metric.unit`; vocabulary pinned by regression to `estimands[].unit` in both `ap_spec_draft_front.v2.json` and `ap_spec_native_mtp_front.v2.json`: `J`, `J/committed_output_token`, `J/accepted_draft_token` |
 | `estimator_id` | Copy of verdict `estimator.name`, nonempty string; owner validates registration |
-| `ratio_estimand` | Copy of verdict `metric.ratio_estimand`; null with J; `mean_of_request_ratios` or `ratio_of_totals` with J/token |
-| `deterministic_bounds` | Exact ordered copy of verdict `deterministic_bounds.terms`: nonempty list of exact `{name, bound}` objects; unique nonempty names and finite nonnegative numeric bounds |
+| `ratio_estimand` | Verbatim object copy of verdict `metric.ratio_estimand`; null for absolute J contrasts. Any per-token unit (`unit != "J"`) requires the exact six-key B8 mapping validated by `ratio.validate_ratio_estimand`: `form`, `numerator_metric`, `denominator`, `denominator_unit`, `tokenizer_scope`, `output_policy_scope`. Estimand kind is read from `["form"]` (`mean_of_request_ratios` or `ratio_of_totals`), never a bare string |
+| `deterministic_terms` | Exact ordered copy of verdict `deterministic_bounds.terms`: nonempty list of exact `{name, bound}` objects; unique nonempty names and finite nonnegative numeric bounds |
 | `metrology_aware_CI95` | Copy of verdict `estimator.metrology_aware_CI95` |
 | `decision_interval` | Copy of verdict `deterministic_bounds.decision_interval` |
 
 Each interval is exactly `{lower, upper}`, finite JSON numbers, lower ≤ upper.
 Booleans, null numeric fields, numeric strings, NaN/infinity, duplicate object
 keys, extra/missing keys and v1 sidecars refuse. This is never issued under v1.
-A ratio quantity under `claim_side_bound_j` or any substitute `_j` row key
-refuses the closed schema; changing its unit to J also refuses.
+Any per-token quantity (`unit != "J"`) under `claim_side_bound_j` or any
+substitute J-typed `_j`/`_J` row key refuses the closed schema; changing its
+unit to J also refuses. The closed schema disallows these substitute keys
+for absolute quantities too; no renderer or J-typed placement is added here.
 
 Equality of every copied numeric field means **the identical JSON numeral
 bytes**, including exponent spelling, trailing zeros and signed zero. `4`,
@@ -83,8 +85,13 @@ recorded order, then each resolution's `source_cell_ids` in recorded order.
 Every status must be `exact` or `transported`; every resolution has a nonempty
 list of distinct cells present in `floor_artifact.cells[].cell_id`; `exact`
 has one cell. Concatenate without sorting or deduplicating. A cell repeated in
-different resolutions remains repeated. Distinct contrast IDs must have
-distinct complete ordered concatenations (injectivity).
+different resolutions remains repeated. Injectivity is keyed on
+`(estimand kind, ordered cell list)`, with null kind for absolute J and
+`ratio_estimand["form"]` for per-token contrasts. Refuse two contrast IDs only
+when both kind and the complete ordered concatenation coincide. An absolute-J
+contrast and its per-token companion may share cells: they describe different
+estimands over the same arms. Different ratio forms may likewise share cells;
+a different unit alone does not exempt a duplicate kind/cell pair.
 
 The finalized v3 manifest registers contrast IDs and
 `floor_estimator_registration`; it does **not** have a contrast-level
@@ -123,10 +130,11 @@ No supply role is promoted from fixture mode and no renderer is added here.
 | Private refusal code | Trigger |
 |---|---|
 | `paper_claim_side_bound_shape_invalid` | Invalid bytes/schema/types/keys/numbers/intervals or incomplete source shape |
+| `paper_claim_side_bound_numeral_unparseable` | A source numeral exceeds Decimal's representable exponent range (including `0e9999999999999999999` and `1e-9999999999999999999`); producer raises the structured refusal and validator returns it |
 | `paper_claim_side_bound_reader_digest_mismatch` | Sidecar digest differs from raw verdict SHA-256 |
 | `paper_claim_side_bound_contrast_mismatch` | Unregistered/duplicate source ID, or sidecar ID/order/coverage differs |
 | `paper_claim_side_bound_cell_mismatch` | Invalid/refused resolution, wrong floor cell, or changed ordered concatenation |
-| `paper_claim_side_bound_join_not_injective` | Two verdict contrasts share one ordered concatenation |
+| `paper_claim_side_bound_join_not_injective` | Two verdict contrasts share both estimand kind and ordered concatenation |
 | `paper_claim_side_bound_lineage_mismatch` | Sidecar names a different floor artifact |
 | `paper_claim_side_bound_unit_mismatch` | Unit/ratio disagreement or sidecar unit/estimand/estimator differs from verdict |
 | `paper_claim_side_bound_anchor_missing` | Verdict terms lack the required anchor kind |
@@ -141,7 +149,10 @@ Tests are `tests.test_claim_side_bound.ClaimSideBoundTests` unless noted.
 Each mutation begins with an accepted copy control, then alters one boundary.
 `tests/fixtures/paper_custody/run_kills.py --s3` independently removes the
 relevant check (or corrupts the producer) and requires an assertion failure;
-an import error or unrelated exception is not counted as a kill.
+an import error or unrelated exception is not counted as a kill. The runner
+executes **20 mutations over 9 distinct guards** (including two producer
+sites). Eleven mutations share the exact-copy guard and two share the ordered
+cell-copy guard; the count describes data coverage, not 20 independent guards.
 
 | Mutation / counterfactual without the guard | Regression |
 |---|---|
@@ -158,8 +169,11 @@ an import error or unrelated exception is not counted as a kill.
 | Reordered or deduplicated cell lists would pass | `test_permuted_cells`, `test_deduplicated_cells` |
 | Cells from a refused resolution would pass | `test_refused_resolution` |
 | Missing anchor would produce a sidecar | `test_anchor_required` |
-| Contrasts could alias the same ordered join | `test_join_injective` |
-| J/token would be labelled J or placed in a `_j` cell | `test_ratio_in_j_cell` |
+| Contrasts of the same estimand kind could alias the same ordered join | `test_join_injective` |
+| Either registry per-token unit would be labelled J or placed in a J-typed cell | `test_ratio_in_j_cell` |
+| Absolute/per-token companions or different ratio forms would be incorrectly refused | `test_companion_estimands_share_ordered_cells` |
+| An invented unit or bare/incomplete B8 estimand could pass | `test_unit_vocabulary_matches_both_registries`, `test_ratio_requires_exact_b8_object` |
+| Extreme exponents would leak `decimal.InvalidOperation` through either API | `test_extreme_exponents_refuse_through_both_apis` |
 | Boolean would serve as a numeric bound | `test_bool_rejected` |
 | Float normalization would erase byte-level drift | `test_numeral_bytes_not_numeric_equality` |
 | Producer could substitute anchor for total | `test_copy_only_control` |
