@@ -12,6 +12,6 @@ rc=1 end=2026-09-08 08:52:28
 
 The three failures are all `test_run_campaign.IdleAdmissionCoreVerdictTests` (`test_cpu_admission_reads_final_attempt_telemetry`,
 `test_environment_refusal_does_not_hide_valid_retry_telemetry`, `test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound`):
-the load-sensitive class documented in 21g (passes alone; passed in joulewise-53's replays of PR #296 and #297 at lower load; this run
-overlapped joulewise-53's daytime seats). Shards 1–3 passed; `tests.test_paper_round7_artifacts` passed with the override. No failure is
+the load-sensitive class documented in 21g (there: one of its tests passed alone with strict_valid True; the class alone failed 2 of 68 on
+260f997b; the module passed in joulewise-53's replay of PR #296 in its scratch log). This run overlapped joulewise-53's daytime seats. Shards 1–3 passed; `tests.test_paper_round7_artifacts` passed with the override. No failure is
 in a file this branch touches; the arm-time sequence depends on none of them.

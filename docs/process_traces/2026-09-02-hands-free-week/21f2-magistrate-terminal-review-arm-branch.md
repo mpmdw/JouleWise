@@ -1,6 +1,6 @@
 # 21f2 — Magistrate terminal review, branch `bookkeeping/2026-09-09-rehearsal-arm` (headless activation 784a764e)
 
-Written 1788880058 2026-09-08 08:07:38 PDT; content reviewed: the whole branch range c6d64665..HEAD as of the final commit, which also adds this file's final revision, the replay record 21g2 and the 21e8 custody. Docs only.
+Written 1788880058 2026-09-08 08:07:38 PDT; content reviewed: the whole branch range 1c83f2af..HEAD (every branch commit) as of the commit that lands the 21e9 one-line corrections; this stamp predates that commit. Docs only.
 
 ## What this branch does
 Records joulewise-53's stand-down (precondition (b)), the synthesis author's ruling of record on D-175 condition 5 (21c), and
@@ -17,7 +17,8 @@ cycles. The classifier is on its fourth formulation; any further change goes thr
 - Reviews 21e5, 21e6, 21e7, 21e8 (all Opus) and the consult 21f-consult-2; every blocker's disposition is in the commits.
 
 ## Accepted limits (recorded, not cured by more prose)
-- Deltas 5–8 each found the class "self-report contradicts its artifact" in text this magistrate wrote (pid narration, a stale head in
+- Delta 9 (21e9) found two more instances introduced by the previous commit; both were cured as one-line corrections and no new prose
+  was added beyond this bullet. Deltas 5–8 each found the class "self-report contradicts its artifact" in text this magistrate wrote (pid narration, a stale head in
   this review, one over-claiming commit message ebf90cd6 corrected by 734dadec). Cure applied: deletion and one-line citations only;
   the classifier block is byte-identical since c6d64665. No further prose reformulation; residual risk is confined to prose, not to
   the arm-time mechanism, whose evidence is the artifacts under `21b-rehearsal-20260909-bench/`.

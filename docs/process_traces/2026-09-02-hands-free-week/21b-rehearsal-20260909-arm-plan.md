@@ -21,8 +21,8 @@ joulewise-53 has messaged that it stood down (its condition 2: no arming while i
 | commit b0c88632 | 01:11:22 | git |
 | commit a8cc6e68 (cold-gate AMEND relayed) | 01:20:08 | git |
 | commit 2987a626 | 01:20:19 | git |
-| activation 1ef89702 terminated | 01:33:28 | events.jsonl seq 5 epoch 1788856408.777 |
-| activation 784a764e spawned | 01:41:58 | events.jsonl seq 8 epoch 1788856918.677 |
+| activation 1ef89702 terminated | 01:33:28 | 21-activation-784a764e/events.jsonl seq 5 epoch 1788856408.777 |
+| activation 784a764e spawned | 01:41:58 | 21-activation-784a764e/events.jsonl seq 8 epoch 1788856918.677 |
 | commits 9a15338e / a6bff232 / 83b3ec5e | 01:48:16 / 01:48:47 / 02:01:16 | git |
 | commit dbd49c1d (21c: ruling B recorded) | 02:03:37 | git |
 | commit 0f3390c9 (fix round 1 landed) | 02:10:06 | git |
@@ -320,7 +320,7 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
   `pass3`-adjacent artifact `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`, with `ps -p 83953` at capture). Hold the arm
   while pid 83953 lives; a fresh stand-down message is promised by 1788941700 (01:15 PDT 2026-09-09); if none has arrived by
   1788942600 (01:30 PDT), its absence is judged ONLY by `ps -p 83953` showing the pid gone. Precondition (b) is therefore OPEN again.
-- Condition 5 ruling by the synthesis author (recorded verbatim in 21c §Ruling of record on condition 5): agent SESSIONS count;
+- Condition 5 ruling by the synthesis author (recorded in 21c §Ruling of record on condition 5, with a bracketed D6-2 note): agent SESSIONS count;
   Ed's ChatGPT.app helpers do not; the regex list is informational; the night is judged by `joulewise.night_gate.agent_census`
   (`pgrep -lf "codex|claude|t3"`, night_gate.py:38); ask Ed to quit the ChatGPT desktop app before the belt (02:45 PDT = epoch 1788947100) for a clean
   REHEARSAL_ONLY receipt (follow-ups on thread `1a0800cdb282c3f1`: `1a0816757635cf98`; the correction `1a081723350aea55` asking Ed to CLOSE the
@@ -349,12 +349,12 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
 
 ## Activation succession (2026-09-08 01:48:16 PDT (commit 9a15338e); F2; written by activation 784a764e)
 
-- Activation 1ef89702 (pid 84232 per `21-activation-1ef89702/magistrate.lock.json`) was terminated at 01:33:28 PDT (events.jsonl seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
+- Activation 1ef89702 (pid 84232 per `21-activation-1ef89702/magistrate.lock.json`) was terminated at 01:33:28 PDT (`21-activation-784a764e/events.jsonl` seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
   45-minute timer, and Claude Code's headless `-p` mode terminates a session 600 s after a turn ends while background
   tasks remain (`attempts/1ef89702-…/attempt-1.stderr.log`: "Background tasks still running after 600s; terminating.
   Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely."). The watchdog recorded `clean activation exit`
   (events seq 5, IDLE), `backoff has not expired` (seq 6, BACKOFF, 300 s), then spawned activation
-  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075 per `21-activation-784a764e/magistrate.lock.json`; `attempt: 2`).
+  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (`21-activation-784a764e/events.jsonl` seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075 per `21-activation-784a764e/magistrate.lock.json`; `attempt: 2`).
 - Consequence for this plan: the arming party is whichever headless activation is live when preconditions (a)+(b)
   hold. The NIGHT_HANDBACK text at H names activation 1ef89702 as the author of the arm request (true: emails
   `1a0800cdb282c3f1`/`1a08012045894ef7` were sent by it); the arm itself is executed and recorded by the live
