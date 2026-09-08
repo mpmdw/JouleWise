@@ -1,0 +1,36 @@
+{
+ "NIGHT-REHEARSAL-01": {
+  "goal": "After the watchdog install handoff, run one fresh REHEARSAL_STUB night through the installed LaunchAgent and night-driver courier before any real plan, then send the stage-1 email before the first diagnostic plan is armed.",
+  "fences": [
+   {
+    "authority": {
+     "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+     "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+    },
+    "rule": "Ed's standing NO overrides any armed night; the arming email precedes arming (cold gate coldgate-e10 (b))"
+   },
+   {
+    "authority": {
+     "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+     "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+    },
+    "rule": "Receipt classes are honest: REHEARSAL_STUB can never carry verdict GO; TRANSACTION_PACK cannot GO from stage-1 code; DIAGNOSTIC_NO_PACK records C2 as NOT_APPLICABLE with basis no_pack_by_design, never PASS"
+   },
+   {
+    "authority": {
+     "label": "D-127 zero-agent rule",
+     "path": "docs/decision_log.md"
+    },
+    "rule": "Zero-agent fence unchanged: the agent census (/usr/bin/pgrep -lf 'codex, claude, or t3 (alternation)' exit exactly 1, empty stdout) is the driver's first act and repeats every 30 s during the chain; any hit refuses or aborts the night"
+   }
+  ],
+  "acceptance": [
+   "cold_start.json recorded and COURIER_DEADLINE_S set from its median",
+   "A REHEARSAL_STUB result on a night-results branch produced by a launchd-started driver (not a shell-started one), with verdict REHEARSAL_ONLY",
+   "The courier email for that rehearsal is in Ed's inbox (message id recorded)",
+   "The stage-1 plan email (first armed date; launches without Ed's hand unless he replies NO) is sent before install_night_agent.sh arms a DIAGNOSTIC_NO_PACK plan",
+   "A rehearsal with the agents installed the MORNING BEFORE the armed night, so the pre-night 07:00 dead-man firing is observed standing down without writing anything but a log line (coldgate-d1 R-7 amendment)",
+   "After WATCHDOG-INSTALL-01, one fresh REHEARSAL_STUB night fires through the night driver's own courier before any real plan is armed"
+  ]
+ }
+}
