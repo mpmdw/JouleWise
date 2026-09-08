@@ -24,6 +24,7 @@ from joulewise.calibration_ledger import (
     CalibrationLedgerSnapshot,
     LedgerObservation,
     content_id_from_artifact_hashes,
+    probe_custody,
 )
 from joulewise.powermetrics_fiducial import (
     CAPTURE_TIME_FIELD,
@@ -1082,6 +1083,27 @@ def load_calibration_candidate(
 ) -> CalibrationCandidate | None:
     """Authenticate one standalone validation directory from primary bytes."""
 
+    original = Path(directory)
+
+    def inspect(mapped: Path) -> CalibrationCandidate | None:
+        mapped_runs_root = Path(runs_root)
+        if mapped != original:
+            # Preserve the candidate's relative identity when a backup moves.
+            try:
+                relative = original.absolute().relative_to(mapped_runs_root.absolute())
+            except ValueError:
+                return None
+            mapped_runs_root = mapped
+            for _ in relative.parts:
+                mapped_runs_root = mapped_runs_root.parent
+        return _load_calibration_candidate_unbounded(mapped, runs_root=mapped_runs_root)
+
+    return probe_custody(original, inspect, lambda: None)
+
+
+def _load_calibration_candidate_unbounded(
+    directory: Path, *, runs_root: Path
+) -> CalibrationCandidate | None:
     root = Path(runs_root).resolve()
     try:
         directory = Path(directory).resolve(strict=True)

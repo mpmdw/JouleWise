@@ -2634,5 +2634,66 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
 
 
+class CustodyCandidateProbeTests(unittest.TestCase):
+    def test_candidate_resolve_and_read_timeout_return_none(self):
+        import threading
+        import time
+        from joulewise import calibration_ledger as ledger
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            for target in ("pathlib.Path.resolve",
+                           "joulewise.calibration_bracketing.read_authentication_input"):
+                with self.subTest(target=target):
+                    release = threading.Event()
+                    entered = threading.Event()
+                    workers = []
+
+                    def blocked(*args, **kwargs):
+                        workers.append(threading.current_thread())
+                        entered.set()
+                        release.wait()
+                        raise FileNotFoundError("synthetic absent custody")
+
+                    try:
+                        with (
+                            patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+                            patch(target, side_effect=blocked),
+                        ):
+                            started = time.monotonic()
+                            self.assertIsNone(load_calibration_candidate(root, runs_root=root.parent))
+                            self.assertLess(time.monotonic() - started, 0.5)
+                            self.assertTrue(entered.is_set())
+                            self.assertTrue(workers[0].daemon)
+                            release.set()
+                            workers[0].join(1)
+                    finally:
+                        release.set()
+                        for worker in workers:
+                            worker.join(1)
+
+    def test_candidate_backup_override_skips_original_and_preserves_relative_root(self):
+        import os
+        from joulewise import calibration_ledger as ledger
+
+        original = ledger.BACKUP_ROOTS[0] / "runs/instrument_validation/member"
+        with (
+            patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}),
+            patch("threading.Thread.start", side_effect=AssertionError("probe")),
+        ):
+            self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent))
+        with tempfile.TemporaryDirectory() as temporary:
+            backup = Path(temporary).resolve()
+            mapped = backup / "runs/instrument_validation/member"
+            mapped.mkdir(parents=True)
+            with (
+                patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(backup)}),
+                patch("joulewise.calibration_bracketing._load_calibration_candidate_unbounded",
+                      return_value=None) as inspect,
+            ):
+                self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent))
+                inspect.assert_called_once_with(mapped, runs_root=backup / "runs")
+
+
 if __name__ == "__main__":
     unittest.main()

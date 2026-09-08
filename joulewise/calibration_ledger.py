@@ -36,12 +36,13 @@ import tempfile
 import threading
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Callable, TypeVar
 
 from joulewise.authentication_io import (
     V2AuthenticationInputError,
@@ -273,7 +274,10 @@ def content_id_from_artifact_hashes(artifact_sha256: Mapping[str, Any]) -> str |
 def artifact_hashes(custody_dir: Path) -> dict[str, str]:
     """Hash every governed artifact present in one finalized custody tree."""
 
-    root = Path(custody_dir)
+    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict)
+
+
+def _artifact_hashes_unbounded(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for relative in GOVERNED_ARTIFACTS:
         path = root / relative
@@ -1781,23 +1785,33 @@ def _custody_reasons(
         root = Path(observation.custody_locator)
         if not root.is_absolute():
             root = Path(repo_root) / root
-        for relative, expected in observation.artifact_sha256.items():
-            path = root / relative
-            try:
-                actual = hashlib.sha256(
-                    read_authentication_input(
-                        path,
-                        grammar="raw",
-                        label=(
-                            f"calibration ledger custody {observation.attempt_id} "
-                            f"artifact {relative}"
-                        ),
-                    )
-                ).hexdigest()
-            except OSError:
-                return {"calibration_ledger_custody_invalid"}
-            if actual != expected:
-                return {"calibration_ledger_custody_invalid"}
+        reasons = probe_custody(
+            root, lambda path: _observation_custody_reasons(observation, path),
+            lambda: {"calibration_ledger_custody_invalid"},
+        )
+        if reasons:
+            return reasons
+    return set()
+
+
+def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
+    for relative, expected in observation.artifact_sha256.items():
+        path = root / relative
+        try:
+            actual = hashlib.sha256(
+                read_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=(
+                        f"calibration ledger custody {observation.attempt_id} "
+                        f"artifact {relative}"
+                    ),
+                )
+            ).hexdigest()
+        except OSError:
+            return {"calibration_ledger_custody_invalid"}
+        if actual != expected:
+            return {"calibration_ledger_custody_invalid"}
     return set()
 
 
@@ -2333,6 +2347,13 @@ def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
+    return probe_custody(
+        directory, _assert_absolute_nonsymlink_directory_unbounded,
+        lambda: _missing_custody(directory),
+    )
+
+
+def _assert_absolute_nonsymlink_directory_unbounded(directory: Path) -> Path:
     path = Path(directory)
     if not path.is_absolute():
         raise CalibrationLedgerError("custody locator is not absolute")
@@ -2354,6 +2375,13 @@ def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
 
 
 def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
+    return probe_custody(
+        directory, lambda root: _read_contained_nofollow_unbounded(root, relative),
+        lambda: _missing_custody(directory),
+    )
+
+
+def _read_contained_nofollow_unbounded(directory: Path, relative: str) -> bytes:
     root = _assert_absolute_nonsymlink_directory(directory)
     try:
         return read_authentication_input_nofollow(
@@ -2369,6 +2397,13 @@ def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
 
 
 def _governed_raw_nofollow(directory: Path) -> dict[str, bytes]:
+    return probe_custody(
+        directory, _governed_raw_nofollow_unbounded,
+        lambda: _missing_custody(directory),
+    )
+
+
+def _governed_raw_nofollow_unbounded(directory: Path) -> dict[str, bytes]:
     return {
         relative: _read_contained_nofollow(directory, relative)
         for relative in GOVERNED_ARTIFACTS
@@ -4647,7 +4682,96 @@ def validate_frozen_reservation_plan(
     return _frozen_mapping(value)
 
 
+BACKUP_ROOTS = (
+    Path("/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup"),
+)
+CUSTODY_PROBE_TIMEOUT_S = 2.0
+
+
+_CustodyResult = TypeVar("_CustodyResult")
+_CUSTODY_PROBE_ACTIVE: ContextVar[bool] = ContextVar("custody_probe_active", default=False)
+
+
+def _custody_probe_paths(path: Path) -> tuple[Path, ...]:
+    """Replace default backup roots lexically; never resolve the old mount."""
+
+    override = os.environ.get("JOULEWISE_BACKUP_ROOTS")
+    if override is not None:
+        for root in BACKUP_ROOTS:
+            try:
+                relative = Path(os.path.abspath(path)).relative_to(root)
+            except ValueError:
+                continue
+            return tuple(Path(part) / relative for part in override.split(os.pathsep) if part)
+    return (path,)
+
+
+def _custody_backup_disabled(path: Path) -> bool:
+    return not _custody_probe_paths(path)
+
+
+def probe_custody(
+    path: Path,
+    inspect: Callable[[Path], _CustodyResult],
+    absent: Callable[[], _CustodyResult],
+) -> _CustodyResult:
+    """Run one read-only custody inspection within a shared two-second budget.
+
+    Backup overrides preserve the suffix under the default root. The first
+    existing replacement is authoritative, including any integrity failure.
+    Empty overrides and timeouts invoke the caller's existing absent outcome.
+    Nested reads stay inside the outer worker and budget. A stalled daemon
+    may outlive the call, but cannot publish a partial result to the caller.
+    """
+
+    if _CUSTODY_PROBE_ACTIVE.get():
+        return inspect(path)
+    paths = _custody_probe_paths(path)
+    if not paths:
+        return absent()
+    result: list[_CustodyResult] = []
+    errors: list[BaseException] = []
+
+    def probe() -> None:
+        token = _CUSTODY_PROBE_ACTIVE.set(True)
+        try:
+            if paths == (path,):
+                result.append(inspect(path))
+            else:
+                for candidate in paths:
+                    if candidate.exists():
+                        result.append(inspect(candidate))
+                        break
+                else:
+                    result.append(absent())
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            _CUSTODY_PROBE_ACTIVE.reset(token)
+
+    # Authentication reads use context-local custody accounting.
+    context = copy_context()
+    worker = threading.Thread(
+        target=context.run, args=(probe,), daemon=True, name="custody-locator-probe"
+    )
+    worker.start()
+    worker.join(CUSTODY_PROBE_TIMEOUT_S)
+    if worker.is_alive():
+        return absent()
+    if errors:
+        raise errors[0]
+    return result[0]
+
+
+def _missing_custody(path: Path) -> Any:
+    raise CalibrationLedgerError(f"custody locator is missing: {path}")
+
+
 def _custody_state(path: Path) -> str:
+    return probe_custody(path, _custody_state_unbounded, lambda: "absent")
+
+
+def _custody_state_unbounded(path: Path) -> str:
     try:
         if not path.exists():
             return "absent"
