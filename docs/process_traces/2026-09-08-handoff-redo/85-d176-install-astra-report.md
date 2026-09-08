@@ -2,14 +2,14 @@
 {
   "schema": "claude-codex-report/v1",
   "genre": "implementation",
-  "status": "blocked",
-  "completion": "partial",
-  "summary": "Installed independent D-176 third-pass fixes; F3 live lineage mode requires the magistrate ruling requested by the brief.",
+  "status": "clean",
+  "completion": "complete",
+  "summary": "Installed the magistrate F3 caller-mode forwarding ruling with checkout-verified call sites and the stale-boot clause-map counterfactual.",
   "workspace": {
-    "base_requested": "d3cab2d4",
+    "base_requested": "07dfd03a",
     "base_mode": "exact",
-    "head_start": "d3cab2d4c2937886a25659756374483c7a8dc578",
-    "head_end": "d3cab2d4c2937886a25659756374483c7a8dc578",
+    "head_start": "07dfd03aee1b8550a9651465f86f011308fad40b",
+    "head_end": "07dfd03aee1b8550a9651465f86f011308fad40b",
     "upstream_end": null,
     "branch": "feat/2026-09-08-d176-stage3-ruling"
   },
@@ -17,12 +17,10 @@
     "docs/contracts/pack_night_go_receipt.md",
     "docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md"
   ],
-  "unowned_dirty": [
-    "docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md"
-  ],
+  "unowned_dirty": [],
   "verdict": {
-    "implementation": "partial",
-    "acceptance": "needs_ruling"
+    "implementation": "implemented",
+    "acceptance": "ready"
   },
   "verification": [
     {
@@ -58,22 +56,7 @@
       }
     }
   ],
-  "flags": [
-    {
-      "id": "F3",
-      "kind": "lead_ruling",
-      "level": "blocking",
-      "text": "NEEDS_RULING: authenticate_launch_lineage defaults to historical False but forwards require_current_boot, and its live locator caller explicitly passes True. An unconditional historical reader mode conflicts with this live route.",
-      "needs": "Rule whether the extended reader forwards the lineage mode (recommended) or always uses False while retaining the separate live boot checks."
-    },
-    {
-      "id": "F5-F6",
-      "kind": "baseline_drift",
-      "level": "nonblocking",
-      "text": "Verified t0_rehearsal.py pins differ from the supplied refutation: REHEARSAL_RECEIPT_SCHEMA is line 49 and D149_SCHEMA line 48; line 50 is PROCESS_LINEAGE_SCHEMA. Installed actual code pins.",
-      "needs": ""
-    }
-  ]
+  "flags": []
 }
 ```
 
@@ -335,8 +318,9 @@ rc=0
 
 ### Third pass (2026-09-08) — F1–F11 fix round
 
-This section and the current header describe this turn; prior sections retain
-historical installation evidence. Exact requested head matched d3cab2d4.
+This section records the initial third pass; its F3 ruling follow-up below and
+the current header describe the resumed turn. Prior sections retain historical
+installation evidence. The initial third-pass requested head matched d3cab2d4.
 Mission M0 found no active stop card or global selection gate; this explicit
 bounded [AGENT] fix brief selects the documentation work. Only the contract and
 this report were modified. File 15 was already present and untracked at intake;
@@ -357,7 +341,7 @@ consult ran. Queue, restart and decision-log updates remain outside this scope.
 | F10 | §7.1 explicitly splits tests/test_launch_window.py methods between seats 3/4 and scripts/run_night.py symbols between seats 2/4, with lead reconciliation and separate worktrees. |
 | F11 | Read `scripts/magistrate_watchdog.py:686`: NightPlan.from_mapping parses the plan. §§1/7.1/9 assign the read-only v3-pack-plan tolerance check to seat 2. |
 
-### NEEDS_RULING — F3 live lineage exception
+### Historical NEEDS_RULING — F3 live lineage exception (resolved below)
 
 **Question:** Should the extended reader at
 `joulewise/arm_readiness.py:10145` forward `authenticate_launch_lineage`'s
@@ -406,6 +390,61 @@ $ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_docs_freshness
 ...............................
 ----------------------------------------------------------------------
 Ran 31 tests in 0.922s
+
+OK
+rc=0
+```
+
+```text
+$ git diff --check
+(no output)
+rc=0
+```
+
+### Third-pass F3 ruling follow-up (2026-09-08)
+
+The resumed magistrate brief resolves the historical F3 question above:
+`_read_v2_consumption` (and its v3 successor) forwards `require_current_boot`
+unchanged, with each caller fixing its mode. Installed the supplied ruling as
+§10.1 F3, propagated the exhaustive caller census to §3 and removed the stale
+lineage blocker from the status and seat-3 ownership row. §9 retains the
+four-site migration row and adds the exact counterfactual: “lineage reader
+hardcodes False and accepts a stale-boot record on the live path”. Its future
+runtime assertion remains NOT PINNED.
+
+Read `joulewise/arm_readiness.py` at the exact requested checkout
+`07dfd03aee1b8550a9651465f86f011308fad40b` to verify every pin below; no line
+number is inherited solely from the brief or refutation:
+
+| Reader call / caller | Verified line(s) | Required extended-reader mode and inspected evidence |
+|---|---|---|
+| `verify_consumed_launch` reader call | :9470 | Forward caller mode: live True (default :9457); explicit historical False. Existing ARM replay forwards the mode at :9475. |
+| `_lifecycle_receipt_path` reader call | :9797 | True for the live consumer/child path. |
+| Lifecycle-receipt append reader call | :9939 | False (historical); existing ARM replay passes False at :9945. Preserve the separate current-boot comparison at :9950–9955. |
+| `authenticate_launch_lineage` reader call | :10145 | Forward caller mode unchanged; defaults False at :10111 and existing ARM replay forwards it at :10156. |
+| Live lineage caller | :10536, argument :10539 | Calls `authenticate_launch_lineage` with `require_current_boot=True`. |
+| Historical bundle lineage caller | :10683–10684 | Omits the argument, selecting False from :10111. |
+
+The current reader definition at :8975 has no mode parameter. These are
+contract migration requirements, not a claim of implemented v3 behavior or
+live hardware validation. The four reader calls are the exhaustive census;
+the last two rows are lineage callers, not additional reader calls.
+
+Mission M0 found no active stop card or global selection gate. The worktree
+was clean at intake and the requested branch/head matched. Only the two
+allowlisted documentation files changed; no commit was made. No branch
+upstream is configured. The focused docs suite is proportionate to this
+contract/report-only change; no runtime code changed, so the full suite was
+not required. Next exact step: the lead reviews the F3 delta and passes the
+ruled contract through its refutation/landing gate before successor code work.
+
+Acceptance log: `/private/tmp/d176-f3-docs-freshness.log` (outside the repository).
+
+```text
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_docs_freshness
+...............................
+----------------------------------------------------------------------
+Ran 31 tests in 0.900s
 
 OK
 rc=0

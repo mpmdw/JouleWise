@@ -2,7 +2,7 @@
 
 Status: **DRAFT for the Opus contract refuter; wire details ruled by the
 interactive magistrate on 2026-09-08 and installed in §§8 and 10. (The
-third-pass §10.1 rulings govern amended wire details; F3 lineage mode awaits the flagged ruling.)** No code or live gate
+third-pass §10.1 rulings govern amended wire details; F3 forwards the caller mode under the magistrate ruling.)** No code or live gate
 is closed by this document. D-176 is adopted by cold gate + Opus refuter +
 magistrate synthesis 2026-09-08 (Ed may veto).
 
@@ -331,7 +331,9 @@ legacy branch untouched. Rename/extend `_read_v2_consumption`
 (`joulewise/arm_readiness.py:8975–8992`) to accept v3 always and v2 ONLY with
 `require_current_boot=False` for historical replay; live v2 refuses with
 `LaunchLineageError("launch_go_receipt_missing", ...)`. Schema acceptance does
-not bypass any other binding or boot check. The exhaustive four call sites of
+not bypass any other binding or boot check. The extended reader forwards
+`require_current_boot` unchanged; each caller fixes its own value. The exhaustive
+four call sites of
 `_read_v2_consumption` in `joulewise/arm_readiness.py` at the inspected head are:
 
 | Call site | Ruled `require_current_boot` for the extended reader |
@@ -339,12 +341,19 @@ not bypass any other binding or boot check. The exhaustive four call sites of
 | `verify_consumed_launch`, `joulewise/arm_readiness.py:9470` | Forward its mode: True on live replay (default at :9457); False only on explicit historical replay |
 | `_lifecycle_receipt_path`, `joulewise/arm_readiness.py:9797` | True for the live consumer/child path; v2 refuses |
 | Lifecycle-receipt append, `joulewise/arm_readiness.py:9939` | False (historical ARM replay at :9945); preserve the separate current-boot guard at :9950–9955 |
-| `authenticate_launch_lineage`, `joulewise/arm_readiness.py:10145` | False for historical lineage verification; **NEEDS_RULING** for its live caller: :10111 defaults False but :10156 forwards the mode, and :10536–10540 explicitly requests True. Do not silently weaken that route; report 85 records the question. |
+| `authenticate_launch_lineage`, `joulewise/arm_readiness.py:10145` | Forward its own caller mode unchanged: True for the live check, False for historical lineage replay (default at :10111; existing ARM replay forwards it at :10156) |
+
+The live lineage caller invokes `authenticate_launch_lineage` at
+`joulewise/arm_readiness.py:10536` with `require_current_boot=True` at :10539.
+Historical bundle lineage replay at :10683–10684 omits the mode, taking the
+False default at :10111. These line numbers and all four reader calls above
+were verified by reading this checkout at `07dfd03a`. The current reader at
+:8975 has no mode parameter; the table specifies the required v2/v3 migration.
 
 The live `_consume_launch_capability` path requires current-boot validation
 (True); it is not an additional `_read_v2_consumption` call site. Seat 3 updates
-all four calls, preserving live/historical separation; the exceptional lineage
-mode is blocked on the lead's ruling. For v3,
+all four calls, preserving live/historical separation and forwarding the lineage
+caller mode unchanged. For v3,
 `verify_consumed_launch` must re-read GO bytes from `go_receipt.path`, recompute SHA-256 and parse those bytes. A digest
 mismatch OR a parsed `receipt_id` mismatch with the recorded identity refuses
 with `launch_go_receipt_invalid`; `detail` names `sha256` or `receipt_id`,
@@ -565,7 +574,7 @@ call-site repairs within that file; unrelated edits remain excluded.
 |---|---|---|
 | 1 — this third-pass contract install | `docs/contracts/pack_night_go_receipt.md`; `docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md`; `docs/process_traces/2026-09-08-handoff-redo/78-coldgate-packet-d169-stage3/15-opus-contract-refutation-go-receipt.md` | Contract §§1–10.1; report third pass. Preserve file 15 body unchanged. No runtime or decision-log edits. |
 | 2 — producer, plan and night orchestration | `joulewise/night_plan_writer.py`; `joulewise/night_gate.py`; `scripts/install_night_agent.sh`; `scripts/run_night.py`; `joulewise/arm_readiness.py`; `joulewise/t0_rehearsal.py`; `tests/test_night_gate.py`; `tests/test_install_night_agent.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/night_plan_writer.py:15–66` mapping/serialization/`write_night_plan`; `joulewise/night_gate.py:21–23,106–136,187–300` v3 `NightPlan` and exact keys, `:313–350` shared condition shape; `:979–1038` receipt validator is read-only and NOT modified, `:583,738–746` valid-pack-only fence lift and C1–C5; `scripts/install_night_agent.sh:39–75,132–141` validated absolute plan-path installation; `scripts/run_night.py:891,1149–1181` persisted plan attempt/byte hash, ARM-before-GO production, record locators, exact T-0 evidence set/digest, separate create-once 0600 `night/go_receipt.json`, unchanged `night/receipt.json` for every class and refusal (no GO on refusal), and `--night-plan`/`--go-receipt` argv transport; `joulewise/arm_readiness.py:223` constants area ONLY for new frozen `PRODUCTION_CUSTODY_ROOTS`; `joulewise/t0_rehearsal.py:190–207,779–787` derive G6 census/read shared constant; each listed test file `:1` focused producer/plan/G6 regressions; contract §9 final pins. B1/B5/S2/S3/S4/S6/N1. |
-| 3 — consumer, v3 consumption, replay and child | `joulewise/arm_readiness.py`; `scripts/launch_window.py`; `docs/contracts/d078_reason_registry_amendment.md`; `tests/test_arm_readiness_schemas.py`; `tests/test_arm_readiness_lifecycle.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/arm_readiness.py:223–231` launch reason registry, `:670–702` untouched legacy / distinct v2 / v3 and `GO_RECEIPT_REFERENCE_KEYS`, `:1048–1062,1103–1112` correct exception families, `:2587` validator branches, `:8975–8992` renamed/extended reader and its callers, `:9451–9495` replay (ARM window id `:9486`), `:9573–9791` callee keywords, B4 ordered GO checks, pinned plan read/digest, both record locators and copied fields, exact T-0 set/digest, C1–C5, shared-root purpose predicate, v3 one-use write (ARM window id `:9748`), `:9470,9797,9939,10145` exhaustive reader calls/modes in §3 (lineage exception awaits ruling); `:9796–9802` child v3 reader; `scripts/launch_window.py:39–58` required `--night-plan`/`--go-receipt` flags and omission-refusal regressions; `:102,239–312` launch context/GO/confirmation transport, child path, shared JSON refusal handler; registry amendment `:1` R-8 documentation of both GO codes; each listed test file `:1` focused schema/live-historical/consumer/CLI/child regressions; contract §9 final pins. B1–B5/S1/S3–S6/N1/N2. |
+| 3 — consumer, v3 consumption, replay and child | `joulewise/arm_readiness.py`; `scripts/launch_window.py`; `docs/contracts/d078_reason_registry_amendment.md`; `tests/test_arm_readiness_schemas.py`; `tests/test_arm_readiness_lifecycle.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/arm_readiness.py:223–231` launch reason registry, `:670–702` untouched legacy / distinct v2 / v3 and `GO_RECEIPT_REFERENCE_KEYS`, `:1048–1062,1103–1112` correct exception families, `:2587` validator branches, `:8975–8992` renamed/extended reader and its callers, `:9451–9495` replay (ARM window id `:9486`), `:9573–9791` callee keywords, B4 ordered GO checks, pinned plan read/digest, both record locators and copied fields, exact T-0 set/digest, C1–C5, shared-root purpose predicate, v3 one-use write (ARM window id `:9748`), `:9470,9797,9939,10145` exhaustive reader calls/modes in §3 (lineage forwards its caller mode); `:9796–9802` child v3 reader; `scripts/launch_window.py:39–58` required `--night-plan`/`--go-receipt` flags and omission-refusal regressions; `:102,239–312` launch context/GO/confirmation transport, child path, shared JSON refusal handler; registry amendment `:1` R-8 documentation of both GO codes; each listed test file `:1` focused schema/live-historical/consumer/CLI/child regressions; contract §9 final pins. B1–B5/S1/S3–S6/N1/N2. |
 | 4 — rehearsal purpose/G7 producer and acceptance | `scripts/run_night.py`; `joulewise/t0_rehearsal.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `scripts/run_night.py:61–64,1149–1181` real production-launcher G7 presentation and exact `night/g7_refusal.json` with custody-wide consumption/`chain.started` absence; `joulewise/t0_rehearsal.py:38,49,88–95` existing rehearsal schema/class; `:48,86–87,714–730` G5 schema/key sets and C1–C5 recomputation and `:792` G7 artifact acceptance; each listed test file `:1` authentic producer G7/class-order and four-case purpose/root regressions through the seat-3 consumer; contract §9 final pins. B4/S1/S4/N1; uses seat-2 producer and seat-3 consumer. |
 
 Read-only dependencies include
@@ -773,7 +782,8 @@ map rule. Graph installation assertions are in the installation report.
 | §10 N2: named seven-key GO reference | G §§3, 8.1, 10 N2 | Seat 3 new `GO_RECEIPT_REFERENCE_KEYS` at `joulewise/arm_readiness.py:681–702` | NOT PINNED: seven-key exactness, including plan digest | Reuse two-key reference validator or omit plan digest |
 | §10.1 F1: fourth keyword and installer-pinned plan argv | G §§2–3, 5, 7.1 | Seat 2 driver `scripts/run_night.py:1149–1181`; seat 3 parser `scripts/launch_window.py:39–58` and callee `joulewise/arm_readiness.py:9573–9608` | NOT PINNED: substituted-plan digest refusal and omitted night_plan/--night-plan refusal | consumer accepts a caller-substituted plan |
 | §10.1 F2: separate create-once 0600 GO custody | G §§2–3, 7.1; S3 amendment | Seat 2 `scripts/run_night.py:1149–1150`; read-only validator `joulewise/night_gate.py:979–985` | NOT PINNED: permissions/no-clobber and every-class/refused-pack receipt validation | Overwrite GO, broaden night_gate receipt keys, or create GO on refusal |
-| §10.1 F3: exhaustive four reader call modes | G §§3, 5, 7.1 | Seat 3 `joulewise/arm_readiness.py:9470,9797,9939,10145` | NOT PINNED: live-v2 refusal and historical-v2 replay; live lineage exception NEEDS_RULING | Omit one call-site migration or weaken a live replay to historical |
+| §10.1 F3: exhaustive four reader call modes | G §§3, 5, 7.1 | Seat 3 `joulewise/arm_readiness.py:9470,9797,9939,10145` | NOT PINNED: live-v2 refusal and historical-v2 replay; lineage forwards its caller mode unchanged | Omit one call-site migration or weaken a live replay to historical |
+| §10.1 F3: lineage caller-mode forwarding | G §§3, 10.1 F3 | Seat 3 `joulewise/arm_readiness.py:10145,10156`; live caller :10536 with True at :10539; historical default :10111 | NOT PINNED: implementing seat must pin live stale-boot refusal and historical lineage replay with False | lineage reader hardcodes False and accepts a stale-boot record on the live path |
 | §10.1 F4/F5: actual rehearsal receipt_class/schema | G §§3, 6; B4 correction | Seat 3 callee `joulewise/arm_readiness.py:9573`; seat 4 schema dependency `joulewise/t0_rehearsal.py:38,49,88–95` | NOT PINNED: class-specific production refusal and G7 presented_class equality | Read nonexistent class instead of receipt_class |
 | §10.1 F6: G5 schema and full C1–C5 evaluation | G §§6, 7.1 | Seat 4 `joulewise/t0_rehearsal.py:48,86–87,714–730` | NOT PINNED: new GO accepted only after evidence recomputation; legacy schema refused | Keep G5's legacy schema or three-key condition validation |
 | §10.1 F7: GO argv omission refusal | G §§3, 5, 7.1 | Seat 3 `scripts/launch_window.py:39–58`; seat 2 driver transport | NOT PINNED: real CLI refuses omitted --go-receipt before consumption | Launch without --go-receipt |
@@ -860,7 +870,7 @@ duplicates. N2 — the six/seven-key [seven, per B1] `go_receipt` block's consta
 ### 10.1 third-pass rulings (2026-09-08)
 
 The magistrate adopts F1–F11 from the second Opus contract refutation, subject
-to the express F2 ruling and the code-contradiction escalation in F3. This block
+to the express F2 ruling and the caller-mode forwarding ruling in F3. This block
 supersedes conflicting second-pass wording; §§2/3/5/6/7.1/9 carry its operative
 requirements. The supplied scratchpad refutation was read first; file 15 is the
 retained earlier refutation and its body is unchanged.
@@ -877,12 +887,10 @@ retained earlier refutation and its body is unchanged.
   S3 retains only its shared condition shape/order/vocabulary requirement and
   now states this separate-file rule. The custody and consumption locator tables
   and seat 2 seams name the GO path.
-- **F3 — ADOPTED, live-lineage exception NEEDS_RULING.** §3 exhaustively lists
-  all four reader call sites and their ruled modes: live consumer/child and
-  `verify_consumed_launch` live replay True; lifecycle-receipt append and
-  historical lineage verification False. The code also supports a live lineage
-  route requesting True; report 85 asks the lead to rule it rather than guessing.
-  B2/S5's reader migration uses this exhaustive list, not an open-ended list.
+- **F3 — RULED.** _read_v2_consumption (and its v3 successor) forwards require_current_boot unchanged; each caller fixes its own value: the live consumer path and verify_consumed_launch's live replay = True; the lifecycle-receipt append = False (historical); lineage verification forwards its own caller — the live check passes True, historical lineage replays pass False.
+  §3 lists the exhaustive four call sites with per-site modes and the live
+  lineage caller, all verified against `joulewise/arm_readiness.py` at
+  `07dfd03a`. B2/S5's reader migration uses this exhaustive list.
 - **F4 — ADOPTED.** The G7 source field is `receipt_class`, including the
   consumer detail and `presented_class`; corrected in §§3/6 and B4.
 - **F5 — ADOPTED with verified pin correction.** B4 names
