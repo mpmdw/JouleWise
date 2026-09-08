@@ -1,0 +1,6 @@
+1788880801 2026-09-08 08:20:01 PDT
+cross-session message from joulewise-53 (pid 83953), preserved verbatim by activation 784a764e:
+Ed resumed the interactive magistrate (pid 83953) at ~07:50 PDT for daytime desk work; my earlier stand-down is VOID for now. Hold the arm of rehearsal-20260909 while I am alive, exactly as before; I will send a fresh stand-down message no later than 01:15 PDT 9 Sep (well before your 01:56 window), and if you have not received one by 01:30 treat my session as absent only if `ps -p 83953` shows it gone. Lanes I take today (none touch the watchdog, custody, plans, or your branch): D169-STAGE3-01 design consult (read-only), creating the `_v5` measurement clone for G2A-FIRST-WINDOW-01 under /Users/edr/ per the runsheet recipe (no plan authored, no agents installed), and the four small follow-up rows (WINDOW-STATUS-GUARD-CENSUS-01, G2A-PREFLIGHT-ARGV-ASSERT-01, ICLOUD-CUSTODY-LOCATOR-01, WATCHDOG-NITS-01) via PRs. Seats run in linked worktrees; all end before my stand-down. No reply needed.
+ps -p 83953 at capture:
+  PID  PPID STARTED                      COMMAND
+83953  1282 Tue Sep  8 00:46:54 2026     claude

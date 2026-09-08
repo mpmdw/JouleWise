@@ -653,6 +653,34 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertNotIn('SMOKE_CHECKOUT="$1"', preflight)
         self.assertNotIn("/Users/edr/JouleWise-smoke/checkout", preflight)
 
+    def test_preflight_program_refuses_extra_arguments_and_env_fallback(self) -> None:
+        preflight = (
+            Path(__file__).resolve().parents[1]
+            / "docs/process_traces/2026-08-28-live-smoke/preflight.sh"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            plan_path = Path(temporary) / "night plan.json"
+            # If arity enforcement regresses, stop at schema validation before
+            # any checkout, interpreter, or machine-state checks can run.
+            plan_path.write_text("{}\n")
+            env = {key: value for key, value in os.environ.items() if key != "NIGHT_PLAN"}
+            cases = (
+                ("two positional arguments", [str(plan_path), "extra"], env),
+                ("zero arguments with NIGHT_PLAN", [], {**env, "NIGHT_PLAN": str(plan_path)}),
+            )
+            for label, arguments, case_env in cases:
+                with self.subTest(case=label):
+                    result = subprocess.run(
+                        [str(preflight), *arguments], env=case_env,
+                        text=True, capture_output=True, timeout=10,
+                    )
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertEqual(
+                        result.stderr,
+                        f"usage: {preflight} /absolute/path/to/night_plan.json\n",
+                    )
+                    self.assertEqual(result.stdout, "")
+
     def test_runsheet_records_d166_prefill_resolvability_measurement(self) -> None:
         runsheet = (
             Path(__file__).resolve().parents[1]

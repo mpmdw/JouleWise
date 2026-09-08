@@ -1,0 +1,60 @@
+1788878322 2026-09-08 07:38:42 PDT
+step-4 block (post delta-5 cures, path rule for the app's Electron helpers) executed live as a dry classification; nothing armed:
+foreign agent sessions (cond. 5, must be empty): [(7143, '/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/c'), (7631, '/Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inh'), (7632, '/Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inh'), (7633, '/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /'), (7634, '/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /'), (7644, '/Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://'), (7901, '/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendo'), (16479, '/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/c'), (83953, 'claude'), (83975, 'node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="'), (83977, '/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendo')]
+informational matches (Ed's ChatGPT.app tree / substring false positives): [(58633, '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resource'), (82303, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82305, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82316, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82317, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82318, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82362, '/Applications/ChatGPT.app/Contents/Resources/codex -c features.code_mode_host=true app-ser'), (82386, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82387, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (82551, '/Users/edr/.codex/computer-use/Codex Computer Use.app/Contents/MacOS/SkyComputerUseService'), (83044, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797'), (83054, '/Applications/ChatGPT.app/Contents/Frameworks/Codex Framework.framework/Versions/152.0.797')]
+production agent_census argv output (pgrep exit 0) — recorded, not gating the arm:
+7143 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/cache/openai-bundled/unified-computer-use/26.901.51231/scripts/launch.mjs
+7631 /Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inherit="all" -c default_permissions="node_repl" -c permissions.node_repl={filesystem = {"/Applications/ChatGPT.app/Contents/Resources/cua_node/bin" = "read", "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules" = "read", "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/.tmptmcCtC" = "read", ":root" = "read"}, network = {enabled = false}} -- /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/.tmptmcCtC/kernel.js --session-id 8d47b5ce3a394ca8b30ba44f6abace1d --working-dir /private/tmp/claude-501/-Users-edr-code-JouleWise/1d65b6ea-5518-4207-8f65-31f8bf376204/scratchpad/cu-probe
+7632 /Applications/ChatGPT.app/Contents/Resources/codex sandbox -c shell_environment_policy.inherit="all" -c default_permissions="node_repl" -c permissions.node_repl={filesystem = {"/Applications/ChatGPT.app/Contents/Resources/cua_node/bin" = "read", "/Applications/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules" = "read", "/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/.tmptmcCtC" = "read", ":root" = "read"}, network = {enabled = false}} -- /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/.tmptmcCtC/trusted-worker.js /private/tmp/claude-501/-Users-edr-code-JouleWise/1d65b6ea-5518-4207-8f65-31f8bf376204/scratchpad/cu-probe
+7633 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/.tmptmcCtC/kernel.js --session-id 8d47b5ce3a394ca8b30ba44f6abace1d --working-dir /private/tmp/claude-501/-Users-edr-code-JouleWise/1d65b6ea-5518-4207-8f65-31f8bf376204/scratchpad/cu-probe
+7634 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node --experimental-vm-modules /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/.tmptmcCtC/trusted-worker.js /private/tmp/claude-501/-Users-edr-code-JouleWise/1d65b6ea-5518-4207-8f65-31f8bf376204/scratchpad/cu-probe
+7644 /Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://
+7901 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex-code-mode-host
+15932 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'while true; do python3 - <<'"'"'PY'"'"'
+import subprocess
+rows={}
+for l in subprocess.run(["ps","-axo","pid=,ppid=,etime=,cputime=,command="],capture_output=True,text=True).stdout.splitlines():
+    p=l.split(None,4)
+    if len(p)>=5: rows[int(p[0])]=(int(p[1]),p[2],p[3],p[4])
+def mine(p):
+    while p and p!=1 and p in rows:
+        if p==83086: return True
+        p=rows[p][0]
+    return False
+def secs(e):
+    parts=[int(x) for x in e.replace('"'"'-'"'"','"'"':'"'"').split('"'"':'"'"')]
+    return sum(v*m for v,m in zip(reversed(parts),(1,60,3600,86400)))
+for pid,(pp,et,ct,cmd) in rows.items():
+    if '"'"'paper_excursion_decomposition.py'"'"' in cmd and cmd.lstrip().startswith('"'"'/opt/homebrew'"'"') and mine(pid) and secs(et)>180:
+        print(f"STALL pid={pid} etime={et} cputime={ct} (own descendant, python child)")
+PY
+sleep 60; done' && pwd -P >| /tmp/claude-05d8-cwd
+16479 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/cache/openai-bundled/unified-computer-use/26.901.51231/scripts/launch.mjs
+51556 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true && setopt NO_EXTENDED
+exit code: 1
+--- ancestry of every process whose command mentions ChatGPT.app or .codex/:
+7142 chain: [7142, 83977, 83975, 83953, 1282, 1278, 1212] | root: /System/Applications/Utilities/Terminal.app/Conten
+7143 chain: [7143, 83977, 83975, 83953, 1282, 1278, 1212] | root: /System/Applications/Utilities/Terminal.app/Conten
+7210 chain: [7210, 7143, 83977, 83975, 83953, 1282, 1278, 1212] | root: /System/Applications/Utilities/Terminal.app/Conten
+7631 chain: [7631, 7210, 7143, 83977, 83975, 83953, 1282, 1278] | root: /System/Applications/Utilities/Terminal.app/Conten
+7632 chain: [7632, 7210, 7143, 83977, 83975, 83953, 1282, 1278] | root: /System/Applications/Utilities/Terminal.app/Conten
+7633 chain: [7633, 7631, 7210, 7143, 83977, 83975, 83953, 1282] | root: /System/Applications/Utilities/Terminal.app/Conten
+7634 chain: [7634, 7632, 7210, 7143, 83977, 83975, 83953, 1282] | root: /System/Applications/Utilities/Terminal.app/Conten
+7644 chain: [7644, 7210, 7143, 83977, 83975, 83953, 1282, 1278] | root: /System/Applications/Utilities/Terminal.app/Conten
+16479 chain: [16479, 83977, 83975, 83953, 1282, 1278, 1212] | root: /System/Applications/Utilities/Terminal.app/Conten
+16480 chain: [16480, 83977, 83975, 83953, 1282, 1278, 1212] | root: /System/Applications/Utilities/Terminal.app/Conten
+16552 chain: [16552, 16479, 83977, 83975, 83953, 1282, 1278, 1212] | root: /System/Applications/Utilities/Terminal.app/Conten
+52356 chain: [52356, 83086, 83075] | root: /opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks
+82301 chain: [82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82303 chain: [82303] | root: /Applications/ChatGPT.app/Contents/Frameworks/Code
+82305 chain: [82305] | root: /Applications/ChatGPT.app/Contents/Frameworks/Code
+82316 chain: [82316, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82317 chain: [82317, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82318 chain: [82318, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82354 chain: [82354, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82362 chain: [82362, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82386 chain: [82386, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82387 chain: [82387, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+82551 chain: [82551, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+83044 chain: [83044, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
+83054 chain: [83054, 82301] | root: /Applications/ChatGPT.app/Contents/MacOS/ChatGPT

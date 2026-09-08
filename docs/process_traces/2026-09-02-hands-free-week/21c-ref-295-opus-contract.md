@@ -225,5 +225,28 @@ Magistrate 784a764e disposition of the refutation: F1 → ruled B above; F2, F3,
 → dictated cures in fix round 1 (astra seat, brief in the activation's scratch, report custodied as 21d); F5 → the
 ruled twin-validation shape (validation twin plan under $TMPDIR, byte-diff against the real staged plan, real custody
 root first created by the mkdir immediately before os.replace); F6 → no allowlist: the arming session stops its own
-Codex children and background tasks before the census and a reparented own process aborts the arm (fail-closed);
+Codex children and background tasks before the census and a reparented own process aborts the arm (fail-closed) [superseded in part by
+the condition-5 ruling below: Ed's ChatGPT.app tree and its reparented Electron helpers are excluded];
 F11 → restore the four sentences verbatim (requirement 4). Delta re-audit of the fix round follows (21e).
+
+## Ruling of record on condition 5 (synthesis author joulewise-53, its last message before exit, after the stand-down census `pass3-standdown-census.txt` epoch 1788877254)
+
+Condition 5 counts agent SESSIONS — a magistrate, a codex-run-v3 seat, an interactive Claude or Codex session, or their children —
+not the idle helper processes of Ed's ChatGPT desktop app (pid 82301 tree: Codex Framework helpers, codex app-server,
+SkyComputerUseService, cua_node). Those are Ed's app, never signalled, and they are not an agent session under D-175; the regex
+list is informational for the arm. The interactive session's pid 83953 and its codex mcp-server children are treated like any other
+session: absent = fine, present = do not arm. The NIGHT is judged by the driver's own first act, `joulewise.night_gate.agent_census`
+under D-169's documented semantics, exactly as the handback says; the arming session does not pre-empt it. Consequences: (1) if the
+driver's pgrep alternation matches the ChatGPT.app helpers at 02:56 (t0 1788947760), the receipt will be `night_refused_agent_present`, which
+NIGHT_HANDBACK.md classes as acceptable for a stub; (2) the arm-notice follow-up asks Ed to quit the ChatGPT desktop app before
+02:45 PDT (epoch 1788947100) on 9 Sep [refined by D6-2, Gmail `1a0817fbc66d8737`: only after 1788945300] for a clean REHEARSAL_ONLY receipt, and both census outputs are recorded in the arm-time trace either way. Do not
+hold the arm for the ChatGPT helpers alone.
+
+Deltas 5–7 (21e5, 21e6, 21e7) on the factual premise of this ruling: which ChatGPT-pathed processes belonged to joulewise-53's
+session tree and which to Ed's ChatGPT.app is decided per process by the chains in
+`21b-rehearsal-20260909-bench/pass3-census-classified.txt` and the ppid column of `pass3-standdown-census.txt`; three successive prose
+restatements of those pids each contradicted the artifact, so none is kept here. The ruling's rule is unchanged: Ed's desktop-app
+tree (descendants of its main binary, plus its own Electron helpers reparented to launchd, matched by the Frameworks path) is
+excluded; every other foreign match is a session and blocks the arm; pid 83953 must be gone (Ed asked to close its terminal, Gmail
+`1a081723350aea55`, thread `1a0800cdb282c3f1`). Known limit, ruling-covered: a working app-host Codex task under Ed's app main binary
+is excluded as Ed's app. Rule 11's standing trigger applies to any further classifier change (it is on its fourth formulation).

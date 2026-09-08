@@ -1,0 +1,28 @@
+1788879023 2026-09-08 07:50:23 PDT
+step-4 block bench (mocked lock/ps/pgrep); the block is extracted verbatim from 21b
+PASS rc=0 expected=0 :: own + Ed's app (incl. orphan Frameworks helper) + fake vllm
+    foreign agent sessions (cond. 5, must be empty): []
+    informational matches (Ed's ChatGPT.app tree / substring false positives): [(9101, '/Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://'), (9102, '/Users/edr/.codex/compute
+PASS rc=1 expected=1 :: + interactive claude with codex mcp-server, cua_node and codex sandbox children
+    foreign agent sessions (cond. 5, must be empty): [(9300, 'claude'), (9301, 'node /opt/homebrew/bin/codex mcp-server'), (9302, '/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr
+    informational matches (Ed's ChatGPT.app tree / substring false positives): [(9101, '/Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://'), (9102, '/Users/edr/.codex/compute
+PASS rc=1 expected=1 :: + orphan Contents/Resources/codex app-server ppid 1 (fail-closed)
+    foreign agent sessions (cond. 5, must be empty): [(9400, '/Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://')]
+    informational matches (Ed's ChatGPT.app tree / substring false positives): [(9101, '/Applications/ChatGPT.app/Contents/Resources/codex app-server --listen stdio://'), (9102, '/Users/edr/.codex/compute
+PASS rc=1 expected=1 :: + orphan cua_node .codex/plugins ppid 1
+    foreign agent sessions (cond. 5, must be empty): [(9600, '/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node /Users/edr/.codex/plugins/c')]
+    informational matches (Ed's ChatGPT.app tree / substring false positives): []
+PASS rc=1 expected=1 :: + codex-run-v3 seat ppid 1
+    foreign agent sessions (cond. 5, must be empty): [(9500, 'bash /Users/edr/.local/bin/codex-run-v3 /tmp/x.md')]
+    informational matches (Ed's ChatGPT.app tree / substring false positives): []
+PASS rc=1 expected=1 :: + T3 Code app
+    foreign agent sessions (cond. 5, must be empty): [(9700, '/Applications/T3 Code.app/Contents/MacOS/T3 Code')]
+    informational matches (Ed's ChatGPT.app tree / substring false positives): []
+PASS rc=1 expected=1 :: + reparented claude daemon
+    foreign agent sessions (cond. 5, must be empty): [(9800, 'claude daemon run --origin transient')]
+    informational matches (Ed's ChatGPT.app tree / substring false positives): []
+PASS rc=1 expected=1 :: + ppid cycle
+    foreign agent sessions (cond. 5, must be empty): [(9900, 'claude')]
+    informational matches (Ed's ChatGPT.app tree / substring false positives): []
+PASS-if-assert :: lock pid not an ancestor of the census process -> AssertionError: lock pid is not an ancestor of this census process
+1788879023 2026-09-08 07:50:23 PDT

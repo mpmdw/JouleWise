@@ -70,6 +70,7 @@ SUITE_CONFIG = ROOT / "configs" / "examples" / "mock_suite_local.json"
 COMMAND_TIMEOUT_S = 60
 GENERATOR = ROOT / "scripts" / "generate_matrix.py"
 TEST_CAMPAIGN_POLICY = ROOT / "tests" / "fixtures" / "campaign_policy_test.json"
+
 REAL_CAMPAIGN_LOGS = (
     Path("/Users/edr/code/JouleWise/runs_window_contrast_20260730/campaign_log.jsonl"),
     Path("/Users/edr/code/JouleWise/runs/p2_015_floors_window_a/campaign_log.jsonl"),
@@ -80,6 +81,34 @@ run_campaign_module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 sys.modules["run_campaign_module"] = run_campaign_module
 spec.loader.exec_module(run_campaign_module)
+
+
+def setUpModule():
+    # Every subprocess inherits fixture custody and a narrow fake identity probe.
+    from joulewise.measurement_liveness import Identity
+    import scripts.run_campaign as canonical
+    temporary = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(temporary.cleanup)
+    root = Path(temporary.name)
+    probe = root / "identity-probe"
+    probe.write_text("#!/bin/sh\nprintf 'Tue Sep 8 01:02:03 2026 S\\n'\n")
+    probe.chmod(0o755)
+    ps = root / "ps"
+    ps.write_text("#!/bin/sh\necho forbidden-ps >&2\nexit 99\n")
+    ps.chmod(0o755)
+    env_patch = patch.dict(os.environ, {
+        "JOULEWISE_CUSTODY_PARENT": str(root / "custody"),
+        "JOULEWISE_ADDITIONAL_CUSTODY_PARENTS": "[]",
+        "JOULEWISE_IDENTITY_PROBE": str(probe),
+        "PATH": str(root) + os.pathsep + os.environ["PATH"],
+    })
+    env_patch.start()
+    unittest.addModuleCleanup(env_patch.stop)
+    for module in (run_campaign_module, canonical):
+        identity_patch = patch.object(module, "observe_identity",
+                                      return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026"))
+        identity_patch.start()
+        unittest.addModuleCleanup(identity_patch.stop)
 
 
 def campaign_lock_path(token) -> Path:
@@ -98,6 +127,112 @@ def held_campaign_lock(runs_dir: Path):
         raise
     else:
         run_campaign_module.release_campaign_lock(lock_path)
+
+
+class CampaignMeasurementRegistryTests(unittest.TestCase):
+    def setUp(self):
+        from joulewise import measurement_liveness
+        self.live = measurement_liveness
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.parent = self.root / "custody"
+        self.runs = self.root / "unrelated spaced runs unittest"
+        self.configs = self.root / "configs"
+        self.configs.mkdir()
+        write_config(self.configs, "one.json", "one")
+        env_patch = patch.dict(os.environ, {"JOULEWISE_CUSTODY_PARENT": str(self.parent)})
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+        self.registry = self.parent / "active-campaigns"
+
+    def entries(self):
+        return list(self.registry.iterdir()) if self.registry.exists() else []
+
+    def invoke(self, axi=False, dry=False):
+        args = run_campaign_module.parse_args([
+            str(self.configs), "--runs-dir", str(self.runs),
+            "--campaign-policy", str(TEST_CAMPAIGN_POLICY),
+        ] + (["--dry-run"] if dry else []))
+        if not axi:
+            return run_campaign_module.run_campaign(args)
+        fixture = self.root / "axi"
+        shutil.copytree(ROOT / "tests/fixtures/axi_ap_spec", fixture)
+        state = run_campaign_module.load_analysis_manifest(fixture)
+        return run_campaign_module.run_axi_spec_campaign(
+            args, state, runs_dir=self.runs,
+            policy_binding=run_campaign_module.load_campaign_policy(str(TEST_CAMPAIGN_POLICY)),
+        )
+
+    def check_launch_and_cleanup(self, axi, replacement=False):
+        class MockChildStop(Exception):
+            pass
+        captured = []
+        def child(*args, **kwargs):
+            entries = self.entries()
+            self.assertEqual(len(entries), 1, "measurement dispatched without registry")
+            entry = entries[0]
+            captured.append(entry)
+            record = json.loads(entry.read_text())
+            self.assertEqual(record["pid"], os.getpid())
+            self.assertEqual(record["start_time"], "Tue Sep 8 01:02:03 2026")
+            self.assertEqual(record["runs_root"], str(self.runs.resolve()))
+            lock = (self.runs / "campaign.lock").read_text()
+            self.assertIn("nonce=" + record["nonce"] + " ", lock)
+            self.assertIn('start_time="Tue Sep 8 01:02:03 2026"', lock)
+            if replacement:
+                new = entry.with_suffix('.new')
+                new.write_bytes(entry.read_bytes())
+                new.replace(entry)
+            raise MockChildStop("mock child stopped")
+        with patch.object(run_campaign_module, "run_authenticated_campaign_child", side_effect=child) as launch:
+            with self.assertRaisesRegex(MockChildStop, "mock child stopped"):
+                self.invoke(axi=axi)
+        launch.assert_called_once()
+        self.assertFalse((self.runs / 'campaign.lock').exists())
+        self.assertEqual(self.entries(), captured if replacement else [])
+
+    def test_ordinary_registers_before_child_and_exception_cleans(self):
+        self.check_launch_and_cleanup(False)
+
+    def test_axi_registers_before_child_and_exception_cleans(self):
+        self.check_launch_and_cleanup(True)
+
+    def test_exception_preserves_replacement_registry_entry(self):
+        self.check_launch_and_cleanup(False, replacement=True)
+
+    def test_dry_run_and_maintenance_lock_publish_no_registry(self):
+        with patch.object(run_campaign_module, "publish_campaign", wraps=self.live.publish_campaign) as publish, patch.object(run_campaign_module, "run_authenticated_campaign_child") as child:
+            self.assertEqual(self.invoke(dry=True), 0)
+            self.assertEqual(self.invoke(axi=True, dry=True), 0)
+            token = run_campaign_module.acquire_campaign_lock(self.runs)
+            self.assertEqual(self.entries(), [])
+            run_campaign_module.release_campaign_lock(token)
+            publish.assert_not_called()
+            child.assert_not_called()
+        self.assertEqual(self.entries(), [])
+
+    def test_failing_identity_probe_refuses_cleanly_and_releases_lock(self):
+        for axi in (False, True):
+            stderr = io.StringIO()
+            with self.subTest(axi=axi), patch.dict(os.environ, {
+                "JOULEWISE_IDENTITY_PROBE": "/usr/bin/true",
+            }), patch.object(run_campaign_module, "observe_identity", wraps=self.live.observe_identity), patch.object(run_campaign_module, "run_authenticated_campaign_child") as child, redirect_stderr(stderr):
+                self.assertEqual(self.invoke(axi=axi), 2)
+                self.assertEqual(stderr.getvalue().splitlines()[-1],
+                                 "error: campaign start identity unavailable")
+                self.assertNotIn("Traceback", stderr.getvalue())
+                self.assertFalse((self.runs / 'campaign.lock').exists())
+                self.assertEqual(self.entries(), [])
+                child.assert_not_called()
+
+    def test_registry_publication_error_releases_campaign_lock(self):
+        for axi in (False, True):
+            with self.subTest(axi=axi), patch.object(run_campaign_module, "publish_campaign", side_effect=OSError("registry unavailable")), patch.object(run_campaign_module, "run_authenticated_campaign_child") as child:
+                with self.assertRaisesRegex(OSError, "registry unavailable"):
+                    self.invoke(axi=axi)
+                self.assertFalse((self.runs / 'campaign.lock').exists())
+                child.assert_not_called()
 
 
 class CampaignLaunchLineagePreflightTests(unittest.TestCase):
@@ -618,6 +753,17 @@ class CampaignLogTailGrammarTests(unittest.TestCase):
                             self._parse(wire[:boundary]),
                             ([], "torn_prefix"),
                         )
+
+    def test_r7_fixture_campaign_log_writer_rows_are_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "campaign_log.jsonl"
+            rows = [{"event": "attempt", "run_id": "fixture", "exit_code": 0},
+                    {"event": "verdict", "members": ["fixture"], "status": "complete"}]
+            path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+            for wire in path.read_bytes().splitlines():
+                for boundary in range(1, len(wire)):
+                    with self.subTest(wire=wire, boundary=boundary):
+                        self.assertEqual(self._parse(wire[:boundary]), ([], "torn_prefix"))
 
     def test_c3_f1_registered_surrogate_prefixes_are_tolerable(self) -> None:
         registered_counterexamples = (

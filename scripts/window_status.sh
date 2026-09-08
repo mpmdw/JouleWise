@@ -16,7 +16,7 @@
 #     - after a window completes   (state: complete)
 #     - after a window fails       (state: failed  -- the run has already stopped)
 #     - between windows            (state: between)
-#   Never during collection. The script refuses if a campaign process is running.
+#   Never during collection. The script refuses on live or indeterminate measurement markers.
 #
 # USAGE
 #   scripts/window_status.sh <state> "<headline>" ["<detail>"] ["<action needed>"]
@@ -38,9 +38,10 @@ HEADLINE="${2:?headline required}"
 DETAIL="${3:-}"
 ACTION="${4:-None. Nothing needs your attention.}"
 
-# Refuse to push while a measurement is live.
-if ps aux | grep -E "run_campaign|window-chain" | grep -vq grep; then
-  echo "REFUSING: a measurement process is running. Pushing now would contaminate it." >&2
+# Observe registered measurement identities before any status or Git mutation.
+# The helper comes from this checkout; STATUS_REPO never selects custody roots.
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if ! python3 "$SCRIPT_ROOT/joulewise/measurement_liveness.py"; then
   echo "Status not published. Call again between runs." >&2
   exit 1
 fi

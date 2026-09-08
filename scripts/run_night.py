@@ -25,6 +25,8 @@ if str(REPO_ROOT) in sys.path:
     sys.path.remove(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.measurement_liveness import observe_identity  # noqa: E402
+
 from joulewise.night_gate import (  # noqa: E402
     NIGHT_DRIVER_REASON_CODES,
     NIGHT_GATE_REASON_CODES,
@@ -366,16 +368,21 @@ def _claim_chain_start(night_dir: Path) -> int | None:
         return None
 
 
-def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any]) -> int:
+def _complete_chain_start(descriptor: int, process: subprocess.Popen[Any],
+                          night_dir: Path) -> int:
     # start_new_session=True makes the child the process-group leader.
     pgid = process.pid
+    record = {"pid": process.pid, "pgid": pgid, "epoch_s": time.time()}
     try:
-        _write_all(
-            descriptor,
-            _json_bytes({"pid": process.pid, "pgid": pgid, "epoch_s": time.time()}),
-        )
+        # Publish the dead-man's complete identity before any subprocess probe.
+        _write_all(descriptor, _json_bytes(record))
     finally:
         os.close(descriptor)
+    identity = observe_identity(process.pid)
+    record["start_time"] = identity.start_time if identity.state == "LIVE" else None
+    temporary = night_dir / "chain.started.tmp"
+    _write_json(temporary, record)
+    os.replace(temporary, night_dir / "chain.started")
     return pgid
 
 
@@ -442,7 +449,7 @@ def _run_chain_once(
                 [],
                 True,
             )
-        pgid = _complete_chain_start(claim_descriptor, process)
+        pgid = _complete_chain_start(claim_descriptor, process, night_dir)
         census_count = 0
         census_hits: list[dict[str, Any]] = []
         next_census = time.monotonic()

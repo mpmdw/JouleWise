@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
+from joulewise.measurement_liveness import Identity
 from joulewise import night_gate
 from joulewise.night_plan_writer import write_night_plan
 from tests.git_fixture import init_git_fixture
@@ -161,6 +162,11 @@ class NightDriverTests(unittest.TestCase):
         self.driver = _load_driver()
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+        identity_patch = mock.patch.object(
+            self.driver, "observe_identity", return_value=Identity("LIVE", "Tue Sep 8 01:02:03 2026")
+        )
+        self.identity_mock = identity_patch.start()
+        self.addCleanup(identity_patch.stop)
         self.custody = self.root / "custody"
         self.custody.mkdir()
         self.chain = self.root / "chain.zsh"
@@ -374,6 +380,53 @@ class NightDriverTests(unittest.TestCase):
         self.driver.run_courier.assert_called_once()
         self.assertEqual(len(pushes), 2)
 
+    def test_chain_identity_probe_follows_complete_closed_marker(self) -> None:
+        from joulewise.measurement_liveness import census
+        night = self.root / "claim-test" / "night"
+        night.mkdir(parents=True)
+        descriptor = self.driver._claim_chain_start(night)
+        process = types.SimpleNamespace(pid=4242)
+        class DriverKilled(BaseException):
+            pass
+        def killed_during_probe(pid):
+            record = json.loads((night / "chain.started").read_text())
+            self.assertEqual(set(record), {"pid", "pgid", "epoch_s"})
+            self.assertEqual(record["pid"], pid)
+            self.assertEqual(self.driver._read_started_pgid(night / "chain.started"), pid)
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+            raise DriverKilled()
+        with mock.patch.object(self.driver, "observe_identity", side_effect=killed_during_probe):
+            with self.assertRaises(DriverKilled):
+                self.driver._complete_chain_start(descriptor, process, night)
+        result = census(parents=[night.parent.parent], observer=lambda pid: Identity("DEAD"))
+        self.assertFalse(result.clear)
+        self.assertIn("indeterminate", result.refusals[0])
+        self.assertFalse((night / "chain.exited").exists())
+        self.assertEqual(self.driver._read_started_pgid(night / "chain.started"), 4242)
+
+    def test_chain_identity_is_added_by_atomic_replace(self) -> None:
+        night = self.root / "atomic-test"
+        night.mkdir()
+        descriptor = self.driver._claim_chain_start(night)
+        process = types.SimpleNamespace(pid=4242)
+        replace = os.replace
+        def inspect_replace(source, target):
+            self.assertEqual(source, night / "chain.started.tmp")
+            self.assertEqual(target, night / "chain.started")
+            before = json.loads(target.read_text())
+            after = json.loads(source.read_text())
+            self.assertEqual(set(before), {"pid", "pgid", "epoch_s"})
+            self.assertEqual({k: after[k] for k in before}, before)
+            self.assertEqual(after["start_time"], "Tue Sep 8 01:02:03 2026")
+            replace(source, target)
+        with mock.patch.object(self.driver.os, "replace", side_effect=inspect_replace) as swap:
+            self.assertEqual(self.driver._complete_chain_start(descriptor, process, night), 4242)
+        swap.assert_called_once()
+        self.assertFalse((night / "chain.started.tmp").exists())
+        self.assertEqual(json.loads((night / "chain.started").read_text())["start_time"],
+                         "Tue Sep 8 01:02:03 2026")
+
     def test_chain_claim_prevents_a_second_spawn_after_a_failed_chain(self) -> None:
         calls, spawn = self._popen_recorder(return_code=17)
         with mock.patch.object(self.driver.subprocess, "Popen", spawn):
@@ -382,7 +435,10 @@ class NightDriverTests(unittest.TestCase):
         night = self.custody / "night"
         claim = json.loads((night / "chain.started").read_text())
         self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
-        self.assertEqual(set(claim), {"pid", "pgid", "epoch_s"})
+        self.assertEqual(set(claim), {"pid", "pgid", "epoch_s", "start_time"})
+        self.assertEqual(claim["start_time"], "Tue Sep 8 01:02:03 2026")
+        self.identity_mock.assert_called_once_with(claim["pid"])
+        self.assertNotEqual(claim["pid"], os.getpid())
         rerun = list(night.glob("rerun-*.refusal.json"))
         self.assertEqual(len(rerun), 1)
         refusal = json.loads(rerun[0].read_text())
@@ -1180,7 +1236,7 @@ class NightDriverTests(unittest.TestCase):
             descriptor = self.driver._claim_chain_start(night)
             self.assertIsNotNone(descriptor)
             assert descriptor is not None
-            self.driver._complete_chain_start(descriptor, FakeProcess(["chain"]))
+            self.driver._complete_chain_start(descriptor, FakeProcess(["chain"]), night)
             self.driver._record_chain_exit(night, 0)
             sent = night / "courier.sent"
             sent.write_text("sent\n", encoding="utf-8")

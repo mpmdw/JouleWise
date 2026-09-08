@@ -2256,19 +2256,29 @@ def tick(storage: Storage, deps: Dependencies, *, dry_run: bool = False) -> Deci
         notice = "plan_conflict"
     elif decision.reason.startswith("corrupt_lock_"):
         notice = decision.reason.split(":", 1)[0]
-        # transition() suppresses repeated states, including an unreadable
-        # state.json initialized as HOLD_UNSAFE. Always retain this refusal.
-        storage.append_jsonl(storage.root / "events.jsonl", {
-            "schema": EVENT_SCHEMA,
-            "kind": "corrupt_lock_refusal",
-            "reason": decision.reason,
-            "epoch_s": now.timestamp(),
-        })
-        pending = state.setdefault("notice_pending", [])
-        if not any(isinstance(item, dict) and item.get("reason") == decision.reason
-                   for item in pending):
-            pending.append({"id": f"corrupt-lock-{notice}", "kind": notice,
-                            "reason": decision.reason, "epoch_s": now.timestamp()})
+        # Keep event dedupe independent of notice acknowledgements, and reset
+        # it for each activation. Include the full reason so changed PID lists
+        # receive distinct IDs at both enqueue and acknowledgement boundaries.
+        activation = str(state.get("activation_id") or "pre-activation")
+        digest = hashlib.sha256(decision.reason.encode("utf-8")).hexdigest()
+        notice_id = f"corrupt-lock-{activation}-{digest}"
+        seen = state.setdefault("corrupt_lock_refusals", {})
+        if seen.get("activation_id") != activation:
+            seen = {"activation_id": activation, "ids": []}
+            state["corrupt_lock_refusals"] = seen
+        if notice_id not in seen["ids"]:
+            storage.append_jsonl(storage.root / "events.jsonl", {
+                "schema": EVENT_SCHEMA,
+                "kind": "corrupt_lock_refusal",
+                "reason": decision.reason,
+                "epoch_s": now.timestamp(),
+            })
+            pending = state.setdefault("notice_pending", [])
+            if not any(isinstance(item, dict) and item.get("id") == notice_id
+                       for item in pending):
+                pending.append({"id": notice_id, "kind": notice,
+                                "reason": decision.reason, "epoch_s": now.timestamp()})
+            seen["ids"].append(notice_id)
         # The refusal already has an event and a notice, so avoid a duplicate
         # notice when this tick also changes state.
         notice = None

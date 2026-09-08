@@ -1293,8 +1293,8 @@ class ClaudeHostIdentificationTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 self._assert_bench()
         source = self._installer_source()
-        # The installer uses the same shape for retirement and ancestry checks.
-        self.assertEqual(source.count(self.NEW_REGEX), 2)
+        # Retirement delegates to the shared classifier; ancestry retains one regex.
+        self.assertEqual(source.count(self.NEW_REGEX), 1)
         with self.assertRaises(AssertionError):
             self._assert_bench(source.replace(self.NEW_REGEX, self.OLD_REGEX))
 
@@ -1539,6 +1539,56 @@ class HandoffDefectTests(WatchdogTestCase):
                         self.assertTrue(any(item.get("reason") == decision.reason for item in events))
                     self.assertEqual([], self.harness.processes.signals)
                     self.assertEqual([], self.harness.spawn_calls)
+
+    def test_corrupt_lock_refusals_dedupe_by_activation_and_full_reason(self) -> None:
+        """Counterfactual: ten stalled ticks flood events, or PID churn reuses notice IDs."""
+        storage = self.harness.storage
+        state = wd.initial_state()
+        state["activation_id"] = "activation-a"
+        state["resident_session"] = {"schema": wd.LOCK_SCHEMA,
+                                     "activation_id": "activation-a",
+                                     "pid": 100, "start_time": "gone"}
+        storage.atomic_json(storage.root / "state.json", state)
+        (storage.root / "magistrate.lock").write_text("{torn")
+        def ticks(pid, count):
+            self.harness.processes.rows = [wd.ProcessInfo(pid, 1, "twin", self.TWIN)]
+            for _ in range(count):
+                self.assertEqual("HOLD_UNSAFE", wd.tick(storage, self.harness.deps, dry_run=True).state)
+            events = [json.loads(line) for line in (storage.root / "events.jsonl").read_text().splitlines()]
+            return [item for item in events if item["kind"] == "corrupt_lock_refusal"], wd.load_state(storage)
+        events, state = ticks(200, 10)
+        self.assertEqual(1, len(events))
+        self.assertEqual(1, len(state["notice_pending"]))
+        events, state = ticks(201, 10)
+        self.assertEqual(2, len(events))
+        self.assertEqual(2, len(state["notice_pending"]))
+        self.assertEqual(2, len({item["id"] for item in state["notice_pending"]}))
+        # A returning reason and a delivered notice must not re-emit an event.
+        state["notice_pending"] = []
+        storage.atomic_json(storage.root / "state.json", state)
+        events, state = ticks(200, 1)
+        self.assertEqual(2, len(events))
+        self.assertEqual([], state["notice_pending"])
+        state["activation_id"] = "activation-b"
+        storage.atomic_json(storage.root / "state.json", state)
+        events, state = ticks(200, 1)
+        self.assertEqual(3, len(events))
+        self.assertEqual(1, len(state["notice_pending"]))
+
+    def test_documented_reconciliation_names_absent_lock_before_read(self) -> None:
+        """Counterfactual: running step 4 without a lock raises FileNotFoundError."""
+        block = self.recovery_block("HANDOFF_DEAD_LOCK_REMOVED")
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        shell_block = next(block for block in re.findall(r"```zsh\n(.*?)\n\s*```", document, re.DOTALL)
+                           if "HANDOFF_DEAD_LOCK_REMOVED" in block)
+        syntax = subprocess.run(["/bin/zsh", "-n"], input=textwrap.dedent(shell_block),
+                                text=True, capture_output=True)
+        self.assertEqual(0, syntax.returncode, syntax.stderr)
+        with mock.patch.object(wd, "DEFAULT_CUSTODY_ROOT", self.harness.storage.root), \
+             mock.patch.object(wd.RealProcessTable, "snapshot") as snapshot:
+            with self.assertRaisesRegex(SystemExit, "^handoff_lock_absent:"):
+                exec(compile(block, "<step4-absent>", "exec"), {})
+        snapshot.assert_not_called()
 
     def test_corrupt_lock_documented_matrix_binds_durable_resident(self) -> None:
         """Counterfactual: step 4 refuses a provably absent durable resident, or trusts
