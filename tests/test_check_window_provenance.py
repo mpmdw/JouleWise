@@ -644,8 +644,13 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             / "docs/process_traces/2026-08-28-live-smoke/preflight.sh"
         ).read_text()
         self.assertIn('if [ "$#" -ne 1 ]', preflight)
-        self.assertIn("/Users/edr/JouleWise-measurement-20260813", preflight)
-        self.assertIn('SMOKE_CHECKOUT="$1"', preflight)
+        self.assertIn("/absolute/path/to/night_plan.json", preflight)
+        self.assertIn('NIGHT_PLAN="$1"', preflight)
+        self.assertIn("/usr/bin/jq -er '.measurement_root", preflight)
+        self.assertIn("/usr/bin/jq -er '.measurement_head", preflight)
+        self.assertIn('SMOKE_CHECKOUT="$MEASUREMENT_ROOT"', preflight)
+        self.assertIn('export PY="$MEASUREMENT_ROOT/.venv/bin/python"', preflight)
+        self.assertNotIn('SMOKE_CHECKOUT="$1"', preflight)
         self.assertNotIn("/Users/edr/JouleWise-smoke/checkout", preflight)
 
     def test_runsheet_records_d166_prefill_resolvability_measurement(self) -> None:

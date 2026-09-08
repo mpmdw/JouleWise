@@ -55,7 +55,7 @@ class G2aNightChainTests(unittest.TestCase):
         independent = _independent_fence_inventory(self.runsheet)
         self.assertEqual(
             [(start, end) for start, end, _body in independent],
-            [(1516, 1580), (328, 351), (374, 385), (389, 564), (575, 587)],
+            [(1534, 1598), (328, 351), (374, 385), (389, 564), (575, 587)],
         )
         self.assertEqual(self.generator.inventory_g2a_shell_blocks(self.runsheet), independent)
 

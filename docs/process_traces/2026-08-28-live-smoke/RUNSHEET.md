@@ -266,6 +266,14 @@ Timing: <1 min. Expected artifact: shell variables only. The selected
 reviewed head because they land via this PR. Expected refusal: `preflight.sh` prints `FAIL REVIEWED_HEAD is
 required` or checkout mismatch.
 
+**Routing addendum — superseded 2026-09-08 by
+[the plan-derived preflight contract](SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables):**
+The historical refusal above is retired; `preflight.sh <night_plan.json>`
+requires one absolute v2 plan filename, derives root/head/interpreter from it,
+and refuses a mismatch with `FAIL checkout HEAD does not equal measurement_head`.
+Use [Phase A's desk routing step](SHAKEDOWN-G2-RUNSHEET.md#phase-a--desk-preflight)
+for current operator commands.
+
 ```sh
 export REVIEWED_HEAD='<paste full reviewed 40-hex SHA>'
 export SMOKE_ROOT='/Users/edr/JouleWise-smoke'

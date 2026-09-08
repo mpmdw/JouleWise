@@ -695,6 +695,22 @@ equality.
 
 ### Phase A — desk preflight
 
+**A0 — load the authored v2 night plan (2026-09-08 routing addendum).**
+Set the absolute filename below to the lead-authored plan for this night,
+then run these commands before A1 or any common-variable block:
+
+```sh
+export NIGHT_PLAN='/absolute/path/to/night_plan.json'
+MEASUREMENT_ROOT="$(/usr/bin/jq -er '.measurement_root' "$NIGHT_PLAN")" || exit 1
+MEASUREMENT_HEAD="$(/usr/bin/jq -er '.measurement_head' "$NIGHT_PLAN")" || exit 1
+export MEASUREMENT_ROOT MEASUREMENT_HEAD
+```
+
+Now execute [Emitted routing and common variables](#emitted-routing-and-common-variables)
+in this same shell to validate those coordinates and derive
+`MEASUREMENT_CHECKOUT`, `PY`, and the remaining common variables; then continue
+with A1. The full preflight below independently reads the same plan.
+
 ### A1 — fixed supply and checkout inspection (MAGISTRATE)
 
 CWD: `$MEASUREMENT_CHECKOUT`. Timing: <2 min. Expected artifact: transcript
@@ -1487,6 +1503,8 @@ independent `git clone --no-hardlinks` of the canonical repository detached
 at the reviewed full head. Never repurpose the protected historical clone.
 Run this preparation at the desk, before authoring/arming the v2 plan; it is
 an operator recipe, not an instruction to the emitter or a delegated agent.
+The clone-prep fence is deliberately `bash` so the emitter's `^```(?:sh|zsh)`
+regex excludes it from the night chain.
 Supply `REVIEWED_HEAD` (full reviewed SHA-1) and `NIGHT_DATE` (YYYYMMDD):
 
 ```bash

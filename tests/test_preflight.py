@@ -51,13 +51,29 @@ class PreflightRoutingTests(unittest.TestCase):
         result = subprocess.run(
             ["/bin/bash", "-c", routing, "preflight.sh", str(plan_path)],
             env={**os.environ, "PATH": f"{self.fake_bin}:/usr/bin:/bin",
-                 "CHECKED_BRANCH": self.checked_branch, "EXPECTED_ROOT": str(self.root), "REVIEWED_HEAD": HEAD, "MEASUREMENT_ROOT": "/inherited/wrong",
+                 "CHECKED_BRANCH": self.checked_branch, "EXPECTED_ROOT": str(self.root), "MEASUREMENT_ROOT": "/inherited/wrong",
                  "MEASUREMENT_HEAD": "b" * 40, "PY": "/inherited/python",
                  "PYTHONPATH": "/inherited/pythonpath"},
             text=True, capture_output=True,
         )
         self.assertNotIn("UNEXPECTED_INTERPRETER_EXECUTION", result.stderr)
         return result
+
+    def test_program_refuses_missing_argument_and_mismatched_head(self) -> None:
+        env = {**os.environ, "PATH": f"{self.fake_bin}:/usr/bin:/bin",
+               "EXPECTED_ROOT": str(self.root)}
+        result = subprocess.run([str(PREFLIGHT)], env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("usage:", result.stderr)
+        self.assertIn("/absolute/path/to/night_plan.json", result.stderr)
+        self.plan["measurement_head"] = "b" * 40
+        plan_path = Path(self.temporary.name) / "night plan.json"
+        plan_path.write_text(json.dumps(self.plan))
+        result = subprocess.run([str(PREFLIGHT), str(plan_path)], env=env,
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL checkout HEAD does not equal measurement_head", result.stdout)
+        self.assertNotIn("UNEXPECTED_INTERPRETER_EXECUTION", result.stderr)
 
     def test_plan_routes_root_head_and_interpreter_over_inherited_values(self) -> None:
         result = self.run_routing()
