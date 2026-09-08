@@ -308,7 +308,7 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
 - joulewise-53 (session 018PXMANyqqMtpXYryP26pEm, pid 83953) sent its STAND-DOWN message (precondition (b)); it names main
   `1c83f2af` (CI green) with D-175 `a969e526`, PR #297 `138e7edb`, PR #298 `d477e138`, PR #299 `c9e2981c`, T0-ACID-CLOCK-01/02/03
   (`e4ce8b3b`, `3c366db7`, `019f9bba`, `481df11c`, `a9a70516`), PR #295 `23012b52`, T38 `eacadff7`, T38b `0f6b1c8b`; retirement per
-  the new step 1 done (`handoff-daemons` rc 0; bg-job daemon 71666, spare 71687, both pty-hosts and the resumed twin 71607 gone).
+  the new step 1 done (`handoff-daemons` rc 0; bg-job daemon 71666, spare 71687, both pty-hosts and the resumed twin 71607 gone — its report; pids per `21-activation-1ef89702/process-census-0055.txt`, absence per `pass3-standdown-census.txt`).
 - This activation's census right after that message: `21b-rehearsal-20260909-bench/pass3-standdown-census.txt` (epoch 1788877254)
   and, classified by the step-4 block itself, `pass3-census-classified.txt`. Tree membership of every process is read from the chains
   printed in that artifact and the ppid column of `pass3-standdown-census.txt`; no pid is restated in prose (deltas 5–7: every
@@ -319,8 +319,9 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
 - Condition 5 ruling by the synthesis author (recorded verbatim in 21c §Ruling of record on condition 5): agent SESSIONS count;
   Ed's ChatGPT.app helpers do not; the regex list is informational; the night is judged by `joulewise.night_gate.agent_census`
   (`pgrep -lf "codex|claude|t3"`, night_gate.py:38); ask Ed to quit the ChatGPT desktop app before the belt (02:45 PDT = epoch 1788947100) for a clean
-  REHEARSAL_ONLY receipt (follow-ups on thread `1a0800cdb282c3f1`: `1a0816757635cf98`, then the correction `1a081723350aea55` asking Ed to CLOSE the
-  joulewise-53 terminal before 1788944160); record both census outputs at arm time. Step 4 above now
+  REHEARSAL_ONLY receipt (follow-ups on thread `1a0800cdb282c3f1`: `1a0816757635cf98`; the correction `1a081723350aea55` asking Ed to CLOSE the
+  joulewise-53 terminal before 1788944160; the refinement `1a0817fbc66d8737` asking that any app quit happen after 1788945300 and
+  before 1788947100, D6-2); record both census outputs at arm time. Step 4 above now
   implements exactly that (sessions gate, informational list, production pgrep output printed).
 
 ## Bench pass 2 (activation 784a764e; first run recorded by commit 82622e70 at 02:11:53 PDT without copied artifacts — delta N2; re-run with artifacts captured under `21b-rehearsal-20260909-bench/pass2-*`, time and epoch in `pass2-bench-output.txt`; scratch paths only)
@@ -362,7 +363,7 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
   tick) instead of ending its turn idle; that poll is a direct child of the session pid and is stopped at step 3b
   before the census (delta N8). Launch email for 784a764e: Gmail `1a080326c4d2f147`.
 - joulewise-53's answers (cross-session message, 01:48 PDT (recorded in a6bff232 at 01:48:47); F2): (a) the arm-time census must treat the Claude bg-job
-  daemon 71666, bg-pty-hosts 71596/71682, bg-spare 71687 and the resumed twin 71607 as foreign matches that must be
+  daemon 71666, bg-pty-hosts 71596/71682, bg-spare 71687 and the resumed twin 71607 (all in `21-activation-1ef89702/process-census-0055.txt`) as foreign matches that must be
   gone; joulewise-53 retires them itself as its last act before stand-down (`claude daemon stop --any`, then verify
   no `claude daemon run|bg-spare|bg-pty-host|--resume` process remains) and states the result in its stand-down
   message; this activation never signals them. The step-4 regex `codex|claude|t3` already matches every one of those
