@@ -1,0 +1,26 @@
+captured: 2026-09-08 02:33:16 PDT epoch 1788859996
+lock:
+{
+  "activation_id": "784a764e-12b2-4c9a-a96d-9b8690d6abad",
+  "activation_spawn_epoch_s": 1788856918.677485,
+  "binary_symlink": "/Users/edr/.local/bin/claude",
+  "binary_version": "2.1.263 (Claude Code)",
+  "launch_epoch_s": 1788856918.677485,
+  "pid": 83086,
+  "schema": "joulewise.magistrate_lock.v1",
+  "start_time": "Tue Sep 8 01:41:58 2026",
+  "status": "ACTIVE",
+  "supervisor_pid": 83075
+}
+
+session tree (ps -axo pid,ppid,lstart,command | children of lock pid):
+  PID  PPID STARTED                      COMMAND
+16456 83086 Tue Sep  8 01:48:20 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/
+18993 83086 Tue Sep  8 02:12:35 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/
+74370 83086 Tue Sep  8 02:33:16 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/
+83086 83075 Tue Sep  8 01:41:58 2026     /Users/edr/.local/bin/claude -p You are the top-level JouleWise magistrate, relaunched headless at 2026-09-08T01:41:58.677485-07:00 as activation 784a764e-12b2
+83123 83086 Tue Sep  8 01:41:59 2026     node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+
+keepalive monitor loop process (command contains standdown.request):
+16456 83086 Tue Sep  8 01:48:20 2026     /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1788856931687-skilk8.sh 2>/dev/n
+83086 83075 Tue Sep  8 01:41:58 2026     /Users/edr/.local/bin/claude -p You are the top-level JouleWise magistrate, relaunched headless at 
