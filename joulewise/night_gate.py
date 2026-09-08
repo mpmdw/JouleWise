@@ -67,6 +67,8 @@ NIGHT_GATE_REASON_CODES = frozenset(
         "night_plan_stale",
         "night_plan_malformed",
         "night_chain_digest_mismatch",
+        "launch_go_receipt_missing",
+        "launch_go_receipt_invalid",
         "night_refused_class_unbuilt",
         "night_receipt_class_invalid",
         "night_probe_error",
@@ -123,7 +125,7 @@ _PLAN_KEYS = {
     "registration_path",
 }
 _PACK_NIGHT_KEYS = {
-    "pack_id", "pack_sha256", "attempt_ordinal",
+    "pack_id", "pack_root", "pack_sha256", "attempt_ordinal",
     "authorization_record", "confirmation_record",
 }
 _PACK_RECORD_KEYS = {"path", "sha256"}
@@ -295,6 +297,11 @@ class NightPlan:
             pack_id = binding["pack_id"]
             if not isinstance(pack_id, str) or not pack_id:
                 raise PlanError("night_plan_malformed", "pack_night.pack_id must be a non-empty string")
+            pack_root = binding["pack_root"]
+            if (not isinstance(pack_root, str) or not Path(pack_root).is_absolute()
+                    or Path(pack_root).name != pack_id
+                    or any(part.is_symlink() for part in (Path(pack_root), *Path(pack_root).parents))):
+                raise PlanError("night_plan_malformed", "pack_night.pack_root must be absolute, non-symlink, with basename pack_id")
             pack_sha256 = binding["pack_sha256"]
             if not isinstance(pack_sha256, str) or _SHA256_RE.fullmatch(pack_sha256) is None:
                 raise PlanError("night_plan_malformed", "pack_night.pack_sha256 must be SHA-256")
@@ -305,6 +312,7 @@ class NightPlan:
                 raise PlanError("night_plan_malformed", "pack custody_root must be an absolute path")
             pack_night = {
                 "pack_id": pack_id,
+                "pack_root": pack_root,
                 "pack_sha256": pack_sha256,
                 "attempt_ordinal": ordinal,
             }
@@ -630,7 +638,7 @@ def _clock_value(probes: Probes, name: str) -> float | int:
     return value
 
 
-def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
+def evaluate_night(plan: NightPlan, probes: Probes, *, pack_conditions=None) -> Receipt:
     rows = _initial_conditions(plan.receipt_class)
     evidence: list[ProbeResult] = []
 
@@ -785,7 +793,7 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
         "window, plan freshness, measurement HEAD, and chain identity passed"
     )
 
-    if plan.receipt_class == "TRANSACTION_PACK":
+    if plan.receipt_class == "TRANSACTION_PACK" and (plan.pack_night is None or pack_conditions is None):
         return _finish(
             plan,
             probes,
@@ -796,6 +804,15 @@ def evaluate_night(plan: NightPlan, probes: Probes) -> Receipt:
                 (),
             ),
         )
+
+    if plan.receipt_class == "TRANSACTION_PACK":
+        # These two rows come only from the driver's authenticated preparation
+        # and self-written ARM replay. C3–C5 still run their normal probes.
+        for key in ("C1", "C2"):
+            row = pack_conditions.get(key)
+            if not isinstance(row, ConditionRow) or row.condition_id != key or row.status != "PASS" or row.basis is not None:
+                return _finish(plan, probes, rows, Refusal("launch_go_receipt_invalid", key, ()))
+            rows[key] = _MutableCondition(row.status, row.basis, list(row.evidence), dict(row.measured))
 
     # R-6's unattended HID predicate precedes the remaining quiet predicates.
     try:

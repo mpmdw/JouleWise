@@ -54,7 +54,7 @@ def _init_repo(root: Path) -> str:
 class InstallNightAgentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.measurement_root = self.root / "measurement checkout"
         self.measurement_head = _init_repo(self.measurement_root)
         self.rendered = self.root / "rendered"
@@ -95,6 +95,7 @@ class InstallNightAgentTests(unittest.TestCase):
             registration_path=None,
             pack_night={
                 "pack_id": "install-pack",
+                "pack_root": str(self.root / "install-pack"),
                 "pack_sha256": "a" * 64,
                 "attempt_ordinal": 1,
                 "authorization_record": {

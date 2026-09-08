@@ -135,6 +135,15 @@ def _clock_value() -> dict[str, object]:
     }
 
 
+def fixture_inventory(root):
+    return [{"deployment_id": "fixture", "measurement_root": str(root.parents[2] / "production"),
+             "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+
+
+def fixture_bundle(root):
+    return cli.load_evidence_bundle(root, home=root.parents[1], inventory=fixture_inventory(root))
+
+
 class FixtureBuilder:
     """Test-only builder for one complete or exactly-one-gate-broken tree."""
 
@@ -146,9 +155,9 @@ class FixtureBuilder:
         hid_case: str = "pass",
         g10_case: str = "pass",
     ) -> None:
-        self.base = base
-        self.root = base / "fixture"
-        self.root.mkdir()
+        self.base = base.resolve()
+        self.root = self.base / "home/night-custody/rehearsal-t0-unattended-fixture-001"
+        self.root.mkdir(parents=True)
         self.namespace = self.root / "t0-namespace"
         self.inputs = self.namespace / "arm_readiness.t0.inputs"
         self.sources = self.namespace / "arm_readiness.t0.sources"
@@ -516,8 +525,13 @@ class FixtureBuilder:
     def _build_manifest(self) -> None:
         production = self.base / "production"
         production.mkdir()
+        inventory = fixture_inventory(self.root)
         if self.broken_gate == "G6":
-            production = self.base
+            # Keep the independently derived census; mutate rehearsal authority.
+            record_path = self.records / "rehearsal-receipt.json"
+            value = readiness.parse_json_bytes(record_path.read_bytes())
+            value["window_id"] += "-wrong-sibling"
+            _write_json(record_path, value)
         _write_json(
             self.root / cli.MANIFEST_NAME,
             {
@@ -534,7 +548,9 @@ class FixtureBuilder:
                     "positive_control": "records/positive-control.json",
                 },
                 "production_roots": [
-                    {"role": "production_custody_root", "path": str(production.resolve())}
+                    {"role": item.role, "path": str(item.path)}
+                    for item in readiness.production_custody_roots(
+                        home=self.base / "home", inventory=inventory)
                 ],
             },
         )
@@ -549,7 +565,7 @@ class T0RehearsalTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = FixtureBuilder(Path(temporary.name)).build()
-        bundle = cli.load_evidence_bundle(root)
+        bundle = fixture_bundle(root)
         _artifact, receipt, fact = rehearsal._clock_receipt(bundle)
         value = fact["value"]
         receipt["valid_until_monotonic_ns"] = (
@@ -592,7 +608,7 @@ class T0RehearsalTests(unittest.TestCase):
             hid_case=hid_case,
             g10_case=g10_case,
         ).build()
-        bundle = cli.load_evidence_bundle(root)
+        bundle = fixture_bundle(root)
         return temporary, root, rehearsal.evaluate_rehearsal(bundle)
 
     def _assert_single_failure(
@@ -637,7 +653,7 @@ class T0RehearsalTests(unittest.TestCase):
     def test_g1_missing_new_execution_record_is_unruled_not_pass(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         (root / "records/execution.json").unlink()
-        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
+        verdict = rehearsal.evaluate_rehearsal(fixture_bundle(root))
         self.assertEqual(verdict["gates"][0]["status"], "UNRULED")
         self.assertIn("current command captures do not record", verdict["gates"][0]["message"])
         self.assertEqual(verdict["overall_verdict"], "INCOMPLETE")
@@ -679,7 +695,7 @@ class T0RehearsalTests(unittest.TestCase):
         self._assert_single_failure(
             "G6",
             broken_gate="G6",
-            message="rehearsal custody overlaps production root",
+            message="rehearsal_roots_not_disjoint",
         )
 
     def test_g7_is_first_class_unruled_and_never_faked_as_failure_or_pass(self) -> None:
@@ -709,7 +725,7 @@ class T0RehearsalTests(unittest.TestCase):
         value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
         value["human_interventions"] = [{"action": "made run succeed"}]
         _write_json(path, value)
-        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
+        verdict = rehearsal.evaluate_rehearsal(fixture_bundle(root))
         failures = [gate for gate in verdict["gates"] if gate["status"] == "FAIL"]
         self.assertEqual([gate["gate_id"] for gate in failures], ["G9"])
         self.assertIn("human intervention occurred", failures[0]["message"])
@@ -781,7 +797,7 @@ class T0RehearsalTests(unittest.TestCase):
     def test_fixture_cli_reads_bytes_and_exits_non_success_for_incomplete(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
-        code = cli.main(["--fixture-root", str(root)], stdout=output)
+        code = cli.main(["--fixture-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
         self.assertEqual(code, 3)
         self.assertEqual(parsed["overall_verdict"], "INCOMPLETE")
@@ -790,7 +806,7 @@ class T0RehearsalTests(unittest.TestCase):
     def test_real_custody_cli_mode_uses_the_same_evidence_only_loader(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
-        code = cli.main(["--custody-root", str(root)], stdout=output)
+        code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
         self.assertEqual(code, 3)
         self.assertEqual(parsed["gate_counts"]["UNRULED"], 1)

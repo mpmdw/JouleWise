@@ -1,0 +1,30 @@
+[
+  {
+    "deployment_id": "JouleWise",
+    "measurement_root": "/Users/edr/code/JouleWise",
+    "custody_root": null,
+    "ledger_path": null,
+    "notes": "D-176 2026-09-08 retained deployment census; no separate custody or ledger locator attested by the ruling."
+  },
+  {
+    "deployment_id": "JouleWise-measurement-20260813",
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260813",
+    "custody_root": null,
+    "ledger_path": null,
+    "notes": "D-176 2026-09-08 retained deployment census; no separate custody or ledger locator attested by the ruling."
+  },
+  {
+    "deployment_id": "JouleWise-measurement-20260818",
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260818",
+    "custody_root": null,
+    "ledger_path": null,
+    "notes": "D-176 2026-09-08 retained deployment census; no separate custody or ledger locator attested by the ruling."
+  },
+  {
+    "deployment_id": "JouleWise-measurement-v5-20260910-1c83f2a",
+    "measurement_root": "/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a",
+    "custody_root": null,
+    "ledger_path": null,
+    "notes": "D-176 2026-09-08 retained deployment census; no separate custody or ledger locator attested by the ruling."
+  }
+]

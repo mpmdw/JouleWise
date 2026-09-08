@@ -855,6 +855,8 @@ class NightGateTests(unittest.TestCase):
             "night_plan_malformed",
             "night_chain_digest_mismatch",
             "night_refused_class_unbuilt",
+            "launch_go_receipt_missing",
+            "launch_go_receipt_invalid",
             "night_receipt_class_invalid",
             "night_probe_error",
         }
@@ -872,6 +874,8 @@ class NightGateTests(unittest.TestCase):
             "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",
             "night_receipt_class_invalid": "test_c2_pass_or_an_unregistered_basis_is_a_class_invalid_defect",
             "night_probe_error": "test_any_probe_exception_refuses_before_later_commands_run",
+            "launch_go_receipt_missing": "test_pack_refusal_codes_keep_standard_receipt_shape",
+            "launch_go_receipt_invalid": "test_pack_refusal_codes_keep_standard_receipt_shape",
         }
         self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, set(coverage))
         methods = dir(type(self))
@@ -899,12 +903,22 @@ class NightGateTests(unittest.TestCase):
         for code in night_gate.NIGHT_DRIVER_REASON_CODES:
             self.assertNotIn(f'"{code}"', body, code)
 
+    def test_pack_refusal_codes_keep_standard_receipt_shape(self):
+        from scripts.run_night import _pack_refused_receipt, PackNightRefusal
+        from dataclasses import replace
+        plan = make_plan("TRANSACTION_PACK")
+        for missing in (False, True):
+            error = PackNightRefusal("pack_root", missing=missing)
+            receipt = _pack_refused_receipt(plan, error, FakeProbeSource().probes())
+            self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
+            self.assertEqual(error.reason, receipt.refusal.reason)
+
     def test_every_reason_registry_member_has_the_night_prefix(self) -> None:
         for registry in (
             night_gate.NIGHT_GATE_REASON_CODES,
             night_gate.NIGHT_DRIVER_REASON_CODES,
         ):
-            self.assertTrue(all(code.startswith("night_") for code in registry))
+            self.assertTrue(all(code.startswith("night_") or code in {"launch_go_receipt_missing", "launch_go_receipt_invalid"} for code in registry))
 
 
 if __name__ == "__main__":

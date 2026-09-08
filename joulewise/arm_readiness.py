@@ -220,6 +220,85 @@ R1_CUSTODY_REASON_CODES = frozenset(
     }
 )
 R1_GIT_REASON_CODES = frozenset({"readiness_r1_successor_chain"})
+# D-176 §10.3: reviewed derivations, never an environment-selected census.
+from dataclasses import dataclass as _root_dataclass
+
+
+@_root_dataclass(frozen=True)
+class ProductionRootSpec:
+    role: str
+    kind: str
+    value: str
+    predicate: str
+
+
+PRODUCTION_CUSTODY_INVENTORY = Path("configs/production_custody_inventory.json")
+PRODUCTION_CUSTODY_ROOTS = (
+    ProductionRootSpec("magistrate_state", "HOME_RELATIVE", "night-custody/magistrate", "DISJOINT"),
+    ProductionRootSpec("night_custody_parent", "HOME_RELATIVE", "night-custody", "SIBLING_CHILD"),
+    ProductionRootSpec("backup_icloud", "HOME_RELATIVE", "Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup", "DISJOINT"),
+    ProductionRootSpec("quiet_guard_state", "LITERAL", "/Library/Application Support/JouleWise/quiet-guard", "DISJOINT"),
+    ProductionRootSpec("repo_runs", "CLONE_DERIVED", "runs", "DISJOINT"),
+    ProductionRootSpec("deployment_measurement_root", "INVENTORY", "measurement_root", "DISJOINT"),
+)
+# Calibration custody has no code default; it is not invented here. ARM-context
+# roots are rehearsal inputs to the predicate, not production census members.
+
+
+def production_custody_roots(*, home, inventory):
+    """Resolve the frozen census without environment overrides or existence filters.
+
+    ``inventory`` is the parsed HEAD-authenticated inventory supplied by the
+    caller; tests supply a synthetic inventory. Resolution failures remain
+    explicit ProductionRoot records so G6 cannot turn them into absence.
+    """
+    from joulewise.t0_rehearsal import ProductionRoot
+
+    home = Path(home)
+    if not home.is_absolute() or not isinstance(inventory, (list, tuple)) or not inventory:
+        raise ValueError("production-root census incomplete")
+    keys = {"deployment_id", "measurement_root", "custody_root", "ledger_path", "notes"}
+    ids = set()
+    for item in inventory:
+        if not isinstance(item, Mapping) or set(item) != keys:
+            raise ValueError("production-root census incomplete")
+        identity = item["deployment_id"]
+        if not isinstance(identity, str) or not identity or identity in ids:
+            raise ValueError("production-root census incomplete")
+        ids.add(identity)
+        if not isinstance(item["notes"], str):
+            raise ValueError("production-root census incomplete")
+        for key in ("measurement_root", "custody_root", "ledger_path"):
+            value = item[key]
+            if value is None and key != "measurement_root":
+                continue
+            if not isinstance(value, str) or not Path(value).is_absolute():
+                raise ValueError("production-root census incomplete")
+    roots = []
+    for spec in PRODUCTION_CUSTODY_ROOTS:
+        if spec.kind == "INVENTORY":
+            candidates = [(f"{spec.role}:{item['deployment_id']}", Path(item[spec.value])) for item in inventory]
+        elif spec.kind == "HOME_RELATIVE":
+            candidates = [(spec.role, home / spec.value)]
+        elif spec.kind == "CLONE_DERIVED":
+            candidates = [(spec.role, Path(__file__).resolve().parents[1] / spec.value)]
+        elif spec.kind == "LITERAL":
+            candidates = [(spec.role, Path(spec.value))]
+        else:
+            raise ValueError("production-root census incomplete")
+        for role, candidate in candidates:
+            try:
+                resolved = candidate.resolve(strict=False)
+                try:
+                    candidate.stat()
+                except FileNotFoundError:
+                    pass  # Missing production roots remain census members.
+                roots.append(ProductionRoot(role, resolved))
+            except (OSError, RuntimeError) as exc:
+                roots.append(ProductionRoot(role, candidate, str(exc)))
+    return tuple(roots)
+
+
 LAUNCH_LINEAGE_REASON_CODES = frozenset(
     {
         "launch_consumption_missing",

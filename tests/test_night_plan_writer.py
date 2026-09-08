@@ -33,7 +33,7 @@ class NightPlanWriterTests(unittest.TestCase):
             chain_sha256_path=str(self.custody / "chain.sha256"),
             custody_root=str(self.custody), registration_path=None,
             pack_night={
-                "pack_id": "pack-test", "pack_sha256": "c" * 64,
+                "pack_id": "pack-test", "pack_root": str(self.root / "pack-test"), "pack_sha256": "c" * 64,
                 "attempt_ordinal": 7,
                 "authorization_record": {
                     "path": str(self.custody / "authorization.json"), "sha256": "d" * 64,
@@ -56,7 +56,7 @@ class NightPlanWriterTests(unittest.TestCase):
         self.assertIs(type(mapping["schema_version"]), int)
         self.assertEqual(3, mapping["schema_version"])
         self.assertEqual({
-            "pack_id", "pack_sha256", "attempt_ordinal",
+            "pack_id", "pack_root", "pack_sha256", "attempt_ordinal",
             "authorization_record", "confirmation_record",
         }, set(mapping["pack_night"]))
         path = write_night_plan(self.custody / "night_plan.json", self.plan)
@@ -97,6 +97,18 @@ class NightPlanWriterTests(unittest.TestCase):
         del mapping["pack_night"]
         with self.assertRaises(PlanError):
             NightPlan.from_mapping(mapping)
+
+    def test_pack_root_absolute_basename_and_symlink_refusals(self):
+        baseline = night_plan_mapping(self.plan)
+        for root in ("relative/pack-test", str(self.root / "wrong-id"), None):
+            mapping = copy.deepcopy(baseline)
+            mapping["pack_night"]["pack_root"] = root
+            with self.subTest(root=root), self.assertRaisesRegex(PlanError, "pack_root"):
+                NightPlan.from_mapping(mapping)
+        (self.root / "target").mkdir()
+        (self.root / "pack-test").symlink_to(self.root / "target", target_is_directory=True)
+        with self.assertRaisesRegex(PlanError, "pack_root"):
+            NightPlan.from_mapping(baseline)
 
     def test_pack_nested_keys_types_and_digests_fail_closed(self) -> None:
         baseline = night_plan_mapping(self.plan)

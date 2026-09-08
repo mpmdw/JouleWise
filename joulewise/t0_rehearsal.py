@@ -747,15 +747,11 @@ def _contains(parent: Path, child: Path) -> bool:
 
 
 def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
-    """Evaluate rehearsal authority separation and real path containment.
+    """Check the resolver-derived census with D-176's sibling-child exception.
 
-    The production-root census follows the accepted design's dedicated
-    runs/custody/ledger/backup requirement (``seat-sol-design.md`` lines
-    148-170) and the ruling's outside-production requirement
-    (``MAGISTRATE-RULING-T0-UNATTENDED.md`` lines 96-99).  The manifest must
-    enumerate those role-labelled roots; resolved ``Path.relative_to`` tests,
-    in both directions, reject containment or equality without string-prefix
-    guesses.
+    The loader authenticates inventory bytes at HEAD and compares the manifest
+    evidence record to the whole census. Missing production roots still count;
+    resolution errors, equality and either containment direction fail closed.
     """
 
     name = "REHEARSAL SEPARATION"
@@ -772,8 +768,11 @@ def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
     if not isinstance(window_id, str) or not window_id.startswith(REHEARSAL_WINDOW_PREFIX):
         return _result("G6", name, GateStatus.FAIL, f"window id does not begin {REHEARSAL_WINDOW_PREFIX}", artifact.citation())
     try:
+        if (not bundle.custody_root.is_absolute()
+                or any(p.is_symlink() for p in (bundle.custody_root, *bundle.custody_root.parents))):
+            raise OSError("custody_root must be absolute and non-symlink")
         custody = bundle.custody_root.resolve(strict=True)
-    except OSError as exc:
+    except (OSError, RuntimeError) as exc:
         return _result("G6", name, GateStatus.FAIL, f"rehearsal custody root cannot be resolved: {exc}", artifact.citation())
     if value.get("custody_root") != str(custody):
         return _result("G6", name, GateStatus.FAIL, "rehearsal receipt custody_root does not bind the evaluated root", artifact.citation())
@@ -782,6 +781,14 @@ def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
     for production in bundle.production_roots:
         if production.resolution_error is not None:
             return _result("G6", name, GateStatus.FAIL, f"production root {production.role} cannot be resolved: {production.resolution_error}", artifact.citation())
+        predicate = next((spec.predicate for spec in readiness.PRODUCTION_CUSTODY_ROOTS
+                          if spec.role == production.role.split(":", 1)[0]), None)
+        if predicate not in {"DISJOINT", "SIBLING_CHILD"}:
+            return _result("G6", name, GateStatus.FAIL, "production-root predicate is absent", artifact.citation())
+        if predicate == "SIBLING_CHILD":
+            if custody.parent != production.path or custody.name != window_id:
+                return _result("G6", name, GateStatus.FAIL, "rehearsal_roots_not_disjoint: custody must be the window-id sibling child", artifact.citation())
+            continue
         if _contains(production.path, custody) or _contains(custody, production.path):
             return _result("G6", name, GateStatus.FAIL, f"rehearsal custody overlaps production root {production.role}: {production.path}", artifact.citation())
     return _result("G6", name, GateStatus.PASS, "receipt is non-claim rehearsal authority and resolved custody is disjoint from every enumerated production root", artifact.citation(), bundle.manifest.citation())
