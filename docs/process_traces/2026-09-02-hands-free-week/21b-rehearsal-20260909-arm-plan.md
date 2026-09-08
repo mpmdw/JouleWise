@@ -183,7 +183,7 @@ foreign = [(p,c[:90]) for p,pp,c in rows if re.search(r"codex|claude|t3", c) and
 print("foreign census matches:", foreign); sys.exit(1 if foreign else 0)
 PY
 # 5. Re-check Ed's thread for NO (Gmail search on thread 1a0800cdb282c3f1) — abort on NO (cond. 4).
-# 6. THE MOVE: atomic rename into the plan directory (same volume as /private/tmp — verified: both device 16777231).
+# 6. THE MOVE: atomic rename into the plan directory (same volume as /private/tmp — verified: both device 16777233 per stat -f %d).
 mkdir -p "$NIGHT_CUSTODY" && python3 -c 'import os,sys; os.replace(sys.argv[1], sys.argv[2]); print("moved", sys.argv[2])' "$STAGE/night_plan.json" "$NIGHT_CUSTODY/night_plan.json"
 # 7. Install both agents FROM the stub checkout with --hour/--minute == t0 local (cond. 3).
 cd "$STUB_CHECKOUT" && scripts/install_night_agent.sh --plan "$NIGHT_CUSTODY/night_plan.json" --hour 2 --minute 56
