@@ -1,6 +1,6 @@
 # 21f2 — Magistrate terminal review, branch `bookkeeping/2026-09-09-rehearsal-arm` (headless activation 784a764e)
 
-Written 1788880058 2026-09-08 08:07:38 PDT; content head reviewed: `734dadec` plus this file and 21g2 (replay tail) on top. Docs only.
+Written 1788880058 2026-09-08 08:07:38 PDT; content reviewed: the whole branch range c6d64665..HEAD as of the final commit, which also adds this file's final revision, the replay record 21g2 and the 21e8 custody. Docs only.
 
 ## What this branch does
 Records joulewise-53's stand-down (precondition (b)), the synthesis author's ruling of record on D-175 condition 5 (21c), and
@@ -14,7 +14,13 @@ cycles. The classifier is on its fourth formulation; any further change goes thr
 - The three zsh blocks and four PY heredocs at every round (`zsh -n`, `compile()`), and the step-4 block live as a dry
   classification (`pass3-census-classified.txt`: sessions = joulewise-53's descendants while pid 83953 lives; informational = Ed's
   app helpers and the fake vllm leak) and against nine mocked tables (`pass3-step4-bench.txt`).
-- Reviews 21e5 (Opus), 21e6 (Opus), 21e7 (Opus) and the consult 21f-consult-2; every blocker's disposition is in the commits.
+- Reviews 21e5, 21e6, 21e7, 21e8 (all Opus) and the consult 21f-consult-2; every blocker's disposition is in the commits.
+
+## Accepted limits (recorded, not cured by more prose)
+- Deltas 5–8 each found the class "self-report contradicts its artifact" in text this magistrate wrote (pid narration, a stale head in
+  this review, one over-claiming commit message ebf90cd6 corrected by 734dadec). Cure applied: deletion and one-line citations only;
+  the classifier block is byte-identical since c6d64665. No further prose reformulation; residual risk is confined to prose, not to
+  the arm-time mechanism, whose evidence is the artifacts under `21b-rehearsal-20260909-bench/`.
 
 ## Design-level answers
 1. Soundness of the gate: step 4 is strictly more permissive than the night's own gate (`agent_census`, zero exclusions), so a

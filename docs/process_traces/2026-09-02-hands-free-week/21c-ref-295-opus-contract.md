@@ -239,7 +239,7 @@ session: absent = fine, present = do not arm. The NIGHT is judged by the driver'
 under D-169's documented semantics, exactly as the handback says; the arming session does not pre-empt it. Consequences: (1) if the
 driver's pgrep alternation matches the ChatGPT.app helpers at 02:56 (t0 1788947760), the receipt will be `night_refused_agent_present`, which
 NIGHT_HANDBACK.md classes as acceptable for a stub; (2) the arm-notice follow-up asks Ed to quit the ChatGPT desktop app before
-02:45 PDT (epoch 1788947100) on 9 Sep for a clean REHEARSAL_ONLY receipt, and both census outputs are recorded in the arm-time trace either way. Do not
+02:45 PDT (epoch 1788947100) on 9 Sep [refined by D6-2, Gmail `1a0817fbc66d8737`: only after 1788945300] for a clean REHEARSAL_ONLY receipt, and both census outputs are recorded in the arm-time trace either way. Do not
 hold the arm for the ChatGPT helpers alone.
 
 Deltas 5–7 (21e5, 21e6, 21e7) on the factual premise of this ruling: which ChatGPT-pathed processes belonged to joulewise-53's

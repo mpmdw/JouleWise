@@ -316,6 +316,10 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
   while present; Ed was asked to close it before 1788944160 (Gmail `1a081723350aea55`).
   `handoff-daemons` rc 0 is joulewise-53's own report; this activation's attempt ran from the wrong cwd (ModuleNotFoundError,
   recorded in the same artifact) and is not evidence either way.
+- STAND-DOWN VOID for now: Ed resumed the interactive magistrate for daytime desk work (message preserved verbatim in
+  `pass3`-adjacent artifact `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`, with `ps -p 83953` at capture). Hold the arm
+  while pid 83953 lives; a fresh stand-down message is promised by 1788941700 (01:15 PDT 2026-09-09); if none has arrived by
+  1788942600 (01:30 PDT), its absence is judged ONLY by `ps -p 83953` showing the pid gone. Precondition (b) is therefore OPEN again.
 - Condition 5 ruling by the synthesis author (recorded verbatim in 21c §Ruling of record on condition 5): agent SESSIONS count;
   Ed's ChatGPT.app helpers do not; the regex list is informational; the night is judged by `joulewise.night_gate.agent_census`
   (`pgrep -lf "codex|claude|t3"`, night_gate.py:38); ask Ed to quit the ChatGPT desktop app before the belt (02:45 PDT = epoch 1788947100) for a clean
@@ -345,12 +349,12 @@ night records and launchd stays barred by relaunch-prompt line 19 (as amended by
 
 ## Activation succession (2026-09-08 01:48:16 PDT (commit 9a15338e); F2; written by activation 784a764e)
 
-- Activation 1ef89702 (pid 84232) was terminated at 01:33:28 PDT (events.jsonl seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
+- Activation 1ef89702 (pid 84232 per `21-activation-1ef89702/magistrate.lock.json`) was terminated at 01:33:28 PDT (events.jsonl seq 5, epoch 1788856408): it ended its last turn holding only monitors and a
   45-minute timer, and Claude Code's headless `-p` mode terminates a session 600 s after a turn ends while background
   tasks remain (`attempts/1ef89702-…/attempt-1.stderr.log`: "Background tasks still running after 600s; terminating.
   Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely."). The watchdog recorded `clean activation exit`
   (events seq 5, IDLE), `backoff has not expired` (seq 6, BACKOFF, 300 s), then spawned activation
-  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075; `attempt: 2`).
+  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT, epoch 1788856918; lock pid 83086, supervisor 83075 per `21-activation-784a764e/magistrate.lock.json`; `attempt: 2`).
 - Consequence for this plan: the arming party is whichever headless activation is live when preconditions (a)+(b)
   hold. The NIGHT_HANDBACK text at H names activation 1ef89702 as the author of the arm request (true: emails
   `1a0800cdb282c3f1`/`1a08012045894ef7` were sent by it); the arm itself is executed and recorded by the live

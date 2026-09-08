@@ -1,0 +1,61 @@
+head=c6d646650a817ecd77e8c2a776abc7155b73d125 start=2026-09-08 07:50:48 JOULEWISE_BACKUP_ROOTS=(empty)
+1222:SHARD SUMMARY index=1/4 modules=32 tests=613 failures=0 errors=0 skipped=45 result=PASS
+2821:SHARD SUMMARY index=2/4 modules=50 tests=1151 failures=0 errors=0 skipped=34 result=PASS
+5067:SHARD SUMMARY index=3/4 modules=63 tests=1707 failures=0 errors=0 skipped=14 result=PASS
+7234:FAIL: test_cpu_admission_reads_final_attempt_telemetry (test_run_campaign.IdleAdmissionCoreVerdictTests.test_cpu_admission_reads_final_attempt_telemetry)
+7250:FAIL: test_environment_refusal_does_not_hide_valid_retry_telemetry (test_run_campaign.IdleAdmissionCoreVerdictTests.test_environment_refusal_does_not_hide_valid_retry_telemetry)
+7265:FAIL: test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound (test_run_campaign.IdleAdmissionCoreVerdictTests.test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound)
+7283:MODULE FAIL tests.test_run_campaign tests=281 failures=3 errors=0 skipped=0 seconds=376.736
+7759:SHARD SUMMARY index=4/4 modules=65 tests=1872 failures=3 errors=0 skipped=16 result=FAIL
+7760:WORKERS SUMMARY shards=4 modules=210 tests=5343 failures=3 errors=0 skipped=109 failed_shards=4 result=FAIL
+7761:rc=1 end=2026-09-08 08:52:28
+--- tracebacks:
+FAIL: test_cpu_admission_reads_final_attempt_telemetry (test_run_campaign.IdleAdmissionCoreVerdictTests.test_cpu_admission_reads_final_attempt_telemetry)
+Fix round 1 (blocker): pair CPU telemetry with the final attempt.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-magistrate-1ef89702/tests/test_run_campaign.py", line 9253, in test_cpu_admission_reads_final_attempt_telemetry
+    evaluation = self._produced_retry_member(
+        "p2-work-a__r1",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_busy_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-magistrate-1ef89702/tests/test_run_campaign.py", line 9238, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+======================================================================
+FAIL: test_environment_refusal_does_not_hide_valid_retry_telemetry (test_run_campaign.IdleAdmissionCoreVerdictTests.test_environment_refusal_does_not_hide_valid_retry_telemetry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-magistrate-1ef89702/tests/test_run_campaign.py", line 9267, in test_environment_refusal_does_not_hide_valid_retry_telemetry
+    evaluation = self._produced_retry_member(
+        "environment-refused",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_clean_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-magistrate-1ef89702/tests/test_run_campaign.py", line 9238, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+======================================================================
+FAIL: test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound (test_run_campaign.IdleAdmissionCoreVerdictTests.test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-magistrate-1ef89702/tests/test_run_campaign.py", line 9333, in test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound
+    base_evaluation = self._produced_retry_member(
+        "malformed-ledger",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_clean_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-magistrate-1ef89702/tests/test_run_campaign.py", line 9238, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+----------------------------------------------------------------------
+Ran 281 tests in 376.736s
+
+FAILED (failures=3)

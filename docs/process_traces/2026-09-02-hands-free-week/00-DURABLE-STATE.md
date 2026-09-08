@@ -590,5 +590,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `1a081723350aea55` asking Ed to CLOSE the joulewise-53 terminal (pid 83953 stays alive until then and blocks the arm while present);
   refinement `1a0817fbc66d8737`: any ChatGPT-app quit after 1788945300 and before 1788947100 (D6-2).
 - NEXT EXACT ACTIONS unchanged from the section above except (1) is done (PR #295 merged `23012b52`) and (2) is done; the arm runs in
-  window 1788944160 ≤ now < 1788945300 with no NO on thread `1a0800cdb282c3f1` and no standdown.request. Hazard: a leaked fake
-  `vllm serve` test server (pid 58633 in `pass3-standdown-census.txt`) matches the production census alternation only by a temp-path substring.
+  window 1788944160 ≤ now < 1788945300 with no NO on thread `1a0800cdb282c3f1` and no standdown.request. Hazard: a leaked python test
+  process (pid 58633; full argv in `pass3-pid58633-argv.txt`) matches the production census alternation only by a temp-path substring.
+- STAND-DOWN VOID (later on 2026-09-08): Ed resumed joulewise-53 (pid 83953) for daytime work; fresh stand-down promised by
+  1788941700 (01:15 PDT 09-09), fallback: absence judged only by `ps -p 83953` after 1788942600. Message verbatim:
+  `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`. Hold the arm while that pid lives.
