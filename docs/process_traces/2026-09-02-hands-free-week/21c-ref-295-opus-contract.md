@@ -203,3 +203,27 @@ $ cat /Users/edr/JouleWise-measurement-20260813/.git/refs/heads/main -> eeb4e133
 VERDICT: **NOT LANDABLE** — blockers F1 (arm email recorded as sent 22 min before it was sent, and on the commit
 clock it preceded H, refuting D-175 cond. 1), F2 (every self-reported time in 21b is 15–30 min ahead of the
 artifacts), F3 (the arm block's census hardcodes the dead pid 84232 and, bench-proved, can never pass).
+
+## Ruling of record on F1 (synthesis author joulewise-53, cross-session message ~02:03 PDT 2026-09-08; Ed may veto on the thread)
+
+Option B. Condition 1 is judged on ONE consolidated arm notice sent on the same thread (`1a0800cdb282c3f1`) AFTER the
+fix round lands on the branch; H stays `ae8f074f` and conditions 2 and 6 keep that sha. Reasoning: condition 1 exists so
+that the pins Ed can say NO to are durable before he is asked; the 01:10:59 pins follow-up met the substance 15 s after
+H, but the 01:05:21 email asked before the pins were committed, so the ordering is ambiguous on the primaries. One
+consolidated notice cures that at the cost of one email. Requirements on that notice: (1) restate every pin verbatim
+(t0 epoch and local time, measurement_root, measurement_head ae8f074f, receipt class REHEARSAL_STUB, courier deadline,
+custody_root) and "launches unless NO"; (2) include the corrected timeline (arm email, H, pins follow-up, this notice)
+with primary-source times and state that the earlier 21b self-reported times were 15–30 min ahead of the commit clock;
+(3) send it only after the fix round is committed: the census block must not hard-code pid 84232 (derive the foreign
+list live), guards must be fatal (a non-zero census or a failed --render-only aborts the arm), and --render-only must
+run against a SCRATCH custody root under $TMPDIR so nothing is created under the real custody root before the atomic
+move (condition 2's staging rule covers the whole validation, not only the plan file); (4) restore the four dropped
+"Next lane" sentences in the handback or record here why each is obsolete. The NO window runs from that notice; do not
+arm earlier than t0 − 60 min (01:56 PDT 2026-09-09) and never before joulewise-53's stand-down message.
+
+Magistrate 784a764e disposition of the refutation: F1 → ruled B above; F2, F3, F4, F7, F8, F9, F10, F12, F13, F14, F15
+→ dictated cures in fix round 1 (astra seat, brief in the activation's scratch, report custodied as 21d); F5 → the
+ruled twin-validation shape (validation twin plan under $TMPDIR, byte-diff against the real staged plan, real custody
+root first created by the mkdir immediately before os.replace); F6 → no allowlist: the arming session stops its own
+Codex children and background tasks before the census and a reparented own process aborts the arm (fail-closed);
+F11 → restore the four sentences verbatim (requirement 4). Delta re-audit of the fix round follows (21e).
