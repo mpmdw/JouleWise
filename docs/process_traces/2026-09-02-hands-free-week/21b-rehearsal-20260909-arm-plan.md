@@ -193,3 +193,25 @@ launchctl list | grep -E "com.joulewise.night"; rm -rf "$STAGE"
 ```
 Cond. 8: any later re-arm or removal of THIS plan by a headless session repeats steps 2–7; everything else on plans,
 night records and launchd stays barred by relaunch-prompt line 19 (as amended by D-175).
+
+## Activation succession (2026-09-08 ~01:50 PDT; written by activation 784a764e)
+
+- Activation 1ef89702 (pid 84232) was terminated at 01:33:28 PDT: it ended its last turn holding only monitors and a
+  45-minute timer, and Claude Code's headless `-p` mode terminates a session 600 s after a turn ends while background
+  tasks remain (`attempts/1ef89702-…/attempt-1.stderr.log`: "Background tasks still running after 600s; terminating.
+  Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely."). The watchdog recorded `clean activation exit`
+  (events seq 5, IDLE), `backoff has not expired` (seq 6, BACKOFF, 300 s), then spawned activation
+  `784a764e-12b2-4c9a-a96d-9b8690d6abad` (seq 7–8, 01:41:58 PDT; lock pid 83086, supervisor 83075; `attempt: 2`).
+- Consequence for this plan: the arming party is whichever headless activation is live when preconditions (a)+(b)
+  hold. The NIGHT_HANDBACK text at H names activation 1ef89702 as the author of the arm request (true: emails
+  `1a0800cdb282c3f1`/`1a08012045894ef7` were sent by it); the arm itself is executed and recorded by the live
+  activation, whose id and pid go into the arm record (step 8). No re-pin: H stays `ae8f074f`.
+- CORRECTION to step 4 (census): `me = 84232` is the dead pid. The live activation must derive its own pid from the
+  lock it holds, never a constant:
+  `me = json.load(open(os.path.expanduser("~/night-custody/magistrate/magistrate.lock")))["pid"]` (plus
+  `import json, os`), and assert `me == os.getppid()`-chain membership is unnecessary — the lock pid is the session.
+- Relaunch churn (finding for the watchdog owner, joulewise-53; not a process change by this activation): with the
+  600 s ceiling, a headless magistrate that ends its turn while waiting is relaunched every ~10 min (5-min backoff +
+  ceiling) and each relaunch sends Ed a mandated launch email. Activation 784a764e therefore keeps itself alive with
+  a bounded background poll (standdown.request, `~/night-custody/*/night_plan.json`, joulewise-53's pid, a 7-minute
+  tick) instead of ending its turn idle. Launch email for 784a764e: Gmail `1a080326c4d2f147`.

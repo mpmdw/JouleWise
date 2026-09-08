@@ -535,3 +535,7 @@ unattended-window path. Session 3c46c831 (resumed twin, pid 71607) ends here; it
   fixes (WATCHDOG-CENSUS-01, RESUME-DAEMON-01, T0-ACID-CLOCK-01), the RUN_STATE/TASK_QUEUE rows for them and for
   this relaunch, and `docs/process_traces/2026-09-08-handoff-redo/`. The headless magistrate holds: NO arming while
   that session or its seats are alive; rehearsal-stub prep resumes after it stands down (email-then-arm).
+- 2026-09-08 01:42 PDT: activation 1ef89702 was terminated by the headless 600 s background-task ceiling at 01:33
+  (recorded `clean activation exit`); the watchdog relaunched activation 784a764e at 01:41:58 (launch email
+  `1a080326c4d2f147`). Same lane, same conditions; the arm plan 21b carries a succession addendum (census `me` from
+  the lock, not a constant). Arm request thread `1a0800cdb282c3f1` has no NO. Nothing armed.
