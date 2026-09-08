@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import subprocess
 import importlib.util
 import re
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,7 +36,7 @@ def _independent_fence_inventory(source: str) -> list[tuple[int, int, str]]:
     """Fence parser intentionally independent of the production emitter."""
 
     result: list[tuple[int, int, str]] = []
-    for heading in ("## Tree and fixed variables", "## G2-a — first machine evening"):
+    for heading in ("## Plan-derived measurement variables", "## G2-a — first machine evening"):
         section = _section(source, heading)
         offset = source.index(section)
         for match in re.finditer(r"^```(?:sh|zsh)\n(.*?)^```$", section, re.MULTILINE | re.DOTALL):
@@ -52,7 +55,7 @@ class G2aNightChainTests(unittest.TestCase):
         independent = _independent_fence_inventory(self.runsheet)
         self.assertEqual(
             [(start, end) for start, end, _body in independent],
-            [(252, 302), (326, 349), (372, 383), (387, 562), (573, 585)],
+            [(1534, 1598), (328, 351), (374, 385), (389, 564), (575, 587)],
         )
         self.assertEqual(self.generator.inventory_g2a_shell_blocks(self.runsheet), independent)
 
@@ -82,6 +85,71 @@ class G2aNightChainTests(unittest.TestCase):
         for start, end, body in (blocks[0], blocks[3], blocks[4]):
             self.assertIn(f"# runsheet L{start}-{end}\n{body}", chain)
         self.assertNotIn("20260830", chain)
+
+    def test_counterfactual_literal_survives_in_emitted_chain(self) -> None:
+        chain = self.generator.render_g2a_night_chain(self.runsheet, "20260908")
+        for literal in ("JouleWise-measurement-20260813", "code/JouleWise/.venv"):
+            self.assertNotIn(literal, chain)
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh required for emitted chain")
+    def test_counterfactual_missing_measurement_root_not_refused(self) -> None:
+        chain = self.generator.render_g2a_night_chain(self.runsheet, "20260908")
+        # Only the routing block: never execute probe, ledger, or measurement work.
+        routing = chain.split("\n# runsheet ")[1].split("\n", 1)[1]
+        environment = {key: value for key, value in os.environ.items()
+                       if key not in ("MEASUREMENT_ROOT", "MEASUREMENT_HEAD")}
+        result = subprocess.run(["/bin/zsh", "-c", routing], env=environment,
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("FAIL measurement_root is required", result.stderr)
+
+    @unittest.skipUnless(shutil.which("zsh"), "zsh required for emitted chain")
+    def test_routing_checks_head_and_derives_interpreter_before_any_work(self) -> None:
+        chain = self.generator.render_g2a_night_chain(self.runsheet, "20260908")
+        routing = chain.split("\n# runsheet ")[1].split("\n", 1)[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "measurement with spaces"
+            python = root / ".venv/bin/python"
+            python.parent.mkdir(parents=True)
+            python.write_text("#!/bin/sh\necho UNEXPECTED_EXECUTION >&2\nexit 99\n")
+            python.chmod(0o755)
+            fake_bin = Path(temporary) / "bin"
+            fake_bin.mkdir()
+            git = fake_bin / "git"
+            git.write_text('#!/bin/sh\n[ "$1" = -C ] && [ "$2" = "$EXPECTED_ROOT" ] || exit 99\n'
+                           'printf "%s\\n" "$OBSERVED_HEAD"\n')
+            git.chmod(0o755)
+            environment = {**os.environ, "PATH": f"{fake_bin}:/usr/bin:/bin",
+                           "MEASUREMENT_ROOT": str(root), "EXPECTED_ROOT": str(root),
+                           "MEASUREMENT_HEAD": "a" * 40, "OBSERVED_HEAD": "a" * 40,
+                           "PY": "/wrong/python", "REPO": "/wrong/repo"}
+            def run():
+                return subprocess.run(["/bin/zsh", "-c", routing +
+                                       '\nprintf "%s\\n" "$REPO" "$PY" "$PYTHONPATH"\n'],
+                                      env=environment, text=True, capture_output=True)
+            result = run()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.stdout, f"{root}\n{python}\n{root}\n")
+            for field, value, refusal in (
+                ("MEASUREMENT_HEAD", "b" * 40, "checkout HEAD does not equal measurement_head"),
+                ("MEASUREMENT_HEAD", "", "measurement_head must be a full 40-character lowercase SHA-1"),
+                ("MEASUREMENT_ROOT", "relative", "measurement_root must be an absolute path"),
+            ):
+                with self.subTest(field=field, value=value):
+                    original = environment[field]
+                    environment[field] = value
+                    result = run()
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("FAIL " + refusal, result.stderr)
+                    environment[field] = original
+            python.unlink()
+            result = run()
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("FAIL measurement venv Python is missing or not executable", result.stderr)
+
+    def test_source_fence_drift_is_refused(self) -> None:
+        with self.assertRaisesRegex(ValueError, "shell-fence inventory drifted"):
+            self.generator.render_g2a_night_chain("\n" + self.runsheet, "20260908")
 
     def test_emit_writes_gnu_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

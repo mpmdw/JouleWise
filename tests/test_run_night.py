@@ -14,6 +14,7 @@ import time
 import types
 import unittest
 from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -281,6 +282,53 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("epoch_s", exited)
         self.assertIn("monotonic_ns", exited)
         self.assertTrue(self.popen_kwargs[0]["start_new_session"])
+
+    def test_counterfactual_inherited_coordinates_override_parsed_night_plan(self) -> None:
+        parsed = night_gate.NightPlan.from_mapping(json.loads(self.plan_path.read_text()))
+        parsed = replace(
+            parsed,
+            measurement_root=str(self.root / "measurement with spaces"),
+            measurement_head="a" * 40,
+        )
+        write_night_plan(self.plan_path, parsed)
+        self.probes_mock.return_value = replace(
+            self.source.probes(), measurement_head=lambda _root: parsed.measurement_head
+        )
+        inherited = {
+            "NIGHT_PLAN_ID": "stale-plan",
+            "MEASUREMENT_ROOT": "/stale/measurement",
+            "MEASUREMENT_HEAD": "b" * 40,
+            "PY": "/stale/development/python",
+        }
+        with mock.patch.dict(os.environ, inherited):
+            exit_code, calls = self._run_night()
+            # The handoff changes only the child's environment.
+            self.assertEqual({key: os.environ[key] for key in inherited}, inherited)
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+        environment = self.popen_kwargs[0]["env"]
+        self.assertEqual(
+            {key: environment.get(key) for key in inherited},
+            {
+                "NIGHT_PLAN_ID": parsed.plan_id,
+                "MEASUREMENT_ROOT": parsed.measurement_root,
+                "MEASUREMENT_HEAD": parsed.measurement_head,
+                "PY": parsed.measurement_root + "/.venv/bin/python",
+            },
+        )
+
+    def test_plan_supplies_coordinates_when_parent_exports_are_absent(self) -> None:
+        keys = ("MEASUREMENT_ROOT", "MEASUREMENT_HEAD", "PY")
+        parent = {key: value for key, value in os.environ.items() if key not in keys}
+        with mock.patch.dict(os.environ, parent, clear=True):
+            exit_code, calls = self._run_night()
+        self.assertEqual(exit_code, self.driver.EXIT_GO)
+        self.assertEqual(calls, [["/bin/zsh", str(self.chain)]])
+        environment = self.popen_kwargs[0]["env"]
+        self.assertEqual(
+            [environment.get(key) for key in keys],
+            [str(self.root), HEAD, str(self.root) + "/.venv/bin/python"],
+        )
 
     def test_chain_spawn_failure_records_refusal_and_finishes_reporting(self) -> None:
         self.driver._durable_record = self.real_durable_record

@@ -94,4 +94,17 @@ driver checkout HEAD and `measurement_head` against the HEAD of the plan's
 needs `claude` on PATH.
 Ordinary
 daytime work in the dev checkout no longer invalidates an armed night; only
-moving the pinned measurement checkout does.
+moving the pinned measurement checkout does. Once authored, every armed
+plan's canonical `(plan_id, measurement_root, measurement_head)` is included
+in the magistrate relaunch prompt's frozen-checkout list until completion.
+
+G2-a routing handoff (2026-09-08; installed):
+`scripts/run_night.py::_run_chain_once` derives `MEASUREMENT_ROOT`,
+`MEASUREMENT_HEAD`, and `PY` from the parsed v2 plan and overwrites inherited
+values in the child environment alongside `NIGHT_PLAN_ID`. There is no v2
+interpreter field: the driver, chain, and preflight always derive
+`<measurement_root>/.venv/bin/python`. The chain and preflight verify checkout
+HEAD against `measurement_head`. The preflight's sole argument is the absolute
+v2 plan filename. Future clone naming and the exact locked venv creation
+commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
+>>>>>>> feat/2026-09-08-g2a-chain-routing

@@ -75,6 +75,8 @@ G2A_INPUT_CHECK = (
 def _section_bounds(source: str, heading: str) -> tuple[int, int]:
     """Return the character bounds for one level-two runsheet section."""
 
+    if heading not in source:
+        raise ValueError(f"runsheet section is missing: {heading}")
     start = source.index(heading)
     following = re.search(r"^## ", source[start + len(heading) :], re.MULTILINE)
     end = len(source) if following is None else start + len(heading) + following.start()
@@ -86,14 +88,14 @@ def _line_number(source: str, offset: int) -> int:
 
 
 def inventory_g2a_shell_blocks(runsheet: str) -> list[tuple[int, int, str]]:
-    """Inventory shell fences in the fixed-variable and G2-a sections.
+    """Inventory shell fences in the plan-derived-variable and G2-a sections.
 
     The inclusive line numbers deliberately cover the markdown fence lines:
     they are the stable source anchors recorded in an emitted chain.
     """
 
     sections = (
-        _section_bounds(runsheet, "## Tree and fixed variables"),
+        _section_bounds(runsheet, "## Plan-derived measurement variables"),
         _section_bounds(runsheet, "## G2-a — first machine evening"),
     )
     blocks: list[tuple[int, int, str]] = []
@@ -119,7 +121,7 @@ def render_g2a_night_chain(runsheet: str, night_date: str) -> str:
     if re.fullmatch(r"[0-9]{8}", night_date) is None:
         raise ValueError("--night-date must be YYYYMMDD")
     blocks = inventory_g2a_shell_blocks(runsheet)
-    expected_ranges = [(252, 302), (326, 349), (372, 383), (387, 562), (573, 585)]
+    expected_ranges = [(1534, 1598), (328, 351), (374, 385), (389, 564), (575, 587)]
     observed_ranges = [(start, end) for start, end, _body in blocks]
     if observed_ranges != expected_ranges:
         raise ValueError(
@@ -408,6 +410,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     expected = replace_generated_region(expected, render_generated_region(runbook))
     if args.check:
+        # Check executable source fences as well as the generated bracket bytes.
+        try:
+            render_g2a_night_chain(runsheet, "20260830")
+        except ValueError as exc:
+            print(f"FAIL {exc}")
+            return 1
         if runsheet != expected:
             print(f"FAIL generated Phase D drift: {RUNSHEET_PATH.relative_to(REPO_ROOT)}")
             return 1
