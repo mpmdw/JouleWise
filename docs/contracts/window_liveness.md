@@ -155,8 +155,9 @@ The example replacement is: [C4]
 ```
 
 If the probe cannot supply a running process's start token, the replacement
-contains `"start_time": null`. The census refuses any start object without a
-usable token before it probes the PID, even if that PID has disappeared. The
+contains `"start_time": null`. When neither exit check accepts an exit, the
+census refuses any start object without a usable token before it probes the
+PID, even if that PID has disappeared. The
 initial empty or partially written file can still be seen between the claim
 and completion of the first write; moving the probe after that write prevents
 the probe's delay from extending that interval. The replacement has no
@@ -190,8 +191,8 @@ stage; the complete records are the two JSON objects above. [C6]
 
 The separate **dead-man** is the scheduled recovery execution of the night
 driver; it needs the group number even if the identity probe has not finished.
-Once earlier courier-delivery checks allow recovery to reach a start with no
-exit, it reads a positive integer `pgid` (excluding a JSON true/false value) and calls
+Once earlier courier-delivery checks (for the program that emails the night's
+result) allow recovery to reach a start with no exit, it reads a positive integer `pgid` (excluding a JSON true/false value) and calls
 `os.killpg(pgid, 0)`, an existence/permission check on that group that sends no
 **signal**, an operating-system notification such as a termination request.
 `ProcessLookupError` means no such group and permits an
@@ -693,11 +694,12 @@ failing command). A clear census is a **snapshot**, observations at the times
 of its reads, not **mutual exclusion**, a lock preventing a new measurement
 from starting during publication. Use updated driver-managed chains and
 sequence publication and launch so they cannot overlap. A hand-run chain's
-pauses, a collector without registrations, an old checkout, surviving children
+pauses, a collector (the launchd-run measurement collection program) without
+registrations, an old checkout, surviving children
 of a dead owner, or a new launch after inspection can escape this inventory;
 start tokens also cannot distinguish reuse within the same printed second.
-The watchdog's checks for agent processes and its rules forbidding launch
-remain separate. [T8]
+The watchdog (the agent-monitoring LaunchAgent that evaluates arming ticks)
+has checks for agent processes and rules forbidding launch that remain separate. [T8]
 
 ## 8. Follow the numbers through refusal and publication
 
@@ -750,16 +752,16 @@ identified separately instead of being attributed to current code.
 
 | Text | Implementing location and correspondence |
 |---|---|
-| P1 | `scripts/window_status.sh:12`–`:19`: Git/network contamination and allowed call times; `:60`–`:92`: status write; `:99`–`:106`: Git operations |
+| P1 | `scripts/window_status.sh:12`–`:19`: Git/network contamination and allowed call times; `:60`–`:94`: status write; `:101`–`:106`: Git staging/change check; `:107`–`:108`: commit/push |
 | P2 | Historical failure: terminal review linked in P3, opening and Why; replacement: `joulewise/measurement_liveness.py:41`–`:68` and `scripts/window_status.sh:41`–`:47` |
 | P3 | Parent: `joulewise/measurement_liveness.py:71`–`:72`; census: `:224`–`:263`; refusals: `:166`–`:201`, `:261`–`:272`; caller: `scripts/window_status.sh:41`–`:47` |
 | F1, F3 | PID/token probe and one-second format: `joulewise/measurement_liveness.py:25`–`:68`; chain's PID/PGID: `scripts/run_night.py:373`–`:385`, `:431`–`:437`; campaign PID/token: `joulewise/measurement_liveness.py:113`–`:116`; reuse: `:175`–`:182` |
 | F2 | Production argument/language distinction: `joulewise/measurement_liveness.py:53`–`:56`, `:62`–`:68`; operator column command is explanatory, not the production command; historical extract links above own its values |
 | C1 | Names: `joulewise/measurement_liveness.py:185`–`:186`, `:259`; exclusive claim, permissions, existing-name return: `scripts/run_night.py:360`–`:369`; launch claim use: `:1247`–`:1266` |
-| C2 | JSON encoding/newline: `scripts/run_night.py:105`–`:106`; child spawn: `:431`–`:437`; first record, write time: `:373`–`:380` |
+| C2 | JSON encoding/newline: `scripts/run_night.py:102`–`:103`; child spawn: `:431`–`:437`; first record, write time: `:373`–`:380` |
 | C3 | Complete writes/fsync: `scripts/run_night.py:109`–`:116`; close before probe: `:375`–`:380` |
-| C4 | Probe, temporary write, replacement: `scripts/run_night.py:380`–`:385`; temporary exclusive write/fsync: `:119`–`:129` |
-| C5 | Null: `scripts/run_night.py:381`; census token-before-PID: `joulewise/measurement_liveness.py:199`–`:201`; empty interval: `scripts/run_night.py:360`–`:380`; no directory fsync: `:382`–`:385`; accepted power-loss limitation: linked terminal review, Lead rulings |
+| C4 | Probe, temporary write, replacement: `scripts/run_night.py:380`–`:385`; temporary exclusive write/fsync: `:116`–`:125` |
+| C5 | Null: `scripts/run_night.py:382`; census token-before-PID: `joulewise/measurement_liveness.py:199`–`:201`; empty interval: `scripts/run_night.py:360`–`:380`; no directory fsync: `:382`–`:385`; accepted power-loss limitation: linked terminal review, Lead rulings |
 | C6 | Entire timeline: `scripts/run_night.py:360`–`:385`, `:431`–`:452` |
 | C7 | Earlier courier checks: `scripts/run_night.py:1358`–`:1385`; group parsing: `:1339`–`:1348`; missing group exit: `:1387`–`:1401`; zero-signal check and two exception meanings: `:1403`–`:1422` |
 | C8 | Same example branches: `scripts/run_night.py:1389`–`:1422`; distinct census check: `joulewise/measurement_liveness.py:199`–`:201`, `:53`–`:68` |
@@ -791,7 +793,7 @@ identified separately instead of being attributed to current code.
 | T3 | Probe reachability and exit arrival limits: `joulewise/measurement_liveness.py:187`–`:201` |
 | T4, T5 | Registry categories: `joulewise/measurement_liveness.py:204`–`:212`, `:166`–`:182`; combination table: marker-table locations above plus `:139`–`:141`, `:261`–`:272` |
 | T6 | Diagnostic prefixes and rc: `joulewise/measurement_liveness.py:266`–`:272`; shell ordering/failure: `scripts/window_status.sh:41`–`:47`; no courier override: `joulewise/measurement_liveness.py:185`–`:212` |
-| T7 | Sentinel and status checkout defaults: `scripts/window_status.sh:32`–`:34`; helper checkout: `:41`–`:44`; local-only branch: `:94`–`:97`; stage/commit/push: `:99`–`:110` |
+| T7 | Sentinel and status checkout defaults: `scripts/window_status.sh:32`–`:34`; helper checkout: `:41`–`:44`; local-only branch: `:96`–`:99`; stage/commit/push: `:99`–`:110` |
 | T8 | Publish table branches: `scripts/window_status.sh:44`–`:47`, `:92`–`:110`; unhandled failures: `:30`; snapshot/coverage limits: `joulewise/measurement_liveness.py:3`–`:7`, `:47`; separate night agent check: `scripts/run_night.py:459`–`:460` |
 | W1–W3 | Steps 1–8 use T2/T5 rows N, L, L, E, E, E, E, E and I4/I5; exit object: `joulewise/measurement_liveness.py:159`–`:163`; repair: R10/R11; missing/error parent: `:237`–`:240`, `:261`–`:262`; publish/refuse: `scripts/window_status.sh:44`–`:47`, `:92`–`:110` |
 | Watchdog, handback, G2 pointer paragraphs | Helper call/refusal: `scripts/window_status.sh:41`–`:47`; shared custody: `joulewise/measurement_liveness.py:3`–`:7`; independent chain/campaign checks: `:185`–`:212`; operator repair: R10/R11; separate watchdog agent decisions: `scripts/run_night.py:459`–`:460` |
