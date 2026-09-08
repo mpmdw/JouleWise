@@ -23,73 +23,63 @@ unreadable decision means the watchdog is dead and must be reported as such.
 
 ## Purpose of this night
 
-Plan `rehearsal-20260903`, class `REHEARSAL_STUB`, armed by the magistrate
-(Fable, standing loop, the morning of 2026-09-02; RE-ARMED the evening of
-2026-09-02 — a fresh audit caught that the magistrate's own daytime pulls
-had moved the canonical checkout HEAD past the plan's pinned `repo_head`,
-so the gate would have refused `night_plan_stale`; the plan was re-pinned
-to the re-arm commit and both plists re-rendered, which also refreshed the
-courier binary pin past a same-day claude self-update) for 02:56 local on
-2026-09-03 with a 900 s window. The chain is the driver's built-in stub
-(`sleep 2; echo REHEARSAL`); no pack, no model, no measurement, no sudo.
-This is the "installed the morning before" stand-down rehearsal ruled by
-the cold gate D1 R-7 amendment
-(`docs/process_traces/2026-09-01-unattended/coldgate-d1-RULING.md`): the
-agents were installed around 03:30 on 2026-09-02, so the dead-man's
-07:00 firing on 2026-09-02 lands BEFORE the armed night, and the ruled
-observable is its stand-down — one `night.log` line ("dead-man fired
-before the night's completion epoch …; standing down"), exit GO, no other
-writes. The night itself then fires from launchd at 02:56 on 2026-09-03 as
-a second end-to-end rehearsal. The gate receipt may again refuse
-`night_refused_agent_present` if the standing loop's own sessions are
-alive at 02:56 — acceptable for a `REHEARSAL_STUB` (it can never carry
-GO); any OTHER refusal reason is a finding. Serves kernel row
-`NIGHT-REHEARSAL-01` (the R-7 stand-down rehearsal case). The first
-launchd rehearsal (`rehearsal-20260902`) completed 2026-09-02: verdict
-`REHEARSAL_ONLY`, chain exit 0, courier message id `1a0618d143537010`,
-branch `night-results/20260902`.
+Plan `rehearsal-20260909`, class `REHEARSAL_STUB`, armed by the headless
+magistrate (activation 1ef89702, spawned by the relaunch watchdog on
+2026-09-08 00:51:55 PDT) for 02:56 local on 2026-09-09 with a 900 s
+window, inside the 02:45–03:30 belt. It is the fresh post-watchdog
+rehearsal the state kernel requires before any real plan
+(`NIGHT-REHEARSAL-01`, last acceptance item). The chain is the driver's
+built-in stub (`sleep 2; echo REHEARSAL`); no pack, no model, no
+measurement, no sudo. The plan is v2: `repo_head` and `measurement_head`
+both pin THIS commit (the one that rewrote this file), and
+`measurement_root` is a disposable detached checkout of this commit at
+`/private/tmp/joulewise-rehearsal-20260909-checkout`, used only by this
+stub and removed with the plan root before any real plan; the measurement
+checkout of record (`/Users/edr/JouleWise-measurement-20260813`) is
+untouched. Both night agents are installed FROM that checkout. Ed was
+emailed the arming notice before the arm (thread `1a0800cdb282c3f1`, with
+the exact pins in its follow-up); a NO on that thread stands the night
+down. Expected: `result.json` verdict `REHEARSAL_ONLY`, chain exit 0,
+courier deadline `t0 + 900 + 300` = 03:16 PDT. A receipt refusing
+`night_refused_agent_present` is acceptable for a stub (it can never
+carry GO); any other refusal is a finding. If the agents were installed
+before 07:00 on 2026-09-08, that morning's dead-man firing stands down
+with one `night.log` line (the R-7 observable); otherwise this night does
+not repeat that case. The design ruling and bench pass are in
+`docs/process_traces/2026-09-02-hands-free-week/21b-rehearsal-20260909-arm-plan.md`.
 
 ## Where the results are
 
-- Stand-down observable (from the 2026-09-02 07:00 dead-man firing):
-  the "standing down" line in
-  `/Users/edr/night-custody/rehearsal-20260903/night.log`.
-- Results branch: `night-results/20260903` on `origin` (pushed by the
-  driver from a fresh shallow clone; readable from a phone).
-- Custody root: `/Users/edr/night-custody/rehearsal-20260903/night/` on the
-  measurement machine — `result.json` (expected verdict `REHEARSAL_ONLY`,
-  `chain_exit_code` 0), `receipt.json`, `chain.started`, `chain.exited`,
-  `censuses.jsonl`, `night.log`.
+- Custody root: `/Users/edr/night-custody/rehearsal-20260909/night/` —
+  `result.json` (expected verdict `REHEARSAL_ONLY`, `chain_exit_code` 0),
+  `receipt.json` or `refusal.json` as `result.json` directs,
+  `chain.started`, `chain.exited`, `censuses.jsonl`, `courier.sent`,
+  `courier.json`.
+- Driver log: `/Users/edr/night-custody/rehearsal-20260909/night.log`
+  (and the dead-man stand-down line if the 2026-09-08 07:00 firing
+  preceded the night).
+- Results branch: `night-results/20260909` on `origin`, if the driver's
+  push succeeded — verify, do not presume.
 
 ## Next lane
 
-Resume the standing loop (`/loop` mandate; memory `unattended-loop-first`):
-the magistrate harvests the custody root AND the stand-down log line,
-records both under `NIGHT-REHEARSAL-01`, then runs
-`scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260903/night_plan.json --hour 2 --minute 56 --uninstall`
-at the SAME commit the plan was RE-armed on (the re-arm commit that
-rewrote this file; on install the installer checks `repo_head` against the
-driver checkout HEAD and `measurement_head` against the HEAD of the plan's
-`measurement_root`, while `--uninstall` checks neither pin and no longer
-needs `claude` on PATH), so the dead-man job stops firing at 07:00. The
-measurement checkout of record (`/Users/edr/JouleWise-measurement-20260813`)
-must not move between the re-arm and the night's completion: the v2 gate
-compares the plan's `measurement_head` to that checkout's HEAD. Ordinary
-daytime work in the dev checkout no longer invalidates an armed night; only
-moving the pinned measurement checkout does. Then the last stage-1 item: the stage-1 plan email to Ed (first
-armed date; launches unless he replies NO) before any `DIAGNOSTIC_NO_PACK`
-plan is armed. For every v2 plan, run `scripts/install_night_agent.sh` FROM
-the checkout named by the plan's `measurement_root`, with that checkout at
-the plan's `measurement_head`; never install those two night agents from the
-development checkout. Ed was emailed the arming notice for THIS night before it
-was armed (cold gate coldgate-e10 (b)); if Ed replied NO on that thread,
-stand the night down instead of harvesting. A refusal other than
-`night_refused_agent_present` on this night is a finding: cure the cause
+The relaunched magistrate (its prompt carries the frozen triple
+`rehearsal-20260909` / `/private/tmp/joulewise-rehearsal-20260909-checkout`
+/ this commit) harvests `result.json`, the receipt or refusal, the courier
+message id and the results-branch evidence, records them under
+`NIGHT-REHEARSAL-01`, then runs
+`scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260909/night_plan.json --hour 2 --minute 56 --uninstall`
+FROM the stub checkout, removes the stub checkout (`git worktree remove`)
+and the plan root before any real plan, and then sends the stage-1 plan
+email to Ed before any `DIAGNOSTIC_NO_PACK` plan is armed. Accept only
+`night_refused_agent_present` as a receipt refusal; cure any other cause
 before re-arming; never re-arm the same plan on the same signature twice.
-Author every new v2 plan with
-`joulewise.night_plan_writer.write_night_plan`; invalid-plan tests begin with
-that writer's bytes and apply a named mutation. The writer emits both
-`schema: joulewise.night_plan.v2` and integer `schema_version: 2`; either field
-missing or inconsistent makes the plan malformed. Once authored, every armed
-plan's canonical `(plan_id, measurement_root, measurement_head)` is included
-in the magistrate relaunch prompt's frozen-checkout list until completion.
+For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
+named by the plan's `measurement_root`, with that checkout at the plan's
+`measurement_head`; never install the two night agents from the
+development checkout. Author every new v2 plan with
+`joulewise.night_plan_writer.write_night_plan`; the writer emits both
+`schema: joulewise.night_plan.v2` and integer `schema_version: 2`. Once
+authored, every armed plan's canonical `(plan_id, measurement_root,
+measurement_head)` is included in the magistrate relaunch prompt's
+frozen-checkout list until completion.
