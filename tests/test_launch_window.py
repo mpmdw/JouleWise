@@ -2157,6 +2157,9 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         consumption = json.loads(self.case.consumption.read_bytes())
         go_path = fixture.custody / "night/go_receipt.json"
         go = json.loads(go_path.read_bytes())
+        import uuid
+        self.assertEqual(uuid.UUID(go["receipt_id"]).version, 4)
+        self.assertEqual(str(uuid.UUID(go["receipt_id"])), go["receipt_id"])
         self.assertEqual(len(go["t0_evidence"]), 21)
         self.assertEqual(consumption["go_receipt"]["sha256"], fixture._artifact(go_path)["sha256"])
         self.assertEqual(consumption["night_plan"]["sha256"], fixture._artifact(plan_path)["sha256"])

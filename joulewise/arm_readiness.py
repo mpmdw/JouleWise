@@ -9846,7 +9846,9 @@ def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: P
 
 
 def _authenticate_go_purpose(go, arm, plan) -> None:
-    prefixed = arm["pack"]["window_id"].startswith("rehearsal-t0-unattended-")
+    from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
+
+    prefixed = arm["pack"]["window_id"].startswith(REHEARSAL_WINDOW_PREFIX)
     rehearsal = go["purpose"] == "T0_REHEARSAL"
     if rehearsal and not prefixed:
         raise _go_invalid("rehearsal_purpose_on_production_id")
@@ -9916,9 +9918,11 @@ def _authenticate_pack_launch_go(
             "pack_id", "pack_root", "pack_sha256", "attempt_ordinal", "authorization_record", "confirmation_record",
         }, "pack_night")
         _require_int(binding["attempt_ordinal"], "pack_night.attempt_ordinal", minimum=1)
-        pack_root = Path(binding["pack_root"]).resolve(strict=True)
         try:
+            pack_root = Path(binding["pack_root"]).resolve(strict=True)
             pack_digest = committed_pack_tree_sha256(pack_root)
+        except FileNotFoundError as exc:
+            raise LaunchLineageError("launch_go_receipt_missing", "pack_root") from exc
         except (ArmReadinessError, OSError, RuntimeError) as exc:
             raise _go_invalid("pack_night.pack_root.pack_sha256: " + str(exc)) from exc
         if pack_digest != binding["pack_sha256"] or pack_digest != arm["pack"]["pack_sha256"]:

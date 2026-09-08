@@ -861,18 +861,18 @@ def _pack_rehearsal_roots(plan, arm, purpose):
             raise PackNightRefusal(field + ": resolution_error") from exc
         for root in production:
             if root.resolution_error is not None:
-                raise PackNightRefusal("rehearsal_roots_not_disjoint: resolution_error " + root.role)
+                raise PackNightRefusal("rehearsal_roots_not_disjoint")
             predicate = next((spec.predicate for spec in readiness.PRODUCTION_CUSTODY_ROOTS
                               if spec.role == root.role.split(":", 1)[0]), None)
             if predicate not in {"DISJOINT", "SIBLING_CHILD"}:
-                raise PackNightRefusal("rehearsal_roots_not_disjoint: unknown production predicate")
+                raise PackNightRefusal("rehearsal_roots_not_disjoint")
             if predicate == "SIBLING_CHILD" and field in {"custody_root", "arm_context.custody_root"}:
                 if path.parent != root.path or path.name != window_id:
-                    raise PackNightRefusal("rehearsal_roots_not_disjoint: " + field)
+                    raise PackNightRefusal("rehearsal_roots_not_disjoint")
             elif predicate == "SIBLING_CHILD" and field != "measurement_root":
                 continue
             elif t0_rehearsal._contains(root.path, path) or t0_rehearsal._contains(path, root.path):
-                raise PackNightRefusal("rehearsal_roots_not_disjoint: " + field)
+                raise PackNightRefusal("rehearsal_roots_not_disjoint")
 
 
 def _evaluate_pack_conditions(plan, probes, rows, arm_path):

@@ -2266,7 +2266,11 @@ class PackNightConsumerTests(unittest.TestCase):
                              require_current_boot=False)["pack_id"], self.fixture.arm["pack"]["pack_id"])
 
     def test_authorization_copies_attempt_confirmation_and_census_are_reauthenticated(self):
-        mutations = [lambda go: go["authorization"].update(attempt_id="wrong/2"),
+        mutations = [lambda go: go.pop("authorization"),
+                     lambda go: go.pop("confirmation_record"),
+                     lambda go: go["authorization"].update(sha256="e" * 64),
+                     lambda go: go["authorization"].update(purpose="CAMPAIGN_TRANSACTION"),
+                     lambda go: go["authorization"].update(attempt_id="wrong/2"),
                      lambda go: go["authorization"].update(claim_eligible=True),
                      lambda go: go["confirmation_record"].update(sha256="e" * 64),
                      lambda go: go["census"].update(exit_code=0),
@@ -2319,16 +2323,30 @@ class PackNightConsumerTests(unittest.TestCase):
                 self.assertFalse(self.consumption.exists())
 
     def test_rehearsal_window_purpose_and_frozen_root_predicates(self):
+        from types import SimpleNamespace
+        from joulewise import night_gate
+
+        def authenticate_both(go, arm, plan):
+            try:
+                readiness._authenticate_go_purpose(go, arm, plan)
+            except readiness.LaunchLineageError as consumer:
+                with self.assertRaises(night_gate.PackNightRefusal) as gate:
+                    night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+                self.assertEqual(gate.exception.reason, consumer.reason_code)
+                self.assertEqual(str(gate.exception), str(consumer))
+                raise
+            night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+
         go = copy.deepcopy(self.inputs["authenticated_go_receipt"])
         arm = copy.deepcopy(self.fixture.arm)
         plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
         go["purpose"] = "T0_REHEARSAL"
         with self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_purpose_on_production_id"):
-            readiness._authenticate_go_purpose(go, arm, plan)
+            authenticate_both(go, arm, plan)
         arm["pack"]["window_id"] = "rehearsal-t0-unattended-fixture"
         go["purpose"] = "G2B_SHAKEDOWN"
         with self.assertRaisesRegex(readiness.LaunchLineageError, "purpose"):
-            readiness._authenticate_go_purpose(go, arm, plan)
+            authenticate_both(go, arm, plan)
         go["purpose"] = "T0_REHEARSAL"
         home = Path(self.fixture.temporary.name).resolve() / "home"
         custody = home / "night-custody" / arm["pack"]["window_id"]
@@ -2339,7 +2357,7 @@ class PackNightConsumerTests(unittest.TestCase):
                       "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
         with mock.patch.object(Path, "home", return_value=home), \
              mock.patch.object(readiness, "_production_inventory", return_value=inventory):
-            readiness._authenticate_go_purpose(go, arm, plan)
+            authenticate_both(go, arm, plan)
             fields = {key: plan for key in ("measurement_root", "custody_root")}
             fields.update({"arm_context." + key: arm["arm_context"]
                            for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS})
@@ -2356,7 +2374,7 @@ class PackNightConsumerTests(unittest.TestCase):
                 with self.subTest(custody_overlap=production.role), \
                      mock.patch.object(readiness, "production_custody_roots", return_value=census), \
                      self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$"):
-                    readiness._authenticate_go_purpose(go, arm, plan)
+                    authenticate_both(go, arm, plan)
             for field, target in fields.items():
                 key = field.removeprefix("arm_context.")
                 original = target[key]
@@ -2375,16 +2393,16 @@ class PackNightConsumerTests(unittest.TestCase):
                         with self.subTest(field=field, role=production.role, candidate=candidate), \
                              mock.patch.object(readiness, "production_custody_roots", return_value=census), \
                              self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$"):
-                            readiness._authenticate_go_purpose(go, arm, plan)
+                            authenticate_both(go, arm, plan)
                 for candidate in ("relative", str(home / "absent")):
                     target[key] = candidate
                     with self.subTest(field=field, candidate=candidate), self.assertRaisesRegex(readiness.LaunchLineageError, field):
-                        readiness._authenticate_go_purpose(go, arm, plan)
+                        authenticate_both(go, arm, plan)
                 alias = home / (field + "-alias")
                 alias.symlink_to(Path(original))
                 target[key] = str(alias)
                 with self.subTest(field=field, candidate="symlink"), self.assertRaisesRegex(readiness.LaunchLineageError, field):
-                    readiness._authenticate_go_purpose(go, arm, plan)
+                    authenticate_both(go, arm, plan)
                 target[key] = original
             for field, target in (("custody_root", plan), ("custody_root", arm["arm_context"]),
                                   ("measurement_root", plan)):
@@ -2394,20 +2412,20 @@ class PackNightConsumerTests(unittest.TestCase):
                     candidate.mkdir(exist_ok=True)
                     target[field] = str(candidate)
                     with self.subTest(field=field, candidate=candidate), self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
-                        readiness._authenticate_go_purpose(go, arm, plan)
+                        authenticate_both(go, arm, plan)
                 target[field] = original
             for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS - {"custody_root"}:
                 own = custody / key
                 own.mkdir()
                 arm["arm_context"][key] = str(own)
-            readiness._authenticate_go_purpose(go, arm, plan)
+            authenticate_both(go, arm, plan)
             with mock.patch.object(readiness, "_production_inventory", return_value=[]), \
                  self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
                 readiness._authenticate_go_purpose(go, arm, plan)
             broken = (replace(production_roots[0], resolution_error="loop"), *production_roots[1:])
             with mock.patch.object(readiness, "production_custody_roots", return_value=broken), \
                  self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
-                readiness._authenticate_go_purpose(go, arm, plan)
+                authenticate_both(go, arm, plan)
 
     def test_consumer_applies_rehearsal_census_before_one_use_write(self):
         self.fixture.arm["pack"]["window_id"] = "rehearsal-t0-unattended-fixture"
@@ -2470,6 +2488,43 @@ class PackNightConsumerTests(unittest.TestCase):
             with self.assertRaises(readiness.LaunchLineageError):
                 self.consume()
             self.assertFalse(self.consumption.exists())
+
+    def test_rehearsal_prefix_is_shared_by_gate_and_consumer(self):
+        from types import SimpleNamespace
+        from joulewise import night_gate, t0_rehearsal
+        arm = copy.deepcopy(self.fixture.arm)
+        plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
+        go = {"purpose": "G2B_SHAKEDOWN"}
+        with mock.patch.object(t0_rehearsal, "REHEARSAL_WINDOW_PREFIX", "changed-prefix-"):
+            for window, refuses in (("changed-prefix-fixture", True),
+                                     ("rehearsal-t0-unattended-fixture", False)):
+                arm["pack"]["window_id"] = window
+                with self.subTest(window=window):
+                    if refuses:
+                        with self.assertRaisesRegex(readiness.LaunchLineageError, "^purpose$"):
+                            readiness._authenticate_go_purpose(go, arm, plan)
+                        with self.assertRaisesRegex(night_gate.PackNightRefusal, "^purpose$"):
+                            night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+                    else:
+                        readiness._authenticate_go_purpose(go, arm, plan)
+                        night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+
+    def test_missing_pack_root_has_identical_gate_and_consumer_refusal(self):
+        from joulewise import night_gate
+        plan_path = self.inputs["night_plan"]
+        plan = readiness.parse_json_bytes(plan_path.read_bytes())
+        plan["pack_night"]["pack_root"] = str(self.fixture.pack.parent / "missing" / self.fixture.pack.name)
+        plan_path.write_bytes(readiness.render_json(plan))
+        self.rewrite_go(lambda go: go.update(plan_sha256=hashlib.sha256(plan_path.read_bytes()).hexdigest()))
+        with self.assertRaises(night_gate.PackNightRefusal) as gate:
+            night_gate._pack_digest(night_gate.NightPlan.from_mapping(plan))
+        with self.assertRaises(readiness.LaunchLineageError) as consumer:
+            self.consume()
+        self.assertEqual(gate.exception.reason, "launch_go_receipt_missing")
+        self.assertEqual(consumer.exception.reason_code, gate.exception.reason)
+        self.assertEqual(str(gate.exception), "pack_root")
+        self.assertEqual(str(consumer.exception), str(gate.exception))
+        self.assertFalse(self.consumption.exists())
 
 
 
