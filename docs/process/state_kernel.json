@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "2026-09-05 D-174 decision-to-kernel wiring",
-    "path": "docs/process_traces/2026-09-05-post-merge-docs/02-d174-wiring-report.md"
+    "label": "2026-09-08 T38 handoff-redo bookkeeping verification",
+    "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1512,6 +1512,45 @@
       "status_note": "In flight on feat/2026-09-05-d166-prompt0; census first. Ed's ensemble-versus-same-condition question remains outstanding while prompt 0 is the ruled default.",
       "stop_card": null
     },
+    "D169-STAGE3-01": {
+      "acceptance": {
+        "evidence": [
+          "Obtain the stage-3 ruling and complete the authenticated GO-receipt consumer plus unattended T-0 rehearsal closure before G2-b and campaign nights."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D169-STAGE3-01/acceptance",
+          "label": "D169-STAGE3-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Obtain the stage-3 ruling and complete the authenticated GO-receipt consumer plus unattended T-0 rehearsal closure before G2-b and campaign nights."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "required": "Lead stage-3 ruling installed",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D169-STAGE3-RULING"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Obtain the stage-3 ruling and complete the authenticated GO-receipt consumer plus unattended T-0 rehearsal closure before G2-b and campaign nights.",
+      "id": "D169-STAGE3-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 160,
+      "status": "blocked",
+      "status_note": "H1; needs_ruling (T38 directive); trace 27 section 7, not a section H, records the unbuilt TRANSACTION_PACK path. D-171 delegation already exists; this row does not invent new authority.",
+      "stop_card": null
+    },
     "D173-PAPER-SUPPLY-COLD-GATE-01": {
       "acceptance": {
         "evidence": [
@@ -2240,6 +2279,103 @@
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
       "stop_card": null
     },
+    "G2A-CHAIN-ROUTING-01": {
+      "acceptance": {
+        "evidence": [
+          "Finish replay and ledger row 9 for the reviewed G2-a plan-derived routing series before merge."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/G2A-CHAIN-ROUTING-01/acceptance",
+          "label": "G2A-CHAIN-ROUTING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Finish replay and ledger row 9 for the reviewed G2-a plan-derived routing series before merge."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Finish replay and ledger row 9 for the reviewed G2-a plan-derived routing series before merge.",
+      "id": "G2A-CHAIN-ROUTING-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 161,
+      "status": "queued",
+      "status_note": "H1; Local branch feat/2026-09-08-g2a-chain-routing at 44519d14; trace 99b records B1-B3 cured and R1 follow-up. PR #298 is reported by the lead; remote status unverified.",
+      "stop_card": null
+    },
+    "G2A-FIRST-WINDOW-01": {
+      "acceptance": {
+        "evidence": [
+          "Create the _v5 measurement clone at a reviewed head by trace 27 recipe, author the G2-a DIAGNOSTIC_NO_PACK v2 plan, install both night agents, and email then arm."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/G2A-FIRST-WINDOW-01/acceptance",
+          "label": "G2A-FIRST-WINDOW-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Create the _v5 measurement clone at a reviewed head by trace 27 recipe, author the G2-a DIAGNOSTIC_NO_PACK v2 plan, install both night agents, and email then arm."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Post-watchdog rehearsal acceptance harvested",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "NIGHT-REHEARSAL-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Create the _v5 measurement clone at a reviewed head by trace 27 recipe, author the G2-a DIAGNOSTIC_NO_PACK v2 plan, install both night agents, and email then arm.",
+      "id": "G2A-FIRST-WINDOW-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 159,
+      "status": "blocked",
+      "status_note": "H1; Routing branch 44519d14 trace 27 sections 2-5 is the runbook. Agent lane covers preparation only; actual collection requires zero agents. After the post-watchdog rehearsal and routing merge.",
+      "stop_card": null
+    },
+    "G2A-PREFLIGHT-ARGV-ASSERT-01": {
+      "acceptance": {
+        "evidence": [
+          "Add executable preflight refusal assertions for two positional arguments and zero arguments with NIGHT_PLAN populated."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/G2A-PREFLIGHT-ARGV-ASSERT-01/acceptance",
+          "label": "G2A-PREFLIGHT-ARGV-ASSERT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Add executable preflight refusal assertions for two positional arguments and zero arguments with NIGHT_PLAN populated."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add executable preflight refusal assertions for two positional arguments and zero arguments with NIGHT_PLAN populated.",
+      "id": "G2A-PREFLIGHT-ARGV-ASSERT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 157,
+      "status": "queued",
+      "status_note": "H2; Routing branch 44519d14 trace 39 R1; accepted test-strength follow-up in trace 99b.",
+      "stop_card": null
+    },
     "GAMMA-CLAIM-RENDERER-01": {
       "acceptance": {
         "evidence": [
@@ -2425,6 +2561,64 @@
       "rank": 99,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
+      "stop_card": null
+    },
+    "ICLOUD-BACKUP-PROBE-01": {
+      "acceptance": {
+        "evidence": [
+          "Complete the bounded backup-discovery fix round, re-record final XS/AS pins, verify golden replay, and prepare the PR."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ICLOUD-BACKUP-PROBE-01/acceptance",
+          "label": "ICLOUD-BACKUP-PROBE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Complete the bounded backup-discovery fix round, re-record final XS/AS pins, verify golden replay, and prepare the PR."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Complete the bounded backup-discovery fix round, re-record final XS/AS pins, verify golden replay, and prepare the PR.",
+      "id": "ICLOUD-BACKUP-PROBE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 162,
+      "status": "queued",
+      "status_note": "H1; Local branch fix/2026-09-08-icloud-backup-probe at c3488fb8; canonical traces 45/47/48 corroborate byte-identical golden replay; trace 49 assigns C1-C5. Live seat and PR status unverified.",
+      "stop_card": null
+    },
+    "ICLOUD-CUSTODY-LOCATOR-01": {
+      "acceptance": {
+        "evidence": [
+          "Bound custody-locator filesystem discovery in joulewise/calibration_ledger.py without weakening custody refusals."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ICLOUD-CUSTODY-LOCATOR-01/acceptance",
+          "label": "ICLOUD-CUSTODY-LOCATOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Bound custody-locator filesystem discovery in joulewise/calibration_ledger.py without weakening custody refusals."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Bound custody-locator filesystem discovery in joulewise/calibration_ledger.py without weakening custody refusals.",
+      "id": "ICLOUD-CUSTODY-LOCATOR-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 156,
+      "status": "queued",
+      "status_note": "H2; Trace 47 C8 (canonical worktree): static finding; _custody_state exists/is_dir on tracked iCloud fixture locators has no budget. No live hang was reproduced.",
       "stop_card": null
     },
     "INSTRUMENT-PATH-PIN-01": {
@@ -2977,6 +3171,15 @@
       },
       "dependencies": [
         {
+          "evidence": null,
+          "kind": "event",
+          "required": "Fresh post-watchdog REHEARSAL_STUB night and its night-driver courier evidence are harvested before any real plan",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "POST-WATCHDOG-REHEARSAL-20260909"
+        },
+        {
           "evidence": {
             "label": "NIGHT-DRIVER-01 merged (PR 265, gauntlet through delta re-audit 4 + cold gate D1)",
             "path": "docs/process_traces/2026-09-01-unattended/coldgate-d1-RULING.md"
@@ -3001,11 +3204,14 @@
           "target": "NIGHT-GATE-01"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "T38: 09-06 install and harvested seats; activation branch 1ae91b4d trace 21, launch 00:51:55 PDT and acknowledgement epoch 1788854136.9",
+            "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+          },
           "kind": "task",
           "required": "the merged watchdog is installed from canonical main and its first activation produces notice.ack",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "WATCHDOG-INSTALL-01"
         }
@@ -3041,7 +3247,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "The 2026-09-02 and 2026-09-03 rehearsal evidence, dead-man observation, courier deliveries, and PR #277 harvest remain complete. The next required rehearsal is the post-PR-#284 watchdog rehearsal: it waits on WATCHDOG-INSTALL-01, then must run through the night driver's own courier before any real plan; the first DIAGNOSTIC_NO_PACK plan email remains due before that plan is armed.",
+      "status_note": "WATCHDOG-INSTALL-01 is DONE (T38 evidence in durable state). Remains blocked pending the fresh post-watchdog REHEARSAL_STUB night; rehearsal-20260909 is prepared for 2026-09-09 02:56 PDT on activation branch 1ae91b4d, trace 21b. Interactive stand-down, Ed no-NO and NIGHT_HANDBACK conditions still precede arming; no real plan is armed.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -6547,46 +6753,33 @@
       "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
       "stop_card": null
     },
-    "WATCHDOG-INSTALL-01": {
+    "WATCHDOG-NITS-01": {
       "acceptance": {
         "evidence": [
-          "All background seats are harvested and stopped before the Terminal-hosted handoff begins",
-          "The install checklist runs from canonical main after the live STEP0_OK digest check",
-          "The watchdog LaunchAgent activates and notice.ack records the first activation",
-          "Ed receives the installation notice; no real plan is armed during this handoff"
+          "Review watchdog refusal-event repetition, notice dedupe/ack keys, inline installer classifier, lock existence ordering, and PID/lstart identity residual."
         ],
         "pointer": {
-          "json_pointer": "/tasks/WATCHDOG-INSTALL-01/acceptance",
-          "label": "WATCHDOG-INSTALL-01 acceptance",
+          "json_pointer": "/tasks/WATCHDOG-NITS-01/acceptance",
+          "label": "WATCHDOG-NITS-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The merged watchdog is installed from canonical main at the quiet handoff point, activates once, records notice.ack, and sends Ed the install notice."
+        "summary": "Review watchdog refusal-event repetition, notice dedupe/ack keys, inline installer classifier, lock existence ordering, and PID/lstart identity residual."
       },
       "authority": {
-        "label": "2026-09-04 durable state: watchdog merged as PR #284, STEP0_OK live, install handoff pending the quiet point",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
       },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "event",
-          "required": "the in-flight paper-custody and fan-out seats are harvested and stopped so the Terminal-hosted install can take the quiet handoff",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "ACTIVE-SEATS-HARVESTED-FOR-WATCHDOG-HANDOFF"
-        }
-      ],
+      "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Hand off from the merged PR #284 implementation to the Terminal-hosted install: stop active seats, install from canonical main, observe the first LaunchAgent activation and notice.ack, and notify Ed.",
-      "id": "WATCHDOG-INSTALL-01",
+      "goal": "Review watchdog refusal-event repetition, notice dedupe/ack keys, inline installer classifier, lock existence ordering, and PID/lstart identity residual.",
+      "id": "WATCHDOG-NITS-01",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 134,
-      "status": "blocked",
-      "status_note": "Implementation is DONE on main via PR #284 at c74c7e6a and the canonical STEP0_OK digest check passed live. Only the quiet-point install handoff remains; it starts after the in-flight custody-seam and fan-out seats are harvested and stopped, and it does not arm a real plan.",
+      "priority": "p2_next_slice",
+      "rank": 158,
+      "status": "queued",
+      "status_note": "H2; Traces 23 F2-F4, 24 and 99: nonblocking follow-ups; preserve fail-closed refusal semantics.",
       "stop_card": null
     },
     "WHOLE-WINDOW-STOP-RECEIPT-01": {
@@ -6618,6 +6811,35 @@
       "rank": 144,
       "status": "shelved",
       "status_note": "D-174 scope freeze",
+      "stop_card": null
+    },
+    "WINDOW-STATUS-GUARD-CENSUS-01": {
+      "acceptance": {
+        "evidence": [
+          "Match a real measurement chain in scripts/window_status.sh or isolate the test process view; prove sibling replay processes cannot spuriously trip the guard."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WINDOW-STATUS-GUARD-CENSUS-01/acceptance",
+          "label": "WINDOW-STATUS-GUARD-CENSUS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Match a real measurement chain in scripts/window_status.sh or isolate the test process view; prove sibling replay processes cannot spuriously trip the guard."
+      },
+      "authority": {
+        "label": "T38 dictated task registration and repository verification",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Match a real measurement chain in scripts/window_status.sh or isolate the test process view; prove sibling replay processes cannot spuriously trip the guard.",
+      "id": "WINDOW-STATUS-GUARD-CENSUS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 155,
+      "status": "queued",
+      "status_note": "H1; Trace 43: whole-table run_campaign/window-chain matching rejects a parallel replay sibling.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
@@ -6860,5 +7082,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-05"
+  "updated": "2026-09-08"
 }
