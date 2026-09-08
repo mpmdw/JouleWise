@@ -310,12 +310,10 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
   (`e4ce8b3b`, `3c366db7`, `019f9bba`, `481df11c`, `a9a70516`), PR #295 `23012b52`, T38 `eacadff7`, T38b `0f6b1c8b`; retirement per
   the new step 1 done (`handoff-daemons` rc 0; bg-job daemon 71666, spare 71687, both pty-hosts and the resumed twin 71607 gone).
 - This activation's census right after that message: `21b-rehearsal-20260909-bench/pass3-standdown-census.txt` (epoch 1788877254)
-  and, classified by the step-4 block itself, `pass3-census-classified.txt`. Which ChatGPT-pathed process belongs to which tree is
-  decided per process by the chains printed in that artifact, never by path or by this prose (delta 5 B1, delta 6 D6-1): at capture,
-  7143, 7631–7644, 7901 and 16479 chained to pid 83953 (joulewise-53's codex mcp-server) and are sessions; 82362 (`codex …
-  app-server`), 82551 (SkyComputerUseService) and the renderer helpers chained to 82301 and are Ed's app; 82303/82305 (Frameworks
-  crashpad helpers) had ppid 1 and are Ed's app by the Frameworks path rule. pid 83953 stays alive until Ed closes its terminal
-  and, per the ruling, blocks the arm while present; Ed was asked to close it before 1788944160 (Gmail `1a081723350aea55`).
+  and, classified by the step-4 block itself, `pass3-census-classified.txt`. Tree membership of every process is read from the chains
+  printed in that artifact and the ppid column of `pass3-standdown-census.txt`; no pid is restated in prose (deltas 5–7: every
+  restatement contradicted its artifact). pid 83953 stays alive until Ed closes its terminal and, per the ruling, blocks the arm
+  while present; Ed was asked to close it before 1788944160 (Gmail `1a081723350aea55`).
   `handoff-daemons` rc 0 is joulewise-53's own report; this activation's attempt ran from the wrong cwd (ModuleNotFoundError,
   recorded in the same artifact) and is not evidence either way.
 - Condition 5 ruling by the synthesis author (recorded verbatim in 21c §Ruling of record on condition 5): agent SESSIONS count;
@@ -337,6 +335,7 @@ checkout printed `validated pins: repo_head=ae8f074f… measurement_root=<scratc
 `<SCRATCH>/custody/night` did exist (the installer's `mkdir -p "$custody_root/night"`, which is exactly why the twin is
 validated instead of the real plan). The bench worktree and parent were removed; `ls ~/night-custody` afterwards shows
 only `magistrate`, `magistrate-bench`, `retired-v1`. Steps 4–8 were NOT executed (they arm).
+- Step-4 classifier bench (nine mocked process tables, verbatim block): `pass3-step4-bench.txt`.
 - Artifacts of the re-run: `pass2-bench-output.txt` (full transcript with start/finish times), `pass2-real-staged-night_plan.json`,
   `pass2-twin-night_plan.json`, `pass2-render-com.joulewise.night.plist`, `pass2-render-com.joulewise.night.deadman.plist`.
 

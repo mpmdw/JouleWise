@@ -242,11 +242,11 @@ NIGHT_HANDBACK.md classes as acceptable for a stub; (2) the arm-notice follow-up
 02:45 PDT (epoch 1788947100) on 9 Sep for a clean REHEARSAL_ONLY receipt, and both census outputs are recorded in the arm-time trace either way. Do not
 hold the arm for the ChatGPT helpers alone.
 
-Delta 5 (21e5) / delta 6 (21e6, D6-1) correction to the factual premise of this ruling, decided per process by the chains in
-`21b-rehearsal-20260909-bench/pass3-census-classified.txt`: some ChatGPT-pathed processes present at the stand-down census (7143,
-7631–7644, 7901, 16479) were descendants of joulewise-53's codex mcp-server (pid 83953 tree) and are sessions; others (82362
-`codex … app-server`, 82551 SkyComputerUseService, the renderer helpers) chained to Ed's ChatGPT.app pid 82301 and are Ed's app;
-82303/82305 (Frameworks crashpad helpers) were reparented to launchd and are Ed's app by path. The ruling's rule is unchanged: Ed's
-desktop-app tree is excluded; every other foreign match is a session and blocks the arm; pid 83953 must be gone (Ed asked to close
-its terminal, Gmail `1a081723350aea55`, thread `1a0800cdb282c3f1`). A working app-host Codex task under 82301 is excluded by this rule
-(ruling-covered: it is Ed's app), recorded as a known limit; any further change to the classifier goes to a cold gate, not another patch.
+Deltas 5–7 (21e5, 21e6, 21e7) on the factual premise of this ruling: which ChatGPT-pathed processes belonged to joulewise-53's
+session tree and which to Ed's ChatGPT.app is decided per process by the chains in
+`21b-rehearsal-20260909-bench/pass3-census-classified.txt` and the ppid column of `pass3-standdown-census.txt`; three successive prose
+restatements of those pids each contradicted the artifact, so none is kept here. The ruling's rule is unchanged: Ed's desktop-app
+tree (descendants of its main binary, plus its own Electron helpers reparented to launchd, matched by the Frameworks path) is
+excluded; every other foreign match is a session and blocks the arm; pid 83953 must be gone (Ed asked to close its terminal, Gmail
+`1a081723350aea55`, thread `1a0800cdb282c3f1`). Known limit, ruling-covered: a working app-host Codex task under Ed's app main binary
+is excluded as Ed's app. Rule 11's standing trigger applies to any further classifier change (it is on its fourth formulation).
