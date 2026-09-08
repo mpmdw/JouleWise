@@ -21,6 +21,8 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # 2026-09-08 D-176 decision 5: isolated pack-bound rehearsal successor.
+    "NIGHT-PACK-REHEARSAL-01",
     # 2026-09-03 post-merge kernel batch. Thirteen rows, from four sources:
     # the decode-identity S3 ruling (d) and the packet-45 cold gate's two
     # residual nits; the 2026-09-02 code-and-tests audit's ranked five; the two
@@ -713,7 +715,55 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 149)  # 2026-09-08 T38b: 151 − 2 merged tasks retired
+        self.assertEqual(len(self.tasks), 150)  # 2026-09-08 D-176: 149 + 1 pack rehearsal
+
+    def test_d176_ruling_installs_build_start_and_live_close_graph(self):
+        # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,
+        # not the still-unbuilt GO consumer or any live rehearsal acceptance.
+        ruling = (
+            "docs/process_traces/2026-09-08-handoff-redo/"
+            "78-coldgate-packet-d169-stage3/13-magistrate-synthesis.md"
+        )
+        def edges(task_id, scope):
+            return {
+                (d["kind"], d["target"], d["state"], d["strength"])
+                for d in self.tasks[task_id]["dependencies"] if d["scope"] == scope
+            }
+        for task_id in ("UNATTENDED-LAUNCH-01", "T0-UNATTENDED-01", "D169-STAGE3-01"):
+            with self.subTest(task=task_id):
+                self.assertEqual(edges(task_id, "start"), {("decision", "D-176", "satisfied", "hard")})
+        for task_id in ("UNATTENDED-LAUNCH-01", "D169-STAGE3-01", "NIGHT-PACK-REHEARSAL-01"):
+            self.assertEqual(self.tasks[task_id]["authority"]["path"], ruling)
+        self.assertIn(("task", "T0-UNATTENDED-01", "pending", "hard"), edges("UNATTENDED-LAUNCH-01", "close"))
+        self.assertIn(("task", "UNATTENDED-LAUNCH-01", "pending", "hard"), edges("S9-06-WINDOW-T0-GO-RECEIPT-GATE-01", "close"))
+        self.assertEqual(edges("D169-STAGE3-01", "close"), {
+            ("event", "D176-DECISIONS-1-4-MERGED", "pending", "hard"),
+            ("task", "NIGHT-PACK-REHEARSAL-01", "pending", "hard"),
+        })
+        self.assertEqual(edges("NIGHT-PACK-REHEARSAL-01", "start"), {
+            ("task", "UNATTENDED-LAUNCH-01", "pending", "hard"),
+            ("task", "NIGHT-REHEARSAL-01", "pending", "hard"),
+        })
+        self.assertIn(("task", "NIGHT-PACK-REHEARSAL-01", "pending", "hard"), edges("V5-G2B-SHAKEDOWN-01", "start"))
+        for task_id in ("UNATTENDED-LAUNCH-01", "T0-UNATTENDED-01", "D169-STAGE3-01"):
+            self.assertTrue(gen_state._dependency_ready(self.tasks[task_id]))
+        self.assertEqual(
+            {d["target"] for d in gen_state._hard_start_blockers(self.tasks["NIGHT-PACK-REHEARSAL-01"])},
+            {"UNATTENDED-LAUNCH-01", "NIGHT-REHEARSAL-01"},
+        )
+        rehearsal = self.tasks["NIGHT-PACK-REHEARSAL-01"]
+        self.assertEqual(rehearsal["lane"], "agent")
+        self.assertEqual(rehearsal["priority"], "p1_phase_gate")
+        self.assertEqual(rehearsal["fences"], self.tasks["NIGHT-REHEARSAL-01"]["fences"])
+        producers = self.tasks["T0-REHEARSAL-PRODUCERS-01"]
+        self.assertNotIn("REHEARSAL_PRODUCER_WORK_ORDER", json.dumps(producers))
+        self.assertTrue(producers["authority"]["path"].endswith("exhibit-A-consult-astra.md"))
+        self.assertIn("179", producers["authority"]["label"])
+        limitation = self.tasks["T0-LIVENESS-BOUND-EMPIRICAL-01"]["status_note"]
+        self.assertIn("registered limitation through G2-b, not a launch gate", limitation)
+        self.assertIn("close or be reruled before ALPHA", limitation)
+        self.assertEqual(self.tasks["V5-TRANSACTION-GO-01"]["goal"],
+                         "Satisfied by the magistrate's CAMPAIGN_TRANSACTION authorization record after G2-b (D-171 §3).")
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -992,7 +1042,8 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         )
         self.assertEqual(
             self._hard_start_targets("V5-G2B-SHAKEDOWN-01"),
-            {"V5-DESK-DAY-01"},
+            # 2026-09-08 D-176: G2-b also waits for the pack-bound rehearsal.
+            {"V5-DESK-DAY-01", "NIGHT-PACK-REHEARSAL-01"},
         )
         self.assertEqual(
             self._hard_start_targets("V5-TRANSACTION-GO-01"),
