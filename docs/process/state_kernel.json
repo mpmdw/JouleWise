@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "2026-09-08 T38 handoff-redo bookkeeping verification",
-    "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+    "label": "2026-09-08 T38b closing bookkeeping verification",
+    "path": "docs/process_traces/2026-09-08-handoff-redo/64-bookkeeping-t38b-astra.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2279,35 +2279,6 @@
       "status_note": "Registered 2026-09-03 from CR-3 on branch feat/2026-09-02-v5-floor-generator. The magistrate selected option 1: kernel invariant 3 requires BLOCKED because the pack freeze owned by V5-DESK-DAY-01 is a pending hard start dependency.",
       "stop_card": null
     },
-    "G2A-CHAIN-ROUTING-01": {
-      "acceptance": {
-        "evidence": [
-          "Finish replay and ledger row 9 for the reviewed G2-a plan-derived routing series before merge."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/G2A-CHAIN-ROUTING-01/acceptance",
-          "label": "G2A-CHAIN-ROUTING-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Finish replay and ledger row 9 for the reviewed G2-a plan-derived routing series before merge."
-      },
-      "authority": {
-        "label": "T38 dictated task registration and repository verification",
-        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Finish replay and ledger row 9 for the reviewed G2-a plan-derived routing series before merge.",
-      "id": "G2A-CHAIN-ROUTING-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 161,
-      "status": "queued",
-      "status_note": "H1; Local branch feat/2026-09-08-g2a-chain-routing at 44519d14; trace 99b records B1-B3 cured and R1 follow-up. PR #298 is reported by the lead; remote status unverified.",
-      "stop_card": null
-    },
     "G2A-FIRST-WINDOW-01": {
       "acceptance": {
         "evidence": [
@@ -2561,35 +2532,6 @@
       "rank": 99,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
-      "stop_card": null
-    },
-    "ICLOUD-BACKUP-PROBE-01": {
-      "acceptance": {
-        "evidence": [
-          "Complete the bounded backup-discovery fix round, re-record final XS/AS pins, verify golden replay, and prepare the PR."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ICLOUD-BACKUP-PROBE-01/acceptance",
-          "label": "ICLOUD-BACKUP-PROBE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Complete the bounded backup-discovery fix round, re-record final XS/AS pins, verify golden replay, and prepare the PR."
-      },
-      "authority": {
-        "label": "T38 dictated task registration and repository verification",
-        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Complete the bounded backup-discovery fix round, re-record final XS/AS pins, verify golden replay, and prepare the PR.",
-      "id": "ICLOUD-BACKUP-PROBE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 162,
-      "status": "queued",
-      "status_note": "H1; Local branch fix/2026-09-08-icloud-backup-probe at c3488fb8; canonical traces 45/47/48 corroborate byte-identical golden replay; trace 49 assigns C1-C5. Live seat and PR status unverified.",
       "stop_card": null
     },
     "ICLOUD-CUSTODY-LOCATOR-01": {

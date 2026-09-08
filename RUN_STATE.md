@@ -14,6 +14,8 @@ file instead.
 
 T38 merges (all two-parent): T0-ACID-CLOCK-01 `e4ce8b3b`; T0-ACID-CLOCK-02 `3c366db7` plus Linux follow-up `019f9bba`; D-175 / PR #296 `a969e526` (line-19 rehearsal authority under eight conditions); WATCHDOG-CENSUS-01 + RESUME-DAEMON-01 / PR #297 `138e7edb` (scoped census, signal labels, daemon retirement, twin refusal and resident-bound corrupt-lock recovery). Local routing branch is `44519d14` (reported PR #298), with B1–B3 cured, R1 registered as G2A-PREFLIGHT-ARGV-ASSERT-01, replay/row 9 still owed in trace 99b. iCloud branch is `c3488fb8`: bounded discovery and golden byte parity are reported in traces 45/47/48; C1–C5 fix work is assigned by trace 49. Other registered follow-ups: WINDOW-STATUS-GUARD-CENSUS-01, ICLOUD-CUSTODY-LOCATOR-01, WATCHDOG-NITS-01, G2A-FIRST-WINDOW-01 and D169-STAGE3-01 (needs_ruling). GitHub PR/CI status and live seat status could not be independently verified; see `docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md` for exact evidence and gaps. T37/T36 below remain historical checkpoints.
 
+**T38b (2026-09-08 ~07:15 PDT) — closing delta.** Main `c9e2981c` contains the seven two-parent merges since T38 `eacadff7`: fidelity IDs `f3a5001c` and count `f3a1b344`; T0-ACID-CLOCK-03 prune `481df11c` and deterministic replacement `a9a70516`; headless evidence/handback PR #295 `23012b52`; G2A-CHAIN-ROUTING-01 / PR #298 `d477e138`; ICLOUD-BACKUP-PROBE-01 / PR #299 `c9e2981c`. All four interactive session lanes (census/daemon, clock, routing, iCloud) have landed, including census/daemon `138e7edb` recorded at T38. Per the closing directive, the interactive magistrate stands down after this delta; twin 71607 and daemon/spare 71666/71682/71687 retirement is **pending at this write**, for the magistrate’s follow-up commit. The headless magistrate (recorded activation `784a764e`, or its successor) is to arm rehearsal-20260909 in the 01:56–02:15 PDT 9 Sep window after Ed’s no-NO, confirmed stand-down and all trace-21b/NIGHT_HANDBACK conditions; this is a conditional handoff, not evidence of arming. Next lane is G2A-FIRST-WINDOW-01 per trace 27 after rehearsal acceptance; D169-STAGE3-01 needs a ruling first. Process note (lead-reported incident): the first fidelity fix passed a piped test gate with a remaining count failure; gate on the process rc, never on a pipeline — memory rule re-learned. [Verification and gaps](docs/process_traces/2026-09-08-handoff-redo/64-bookkeeping-t38b-astra.md) include unavailable GitHub/traces 59–63 and the residual NIGHT_HANDBACK conflict marker.
+
 **T37 (2026-09-08 00:45 PDT) — CHECKPOINT FOR A FRESH, CONTEXT-FREE SESSION.** Paper work is complete and merged
 (main 3de19e3f). The watchdog handoff of 09-06 ran but did not take: the reaper killed the interactive tree, the
 Claude Code background-job daemon auto-resumed the same session (RESUME-DAEMON-01), and the watchdog has sat in
@@ -5178,7 +5180,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-08). Latest report: [2026-09-08 T38 handoff-redo bookkeeping verification](docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-08). Latest report: [2026-09-08 T38b closing bookkeeping verification](docs/process_traces/2026-09-08-handoff-redo/64-bookkeeping-t38b-astra.md).
 
 ### [ED-EXTERNAL]
 
