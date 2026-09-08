@@ -455,3 +455,61 @@ $ git diff --check
 (no output)
 rc=0
 ```
+
+## Fourth pass — Opus delta N1–N6 (2026-09-08)
+
+Applied all six findings at requested HEAD
+`3a8b101ee89a4650bb7dc3c93735e644582adef9` on
+`feat/2026-09-08-d176-stage3-ruling`. Intake was clean, with no active stop
+card or global selection gate. The three authorized documentation files are
+the only changed repository paths. No commit, runtime edit, test edit,
+measurement or live-gate closure was made. No upstream is configured.
+
+### Clause map — fourth-pass delta
+
+These are documentation corrections; production implementations and their
+mutation-shaped assertions remain NOT PINNED for the successor seats.
+
+| Finding | Installed documentation site | Inspection / counterfactual |
+|---|---|---|
+| N1 | Contract §2 nested `authorization` row | Restored authorization's own absolute custody path; plan authorization locator still binds it. Replacing it with the GO path recreates the contradiction. |
+| N2 | Contract §2 `plan_sha256` row | Names installer-pinned plan path supplied by `--night-plan`; restoring launch-context wording loses the explicit F1 transport. |
+| N3 | Contract §7.1 seat-2 row | Writable :106–121,131–136 excludes source :122–130 `_RECEIPT_KEYS`, explicitly read-only. Restoring :106–136 grants the frozen key set. |
+| N4 | Contract §7.1 shared-symbol paragraph and §9 F10 row | Lists seat-2 t0 seams :190–207,779–787 and seat-4 seams :38,49,88–95; :48,86–87; :710–738; :790–793. Deleting the split leaves shared-file ownership implicit. |
+| N5 | D-176 dated addendum; contract §7.1 seat-1 row | Four keywords including `night_plan` / `--night-plan`, separate GO file, unchanged D-149 receipt for every class, and §§10/10.1 precedence over D-176 §1 are explicit. Original decision bytes preserved; removing addendum restores stale authority wording. Seat 1 owns the addendum. |
+| N6 | Contract §§6,7.1,9,10.1 | Read source: `evaluate_g5` is :710–738, `evaluate_g7` is :790–793; all corresponding pins updated. Restoring :714–730 or :792 omits function boundaries / points at a blank line. |
+
+Read `joulewise/night_gate.py:106–136` and
+`joulewise/t0_rehearsal.py:38–49,86–95,190–207,710–793` to verify the
+relevant symbols and boundaries. Whole-contract search
+`rg -n 'night/go_receipt.json' docs/contracts/pack_night_go_receipt.md`
+found ten remaining occurrences: GO creation, custody table, argv transport,
+consumption GO locator, confirmation/GO flag description, G5 evidence,
+seat-2 production, identity locator, S3 amendment and F2 ruling. Every one
+refers to the GO file, never the authorization or confirmation record.
+
+### Executed evidence
+
+The docs/state tests are proportionate to this documentation-only correction;
+the decision-log change requires gen_state coverage. The full runtime suite
+was not needed. No EXPECTED_IDS/count pin failed or was edited.
+Acceptance log: `/private/tmp/d176-fourth-pass-tests.log` (outside repository).
+
+```text
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_docs_freshness tests.test_gen_state
+...........................................................................
+----------------------------------------------------------------------
+Ran 75 tests in 4.810s
+
+OK
+rc=0
+```
+
+```text
+$ git diff --check
+(no output)
+rc=0
+```
+
+Blockers: none. Next exact step: lead reviews this N1–N6 delta and completes
+the contract refutation/landing gate before issuing successor code scopes.

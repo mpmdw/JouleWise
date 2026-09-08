@@ -11250,3 +11250,19 @@ Focused replay list (exhibit A, verbatim):
 **2026-09-08 ~10:20 PDT wire ruling (interactive magistrate):** the normative amendments to the original key lists—GO UUID4 identity and absolute replay path, authorization attempt/copied-field binding and consumption claim eligibility, and exact JSON encodings—are installed in [pack-night GO contract §8](contracts/pack_night_go_receipt.md#8-wire-details-ruled-2026-09-08); all three wire questions are closed within the adopted cold-gate envelope, with no decision reopened.
 
 **2026-09-08 ~11:00 PDT second-pass wire ruling (interactive magistrate):** B1–B5, S1–S6 and N1–N2 of the Opus contract refutation are installed verbatim in [pack-night GO contract §10](contracts/pack_night_go_receipt.md#10-wire-addendum-ruled-2026-09-08-second-pass), with propagation into the exact-key tables, D-170 clause map and §7.1 seat WRITE_SCOPEs: v3 plan root of trust and persisted attempt, plan digest in GO/consumption, distinct 8/20/22-key consumption versions and live-v2 refusal, LaunchLineageError/CLI handling, schema-first G7 class refusal and eight-key artifact, readable custody locators, authenticated ARM window id, conditional pack-fence lift, one GO/night-gate receipt with shared condition shape, frozen production-root source and four-case purpose predicate, child v3 reading, exact T-0 evidence set/digest, numeric epochs and GO_RECEIPT_REFERENCE_KEYS. This is a normative wire amendment within the adopted cold-gate envelope; no code or live gate is closed.
+
+### Addendum 2026-09-08 — third-pass wire rulings (seat-1 installation)
+
+The consumer requires four keywords: `go_receipt`, `authenticated_go_receipt`,
+`go_receipt_sha256`, and `night_plan`, each defaulting to
+`_MISSING_LAUNCH_CONTEXT`. The added `--night-plan` flag carries the
+installer-pinned plan path from the driver to the launcher and consumer.
+GO lives in the separate create-once mode-0600 `night/go_receipt.json`;
+the D-149 `night/receipt.json` shape (`_RECEIPT_KEYS`) is unchanged for every
+class, including refused pack nights, which emit no GO file. This supersedes
+the earlier one-GO/night-gate-receipt wording. The
+[contract §10](contracts/pack_night_go_receipt.md#10-wire-addendum-ruled-2026-09-08-second-pass)
+and [§10.1](contracts/pack_night_go_receipt.md#101-third-pass-rulings-2026-09-08)
+rulings govern where they refine this decision's §1; §10.1 supersedes conflicting
+second-pass wording. Seat 1 owns this addendum. The original decision and
+earlier dated rulings remain preserved above; no code or live gate is closed.
