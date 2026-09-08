@@ -732,7 +732,23 @@ def _validator_source_census(
             validate_extraction_spec,
         )
 
+        from joulewise.paper_reported_energy import (
+            _validate_registered_spec, _project_cell, _validate_projection,
+            _synthetic_projection, validate_phase_ratio_estimand,
+        )
+        from joulewise.bundle_read import BundleReader
+        from joulewise.analysis_engine.inputs import deterministic_bounds
+        from joulewise.whole_window import validate_whole_window_verdict_row
+
         owners = (
+            ("paper_reported_energy._validate_registered_spec", _validate_registered_spec),
+            ("paper_reported_energy._project_cell", _project_cell),
+            ("paper_reported_energy._validate_projection", _validate_projection),
+            ("paper_reported_energy._synthetic_projection", _synthetic_projection),
+            ("paper_reported_energy.validate_phase_ratio_estimand", validate_phase_ratio_estimand),
+            ("bundle_read.BundleReader", BundleReader),
+            ("analysis_engine.inputs.deterministic_bounds", deterministic_bounds),
+            ("whole_window.validate_whole_window_verdict_row", validate_whole_window_verdict_row),
             ("floor_extraction.validate_extraction_spec", validate_extraction_spec),
             (
                 "floor_extraction.validate_d117_mint_consumption_report",
@@ -1279,6 +1295,13 @@ def _validate_fixture_documents(
         except (UnicodeError, json.JSONDecodeError, ValueError):
             errors.append(f"{binding.role.value}_invalid")
             continue
+        if (family == "reported_energy_parents" and binding.role is InputRole.EXTRACTION_SPEC
+            and "projection_input" in value):
+            from joulewise.paper_reported_energy import _synthetic_projection
+            try:
+                _synthetic_projection(value.pop("projection_input"))
+            except (ValueError, KeyError, TypeError, ArithmeticError):
+                errors.append("reported_energy_projection_invalid")
         if value != {
             "family": family,
             "marker": "synthetic-no-measurement-value",
@@ -1445,6 +1468,12 @@ def _open_paper_input_impl(
         )
         payload = _FrozenObject(tuple((binding.role.value, _freeze_json(_json_object(raws[binding.role])))
                                       for binding in sources))
+        if spec.family == "reported_energy_parents" and mode == "test_fixture_non_issuing":
+            document = _json_object(raws[InputRole.EXTRACTION_SPEC])
+            if "projection_input" in document:
+                from joulewise.paper_reported_energy import _synthetic_projection
+                projection = _synthetic_projection(document["projection_input"])
+                payload = _FrozenObject((*payload.fields, ("reported_energy_projection", _freeze_json(projection))))
         output_type = spec.issuing_type if mode == "production" else spec.fixture_type
         return _construct_verified(_custody_token, output_type, evidence, payload)
 

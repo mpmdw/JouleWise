@@ -219,6 +219,7 @@ be re-derived by a future agent gets an entry here.
 | D-173 | PAPER SUPPLY CUSTODY — every paper supplier/renderer obtains claim-bearing inputs only through the shared custody-read seam (`joulewise/paper_custody.py`): the caller passes a ROLE NAME and a runs root only; a git-tracked supply map read through the repository's authentication session and anchored on a clean tree names every path and expected digest; validator-replayed frozen verified objects out; receipts corroborate, never authorize; no caller-supplied paths, digests, dicts or bytes; closed `paper_custody_*` refusals; normative home `docs/contracts/paper_supply_custody.md` | adopted (as amended 2026-09-05; installs via PAPER-CUSTODY-SEAM-01 round 5) |
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
+| D-179 | Reported phase-energy supplier semantics | adjudicated |
 
 ---
 
@@ -11156,3 +11157,62 @@ would `HOLD_UNSAFE`, drain the resident and block every later launch (`scripts/m
 an "already armed" carve-out would strip the session of the re-arm path the 09-03 rehearsal actually needed.
 
 **Evidence:** packet, cold ruling, Opus refutation and synthesis in the trace directory above.
+
+## D-179: Reported phase-energy supplier semantics (magistrate, 2026-09-08)
+
+**Status:** adjudicated. Governing synthesis:
+`docs/process_traces/2026-09-08-handoff-redo/99be-coldgate-packet-paper-s2-semantics/13-magistrate-synthesis.md`.
+The three seats (10/11/12) are evidence; the synthesis governs. This entry
+records rulings 1–7; it does not issue measurements or restore retired placement.
+
+1. The point estimate is `arithmetic_mean_over_fixed_member_universe.v1`,
+   equal weight over the complete ordered 50-member universe, `expected_n: 50`,
+   `missing_or_invalid_member: refuse_reported_mean`. No post-collection
+   admission filter exists: any absent/invalid member refuses the cell, never a
+   49-member mean. `[N_bundles]` renders `expected_n`. Exclusion by admission
+   code is narrowed to this complete-universe refusal.
+2. The independence unit census is 20 per cell: ten absolute repeats and ten
+   complete A/B/B/A blocks. The fifty bundles are not fifty independent draws.
+3. With block energies averaged over their four members,
+   `m = 0.2 mean(r) + 0.8 mean(b)` and
+   `V = 0.2² s_r²/10 + 0.8² s_b²/10`. Use conservative reference `ν = 9`
+   and `h = t(0.975,9) sqrt(V)`. Reject the pooled `s/sqrt(20)` form: it
+   weights units equally in the variance but not in the mean. A synthetic
+   regression with unequal stratum standard deviations must distinguish them.
+4. Endpoints are `m ∓ (h+B)`, where B sums the average of each registered
+   deterministic-bound kind across the same members. Any absent recorded kind
+   refuses, never defaults to zero. Publish the D-078 approximately 1-J
+   attribution limit as a labelled floor beside the cell, never composed into
+   its interval. Exclude `detection_floor.py`'s `sqrt(1+1/n)` prediction term by
+   name. Record n, s_r, s_b, V, h, each kind average and B so the endpoint span
+   is independently recomputable as `2(h+B)`. The Cartesian-product envelope
+   alternative is rejected as unauditable and unregistered.
+5. Per-token energy is `ΣE_i/ΣT_i` across exactly the same fifty members. A
+   new sibling `phase_ratio_estimand` uses form `ratio_of_totals`, numerator
+   `gross_phase_energy_j`, phase, denominator `runtime_observed_prompt_tokens`
+   or `runtime_observed_output_tokens`, and tokenizer/output-policy scope.
+   Validate exact keys and fail closed; do not loosen the existing ratio
+   estimand. Prefill counts are observed total minus observed output,
+   cross-checked across the four bundle-reader surfaces. Absent, zero,
+   malformed or fallback-sourced denominators refuse the per-token value,
+   without dropping members or changing the energy mean.
+6. Install executable registrations now in both v5 generators and the S2
+   contract. A document alone is not pre-registration. The absent frozen
+   extraction specification blocks numbers, not estimands. The registration
+   digest must predate the specification's first existence.
+7. X5 rows remain `RETIRED_FALLBACK` under D-174; these registrations restore
+   no placement. Every registration binds a specific `cell_id`: decode,
+   prefill-p42 or prefill-p512 per model, never merely "prefill". The paper's
+   prefill cell remains G2-a's `[PREFILL_LENGTH]`.
+
+**Options Considered:** filtered means, treating fifty bundles as independent,
+pooled twenty-unit uncertainty, Cartesian-product envelopes, configured token
+counts and means of ratios; all rejected as above.
+
+**Considerations:** preserve the registered member universe, account for the
+unequal strata, retain recorded deterministic displacement terms, distinguish
+an attribution floor from mean uncertainty, and use runtime-observed counts.
+The registration/kernel increment is in `docs/contracts/paper_reported_energy.md`
+and `tests/test_paper_reported_energy.py`. Production custody replay remains
+unregistered and non-issuing; lead final verification and source-order evidence
+are still required. Revisit only through a new ruling before a future freeze.

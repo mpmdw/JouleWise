@@ -39,7 +39,7 @@ def _field(value: _FrozenObject, name: str):
 
 @_issued_renderer(VerifiedReportedEnergyParents, "cell")
 def render_reported_energy(value: VerifiedReportedEnergyParents) -> str:
-    cells = _field(_field(value._payload, "extraction_report"), "reported_energy_cells")
+    cells = _field(_field(value._payload, "reported_energy_projection"), "cells")
     assert type(cells) is _FrozenArray
     selected = {subject for subject in value.evidence.subjects}
     return "\n".join(f'{_field(cell, "cell_id")}: {_field(cell, "mean_j")}'
