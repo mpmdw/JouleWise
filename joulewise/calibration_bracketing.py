@@ -1098,7 +1098,7 @@ def load_calibration_candidate(
                 mapped_runs_root = mapped_runs_root.parent
         return _load_calibration_candidate_unbounded(mapped, runs_root=mapped_runs_root)
 
-    return probe_custody(original, inspect, lambda: None)
+    return probe_custody(original, inspect, lambda: None, mode="read_replay")
 
 
 def _load_calibration_candidate_unbounded(

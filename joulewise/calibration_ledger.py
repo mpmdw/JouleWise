@@ -41,7 +41,7 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, BinaryIO, Callable, TypeVar
+from typing import Any, BinaryIO, Callable, Literal, TypeVar
 
 from joulewise.authentication_io import (
     V2AuthenticationInputError,
@@ -274,7 +274,7 @@ def artifact_hashes(custody_dir: Path) -> dict[str, str]:
     """Hash governed artifacts for issuance; refuse relocated custody roots."""
 
     _refuse_custody_override_mint()
-    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict)
+    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict, mode="issuing")
 
 
 def _artifact_hashes_unbounded(root: Path) -> dict[str, str]:
@@ -1775,7 +1775,7 @@ def _target_state_transition_is_valid(
 
 
 def _custody_reasons(
-    observations: Sequence[LedgerObservation], repo_root: Path
+    observations: Sequence[LedgerObservation], repo_root: Path, *, mode: Literal["read_replay", "issuing"] = "read_replay",
 ) -> set[str]:
     for observation in observations:
         if not observation.artifact_sha256:
@@ -1787,7 +1787,7 @@ def _custody_reasons(
             root = Path(repo_root) / root
         reasons = probe_custody(
             root, lambda path: _observation_custody_reasons(observation, path),
-            lambda: {"calibration_ledger_custody_invalid"},
+            lambda: {"calibration_ledger_custody_invalid"}, mode=mode,
         )
         if reasons:
             return reasons
@@ -1972,7 +1972,7 @@ def load_calibration_ledger_snapshot(
     require_committed_pin: bool = True,
     verify_custody: bool = True,
     repo_root: Path = REPO_ROOT,
-    calibration_custody_store: Path | None = None,
+    calibration_custody_store: Path | None = None, mode: Literal["read_replay", "issuing"] = "read_replay",
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -2068,7 +2068,7 @@ def load_calibration_ledger_snapshot(
     if calibration_custody_store is not None and not verify_custody:
         reasons.add("calibration_ledger_custody_invalid")
     elif verify_custody and calibration_custody_store is None:
-        reasons.update(_custody_reasons(custody_observations, repo_root))
+        reasons.update(_custody_reasons(custody_observations, repo_root, mode=mode))
     elif verify_custody:
         store_reasons, custody_store_manifest_sha256 = _custody_store_reasons(
             custody_observations,
@@ -2328,7 +2328,7 @@ def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
 def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
     return probe_custody(
         directory, _assert_absolute_nonsymlink_directory_unbounded,
-        lambda: _missing_custody(directory),
+        lambda: _missing_custody(directory), mode="issuing",
     )
 
 
@@ -2356,7 +2356,7 @@ def _assert_absolute_nonsymlink_directory_unbounded(directory: Path) -> Path:
 def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
     return probe_custody(
         directory, lambda root: _read_contained_nofollow_unbounded(root, relative),
-        lambda: _missing_custody(directory),
+        lambda: _missing_custody(directory), mode="issuing",
     )
 
 
@@ -2378,7 +2378,7 @@ def _read_contained_nofollow_unbounded(directory: Path, relative: str) -> bytes:
 def _governed_raw_nofollow(directory: Path) -> dict[str, bytes]:
     return probe_custody(
         directory, _governed_raw_nofollow_unbounded,
-        lambda: _missing_custody(directory),
+        lambda: _missing_custody(directory), mode="issuing",
     )
 
 
@@ -4685,8 +4685,13 @@ def _refuse_custody_override_mint() -> None:
         raise CalibrationLedgerError("custody_locator_override_mint_forbidden")
 
 
-def _custody_probe_paths(path: Path) -> tuple[Path, ...]:
-    """Replace default backup roots lexically; never resolve the old mount."""
+def _custody_probe_paths(
+    path: Path, *, mode: Literal["read_replay", "issuing"] = "issuing",
+) -> tuple[Path, ...]:
+    """Map only replay locators; empty overrides retain the absent shortcut."""
+
+    if mode not in {"read_replay", "issuing"}:
+        raise ValueError(f"invalid custody resolution mode: {mode}")
 
     override = os.environ.get("JOULEWISE_BACKUP_ROOTS")
     if override is not None:
@@ -4695,12 +4700,17 @@ def _custody_probe_paths(path: Path) -> tuple[Path, ...]:
                 relative = Path(os.path.abspath(path)).relative_to(root)
             except ValueError:
                 continue
-            return tuple(Path(part) / relative for part in override.split(os.pathsep) if part)
+            parts = tuple(part for part in override.split(os.pathsep) if part)
+            if not parts:
+                return ()
+            if mode == "read_replay":
+                return tuple(Path(part) / relative for part in parts)
+            break
     return (path,)
 
 
 def _custody_backup_disabled(path: Path) -> bool:
-    return not _custody_probe_paths(path)
+    return not _custody_probe_paths(path, mode="issuing")
 
 
 def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
@@ -4730,13 +4740,15 @@ def probe_custody(
     absent: Callable[[], _CustodyResult],
     *,
     not_directory: Callable[[], _CustodyResult] | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> _CustodyResult:
     """Bound only a pure path probe; inspect synchronously on the caller.
 
     The daemon performs only exists/is_dir filesystem calls, without entering
     an authentication session, inheriting its context, or acquiring its locks.
     Timeout or any probe exception has the same decision as absence, with a
-    distinguishable stderr diagnostic. Backup overrides retain
+    distinguishable stderr diagnostic. Only explicit read_replay mode maps
+    backup roots. Issuing mode probes the original locator. Replay retains
     the suffix; the first existing replacement remains authoritative even if
     invalid. An empty override skips default backup locators without probing.
 
@@ -4750,7 +4762,7 @@ def probe_custody(
     remain the caller's responsibility.
     """
 
-    paths = _custody_probe_paths(path)
+    paths = _custody_probe_paths(path, mode=mode)
     if not paths:
         return absent()
     result: list[tuple[Path, bool]] = []
@@ -4793,10 +4805,12 @@ def _missing_custody(path: Path) -> Any:
     raise CalibrationLedgerError(f"custody locator is missing: {path}")
 
 
-def _custody_state(path: Path) -> str:
+def _custody_state(
+    path: Path, *, mode: Literal["read_replay", "issuing"] = "issuing",
+) -> str:
     return probe_custody(
         path, _custody_state_unbounded, lambda: "absent",
-        not_directory=lambda: "unreadable",
+        not_directory=lambda: "unreadable", mode=mode,
     )
 
 
@@ -4869,7 +4883,7 @@ def calibration_session_status(
         slots[slot] = {
             "attempt_id": session.slot_attempt_ids.get(slot),
             "custody_locator": str(locator) if locator is not None else None,
-            "custody_state": _custody_state(locator) if locator is not None else None,
+            "custody_state": _custody_state(locator, mode="read_replay") if locator is not None else None,
             "finalized": slot in session.finalized_slots,
         }
     next_slot = (
@@ -4958,6 +4972,7 @@ def calibration_readiness(
         # The enforcing gate authenticates every finalized observation in the
         # snapshot, not merely the custody path for the upcoming slot.
         verify_custody=enforcing_under_lease,
+        mode="issuing" if enforcing_under_lease else "read_replay",
         repo_root=repo_root,
     )
     relation = _pin_relation(snapshot)
@@ -5005,7 +5020,10 @@ def calibration_readiness(
                 else None
             )
             if isinstance(reserved, Mapping):
-                custody_state = _custody_state(Path(str(reserved["custody_locator"])))
+                custody_state = _custody_state(
+                    Path(str(reserved["custody_locator"])),
+                    mode="issuing" if enforcing_under_lease else "read_replay",
+                )
             claims = [
                 receipt
                 for receipt in snapshot.receipts
@@ -5136,6 +5154,7 @@ def advance_calibration_head_pin(
             head_pin_path,
             require_committed_pin=require_committed_pin,
             verify_custody=True,
+            mode="issuing",
             repo_root=repo_root,
         )
         if _pin_relation(snapshot) is not PinRelation.PHYSICAL_AHEAD:
@@ -5247,7 +5266,7 @@ def resume_finalize_bracket_session(
         assert open_receipt is not None
         reserved = open_receipt["slots"][slot]
         custody = Path(str(reserved["custody_locator"]))
-        state = _custody_state(custody)
+        state = _custody_state(custody, mode="issuing")
         if state != "complete":
             raise CalibrationLedgerError(
                 RefusalCode.CUSTODY_PARTIAL

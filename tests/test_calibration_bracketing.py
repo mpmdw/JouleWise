@@ -2615,6 +2615,17 @@ class CalibrationBracketingTests(unittest.TestCase):
                     directory, runs_root=root
                 )
                 self.assertIsNotNone(candidate)
+                import os
+                from joulewise import calibration_ledger as ledger
+
+                original_root = root / "absent-original"
+                original = original_root / directory.relative_to(root)
+                with (
+                    patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                    patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(root)}),
+                ):
+                    relocated = load_calibration_candidate(original, runs_root=original_root)
+                self.assertEqual(relocated, candidate)
                 self.assertEqual(candidate.b_fiducial_s, "0.02")
                 self.assertEqual(
                     candidate.bindings["anchor_method_version"], CLOCK_METHOD_V3

@@ -1209,7 +1209,7 @@ def _validate_reserved_bracket_slot(
         ledger_path,
         head_pin_path,
         require_committed_pin=require_committed_pin,
-        verify_custody=True,
+        verify_custody=True, mode="issuing",
     )
     session = snapshot.bracket_session_by_id.get(session_id)
     finalized_slots = set(session.finalized_slots) if session is not None else set()

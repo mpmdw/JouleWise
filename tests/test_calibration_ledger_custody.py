@@ -47,6 +47,12 @@ class CustodyProbeTests(unittest.TestCase):
 
     def test_issuance_refuses_override_before_input_access(self):
         calls = (
+            lambda: ledger.generate_historical_custody_manifest(roots=(),
+                checkout_root=None, disposition_table_raw=b"",
+                expected_disposition_table_sha256=""),
+            lambda: ledger.bootstrap_historical_import(None, head_pin_path=None,
+                disposition_table_raw=b"", expected_disposition_table_sha256="",
+                custody_manifest_raw=b"", expected_custody_manifest_sha256=""),
             lambda: ledger.resume_finalize_bracket_session(None, None,
                 session_id="s", slot="pre", plan_path=None, systematic_screen_s=None),
             lambda: ledger.finalize_attempt_receipt(None, attempt_id="a",
@@ -63,6 +69,139 @@ class CustodyProbeTests(unittest.TestCase):
                     ledger.CalibrationLedgerError, "custody_locator_override_mint_forbidden"
                 ):
                     call()
+
+    def test_issuing_helpers_ignore_planted_replacement(self):
+        # The guard is tested separately. Disable only that defence in depth
+        # here to prove artifact_hashes itself cannot bind relocated bytes.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            original_root, mapped_root = root / "original", root / "mapped"
+            original, mapped = original_root / "runs/member", mapped_root / "runs/member"
+            for directory, raw in ((original, b"{}"), (mapped, b'{"planted":true}')):
+                for name in ledger.GOVERNED_ARTIFACTS:
+                    artifact = directory / name
+                    artifact.parent.mkdir(parents=True, exist_ok=True)
+                    artifact.write_bytes(raw)
+            hashes = {name: hashlib.sha256(b"{}").hexdigest() for name in ledger.GOVERNED_ARTIFACTS}
+            plan = SimpleNamespace(receipts=[{
+                "event": ledger.HISTORICAL_IMPORT_FINALIZATION_EVENT,
+                "custody_locator": str(original), "artifact_sha256": hashes,
+            }])
+            cases = {
+                "probe_default": lambda: ledger.probe_custody(original, str, lambda: "absent"),
+                "hashes": lambda: ledger.artifact_hashes(original),
+                "directory": lambda: ledger._assert_absolute_nonsymlink_directory(original),
+                "read": lambda: ledger._read_contained_nofollow(original, "manifest.json"),
+                "governed": lambda: ledger._governed_raw_nofollow(original),
+                "reauthenticate": lambda: ledger._reauthenticate_historical_import_plan(plan),
+                "historical": lambda: ledger._inspect_historical_candidate(original, checkout_root=root, expected_epoch={}),
+                "state": lambda: ledger._custody_state(original),
+                "custody_validation_issuing": lambda: ledger._custody_reasons(
+                    [SimpleNamespace(custody_locator=str(original), artifact_sha256=hashes,
+                                     attempt_id="a", disposition="valid")], root, mode="issuing"),
+            }
+            def outcome(call):
+                try:
+                    return call()
+                except ledger.CalibrationLedgerError as exc:
+                    return type(exc), str(exc)
+
+            for present in (True, False):
+                if not present:
+                    original.rename(original.with_name("removed"))
+                with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}):
+                    expected = {name: outcome(call) for name, call in cases.items()}
+                touched = []
+                def track(operation):
+                    def checked(path, *args, **kwargs):
+                        if isinstance(path, (str, os.PathLike)) and Path(path).is_relative_to(mapped_root):
+                            touched.append(str(path))
+                            raise AssertionError("issuing touched replacement")
+                        return operation(path, *args, **kwargs)
+                    return checked
+                with (
+                    mock.patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                    mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(mapped_root)}),
+                    mock.patch.object(ledger, "_refuse_custody_override_mint"),
+                    mock.patch.object(Path, "exists", track(Path.exists)),
+                    mock.patch.object(Path, "is_dir", track(Path.is_dir)),
+                    mock.patch.object(Path, "open", track(Path.open)),
+                    mock.patch.object(os, "open", track(os.open)),
+                ):
+                    for name, call in cases.items():
+                        with self.subTest(helper=name, original_present=present):
+                            self.assertEqual(outcome(call), expected[name])
+                            self.assertEqual(touched, [])
+                if present:
+                    self.assertEqual(expected["hashes"], hashes)
+                    self.assertEqual(expected["read"], b"{}")
+                else:
+                    self.assertEqual(expected["hashes"], {})
+                    self.assertEqual(expected["state"], "absent")
+
+    def test_readiness_forwards_resolution_mode_to_snapshot_and_state(self):
+        class ReachedState(Exception):
+            pass
+
+        session = SimpleNamespace(state="open", finalized_slots=(),
+                                  slot_attempt_ids={"pre": "attempt"})
+        snapshot = SimpleNamespace(bracket_session_by_id={"session": session})
+        inspection = SimpleNamespace(state="clean", legacy_journal_path=None)
+        reserved = {"slots": {"pre": {"custody_locator": "/mock/original"}}}
+        for enforcing, mode in ((True, "issuing"), (False, "read_replay")):
+            with (
+                self.subTest(enforcing=enforcing),
+                mock.patch.object(ledger, "_current_writer_lease", return_value=object()),
+                mock.patch.object(ledger, "inspect_calibration_ledger", return_value=inspection),
+                mock.patch.object(ledger, "load_calibration_ledger_snapshot", return_value=snapshot) as load,
+                mock.patch.object(ledger, "_pin_relation", return_value=ledger.PinRelation.EXACT),
+                mock.patch.object(ledger, "writer_lease_is_live", return_value=False),
+                mock.patch.object(ledger, "_session_open_receipt", return_value=reserved),
+                mock.patch.object(ledger, "_custody_state", side_effect=ReachedState) as state,
+            ):
+                with self.assertRaises(ReachedState):
+                    ledger.calibration_readiness(Path("/mock/ledger"), Path("/mock/pin"),
+                        phase="pre-slot", session_id="session", enforcing_under_lease=enforcing)
+                self.assertEqual(load.call_args.kwargs.get("mode"), mode)
+                self.assertEqual(load.call_args.kwargs["verify_custody"], enforcing)
+                state.assert_called_once_with(Path("/mock/original"), mode=mode)
+
+    def test_head_pin_advancement_forwards_issuing_mode(self):
+        class ReachedSnapshot(Exception):
+            pass
+
+        with (
+            mock.patch.object(ledger, "CalibrationWriterLease"),
+            mock.patch.object(ledger, "_authenticated_head_pin", return_value={}),
+            mock.patch.object(ledger, "inspect_calibration_ledger",
+                              return_value=SimpleNamespace(state="clean", legacy_journal_path=None)),
+            mock.patch.object(ledger, "load_calibration_ledger_snapshot", side_effect=ReachedSnapshot) as load,
+        ):
+            with self.assertRaises(ReachedSnapshot):
+                ledger.advance_calibration_head_pin(Path("/mock/ledger"), Path("/mock/pin"),
+                    session_id=None, expected_sequence=1, expected_digest="0" * 64,
+                    operator_identity="test", attestation_reason="routing test")
+            self.assertEqual(load.call_args.kwargs.get("mode"), "issuing")
+            self.assertTrue(load.call_args.kwargs["verify_custody"])
+
+    def test_lifecycle_slot_validator_forwards_issuing_mode(self):
+        from scripts import validate_powermetrics_fiducial as writer
+
+        class ReachedSnapshot(Exception):
+            pass
+
+        with mock.patch.object(writer, "load_calibration_ledger_snapshot", side_effect=ReachedSnapshot) as load:
+            with self.assertRaises(ReachedSnapshot):
+                writer._validate_reserved_bracket_slot(Path("/mock/ledger"), Path("/mock/pin"),
+                    session_id="session", slot="pre", attempt_id="attempt",
+                    custody_locator="/mock/original", identity_epoch={}, t1_bindings={})
+            self.assertEqual(load.call_args.kwargs.get("mode"), "issuing")
+            self.assertTrue(load.call_args.kwargs["verify_custody"])
+
+    def test_unknown_resolution_mode_refuses_before_probe(self):
+        with mock.patch.object(threading.Thread, "start", side_effect=AssertionError("probe")):
+            with self.assertRaisesRegex(ValueError, "invalid custody resolution mode"):
+                ledger.probe_custody(Path("/mock/custody"), str, dict, mode="typo")
 
     def test_empty_override_preserves_local_mint_hashes(self):
         with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(
@@ -283,12 +422,10 @@ class CustodyReadCoverageTests(unittest.TestCase):
                     str(backup / "missing") + os.pathsep + str(backup)}),
                 mock.patch.object(Path, "exists", safe_exists),
             ):
-                self.assertEqual(ledger._custody_state(original), "complete")
+                self.assertEqual(ledger._custody_state(original, mode="read_replay"), "complete")
                 with self.assertRaisesRegex(ledger.CalibrationLedgerError, "custody_locator_override_mint_forbidden"):
                     ledger.artifact_hashes(original)
                 self.assertEqual(ledger._custody_reasons([observation], backup), set())
-                self.assertEqual(ledger._governed_raw_nofollow(original),
-                                 {name: b"{}" for name in ledger.GOVERNED_ARTIFACTS})
                 # A present but corrupt first root cannot be skipped for a good one.
                 bad = backup / "bad/runs/member"
                 bad.mkdir(parents=True)

@@ -402,3 +402,55 @@ finalization refuse an active non-empty root override with
 keeps evidence fail-closed: a new receipt must never name original locator L
 while authenticating bytes under replacement M. Unset/empty override issuance
 behavior is unchanged. Use overrides for read/replay; unset them for issuance.
+
+
+## 2026-09-08 addendum: read/replay-only resolution (part 4)
+
+The root override is a read/replay affordance. The shared resolution helper
+`_custody_probe_paths` and bounded `probe_custody` default to `mode="issuing"`:
+a non-empty replacement list never supplies a probe or inspection path in that
+mode. Only explicit `mode="read_replay"` maps the lexical backup-root prefix.
+The empty-list absent shortcut remains available in both modes; it performs no
+filesystem work. Unknown modes fail before probing. Original-locator timeout
+and probe errors retain the existing absent outcome and diagnostic.
+
+`artifact_hashes`, historical candidate inspection, import reauthentication,
+no-follow issuance helpers, finalization, head-pin advancement, and readiness
+under the writer lease resolve original locators. The existing
+`custody_locator_override_mint_forbidden` guards remain defence in depth.
+They may refuse before the original-locator probe; this addendum does not
+remove or widen those guards.
+
+Snapshot custody validation, candidate loading, session status, and advisory
+readiness are read/replay consumers. Shared snapshot validation accepts an
+explicit issuing mode for issuing callers. Any issuing caller of a replay
+reader must select issuing mode before custody authentication; calling a
+validator does not turn issuance into replay. Direct reads that never consult
+the override continue to use their supplied original path.
+
+Resolution census in the two owning modules:
+
+| Function / caller | Classification and resolution |
+|---|---|
+| `_refuse_custody_override_mint` | Issuing defence in depth; environment predicate only. |
+| `_custody_probe_paths`, `probe_custody` | Shared boundary; issuing by default, explicit read/replay mapping only. |
+| `_custody_backup_disabled` | Pure lexical absent-shortcut query; no mapped filesystem access. |
+| `artifact_hashes` | Issuing; retains refusal and explicitly probes in issuing mode. |
+| `_assert_absolute_nonsymlink_directory`, `_read_contained_nofollow`, `_governed_raw_nofollow` | Issuing; historical inspection/import reauthentication/resume-finalize consumers. |
+| `_custody_reasons` via `load_calibration_ledger_snapshot` | Replay validation by default; forwards issuing mode when requested by an issuer. |
+| `_custody_state` | Issuing by default; resume-finalize uses issuing mode. |
+| `calibration_session_status` | Read/replay state inspection. |
+| `calibration_readiness` | Advisory read/replay; enforcing-under-lease snapshot and state checks use issuing mode. |
+| `advance_calibration_head_pin` | Issuing snapshot custody validation. |
+| `load_calibration_candidate` and `_candidate_from_observation` | Read/replay; mapped runs-root adjustment preserves relative candidate identity. |
+
+The census applies the classification in consult 99ae §F1 and delta audit 99u
+under the part-4 ruling, which supersedes the proposed entry-point guard
+programme. It is not an entry-point refusal or zero-mutation guarantee.
+
+
+The lifecycle's `_validate_reserved_bracket_slot` explicitly requests issuing
+snapshot resolution, including its early validation before lease acquisition.
+Its enforcing readiness check also uses issuing resolution for both finalized
+observations and the reserved slot. `rederive_artifact` does not call the
+resolution helper: its direct reads use the supplied `source_dir` unchanged.
