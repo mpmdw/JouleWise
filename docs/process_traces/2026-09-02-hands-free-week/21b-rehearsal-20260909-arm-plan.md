@@ -39,8 +39,9 @@ restate every pin verbatim (t0 epoch and local time, measurement_root, measureme
 REHEARSAL_STUB, courier deadline, custody_root), say "launches unless NO", and include the corrected primary-source
 timeline (arm email, H, pins follow-up, new notice) and the correction of the earlier times. The NO window runs
 from that notice. NO ARM pending that notice and all other conditions; never before t0 − 60 min
-(01:56 PDT 2026-09-09, epoch 1788944160) or joulewise-53's stand-down message. The new notice's Gmail id and primary-source time
-remain to be recorded here by the lead; this docs-only fix sends nothing and arms nothing. <!-- F1 -->
+(01:56 PDT 2026-09-09, epoch 1788944160) or joulewise-53's stand-down message. CONSOLIDATED NOTICE SENT: Gmail id `1a080d1adf46c7b2`,
+internalDate 1788867620 = 04:40:20 PDT 2026-09-08, on thread `1a0800cdb282c3f1`, after fix round 0f3390c9 and the delta cures
+(content head 083ce8ae; ledger head 1ae91b4d). The NO window runs from it. Nothing is armed. <!-- F1 -->
 
 ## Ruling on the scout's NEEDS_RULING (21a, F1)
 

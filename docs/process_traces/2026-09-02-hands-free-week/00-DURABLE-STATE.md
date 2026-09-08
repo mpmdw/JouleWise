@@ -539,3 +539,20 @@ unattended-window path. Session 3c46c831 (resumed twin, pid 71607) ends here; it
   (recorded `clean activation exit`); the watchdog relaunched activation 784a764e at 01:41:58 (launch email
   `1a080326c4d2f147`). Same lane, same conditions; the arm plan 21b carries a succession addendum (census `me` from
   the lock, not a constant). Arm request thread `1a0800cdb282c3f1` has no NO. Nothing armed.
+
+## 2026-09-08 activation 784a764e (spawned epoch 1788856918; events.jsonl seq 8) — PR #295 gauntlet complete; consolidated arm notice sent
+
+- PR #295 (`bookkeeping/2026-09-08-activation-evidence`): trace 21/21a/21b + handback H=ae8f074f, refutation 21c, fix round 21d,
+  deltas 21e/21e2/21e3/21e4, consult 21f-consult, terminal review 21f, replays 21g; origin/main a969e526 merged in at 260f997b;
+  twelve-row ledger installed (rows 11/12 pinned to the head named in the PR body). Integration replay: 5271 tests, 2 environmental
+  failures (iCloud backup root blocks `paper_excursion_decomposition.py`; idle-admission load flake) — see 21g.
+- Consolidated arm notice (ruling B, 21c): Gmail `1a080d1adf46c7b2`, internalDate 1788867620, thread `1a0800cdb282c3f1`. DO NOT
+  resend; a successor activation only checks that thread for a NO.
+- NEXT EXACT ACTIONS: (1) when PR #295 CI is green, merge it (D-072 gate shape satisfied; docs only); (2) hold for joulewise-53's
+  stand-down message (it names the main SHAs of PR #297 138e7edb, PR #298, the iCloud-probe branch, and confirms the twin 71607 and
+  the bg-job daemon/spare are retired); (3) in the window 1788944160 ≤ now < 1788945300 (01:56–02:15 PDT 2026-09-09), with no NO on
+  the thread and no standdown.request, run 21b block A → manual 3b/5 → block B, record the arm (plan json copy, launchctl list,
+  census output) here, commit, push, stop every child, exit before 1788946260 (02:31 PDT); (4) the morning after: harvest per 21b
+  "Morning after". A successor activation resumes from THIS section and 21b; its own pid comes from the lock, never a constant.
+- Hazards for the code/tests lane (joulewise-53): iCloud path `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup`
+  blocks directory access (0 CPU, `__opendir2`); `IdleAdmissionCoreVerdictTests` fail under load ≥ ~8 and pass alone.
