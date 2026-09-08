@@ -11,7 +11,7 @@ import hashlib
 import json
 import math
 
-from .ratio import validate_ratio_estimand
+from .ratio import validate_metric_unit_and_ratio
 
 
 _SCHEMA = "joulewise.claim_side_bound.v2"
@@ -19,9 +19,6 @@ _ROW_KEYS = {"contrast_id", "source_cell_ids", "floor_artifact_id",
              "deterministic_widening_total", "unit", "estimator_id", "ratio_estimand",
              "deterministic_terms", "metrology_aware_CI95", "decision_interval"}
 _ANCHOR = "E_clock_anchor_shift_bound_j"
-# Pinned against both ap_spec_*_front.v2 registries by the regression suite;
-# production projection consumes authenticated bytes only, never registry paths.
-_UNITS = frozenset({"J", "J/committed_output_token", "J/accepted_draft_token"})
 
 
 class ClaimSideBoundRefusal(ValueError):
@@ -122,13 +119,10 @@ def _project(claim_verdicts, finalized_manifest, floor_artifact):
             sources.extend(cells)
         metric, estimator = contrast["metric"], contrast["estimator"]
         unit, ratio = metric["unit"], metric["ratio_estimand"]
-        if type(unit) is not str or unit not in _UNITS or (unit == "J" and ratio is not None):
-            raise ClaimSideBoundRefusal("paper_claim_side_bound_unit_mismatch")
-        if unit != "J":
-            try:
-                validate_ratio_estimand(ratio)
-            except (TypeError, ValueError) as exc:
-                raise ClaimSideBoundRefusal("paper_claim_side_bound_unit_mismatch") from exc
+        try:
+            validate_metric_unit_and_ratio(unit, ratio)
+        except (TypeError, ValueError) as exc:
+            raise ClaimSideBoundRefusal("paper_claim_side_bound_unit_mismatch") from exc
         # Absolute and per-token companions may use the same ordered cells.
         # Repeated cells across resolutions are preserved, never deduplicated.
         estimand_kind = ratio["form"] if ratio is not None else None

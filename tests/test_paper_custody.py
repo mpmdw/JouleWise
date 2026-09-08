@@ -945,6 +945,7 @@ class RoundFiveTests(unittest.TestCase):
                                  "analysis_engine.artifact._validate_cross_field_claim_semantics",
                                  "analysis_engine.claim_side_bound.produce_claim_side_bound",
                                  "analysis_engine.ratio.validate_ratio_estimand",
+                                 "analysis_engine.ratio.validate_metric_unit_and_ratio",
                                  "module:joulewise.analysis_engine.ratio",
                                  "module:joulewise.analysis_engine.claim_side_bound"):
                     self.assertIn(required, members)

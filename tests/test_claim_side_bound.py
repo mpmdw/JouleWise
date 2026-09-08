@@ -5,7 +5,6 @@ import copy
 from dataclasses import asdict
 import hashlib
 import json
-from pathlib import Path
 import unittest
 
 from joulewise.analysis_engine import claim_side_bound as bound
@@ -153,45 +152,60 @@ class ClaimSideBoundTests(unittest.TestCase):
         self.manifest["contrasts"].append({"contrast_id": "other", "floor_estimator_registration": {}})
         self.assert_source_refuses("paper_claim_side_bound_join_not_injective")
 
-    def registry_units(self):
-        root = Path(__file__).resolve().parents[1] / "configs/analysis_registry"
-        vocabularies = [
-            {row["unit"] for row in json.loads((root / name).read_bytes())["estimands"]}
-            for name in ("ap_spec_draft_front.v2.json", "ap_spec_native_mtp_front.v2.json")
-        ]
-        self.assertEqual(vocabularies[0], vocabularies[1])
-        return vocabularies[0]
-
-    def test_unit_vocabulary_matches_both_registries(self):
-        self.assertEqual(bound._UNITS, self.registry_units())
-        for unit in ("J/token", "kJ", "", None):
-            with self.subTest(unit=unit):
-                self.verdicts["contrasts"][0]["metric"]["unit"] = unit
-                self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
+    def test_b8_unit_vocabulary_through_both_apis(self):
+        for form in ("mean_of_request_ratios", "ratio_of_totals"):
+            metric = self.verdicts["contrasts"][0]["metric"]
+            ratio = ratio_estimand(form)
+            metric.update(unit="J/token", ratio_estimand=ratio)
+            self.verdicts["contrasts"][0]["estimator"]["name"] = (
+                "paired_mean_student_t_v1" if form == "mean_of_request_ratios"
+                else "ratio_of_totals_delete_one_block_jackknife_t_v1")
+            raw = encoded(self.verdicts)
+            sidecar = self.produce(raw)
+            self.assertEqual(self.validate(sidecar, raw), ())
+            row = json.loads(sidecar)["contrasts"][0]
+            self.assertEqual(row["unit"], "J/token")
+            self.assertEqual(row["ratio_estimand"], ratio)
+            for unit in ("J/parsecs", "J/committed_output_token", "J/accepted_draft_token",
+                         "", None, 1, True, [], {}):
+                for api in ("produce", "validate"):
+                    with self.subTest(form=form, unit=unit, api=api):
+                        metric["unit"] = unit
+                        rejected_raw = encoded(self.verdicts)
+                        # Match the candidate to the source so copy equality cannot
+                        # mask a missing source-unit membership check.
+                        candidate = json.loads(sidecar)
+                        candidate["contrasts"][0]["unit"] = unit
+                        candidate["claim_verdicts_sha256"] = hashlib.sha256(rejected_raw).hexdigest()
+                        if api == "produce":
+                            with self.assertRaises(bound.ClaimSideBoundRefusal) as raised:
+                                self.produce(rejected_raw)
+                            self.assertEqual(raised.exception.code, "paper_claim_side_bound_unit_mismatch")
+                        else:
+                            self.assertEqual(self.validate(encoded(candidate), rejected_raw),
+                                             ("paper_claim_side_bound_unit_mismatch",))
 
     def test_ratio_in_j_cell(self):
-        for unit in sorted(self.registry_units() - {"J"}):
-            for form, estimator in (("mean_of_request_ratios", "paired_mean_student_t_v1"),
-                                    ("ratio_of_totals", "ratio_of_totals_delete_one_block_jackknife_t_v1")):
-                with self.subTest(unit=unit, form=form):
-                    # Use the existing B8 fixture and validate it with its owner.
-                    ratio = ratio_estimand(form)
-                    self.assertEqual(set(ratio), RATIO_ESTIMAND_KEYS)
-                    self.assertEqual(validate_ratio_estimand(ratio), ratio)
-                    row = self.verdicts["contrasts"][0]
-                    row["metric"].update(unit=unit, ratio_estimand=ratio)
-                    row["estimator"]["name"] = estimator
-                    self.raw = encoded(self.verdicts)
-                    self.sidecar_raw = self.produce(); self.sidecar = json.loads(self.sidecar_raw)
-                    self.assertEqual(self.sidecar["contrasts"][0]["ratio_estimand"], ratio)
-                    self.assertEqual(self.sidecar["contrasts"][0]["unit"], unit)
-                    self.mutate(lambda row: row.update(unit="J"), "paper_claim_side_bound_unit_mismatch")
-                    for key in ("claim_side_bound_j", "another_j", "B_decode_claim_J"):
-                        bad = copy.deepcopy(self.sidecar)
-                        bad["contrasts"][0][key] = bad["contrasts"][0].pop("deterministic_widening_total")
-                        self.assertEqual(self.validate(encoded(bad)), ("paper_claim_side_bound_shape_invalid",))
-        self.verdicts["contrasts"][0]["metric"]["unit"] = "J"
-        self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
+        for form, estimator in (("mean_of_request_ratios", "paired_mean_student_t_v1"),
+                                ("ratio_of_totals", "ratio_of_totals_delete_one_block_jackknife_t_v1")):
+            with self.subTest(form=form):
+                ratio = ratio_estimand(form)
+                self.assertEqual(set(ratio), RATIO_ESTIMAND_KEYS)
+                self.assertEqual(validate_ratio_estimand(ratio), ratio)
+                row = self.verdicts["contrasts"][0]
+                row["metric"].update(unit="J/token", ratio_estimand=ratio)
+                row["estimator"]["name"] = estimator
+                self.raw = encoded(self.verdicts)
+                self.sidecar_raw = self.produce(); self.sidecar = json.loads(self.sidecar_raw)
+                self.mutate(lambda row: row.update(unit="J"), "paper_claim_side_bound_unit_mismatch")
+                for key in ("claim_side_bound_j", "another_j", "B_decode_claim_J"):
+                    bad = copy.deepcopy(self.sidecar)
+                    bad["contrasts"][0][key] = bad["contrasts"][0].pop("deterministic_widening_total")
+                    self.assertEqual(self.validate(encoded(bad)), ("paper_claim_side_bound_shape_invalid",))
+                row["metric"]["unit"] = "J"
+                self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
+                row["metric"].update(unit="J/token", ratio_estimand=None)
+                self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
 
     def test_ratio_requires_exact_b8_object(self):
         valid = ratio_estimand("ratio_of_totals")
@@ -199,14 +213,14 @@ class ClaimSideBoundTests(unittest.TestCase):
                       dict(valid, extra="value"), dict(valid, denominator="invented")):
             with self.subTest(ratio=ratio):
                 self.verdicts["contrasts"][0]["metric"].update(
-                    unit="J/committed_output_token", ratio_estimand=ratio)
+                    unit="J/token", ratio_estimand=ratio)
                 self.assert_source_refuses("paper_claim_side_bound_unit_mismatch")
 
     def test_companion_estimands_share_ordered_cells(self):
         for form in ("mean_of_request_ratios", "ratio_of_totals"):
             companion = copy.deepcopy(self.verdicts["contrasts"][0])
             companion["contrast_id"] = form
-            companion["metric"].update(unit="J/committed_output_token", ratio_estimand=ratio_estimand(form))
+            companion["metric"].update(unit="J/token", ratio_estimand=ratio_estimand(form))
             self.verdicts["contrasts"].append(companion)
             self.manifest["contrasts"].append({"contrast_id": form, "floor_estimator_registration": {}})
         raw = encoded(self.verdicts)
@@ -216,10 +230,9 @@ class ClaimSideBoundTests(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertIsNone(rows[0]["ratio_estimand"])
         self.assertTrue(all(row["source_cell_ids"] == ["a", "b", "a"] for row in rows))
-        # Same ratio kind still collides even if the registered unit differs.
+        # The same ratio kind still collides over the same ordered cells.
         duplicate = copy.deepcopy(self.verdicts["contrasts"][-1])
-        duplicate["contrast_id"] = "same-kind-other-unit"
-        duplicate["metric"]["unit"] = "J/accepted_draft_token"
+        duplicate["contrast_id"] = "same-kind"
         self.verdicts["contrasts"].append(duplicate)
         self.manifest["contrasts"].append({"contrast_id": duplicate["contrast_id"]})
         self.assert_source_refuses("paper_claim_side_bound_join_not_injective")

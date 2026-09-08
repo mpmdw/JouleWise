@@ -29,8 +29,8 @@ whole-window drift. Their complete recorded list travels with B, including
 
 For `mean_of_request_ratios` and `ratio_of_totals`, the corresponding existing
 ratio estimator owns normalization/propagation and serializes B and I/D in
-`J/committed_output_token` or `J/accepted_draft_token`. The formulas above define the absolute-energy estimator, not a new
-ratio estimator. S3 performs no division by tokens and no estimator arithmetic.
+the author-supplied B8 metric unit `J/token`. The formulas above define the
+absolute-energy estimator, not a new ratio estimator. S3 performs no division by tokens and no estimator arithmetic.
 The meanings and algorithms remain in `analysis_engine/estimators.py` and the
 [comparison protocol](../paper/protocol/prospective-comparison-protocol.md).
 Term-sum and interval arithmetic validation belong to `validate_claim_verdicts`.
@@ -48,12 +48,21 @@ exactly these fields:
 | `source_cell_ids` | Ordered concatenation defined below |
 | `floor_artifact_id` | Supplied authenticated floor artifact's nonempty `artifact_id` |
 | `deterministic_widening_total` | Copy of verdict `deterministic_bounds.total`, finite nonnegative JSON number |
-| `unit` | Copy of verdict `metric.unit`; vocabulary pinned by regression to `estimands[].unit` in both `ap_spec_draft_front.v2.json` and `ap_spec_native_mtp_front.v2.json`: `J`, `J/committed_output_token`, `J/accepted_draft_token` |
+| `unit` | Copy of verdict `metric.unit`; B8 verdict metric vocabulary owned by `ratio.validate_metric_unit_and_ratio`: `J` with null ratio or `J/token` with an exact valid B8 mapping |
 | `estimator_id` | Copy of verdict `estimator.name`, nonempty string; owner validates registration |
-| `ratio_estimand` | Verbatim object copy of verdict `metric.ratio_estimand`; null for absolute J contrasts. Any per-token unit (`unit != "J"`) requires the exact six-key B8 mapping validated by `ratio.validate_ratio_estimand`: `form`, `numerator_metric`, `denominator`, `denominator_unit`, `tokenizer_scope`, `output_policy_scope`. Estimand kind is read from `["form"]` (`mean_of_request_ratios` or `ratio_of_totals`), never a bare string |
+| `ratio_estimand` | Verbatim object copy of verdict `metric.ratio_estimand`; null for absolute J contrasts. Any per-token unit (`unit != "J"`) requires the exact six-key B8 mapping checked by the shared unit/ratio validator through `ratio.validate_ratio_estimand`: `form`, `numerator_metric`, `denominator`, `denominator_unit`, `tokenizer_scope`, `output_policy_scope`. Estimand kind is read from `["form"]` (`mean_of_request_ratios` or `ratio_of_totals`), never a bare string |
 | `deterministic_terms` | Exact ordered copy of verdict `deterministic_bounds.terms`: nonempty list of exact `{name, bound}` objects; unique nonempty names and finite nonnegative numeric bounds |
 | `metrology_aware_CI95` | Copy of verdict `estimator.metrology_aware_CI95` |
 | `decision_interval` | Copy of verdict `deterministic_bounds.decision_interval` |
+
+The B8 manifest author supplies `metric.unit`; `analysis_manifest.py` requires
+`J/token` for ratio estimands and `J` with null ratio for absolute contrasts.
+S3 copies accepted units verbatim. The AP-SPEC v2 estimand units
+`J/committed_output_token` and `J/accepted_draft_token` belong to the separate
+v2 manifest path rejected by `analyze-claims`; there is no AP-SPEC-to-B8 unit
+conversion. Those units, invented units, empty/non-string units, `J` with a
+ratio mapping, and `J/token` with null ratio all refuse with
+`paper_claim_side_bound_unit_mismatch`.
 
 Each interval is exactly `{lower, upper}`, finite JSON numbers, lower ≤ upper.
 Booleans, null numeric fields, numeric strings, NaN/infinity, duplicate object
@@ -150,9 +159,9 @@ Each mutation begins with an accepted copy control, then alters one boundary.
 `tests/fixtures/paper_custody/run_kills.py --s3` independently removes the
 relevant check (or corrupts the producer) and requires an assertion failure;
 an import error or unrelated exception is not counted as a kill. The runner
-executes **20 mutations over 9 distinct guards** (including two producer
+executes **21 mutations over 10 distinct guards** (including two producer
 sites). Eleven mutations share the exact-copy guard and two share the ordered
-cell-copy guard; the count describes data coverage, not 20 independent guards.
+cell-copy guard; the count describes data coverage, not 21 independent guards.
 
 | Mutation / counterfactual without the guard | Regression |
 |---|---|
@@ -170,9 +179,9 @@ cell-copy guard; the count describes data coverage, not 20 independent guards.
 | Cells from a refused resolution would pass | `test_refused_resolution` |
 | Missing anchor would produce a sidecar | `test_anchor_required` |
 | Contrasts of the same estimand kind could alias the same ordered join | `test_join_injective` |
-| Either registry per-token unit would be labelled J or placed in a J-typed cell | `test_ratio_in_j_cell` |
+| A B8 per-token metric would be labelled J or placed in a J-typed cell | `test_ratio_in_j_cell` |
 | Absolute/per-token companions or different ratio forms would be incorrectly refused | `test_companion_estimands_share_ordered_cells` |
-| An invented unit or bare/incomplete B8 estimand could pass | `test_unit_vocabulary_matches_both_registries`, `test_ratio_requires_exact_b8_object` |
+| Removing only unit membership admits invented/AP-SPEC units with valid mappings; bare/incomplete B8 estimands could pass | `test_b8_unit_vocabulary_through_both_apis`, `test_ratio_requires_exact_b8_object` |
 | Extreme exponents would leak `decimal.InvalidOperation` through either API | `test_extreme_exponents_refuse_through_both_apis` |
 | Boolean would serve as a numeric bound | `test_bool_rejected` |
 | Float normalization would erase byte-level drift | `test_numeral_bytes_not_numeric_equality` |
@@ -182,3 +191,7 @@ cell-copy guard; the count describes data coverage, not 20 independent guards.
 | Sidecar changes could reach claim reevaluation | `test_gate_reevaluates_verdicts_with_real_copy_validator` (upstream custody boundaries mocked) |
 
 Synthetic controls establish software behavior only; no live gate is claimed.
+
+## Follow-ups
+
+- `UNIT-VOCAB-SHARED-01`: Wire `ratio.validate_metric_unit_and_ratio` into manifest and verdict validation; their acceptance is unchanged in S3.

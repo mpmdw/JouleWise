@@ -1138,8 +1138,10 @@ No numeric renderer projection is implemented in S3; that seat follows S2.
   `deterministic_widening_total`, copied from verdict `deterministic_bounds.total`,
   accompanied by copied `unit`, `estimator_id`, the verbatim six-key B8
   `ratio_estimand` mapping (kind from `["form"]`; null for absolute J), and
-  the complete per-kind `deterministic_terms` list. The registry-pinned units
-  are `J`, `J/committed_output_token`, and `J/accepted_draft_token`. Any
+  the complete per-kind `deterministic_terms` list. The B8 verdict metric
+  vocabulary is `J` with null ratio or `J/token` with an exact valid B8 mapping,
+  checked by `ratio.validate_metric_unit_and_ratio`. AP-SPEC v2 estimand units
+  are not this vocabulary, and no AP-SPEC-to-B8 conversion occurs. Any
   per-token quantity (`unit != "J"`) cannot fill the
   historical `B_decode_claim_J`/`claim_side_bound_j` cell. S6's
   `claim_side_bound_j` retains its clock-anchor planning meaning within F+B.

@@ -1,6 +1,6 @@
 """Run the Round-5 or --s3 kill mutations, restoring selected bytes exactly.
 
---s3 runs only claim-side-bound tests and mutates only the claim-side module;
+--s3 runs only claim-side-bound tests and mutates the claim-side/ratio modules;
 it never repins the supply map. Legacy Round-5 mode has broader write scope.
 
 Only the four user-permitted unittest modules may run. These mutations are
@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CUSTODY = 'joulewise/paper_custody.py'
 RENDER = 'joulewise/paper_rendering.py'
 BOUND = 'joulewise/analysis_engine/claim_side_bound.py'
+RATIO = 'joulewise/analysis_engine/ratio.py'
 CONTRACT = 'docs/contracts/paper_supply_custody.md'
 MAP = 'configs/paper_supply/supply_map.json'
 C = 'tests.test_paper_custody.RoundFiveTests.'
@@ -130,15 +131,25 @@ S3_MUTATIONS = [
 ]
 
 
+S3_MUTATIONS = [(identity, BOUND, old, new, method)
+                for identity, old, new, method in S3_MUTATIONS] + [
+    ("units_membership", RATIO,
+     ' or unit not in {ABSOLUTE_METRIC_UNIT, RATIO_METRIC_UNIT}', '',
+     'test_b8_unit_vocabulary_through_both_apis'),
+]
+
+
 def run_s3_kills():
     """No map writes/repins: these regressions do not construct custody receipts."""
-    path = ROOT / BOUND
-    original = path.read_bytes()
-    source = original.decode()
+    originals = {relative: (ROOT / relative).read_bytes()
+                 for _, relative, _, _, _ in S3_MUTATIONS}
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
     records = []
-    distinct_guards = len({old for _, old, _, _ in S3_MUTATIONS})
-    for identity, old, new, method in S3_MUTATIONS:
+    distinct_guards = len({(relative, old) for _, relative, old, _, _ in S3_MUTATIONS})
+    for identity, relative, old, new, method in S3_MUTATIONS:
+        path = ROOT / relative
+        original = originals[relative]
+        source = original.decode()
         if source.count(old) != 1:
             raise ValueError(f'{identity}: mutation target count {source.count(old)}')
         test = 'tests.test_claim_side_bound.ClaimSideBoundTests.' + method
@@ -148,7 +159,7 @@ def run_s3_kills():
                                     env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             killed = (result.returncode == 1 and 'FAILED (failures=' in result.stdout
                       and 'errors=' not in result.stdout and 'Ran 1 test' in result.stdout)
-            records.append({'id': identity, 'test': test, 'counterfactual': {'old': old, 'new': new},
+            records.append({'id': identity, 'test': test, 'counterfactual': {'file': relative, 'old': old, 'new': new},
                             'exit_code': result.returncode, 'killed': killed,
                             'tail': result.stdout.rstrip().splitlines()[-9:]})
             print(f'S3-{identity}: {"KILLED" if killed else "SURVIVED/ERROR"}', flush=True)
