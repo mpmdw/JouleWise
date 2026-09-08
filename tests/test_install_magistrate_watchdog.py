@@ -98,6 +98,12 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
         self.shadow_script = self.shadow_repo / "scripts" / SCRIPT_PATH.name
         self.shadow_script.write_text(source, encoding="utf-8")
         self.shadow_script.chmod(0o755)
+        watchdog_source = (REPO_ROOT / "scripts/magistrate_watchdog.py").read_text()
+        watchdog_source = watchdog_source.replace(
+            'REPO_ROOT = Path(__file__).resolve().parents[1]',
+            f'REPO_ROOT = Path({str(REPO_ROOT)!r})',
+        ).replace('("/bin/ps",', f'("{ps_stub}",')
+        (self.shadow_repo / "scripts/magistrate_watchdog.py").write_text(watchdog_source)
         init_git_fixture(self.shadow_repo, "-q")
 
         self.noncanonical_repo = self.root / "noncanonical-copy"
@@ -147,6 +153,15 @@ class InstallMagistrateWatchdogTests(unittest.TestCase):
                 self.assertFalse((self.home / "Library/LaunchAgents").exists())
                 self.assertFalse((self.home / "night-custody").exists())
                 self.assertFalse(self.launch_log.exists())
+
+    def test_install_uses_shared_daemon_classifier(self) -> None:
+        """Counterfactual: installer silently forks the daemon command grammar."""
+        source = SCRIPT_PATH.read_text()
+        preflight = source.split("# Read-only preflight:", 1)[1].split("# File 15 row 10", 1)[0]
+        self.assertIn('"$python_bin" "$script_dir/magistrate_watchdog.py" handoff-daemons', preflight)
+        self.assertNotIn("re.search", preflight)
+        self.assertNotIn("bg-spare", preflight)
+        self.assertNotIn("bg-pty-host", preflight)
 
     def test_rendered_plist_pins_canonical_checkout(self) -> None:
         render_dir = self.root / "rendered"
