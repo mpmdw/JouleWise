@@ -38,7 +38,18 @@ EXPECTED_IDS = {
     "CANONICAL-JSON-ONE-HOME-01",
     "INSTRUMENT-PATH-PIN-01",
     "GENERATOR-CORE-01",
-    "WATCHDOG-INSTALL-01",
+    # 2026-09-08 T38 bookkeeping: WATCHDOG-INSTALL-01 retired (all four acceptance
+    # items satisfied by the 09-06 install and the 00:51:55 activation); eight
+    # rows added — six follow-ups from the handoff-redo gauntlets plus the two
+    # open lanes (G2-a chain routing, iCloud backup probe).
+    "D169-STAGE3-01",
+    "G2A-CHAIN-ROUTING-01",
+    "G2A-FIRST-WINDOW-01",
+    "G2A-PREFLIGHT-ARGV-ASSERT-01",
+    "ICLOUD-BACKUP-PROBE-01",
+    "ICLOUD-CUSTODY-LOCATOR-01",
+    "WATCHDOG-NITS-01",
+    "WINDOW-STATUS-GUARD-CENSUS-01",
     "CHARTER-V3-PACKET-INPUTS-01",
     # 2026-09-02 paper-d fixture-shape cold gate (files 38-42).
     "DG071-PROVENANCE-TEST-01",
@@ -703,7 +714,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 144)
+        self.assertEqual(len(self.tasks), 151)  # 2026-09-08 T38: 144 − 1 retired + 8 added
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

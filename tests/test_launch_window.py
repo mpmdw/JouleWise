@@ -430,7 +430,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
     def test_mint_keeps_raw_anchors_separate_from_sequence_clock(self) -> None:
         anchor = clock_reference.sample_anchor()
         two_hours_ns = 2 * 60 * 60 * 1_000_000_000
-        for offset_ns in (-two_hours_ns, two_hours_ns):
+        for offset_ns in (0, -two_hours_ns, two_hours_ns):
             with self.subTest(ordinary_minus_raw_ns=offset_ns):
                 with (
                     mock.patch.object(
@@ -477,7 +477,10 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         # ten-minute history even when a Linux runner booted only seconds ago.
         # The subprocess clock remains live: this offset is confined to the
         # in-process T-0 author and cannot mint the arm capability deadline.
-        fixture_now = live_fixture_now + t0_evidence._MIN_IDLE_NS + 1_000
+        # The clock-separation regression can deliberately put ordinary time
+        # below zero on a freshly booted host. Only the capture timeline needs
+        # this floor; keep the live RAW/REALTIME anchors intact for ARM replay.
+        fixture_now = max(live_fixture_now, 0) + t0_evidence._MIN_IDLE_NS + 1_000
         temporary, repository, pack, custody, context, input_root = (
             make_t0_fixture(
                 now_monotonic_ns=fixture_now,
