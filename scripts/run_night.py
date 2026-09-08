@@ -13,7 +13,10 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta
+import uuid
+import math
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -25,6 +28,7 @@ if str(REPO_ROOT) in sys.path:
     sys.path.remove(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise import night_gate
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -61,6 +65,8 @@ EXIT_COURIER_FAILED = 6
 
 _WRITE_ONCE_RECORDS = (
     "receipt.json",
+    "go_receipt.json",
+    "go-census.json",
     "result.json",
     "refusal.json",
     "chain.started",
@@ -76,7 +82,7 @@ def _build_code_map(codes: set[str] | frozenset[str]) -> dict[str, str]:
     return {code[6:]: code for code in codes}
 
 
-_CODES = _build_code_map(NIGHT_GATE_REASON_CODES | NIGHT_DRIVER_REASON_CODES)
+_CODES = _build_code_map({code for code in NIGHT_GATE_REASON_CODES | NIGHT_DRIVER_REASON_CODES if code.startswith("night_")})
 
 
 def _sha256_path(path: Path) -> str:
@@ -430,6 +436,7 @@ def _run_chain_once(
         try:
             process = subprocess.Popen(
                 command if command is not None else ["/bin/zsh", str(chain_path)],
+                stdin=subprocess.DEVNULL,
                 stdout=stdout,
                 stderr=stderr,
                 env=environment,
@@ -504,6 +511,8 @@ def _artifact_list(custody_root: Path, night_dir: Path) -> list[dict[str, str]]:
     paths = [
         custody_root / "night.log",
         night_dir / "receipt.json",
+        night_dir / "go_receipt.json",
+        night_dir / "go-census.json",
         night_dir / "refusal.json",
         night_dir / "result.json",
         night_dir / "chain.started",
@@ -1026,6 +1035,14 @@ def _write_standard_refusal_result(
     *,
     evidence: Any = None,
 ) -> None:
+    if plan.receipt_class == "TRANSACTION_PACK" and not (night_dir / "receipt.json").exists():
+        # §10.3: the frozen gate validator accepts gate codes only. Preserve
+        # the driver cause in detail and in the authoritative refusal.json.
+        receipt_reason = reason if reason in NIGHT_GATE_REASON_CODES else _CODES["probe_error"]
+        failed = night_gate.Receipt(night_gate.SCHEMA, plan.receipt_class, plan.plan_id, "REFUSED",
+            tuple(night_gate.ConditionRow(key, "FAIL", None, (), {"detail": detail}) for key in night_gate._CONDITION_IDS),
+            night_gate.Refusal(receipt_reason, f"{reason}: {detail}", ()), int(started_monotonic_ns))
+        _write_bytes_exclusive(night_dir / "receipt.json", failed.to_json_bytes())
     refusal = _write_driver_refusal(
         night_dir / "refusal.json", plan, reason, detail, evidence
     )
@@ -1078,14 +1095,193 @@ def _malformed_plan_exit(plan_path: Path, error: Exception, courier_bin: Path | 
     )
 
 
+# Shared custody authentication belongs to the gate; preparation and final GO
+# publication re-use the same checks.
+PackNightRefusal = night_gate.PackNightRefusal
+_pack_bytes = night_gate._pack_bytes
+_pack_object = night_gate._pack_object
+_pack_digest = night_gate._pack_digest
+_pack_no_retry = night_gate._pack_no_retry
+_pack_evidence = night_gate._pack_evidence
+
+
+def _prepare_pack_night(plan: NightPlan, plan_path: Path, plan_raw: bytes):
+    """Re-read pinned plan and authority before authoring ARM or publishing GO."""
+    _pack_bytes(plan_path, "plan_sha256", hashlib.sha256(plan_raw).hexdigest())
+    return night_gate._authenticate_pack_records(plan)
+
+
+def _author_pack_arm(plan: NightPlan, prepared):
+    from joulewise import arm_readiness as readiness
+    from joulewise import arm_readiness_evidence_t0 as t0_author
+    root = prepared["root"]
+    custody = Path(plan.custody_root)
+    pack_custody = custody / plan.pack_night["pack_id"]
+    boot = readiness._current_boot_session_id()
+    _pack_no_retry(plan, boot)
+    namespace = pack_custody / "arm_readiness.receipts"
+    before = {p.resolve() for p in namespace.glob("arm-*.json")}
+    authored = t0_author.author_arm_readiness_evidence_t0(root, custody)
+    if authored.get("status") != "PASS":
+        raise PackNightRefusal("t0_evidence: author refused")
+    context = _pack_object(pack_custody / "arm_readiness.t0.inputs/arm-context.json", "arm_context")
+    confirmation = prepared["confirmation_record"]
+    result = readiness.generate_arm_receipt(
+        root, context, custody,
+        step6_confirmation_table=confirmation["table_path"],
+        expected_confirmation_digest=confirmation["table_sha256"],
+    )
+    if result.get("arm_disposition") != "GO" or result.get("status") != "PASS":
+        raise PackNightRefusal("arm_receipt: NO_GO")
+    path = Path(result["receipt_path"])
+    if (path.parent != namespace or not re.fullmatch(r"arm-[0-9]{4,}\.json", path.name)
+            or path.resolve() in before):
+        raise PackNightRefusal("arm_receipt: must be the driver's self-written receipt")
+    verification = readiness._verify_arm_receipt(
+        root, path, require_unconsumed=True,
+        step6_confirmation_table=confirmation["table_path"],
+        expected_confirmation_digest=confirmation["table_sha256"],
+    )
+    arm = _pack_object(path, "arm_receipt", result["receipt_sha256"])
+    if verification.get("receipt_sha256") != result["receipt_sha256"]:
+        raise PackNightRefusal("arm_receipt.sha256")
+    _pack_no_retry(plan, boot, path)
+    return {"path": path, "arm": arm, "sha256": result["receipt_sha256"], "authored": authored}
+
+
+def _pack_launch_references(plan: NightPlan, arm):
+    from joulewise import arm_readiness as readiness
+    root = Path(plan.pack_night["pack_root"])
+    pack_custody = Path(plan.custody_root) / plan.pack_night["pack_id"]
+    fixed = pack_custody / "arm_readiness.t0.inputs/launch-manifest.json"
+    _pack_bytes(fixed, "launch_manifest")
+    # More than one manifest-shaped input is ambiguous even if one has the
+    # preferred spelling. Never choose a fallback candidate.
+    for path in (pack_custody / "arm_readiness.t0.inputs").rglob("*.json"):
+        if path != fixed and _pack_object(path, "launch_manifest candidates").get("schema_version") == readiness.LAUNCH_MANIFEST_SCHEMA:
+            raise PackNightRefusal("launch_manifest: duplicate candidate")
+    refs = readiness._attested_launch_artifact_references(root, pack_custody, arm, launch_binding_cache={})
+    if refs["launch_manifest"]["path"] != str(fixed):
+        raise PackNightRefusal("launch_manifest.path")
+    for name, item in refs.items():
+        _pack_bytes(Path(item["path"]), name + "_sha256", item["sha256"])
+    if refs["window_chain"]["path"] != plan.chain_path:
+        raise PackNightRefusal("window_chain.path")
+    return refs
+
+
+_pack_rehearsal_roots = night_gate._pack_rehearsal_roots
+
+
+def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes):
+    """Final producer reauthentication; publish once only after every check."""
+    from joulewise import arm_readiness as readiness
+    if receipt.verdict != "GO" or any(row.status != "PASS" for row in receipt.conditions):
+        raise PackNightRefusal("conditions: refused night")
+    current = _prepare_pack_night(plan, plan_path, plan_raw)
+    if current != prepared:
+        raise PackNightRefusal("preparation changed")
+    arm = arm_state["arm"]
+    _pack_digest(plan, arm)
+    confirmation = prepared["confirmation_record"]
+    readiness._verify_arm_receipt(prepared["root"], arm_state["path"], require_unconsumed=True,
+        step6_confirmation_table=confirmation["table_path"], expected_confirmation_digest=confirmation["table_sha256"])
+    _pack_bytes(arm_state["path"], "arm_receipt", arm_state["sha256"])
+    _pack_no_retry(plan, readiness._current_boot_session_id(), arm_state["path"])
+    refs = _pack_launch_references(plan, arm)
+    evidence = _pack_evidence(plan, arm_state)
+    probe, refusal = agent_census(probes)
+    _append_census(Path(plan.custody_root) / "night/censuses.jsonl", probe, refusal)
+    if refusal is not None or probe.exit_code != 1 or probe.stdout != "":
+        raise PackNightRefusal("census: " + (refusal.detail if refusal else "stdout must be empty"))
+    issued = time.monotonic_ns()
+    issued_epoch = float(probes.now_epoch_s())
+    if not plan.t0_epoch_s <= issued_epoch <= plan.t0_epoch_s + plan.window_max_s:
+        raise PackNightRefusal("conditions.C5.window_expired")
+    if arm["boot_session_id"] != readiness._current_boot_session_id() or not probe.monotonic_ns <= issued < arm["valid_until_monotonic_ns"]:
+        raise PackNightRefusal("boot_session_id/valid_until_monotonic_ns")
+    authorization = prepared["authorization_record"]
+    if arm["pack"]["plan_id"] != plan.plan_id:
+        raise PackNightRefusal("arm_receipt.pack.plan_id")
+    if arm["reviewed_main"]["head_commit"] != plan.repo_head or probes.checkout_head() != plan.repo_head:
+        raise PackNightRefusal("repo_head")
+    if next(row for row in receipt.conditions if row.condition_id == "C4").measured.get("boot_session_uuid") != arm["boot_session_id"]:
+        raise PackNightRefusal("conditions.C4.boot_session_id")
+    _pack_rehearsal_roots(plan, arm, authorization["purpose"])
+    custody = Path(plan.custody_root).resolve(strict=True)
+    def reference(path, digest):
+        return {"path": Path(path).resolve(strict=True).relative_to(custody).as_posix(), "sha256": digest}
+    arm_ref = reference(arm_state["path"], arm_state["sha256"])
+    auth_ref = reference(plan.pack_night["authorization_record"]["path"], plan.pack_night["authorization_record"]["sha256"])
+    confirmation_ref = reference(plan.pack_night["confirmation_record"]["path"], plan.pack_night["confirmation_record"]["sha256"])
+    # The running census journal remains append-only. GO instead binds this
+    # immutable snapshot so a later journal append cannot invalidate C3 replay.
+    census_path = custody / "night/go-census.json"
+    census_raw = readiness.render_json(_census_record(probe, None))
+    _write_bytes_exclusive(census_path, census_raw)
+    census_ref = reference(census_path, readiness.sha256_bytes(census_raw))
+    condition_evidence = {"C1": [auth_ref, confirmation_ref], "C2": [arm_ref, *evidence],
+                          "C3": [census_ref], "C4": evidence, "C5": [arm_ref, auth_ref]}
+    conditions = []
+    for row in receipt.conditions:
+        conditions.append({"condition_id": row.condition_id, "status": row.status, "basis": row.basis,
+                           "evidence": condition_evidence[row.condition_id], "measured": dict(row.measured)})
+    go = {
+        "schema_version": "joulewise.pack_night_go_receipt.v1", "receipt_id": str(uuid.uuid4()),
+        "receipt_class": "TRANSACTION_PACK", "purpose": authorization["purpose"],
+        "plan_id": plan.plan_id, "plan_sha256": readiness.sha256_bytes(plan_raw),
+        "pack_id": plan.pack_night["pack_id"], "pack_sha256": plan.pack_night["pack_sha256"],
+        "arm_receipt": {"receipt_id": arm["receipt_id"], "sha256": arm_state["sha256"],
+                        "valid_until_monotonic_ns": arm["valid_until_monotonic_ns"]},
+        "boot_session_id": arm["boot_session_id"], "t0_evidence": evidence,
+        "t0_evidence_set_sha256": readiness.sha256_bytes(readiness.render_json(evidence)),
+        "launch_manifest_sha256": refs["launch_manifest"]["sha256"],
+        "window_environment_sha256": refs["window_environment"]["sha256"],
+        "window_chain_sha256": refs["window_chain"]["sha256"],
+        "repo_head": plan.repo_head, "measurement_root": plan.measurement_root, "measurement_head": plan.measurement_head,
+        "confirmation_record": dict(plan.pack_night["confirmation_record"]),
+        "authorization": {**plan.pack_night["authorization_record"], **{k: authorization[k] for k in ("purpose", "attempt_id", "claim_eligible")}},
+        "census": {"argv": list(probe.argv), "exit_code": probe.exit_code,
+                   "stdout_sha256": readiness.sha256_bytes(probe.stdout.encode()), "monotonic_ns": probe.monotonic_ns},
+        "issued_epoch_s": issued_epoch, "issued_monotonic_ns": issued,
+        "valid_until_monotonic_ns": arm["valid_until_monotonic_ns"], "conditions": conditions, "verdict": "GO",
+    }
+    path = Path(plan.custody_root) / "night/go_receipt.json"
+    _write_bytes_exclusive(path, readiness.render_json(go))
+    _fsync_path(path.parent)
+    return _pack_launcher_argv(plan, plan_path, arm_state["path"], Path(refs["launch_manifest"]["path"]), path, confirmation)
+
+
+def _pack_launcher_argv(plan, plan_path, arm_path, manifest_path, go_path, confirmation):
+    return [str(Path(plan.measurement_root) / ".venv/bin/python"),
+            str(Path(plan.measurement_root) / "scripts/launch_window.py"),
+            "--pack-root", plan.pack_night["pack_root"], "--arm-receipt", str(arm_path),
+            "--arm-readiness-custody-root", plan.custody_root, "--launch-manifest", str(manifest_path),
+            "--night-plan", str(plan_path), "--go-receipt", str(go_path),
+            "--step6-confirmation-table", confirmation["table_path"],
+            "--expected-confirmation-digest", confirmation["table_sha256"]]
+
+
+def _pack_refused_receipt(plan, error, probes):
+    reason = getattr(error, "reason", "launch_go_receipt_invalid")
+    return night_gate.Receipt(night_gate.SCHEMA, plan.receipt_class, plan.plan_id, "REFUSED",
+        tuple(night_gate.ConditionRow(key, "FAIL", None, (), {"detail": str(error)}) for key in night_gate._CONDITION_IDS),
+        night_gate.Refusal(reason, str(error), ()), int(probes.monotonic_ns()))
+
+
 def run_night(
     plan_path: Path,
     *,
     rehearsal: bool = False,
     courier_bin: Path | None = None,
 ) -> int:
+    from joulewise import arm_readiness as readiness
+    probes = make_probes()
+    initial_probe, initial_refusal = agent_census(probes)
     try:
-        plan = _load_plan(plan_path)
+        plan_path = plan_path.resolve(strict=True)
+        plan_raw = plan_path.read_bytes()
+        plan = NightPlan.from_mapping(readiness.parse_json_bytes(plan_raw))
     except (OSError, ValueError, TypeError, PlanError) as error:
         return _malformed_plan_exit(plan_path, error, courier_bin)
 
@@ -1097,7 +1293,7 @@ def run_night(
         _write_rerun_refusal(night_dir, plan, existing)
         return EXIT_REFUSED
 
-    (night_dir / "censuses.jsonl").touch(exist_ok=True)
+    _append_census(night_dir / "censuses.jsonl", initial_probe, initial_refusal)
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
@@ -1152,9 +1348,34 @@ def run_night(
             courier_bin_substitution=courier_substitution,
         )
 
-    probes = make_probes()
-    receipt = evaluate_night(plan, probes)
-    _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
+    prepared = arm_state = None
+    is_pack = plan.receipt_class == "TRANSACTION_PACK"
+    if is_pack:
+        try:
+            if initial_refusal is not None or initial_probe.exit_code != 1 or initial_probe.stdout != "":
+                error = PackNightRefusal("census: " + (initial_refusal.detail if initial_refusal else "stdout must be empty"))
+                if initial_refusal is not None:
+                    error.reason = initial_refusal.reason
+                raise error
+            if rehearsal:
+                raise PackNightRefusal("receipt_class: rehearsal flag requires REHEARSAL_STUB")
+            prepared = _prepare_pack_night(plan, plan_path, plan_raw)
+            arm_state = _author_pack_arm(plan, prepared)
+            receipt = evaluate_night(plan, probes, pack_arm_receipt=arm_state["path"])
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
+            receipt = _pack_refused_receipt(plan, error, probes)
+    else:
+        # Reuse the first census for the legacy evaluator's census slot; no
+        # filesystem or command probe preceded the driver's initial census.
+        original_run = probes.run
+        cached = [initial_probe]
+        def first_census(argv):
+            if tuple(argv) == night_gate.AGENT_CENSUS_ARGV and cached:
+                return cached.pop()
+            return original_run(argv)
+        receipt = evaluate_night(plan, replace(probes, run=first_census))
+    if not is_pack or receipt.verdict != "GO":
+        _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
     _append_log(custody_root, f"night gate verdict={receipt.verdict}")
 
     if rehearsal and plan.receipt_class != "REHEARSAL_STUB":
@@ -1243,6 +1464,18 @@ def run_night(
             )
         command = ["/bin/zsh", str(chain_path)]
         _append_log(custody_root, "night chain digest verified")
+
+    if is_pack:
+        try:
+            command = _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes)
+        except (OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
+            receipt = _pack_refused_receipt(plan, error, probes)
+            _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
+            _write_standard_refusal_result(custody_root, night_dir, plan, receipt.refusal.reason,
+                receipt.refusal.detail, started_epoch_s, started_monotonic_ns)
+            return _finish_reporting(custody_root, night_dir, plan, EXIT_REFUSED, resolved_courier,
+                deadman_epoch_s=deadman_epoch_s, courier_bin_substitution=courier_substitution)
+        _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
 
     claim_descriptor = _claim_chain_start(night_dir)
     if claim_descriptor is None:

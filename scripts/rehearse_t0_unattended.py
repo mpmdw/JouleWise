@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise import arm_readiness as readiness  # noqa: E402
 from joulewise import t0_rehearsal  # noqa: E402
+from joulewise.arm_readiness import _production_inventory as _read_production_inventory  # noqa: E402
 
 
 MANIFEST_NAME = "t0-rehearsal-bundle.json"
@@ -104,12 +105,24 @@ def _crawl(root: Path) -> tuple[tuple[t0_rehearsal.EvidenceArtifact, ...], tuple
     return tuple(artifacts), tuple(issues)
 
 
-def load_evidence_bundle(root: Path | str) -> t0_rehearsal.EvidenceBundle:
+def _production_inventory():
+    """Preserve the bundle loader's byte-reader seam and error vocabulary."""
+    try:
+        return _read_production_inventory(
+            read_bytes=lambda path: _regular_bytes(path, label="production custody inventory"))
+    except ValueError as exc:
+        raise BundleLoadError(str(exc)) from exc
+
+
+def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_rehearsal.EvidenceBundle:
     """Read one fixed-layout custody tree without synthesizing evidence."""
 
     try:
-        custody = Path(root).resolve(strict=True)
-    except OSError as exc:
+        original = Path(root)
+        if not original.is_absolute() or any(p.is_symlink() for p in (original, *original.parents)):
+            raise BundleLoadError("custody root must be absolute and non-symlink")
+        custody = original.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
         raise BundleLoadError(f"custody root is unavailable: {root}: {exc}") from exc
     if custody.is_symlink() or not custody.is_dir():
         raise BundleLoadError("custody root must be a regular directory")
@@ -149,30 +162,22 @@ def load_evidence_bundle(root: Path | str) -> t0_rehearsal.EvidenceBundle:
     production_items = manifest_value.get("production_roots")
     if not isinstance(production_items, list):
         raise BundleLoadError("production_roots must be a list")
-    production_roots = []
-    roles = set()
-    for index, item in enumerate(production_items):
-        if not isinstance(item, Mapping) or set(item) != {"role", "path"}:
-            raise BundleLoadError(f"production_roots[{index}] is malformed")
-        role = item.get("role")
-        path_text = item.get("path")
-        if (
-            not isinstance(role, str)
-            or not role
-            or role in roles
-            or not isinstance(path_text, str)
-            or not Path(path_text).is_absolute()
-        ):
-            raise BundleLoadError(f"production_roots[{index}] role/path is invalid")
-        roles.add(role)
-        try:
-            resolved = Path(path_text).resolve(strict=True)
-        except OSError as exc:
-            production_roots.append(
-                t0_rehearsal.ProductionRoot(role, Path(path_text).absolute(), str(exc))
-            )
-        else:
-            production_roots.append(t0_rehearsal.ProductionRoot(role, resolved))
+    try:
+        production_roots = readiness.production_custody_roots(
+            home=Path.home() if home is None else home,
+            inventory=_production_inventory() if inventory is None else inventory,
+        )
+        recorded = {}
+        for item in production_items:
+            if (not isinstance(item, Mapping) or set(item) != {"role", "path"}
+                    or not isinstance(item["role"], str) or item["role"] in recorded
+                    or not isinstance(item["path"], str) or not Path(item["path"]).is_absolute()):
+                raise ValueError("invalid census record")
+            recorded[item["role"]] = Path(item["path"]).resolve(strict=False)
+        if recorded != {item.role: item.path for item in production_roots}:
+            raise ValueError("census mismatch")
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise BundleLoadError("production-root census incomplete") from exc
 
     artifacts, crawl_issues = _crawl(custody)
     manifest_artifact = next(
@@ -216,11 +221,12 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     stdout: BinaryIO | None = None,
+    home=None, inventory=None,
 ) -> int:
     args = _parser().parse_args(argv)
     root = args.fixture_root if args.fixture_root is not None else args.custody_root
     try:
-        bundle = load_evidence_bundle(root)
+        bundle = load_evidence_bundle(root, home=home, inventory=inventory)
         verdict = t0_rehearsal.evaluate_rehearsal(bundle)
     except BundleLoadError as exc:
         verdict = {

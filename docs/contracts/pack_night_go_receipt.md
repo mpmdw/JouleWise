@@ -99,9 +99,11 @@ terminates a night when continued operation cannot be authorized.
 The night driver (`scripts/run_night.py`) is the only GO producer. Its first act
 remains the governed agent census, a process-list check for agent presence. Pack
 preparation precedes ARM verification and does not receive premature measurement
-GO. After ARM verification, the driver authenticates the transaction
+GO. §10.3 fixes the sequence: first census, then pinned plan bytes/v3 parse,
+pack/record preparation, driver-authored T-0 evidence and ARM, verification of
+that exact new ARM path, C1–C5, separate GO, and the eight-flag launcher argv. After ARM verification, the driver authenticates the transaction
 authorization, confirmation record, T-0 evidence, boot/clock evidence, quiet
-census and no-retry state, evaluates C1–C5, and only then produces
+census and no-retry state, asks the night gate to evaluate C1–C5, and only then produces
 `joulewise.pack_night_go_receipt.v1`. The launch consumer is
 `joulewise/arm_readiness.py::_consume_launch_capability`; the launcher is
 `scripts/launch_window.py`; replay is
@@ -137,9 +139,14 @@ in `night/receipt.json`. The night_gate receipt validator is NOT modified
 
 | Custody locator | Schema / transport |
 |---|---|
+| `night/go-census.json` under plan `custody_root` | Immutable `_census_record` snapshot bound by C3 evidence; the append-only running census journal cannot replace this snapshot |
 | `night/receipt.json` under plan `custody_root` | Exact night_gate keys `schema, receipt_class, plan_id, verdict, conditions, refusal, authored_monotonic_ns`; unchanged validator, including pack refusal |
 | `night/go_receipt.json` under plan `custody_root` | Separate 26-key GO schema below; create-once 0600, only after GO; absolute path passed as `--go-receipt` and retained in consumption `go_receipt.path` |
 | Installer-pinned absolute night-plan path | Driver passes it as `--night-plan`; consumer keyword `night_plan` supplies the bytes checked against GO `plan_sha256` |
+| Plan `pack_night.pack_root` | Sixth exact pack binding; absolute, non-symlink, basename `pack_id`; passed as `--pack-root` |
+| `<custody_root>/<pack_id>/arm_readiness.receipts/arm-NNNN.json` | Driver's own ARM result path, never a selected receipt; passed as `--arm-receipt` |
+| `<custody_root>/<pack_id>/arm_readiness.t0.inputs/launch-manifest.json` | Fixed manifest, no alternate candidate; bytes must equal the T-0 author's attested digest; passed as `--launch-manifest` |
+| Plan `custody_root` | Absolute transaction custody; passed as `--arm-readiness-custody-root` |
 
 The plan retains the v2 exact-key set `_PLAN_KEYS` at
 `joulewise/night_gate.py:106–121`: `schema, schema_version, plan_id,
@@ -153,7 +160,7 @@ field types and validation remain in force.
 
 | Plan object | Exact required keys and types | Binding and check |
 |---|---|---|
-| `pack_night` | `pack_id`: string; `pack_sha256`: SHA-256 string; `attempt_ordinal`: integer ≥ 1; `authorization_record`: object; `confirmation_record`: object | Pack fields equal verified ARM/pack identity; persisted ordinal binds C1/C5 and the authorization attempt |
+| `pack_night` | `pack_id`: string; `pack_root`: absolute non-symlink path string with basename equal to `pack_id`; `pack_sha256`: SHA-256 string; `attempt_ordinal`: integer ≥ 1; `authorization_record`: object; `confirmation_record`: object | Recompute `committed_pack_tree_sha256(pack_root)` at preparation, GO and consumption; equal plan and ARM pack digests, with ARM `pack.pack_root` equal the resolved plan root. Persisted ordinal binds C1/C5 and the authorization attempt |
 | `pack_night.authorization_record` | `path`: absolute path string inside plan `custody_root`; `sha256`: SHA-256 string | Re-read these bytes, hash them, and compare the GO authorization locator/digest and parsed copies |
 | `pack_night.confirmation_record` | `path`: absolute path string inside plan `custody_root`; `sha256`: SHA-256 string | Re-read these bytes, hash them, and compare the GO confirmation locator/digest and authenticated table pair |
 
@@ -175,12 +182,12 @@ plan or authorization does not replace the armed plan's authority.
 | `plan_id` | string | Authenticated pack-night plan and pack identity | Producer, consumer, replay |
 | `plan_sha256` | SHA-256 string | Plan file bytes the driver read; consumer re-reads the installer-pinned plan path supplied by `--night-plan`; also equals consumption GO reference | Producer, consumer, replay |
 | `pack_id` | string | Authenticated pack identity | Producer, consumer, replay |
-| `pack_sha256` | SHA-256 string | Verified frozen pack bytes and authorization's pack digest | Producer, consumer, replay |
-| `arm_receipt` | object | Verified ARM identity, digest and expiry; exact nested keys below | Producer, consumer, replay |
+| `pack_sha256` | SHA-256 string | Committed pack-tree digest recomputed at plan `pack_root` at preparation, GO and consumption; equals ARM and authorization digests | Producer, consumer, replay |
+| `arm_receipt` | object | Driver-written ARM identity, digest and expiry; exact nested keys below | Producer, consumer, replay |
 | `boot_session_id` | string | Verified ARM and current launch boot session | Producer, consumer, live replay |
 | `t0_evidence` | array of objects | Exactly `author_arm_readiness_evidence_t0`'s `receipt_paths` (fifteen `ARM_ONLY` receipts) plus the capture-step record files it inventories; relative custody paths and file-byte digests | Producer, consumer, replay; G2/G5 |
 | `t0_evidence_set_sha256` | SHA-256 string | SHA-256 of canonical JSON of the sorted `t0_evidence` array; consumer recomputes membership, each file digest and the set digest (§10 S6) | Producer, consumer, replay; G2/G5 |
-| `launch_manifest_sha256` | SHA-256 string | Authenticated launch manifest bytes already held by launch consumer | Producer, consumer, replay |
+| `launch_manifest_sha256` | SHA-256 string | Fixed manifest bytes at the §10.3 locator, equal to the T-0 author attestation; absent, symlinked, duplicate or changed candidates refuse | Producer, consumer, replay |
 | `window_environment_sha256` | SHA-256 string | Authenticated `window.env` bytes already held by launch consumer | Producer, consumer, replay |
 | `window_chain_sha256` | SHA-256 string | Authenticated chain bytes, also equal to authorization's permitted chain digest | Producer, consumer, replay |
 | `repo_head` | string | Reviewed repository revision in authenticated plan/launch context | Producer, consumer, replay |
@@ -239,10 +246,14 @@ callee route.
 
 The driver passes the absolute `night/go_receipt.json` path with
 `--go-receipt` and its installer-pinned plan path with `--night-plan` to
-`scripts/launch_window.py`; both flags are required for pack launch, with
+`scripts/launch_window.py`; all eight flags of §5 are required for pack launch, with
 omission-refusal regressions for each. The launcher supplies the four callee
 keywords; the callee authenticates the separate GO file, never substitutes
-`night/receipt.json`. The consumer check order is mandatory:
+`night/receipt.json`. At consumption, recompute the committed pack tree from the plan's `pack_root`
+and compare it with both the plan and ARM `pack_sha256`; require ARM
+`pack.pack_root` to equal the resolved plan value. The presented ARM is the
+exact driver-written path, with supersession and consumption checked again.
+The consumer check order is mandatory:
 
 1. Read GO bytes and recompute SHA-256; compare with `go_receipt_sha256`.
 2. Parse JSON.
@@ -282,8 +293,8 @@ The two ruled GO refusal codes are:
 
 | Code | Exact responsibility |
 |---|---|
-| `launch_go_receipt_missing` | GO file is missing, or a v2 / GO-less consumption record is presented on live replay |
-| `launch_go_receipt_invalid` | Every other GO authentication, binding, class, purpose, condition or validity failure; `detail` names the field, or the refused class for G7 |
+| `launch_go_receipt_missing` | A required GO/input locator is missing, or a v2 / GO-less consumption record is presented on live replay |
+| `launch_go_receipt_invalid` | Duplicate/ambiguous candidates, any disagreement between plan, GO and disk bytes, or any other GO authentication, binding, class, purpose, condition or validity failure; `detail` names the field, or the refused class for G7 |
 
 Before either code emits, complete **R-8**, the launch-reason registration rule
 in the [stage-1
@@ -396,7 +407,10 @@ producer lands.
 C2–C5 are identical and required to PASS. `DIAGNOSTIC_NO_PACK` (the diagnostic
 class without a frozen pack) for G2-b is rejected. `attempt_id` names the exact
 authorized attempt using the §8.2 encoding. The seven keys in the authorization
-table are required and exhaustive.
+table are required and exhaustive. Preparation re-reads and re-digests its
+plan locator before any ARM; GO rechecks the bytes again. Missing bytes use
+`launch_go_receipt_missing`; digest disagreements use
+`launch_go_receipt_invalid` with `authorization_record` in the detail.
 
 ## 5. Step-6 confirmation custody and transport
 
@@ -421,7 +435,11 @@ launch, including when there are no digest-conditional paths (changed files
 whose launch permission depends on the confirmed digest). The driver passes both
 to the launcher by argv, alongside `--night-plan` (installer-pinned absolute
 plan) and `--go-receipt` (absolute `night/go_receipt.json` path). Regressions
-must prove refusal when any of these four transport flags is omitted.
+pin all eight launcher flags exactly: `--pack-root`, `--arm-receipt`,
+`--arm-readiness-custody-root`, `--launch-manifest`, `--night-plan`,
+`--go-receipt`, `--step6-confirmation-table`, `--expected-confirmation-digest`.
+The driver uses `stdin=DEVNULL`. The two confirmation values are re-read from
+the plan-bound record at preparation and GO; no fallback locator is selected.
 
 The child chain's `--lifecycle-event start` reads `step6_confirmation` from the
 authenticated v3 consumption record when the flags are absent, then re-hashes
@@ -448,22 +466,44 @@ descendants cannot inherit interactive input.
 
 Closure requires one isolated, non-claim, pack-bound night run by the driver.
 Its authenticated window id is `receipt["pack"]["window_id"]` from the verified
-ARM receipt, and begins `rehearsal-t0-unattended-`. Its custody, ledger (the
-retained transaction event log), runs and backups are dedicated and disjoint
-from production roots. A NEW frozen `PRODUCTION_CUSTODY_ROOTS` constant in
-`joulewise/arm_readiness.py` is the common source of that census; G6's current
-`bundle.production_roots` list (`joulewise/t0_rehearsal.py:779–787`) is derived
-from it, and G6 reads the constant. The consumer checks the plan's resolved
-`measurement_root` and `custody_root` against every production root. A
-`T0_REHEARSAL` purpose with either root under any production root refuses
-`launch_go_receipt_invalid`, detail `rehearsal_roots_not_disjoint`.
+ARM receipt, and begins `rehearsal-t0-unattended-`. Its custody, ledger (the retained transaction event log), runs and backups are
+dedicated and disjoint from production roots, subject to the
+`night_custody_parent` sibling-child rule below. The common census is a
+frozen tuple of `ProductionRootSpec(role, kind, value, predicate)` in
+`arm_readiness.py`, resolved by `production_custody_roots(*, home, inventory)`.
+The six derivations and reviewed deployment inventory are specified in §10.3;
+`JOULEWISE_BACKUP_ROOTS` cannot shrink the census. Production paths resolve
+with `strict=False`, so a missing root still counts; resolution errors FAIL.
+The calibration custody store has no code default. ARM-context roots are
+rehearsal inputs to check, not production census members.
+
+The bundle loader derives `EvidenceBundle.production_roots` from that resolver.
+The manifest retains its `production_roots` evidence record, which must exactly
+match the derived role set and resolved paths or loading raises
+`BundleLoadError("production-root census incomplete")`. The deployment inventory
+is authenticated against this checkout's HEAD before production loading.
+
+Plan `measurement_root`, `custody_root` and each ARM-context root must be
+absolute, non-symlink and resolvable with `strict=True`; invalid rehearsal
+fields refuse `launch_go_receipt_invalid` naming the field. For DISJOINT roots,
+`_contains` uses resolved `Path.relative_to` in BOTH directions, including
+equality. Any containment refuses `rehearsal_roots_not_disjoint`.
+For `night_custody_parent`, custody passes only when its parent is exactly
+`home/night-custody` and its basename equals the prefixed authenticated ARM
+window id; equality, deeper nesting and another basename refuse. Only
+`measurement_root` must be wholly outside that parent. Other ARM-context roots
+(`claim_runs_root`, `bound_runs_root`, `quarantine_root`, both backup destinations
+and `waiver_path`) are checked by DISJOINT against every census role except
+`night_custody_parent`; they may live under the rehearsal's own custody directory.
+The gate and consumer apply these predicates independently to the relevant
+plan and ARM-context roots.
 
 | Authenticated ARM window id | Purpose | Root predicate | Consumer outcome |
 |---|---|---|---|
 | Unprefixed | `T0_REHEARSAL` | Any | Refuse `launch_go_receipt_invalid`, detail `rehearsal_purpose_on_production_id` |
 | Prefixed | Other purpose | Any | Refuse `launch_go_receipt_invalid` (detail names `purpose`) |
-| Prefixed | `T0_REHEARSAL` | Disjoint | Accept this predicate; all other GO checks still required |
-| Prefixed | `T0_REHEARSAL` | Not disjoint | Refuse `launch_go_receipt_invalid`, detail `rehearsal_roots_not_disjoint` |
+| Prefixed | `T0_REHEARSAL` | SIBLING_CHILD: each custody root is the direct child of `night_custody_parent` named by the prefixed ARM window id; measurement is wholly outside that parent; every relevant root passes DISJOINT against the other census roles | Accept this predicate; all other GO checks still required |
+| Prefixed | `T0_REHEARSAL` | Custody equals the parent, nests more deeply, or has another basename; measurement overlaps the parent; or any relevant root equals, contains, or is contained by a DISJOINT census role | Refuse `launch_go_receipt_invalid`, detail `rehearsal_roots_not_disjoint` |
 
 Unprefixed ids with a production purpose follow the ordinary production checks.
 No launcher `--allow-rehearsal` flag is introduced.
@@ -573,7 +613,7 @@ call-site repairs within that file; unrelated edits remain excluded.
 | Seat | WRITE_SCOPE (repository-relative files) | Owned file:line seams and addendum work |
 |---|---|---|
 | 1 — this fourth-pass contract install | `docs/contracts/pack_night_go_receipt.md`; `docs/decision_log.md`; `docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md` | Contract §§1–10.1; owner of the dated 2026-09-08 D-176 decision-log addendum for four consumer keywords, separate GO custody and §§10/10.1 precedence; report fourth pass. Preserve original decision text. No runtime edits. |
-| 2 — producer, plan and night orchestration | `joulewise/night_plan_writer.py`; `joulewise/night_gate.py`; `scripts/install_night_agent.sh`; `scripts/run_night.py`; `joulewise/arm_readiness.py`; `joulewise/t0_rehearsal.py`; `tests/test_night_gate.py`; `tests/test_install_night_agent.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/night_plan_writer.py:15–66` mapping/serialization/`write_night_plan`; `joulewise/night_gate.py:21–23,106–121,131–136,187–300` v3 `NightPlan` and exact keys, `:313–350` shared condition shape; :122–130 `_RECEIPT_KEYS` read-only; `:979–1038` receipt validator is read-only and NOT modified, `:583,738–746` valid-pack-only fence lift and C1–C5; `scripts/install_night_agent.sh:39–75,132–141` validated absolute plan-path installation; `scripts/run_night.py:891,1149–1181` persisted plan attempt/byte hash, ARM-before-GO production, record locators, exact T-0 evidence set/digest, separate create-once 0600 `night/go_receipt.json`, unchanged `night/receipt.json` for every class and refusal (no GO on refusal), and `--night-plan`/`--go-receipt` argv transport; `joulewise/arm_readiness.py:223` constants area ONLY for new frozen `PRODUCTION_CUSTODY_ROOTS`; `joulewise/t0_rehearsal.py:190–207,779–787` derive G6 census/read shared constant; each listed test file `:1` focused producer/plan/G6 regressions; contract §9 final pins. B1/B5/S2/S3/S4/S6/N1. |
+| 2 — producer, plan and night orchestration | `joulewise/night_plan_writer.py`; `joulewise/night_gate.py`; `scripts/install_night_agent.sh`; `scripts/run_night.py`; `joulewise/arm_readiness.py`; `joulewise/t0_rehearsal.py`; `tests/test_night_gate.py`; `tests/test_install_night_agent.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `docs/contracts/pack_night_go_receipt.md`; `configs/production_custody_inventory.json`; `scripts/rehearse_t0_unattended.py`; `tests/test_rehearse_t0_unattended.py`; `tests/test_night_plan_writer.py`; `tests/test_arm_readiness_schemas.py` (resolver tests only, shared with seat 3); `tests/test_magistrate_watchdog.py` (additive v2-pack refusal regression) | `joulewise/night_plan_writer.py:15–66` mapping/serialization/`write_night_plan`; `joulewise/night_gate.py:21–23,106–121,131–136,187–300` v3 `NightPlan` and exact keys, `:313–350` shared condition shape; :122–130 `_RECEIPT_KEYS` read-only; `:979–1038` receipt validator is read-only and NOT modified, `:583,738–746` valid-pack-only fence lift and C1–C5; `scripts/install_night_agent.sh:39–75,132–141` validated absolute plan-path installation; `scripts/run_night.py:891,1149–1181` persisted plan attempt/byte hash, ARM-before-GO production, record locators, exact T-0 evidence set/digest, separate create-once 0600 `night/go_receipt.json`, unchanged `night/receipt.json` for every class and refusal (no GO on refusal), and `--night-plan`/`--go-receipt` argv transport; `joulewise/arm_readiness.py:223` constants area ONLY for frozen `PRODUCTION_CUSTODY_ROOTS` and shared ARM-context key classification; `joulewise/t0_rehearsal.py:190–207,779–787` derive G6 census/read shared constant; each listed test file `:1` focused producer/plan/G6 regressions; contract §9 final pins. B1/B5/S2/S3/S4/S6/N1. |
 | 3 — consumer, v3 consumption, replay and child | `joulewise/arm_readiness.py`; `scripts/launch_window.py`; `docs/contracts/d078_reason_registry_amendment.md`; `tests/test_arm_readiness_schemas.py`; `tests/test_arm_readiness_lifecycle.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `joulewise/arm_readiness.py:223–231` launch reason registry, `:670–702` untouched legacy / distinct v2 / v3 and `GO_RECEIPT_REFERENCE_KEYS`, `:1048–1062,1103–1112` correct exception families, `:2587` validator branches, `:8975–8992` renamed/extended reader and its callers, `:9451–9495` replay (ARM window id `:9486`), `:9573–9791` callee keywords, B4 ordered GO checks, pinned plan read/digest, both record locators and copied fields, exact T-0 set/digest, C1–C5, shared-root purpose predicate, v3 one-use write (ARM window id `:9748`), `:9470,9797,9939,10145` exhaustive reader calls/modes in §3 (lineage forwards its caller mode); `:9796–9802` child v3 reader; `scripts/launch_window.py:39–58` required `--night-plan`/`--go-receipt` flags and omission-refusal regressions; `:102,239–312` launch context/GO/confirmation transport, child path, shared JSON refusal handler; registry amendment `:1` R-8 documentation of both GO codes; each listed test file `:1` focused schema/live-historical/consumer/CLI/child regressions; contract §9 final pins. B1–B5/S1/S3–S6/N1/N2. |
 | 4 — rehearsal purpose/G7 producer and acceptance | `scripts/run_night.py`; `joulewise/t0_rehearsal.py`; `tests/test_run_night.py`; `tests/test_t0_rehearsal.py`; `tests/test_launch_window.py`; `docs/contracts/pack_night_go_receipt.md` | `scripts/run_night.py:61–64,1149–1181` real production-launcher G7 presentation and exact `night/g7_refusal.json` with custody-wide consumption/`chain.started` absence; `joulewise/t0_rehearsal.py:38,49,88–95` existing rehearsal schema/class; `:48,86–87,710–738` G5 schema/key sets and C1–C5 recomputation and `:790–793` G7 artifact acceptance; each listed test file `:1` authentic producer G7/class-order and four-case purpose/root regressions through the seat-3 consumer; contract §9 final pins. B4/S1/S4/N1; uses seat-2 producer and seat-3 consumer. |
 
@@ -692,30 +732,30 @@ map rule. Graph installation assertions are in the installation report.
 
 | Clause / source phrase | Contract installation | Production site | Biting assertion | Counterfactual |
 |---|---|---|---|---|
-| J:9 “produced only by the night driver after ARM verify” | G §1 | NOT PINNED: seat 2, `scripts/run_night.py` | NOT PINNED: producer ordering regression | Issue GO before ARM verification |
-| J:9 exact key `schema_version`; J:11 “every binding equals” | G §2 / `schema_version` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `schema_version` producer-to-consumer regression | Omit `schema_version` or accept its mismatched binding |
-| J:9 exact key `receipt_class`; J:11 “every binding equals” | G §2 / `receipt_class` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `receipt_class` producer-to-consumer regression | Omit `receipt_class` or accept its mismatched binding |
-| J:9 exact key `purpose`; J:11 “every binding equals” | G §2 / `purpose` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `purpose` producer-to-consumer regression | Omit `purpose` or accept its mismatched binding |
-| J:9 exact key `plan_id`; J:11 “every binding equals” | G §2 / `plan_id` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `plan_id` producer-to-consumer regression | Omit `plan_id` or accept its mismatched binding |
-| J:9 exact key `pack_id`; J:11 “every binding equals” | G §2 / `pack_id` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `pack_id` producer-to-consumer regression | Omit `pack_id` or accept its mismatched binding |
-| J:9 exact key `pack_sha256`; J:11 “every binding equals” | G §2 / `pack_sha256` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `pack_sha256` producer-to-consumer regression | Omit `pack_sha256` or accept its mismatched binding |
-| J:9 exact key `arm_receipt`; J:11 “every binding equals” | G §2 / `arm_receipt` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `arm_receipt` producer-to-consumer regression | Omit `arm_receipt` or accept its mismatched binding |
-| J:9 exact key `boot_session_id`; J:11 “every binding equals” | G §2 / `boot_session_id` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `boot_session_id` producer-to-consumer regression | Omit `boot_session_id` or accept its mismatched binding |
-| J:9 exact key `t0_evidence`; J:11 “every binding equals” | G §2 / `t0_evidence` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `t0_evidence` producer-to-consumer regression | Omit `t0_evidence` or accept its mismatched binding |
-| J:9 exact key `launch_manifest_sha256`; J:11 “every binding equals” | G §2 / `launch_manifest_sha256` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `launch_manifest_sha256` producer-to-consumer regression | Omit `launch_manifest_sha256` or accept its mismatched binding |
-| J:9 exact key `window_environment_sha256`; J:11 “every binding equals” | G §2 / `window_environment_sha256` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `window_environment_sha256` producer-to-consumer regression | Omit `window_environment_sha256` or accept its mismatched binding |
-| J:9 exact key `window_chain_sha256`; J:11 “every binding equals” | G §2 / `window_chain_sha256` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `window_chain_sha256` producer-to-consumer regression | Omit `window_chain_sha256` or accept its mismatched binding |
-| J:9 exact key `repo_head`; J:11 “every binding equals” | G §2 / `repo_head` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `repo_head` producer-to-consumer regression | Omit `repo_head` or accept its mismatched binding |
-| J:9 exact key `measurement_root`; J:11 “every binding equals” | G §2 / `measurement_root` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `measurement_root` producer-to-consumer regression | Omit `measurement_root` or accept its mismatched binding |
-| J:9 exact key `measurement_head`; J:11 “every binding equals” | G §2 / `measurement_head` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `measurement_head` producer-to-consumer regression | Omit `measurement_head` or accept its mismatched binding |
-| J:9 confirmation digest, amended by §10 B5; J:11 “every binding equals” | G §2 / `confirmation_record` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong confirmation locator/digest regression | Omit `confirmation_record`, escape custody or accept mismatched bytes |
-| J:9 authorization digest, amended by §8.2 wire ruling; J:11 “every binding equals” | G §2 / `authorization` top-level and nested rows | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `authorization` producer-to-consumer regression | Omit `authorization`, alter its digest or accept a copied-field mismatch |
-| J:9 exact key `census`; J:11 “every binding equals” | G §2 / `census` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `census` producer-to-consumer regression | Omit `census` or accept its mismatched binding |
-| J:9 exact key `issued_epoch_s`; J:11 “every binding equals” | G §2 / `issued_epoch_s` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `issued_epoch_s` producer-to-consumer regression | Omit `issued_epoch_s` or accept its mismatched binding |
-| J:9 exact key `issued_monotonic_ns`; J:11 “every binding equals” | G §2 / `issued_monotonic_ns` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `issued_monotonic_ns` producer-to-consumer regression | Omit `issued_monotonic_ns` or accept its mismatched binding |
-| J:9 exact key `valid_until_monotonic_ns`; J:11 “every binding equals” | G §2 / `valid_until_monotonic_ns` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `valid_until_monotonic_ns` producer-to-consumer regression | Omit `valid_until_monotonic_ns` or accept its mismatched binding |
-| J:9 exact key `conditions`; J:11 “every binding equals” | G §2 / `conditions` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `conditions` producer-to-consumer regression | Omit `conditions` or accept its mismatched binding |
-| J:9 exact key `verdict`; J:11 “every binding equals” | G §2 / `verdict` table row | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: missing/wrong `verdict` producer-to-consumer regression | Omit `verdict` or accept its mismatched binding |
+| J:9 “produced only by the night driver after ARM verify” | G §1 | Seat 2 `scripts/run_night.py:1236` → `scripts/run_night.py:1369` | `tests/test_run_night.py:1860`: real driver calls the author, ARM writer and verifier before GO and launcher | Issue GO before ARM verification |
+| J:9 exact key `schema_version`; J:11 “every binding equals” | G §2 / `schema_version` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `schema_version` or accept its mismatched binding |
+| J:9 exact key `receipt_class`; J:11 “every binding equals” | G §2 / `receipt_class` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `receipt_class` or accept its mismatched binding |
+| J:9 exact key `purpose`; J:11 “every binding equals” | G §2 / `purpose` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `purpose` or accept its mismatched binding |
+| J:9 exact key `plan_id`; J:11 “every binding equals” | G §2 / `plan_id` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `plan_id` or accept its mismatched binding |
+| J:9 exact key `pack_id`; J:11 “every binding equals” | G §2 / `pack_id` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `pack_id` or accept its mismatched binding |
+| J:9 exact key `pack_sha256`; J:11 “every binding equals” | G §2 / `pack_sha256` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `pack_sha256` or accept its mismatched binding |
+| J:9 exact key `arm_receipt`; J:11 “every binding equals” | G §2 / `arm_receipt` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `arm_receipt` or accept its mismatched binding |
+| J:9 exact key `boot_session_id`; J:11 “every binding equals” | G §2 / `boot_session_id` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `boot_session_id` or accept its mismatched binding |
+| J:9 exact key `t0_evidence`; J:11 “every binding equals” | G §2 / `t0_evidence` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `t0_evidence` or accept its mismatched binding |
+| J:9 exact key `launch_manifest_sha256`; J:11 “every binding equals” | G §2 / `launch_manifest_sha256` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `launch_manifest_sha256` or accept its mismatched binding |
+| J:9 exact key `window_environment_sha256`; J:11 “every binding equals” | G §2 / `window_environment_sha256` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `window_environment_sha256` or accept its mismatched binding |
+| J:9 exact key `window_chain_sha256`; J:11 “every binding equals” | G §2 / `window_chain_sha256` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `window_chain_sha256` or accept its mismatched binding |
+| J:9 exact key `repo_head`; J:11 “every binding equals” | G §2 / `repo_head` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `repo_head` or accept its mismatched binding |
+| J:9 exact key `measurement_root`; J:11 “every binding equals” | G §2 / `measurement_root` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `measurement_root` or accept its mismatched binding |
+| J:9 exact key `measurement_head`; J:11 “every binding equals” | G §2 / `measurement_head` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `measurement_head` or accept its mismatched binding |
+| J:9 confirmation digest, amended by §10 B5; J:11 “every binding equals” | G §2 / `confirmation_record` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | NOT PINNED: missing/wrong confirmation locator/digest regression | Omit `confirmation_record`, escape custody or accept mismatched bytes |
+| J:9 authorization digest, amended by §8.2 wire ruling; J:11 “every binding equals” | G §2 / `authorization` top-level and nested rows | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | NOT PINNED: missing/wrong `authorization` producer-to-consumer regression | Omit `authorization`, alter its digest or accept a copied-field mismatch |
+| J:9 exact key `census`; J:11 “every binding equals” | G §2 / `census` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `census` or accept its mismatched binding |
+| J:9 exact key `issued_epoch_s`; J:11 “every binding equals” | G §2 / `issued_epoch_s` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `issued_epoch_s` or accept its mismatched binding |
+| J:9 exact key `issued_monotonic_ns`; J:11 “every binding equals” | G §2 / `issued_monotonic_ns` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `issued_monotonic_ns` or accept its mismatched binding |
+| J:9 exact key `valid_until_monotonic_ns`; J:11 “every binding equals” | G §2 / `valid_until_monotonic_ns` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `valid_until_monotonic_ns` or accept its mismatched binding |
+| J:9 exact key `conditions`; J:11 “every binding equals” | G §2 / `conditions` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `conditions` or accept its mismatched binding |
+| J:9 exact key `verdict`; J:11 “every binding equals” | G §2 / `verdict` table row | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | Seat 2 `tests/test_run_night.py:1864` asserts exact GO keys and bound output; consumer mutation pins remain seat 3's | Omit `verdict` or accept its mismatched binding |
 | J:9 “arm_receipt {receipt_id, sha256, valid_until_monotonic_ns}” | G §2 nested ARM row | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | ARM identity or expiry mismatch accepted |
 | J:9 “t0_evidence [{path, sha256}]” | G §2 nested evidence row | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Omit a required evidence member or accept wrong bytes |
 | J:9 “census {argv, exit_code, stdout_sha256, monotonic_ns}” | G §2 nested census row | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Treat erroneous or output-bearing census as absence |
@@ -768,24 +808,24 @@ map rule. Graph installation assertions are in the installation report.
 | J:39 “C-028 gauntlet, mutation-shaped audit” | G §7 opening paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | A green happy path substitutes for gate-deletion regression |
 | J:39 “consult's replay list verbatim” and additions (a)–(c) | G §7 replay list and final paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | Drop any ruled replay case |
 | J:39 “second cold gate ... real plan bytes” | G §7 gate paragraph | NOT PINNED: future runtime/lead gate; no code scope in seat 1 | NOT PINNED: implementing seat must pin a defect-shaped assertion | First pack-bound night occurs without integrated-head/real-plan gate |
-| §8.1 wire ruling: GO `receipt_id` | G §1 identity; §2 `receipt_id`; §8.1 | NOT PINNED: seat 2 producer and seat 3 consumer/replay | NOT PINNED: UUID4 issuance and changed-id replay refusal | Omit producer-issued UUID4 or accept parsed id differing from consumption |
+| §8.1 wire ruling: GO `receipt_id` | G §1 identity; §2 `receipt_id`; §8.1 | Seat 2 producer `scripts/run_night.py:1377`; seat 3 consumer/replay pins remain its own | NOT PINNED: UUID4 issuance and changed-id replay refusal | Omit producer-issued UUID4 or accept parsed id differing from consumption |
 | §8.2 wire ruling: authorization `attempt_id` and copied fields | G §2 nested authorization; §3 consumer; §4 `attempt_id`; §8.2 | NOT PINNED: seats 2 and 3 authorization authentication | NOT PINNED: wrong-attempt and each copied-field mutation regression | Accept a different plan attempt or altered purpose/attempt/claim eligibility |
-| §8.3 wire ruling: encodings and exact keys | G §§2, 4, 5 and §8.3 | NOT PINNED: producer and consumer/replay schema validation | NOT PINNED: malformed type/digest/time/path and extra-key regressions | Accept wrong authority/timestamp/evidence encoding, non-JSON boolean or extra key |
-| §10 B1: plan root of trust and byte digest | G §§1–3, 10 B1 | Baseline targets: seat 2 `joulewise/night_gate.py:106–121,203`, `joulewise/night_plan_writer.py:15–66`, `scripts/install_night_agent.sh:39–75,132–141`, `scripts/run_night.py:891,1149–1150`; seat 3 `joulewise/arm_readiness.py:9451,9573` | NOT PINNED: plan/authorization swap and ordinal replay regressions | Accept swapped authorization, changed plan bytes or recomputed attempt |
+| §8.3 wire ruling: encodings and exact keys | G §§2, 4, 5 and §8.3 | Seat 2 PARTIAL: `joulewise/night_gate.py:208,291` validates v3 plan keys, integer version/ordinal and lowercase digests. GO/record producer `scripts/run_night.py:1147`, `scripts/run_night.py:1369`; seat 3 consumer/replay validation remains its own | Plan portion: `tests/test_night_plan_writer.py:74,101,134` rejects extra/missing keys, boolean/fractional ordinals, malformed digests and escaping paths. Remaining record/GO encoding regressions NOT PINNED | Accept wrong authority/timestamp/evidence encoding, non-JSON boolean or extra key |
+| §10 B1: plan root of trust and byte digest | G §§1–3, 10 B1 | `scripts/run_night.py:1108` (`_prepare_pack_night`); `joulewise/night_gate.py:698` (`_authenticate_pack_records`) | `tests/test_run_night.py:2064` (`test_each_plan_record_digest_and_pinned_plan_swap_refuse`); `tests/test_run_night.py:1999` (`test_gate_checks_authorization_fields_and_confirmation_bytes`) | Changed pinned plan bytes, changed authorization bytes, or a different persisted authorization attempt passes producer authentication |
 | §10 B2: distinct 8/20/22-key consumption schemas | G §3, 10 B2 | Seat 3 `joulewise/arm_readiness.py:670–702,2587,8975–8992,9451` | NOT PINNED: live v2 refused with missing code, historical v2 succeeds, v3 validates | Route 20-key v2 through the 8-key branch or refuse historical v2 after v3 flip |
 | §10 B3: registered exception and launcher refusal | G §3, 10 B3 | Seat 3 `joulewise/arm_readiness.py:223–231,1048–1062,1103–1112,9573`; `scripts/launch_window.py:294–312`; `docs/contracts/d078_reason_registry_amendment.md` R-8 additions | NOT PINNED: both GO codes rendered by real launch CLI | Raise GO code as ArmReadinessError or miss its JSON handler |
-| §10 B4: consumer order and G7 artifact | G §§3, 6, 10 B4 | Seat 3 consumer `joulewise/arm_readiness.py:9573`; seat 4 `scripts/run_night.py:1149–1181`, `joulewise/t0_rehearsal.py:38,49,790–793` | NOT PINNED: real rehearsal schema receives class detail and exact eight-key artifact | Validate GO exact keys before rehearsal class, or write capture/consumption on refusal |
-| §10 B5: readable custody record locators | G §§2–5, 10 B5 | Seats 2/3 producer and consumer seams in §7.1 | NOT PINNED: both path/digest and parsed-field mutation regressions | Supply an unreadable locator, escape custody or trust copied fields |
+| §10 B4: consumer order and G7 artifact | G §§3, 6, 10 B4 | Seat 3 consumer `joulewise/arm_readiness.py:9573`; seat 4 `scripts/run_night.py:1152–1184`, `joulewise/t0_rehearsal.py:38,49,790–793` | NOT PINNED: real rehearsal schema receives class detail and exact eight-key artifact | Validate GO exact keys before rehearsal class, or write capture/consumption on refusal |
+| §10 B5: readable custody record locators | G §§2–5, 10 B5 | `joulewise/night_gate.py:698` (`_authenticate_pack_records`) | `tests/test_run_night.py:2064` (`test_each_plan_record_digest_and_pinned_plan_swap_refuse`); `tests/test_run_night.py:1999` (`test_gate_checks_authorization_fields_and_confirmation_bytes`) | Missing authorization/confirmation bytes, altered record digests, wrong purpose/claim eligibility/blocks/authority, or a changed confirmation table digest passes C1 |
 | §10 S1: authenticated ARM window id | G §§2, 6, 10 S1 | Seat 3 `joulewise/arm_readiness.py:9486,9748` | NOT PINNED: prefix predicate uses ARM pack window id | Trust an unauthenticated window label |
-| §10 S2: conditional pack fence lift | G §2, 10 S2 | Seat 2 `joulewise/night_gate.py:738–746` | NOT PINNED: valid pack evaluates C1–C5; absent/invalid pack object refuses | Leave every pack unbuilt or grant a packless exemption |
-| §10 S3 amended by §10.1 F2: separate receipts, shared condition shape | G §§2–3, 10 S3, 10.1 F2 | Seat 2 `scripts/run_night.py:1149–1150`; unchanged validator dependency `joulewise/night_gate.py:122–136,979–985`; seat 3 consumer | NOT PINNED: distinct schemas/paths, create-once 0600 GO, refusal emits no GO, all-five-PASS regression | Put GO keys in night/receipt.json, modify its validator, or emit GO on refusal |
-| §10 S4: shared frozen roots and complete purpose table | G §6, 10 S4 | Seat 2 new constant in `joulewise/arm_readiness.py:223` constants area and `joulewise/t0_rehearsal.py:779–787`; seat 3 consumer at :9573; seat 4 G6/G7 tests | NOT PINNED: all four table rows and both plan roots | Accept production-root rehearsal or caller-supplied production census |
+| §10 S2: conditional pack fence lift | G §2, 10 S2 | `joulewise/night_gate.py:911` (`evaluate_night`); `joulewise/night_gate.py:871` (`_evaluate_pack_conditions`) | `tests/test_night_gate.py:906` (`test_valid_v3_pack_without_driver_arguments_lifts_unbuilt_fence`); `tests/test_run_night.py:1928` (`test_gate_reauthenticates_c1_and_c2_despite_forged_driver_pass_rows`); `tests/test_night_gate.py:383` (`test_a_transaction_plan_is_refused_until_stage_three_exists`) | Valid v3 pack plan remains class-unbuilt without a caller flag, forged PASS rows override changed C1 bytes/refused ARM/changed T-0 evidence, or an unbound pack gets GO |
+| §10 S3 amended by §10.1 F2: separate receipts, shared condition shape | G §§2–3, 10 S3, 10.1 F2 | `scripts/run_night.py:1176` (`_produce_pack_go`); `scripts/run_night.py:1027` (`_write_standard_refusal_result`); unchanged night_gate receipt validator | `tests/test_run_night.py:1864` (`test_driver_self_authors_arm_before_go_and_pins_all_eight_flags`); `tests/test_run_night.py:2112` (`test_machine_refusal_and_refused_receipt_never_publish_go`); `tests/test_run_night.py:1968` (`test_pack_standard_refusal_receipt_preserves_each_actual_cause`; six cause/detail agreements, registered receipt reasons and frozen-validator acceptance pinned by §10.3 addendum) | GO has the wrong schema/path/mode, overwrites an existing GO, enters the standard receipt shape, or is published on tested machine/standard-writer refusal paths |
+| §10 S4: shared frozen roots and complete purpose table | G §6, 10 S4 | `joulewise/night_gate.py:835` (`_pack_rehearsal_roots`); `joulewise/t0_rehearsal.py:749` (`evaluate_g6`) | `tests/test_run_night.py:2155` (`test_rehearsal_plan_and_arm_context_roots_follow_sibling_child_rule`) (all four §6 table rows, both plan roots and ARM roots); `tests/test_rehearse_t0_unattended.py:19` (`test_stale_census_cannot_false_pass_g6`); `tests/test_rehearse_t0_unattended.py:51` (`test_sibling_child_rejects_parent_nested_and_wrong_basename`) | Either purpose/id mismatch passes; the named direct child or its own ARM paths refuses; equal/nested/wrong-name custody or DISJOINT equality/containment passes; stale manifest census passes |
 | §10 S5: child v3 reader | G §§3, 5, 10 S5 | Seat 3 `joulewise/arm_readiness.py:9796–9802`; `scripts/launch_window.py:270` | NOT PINNED: child reads v3 pair; live v2 gets missing code | Break child v3 resolution or permit v2 live lifecycle |
-| §10 S6: exact author evidence set and digest | G §2, 10 S6 | Seat 2 `scripts/run_night.py:1149` consuming `joulewise/arm_readiness_evidence_t0.py:2245,2420`; seat 3 consumer at :9573 | NOT PINNED: missing/extra/changed receipt and capture-step members, set-digest mutation | Treat a subset or self-declared array as complete T-0 evidence |
-| §10 N1: numeric epochs, vocabulary/order/uniqueness | G §§2, 5–6, 8.3, 10 N1 | Seats 2/3 serializers and validators; seat 4 G7 artifact | NOT PINNED: wrong epoch types, status, duplicate/reordered conditions refuse | Accept inconsistent primitive or condition wire shape |
+| §10 S6: exact author evidence set and digest | G §2, 10 S6 | `joulewise/night_gate.py:787` (`_pack_evidence`); `scripts/run_night.py:1176` (`_produce_pack_go`) | `tests/test_run_night.py:2131` (`test_t0_inventory_cannot_omit_add_or_substitute_author_or_capture_bytes`); `tests/test_run_night.py:1864` (`test_driver_self_authors_arm_before_go_and_pins_all_eight_flags`) | Missing/extra/substituted author paths or changed receipt/capture bytes enter GO, or its set digest differs from canonical sorted evidence bytes |
+| §10 N1: numeric epochs, vocabulary/order/uniqueness | G §§2, 5–6, 8.3, 10 N1 | `joulewise/night_gate.py:698` (`_authenticate_pack_records`); `scripts/run_night.py:1176` (`_produce_pack_go`) | `tests/test_run_night.py:1864` (`test_driver_self_authors_arm_before_go_and_pins_all_eight_flags`); `tests/test_run_night.py:1999` (`test_gate_checks_authorization_fields_and_confirmation_bytes`) | Producer emits non-float issuance epoch, non-integer monotonic times, reordered/duplicate conditions, non-PASS status/non-null basis, or accepts a string confirmation epoch |
 | §10 N2: named seven-key GO reference | G §§3, 8.1, 10 N2 | Seat 3 new `GO_RECEIPT_REFERENCE_KEYS` at `joulewise/arm_readiness.py:681–702` | NOT PINNED: seven-key exactness, including plan digest | Reuse two-key reference validator or omit plan digest |
-| §10.1 F1: fourth keyword and installer-pinned plan argv | G §§2–3, 5, 7.1 | Seat 2 driver `scripts/run_night.py:1149–1181`; seat 3 parser `scripts/launch_window.py:39–58` and callee `joulewise/arm_readiness.py:9573–9608` | NOT PINNED: substituted-plan digest refusal and omitted night_plan/--night-plan refusal | consumer accepts a caller-substituted plan |
-| §10.1 F2: separate create-once 0600 GO custody | G §§2–3, 7.1; S3 amendment | Seat 2 `scripts/run_night.py:1149–1150`; read-only validator `joulewise/night_gate.py:979–985` | NOT PINNED: permissions/no-clobber and every-class/refused-pack receipt validation | Overwrite GO, broaden night_gate receipt keys, or create GO on refusal |
+| §10.1 F1: fourth keyword and installer-pinned plan argv | G §§2–3, 5, 7.1 | Seat 2 driver `scripts/run_night.py:1152–1184`; seat 3 parser `scripts/launch_window.py:39–58` and callee `joulewise/arm_readiness.py:9573–9608` | NOT PINNED: substituted-plan digest refusal and omitted night_plan/--night-plan refusal | consumer accepts a caller-substituted plan |
+| §10.1 F2: separate create-once 0600 GO custody | G §§2–3, 7.1; S3 amendment | Seat 2 `scripts/run_night.py:1152–1153`; read-only validator `joulewise/night_gate.py:979–985` | NOT PINNED: permissions/no-clobber and every-class/refused-pack receipt validation | Overwrite GO, broaden night_gate receipt keys, or create GO on refusal |
 | §10.1 F3: exhaustive four reader call modes | G §§3, 5, 7.1 | Seat 3 `joulewise/arm_readiness.py:9470,9797,9939,10145` | NOT PINNED: live-v2 refusal and historical-v2 replay; lineage forwards its caller mode unchanged | Omit one call-site migration or weaken a live replay to historical |
 | §10.1 F3: lineage caller-mode forwarding | G §§3, 10.1 F3 | Seat 3 `joulewise/arm_readiness.py:10145,10156`; live caller :10536 with True at :10539; historical default :10111 | NOT PINNED: implementing seat must pin live stale-boot refusal and historical lineage replay with False | lineage reader hardcodes False and accepts a stale-boot record on the live path |
 | §10.1 F4/F5: actual rehearsal receipt_class/schema | G §§3, 6; B4 correction | Seat 3 callee `joulewise/arm_readiness.py:9573`; seat 4 schema dependency `joulewise/t0_rehearsal.py:38,49,88–95` | NOT PINNED: class-specific production refusal and G7 presented_class equality | Read nonexistent class instead of receipt_class |
@@ -793,7 +833,29 @@ map rule. Graph installation assertions are in the installation report.
 | §10.1 F7: GO argv omission refusal | G §§3, 5, 7.1 | Seat 3 `scripts/launch_window.py:39–58`; seat 2 driver transport | NOT PINNED: real CLI refuses omitted --go-receipt before consumption | Launch without --go-receipt |
 | §10.1 F8/F9: durable provenance and seven-key editorial note | G §10 | Documentation installation; file 15 preserved and brief 86 linked | Inspection: both relative citation targets exist; seven-key note present | Leave a dead provenance link or ambiguous key count |
 | §10.1 F10: shared symbol/test ownership | G §7.1 | Successor scope specifications (lead reconciles) | Inspection: tests/test_launch_window.py seats 3/4, scripts/run_night.py seats 2/4 and joulewise/t0_rehearsal.py seats 2/4 splits explicit | Assign overlapping symbols without an integration owner |
-| §10.1 F11: watchdog v3-plan tolerance dependency | G §§1, 7.1 | Seat 2 read-only `scripts/magistrate_watchdog.py:686` | NOT PINNED: v3 pack plan survives watchdog parsing via NightPlan.from_mapping | Producer writes v3 plan that watchdog rejects |
+| §10.1 F11: watchdog v3-plan tolerance dependency | G §§1, 7.1 | Seat 2 `joulewise/night_gate.py:208`; read-only `scripts/magistrate_watchdog.py:686` calls the updated parser without modification | `tests/test_night_plan_writer.py:177` `test_watchdog_reads_real_v3_plan_without_mutation` asserts the real watchdog loader returns the v3 pack plan, no errors/diagnostics and unchanged plan bytes | Producer writes v3 plan that watchdog rejects |
+
+
+Seat-2 finding-5 ruling installed (2026-09-08): §10.3's addendum below
+preserves the frozen validator and both registries. Driver-only causes use
+the registered `night_probe_error` receipt reason; the exact cause and detail
+remain in receipt `refusal.detail` and authoritative `refusal.json`.
+The per-cause regression validates all six receipts and pins this agreement.
+
+Seat-2 §10.3 implementation pins (fixture evidence only; consumer/live gates remain lead-owned):
+
+| Synthesis item | Contract installation | Production site | Biting assertion | Counterfactual |
+|---|---|---|---|---|
+| §10.3 1 | G §§2–6 and §10.3 | `joulewise/arm_readiness.py:262` (`production_custody_roots`) | `tests/test_arm_readiness_schemas.py:1708` (`test_frozen_derivations_resolve_every_role_without_existence_filter`) | Literal or incomplete census replaces frozen derivations |
+| §10.3 2 | G §§2–6 and §10.3 | `joulewise/arm_readiness.py:262` (`production_custody_roots`) | `tests/test_arm_readiness_schemas.py:1724` (`test_backup_override_cannot_shrink_census_and_three_script_literals_stay_pinned`); `tests/test_arm_readiness_schemas.py:1733` (`test_inventory_each_entry_counts_and_invalid_or_empty_census_refuses`); `tests/test_arm_readiness_schemas.py:1694` (`test_shipped_inventory_pins_all_four_retained_deployments`) | Environment override shrinks census or a retained deployment disappears |
+| §10.3 3 producer/G6 | G §§2–6 and §10.3 | `joulewise/t0_rehearsal.py:749` (`evaluate_g6`); `joulewise/night_gate.py:835` (`_pack_rehearsal_roots`) | `tests/test_run_night.py:2155` (`test_rehearsal_plan_and_arm_context_roots_follow_sibling_child_rule`); `tests/test_rehearse_t0_unattended.py:51` (`test_sibling_child_rejects_parent_nested_and_wrong_basename`) | Nested/equal-to-parent/wrong-name/symlinked rehearsal root passes |
+| §10.3 4 | G §§2–6 and §10.3 | `scripts/rehearse_t0_unattended.py:117` (`load_evidence_bundle`) | `tests/test_rehearse_t0_unattended.py:19` (`test_stale_census_cannot_false_pass_g6`); `tests/test_rehearse_t0_unattended.py:34` (`test_inventory_must_equal_head_bytes`) | Stale or omitted census evidence produces false PASS |
+| §10.3 5 | G §§2–6 and §10.3 | `joulewise/night_gate.py:675` (`_pack_digest`); `scripts/run_night.py:1108` (`_prepare_pack_night`); `scripts/run_night.py:1176` (`_produce_pack_go`) | `tests/test_run_night.py:2047` (`test_pack_digest_mismatch_at_preparation_and_go_refuses_without_go`); `tests/test_run_night.py:2123` (`test_pack_root_must_match_the_written_arm_root_and_digest`); `tests/test_night_plan_writer.py:101` (`test_pack_root_absolute_basename_and_symlink_refusals`) | Substituted pack root/digest passes preparation or GO; consumption point remains seat 3 integration |
+| §10.3 6 | G §§2–6 and §10.3 | `scripts/run_night.py:1114` (`_author_pack_arm`); `joulewise/night_gate.py:765` (`_pack_no_retry`) | `tests/test_run_night.py:2076` (`test_selected_old_arm_and_higher_receipt_and_consumption_refuse`); `tests/test_run_night.py:2029` (`test_no_go_on_arm_refusal`) | Select existing ARM, ignore supersession/consumption, or GO on NO_GO |
+| §10.3 7 | G §§2–6 and §10.3 | `scripts/run_night.py:1152` (`_pack_launch_references`) | `tests/test_run_night.py:2089` (`test_second_manifest_missing_symlink_and_attested_digest_refuse`) | Second manifest wins a fallback or changed digest passes |
+| §10.3 8 | G §§2–6 and §10.3 | `scripts/run_night.py:1272` (`run_night`); `scripts/run_night.py:1176` (`_produce_pack_go`); `scripts/run_night.py:1255` (`_pack_launcher_argv`) | `tests/test_run_night.py:1864` (`test_driver_self_authors_arm_before_go_and_pins_all_eight_flags`); `tests/test_run_night.py:2112` (`test_machine_refusal_and_refused_receipt_never_publish_go`) | GO before ARM, GO on refusal, mutable census citation, interactive stdin, or any of eight flags omitted |
+| §10.3 8 evidence | G §§2–6 and §10.3 | `joulewise/night_gate.py:787` (`_pack_evidence`) | `tests/test_run_night.py:2131` (`test_t0_inventory_cannot_omit_add_or_substitute_author_or_capture_bytes`) | Subset/extra author files or changed capture bytes enter GO |
+| §10.3 9 | G §§2–6 and §10.3 | `joulewise/night_gate.py:648` (`_pack_bytes`); `scripts/run_night.py:1108` (`_prepare_pack_night`); `scripts/run_night.py:1152` (`_pack_launch_references`) | `tests/test_run_night.py:2064` (`test_each_plan_record_digest_and_pinned_plan_swap_refuse`); `tests/test_run_night.py:2089` (`test_second_manifest_missing_symlink_and_attested_digest_refuse`) | Missing locator or disagreeing digest silently falls back |
 
 ## 10. Wire addendum (ruled 2026-09-08, second pass)
 
@@ -807,7 +869,7 @@ It amends the earlier wire lists; the operative tables, clause map and seat
 scopes incorporate these changes without reopening the adopted outcomes.
 
 B1 — the plan is the root of trust for C1/C5 and must carry the bindings. Define `joulewise.night_plan.v3` = the v2
-exact-key set plus ONE exact-key sub-object `pack_night {pack_id, pack_sha256, attempt_ordinal (int ≥ 1),
+exact-key set plus ONE exact-key sub-object `pack_night {pack_id, pack_root (added by §10.3), pack_sha256, attempt_ordinal (int ≥ 1),
 authorization_record {path, sha256}, confirmation_record {path, sha256}}`, REQUIRED iff `receipt_class ==
 TRANSACTION_PACK` and FORBIDDEN otherwise; v2 plans stay valid for the other classes. The plan is authored by
 `write_night_plan` (extend it), validated by `NightPlan.from_mapping` (`joulewise/night_gate.py:106-121, :203` —
@@ -845,19 +907,19 @@ S1 — the authenticated window id is `receipt["pack"]["window_id"]` of the ARM 
 :9486`); name it wherever the rehearsal prefix rule reads a window id.
 
 S2 — seat 2's scope includes `joulewise/night_gate.py:738-746`: the unconditional `night_refused_class_unbuilt` is
-lifted ONLY for plans carrying a valid `pack_night` object, and C1-C5 are then evaluated (no `no_pack_by_design`).
+lifted ONLY for plans carrying a valid `pack_night` object, with no caller flag required. The gate itself
+evaluates C1–C5 from the plan and custody records, including replay of the exact supplied ARM path;
+driver-supplied `ConditionRow`s have no authority (no `no_pack_by_design`).
 
 S3 — GO conditions REUSE night_gate's condition shape `{condition_id, status, basis, evidence, measured}` with
 `_CONDITION_IDS` ordering, `_STATUSES` vocabulary, no duplicates. [Superseded by §10.1 F2: GO is a separate
 create-once 0600 `night/go_receipt.json`; `night/receipt.json` retains `_RECEIPT_KEYS` for EVERY class,
 including refused pack nights, which emit NO GO file. The night_gate receipt validator is NOT modified.]
 
-S4 — "disjoint roots": a NEW frozen constant `PRODUCTION_CUSTODY_ROOTS` in `joulewise/arm_readiness.py` (the list
-G6 consumes today via `bundle.production_roots`, `t0_rehearsal.py:779-787`, is derived from it — seat 2 makes G6
-read the constant); the consumer refuses a `T0_REHEARSAL` purpose whose plan `measurement_root` or `custody_root`
-lies under any production root (`launch_go_receipt_invalid`, detail `rehearsal_roots_not_disjoint`). Complete the
-2×2 table: unprefixed id + T0_REHEARSAL → refuse (`rehearsal_purpose_on_production_id`); prefixed id + other
-purpose → refuse; prefixed + T0_REHEARSAL + disjoint → accept; prefixed + T0_REHEARSAL + not disjoint → refuse.
+S4 — "disjoint roots": superseded in shape and predicates by §10.3's frozen
+`ProductionRootSpec` derivations, HEAD-pinned inventory, complete loader census,
+and SIBLING_CHILD exception. §6's complete purpose table remains in force;
+`rehearsal_roots_not_disjoint` includes bidirectional containment and equality.
 
 S5 — `_lifecycle_receipt_path` (`arm_readiness.py:9796-9802`) reads v3 (seat 3's scope); a v2 record on live replay
 → `launch_go_receipt_missing`.
@@ -917,3 +979,96 @@ retained earlier refutation and its body is unchanged.
 - **F11 — ADOPTED.** `scripts/magistrate_watchdog.py:686` is a read-only
   dependency. Seat 2 checks v3-pack-plan tolerance through `NightPlan.from_mapping`;
   this does not grant watchdog write scope.
+
+
+### §10.3 seat-2 rulings (2026-09-08)
+
+Governing magistrate synthesis, adopted after the three-seat roots/locators gate.
+This block supersedes conflicting prior roots and locator wording. Source:
+`docs/process_traces/2026-09-08-handoff-redo/99cm-coldgate-packet-d176-roots-locators/13-magistrate-synthesis.md`
+(in the lead checkout; retained there, not copied into this worker's write scope).
+Source SHA-256: `f48b447a0995f49bece155476baf092be587a6a78b792eb928da43366f18e7bf`.
+
+Q1 — PRODUCTION_CUSTODY_ROOTS
+1. SHAPE (judge Q1.1 governs): a frozen tuple of `ProductionRootSpec(role, kind, value, predicate)` in the
+   arm_readiness.py constants area plus a pure resolver `production_custody_roots(*, home, inventory) ->
+   tuple[ProductionRoot, ...]` returning the existing `t0_rehearsal.ProductionRoot`. `kind` ∈ {LITERAL, HOME_RELATIVE,
+   CLONE_DERIVED, INVENTORY}; `predicate` ∈ {DISJOINT, SIBLING_CHILD}. Changing a role or derivation is a reviewed diff.
+2. ROLES: `magistrate_state` HOME_RELATIVE `night-custody/magistrate` DISJOINT (watchdog :55); `night_custody_parent`
+   HOME_RELATIVE `night-custody` SIBLING_CHILD (judge Q1.2: rehearsal `custody_root` passes iff its parent is the
+   resolved night-custody dir AND its basename equals the prefixed ARM window id; `measurement_root` must be wholly
+   outside; equality, deeper nesting, another basename refuse); `backup_icloud` HOME_RELATIVE
+   `Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup` DISJOINT (the three script literals are pinned to
+   the constant by a regression; the `JOULEWISE_BACKUP_ROOTS` env override is NOT honoured by the census — all three
+   seats); `quiet_guard_state` LITERAL `/Library/Application Support/JouleWise/quiet-guard` DISJOINT (quiet_guard.py:39);
+   `repo_runs` CLONE_DERIVED `Path(arm_readiness.__file__).resolve().parents[1]/"runs"` DISJOINT (Opus Q1.4; the
+   ledger home per calibration_ledger.py:94); `deployment_measurement_root` INVENTORY DISJOINT for EVERY entry of a
+   NEW HEAD-pinned `configs/production_custody_inventory.json` (Astra F1: `{deployment_id, measurement_root,
+   custody_root|null, ledger_path|null, notes}` for the canonical checkout and each retained measurement clone —
+   today: /Users/edr/code/JouleWise, /Users/edr/JouleWise-measurement-20260813, /Users/edr/JouleWise-measurement-20260818,
+   /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a; a new clone is a reviewed diff). The judge's unevidenced
+   HOME_GLOB role is REPLACED by the inventory. The calibration custody store has no code default and is excluded with
+   a comment (judge). ARM-context roots are NOT census members (judge; Opus Q1.2 rejected because for a T0_REHEARSAL
+   they are the rehearsal's own roots and would self-collide); the consumer applies the predicate to EACH of them.
+3. PREDICATE (judge Q1.2 + Opus Q1.7 + Astra Q1.3): rehearsal side — plan `custody_root`, `measurement_root` and each
+   ARM-context root must be absolute, non-symlink and `resolve(strict=True)` (night_gate must require an absolute
+   `custody_root`; contract §6 amended; refusal `launch_go_receipt_invalid` naming the field); production side —
+   specs resolve `strict=False` (a missing production root still counts); containment = the existing `_contains`
+   (t0_rehearsal.py ~:741–746, `relative_to` on resolved paths, equality included, BOTH directions), never a string
+   prefix; any DISJOINT containment → `rehearsal_roots_not_disjoint`; `resolution_error` → FAIL.
+4. G6 (judge Q1.3 + Astra): the bundle loader derives `EvidenceBundle.production_roots` from the resolver; the
+   manifest's `production_roots` list stays as an EVIDENCE RECORD that must equal the derived census (role set and
+   resolved paths) or the loader raises `BundleLoadError("production-root census incomplete")` — this discharges the
+   §7 incomplete-census replay. The fixture carries the full role set under a synthetic home + inventory.
+
+Q2 — driver locators and ARM-before-GO
+5. pack_root (judge Q2.1): `pack_night` gains an exact key `pack_root` (absolute, non-symlink, basename == pack_id);
+   `committed_pack_tree_sha256(pack_root)` is recomputed at preparation, GO and consumption and must equal
+   `pack_night.pack_sha256` and ARM `receipt["pack"]["pack_sha256"]`; ARM `receipt["pack"]["pack_root"]` must equal
+   the resolved plan value. (Opus's "pack_root = measurement_root" is rejected: the pack is the campaign directory
+   whose committed tree digest is pack_sha256, not the clone root.)
+6. ARM receipt (all three, judge's path): never selected; the driver's own ARM step writes
+   `<custody_root>/<pack_id>/arm_readiness.receipts/arm-NNNN.json` and presents exactly that path; GO binds
+   `arm_receipt{receipt_id, sha256}`; supersession scan and `.consumed.json` refuse any other; driver refuses before
+   GO on a higher-numbered unconsumed receipt or any consumption this boot.
+7. Launch manifest (judge Q2.3, existing convention): fixed name
+   `<custody_root>/<pack_id>/arm_readiness.t0.inputs/launch-manifest.json`; absent/symlinked/digest ≠ the T-0
+   author's attested sha256 → refuse; GO `launch_manifest_sha256` is that digest.
+8. Preparation (judge Q2.4, in-process, no new subcommand): census → read pinned plan bytes (plan_sha256; v3 parse)
+   → preparation (recompute pack tree digest; re-read and re-digest both record locators; mismatch → refusal in
+   night/receipt.json, no GO) → ARM (author T-0 evidence + ARM receipt, then `_verify_arm_receipt` on the written
+   path with require_unconsumed; NO_GO → refuse) → GO (C1–C5; O_EXCL 0600 night/go_receipt.json) → launcher argv with
+   `stdin=DEVNULL`: `--pack-root --arm-receipt --arm-readiness-custody-root --launch-manifest --night-plan
+   --go-receipt --step6-confirmation-table --expected-confirmation-digest` (seat 3's six required inputs), replacing
+   the direct chain exec for TRANSACTION_PACK only; the sidecar digest check stays.
+9. Refusal rule (Opus Q2.6): missing → `launch_go_receipt_missing`; duplicate/ambiguous candidate or any digest
+   disagreement between plan, GO and bytes on disk → `launch_go_receipt_invalid` with `detail` naming the field; no
+   preference-order fallback.
+
+
+Seat 2 installs items 1–2, 4–8 and its item-9 producer/loader refusals. Seat 3
+owns item 3's consumer checks and the consumption-side pack-root re-digest,
+supersession and eight launcher flags. The lead integrates and verifies those
+consumer assertions at the combined head before any live pack night.
+
+#### §10.3 addendum — finding-5 refusal representation (2026-09-08)
+
+`validate_receipt` and `_RECEIPT_KEYS` remain frozen under §10 S3. The existing
+`_REFUSAL_KEYS` at `joulewise/night_gate.py:143` permits exactly
+`{reason, detail, evidence}`, with a nonempty string `detail`. For a
+driver-side refusal whose cause is absent from `NIGHT_GATE_REASON_CODES`,
+the standard pack receipt uses `night_probe_error`, already registered at
+`joulewise/night_gate.py:75`. Existing gate codes retain their exact reason,
+including `night_chain_digest_mismatch`; `launch_go_receipt_invalid` remains
+reserved for §3 GO authentication, binding and validity failures.
+
+`_write_standard_refusal_result` writes receipt `refusal.detail` as
+`"<actual reason>: <actual detail>"`. `night/refusal.json` remains the
+authoritative cause record, with the actual reason and detail unchanged;
+`result.json.aborted_reason` also retains the actual reason. No GO is written.
+`tests/test_run_night.py:1968`
+(`test_pack_standard_refusal_receipt_preserves_each_actual_cause`) pins all
+six causes, the exact agreement between both refusal artifacts, result cause,
+frozen receipt validation and GO absence. Its three driver-only subcases are
+`night_courier_unavailable`, `night_plan_overruns_deadman` and
+`night_chain_already_started`.

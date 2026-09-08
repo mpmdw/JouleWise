@@ -1684,5 +1684,69 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertNotIn("clock_probe_failed", READINESS_REASON_CODES)
 
 
+
+
+class ProductionCustodyResolverTests(unittest.TestCase):
+    def inventory(self, root):
+        return [{"deployment_id": "clone", "measurement_root": str(root / "retained"),
+                 "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+
+    def test_shipped_inventory_pins_all_four_retained_deployments(self):
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        expected = {
+            "JouleWise": "/Users/edr/code/JouleWise",
+            "JouleWise-measurement-20260813": "/Users/edr/JouleWise-measurement-20260813",
+            "JouleWise-measurement-20260818": "/Users/edr/JouleWise-measurement-20260818",
+            "JouleWise-measurement-v5-20260910-1c83f2a": "/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a",
+        }
+        self.assertEqual(4, len(inventory))
+        self.assertEqual(expected, {item["deployment_id"]: item["measurement_root"] for item in inventory})
+        roots = readiness.production_custody_roots(home=Path("/synthetic-home"), inventory=inventory)
+        self.assertEqual({"deployment_measurement_root:" + key: Path(value) for key, value in expected.items()},
+                         {item.role: item.path for item in roots if item.role.startswith("deployment_measurement_root:")})
+
+    def test_frozen_derivations_resolve_every_role_without_existence_filter(self):
+        home = Path("/synthetic-home")
+        roots = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
+        self.assertEqual({
+            "magistrate_state": home / "night-custody/magistrate",
+            "night_custody_parent": home / "night-custody",
+            "backup_icloud": home / "Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup",
+            "quiet_guard_state": Path("/Library/Application Support/JouleWise/quiet-guard"),
+            "repo_runs": Path(readiness.__file__).resolve().parents[1] / "runs",
+            "deployment_measurement_root:clone": home / "retained",
+        }, {item.role: item.path for item in roots})
+        self.assertTrue(all(item.resolution_error is None for item in roots))
+        self.assertIsInstance(readiness.PRODUCTION_CUSTODY_ROOTS, tuple)
+        with self.assertRaises(AttributeError):
+            readiness.PRODUCTION_CUSTODY_ROOTS[0].role = "shrunken"
+
+    def test_backup_override_cannot_shrink_census_and_three_script_literals_stay_pinned(self):
+        home = Path("/synthetic-home")
+        before = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
+        with mock.patch.dict("os.environ", {"JOULEWISE_BACKUP_ROOTS": "/empty"}):
+            self.assertEqual(before, readiness.production_custody_roots(home=home, inventory=self.inventory(home)))
+        spec = next(item for item in readiness.PRODUCTION_CUSTODY_ROOTS if item.role == "backup_icloud")
+        for filename in ("paper_excursion_decomposition.py", "check_paper_replay_fence.py", "paper_anchor_correction_quantified.py"):
+            self.assertIn(spec.value, (ROOT / "scripts" / filename).read_text())
+
+    def test_inventory_each_entry_counts_and_invalid_or_empty_census_refuses(self):
+        home = Path("/synthetic-home")
+        inventory = self.inventory(home)
+        inventory.append({**inventory[0], "deployment_id": "second", "measurement_root": str(home / "second")})
+        roots = readiness.production_custody_roots(home=home, inventory=inventory)
+        self.assertIn("deployment_measurement_root:second", {item.role for item in roots})
+        for value in ([], {}, [inventory[0], inventory[0]], [{**inventory[0], "measurement_root": "relative"}], [{"deployment_id": "incomplete"}]):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "production-root census incomplete"):
+                readiness.production_custody_roots(home=home, inventory=value)
+
+    def test_resolution_error_is_retained_in_census(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary).resolve()
+            (home / "night-custody").symlink_to(home / "night-custody")
+            roots = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
+            self.assertTrue(next(item for item in roots if item.role == "night_custody_parent").resolution_error)
+
+
 if __name__ == "__main__":
     unittest.main()

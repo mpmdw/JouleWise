@@ -325,6 +325,18 @@ class FenceTests(WatchdogTestCase):
             [event["kind"] for event in changing_events],
         )
 
+    def test_v2_transaction_pack_is_malformed_and_holds_without_crashing(self) -> None:
+        plan = self.make_plan()
+        mapping = night_plan_mapping(plan)
+        mapping["receipt_class"] = "TRANSACTION_PACK"
+        (Path(plan.custody_root) / "night_plan.json").write_text(json.dumps(mapping) + "\n")
+        decision = wd.decide(self.harness.storage, self.harness.deps, wd.initial_state())
+        self.assertEqual("HOLD_UNSAFE", decision.state)
+        self.assertIn("night_plan_malformed", decision.reason)
+        snapshot = wd.load_plans(self.harness.storage, now_epoch_s=self.base.timestamp())
+        self.assertEqual((), snapshot.plans)
+        self.assertEqual(["plan_malformed"], [item.kind for item in snapshot.diagnostics])
+
     def test_future_authorship_is_malformed_and_holds(self) -> None:
         self.make_plan(authored_epoch_s=self.base.timestamp() + 1)
         decision = wd.decide(

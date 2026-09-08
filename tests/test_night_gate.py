@@ -855,6 +855,8 @@ class NightGateTests(unittest.TestCase):
             "night_plan_malformed",
             "night_chain_digest_mismatch",
             "night_refused_class_unbuilt",
+            "launch_go_receipt_missing",
+            "launch_go_receipt_invalid",
             "night_receipt_class_invalid",
             "night_probe_error",
         }
@@ -872,6 +874,8 @@ class NightGateTests(unittest.TestCase):
             "night_refused_class_unbuilt": "test_a_transaction_plan_is_refused_until_stage_three_exists",
             "night_receipt_class_invalid": "test_c2_pass_or_an_unregistered_basis_is_a_class_invalid_defect",
             "night_probe_error": "test_any_probe_exception_refuses_before_later_commands_run",
+            "launch_go_receipt_missing": "test_pack_refusal_codes_keep_standard_receipt_shape",
+            "launch_go_receipt_invalid": "test_pack_refusal_codes_keep_standard_receipt_shape",
         }
         self.assertEqual(night_gate.NIGHT_GATE_REASON_CODES, set(coverage))
         methods = dir(type(self))
@@ -899,12 +903,53 @@ class NightGateTests(unittest.TestCase):
         for code in night_gate.NIGHT_DRIVER_REASON_CODES:
             self.assertNotIn(f'"{code}"', body, code)
 
+    def test_valid_v3_pack_without_driver_arguments_lifts_unbuilt_fence(self):
+        plan = make_plan("TRANSACTION_PACK", pack_night={
+            "pack_id": "pack-test", "pack_root": "/fixture/pack-test",
+            "pack_sha256": "a" * 64, "attempt_ordinal": 1,
+            "authorization_record": {"path": "/custody/auth.json", "sha256": "b" * 64},
+            "confirmation_record": {"path": "/custody/confirm.json", "sha256": "c" * 64},
+        })
+        parsed = night_gate.NightPlan.from_mapping(night_plan_mapping(plan))
+        receipt = night_gate.evaluate_night(parsed, FakeProbeSource().probes())
+        self.assertEqual("REFUSED", receipt.verdict)
+        self.assertEqual("launch_go_receipt_missing", receipt.refusal.reason)
+        self.assertIn("pack_root", receipt.refusal.detail)
+        self.assertEqual("FAIL", receipt.conditions[0].status)
+        self.assertEqual("FAIL", receipt.conditions[1].status)
+
+    def test_pack_import_failure_refuses_instead_of_crashing(self):
+        plan = make_plan("TRANSACTION_PACK", pack_night={
+            "pack_id": "pack-test", "pack_root": "/fixture/pack-test",
+            "pack_sha256": "a" * 64, "attempt_ordinal": 1,
+            "authorization_record": {"path": "/custody/auth.json", "sha256": "b" * 64},
+            "confirmation_record": {"path": "/custody/confirm.json", "sha256": "c" * 64},
+        })
+        for error in (ImportError("dependency unavailable"), ModuleNotFoundError("dependency missing")):
+            with self.subTest(error=type(error).__name__), mock.patch.object(
+                    night_gate, "_evaluate_pack_conditions", side_effect=error):
+                receipt = night_gate.evaluate_night(plan, FakeProbeSource().probes())
+            self.assertEqual("REFUSED", receipt.verdict)
+            self.assertEqual("launch_go_receipt_invalid", receipt.refusal.reason)
+            self.assertIn(str(error), receipt.refusal.detail)
+            self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
+
+    def test_pack_refusal_codes_keep_standard_receipt_shape(self):
+        from scripts.run_night import _pack_refused_receipt, PackNightRefusal
+        from dataclasses import replace
+        plan = make_plan("TRANSACTION_PACK")
+        for missing in (False, True):
+            error = PackNightRefusal("pack_root", missing=missing)
+            receipt = _pack_refused_receipt(plan, error, FakeProbeSource().probes())
+            self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
+            self.assertEqual(error.reason, receipt.refusal.reason)
+
     def test_every_reason_registry_member_has_the_night_prefix(self) -> None:
         for registry in (
             night_gate.NIGHT_GATE_REASON_CODES,
             night_gate.NIGHT_DRIVER_REASON_CODES,
         ):
-            self.assertTrue(all(code.startswith("night_") for code in registry))
+            self.assertTrue(all(code.startswith("night_") or code in {"launch_go_receipt_missing", "launch_go_receipt_invalid"} for code in registry))
 
 
 if __name__ == "__main__":
