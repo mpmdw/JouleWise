@@ -110,3 +110,17 @@ Gmail id `1a0800cdb282c3f1`, 2026-09-08 ~01:27 PDT, subject "JouleWise — ARM R
 (REHEARSAL_STUB) for 02:56 PDT Tue 9 Sep; launches unless you reply NO". Check that thread for a NO immediately before
 step 0 of the arm-time sequence. Precondition (b) (joulewise-53 stand-down message) was still outstanding when this
 line was written.
+
+## Handback committed as H; pins on Ed's thread (2026-09-08 ~01:40 PDT)
+
+- H = `ae8f074ffa554707a9eac95995ab8ec03235d118` (NIGHT_HANDBACK.md rewritten for this night). The arm-time sequence
+  above uses `H="$(git -C "$DRIVER_SOURCE" rev-parse HEAD)"`; if this branch has moved past `ae8f074f` by arm time
+  (it will, by these bookkeeping commits), pin `H=ae8f074ffa554707a9eac95995ab8ec03235d118` EXPLICITLY — the plan must
+  pin the commit that rewrote the handback, and the disposable checkout is created at that commit.
+- Follow-up on the arm thread with the exact pins (t0, measurement_root, H, class, courier deadline 03:16 PDT):
+  Gmail id `1a08012045894ef7`, same thread `1a0800cdb282c3f1`.
+- joulewise-53's authority ruling (relaunch-prompt line 19 protects watchdog-owned state and already-armed plans, not
+  the documented email-then-arm of a stub) is recorded by that session in the decision log for Ed to see; this
+  activation proceeds under it and stops if Ed or a cold gate overturns it. Its condition 4 (no arm until it messages
+  stand-down) still binds. pid 48645 (leaked 09-04 test stub magistrate) was retired by joulewise-53; re-check
+  `ps -p 48645` at arm time and never signal it from this activation.
