@@ -66,7 +66,19 @@ XS_SPEC = importlib.util.spec_from_file_location(
 assert XS_SPEC is not None and XS_SPEC.loader is not None
 EXCURSION = importlib.util.module_from_spec(XS_SPEC)
 sys.modules[XS_SPEC.name] = EXCURSION
-XS_SPEC.loader.exec_module(EXCURSION)
+with tempfile.TemporaryDirectory(prefix="r7f-backups-import-") as backup_directory:
+    with mock.patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": backup_directory}):
+        XS_SPEC.loader.exec_module(EXCURSION)
+
+
+def setUpModule() -> None:
+    backup_directory = tempfile.TemporaryDirectory(prefix="r7f-backups-")
+    unittest.addModuleCleanup(backup_directory.cleanup)
+    override = mock.patch.dict(
+        os.environ, {"JOULEWISE_BACKUP_ROOTS": backup_directory.name}
+    )
+    override.start()
+    unittest.addModuleCleanup(override.stop)
 
 CORPUS_PRESENT = all(
     path.exists()
