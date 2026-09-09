@@ -53,7 +53,7 @@ INFERRED — no transcript of the copy command was captured. The harvest copies 
 `1788950218` in `uninstall-output.txt` by exactly `13.935153` seconds; this dates the watchdog clock sample, not the copy.
 - `uninstall-output.txt`: `scripts/install_night_agent.sh --plan … --hour 2 --minute 56 --uninstall` run FROM the stub checkout at
   `ae8f074f`, rc 0; afterwards `launchctl list` shows only `com.joulewise.magistrate`; only `com.joulewise.magistrate.plist` remains;
-  custody root untouched by the uninstall (17 entries after; the byte harvest had copied 14 records + `night.log`, and the
+  custody root untouched by the uninstall (custody-root count output was 17, with the counting command not captured; the harvest includes 14 `night/` records plus `night.log` and `night_plan.json`, and the
   uninstall branch of `install_night_agent.sh` touches only launchd and the two plists — 06 N2: no pre-count was captured).
   `launchctl list` before the uninstall showed `com.joulewise.night` last exit status 3 = `EXIT_REFUSED` (`scripts/run_night.py`),
   consistent with the refused receipt (06 N3).
@@ -75,7 +75,7 @@ INFERRED — no transcript of the copy command was captured. The harvest copies 
 
 ## Next exact actions (this activation, in order)
 1. NIGHT-GATE-STUB-CHAIN-01: seat in a linked worktree off main — gate-side cure (skip the chain/sidecar read for `REHEARSAL_STUB`,
-   record `chain_sha256: null` with basis `stub_by_design` in C5) plus the defect-shaped test (probe source raising on `chain_path`
+   record `chain_sha256: null` and `chain_stub: built_in_stub_by_design` in C5 measured) plus the defect-shaped test (probe source raising on `chain_path`
    for a REHEARSAL_STUB plan → REHEARSAL_ONLY, no refusal); review lenses; PR under the normal gates.
 2. Complete PR #308's twelve-row gate ledger (CI `gate-ledger` currently fails for the missing section, by design) and merge.
 3. CLONE-READINESS-01 preparation (agent-side only), then G2-a inputs; the `claude remote-control` test between windows.

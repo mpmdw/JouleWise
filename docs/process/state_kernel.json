@@ -3260,7 +3260,7 @@
       "priority": "p1_phase_gate",
       "rank": 168,
       "status": "active",
-      "status_note": "2026-09-09: IN PROGRESS. NIGHT_HANDBACK.md §Executed records cure branch fix/2026-09-09-night-gate-stub-chain at bb7090e2 with fix round 1 at 5db38b58 (PR #309), under paired review, not yet merged. Dictated seat report docs/process_traces/2026-09-09-rehearsal-harvest/02-seat-night-gate-stub-chain-astra-report.md and fix round 17-… are outside this branch by design and land with cure PR #309; their evidence is unverified here. The chain_stub field and driver refusal-reason logging are dictated implementation targets, not verified by the available primary artifacts.",
+      "status_note": "2026-09-09: IN PROGRESS. Cure branch fix/2026-09-09-night-gate-stub-chain: initial cure bb7090e2, fix round 1 head 5db38b58 (PR #309), under paired review, not yet merged (NIGHT_HANDBACK.md §Executed names the branch and the fix head). Dictated seat report docs/process_traces/2026-09-09-rehearsal-harvest/02-seat-night-gate-stub-chain-astra-report.md and fix round 17-… are outside this branch by design and land with cure PR #309; their evidence is unverified here. The chain_stub field and driver refusal-reason logging are dictated implementation targets, not verified by the available primary artifacts.",
       "stop_card": null
     },
     "NIGHT-PACK-REHEARSAL-01": {
