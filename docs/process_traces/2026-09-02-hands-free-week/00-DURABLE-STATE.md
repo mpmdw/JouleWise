@@ -597,3 +597,7 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`. Hold the arm while that pid lives.
 - FRESH STAND-DOWN of joulewise-53 received (verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-standdown-2.txt`; main
   `83ab38ed`). Precondition (b) met; pid 83953 presence is judged by `ps -p 83953` in the window. Arm record follows in this trace.
+- RELAYED (second-hand via joulewise-53; verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-ed-directive-daytime-windows.txt`):
+  Ed's directive that quiet windows may run at any hour. For planning AFTER the rehearsal harvest (CLONE-READINESS-01, then G2-a at the
+  earliest census-clean time); every existing gate (readiness census, email-then-arm lead times, Ed's NO, cold gate 99ey's ordering,
+  all-agents stand-down per window) unchanged. Not applied tonight.
