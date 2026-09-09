@@ -741,6 +741,12 @@ def _authenticate_pack_records(plan: NightPlan):
         raise PackNightRefusal("authorization_record.permitted_blocks")
     if purpose == "CAMPAIGN_TRANSACTION" and authorization["authority"] != "V5-TRANSACTION-GO-01":
         raise PackNightRefusal("authorization_record.authority")
+    # Reject a wrong-clone launch before consuming a single-use ARM receipt.
+    # Keep the gate/GO identity check as a separate reauthentication.
+    try:
+        readiness._authenticate_launcher_identity(plan.measurement_root)
+    except readiness.LaunchLineageError as exc:
+        raise PackNightRefusal(str(exc)) from exc
     if purpose == "T0_REHEARSAL":
         # Preparation runs before the T-0 author and ARM mint. Re-read again
         # in the gate/GO and in consumption rather than trusting this result.

@@ -1108,10 +1108,15 @@ This block supersedes conflicting prior roots and locator wording. Source:
 Source SHA-256: `f48b447a0995f49bece155476baf092be587a6a78b792eb928da43366f18e7bf`.
 
 Q1 — PRODUCTION_CUSTODY_ROOTS
+
+Q1.1/Q1.2 census derivations below are **superseded by §10.4 (2026-09-08)**.
+See [§10.4’s operative census table](#operative-6-census-and-predicate-amendment)
+for the replacement kinds and roles; the retired text is retained as history.
+
 1. SHAPE (judge Q1.1 governs): a frozen tuple of `ProductionRootSpec(role, kind, value, predicate)` in the
    arm_readiness.py constants area plus a pure resolver `production_custody_roots(*, home, inventory) ->
    tuple[ProductionRoot, ...]` returning the existing `t0_rehearsal.ProductionRoot`. `kind` ∈ {LITERAL, HOME_RELATIVE,
-   CLONE_DERIVED, INVENTORY}; `predicate` ∈ {DISJOINT, SIBLING_CHILD}. Changing a role or derivation is a reviewed diff.
+   CLONE_DERIVED, INVENTORY} (**superseded by §10.4 (2026-09-08)**: `CLONE_DERIVED` is retired); `predicate` ∈ {DISJOINT, SIBLING_CHILD}. Changing a role or derivation is a reviewed diff.
 2. ROLES: `magistrate_state` HOME_RELATIVE `night-custody/magistrate` DISJOINT (watchdog :55); `night_custody_parent`
    HOME_RELATIVE `night-custody` SIBLING_CHILD (judge Q1.2: rehearsal `custody_root` passes iff its parent is the
    resolved night-custody dir AND its basename equals the prefixed ARM window id; `measurement_root` must be wholly
@@ -1119,7 +1124,7 @@ Q1 — PRODUCTION_CUSTODY_ROOTS
    `Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup` DISJOINT (the three script literals are pinned to
    the constant by a regression; the `JOULEWISE_BACKUP_ROOTS` env override is NOT honoured by the census — all three
    seats); `quiet_guard_state` LITERAL `/Library/Application Support/JouleWise/quiet-guard` DISJOINT (quiet_guard.py:39);
-   `repo_runs` CLONE_DERIVED `Path(arm_readiness.__file__).resolve().parents[1]/"runs"` DISJOINT (Opus Q1.4; the
+   **Superseded by §10.4 (2026-09-08)**: `repo_runs` CLONE_DERIVED `Path(arm_readiness.__file__).resolve().parents[1]/"runs"` DISJOINT (Opus Q1.4; the
    ledger home per calibration_ledger.py:94); `deployment_measurement_root` INVENTORY DISJOINT for EVERY entry of a
    NEW HEAD-pinned `configs/production_custody_inventory.json` (Astra F1: `{deployment_id, measurement_root,
    custody_root|null, ledger_path|null, notes}` for the canonical checkout and each retained measurement clone —
@@ -1260,15 +1265,20 @@ item 2's exact detail. Measurement containment uses item 3's exact
 §6's bare detail and both sites agree. Existing strict, absolute, non-symlink
 root checks and the SIBLING_CHILD exception continue to apply.
 
+Under item 2, the running driver checkout and the measurement checkout are
+ONE directory. Launcher identity is checked before ARM minting and checked
+again by the post-mint gate/GO and consumer.
+
 Inventory authentication during pre-ARM preparation, gate/GO reauthentication
 and consumption receives the plan's `repo_head`, `measurement_head` and
 `measurement_root`. It reads inventory bytes in the running driver checkout,
 compares them to the blob at `plan.repo_head`, and checks the measurement
 checkout's actual HEAD against `plan.measurement_head`. Neither an uncommitted
 edit nor a locally committed entry deletion changes the reviewed census.
-The G6 bundle loader uses the pack GO's retained plan pins for the same reader;
-G5 owns GO authentication. Its manifest still must equal the entire derived
-census. No G6 derivation edit in `joulewise/t0_rehearsal.py` is needed: it already
+The G6 bundle loader uses the pack GO's retained plan pins for the same reader.
+These pins are unauthenticated at G6 load time; using them is safe only because
+G5 authenticates the GO afterwards, before the bundle can pass. The manifest
+still must equal the entire derived census. No G6 derivation edit in `joulewise/t0_rehearsal.py` is needed: it already
 uses resolver-supplied roots and looks up each role's frozen predicate.
 
 Item 6's existing window-prefix home remains
