@@ -33,6 +33,7 @@ from joulewise.arm_readiness import (
     verify_arm_receipt,
 )
 from joulewise.identity_pins import IdentityPinProjectionError
+from tests.fixtures.arm_clock import coherent_clock_anchor
 from tests.test_arm_readiness_dry_run import install_passing_freeze
 from tests.test_arm_readiness_lifecycle import (
     git,
@@ -173,7 +174,7 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
     source_directory = custody / pack.name / "sources"
     source_directory.mkdir(parents=True, exist_ok=True)
     authored_now = time.monotonic_ns()
-    clock_anchor = readiness._clock_reference.sample_anchor()
+    clock_anchor = coherent_clock_anchor()
     for index, (kind, rows) in enumerate(sorted(rows_by_kind.items()), start=1):
         horizon = lifecycle_policies[kind]["horizon_ns"]
         if not isinstance(horizon, int):
@@ -292,7 +293,13 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         # Keep fixture evidence and every in-test consumer on one logical
         # instant.  These integration tests exercise validity semantics, not
         # whether a slow aggregate test run can outrun the minimum horizon.
-        fixed_monotonic_ns = time.monotonic_ns()
+        # This class already freezes ordinary time. Select a synthetic instant
+        # with enough positive history for the complete ten-minute T-0
+        # sequence: the census fixture subtracts _MIN_IDLE_NS (600 s) from
+        # this value, so a host reading below ~600 s of uptime (a fresh CI
+        # runner) drove started_monotonic_ns negative and the capture guard
+        # refused 'invalid or stale' (root-cause consult 99).
+        fixed_monotonic_ns = coherent_clock_anchor().monotonic_raw_ns
         monotonic_patcher = mock.patch.object(
             time, "monotonic_ns", return_value=fixed_monotonic_ns
         )
@@ -310,6 +317,12 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         self.addCleanup(publication_patcher.stop)
         self.addCleanup(boot_patcher.stop)
         self.addCleanup(monotonic_patcher.stop)
+        self.enterContext(
+            mock.patch.object(
+                readiness._clock_reference, "sample_anchor",
+                side_effect=coherent_clock_anchor,
+            )
+        )
 
     def prepare_profile(self, profile: str):
         temporary, repo, pack, custody, _arm_path = make_go_fixture(PACKS[profile], profile)
@@ -322,6 +335,120 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             __import__("tests.test_arm_readiness_schemas", fromlist=["arm_context"]).arm_context(context_root)
         )
         return temporary, repo, pack, custody, context
+
+    def test_specified_clock_boundaries_reach_real_arm_predicates(self) -> None:
+        """Identical custody passes at the limits and refuses one ns beyond."""
+        for skew, drift, expected in (
+            (1_000_000, 5_000_000, "PASS"),
+            (1_000_001, 0, "REFUSE"),
+            (1_000, 5_000_001, "REFUSE"),
+        ):
+            with self.subTest(skew_ns=skew, drift_ns=drift):
+                temporary, _repo, pack, custody, context = self.prepare_profile(
+                    "ALPHA"
+                )
+                try:
+                    # Mutate only the observed live sample, not the authored
+                    # receipt, hashes, rows or predicate implementations.
+                    with mock.patch.object(
+                        readiness._clock_reference, "sample_anchor",
+                        return_value=coherent_clock_anchor(
+                            skew_ns=skew, drift_ns=drift
+                        ),
+                    ), mock.patch.object(
+                        readiness, "verify_frozen_projection",
+                        side_effect=synthetic_identity_verifier,
+                    ):
+                        result = generate_arm_receipt(pack, context, custody)
+                    self.assertEqual(result["status"], expected, result)
+                    self.assertEqual(
+                        result["reason_codes"],
+                        [] if expected == "PASS"
+                        else ["readiness_clock_preflight_refused"],
+                    )
+                    receipt = json.loads(Path(result["receipt_path"]).read_text())
+                    clock_rows = [
+                        row for row in receipt["rows"]
+                        if row["row_id"] == "clock.correct_and_prior_state"
+                    ]
+                    self.assertEqual(len(clock_rows), 1, receipt["rows"])
+                    self.assertEqual(clock_rows[0]["verdict"], expected)
+                    if expected == "PASS":
+                        self.assertEqual(
+                            verify_arm_receipt(pack, result["receipt_path"])["status"],
+                            "PASS",
+                        )
+                finally:
+                    temporary.cleanup()
+
+    def test_specified_census_observations_refuse_before_publication(self) -> None:
+        """Forbidden/error probe observations cannot acquire PASS evidence."""
+        from tests.test_arm_readiness_evidence_t0 import (
+            T0EvidenceAuthoringError,
+            _probe_result,
+            author_environment,
+            author_arm_readiness_evidence_t0,
+            make_t0_fixture,
+            passing_probe,
+        )
+
+        now = time.monotonic_ns()
+        temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
+            now_monotonic_ns=now,
+            sample_anchor=coherent_clock_anchor,
+        )
+        self.addCleanup(temporary.cleanup)
+        with author_environment(
+            repository, probe=passing_probe, now_monotonic_ns=now,
+            sample_anchor=coherent_clock_anchor,
+        ):
+            authored = author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(authored["status"], "PASS", authored)
+        self.assertEqual(len(authored["authored_rows"]), 15)
+        with mock.patch.object(
+            readiness, "verify_frozen_projection",
+            side_effect=synthetic_identity_verifier,
+        ):
+            arm = generate_arm_receipt(pack, context, custody)
+        self.assertEqual(arm["status"], "PASS", arm)
+        self.assertEqual(verify_arm_receipt(pack, arm["receipt_path"])["status"], "PASS")
+        before = {path: Path(path).read_bytes() for path in authored["receipt_paths"]}
+        for pattern, kind in (
+            ("XProtect", "MAINTENANCE_CENSUS"),
+            ("codex|claude|t3", "PROCESS_CENSUS"),
+        ):
+            for exit_code, stdout in (
+                (0, "123 forbidden-process\n"), (2, ""), (1, "123 stale-output\n")
+            ):
+                with self.subTest(pattern=pattern, exit_code=exit_code, stdout=stdout):
+                    observed = []
+
+                    def bad_probe(argv, *, cwd):
+                        if argv[0] == "/usr/bin/pgrep" and pattern in argv[-1]:
+                            observed.append(tuple(argv))
+                            return _probe_result(
+                                argv, cwd, exit_code=exit_code, stdout=stdout
+                            )
+                        return passing_probe(argv, cwd=cwd)
+
+                    with author_environment(
+                        repository, probe=bad_probe, now_monotonic_ns=now,
+                        sample_anchor=coherent_clock_anchor,
+                    ):
+                        with self.assertRaises(T0EvidenceAuthoringError) as caught:
+                            author_arm_readiness_evidence_t0(pack, custody)
+                    self.assertTrue(observed)
+                    self.assertEqual(caught.exception.kind, kind)
+                    self.assertEqual(
+                        caught.exception.reason_code,
+                        f"evidence_author_t0_{kind.lower()}_underivable",
+                    )
+                    self.assertIn(
+                        "census found a forbidden process", str(caught.exception)
+                    )
+                    self.assertEqual(
+                        before, {path: Path(path).read_bytes() for path in before}
+                    )
 
     def test_alpha_beta_gamma_end_to_end_pass_and_no_hash_cycle(self) -> None:
         """All profiles reach GO with R1 content and execution receipts."""
@@ -739,6 +866,33 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             implementation_literals | generated_underivable,
             T0_EVIDENCE_AUTHOR_REASON_CODES,
         )
+
+
+class ArmReadinessIntegrationClockPortabilityTests(unittest.TestCase):
+    """The integration transaction must not depend on the host's uptime.
+
+    Defect-shaped regression (consult 99): before the setUp freeze used a
+    synthetic instant, host readings below ~600 s made the census fixture's
+    clock-reference capture start negative and refuse. Each subTest runs the
+    complete census test under a simulated host reading.
+    """
+
+    def test_census_transaction_ignores_host_uptime(self) -> None:
+        method = "test_specified_census_observations_refuse_before_publication"
+        for host_now in (
+            100_000_000_000,
+            500_000_000_000,
+            800_000_000_000,
+            500_000_000_000_000,
+        ):
+            with self.subTest(host_now=host_now):
+                result = unittest.TestResult()
+                case = ArmReadinessIntegrationTests(method)
+                with mock.patch.object(time, "monotonic_ns", return_value=host_now):
+                    case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertEqual(result.skipped, [])
+                self.assertTrue(result.wasSuccessful(), (result.errors, result.failures))
 
 
 if __name__ == "__main__":
