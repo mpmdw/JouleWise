@@ -23,6 +23,13 @@ unreadable decision means the watchdog is dead and must be reported as such.
 
 ## Purpose of this night
 
+Cut rehearsal checkouts as `JouleWise-rehearsal-<date>-<sha>`; the reviewed
+`JouleWise-rehearsal-` prefix is exact and case-sensitive. Replace `<sha>` in
+examples with the reviewed checkout commit. The clone must NOT be listed in
+`configs/production_custody_inventory.json` and must sit at a head carrying
+that file. For T0_REHEARSAL it must also be disjoint from every inventoried
+measurement root (no equality or containment in either direction).
+
 Plan `rehearsal-20260909`, class `REHEARSAL_STUB`, armed by the headless
 magistrate (activation 1ef89702, spawned by the relaunch watchdog on
 2026-09-08 00:51:55 PDT) for 02:56 local on 2026-09-09 with a 900 s
@@ -33,7 +40,7 @@ built-in stub (`sleep 2; echo REHEARSAL`); no pack, no model, no
 measurement, no sudo. The plan is v2: `repo_head` and `measurement_head`
 both pin THIS commit (the one that rewrote this file), and
 `measurement_root` is a disposable detached checkout of this commit at
-`/private/tmp/joulewise-rehearsal-20260909-checkout`, used only by this
+`/private/tmp/JouleWise-rehearsal-20260909-<sha>`, used only by this
 stub and removed with the plan root before any real plan; the measurement
 checkout of record (`/Users/edr/JouleWise-measurement-20260813`) is
 untouched. Both night agents are installed FROM that checkout. Ed was
@@ -64,7 +71,7 @@ not repeat that case. The design ruling and bench pass are in
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260909` / `/private/tmp/joulewise-rehearsal-20260909-checkout`
+`rehearsal-20260909` / `/private/tmp/JouleWise-rehearsal-20260909-<sha>`
 / this commit) harvests `result.json`, the receipt or refusal, the courier
 message id and the results-branch evidence, records them under
 `NIGHT-REHEARSAL-01`, then runs
