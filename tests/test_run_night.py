@@ -289,6 +289,51 @@ class NightDriverTests(unittest.TestCase):
         self.assertIn("monotonic_ns", exited)
         self.assertTrue(self.popen_kwargs[0]["start_new_session"])
 
+    def test_gate_refusal_log_includes_reason_and_bounded_single_line_detail(self) -> None:
+        self.source.census_responses = [
+            _probe(night_gate.AGENT_CENSUS_ARGV, stdout="agent\nsecond\r\n" + "x" * 250)
+        ]
+        exit_code, calls = self._run_night()
+        self.assertEqual(3, exit_code)
+        self.assertEqual([], calls)
+        receipt = json.loads((self.custody / "night" / "receipt.json").read_text())
+        refusal = receipt["refusal"]
+        expected_detail = " ".join(refusal["detail"].splitlines())[:200]
+        self.assertEqual(200, len(expected_detail))
+        messages = [
+            line.split(" ", 1)[1]
+            for line in (self.custody / "night.log").read_text().splitlines()
+        ]
+        self.assertEqual(
+            [f"night gate verdict=REFUSED reason={refusal['reason']} detail={expected_detail}"],
+            [message for message in messages if message.startswith("night gate verdict=")],
+        )
+
+    def test_non_refused_gate_log_keeps_exact_verdict_form(self) -> None:
+        self._run_night()
+        messages = [
+            line.split(" ", 1)[1]
+            for line in (self.custody / "night.log").read_text().splitlines()
+        ]
+        self.assertEqual(["night gate verdict=GO"],
+                         [message for message in messages if message.startswith("night gate verdict=")])
+
+    def test_stub_without_chain_files_logs_rehearsal_only(self) -> None:
+        self._write_plan(receipt_class="REHEARSAL_STUB")
+        self.chain.unlink()
+        self.sidecar.unlink()
+        exit_code, calls = self._run_night()
+        self.assertEqual(self.driver.EXIT_REFUSED, exit_code)
+        self.assertEqual([["/bin/zsh", "-c", "sleep 2; echo REHEARSAL"]], calls)
+        receipt = json.loads((self.custody / "night" / "receipt.json").read_text())
+        self.assertEqual("REHEARSAL_ONLY", receipt["verdict"])
+        messages = [
+            line.split(" ", 1)[1]
+            for line in (self.custody / "night.log").read_text().splitlines()
+        ]
+        self.assertEqual(["night gate verdict=REHEARSAL_ONLY"],
+                         [message for message in messages if message.startswith("night gate verdict=")])
+
     def test_counterfactual_inherited_coordinates_override_parsed_night_plan(self) -> None:
         parsed = night_gate.NightPlan.from_mapping(json.loads(self.plan_path.read_text()))
         parsed = replace(

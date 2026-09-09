@@ -131,6 +131,18 @@ class FakeProbeSource:
         )
 
 
+class MissingChainProbeSource(FakeProbeSource):
+    def __init__(self, plan: night_gate.NightPlan) -> None:
+        super().__init__()
+        self.missing_paths = {plan.chain_path, plan.chain_sha256_path}
+
+    def read_text(self, path: str) -> str:
+        if path in self.missing_paths:
+            self.read_calls.append(path)
+            raise FileNotFoundError(2, "No such file or directory", path)
+        return super().read_text(path)
+
+
 def make_plan(receipt_class: str = "DIAGNOSTIC_NO_PACK", **changes: object) -> night_gate.NightPlan:
     values: dict[str, object] = {
         "plan_id": "night-001",
@@ -409,6 +421,11 @@ class NightGateTests(unittest.TestCase):
             [row.status for row in receipt.conditions],
         )
         self.assertEqual("no_pack_by_design", receipt.conditions[1].basis)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual(
+            "window, plan freshness, measurement HEAD, and chain identity passed",
+            c5.measured["detail"],
+        )
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
 
     def test_a_fully_green_rehearsal_can_never_yield_go(self) -> None:
@@ -416,6 +433,50 @@ class NightGateTests(unittest.TestCase):
         self.assertEqual("REHEARSAL_ONLY", receipt.verdict)
         self.assertTrue(all(row.status == "PASS" for row in receipt.conditions if row.condition_id != "C2"))
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
+
+    def test_rehearsal_stub_does_not_read_missing_chain_or_sidecar(self) -> None:
+        plan = make_plan("REHEARSAL_STUB")
+        source = MissingChainProbeSource(plan)
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("REHEARSAL_ONLY", receipt.verdict, repr(receipt.refusal))
+        self.assertIsNone(receipt.refusal)
+        self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
+        self.assertNotIn(plan.chain_path, source.read_calls)
+        self.assertNotIn(plan.chain_sha256_path, source.read_calls)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual(plan.chain_path, c5.measured["chain_path"])
+        self.assertEqual(plan.chain_sha256_path, c5.measured["chain_sha256_path"])
+        self.assertIsNone(c5.measured["chain_sha256"])
+        self.assertIsNone(c5.measured["expected_chain_sha256"])
+        self.assertEqual("built_in_stub_by_design", c5.measured["chain_stub"])
+        self.assertEqual(
+            "window, plan freshness, and measurement HEAD passed; chain identity not evaluated "
+            "(driver substitutes the built-in stub)",
+            c5.measured["detail"],
+        )
+        self.assertEqual("PASS", c5.status)
+        self.assertIsNone(c5.basis)
+
+    def test_rehearsal_stub_does_not_read_present_mismatched_chain_or_sidecar(self) -> None:
+        plan = make_plan("REHEARSAL_STUB")
+        source = FakeProbeSource(chain_digest="0" * 64)
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("REHEARSAL_ONLY", receipt.verdict, repr(receipt.refusal))
+        self.assertIsNone(receipt.refusal)
+        self.assertNotIn(plan.chain_path, source.read_calls)
+        self.assertNotIn(plan.chain_sha256_path, source.read_calls)
+
+    def test_diagnostic_still_refuses_missing_chain_or_sidecar(self) -> None:
+        for missing in ("chain_path", "chain_sha256_path"):
+            with self.subTest(missing=missing):
+                plan = make_plan()
+                source = MissingChainProbeSource(plan)
+                source.missing_paths = {getattr(plan, missing)}
+                receipt = self.evaluate(plan, source)
+                self.assertEqual("REFUSED", receipt.verdict)
+                self.assertEqual("night_probe_error", receipt.refusal.reason)
+                self.assertIn("FileNotFoundError", receipt.refusal.detail)
+                self.assertIn(getattr(plan, missing), source.read_calls)
 
     def test_a_transaction_plan_is_refused_until_stage_three_exists(self) -> None:
         source = FakeProbeSource()

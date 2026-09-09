@@ -1515,7 +1515,12 @@ def run_night(
         receipt = evaluate_night(plan, replace(probes, run=first_census))
     if not is_pack or receipt.verdict != "GO":
         _write_bytes_exclusive(night_dir / "receipt.json", receipt.to_json_bytes())
-    _append_log(custody_root, f"night gate verdict={receipt.verdict}")
+    gate_message = f"night gate verdict={receipt.verdict}"
+    if receipt.verdict == "REFUSED":
+        refusal = _refusal_from_object(receipt.refusal) or {}
+        detail = " ".join(str(refusal.get("detail", "")).splitlines())[:200]
+        gate_message += f" reason={refusal.get('reason')} detail={detail}"
+    _append_log(custody_root, gate_message)
 
     if rehearsal and plan.receipt_class != "REHEARSAL_STUB":
         _write_standard_refusal_result(
