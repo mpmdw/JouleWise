@@ -9658,13 +9658,23 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             )
         self.assertIs(evaluation.strict_valid, True)
         drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
-        # Diagnostic message: CI (Linux) reported 'unknown' here while this
-        # test is 'bounded' on the MacBook; the reason must be visible in the
-        # failure text (validation problems, the drift record, the baseline).
+        # Diagnostic message: CI (Linux) reports post_idle_unavailable here
+        # with the baseline at the 5 s cap (count 100) while this test is
+        # 'bounded' on the MacBook; the producer swallows the capture
+        # exception, so surface the controller log and the raw post-idle
+        # artifact state in the failure text.
+        bundle_dir = self.root / "runs"
+        controller_logs = sorted(bundle_dir.rglob("controller.log"))
+        log_tail = "\n".join(
+            path.read_text(encoding="utf-8", errors="replace")[-3000:]
+            for path in controller_logs
+        )
+        raw_post = sorted(bundle_dir.rglob("powermetrics_idle_post.plist"))
         self.assertEqual(drift["status"], "bounded", (
             drift, evaluation.validation_problems,
             evaluation.metadata.get("idle_baseline"),
-            evaluation.metadata.get("uncertainty_evidence", {}).get("idle_drift_guard"),
+            [(str(path), path.stat().st_size) for path in raw_post],
+            log_tail,
         ))
         self.assertEqual(drift["post_sample_count"], 100, drift)
         self.assertEqual(stages_checked, [True])
