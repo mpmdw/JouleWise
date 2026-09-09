@@ -1,0 +1,10 @@
+# PR #311 replay 2 (FINAL) — integration tree 0290311a (9dbacb40 + merge of main 6d55bb96), alone in-process (four shards concurrent), started 15:52:41 PDT 2026-09-09; timer probe 3.41× at start
+
+SHARD SUMMARY index=1/4 modules=34 tests=545 failures=0 errors=0 skipped=30 result=PASS
+SHARD SUMMARY index=2/4 modules=54 tests=1208 failures=0 errors=0 skipped=53 result=PASS
+SHARD SUMMARY index=3/4 modules=66 tests=1985 failures=0 errors=0 skipped=9 result=PASS
+SHARD SUMMARY index=4/4 modules=67 tests=1912 failures=0 errors=0 skipped=16 result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5650 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+
+failures=0 errors=0 (5650 tests; the portability regression's four subTests included). Race test PASS under shards=4 (ruling 56 ADDENDUM-2, third observation).

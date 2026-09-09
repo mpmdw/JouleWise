@@ -1,4 +1,4 @@
-# Magistrate terminal review — ARM-INTEGRATION-LOAD-01 (PR #311), merge candidate 0661d1d2 (17843715 + merge of main 6981c9b4)
+# Magistrate terminal review — ARM-INTEGRATION-LOAD-01 (PR #311), merge candidate 0290311a (9dbacb40 + merge of main 6d55bb96); content head 9dbacb40
 
 Reviewer: headless magistrate, activation 2145630c (Fable), full session context, not delegated. Diff read at the bench in
 `/Users/edr/code/JouleWise-wt-arm-load` (`git diff 0fda6d95..17843715`: tests/fixtures/arm_clock.py new; tests/test_arm_readiness_evidence_t0.py,
@@ -43,10 +43,18 @@ evidence) are the lane's authority.
 Nothing to prune: one 30-line fixture, seam wiring in four test modules, three added tests, the evidence-recording join branch. The deleted
 block that rewrote captured R0 evidence bytes post hoc is a soundness improvement (Opus 90).
 
-## Fix round (at the bench)
+## Fix rounds (at the bench)
 
 Round 1 (17843715; Opus 90 SF-1/N-1/N-2 applied; SF-2 applied then REVERTED on execution evidence with the rationale in the comment).
 Delta 95 (Astra): clean; same signature: none.
+Linux CI at 0661d1d2 then ERRORed `test_specified_census_observations_refuse_before_publication` (`T0EvidenceAuthoringError: clock-reference
+command capture fields are invalid or stale`) while the Mac replay was green. Root-cause consult 99 (Astra high, before any fix): the
+integration class froze ordinary time at the HOST `time.monotonic_ns()` and the census fixture subtracts `_MIN_IDLE_NS` (600 s), so a fresh
+runner (< 10 min uptime) drove `started_monotonic_ns` negative; the synthetic RAW anchor was not the failing comparison. Round 2 (9dbacb40):
+setUp freeze = `coherent_clock_anchor().monotonic_raw_ns`; regression `ArmReadinessIntegrationClockPortabilityTests` runs the complete census
+test under simulated host readings 1e11/5e11/8e11/5e14 (the first two failed before). Delta 101: clean; the host-calibrated class is
+closed in this lane's integration path; consult 99's three extra T0 refusal tests are a recorded coverage follow-up (helpers exist). CI green
+on 9dbacb40 (run 34412303408).
 
 ## Bench execution (lead)
 
@@ -56,18 +64,20 @@ Focused modules `test_arm_readiness_integration + test_launch_window + test_arm_
 ## Replay (row 9)
 
 Command (unpiped, rc captured): `PYTHONDONTWRITEBYTECODE=1 R7F_CORPUS_ROOT=/Users/edr/code/JouleWise JOULEWISE_BACKUP_ROOTS= python3 scripts/shard_tests.py --workers 4` in
-`/Users/edr/code/JouleWise-wt-arm-load` at 0661d1d2 (contains origin/main 6981c9b4), started 14:19:20 PDT, alone in-process (four shards
-concurrent; no seat, reviewer or other test process launched by this session; timer probe 3.57× at start). Verbatim (97-replay-311-0661d1d2-tail.txt):
+`/Users/edr/code/JouleWise-wt-arm-load` at 0290311a (contains origin/main 6d55bb96), started 15:52:41 PDT, alone in-process (four shards
+concurrent; no seat, reviewer or other test process launched by this session; timer probe 3.41× at start). Verbatim (102-replay-311-final-0290311a-tail.txt):
 
 ```
-WORKERS SUMMARY shards=4 modules=221 tests=5649 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5650 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
 rc=0
 ```
 
+Replay 1 at 0661d1d2 (97): 5649 tests rc 0 (before round 2).
+
 ## Verdict
 
-CLEAN for merge at 0661d1d2: refuters 89 (Astra execution; static + in-memory predicate probes, execution blocked by its sandbox) and 90
-(Opus contract; 0 blockers); fix round 1 delta-audited (95, clean, same signature none; SF-2 refuted by execution and reverted with the
-rationale recorded); full-suite replay alone rc 0 with zero failures at 3.57× slack; CI to be confirmed green on 0661d1d2 before the merge.
-Not proven: live machine readiness (synthetic observations by design, per 99gn); the seat's burner-run determinism evidence was never
-produced (seat 85 timed out) — the four-shard replay is the evidence of record.
+CLEAN for merge at 0290311a: refuters 89 (Astra execution) and 90 (Opus contract; 0 blockers); two fix rounds each delta-audited (95, 101,
+both clean); root cause of the Linux CI failure established by consult 99 before the fix; CI green on 9dbacb40 and to be confirmed on the
+merge head; full-suite replay alone rc 0 with zero failures twice (5649 at 0661d1d2, 5650 at 0290311a). Not proven: live machine readiness
+(synthetic observations by design, per 99gn); the seat's burner-run evidence was never produced — the four-shard replays are the evidence
+of record.
