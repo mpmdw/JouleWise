@@ -604,3 +604,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - RELAYED low-priority daytime task (verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-remote-control-task.txt`): after the
   rehearsal harvest and never during an armed window, test once whether `claude remote-control` starts under a pty wrapper and email Ed
   the link or the negative result; stop it before any arm sequence (it is a claude-class process the census refuses).
+
+## ARMED — rehearsal-20260909 (activation 784a764e; record 21h; artifacts `21b-rehearsal-20260909-bench/arm-*`)
+
+- Plan published (`arm-night_plan.json`), both night agents installed from `/private/tmp/joulewise-rehearsal-20260909-checkout` at
+  `ae8f074f`; census clean (`arm-blockB-output.txt`). Frozen triple: (`rehearsal-20260909`, that checkout, `ae8f074f`).
+- The arming activation exits before 1788946260. NEXT EXACT ACTION for the relaunched magistrate: 21h §Morning after (harvest,
+  NIGHT-REHEARSAL-01 record, `--uninstall` from the stub checkout, remove checkout + plan root), then the relayed daytime lanes above.
+  This branch (`bookkeeping/2026-09-09-rehearsal-arm-record`, PR open) is merged by the successor with its ledger after the harvest.

@@ -1,0 +1,58 @@
+1788944302 2026-09-09 01:58:22 PDT
+-	0	com.joulewise.night
+-	0	com.joulewise.night.deadman
+--- state.json (read-only copy at arm time):
+{
+    "activation_id": "784a764e-12b2-4c9a-a96d-9b8690d6abad",
+    "activation_spawn_epoch_s": 1788856918.677485,
+    "attempt": 2,
+    "backoff_boot_id": "kern.boottime:{ sec = 1788406516, usec = 212407 } Wed Sep  2 20:35:16 2026",
+    "backoff_index": 0,
+    "clock_drain": false,
+    "clock_sane_samples": 8890,
+    "fenced_checkouts": [
+        [
+            "__canonical_repo__",
+            "/Users/edr/code/JouleWise",
+            null
+        ],
+        [
+            "rehearsal-20260909",
+            "/private/tmp/joulewise-rehearsal-20260909-checkout",
+            "ae8f074ffa554707a9eac95995ab8ec03235d118"
+        ]
+    ],
+    "generic_backoff_index": 0,
+    "last_clock": {
+        "epoch_s": 1788944299.005465,
+        "monotonic": 369991.656470916
+    },
+    "next_eligible_epoch_s": 1788856708.777019,
+    "next_eligible_monotonic": 282401.52875375,
+    "notice_pending": [],
+    "reason": "spawned activation 784a764e-12b2-4c9a-a96d-9b8690d6abad",
+    "remote_stop": {
+        "detail": "stop branch absent; positive control present",
+        "observed_monotonic": 369709.171384416,
+        "state": "CLEAR"
+    },
+    "resident_hold_drain": null,
+    "resident_session": {
+        "activation_id": "784a764e-12b2-4c9a-a96d-9b8690d6abad",
+        "activation_spawn_epoch_s": 1788856918.677485,
+        "binary_symlink": "/Users/edr/.local/bin/claude",
+        "binary_version": "2.1.263 (Claude Code)",
+        "launch_epoch_s": 1788856918.677485,
+        "pid": 83086,
+        "schema": "joulewise.magistrate_lock.v1",
+        "start_time": "Tue Sep 8 01:41:58 2026",
+        "status": "ACTIVE",
+        "supervisor_pid": 83075
+    },
+    "schema": "joulewise.magistrate_watchdog_state.v1",
+    "standdown_phase": null,
+    "state": "ACTIVE",
+    "transition_epoch_s": 1788856918.677485,
+    "transition_seq": 8,
+    "usage_backoff_index": 0
+}
