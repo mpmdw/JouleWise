@@ -12,8 +12,9 @@ spawned 03:33:01 PDT, events.jsonl seq 22–23; every events.jsonl sequence cite
   durable record pushed `night-results/20260909` 02:56:10; courier attempt 1 heartbeat+sent 02:57:33; second push 02:57:35.
   No 07:00 dead-man line (agents were installed 01:57 on 09-09, so the R-7 case did not apply — see NIGHT_HANDBACK §Purpose).
 - `refusal.json` is ABSENT BY DESIGN: the driver writes it only for a non-rehearsal refused gate (06 N5). `night.log`'s harvest digest
-  `28ee7ad6…` differs from the `f894b3a4…` recorded inside `night-result.json` because the courier appended two lines after the result
-  was sealed (02:57:33, 02:57:35) (06 N4).
+  `28ee7ad6…` differs from the `f894b3a4…` recorded inside `night-result.json`: the result digest covers the FIRST TWO lines of
+  `night.log`; four lines were appended after the result was sealed, at `2026-09-09T02:56:03.367167-07:00`,
+  `2026-09-09T02:56:10.980604-07:00`, `2026-09-09T02:57:33.117809-07:00`, and `2026-09-09T02:57:35.070205-07:00` (06 N4).
 - `night-result.json`: verdict `REHEARSAL_ONLY`, `chain_exit_code` 0, `census_count` 1, `census_hits` [], `receipt_class`
   `REHEARSAL_STUB`, `aborted_reason` null. `night-chain.started` pid/pgid 82053; `night-chain.exited` rc 0; `night-chain.stdout.log`
   `REHEARSAL`; `night-censuses.jsonl` one clean census (pgrep exit 1, empty stdout).
@@ -45,9 +46,11 @@ Authority relied on: relaunch-prompt line 19 clause (b) ("the documented uninsta
 NIGHT_HANDBACK §Next lane (uninstall FROM the stub checkout, remove the stub checkout and the plan root before any real plan). D-175
 condition 8's arm-shaped steps (2)–(5) (arm email naming pins, census re-run immediately before) were NOT re-run, because the plan had
 completed and nothing was being armed; whether condition 8 also governs post-completion removal is a scope question referred to the
-cold gate (Opus review 06 S2), not decided here. Harvest-before-uninstall ordering evidence (06 N7): `pre-uninstall-observations.txt`
-was written in the same command as the byte copies and embeds `state.json` with `last_clock.epoch_s` < 1788950218, the uninstall epoch
-in `uninstall-output.txt`.
+cold gate (Opus review 06 S2), not decided here. Harvest-before-uninstall ordering evidence (06 N7): the copies' order relative to the uninstall is
+INFERRED — no transcript of the copy command was captured. The harvest copies exist and hash 17/17 against `SHA256SUMS`, while
+`removal-output.txt` records source-root removal at epoch `1788950258` (`plan root removed rc=0`).
+`pre-uninstall-observations.txt` embeds a `state.json` whose `last_clock.epoch_s` is `1788950204.064847`, preceding the uninstall epoch
+`1788950218` in `uninstall-output.txt` by exactly `13.935153` seconds; this dates the watchdog clock sample, not the copy.
 - `uninstall-output.txt`: `scripts/install_night_agent.sh --plan … --hour 2 --minute 56 --uninstall` run FROM the stub checkout at
   `ae8f074f`, rc 0; afterwards `launchctl list` shows only `com.joulewise.magistrate`; only `com.joulewise.magistrate.plist` remains;
   custody root untouched by the uninstall (17 entries after; the byte harvest had copied 14 records + `night.log`, and the
@@ -78,7 +81,9 @@ in `uninstall-output.txt`.
 3. CLONE-READINESS-01 preparation (agent-side only), then G2-a inputs; the `claude remote-control` test between windows.
 
 ## Record note (Opus contract review 10, S4 — recorded here, not as a decision-log amendment; rule 11)
-For `REHEARSAL_STUB` plans the night gate performs NO chain-identity check, because the driver substitutes the built-in stub
+Once NIGHT-GATE-STUB-CHAIN-01 lands (branch `fix/2026-09-09-night-gate-stub-chain`, fix head `5db38b58`, PR #309), the night gate
+performs NO chain-identity check for `REHEARSAL_STUB` plans, because the driver substitutes the built-in stub
 (`sleep 2; echo REHEARSAL`) and never executes the plan's declared chain; consequently the `night_chain_digest_mismatch` refusal
-covers `DIAGNOSTIC_NO_PACK` and `TRANSACTION_PACK` only. Authorized by the magistrate's cure brief (trace
+will cover `DIAGNOSTIC_NO_PACK` and `TRANSACTION_PACK` only; on main at `83ab38ed` the gate still reads the chain unconditionally
+(the forcing defect above). Authorized by the magistrate's cure brief (trace
 `2026-09-09-rehearsal-harvest/01`); whether this belongs in a standing document is for the cold gate or Ed.
