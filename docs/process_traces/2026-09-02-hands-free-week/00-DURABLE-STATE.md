@@ -667,3 +667,38 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - NEXT EXACT ACTION: 21i §Next exact actions (1) NIGHT-GATE-STUB-CHAIN-01 seat + review + PR; (2) PR #308 ledger + merge under the
   normal gates; (3) CLONE-READINESS-01 preparation → G2-a inputs; remote-control test between windows. Whether the cure requires a
   second stub night before G2-a is a cold-gate/Ed ruling, not this activation's.
+
+## 2026-09-09 activation 2145630c (spawned epoch 1788952084, 04:08:04 PDT; events.jsonl seq 26–27; watchdog attempt 6) — harvest bookkeeping landed; cure reviewed; nothing armed
+
+- Launched after activation `628c2eed` exited cleanly at 04:02:54 PDT (seq 24) with two Astra seats and one delta refuter still in
+  flight; `notice_pending` was empty. Heartbeat written (pid 93094); launch email `1a085dce5c24086d` on thread `1a0800cdb282c3f1`;
+  `notice.ack` written. ADDRESS ANOMALY recorded: 628c2eed's two emails (`1a085bc57dbfabbe`, `1a085cd2a5d5a2d5`) went to
+  `claude.ai.copper531@passmail.net`, not the address of record (`claude2.glaring610@passmail.net`) used by every other magistrate
+  email; this activation re-sent their substance to the address of record and changed no configuration.
+- Preserved and finished 628c2eed's in-flight work: harvest traces committed (`e348a2c3`); kernel-fold seat output (T38d
+  checkpoint, `63a2739f` on `bookkeeping/2026-09-09-kernel-fold`) completed at the bench (EXPECTED_IDS count 157, cure head
+  repin) and cherry-picked into this branch; doc-fix round 4 re-seated as 27b and cherry-picked (`191f4c43`); delta refuter 23b
+  re-run for the cure (clean, same signature none).
+- PR #308 gate shape: Opus final-head contract review 30 (3 should-fix, 4 nits, no blocker) → standing escalation trigger honoured
+  (cross-document drift class seen in rounds 3 and 5): consult 33 (Astra high) enumerated every repeated fact across seven
+  documents and supplied a mechanical fact guard (34, 34b) → fix round 5 at the bench (`5d13d0e6`) → delta 36 clean, same
+  signature none → full-suite replay alone (record 38) → terminal review 37.
+- PR #309 (NIGHT-GATE-STUB-CHAIN-01, head `5db38b58`): delta 23b clean; magistrate terminal review 31 CLEAN (+ addendum A6); CI green
+  on 5db38b58 except the by-design `gate-ledger` row check; merge follows #308 so its trace paths exist at its head.
+- REPLAY VERDICT (rule-11 cold gate 44 + Opus refuter 45): the #308 replay alone recorded 5636 tests, 4 failures, all in
+  `tests.test_run_campaign.IdleAdmissionCoreVerdictTests` (shard 4), pre-existing on the merge base, CI green. Judge: merge under
+  C1–C5 (verbatim tail, independence line, addendum obligation, no precedent, fixture lane). Refuter: cause REFUTED (same test OK on
+  retry with powermode 1 still set) — flaky wall-clock coupling, knife-edge 3.5× timeout margin; wanted a green re-run before merge.
+  Magistrate synthesis: three class re-runs stayed red (4/4/3), so the merge proceeds under the judge's conditions with the refuter's
+  corrections applied and its dissent recorded (42 addendum, 37). Lanes registered: FIXTURE-TIMEOUT-WALLCLOCK-01 (P2),
+  POWERMODE-PREFLIGHT-RECORD-01 (P1, record-only; the no-real-night-under-powermode-1 constraint is a RECOMMENDATION to Ed).
+  Emails to Ed: launch `1a085dce5c24086d`; Low-Power-Mode action `1a086405105b8214` (attribution since withdrawn; correction sent).
+- NOTHING IS ARMED. launchctl lists only `com.joulewise.magistrate`; no plan root exists; the frozen list is the canonical repo.
+  The second-stub-night question stays `needs_ruling` (cold gate or Ed).
+- Process observation for the cold gate (recorded, not ruled): a headless activation exits when its turn ends, killing background
+  seats (628c2eed lost seats 23/25/27 mid-run); this activation blocked on every child before ending a turn.
+- NEXT EXACT ACTION: (1) merge PR #308 under the D-072 gate shape once CI is green on its final head; (2) merge origin/main into
+  `fix/2026-09-09-night-gate-stub-chain`, replay alone, fill PR #309's ledger, merge; (2b) per ruling 44 Q2/A1–A6 and the refuter's stricter position, #309 needs its own replay on the integration tree after main
+  moves; exactly-the-four-or-fewer-and-nothing-else is the judge's door, rc=0 the refuter's; record whichever obtains; (3) CLONE-READINESS-01 preparation (the
+  un-inventoried `JouleWise-rehearsal-<date>-<sha>` clone per 99co + amendment) → G2-a inputs (NEEDS_RULING after rehearsal
+  acceptance); the second-stub-night ruling is a cold gate, not this activation's.
