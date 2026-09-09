@@ -673,8 +673,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - Launched after activation `628c2eed` exited cleanly at 04:02:54 PDT (seq 24) with two Astra seats and one delta refuter still in
   flight; `notice_pending` was empty. Heartbeat written (pid 93094); launch email `1a085dce5c24086d` on thread `1a0800cdb282c3f1`;
   `notice.ack` written. ADDRESS ANOMALY recorded: 628c2eed's two emails (`1a085bc57dbfabbe`, `1a085cd2a5d5a2d5`) went to
-  `claude.ai.copper531@passmail.net`, not the address of record (`claude2.glaring610@passmail.net`) used by every other magistrate
-  email; this activation re-sent their substance to the address of record and changed no configuration.
+  `claude.ai.copper531@passmail.net`, not the address of record (`claude2.glaring610@passmail.net`) used by the other ten messages on the
+  thread (inventory: `2026-09-09-rehearsal-harvest/49-gmail-thread-inventory-1a0800cdb282c3f1.txt`); this activation re-sent their substance to the address of record and changed no configuration.
 - Preserved and finished 628c2eed's in-flight work: harvest traces committed (`e348a2c3`); kernel-fold seat output (T38d
   checkpoint, `63a2739f` on `bookkeeping/2026-09-09-kernel-fold`) completed at the bench (EXPECTED_IDS count 157, cure head
   repin) and cherry-picked into this branch; doc-fix round 4 re-seated as 27b and cherry-picked (`191f4c43`); delta refuter 23b
@@ -695,8 +695,10 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   Emails to Ed: launch `1a085dce5c24086d`; Low-Power-Mode action `1a086405105b8214` (attribution since withdrawn; correction sent).
 - NOTHING IS ARMED. launchctl lists only `com.joulewise.magistrate`; no plan root exists; the frozen list is the canonical repo.
   The second-stub-night question stays `needs_ruling` (cold gate or Ed).
-- Process observation for the cold gate (recorded, not ruled): a headless activation exits when its turn ends, killing background
-  seats (628c2eed lost seats 23/25/27 mid-run); this activation blocked on every child before ending a turn.
+- Process observation for the cold gate (lead-reported, not independently evidenced): 628c2eed's clean exit at 04:02:54 (events seq 24)
+  coincided with seats 23/25/27 still in flight (their .status files read RUNNING; no codex process survived at 04:10), which the lead
+  reads as the activation's turn ending and killing its background children; this activation, by its own account, blocked on every
+  child before ending a turn.
 - NEXT EXACT ACTION: (1) merge PR #308 under the D-072 gate shape once CI is green on its final head; (2) merge origin/main into
   `fix/2026-09-09-night-gate-stub-chain`, replay alone, fill PR #309's ledger, merge; (2b) per ruling 44 Q2/A1–A6 and the refuter's stricter position, #309 needs its own replay on the integration tree after main
   moves; EXACTLY the four named failures and nothing else is the judge's door (A1; a subset is not authorized), rc=0 the refuter's; record whichever obtains; (3) CLONE-READINESS-01 preparation (the

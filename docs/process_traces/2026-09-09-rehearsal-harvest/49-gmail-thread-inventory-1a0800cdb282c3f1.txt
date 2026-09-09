@@ -1,0 +1,15 @@
+Gmail thread 1a0800cdb282c3f1 inventory as returned by get_thread (METADATA_ONLY) to activation 2145630c at ~04:12 PDT 2026-09-09, before its own sends.
+All twelve messages are SENT by the account (no reply from Ed on the thread at that time).
+id                internalDate(UTC)      to
+1a0800cdb282c3f1  2026-09-08T08:05:21Z   claude2.glaring610@passmail.net   (1ef89702 arm request)
+1a08012045894ef7  2026-09-08T08:10:59Z   claude2.glaring610@passmail.net   (1ef89702 pins)
+1a080d1adf46c7b2  2026-09-08T11:40:20Z   claude2.glaring610@passmail.net   (784a764e consolidated notice)
+1a0816757635cf98  2026-09-08T14:23:48Z   claude2.glaring610@passmail.net   (784a764e follow-up)
+1a081723350aea55  2026-09-08T14:35:40Z   claude2.glaring610@passmail.net   (784a764e correction)
+1a0817fbc66d8737  2026-09-08T14:50:27Z   claude2.glaring610@passmail.net   (784a764e refinement)
+1a08563d8750bd89  2026-09-09T08:58:28Z   claude2.glaring610@passmail.net   (784a764e ARMED)
+1a0856f16a4e6142  2026-09-09T09:10:45Z   claude2.glaring610@passmail.net   (8844a3d0 launch)
+1a0857c5399e48b2  2026-09-09T09:25:12Z   claude2.glaring610@passmail.net   (b1e2fd2f launch)
+1a0857cfe597ba94  2026-09-09T09:25:56Z   claude2.glaring610@passmail.net   (b1e2fd2f stand-down)
+1a085bc57dbfabbe  2026-09-09T10:35:07Z   claude.ai.copper531@passmail.net  (628c2eed launch)   <- address anomaly
+1a085cd2a5d5a2d5  2026-09-09T10:53:30Z   claude.ai.copper531@passmail.net  (628c2eed remote-control result)   <- address anomaly
