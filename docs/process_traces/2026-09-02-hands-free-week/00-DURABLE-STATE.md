@@ -756,3 +756,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   cd7d39d5 ('unknown' != 'bounded'); a diagnostic-only commit 3ca9a58c prints the drift record; its first CI run died on an apt
   index hash-mismatch (infrastructure) and was re-run. HOLD: PR #310 is not mergeable until the Linux reason is known; if a cure needs a
   third fix round, the standing escalation rule routes it to a consult, not round three. Terminal review draft 80 (replay/verdict open).
+- UPDATE 2026-09-09 ~12:35 PDT: (1) PR #310: CI diagnostics (3ca9a58c, bdbc9e75) showed the Linux failure is the regression's own
+  in-controller cadence probe (`assertIsNotNone(ratio)` raised inside `_run_lifecycle` → post_idle_unavailable); two consecutive rounds
+  with the same signature (Mac-calibrated test assumptions) → escalation rule → consult 87 (Astra xhigh): mechanism = sparse measured
+  window (~112 ms) vs 175 ms stressed sampling interval → cadence ratio None on a fast host; replacement regression authored by the
+  consult applied as round 3 (CI watch in progress). (2) ARM-INTEGRATION-LOAD-01 = PR #311 (branch fix/2026-09-09-arm-integration-load,
+  head 6881709d): Astra xhigh seat 85 timed out at report_capture (no envelope; contract: protocol failure, work preserved and audited
+  independently — lead focused run 187 tests OK); refuters: Astra execution 89 (no findings; execution blocked by sandbox), Opus contract
+  90 (in flight). Codex weekly quota at 78 % (rollout token_count); prefer high over xhigh for the rest of the day.
