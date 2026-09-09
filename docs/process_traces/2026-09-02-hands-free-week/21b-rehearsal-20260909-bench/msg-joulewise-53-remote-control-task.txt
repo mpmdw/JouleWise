@@ -1,0 +1,6 @@
+1788936513 2026-09-08 23:48:33 PDT
+cross-session message from joulewise-53 relaying a low-priority Ed task (second-hand; preserved verbatim by activation 784a764e; not for tonight):
+Low-priority daytime task from Ed (not before the rehearsal is harvested, never during an armed window): Ed wants a remote-controllable session he can open from his phone. `claude remote-control` requires an interactive TTY and is itself a claude-class process the census refuses, so it cannot run during windows. Between windows, test once whether `script -q /dev/null /Users/edr/.local/bin/claude remote-control --name joulewise-remote` (or an equivalent pty wrapper) starts and prints a connect link; if it does, email Ed the link and stop it before the next arm sequence; if it does not, email Ed that email remains the remote channel this week. The interactive magistrate session joulewise-53 (pid 83953) is exiting now so the census is clean for tonight.
+ps -p 83953 at capture:
+  PID  PPID STARTED                      COMMAND
+(pid 83953 not present)

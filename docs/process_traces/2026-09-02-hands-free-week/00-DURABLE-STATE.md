@@ -601,3 +601,6 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   Ed's directive that quiet windows may run at any hour. For planning AFTER the rehearsal harvest (CLONE-READINESS-01, then G2-a at the
   earliest census-clean time); every existing gate (readiness census, email-then-arm lead times, Ed's NO, cold gate 99ey's ordering,
   all-agents stand-down per window) unchanged. Not applied tonight.
+- RELAYED low-priority daytime task (verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-remote-control-task.txt`): after the
+  rehearsal harvest and never during an armed window, test once whether `claude remote-control` starts under a pty wrapper and email Ed
+  the link or the negative result; stop it before any arm sequence (it is a claude-class process the census refuses).
