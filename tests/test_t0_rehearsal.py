@@ -434,10 +434,10 @@ class FixtureBuilder:
     def _build_pack_go(self):
         from tests.test_arm_readiness import LaunchConsumptionV2Tests
         fixture = LaunchConsumptionV2Tests()
-        fixture._fixture_root = self.base
         fixture._custody_window = self.root.name
         try:
-            fixture.setUp()
+            # Reuse this bundle's context without weakening the case's setUp.
+            fixture._set_up_fixture(self.base.resolve(), existing_context=True)
             evidence = install_t0_inventory(fixture)
             inputs = fixture._consumer_inputs()
             go = inputs["authenticated_go_receipt"]

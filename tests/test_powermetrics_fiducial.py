@@ -1375,6 +1375,21 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
             Path(self.stage1.arm["arm_context"]["claim_runs_root"])
             / "instrument_validation"
         )
+        # This is a TRANSACTION_PACK launch: every pack entry is committed
+        # before GO preparation and the consumption-point digest replay.
+        for args in (
+            ("add", self.config.name),
+            ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "-c", "commit.gpgsign=false", "commit", "-qm", "calibration fixture"),
+        ):
+            subprocess.run(
+                ["git", "-C", str(self.stage1.pack), *args],
+                check=True, capture_output=True,
+            )
+        self.stage1.arm["pack"]["pack_sha256"] = (
+            self.readiness.committed_pack_tree_sha256(self.stage1.pack)
+        )
+        self.stage1._install_attested_launch_recipe()
 
     @contextmanager
     def _authentication_environment(
