@@ -293,7 +293,13 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         # Keep fixture evidence and every in-test consumer on one logical
         # instant.  These integration tests exercise validity semantics, not
         # whether a slow aggregate test run can outrun the minimum horizon.
-        fixed_monotonic_ns = time.monotonic_ns()
+        # This class already freezes ordinary time. Select a synthetic instant
+        # with enough positive history for the complete ten-minute T-0
+        # sequence: the census fixture subtracts _MIN_IDLE_NS (600 s) from
+        # this value, so a host reading below ~600 s of uptime (a fresh CI
+        # runner) drove started_monotonic_ns negative and the capture guard
+        # refused 'invalid or stale' (root-cause consult 99).
+        fixed_monotonic_ns = coherent_clock_anchor().monotonic_raw_ns
         monotonic_patcher = mock.patch.object(
             time, "monotonic_ns", return_value=fixed_monotonic_ns
         )
@@ -860,6 +866,33 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
             implementation_literals | generated_underivable,
             T0_EVIDENCE_AUTHOR_REASON_CODES,
         )
+
+
+class ArmReadinessIntegrationClockPortabilityTests(unittest.TestCase):
+    """The integration transaction must not depend on the host's uptime.
+
+    Defect-shaped regression (consult 99): before the setUp freeze used a
+    synthetic instant, host readings below ~600 s made the census fixture's
+    clock-reference capture start negative and refuse. Each subTest runs the
+    complete census test under a simulated host reading.
+    """
+
+    def test_census_transaction_ignores_host_uptime(self) -> None:
+        method = "test_specified_census_observations_refuse_before_publication"
+        for host_now in (
+            100_000_000_000,
+            500_000_000_000,
+            800_000_000_000,
+            500_000_000_000_000,
+        ):
+            with self.subTest(host_now=host_now):
+                result = unittest.TestResult()
+                case = ArmReadinessIntegrationTests(method)
+                with mock.patch.object(time, "monotonic_ns", return_value=host_now):
+                    case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertEqual(result.skipped, [])
+                self.assertTrue(result.wasSuccessful(), (result.errors, result.failures))
 
 
 if __name__ == "__main__":
