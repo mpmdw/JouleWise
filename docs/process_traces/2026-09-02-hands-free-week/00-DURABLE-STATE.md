@@ -629,3 +629,22 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   verify `night-results/20260909` on origin; record under NIGHT-REHEARSAL-01; `--uninstall` from the stub checkout; remove the stub
   checkout and plan root; complete PR #308's ledger and merge under the normal gates. Then CLONE-READINESS-01 → G2-a inputs at the
   earliest census-clean time; the remote-control test between windows. Accept only `night_refused_agent_present` as a receipt refusal.
+
+## 2026-09-09 activation b1e2fd2f (spawned epoch 1788945764, 02:22:44 PDT; events.jsonl seq 16; watchdog attempt 4) — second pre-window relaunch; no work; stand-down before the plan span
+
+- Launched by the watchdog after 8844a3d0's clean exit at 1788945287 (seq 13) and the 300 s backoff; predicates clear at 02:22:44.
+  `notice_pending` was empty. Heartbeat written (pid 81638 from the lock), launch email on the arm thread `1a0800cdb282c3f1`:
+  Gmail `1a0857c5399e48b2`; `notice.ack` written for this activation.
+- Verified on disk at 1788945892 (02:24:52 PDT), read-only: plan v2 `rehearsal-20260909` (t0 1788947760, window 900 s, root
+  `/private/tmp/joulewise-rehearsal-20260909-checkout` HEAD `ae8f074f` = plan `measurement_head`, tree clean); `night/` empty (not
+  fired); `com.joulewise.night`, `com.joulewise.night.deadman`, `com.joulewise.magistrate` loaded; no `standdown.request`, no `STOP`;
+  production census = this session's own codex mcp-server pair only (81651/81664); canonical main `83ab38ed` untouched.
+- Not verifiable from a headless session: a NO on the arm thread (send-only Gmail tool). Stated to Ed in the launch email.
+- Decision: no new lane; no Codex child spawned. Same reasoning as 8844a3d0 — the stand-down request lands at 1788946260 (02:31 PDT),
+  the 02:45–03:30 belt fences relaunch, and a magistrate alive at t0 would cause `night_refused_agent_present`. Observation for the
+  successor (not a rule change): the watchdog relaunches into the pre-window gap twice per armed night; whether a plan-aware launch
+  fence belongs in the watchdog goes to the cold gate or Ed, not to this activation.
+- NEXT EXACT ACTION unchanged: 21h §Morning after by the post-belt successor (~03:30 PDT or later) — harvest
+  `/Users/edr/night-custody/rehearsal-20260909/night/*` + `night.log`; verify `night-results/20260909` on origin; record under
+  NIGHT-REHEARSAL-01; `--uninstall` from the stub checkout; remove stub checkout + plan root; complete PR #308's ledger and merge
+  under the normal gates; then CLONE-READINESS-01 → G2-a inputs at the earliest census-clean time; remote-control test between windows.
