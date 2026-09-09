@@ -1048,7 +1048,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         }
         with patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
-            side_effect=lambda observation: by_attempt.get(observation.attempt_id),
+            side_effect=lambda observation, *, mode: by_attempt.get(observation.attempt_id),
         ) as authenticate:
             discovered = discover_calibration_candidates(snapshot)
         self.assertEqual(discovered, tuple(registered))
@@ -1706,7 +1706,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         by_attempt = {candidate.attempt_id: candidate for candidate in candidates}
         with patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
-            side_effect=lambda observation: by_attempt[observation.attempt_id],
+            side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
         ):
             open_candidates = discover_calibration_candidates(open_snapshot)
         self.assertEqual(
@@ -1727,7 +1727,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         with patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
-            side_effect=lambda observation: by_attempt[observation.attempt_id],
+            side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
         ):
             discovered = discover_calibration_candidates(aborted_snapshot)
         self.assertEqual(
@@ -2091,7 +2091,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             },
         )
 
-        def discover(source: object) -> tuple[CalibrationCandidate, ...]:
+        def discover(source: object, *, mode: str) -> tuple[CalibrationCandidate, ...]:
             return tuple(registered) if source is snapshot else ()
 
         # Trigger-subject: staleness here must come from the unselected
@@ -2169,7 +2169,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
             patch(
                 "joulewise.calibration_bracketing._candidate_from_observation",
-                side_effect=lambda observation: by_attempt[observation.attempt_id],
+                side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
             ),
             patch(
                 "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
@@ -2221,7 +2221,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
             patch(
                 "joulewise.calibration_bracketing._candidate_from_observation",
-                side_effect=lambda observation: by_attempt[observation.attempt_id],
+                side_effect=lambda observation, *, mode: by_attempt[observation.attempt_id],
             ),
             patch(
                 "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
@@ -2615,6 +2615,17 @@ class CalibrationBracketingTests(unittest.TestCase):
                     directory, runs_root=root
                 )
                 self.assertIsNotNone(candidate)
+                import os
+                from joulewise import calibration_ledger as ledger
+
+                original_root = root / "absent-original"
+                original = original_root / directory.relative_to(root)
+                with (
+                    patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                    patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(root)}),
+                ):
+                    relocated = load_calibration_candidate(original, runs_root=original_root, mode="read_replay")
+                self.assertEqual(relocated, candidate)
                 self.assertEqual(candidate.b_fiducial_s, "0.02")
                 self.assertEqual(
                     candidate.bindings["anchor_method_version"], CLOCK_METHOD_V3
@@ -2632,6 +2643,69 @@ class CalibrationBracketingTests(unittest.TestCase):
                 self.assertIsNone(
                     load_calibration_candidate(directory, runs_root=root)
                 )
+
+
+class CustodyCandidateProbeTests(unittest.TestCase):
+    def test_candidate_path_probe_timeout_returns_none(self):
+        import threading
+        import time
+        from joulewise import calibration_ledger as ledger
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            for target in ("pathlib.Path.exists", "pathlib.Path.is_dir"):
+                with self.subTest(target=target):
+                    release = threading.Event()
+                    entered = threading.Event()
+                    workers = []
+
+                    def blocked(*args, **kwargs):
+                        workers.append(threading.current_thread())
+                        entered.set()
+                        release.wait()
+                        raise FileNotFoundError("synthetic absent custody")
+
+                    try:
+                        with (
+                            patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+                            patch(target, side_effect=blocked),
+                            patch("joulewise.calibration_bracketing.read_authentication_input",
+                                  side_effect=AssertionError("read attempted")) as read,
+                        ):
+                            started = time.monotonic()
+                            self.assertIsNone(load_calibration_candidate(root, runs_root=root.parent))
+                            self.assertLess(time.monotonic() - started, 0.5)
+                            self.assertTrue(entered.is_set())
+                            self.assertTrue(workers[0].daemon)
+                            release.set()
+                            workers[0].join(1)
+                            read.assert_not_called()
+                    finally:
+                        release.set()
+                        for worker in workers:
+                            worker.join(1)
+
+    def test_candidate_backup_override_skips_original_and_preserves_relative_root(self):
+        import os
+        from joulewise import calibration_ledger as ledger
+
+        original = ledger.BACKUP_ROOTS[0] / "runs/instrument_validation/member"
+        with (
+            patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": ""}),
+            patch("threading.Thread.start", side_effect=AssertionError("probe")),
+        ):
+            self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent, mode="read_replay"))
+        with tempfile.TemporaryDirectory() as temporary:
+            backup = Path(temporary).resolve()
+            mapped = backup / "runs/instrument_validation/member"
+            mapped.mkdir(parents=True)
+            with (
+                patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(backup)}),
+                patch("joulewise.calibration_bracketing._load_calibration_candidate_unbounded",
+                      return_value=None) as inspect,
+            ):
+                self.assertIsNone(load_calibration_candidate(original, runs_root=original.parent.parent, mode="read_replay"))
+                inspect.assert_called_once_with(mapped, runs_root=backup / "runs")
 
 
 if __name__ == "__main__":

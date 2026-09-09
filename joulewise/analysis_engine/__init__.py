@@ -1686,6 +1686,7 @@ def analyze_claims(
         Path(analysis_manifest_path),
         Path(runs_root),
         Path(floor_artifact_path),
+        mode="read_replay",
         strict_validator=strict_validator,
         evidence_roots=evidence_roots,
     )

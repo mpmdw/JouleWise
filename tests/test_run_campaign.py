@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ast
 import copy
+import inspect
 import importlib.util
 import hashlib
 import io
@@ -20,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from scripts.run_campaign import (
@@ -2602,6 +2605,7 @@ class RunCampaignTests(unittest.TestCase):
         ]
         self.assertEqual(len(whole), 1)
         core_evaluation.assert_called_once()
+        self.assertNotIn("mode", core_evaluation.call_args.kwargs)
         basis_builder.assert_called_once()
         self.assertIs(
             basis_builder.call_args.kwargs["drift_bound_artifact"],
@@ -7572,6 +7576,7 @@ class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
         candidate_loader.assert_called_once_with(
             self.store / self.content_id,
             runs_root=self.root,
+            mode="issuing",
         )
 
     def test_invalid_store_refuses_without_legacy_fallback(self) -> None:
@@ -7641,6 +7646,132 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         return run_campaign_module.load_campaign_policy(
             str(self._write_extended_sidecar(profile))
         )
+
+    def test_campaign_core_callers_keep_replacement_custody_replay_only(self) -> None:
+        from joulewise import calibration_bracketing as bracketing
+        from joulewise import calibration_ledger as ledger
+
+        # Execute the actual call expressions with fixture locals. This covers
+        # all three production edges without starting a hardware campaign.
+        calls = {}
+        for function in ast.parse(SCRIPT.read_text()).body:
+            if isinstance(function, ast.FunctionDef):
+                for node in ast.walk(function):
+                    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                            and node.func.id == "_idle_admission_core_evaluation"):
+                        self.assertNotIn(function.name, calls)
+                        calls[function.name] = node
+        expected_modes = {
+            "idle_admission_core_verdict": None,
+            "_run_whole_window_verdict_locked": "read_replay",
+            "run_axi_spec_campaign": None,
+        }
+        self.assertEqual(set(calls), set(expected_modes))
+        self.assertEqual(inspect.signature(
+            run_campaign_module._idle_admission_core_evaluation
+        ).parameters["mode"].default, "issuing")
+
+        binding = self._binding()
+        members = [self._member("consumer", records=_clean_idle_records())]
+        original_root = self.root / "absent"
+        replacement = self.root / "replacement"
+        original = original_root / "runs/member"
+        mapped = replacement / "runs/member"
+        mapped.mkdir(parents=True)
+        (mapped / "marker").write_text("replacement bytes")
+        candidate = bracketing.CalibrationCandidate(
+            relative_path=str(original), manifest_sha256="a" * 64,
+            evidence_sha256="b" * 64, protocol_id="fixture",
+            capture_wall_time_s=1.0, b_fiducial_s="0.02",
+            bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+        )
+        snapshot, _ = _fixture_snapshot([candidate])
+        inspected = []
+
+        def inspect_candidate(directory, *, runs_root):
+            inspected.append(directory)
+            self.assertEqual((directory / "marker").read_text(), "replacement bytes")
+            self.assertEqual(runs_root, replacement)
+            return candidate
+
+        namespace = {
+            "evaluations": members, "included": members,
+            "selected_evaluations": members, "policy_binding": binding,
+            "whole_window": True, "runs_root": self.root, "runs_dir": self.root,
+            "neg8_drift_bound": None, "evaluation_timestamp_s": None,
+            "calibration_ledger_snapshot": snapshot, "calibration_snapshot": snapshot,
+            "calibration_bracket_binding": None, "bracket_binding": None,
+            "calibration_bracket_identity": None, "bracket_identity": None,
+            "calibration_bracket_binding_supplied": False, "args": SimpleNamespace(),
+        }
+        for caller, call in calls.items():
+            inspected.clear()
+            expected = expected_modes[caller]
+            with (
+                self.subTest(caller=caller),
+                patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(replacement)}),
+                patch.object(bracketing, "BundleReader") as reader,
+                patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                             side_effect=inspect_candidate),
+                patch.object(bracketing, "evaluate_calibration_bracket",
+                             return_value=({"b_fiducial_s": None}, ())) as evaluate,
+                patch.object(run_campaign_module, "calibration_bracket_for_bundles",
+                             wraps=bracketing.calibration_bracket_for_bundles) as bracket,
+            ):
+                reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
+                reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
+                core = Mock(wraps=run_campaign_module._idle_admission_core_evaluation)
+                namespace["_idle_admission_core_evaluation"] = core
+                result = eval(compile(ast.Expression(call), str(SCRIPT), "eval"), namespace)
+                core.assert_called_once()
+                if expected is None:
+                    self.assertNotIn("mode", core.call_args.kwargs)
+                else:
+                    self.assertEqual(core.call_args.kwargs.get("mode"), expected)
+                bracket.assert_called_once()
+                self.assertEqual(inspected, [mapped] if expected else [])
+                self.assertEqual(len(evaluate.call_args.args[0]), 1 if expected else 0)
+                self.assertEqual(bracket.call_args.kwargs["mode"], expected or "issuing")
+                if expected is None:
+                    self.assertIn("calibration_ledger_custody_invalid", result.core["conditions"])
+                self.assertFalse(original.exists())
+
+    def test_campaign_core_mode_counterfactuals(self) -> None:
+        # Mutate only in memory, and require the planted-custody/caller oracle
+        # above to fail by assertion, rather than by a broken test setup.
+        source = SCRIPT.read_text()
+        core_name = "_idle_admission_core_evaluation"
+        mutations = (
+            (core_name, 'mode=mode,', 'mode="read_replay",'),
+            (core_name, 'mode=mode,', 'mode="issuing",'),
+            (core_name, '= "issuing",', '= "read_replay",'),
+            ("_run_whole_window_verdict_locked",
+             '        mode="read_replay",\n        whole_window=True,',
+             '        whole_window=True,'),
+            ("run_axi_spec_campaign", '                whole_window=True,',
+             '                mode="read_replay",\n                whole_window=True,'),
+            ("idle_admission_core_verdict", '        whole_window=whole_window,',
+             '        mode="read_replay",\n        whole_window=whole_window,'),
+        )
+        for name, old, new in mutations:
+            with self.subTest(function=name, mutation=new):
+                function = getattr(run_campaign_module, name)
+                original = inspect.getsource(function)
+                self.assertEqual(original.count(old), 1)
+                mutated = original.replace(old, new)
+                namespace = {}
+                exec(compile(mutated, "<campaign-mode-counterfactual>", "exec"),
+                     run_campaign_module.__dict__, namespace)
+                with (
+                    patch.object(run_campaign_module, name, namespace[name]),
+                    patch(__name__ + ".SCRIPT") as script,
+                ):
+                    script.read_text.return_value = source.replace(original, mutated)
+                    result = unittest.TestResult()
+                    type(self)("test_campaign_core_callers_keep_replacement_custody_replay_only").run(result)
+                self.assertEqual(result.errors, [])
+                self.assertTrue(result.failures, "counterfactual escaped the regression")
 
     def _drift_bound(
         self,
@@ -7901,6 +8032,67 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 else False
             ),
         )
+
+    def test_direct_campaign_bracket_explicitly_replays_relocated_custody(self):
+        from types import SimpleNamespace
+        from joulewise import calibration_bracketing as bracketing
+        from joulewise import calibration_ledger as ledger
+        from tests.test_calibration_bracketing import _fixture_snapshot
+
+        original_root = self.root / "absent-original"
+        replacement = self.root / "replacement"
+        original = original_root / "runs/member"
+        mapped = replacement / "runs/member"
+        mapped.mkdir(parents=True)
+        (mapped / "marker").write_text("retained candidate")
+        candidate = bracketing.CalibrationCandidate(
+            relative_path=str(original), manifest_sha256="a" * 64,
+            evidence_sha256="b" * 64, protocol_id="fixture",
+            capture_wall_time_s=1.0, b_fiducial_s="0.02",
+            bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+        )
+        snapshot, _ = _fixture_snapshot([candidate])
+        member = self._member("consumer", records=None)
+        binding = self._binding()
+        inspected = []
+
+        def inspect_candidate(directory, *, runs_root):
+            inspected.append(directory)
+            self.assertEqual((directory / "marker").read_text(), "retained candidate")
+            self.assertEqual(runs_root, replacement)
+            return candidate
+
+        for issuing_counterfactual in (False, True):
+            inspected.clear()
+
+            def bracket_call(*args, **kwargs):
+                self.assertEqual(kwargs["mode"], "read_replay")
+                if issuing_counterfactual:
+                    kwargs["mode"] = "issuing"
+                return bracketing.calibration_bracket_for_bundles(*args, **kwargs)
+
+            with (
+                self.subTest(issuing_counterfactual=issuing_counterfactual),
+                patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(replacement)}),
+                patch.object(run_campaign_module, "calibration_bracket_for_bundles",
+                             side_effect=bracket_call),
+                patch.object(bracketing, "BundleReader") as reader,
+                patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                             side_effect=inspect_candidate),
+                patch.object(bracketing, "evaluate_calibration_bracket",
+                             return_value=({"status": "passed", "b_fiducial_s": 0.02}, ())) as evaluate,
+            ):
+                reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
+                reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
+                result = run_campaign_module._idle_admission_core_evaluation(
+                    [member], binding, whole_window=True, runs_root=self.root,
+                    calibration_ledger_snapshot=snapshot, mode="read_replay")
+                self.assertEqual(inspected, [] if issuing_counterfactual else [mapped])
+                self.assertEqual(len(evaluate.call_args.args[0]), 0 if issuing_counterfactual else 1)
+                self.assertEqual("calibration_ledger_custody_invalid" in result.core["conditions"],
+                                 issuing_counterfactual)
+                self.assertFalse(original.exists())
 
     def test_load_campaign_policy_parses_and_hash_binds_extension(self) -> None:
         path = self._write_extended_sidecar("production")
@@ -10391,6 +10583,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         session_type.assert_called_once_with(
             self.root,
             set(),
+            mode="read_replay",
             consumption_semantics_id=(
                 run_campaign_module.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
             ),

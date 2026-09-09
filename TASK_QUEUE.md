@@ -616,6 +616,15 @@ close A1 or clear `WINDOW-COUNCIL-GATE`: the sibling calibration writer,
 stages 3-4, successor-family freeze transaction, and full C-028 gauntlet
 remain outstanding.
 
+## Ruled follow-ups — 2026-09-08
+
+Registered by the S2 fix ruling; the lead owns the later kernel fold.
+
+| ID | Priority | Lane | Rationale | Acceptance | Authority |
+|---|---|---|---|---|---|
+| BRIDGE-BASELINE-ANCHORS-01 | P2 Next Slice | [AGENT] | READY — S2 synthesis ruling 8: make codex-run-v3 emit the bridge-protocol v1.1 header fragment BASE_HEAD / BASELINE_MANIFEST / BASELINE_DIGEST. Until installed, runner-owned lanes treat the wrapper's baseline snapshot as the launch baseline. | A wrapper invocation emits all three anchors matching its immutable launch snapshot; acceptance inspects the fragment and validates the baseline digest. Owner: bridge runner maintainer. | S2 synthesis ruling 8 (`docs/process_traces/2026-09-08-handoff-redo/99be-coldgate-packet-paper-s2-semantics/13-magistrate-synthesis.md`); S2 F1 fix ruling, 2026-09-08. |
+| WINDOW-LIVENESS-DOCS-01 | P2 Next Slice | [AGENT] | READY — document the active-campaigns registry path under the custody parent, stale-marker semantics, repair owner, and absence of a SIGTERM handler. Docs follow-up only; preserve the liveness guard. | Operating docs name the exact registry path, LIVE/UNKNOWN refusal and stale semantics, the responsible repair owner and procedure, and no SIGTERM handler; verify each against measurement_liveness and campaign/night code. Owner: operator-docs maintainer. | WINDOW-STATUS-GUARD-CENSUS-01 terminal review `docs/process_traces/2026-09-08-handoff-redo/99ap-magistrate-terminal-review-window-liveness.md` (R4); S2 F1 fix ruling, 2026-09-08. |
+
 ## Current Queue
 
 The generated region below is the sole live queue and source of truth for

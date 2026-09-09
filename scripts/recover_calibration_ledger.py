@@ -237,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                 baseline_digest=args.baseline_digest,
                 require_committed_pin=True,
                 verify_custody=True,
+                mode="read_replay",
                 repo_root=REPO_ROOT,
             )
             if snapshot.refusal_reasons:
@@ -268,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
                 baseline_digest=args.baseline_digest,
                 require_committed_pin=True,
                 verify_custody=True,
+                mode="read_replay",
                 repo_root=REPO_ROOT,
             )
             if snapshot.refusal_reasons:

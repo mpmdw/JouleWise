@@ -1,0 +1,72 @@
+G2A-FIRST-WINDOW-01: desk-only dry validation; no custody publication, sudo, hardware probes, or window.
+Sample argv values below are NON-AUTHORIZING; NEEDS_RULING remains.
+
+cwd=/Users/edr/code/JouleWise-wt-g2a-plan
+$ /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python -B /Users/edr/code/JouleWise-wt-g2a-plan/docs/process_traces/2026-09-08-handoff-redo/99cd-g2a-first-window-plan/validate_plan.py --t0 2026-09-10T02:56:00-07:00 --window-max-s 10800 --plan-id DRY-ONLY-g2a-20260910 --custody-root /Users/edr/night-custody/DRY-ONLY-g2a-20260910 --authored-at 2026-09-10T01:56:00-07:00
+PASS NightPlan.from_mapping and canonical writer serialization (memory only)
+PASS D-166 registration sha256=dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265
+PASS generated Phase D matches pinned runbook bytes
+PASS generated G2-a chain syntax (/bin/zsh -n, stdin; no chain file written)
+measurement_root=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+measurement_head=1c83f2af48df5611c7bbf824bec818209c252d0d
+interpreter=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python
+Python 3.13.1
+chain=/Users/edr/night-custody/DRY-ONLY-g2a-20260910/chain.zsh (prospective; not created)
+chain_sha256_path=/Users/edr/night-custody/DRY-ONLY-g2a-20260910/chain.zsh.sha256 (prospective; not created)
+chain_sha256=b9028e8587d305074906cb9a500da1bf6506278c0710e3bdb1c9baff7cc4954f
+G2A_WINDOW_ID=d117-g2a-prefill-probe-20260910
+G2A_ROOT=/Users/edr/JouleWise-shakedown-g2/g2-a-20260910
+t0_local=2026-09-10T02:56:00-07:00 deadman_local=2026-09-10T07:00:00-07:00
+PASS dry validation only; magistrate inputs are not approved and no live gate was evaluated
+exit_code=0
+
+Refusal checks (expected rc=1):
+cwd=/Users/edr/code/JouleWise-wt-g2a-plan
+$ /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python -B /Users/edr/code/JouleWise-wt-g2a-plan/docs/process_traces/2026-09-08-handoff-redo/99cd-g2a-first-window-plan/validate_plan.py --t0 2026-09-10T02:56:00-07:00 --window-max-s 14340 --plan-id DRY-ONLY-g2a-20260910 --custody-root /Users/edr/night-custody/DRY-ONLY-g2a-20260910 --authored-at 2026-09-10T01:56:00-07:00
+PASS NightPlan.from_mapping and canonical writer serialization (memory only)
+stderr: FAIL window plus 300-second courier budget must end strictly before dead-man
+exit_code=1
+cwd=/Users/edr/code/JouleWise-wt-g2a-plan
+$ /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python -B /Users/edr/code/JouleWise-wt-g2a-plan/docs/process_traces/2026-09-08-handoff-redo/99cd-g2a-first-window-plan/validate_plan.py --t0 2026-09-10T02:56:00 --window-max-s 10800 --plan-id DRY-ONLY-g2a-20260910 --custody-root /Users/edr/night-custody/DRY-ONLY-g2a-20260910 --authored-at 2026-09-10T01:56:00-07:00
+stderr: FAIL timestamps require an explicit UTC offset
+exit_code=1
+
+Read-only subset corresponding to preflight.sh (whole script NOT RUN: requires sudo -n -l and mlx imports).
+All subset subprocesses use cwd=measurement clone; no desk checkout import shadowing.
+cwd=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+$ git -C /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a rev-parse HEAD
+1c83f2af48df5611c7bbf824bec818209c252d0d
+exit_code=0
+cwd=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+$ git -C /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a status --porcelain=v1 --untracked-files=all
+?? joulewise.egg-info/PKG-INFO
+?? joulewise.egg-info/SOURCES.txt
+?? joulewise.egg-info/dependency_links.txt
+?? joulewise.egg-info/requires.txt
+?? joulewise.egg-info/top_level.txt
+exit_code=0
+cwd=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+$ git -C /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a branch --show-current
+exit_code=0
+cwd=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+$ /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python -B -c 'import joulewise; print(joulewise.__file__)'
+/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/joulewise/__init__.py
+exit_code=0
+cwd=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+$ /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python -B -m pip freeze --exclude-editable
+exit_code=0
+Comparison: sorted non-comment lock lines versus sorted freeze lines.
+FAIL normalized lock differs
+lock_only=[]
+installed_only=["joulewise==0.1.0"]
+cwd=/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+$ /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/.venv/bin/python -B -c 'from pathlib import Path; from joulewise.calibration_ledger import load_calibration_ledger_snapshot; import sys; r=Path(sys.argv[1]); s=load_calibration_ledger_snapshot(r/"runs/calibration_observation_ledger.jsonl",r/"configs/calibration/calibration_ledger_head.json",repo_root=r,verify_custody=False); print("refusal_reasons="+repr(s.refusal_reasons)); raise SystemExit(1 if s.refusal_reasons else 0)' /Users/edr/JouleWise-measurement-v5-20260910-1c83f2a
+refusal_reasons=('calibration_ledger_missing', 'calibration_ledger_rollback')
+exit_code=1
+SKIP mlx/mlx_lm import (may initialize Metal; no hardware work authorized).
+SKIP process census and machine power/thermal/HID probes (live readiness belongs to the lead).
+SKIP powermetrics executable/privilege checks and full preflight.sh (no sudo or hardware).
+FAIL preflight clean-tree prerequisite: untracked joulewise.egg-info/; clone preserved.
+PASS read-only inspection completed; this is NOT a full preflight PASS.
+validate_plan.py exit_code=0
+PASS positive and refusal checks

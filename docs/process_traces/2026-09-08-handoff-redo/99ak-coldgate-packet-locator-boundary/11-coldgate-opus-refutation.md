@@ -1,0 +1,12 @@
+# Opus contract-lens refutation — locator issuing boundary (2026-09-08, paired with the cold Fable judge)
+
+Verdict: F1 is correctly a blocker — none of the five paths reaches a guard before issuing — and neither disposition 1 nor 3 alone passes the test; adopt 3 (inverted defaults, shared validators caller-parameterised) plus 2 (entry guards on the four issuing entries), pinned by a call-site inventory regression.
+
+Key findings (file:line at ae09cad7):
+1. Disposition 1 is provably incomplete already: joulewise/whole_window.py:512 (AuthenticatedConsumptionSession.__init__) takes the read_replay default and is constructed on issuing paths at scripts/mint_floor_artifact.py:452 and :1089, joulewise/analysis_manifest_v3.py:3695, joulewise/floor_mint_estimator.py:429.
+2. Disposition 2 holds by construction per guarded process (env predicate, process-wide), coverage by review.
+3. Disposition 3 holds by construction against OMISSION only; an affirmative read_replay literal on a SHARED function reachable from issuing re-opens the hole.
+4. None of the five F1 sites reaches any of the seven guarded functions (grep exit 1). build_bracket_binding.py:492 passes a custody store so mode is inert there; :509 is the live hole.
+5. Replay callers needing explicit read_replay under disposition 3: analysis_engine/inputs.py:1630 and :3125, whole_window.py:512, run_campaign.py:4829 (kwargs :4817), recover_calibration_ledger.py:233/:264, check_window_provenance.py:322/:854, mint_floor_artifact.py:969/:1745, ledger-internal :4853/:5242 and the _custody_reasons forward at :2071. Inert (verify_custody False): receipt_oracle.py:143, generate_g2a_probe_inputs.py:675. SHARED and also reachable from issuing (decisive): whole_window.py:512, analysis_engine/inputs.py:1630 (from floor_mint_estimator.py:630/:672), mint_floor_artifact.py:969/:1745.
+6. Empty override acceptable for issuing (refuse-only, no bytes); cure operator confusion with a diagnostic line, not a behaviour change.
+7. Recommended: 3 + 2 with 1 subsumed; the three shared validators take a caller-supplied mode defaulting to issuing; entry guards at mint_floor_artifact.py:2010, mint_floor_artifact_generalized.py:3983, build_bracket_binding.py:416, analysis_manifest_v3.py:3525; pin with an inventory test in the tests/test_authentication_io.py:58,400-430 census shape (every load_calibration_ledger_snapshot / probe_custody call site either omits mode or is in a pinned read_replay allowlist) plus one planted-replacement fixture per issuing entry asserting zero touches on the mapped root.

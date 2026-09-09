@@ -1,0 +1,16 @@
+{
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "plan_id": "<PLAN_ID>",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "t0_epoch_s": "<T0>",
+  "window_max_s": "<WINDOW_MAX_S>",
+  "authored_epoch_s": "<AUTHORED_AT>",
+  "repo_head": "1c83f2af48df5611c7bbf824bec818209c252d0d",
+  "measurement_root": "/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a",
+  "measurement_head": "1c83f2af48df5611c7bbf824bec818209c252d0d",
+  "chain_path": "<NIGHT_ROOT>/chain.zsh",
+  "chain_sha256_path": "<NIGHT_ROOT>/chain.zsh.sha256",
+  "custody_root": "<NIGHT_ROOT>",
+  "registration_path": "/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a/configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
+}

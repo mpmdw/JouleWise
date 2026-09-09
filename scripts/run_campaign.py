@@ -39,7 +39,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -4823,6 +4823,7 @@ def _load_calibration_snapshot_for_evaluation(
         else None
     )
     loader_arguments: dict[str, Any] = {
+        "mode": "read_replay",
         "baseline_sequence": (
             cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
         ),
@@ -5004,6 +5005,7 @@ def _idle_admission_core_evaluation(
     evaluations: Sequence[MemberEvaluation],
     policy_binding: CampaignPolicyBinding,
     *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     whole_window: bool = False,
     runs_root: Path | None = None,
     neg8_drift_bound: Mapping[str, Any] | None = None,
@@ -5261,6 +5263,7 @@ def _idle_admission_core_evaluation(
             [evaluation.bundle_path for evaluation in evaluations],
             policy_binding.policy.calibration_bracketing,
             ledger_snapshot=calibration_ledger_snapshot,
+            mode=mode,
             bracket_binding=calibration_bracket_binding,
             bracket_window_id=bracket_identity.get("window_id"),
             bracket_plan_id=bracket_identity.get("plan_id"),
@@ -6246,6 +6249,7 @@ def _run_whole_window_verdict_locked(
         consumption_session = AuthenticatedConsumptionSession(
             runs_dir,
             {evaluation.bundle_id for evaluation in included},
+            mode="read_replay",
             consumption_semantics_id=consumption_semantics_id,
             calibration_ledger_snapshot=calibration_snapshot,
             calibration_bracket_binding=bracket_binding,
@@ -6288,6 +6292,7 @@ def _run_whole_window_verdict_locked(
     core_evaluation = _idle_admission_core_evaluation(
         included,
         policy_binding,
+        mode="read_replay",
         whole_window=True,
         runs_root=runs_dir,
         neg8_drift_bound=neg8_drift_bound,

@@ -8,6 +8,15 @@ The registry's Submission disposition overrides its historical fill tables.
 TR-01 is a fixed transfer limitation; DS-34 remains an unissued locator hold.
 Prospective counts are design requirements, not observed counts.
 
+D-177 rules omission of empirical Window C characterization—the measured
+checks from the separate instrument-characterization campaign. X13–X16 remain
+`PROPOSED_STOP_FILL` (no proposed result site may be filled), and the P.2
+summary remains `STOP_FILL` (the summary may not be filled). Keep P.2's four methods and registered minimum
+counts as design requirements. Any placement of the D-123 means, the average
+energies assigned to each phase, must carry the adjacent limitation on phase
+attribution (assigning energy to phases) specified in
+[the placements contract](../../contracts/paper_comparison_placements.md).
+
 Migration preparation does not constitute empirical fill. Successor operations
 are PENDING adopted S1/S6 contracts and live campaign-fill adjudication.
 The [migration inventory](successor-migration-inventory.md) records unresolved
@@ -102,3 +111,5 @@ it contributes zero candidates and emits a `backup_root_unavailable` stderr
 line. This replaces the prior unbounded hang. Retained artifacts are byte-pinned;
 a skip fails closed at the pin check if no matching candidate remains. This
 policy grants no desk replay gate.
+
+2026-09-08: Ledger `JOULEWISE_BACKUP_ROOTS` lexically replaces backup roots for replay (empty means absent without probing); `CUSTODY_PROBE_TIMEOUT_S` is 2 seconds, and non-empty overrides refuse issuance; see [the dated custody addendum](../../contracts/calibration_ledger_append.md#2026-09-08-addendum-bounded-custody-locators-and-replay-overrides).

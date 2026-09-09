@@ -13,7 +13,7 @@ result when a required gate or piece of evidence fails.
 honestly as energy assigned to inference phases from interval-average power records, with
 its sensitivity to allowed timing changes, reports both historical model stacks, and keeps
 everything that presumed the unperformed comparison in a separate prospective protocol
-document. The retired dominance language is cleaned up repository-wide. The watchdog is live with a headless magistrate resident, and the first rehearsal night is being prepared. Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
+document. The retired dominance language is cleaned up repository-wide. The watchdog is live with a headless magistrate resident, and the first rehearsal night is armed for the early hours of 2026-09-09. Today's merged work: the paper now reports each per-model energy as a registered mean with a fixed-rule interval (D-179), carries a deterministic claim-side widening sidecar (D-178), and states the characterization omission and phase-attribution limitation plainly (D-177); the window-liveness census and its docs, the calibration-ledger custody probes with a backup-root override, and the D-176 pack-night go-receipt contract are merged or in final review, so the machine can refuse or admit a night without a person present. Next: land the integrated D-176 driver, then the first real diagnostic window (G2-a). Detailed live state is in [`RUN_STATE.md`](RUN_STATE.md).
 That file's generated state-kernel view owns current work selection.
 
 ## Current State
