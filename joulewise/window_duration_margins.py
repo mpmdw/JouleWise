@@ -713,6 +713,7 @@ def _authenticate_b_operative(
         session = AuthenticatedConsumptionSession(
             runs_root,
             referenced_bundle_ids,
+            mode="read_replay",
             evaluation_basis_sha256=evaluation_basis_sha256,
             consumption_semantics_id=MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         )

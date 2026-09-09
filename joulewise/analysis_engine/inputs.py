@@ -19,7 +19,7 @@ import re
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from joulewise.analysis_manifest import (
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V1_SCHEMA,
@@ -1616,6 +1616,7 @@ def bind_floor_artifact_evidence(
     consumption_semantics_id: str | None = None,
     evaluation_basis_sha256: str | None = None,
     _authenticated_floor: AuthenticatedFloorArtifact | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> FloorEvidenceBinding:
     """Bind v2 component values to their named strict evidence roots."""
@@ -1628,6 +1629,7 @@ def bind_floor_artifact_evidence(
             else None
         )
         calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            mode=mode,
             baseline_sequence=(
                 cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
             ),
@@ -1736,6 +1738,7 @@ def bind_floor_artifact_evidence(
                         evaluation_basis_sha256=basis,
                         consumption_semantics_id=consumption_semantics_id,
                         calibration_ledger_snapshot=calibration_ledger_snapshot,
+                        mode=mode,
                     )
                     reasons = whole_window_refusal_reasons(
                         root,
@@ -3095,6 +3098,7 @@ def load_analysis_inputs(
     evidence_roots: Mapping[str, Path] | None = None,
     consumption_semantics_id: str | None = None,
     evaluation_basis_sha256: str | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> LoadedAnalysisInputs:
     """Load analysis-corpus inputs and independently bind floor evidence.
@@ -3123,6 +3127,7 @@ def load_analysis_inputs(
             else None
         )
         calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+            mode=mode,
             baseline_sequence=(
                 cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
             ),
@@ -3197,6 +3202,7 @@ def load_analysis_inputs(
         evaluation_basis_sha256=evaluation_basis_sha256,
         _authenticated_floor=authenticated_floor,
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        mode=mode,
     )
     cleanup_records = _campaign_claim_records(
         runs_root, collection_manifest_id
@@ -3268,6 +3274,7 @@ def load_analysis_inputs(
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         effective_bundle_ids,
+        mode=mode,
         **session_kwargs,
     )
     whole_window_reasons = whole_window_refusal_reasons(

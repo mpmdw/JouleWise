@@ -1,6 +1,7 @@
 """Desk-only migration checks; no suppliers, external corpus, or paper writes."""
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 from pathlib import Path
 import re
@@ -126,6 +127,48 @@ class PaperSuccessorMigrationTests(unittest.TestCase):
         ledger = (PAPER / "protocol/first-use-audit-ledger.md").read_text(encoding="utf-8")
         self.assertEqual(assembled_gloss_failures(article, protocol, ledger), [])
 
+    def test_characterization_reconciliation_preserves_protected_text(self):
+        protocol = (PAPER / "protocol/prospective-comparison-protocol.md").read_text(encoding="utf-8")
+        refusal = (PAPER / "fill-rehearsal/rendered-refusal.md").read_text(encoding="utf-8")
+        # Pins are the exact protected paragraphs at the assigned ac092ccd base.
+        for text, anchor, digest in (
+            (protocol, "The following are registered characterization methods",
+             "1bf367a0ff8f978627fa6713120fe0709adeaa38a866c3018b2b866201500ab6"),
+            (protocol, "The registered minimum basis is",
+             "b106ee627f6bf9641d081511119c356d8ae810b5fb662034150b7d30a82daf97"),
+            (refusal, "## §6 Variant 0 — Window C not yet result-bearing (DEFAULT)\n\n",
+             "d4cbf0283f015b1b1ef003590df5e5e7a57d550c60bd55c5a0588b4ad8c820f9"),
+        ):
+            with self.subTest(anchor=anchor):
+                self.assertEqual(text.count(anchor), 1)
+                paragraph = text.split(anchor, 1)[1].split("\n\n", 1)[0].rstrip("\n")
+                self.assertEqual(hashlib.sha256(paragraph.encode()).hexdigest(), digest)
+
+    def test_adopted_disposition_is_verbatim_at_both_required_sites(self):
+        protocol = (PAPER / "protocol/prospective-comparison-protocol.md").read_text(encoding="utf-8")
+        refusal = (PAPER / "fill-rehearsal/rendered-refusal.md").read_text(encoding="utf-8")
+        p2 = protocol.split("## P.2 Instrument characterization\n", 1)[1].split(
+            "## P.3 Directional comparison and claim gates", 1)[0]
+        variant = refusal.split(
+            "## §6 Variant 0 — Window C not yet result-bearing (DEFAULT)\n", 1)[1]
+        paragraph = p2.strip().split("\n\n")[-1]
+        # Exact lead-supplied Opus decision-5 paragraph, including punctuation.
+        self.assertEqual(hashlib.sha256(paragraph.encode()).hexdigest(),
+                         "185c4884a11aa8cc38a68035f05dbeca775e124d3623eea97a9cca761688916b")
+        self.assertEqual(variant.strip().split("\n\n")[-1], paragraph)
+        self.assertEqual(protocol.count(paragraph), 1)
+        self.assertEqual(refusal.count(paragraph), 1)
+        # P.2 builds these concepts before naming them in its closing paragraph.
+        earlier = " ".join(p2.split(paragraph, 1)[0].split())
+        for construction in (
+            "identical-condition null-test blocks—blocks in which both conditions are the same",
+            "The containment test therefore requires every",
+            "For phase accounting, the residual",
+            "is the signed energy left after subtracting the enclosing request from the two phase energies",
+        ):
+            with self.subTest(construction=construction):
+                self.assertIn(construction, earlier)
+
     def test_synthetic_relocation_fails_even_when_old_home_is_correct(self):
         term = "powermetrics"
         construction = "macOS powermetrics is the power sampler used here."
@@ -152,6 +195,7 @@ class PaperSuccessorMigrationTests(unittest.TestCase):
     def test_inventory_covers_migration_and_first_use_gates(self):
         inventory = (PAPER / "round7/successor-migration-inventory.md").read_text(encoding="utf-8")
         for target in ("S1", "S6", "NEEDS_RULING", "TR-01", "DS-34", "OB-01/OR-01",
+                       "ruled omission (D-177)", "X13–X16", "PROPOSED_STOP_FILL",
                        "prompt 0", "common", "Operands", "Units", "Signs", "Sampling units",
                        "Thresholds", "Figure encodings", "Synthetic labels", "input/output",
                        "replacement", "historical replay", "live fill adjudication",

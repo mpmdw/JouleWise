@@ -86,7 +86,7 @@ NON_EMPIRICAL = {
 # Closed safety vocabulary: changes require an explicit contract/test update.
 SAFETY_VOCABULARY = {
     'Applicability': {
-        '24 admitted bundles / two brackets',
+        'ruled omission (D-177); 24 admitted bundles / two brackets',
         'A only; never infer from a model verdict',
         'ALPHA 1p7b; BETA 8b; ordered strict members, basis, selection and prompt-pin agree',
         'ALPHA small / BETA large; selected L for prefill; floor acceptance required',
@@ -94,14 +94,14 @@ SAFETY_VOCABULARY = {
         'All twelve ratios >=2 and publication acceptance PASS',
         'Comparison successor only',
         'Complete evaluable ratio census; B never means a failed model contrast',
-        'DO_NOT_START; explicit inclusion and design gates required',
+        'ruled omission (D-177); DO_NOT_START; explicit inclusion and design gates required',
         'DO_NOT_START; historical pulse bound is not transfer validation',
-        'DO_NOT_START; retired result remains retired',
+        'ruled omission (D-177); DO_NOT_START; retired result remains retired',
         'DO_NOT_START; separate authorization, equipment, load/synchronization/range; not a comparison dependency',
         'DO_NOT_START; separate prospectively fixed design and explicit inclusion',
         'Every new machine must demonstrate admission; no inherited measured limits',
         'Every submission floor actually rechecked; binder existence and DC/CE parent acceptance do not grant publication prose',
-        'Five disjoint A/B/B/A blocks per magnitude and earlier disjoint comparator; ALPHA/BETA nulls cannot double as test',
+        'ruled omission (D-177); Five disjoint A/B/B/A blocks per magnitude and earlier disjoint comparator; ALPHA/BETA nulls cannot double as test',
         'G2-a through final close; include failures, not merely admitted members',
         'GAMMA; authenticated floor acceptance; prefill contrast ctr-d117-prefill-pL-qwen3-1p7b-vs-qwen3-8b; L authenticated',
         'Illustrative datasets kept separate; never campaign evidence',
@@ -112,13 +112,14 @@ SAFETY_VOCABULARY = {
         'Only if no governing before-comparison stop; retain separately valid model verdicts',
         'Prospective identity disclosure; no measured result',
         'Public release, not local custody paths',
-        'Separate Window C; forty admitted bundles / five lengths; inclusion and two-limb derivation need ruling',
-        'Six designated references, three held-out probes, three sustained-work/cooldown pairs',
+        'ruled omission (D-177); separate Window C; forty admitted bundles / five lengths remain design requirements',
+        'ruled omission (D-177); Six designated references, three held-out probes, three sustained-work/cooldown pairs',
         'Ten complete blocks per contrast; preserve collection order/membership; SYN-04 cannot supply',
         'Twelve evaluable ratios; four absolute common-mode ratios explicitly N/A',
         'Two distinct exhausted-ladder renderings require adoption; diagnostic failure is not production non-admission',
     },
     'Missing evidence': {
+        'RETIRED_FALLBACK under D-174; no placement restored; D-177 adjacent phase-energy limitation required',
         'Keep synthetic label; omit unsupported illustration rather than infer empirical pass/refusal',
         'Remain excluded; no silent restoration',
         'Retain exclusion; historical Window C is no supplier',
@@ -127,6 +128,7 @@ SAFETY_VOCABULARY = {
         'Retain limitation; no result inferred from design',
         'Retain schematic label; empirical annotations need separate X6–X10 bindings',
         'STOP_FILL; methods/diagnostics fallback; no issued refusal inferred',
+        'STOP_FILL; methods/diagnostics fallback; no issued refusal inferred; D-177 adjacent phase-energy limitation required',
         'STOP_FILL; preserve withdrawal/no-characterization prefix; D is not a fourth global outcome',
         'STOP_FILL; retain honest unissued-locators statement',
     },
@@ -189,7 +191,7 @@ def parse_table(text, marker, columns):
         role = family if family in ("NONE", "UNRESOLVED") else "UNREGISTERED"
         if (row["Family"], row["Role"]) != (family, role):
             raise ValueError("family/role mismatch")
-        if row["Adoption"] != "PROPOSED_STOP_FILL":
+        if row["Adoption"] != ("RETIRED_FALLBACK" if x == 5 else "PROPOSED_STOP_FILL"):
             raise ValueError("proposal treated as active")
         if kind == "EMPIRICAL" and row["Supplier"].startswith(
                 ("synthetic_", "schematic_", "fixture.", "fixed_")):
@@ -206,6 +208,8 @@ def check_agreement(placements, registry, custody):
     tables = (parse_table(placements, "PROPOSALS", COLUMNS),
               parse_table(registry, "PROPOSALS", COLUMNS),
               parse_table(custody, "BINDINGS", BINDING_COLUMNS))
+    if any(tuple(table) != tuple(tables[0]) for table in tables[1:]):
+        raise ValueError("placement row-order agreement mismatch")
     if tables[0] != tables[1]:
         raise ValueError("placement/registry agreement mismatch")
     for key, binding in tables[2].items():
@@ -232,6 +236,52 @@ class ComparisonPlacementAgreementTests(unittest.TestCase):
         values[columns.index(column)] = f" {value} "
         texts[table] = texts[table].replace(row, "|" + "|".join(values) + "|", 1)
         return texts
+
+    def test_claim_tables_pin_v2_verdict_resolution_join(self):
+        for text, marker, columns in ((self.texts[0], "PROPOSALS", COLUMNS),
+                                      (self.texts[1], "PROPOSALS", COLUMNS),
+                                      (self.texts[2], "BINDINGS", BINDING_COLUMNS)):
+            rows = parse_table(text, marker, columns)
+            for key in ("CP-X06-table", "CP-X07-table"):
+                with self.subTest(marker=marker, key=key):
+                    self.assertIn("claim_side_bound.v2 and verdict-resolution source-cell join",
+                                  rows[key]["Artifact field"])
+                    self.assertEqual(rows[key]["Adoption"], "PROPOSED_STOP_FILL")
+
+    def test_d177_phase_energy_adjacency_block_exists(self):
+        self.assertIn(
+            '**D-177 phase-energy limitation.** The D-123 mean cells—the average energies\n'
+            'assigned to each phase—are phase-specific results. Every X5 placement below\n'
+            'requires this adjacent note in the successor:\n'
+            '\n'
+            '> Phase attribution—assigning energy to prompt processing or token generation—is\n'
+            '> reported without an instrument phase-accounting characterization, a measured\n'
+            '> check of how those phase energies account for the enclosing request. The\n'
+            '> phase-accounting check registered in P.2 was not run for this paper. Phase\n'
+            '> energies are per-window accounting under the registered boundary rule—energy\n'
+            '> assigned to each phase from its overlap with sampled power records—not\n'
+            '> independently characterized attributions.',
+            self.texts[0],
+        )
+
+    def test_merged_x5_and_characterization_dispositions(self):
+        for text, marker, columns in ((self.texts[0], "PROPOSALS", COLUMNS),
+                                      (self.texts[1], "PROPOSALS", COLUMNS),
+                                      (self.texts[2], "BINDINGS", BINDING_COLUMNS)):
+            rows = parse_table(text, marker, columns)
+            for row in rows.values():
+                with self.subTest(marker=marker, key=row["Placement"]):
+                    if row["Obligation"] == "X5":
+                        self.assertIn(
+                            "five fields defined in paper_reported_energy.md; production member replay pending",
+                            row["Artifact field"],
+                        )
+                        self.assertEqual(row["Missing evidence"],
+                            "RETIRED_FALLBACK under D-174; no placement restored; D-177 adjacent phase-energy limitation required")
+                        self.assertEqual(row["Adoption"], "RETIRED_FALLBACK")
+                    if row["Obligation"] in {"X13", "X14", "X15", "X16"}:
+                        self.assertTrue(row["Applicability"].startswith("ruled omission (D-177); "))
+                        self.assertEqual(row["Adoption"], "PROPOSED_STOP_FILL")
 
     def test_all_three_tables_agree(self):
         check_agreement(*self.texts)

@@ -1,0 +1,9 @@
+_refuse_custody_override_mint() (raises custody_locator_override_mint_forbidden when JOULEWISE_BACKUP_ROOTS is set NON-EMPTY) is called at exactly seven sites, all inside joulewise/calibration_ledger.py at ae09cad7:
+  :276  artifact_hashes
+  :2546 generate_historical_custody_manifest
+  :2606 prepare_historical_import
+  :3460 bootstrap_historical_import
+  :4401 finalize_bracket_session_slot
+  :5234 resume_finalize_bracket_session
+  :5568 finalize_attempt_receipt
+The five replay-mode snapshot loads named by exhibit A (scripts/mint_floor_artifact.py:2036, scripts/mint_floor_artifact_generalized.py:3454, scripts/build_bracket_binding.py:492 and :509, joulewise/analysis_manifest_v3.py:3637) sit in scripts/modules whose own entry functions (mint_floor_artifact, mint_multi_cell_floor_artifact, the binding builder, analysis finalization) do NOT call the guard directly; whether they reach a guarded ledger function AFTER the replay-mode snapshot load is for the judge to verify at this checkout.

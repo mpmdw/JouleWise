@@ -23,6 +23,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
+    _refuse_custody_override_mint,
     CalibrationLedgerSnapshot,
     canonical_json_bytes,
     canonical_sha256,
@@ -414,6 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _refuse_custody_override_mint()
     try:
         args = build_parser().parse_args(argv)
         lexical_root, resolved_root = _custody_root(args.custody_root)

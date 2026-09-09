@@ -43,3 +43,6 @@ CLAUDE.local.md
 docs/process_traces/**/*.codex-observer.jsonl
 docs/process_traces/**/*.status
 docs/process_traces/**/*.log
+
+# setuptools editable-install metadata (the measurement clone gate requires a clean tree; D-127 clone recipe)
+*.egg-info/
