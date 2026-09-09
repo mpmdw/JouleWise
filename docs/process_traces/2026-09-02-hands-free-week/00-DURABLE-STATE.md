@@ -798,3 +798,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   re-run addendum on main (cure now on main; one quiet 3-minute slot), consult 99's three T0 refusal tests, item 1 cold_start provenance,
   CLONE-READINESS-01 agent-side preparation per scout 64 (cut deferred to just before the pack rehearsal); Ed items: powermode question,
   row-9 wording, production v5 re-cut. Codex weekly quota ~80 %.
+- UPDATE 2026-09-09 ~17:00 PDT: NIGHT-REHEARSAL-01 acceptance item 1 CLOSED (derivation 70 + fresh capture 104 with provenance: median
+  5158 ms → COURIER_DEADLINE_S 300 s confirmed). Ruling-44 C3 ADDENDUM-1 recorded on PR #308 (class alone on main: 73 tests OK at 3.38×
+  slack, powermode unchanged; the fixture cure, not the machine state, was the cause). README blurb refreshed (a03ce274). Open desk items:
+  consult 99's three T0 refusal tests; CLONE-READINESS-01 agent prep (deferred by design). Ed items unchanged. Next exact action unchanged
+  (runbook 67 in the 09-10 03:00–06:30 window).

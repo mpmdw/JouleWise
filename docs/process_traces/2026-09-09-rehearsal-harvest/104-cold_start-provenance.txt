@@ -1,0 +1,8 @@
+# cold_start.json capture provenance (NIGHT-REHEARSAL-01 acceptance item 1)
+captured_at_epoch=1788998192 (2026-09-09T16:56:32-0700)
+machine=Eds-MacBook-Pro.local 26.6.2 arm64 (the night-driver machine; MacBook of record)
+script=scripts/measure_claude_cold_start.sh at main a03ce27446e6cfdf6ba3d82100dc1e7abc558577 (blob c1225c6d873ae8e5720abca98e286428abe5f3c3)
+claude_binary=/Users/edr/.local/share/claude/versions/2.1.265 version=2.1.265 (Claude Code)
+invoked_by=headless magistrate activation 2145630c (pid 93094), nothing armed, no quiet window open; timer probe at the time ~3.4x
+script_rc=0 wall_s=34
+derivation: docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md (COURIER_DEADLINE_S = min(600, max(3*median_s, 300)))
