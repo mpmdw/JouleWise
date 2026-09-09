@@ -5205,7 +5205,6 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - CONTINUE — A152 `D165-RELABEL-01`: Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.
 - CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
 - CONTINUE — A154 `PAPER-K`: Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.
-- CONTINUE — A168 `NIGHT-GATE-STUB-CHAIN-01`: Night gate skips the chain/sidecar read for REHEARSAL_STUB plans (driver substitutes the built-in stub); C5 records chain_sha256 null + chain_stub; driver logs refusal reason on the gate verdict line
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

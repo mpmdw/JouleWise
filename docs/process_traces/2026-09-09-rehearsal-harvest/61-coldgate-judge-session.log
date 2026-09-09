@@ -1,0 +1,18 @@
+Ruling written to `docs/process_traces/2026-09-09-rehearsal-harvest/61-coldgate-ruling-second-stub-night.md` in the magistrate worktree. Stopping here as charged.
+
+**Contamination:** the harness injected the global and project CLAUDE.md, the memory index one-liners, and a git-status snapshot. I opened none of the barred files and ruled from the packet plus foreground read-only probes. All eleven packet hashes verified.
+
+**Verdict, Q1: option (c).** A second REHEARSAL_STUB night is required before any DIAGNOSTIC_NO_PACK plan, and it must be the combined night that closes item 5. The ground is the kernel's open item 5, not the cure. On the cure alone the answer would be (b). The cured code is the stub branch, which no real night executes, and the launchd-to-courier chain was already live-proven on 2026-09-09 because the stub driver proceeds identically whether or not the gate refuses. The pre-night dead-man has never been observed, and a misbehaving one would poison a real night's custody directory, so that first observation belongs on a stub.
+
+**Q2:** the headless magistrate may arm it under D-175's eight conditions with the same email-then-arm and disposable checkout pattern. Added conditions: pin the cured head, install after the previous day's t0 hour:minute and before 07:00, fresh plan_id and root, record powermode without gating on it, explicit receipt and log acceptance.
+
+**Q3:** item 1 closes by locating or re-measuring cold_start.json and citing the deadline formula, never while armed. Item 5 closes only by a night installed before 07:00 the morning before, with the stand-down log line and nothing written to the night directory before t0.
+
+**Q4, over-statements found:**
+- The charge's claim that a real night is the first exercise of the cured path. Real nights take the unchanged branch.
+- The claim that tests skip the driver chain. A driver-level in-process test exists.
+- 21i's reading of launchd exit 3 as consistent with the refused receipt. The stub exits 3 unconditionally, so harvest must not read exit 3 as a refusal signal.
+- NIGHT_HANDBACK still says the cure is unmerged. Stale, reconcile before the next arm.
+
+**Not executed:** driver behaviour when the daily trigger fires on a day before t0 for the stub class, and any search for an existing cold_start.json outside the repository. The unit-test run passed, 136 tests, and the launchctl and night-custody probes matched the packet.
+rc=0

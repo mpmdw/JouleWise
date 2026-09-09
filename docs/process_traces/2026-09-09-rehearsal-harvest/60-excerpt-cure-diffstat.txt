@@ -1,0 +1,7 @@
+ docs/contracts/pack_night_go_receipt.md |  92 ++++++++++++------------
+ joulewise/night_gate.py                 | 120 ++++++++++++++++++--------------
+ scripts/run_night.py                    |   7 +-
+ tests/test_gen_state.py                 |   5 +-
+ tests/test_night_gate.py                |  61 ++++++++++++++++
+ tests/test_run_night.py                 |  45 ++++++++++++
+ 6 files changed, 229 insertions(+), 101 deletions(-)

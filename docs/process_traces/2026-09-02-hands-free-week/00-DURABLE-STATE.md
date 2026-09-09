@@ -724,3 +724,15 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   NIGHT_HANDBACK email-then-arm notice for the 01:56–02:15 PDT arm window of the next night; if NO, mark item 6 MET and proceed;
   (2) CLONE-READINESS-01 preparation (agent part: the un-inventoried `JouleWise-rehearsal-<date>-<sha>` clone plan per 99co +
   amendment; production v5 re-cut is Ed-hardware); (3) ruling-56 addenda 1–3 as their triggers fire. Nothing is armed.
+- UPDATE 2026-09-09 ~09:35 PDT: SECOND STUB NIGHT RULED (cold gate 61 + Opus refuter 62, synthesis 65): REQUIRED, combined with
+  acceptance item 5 — plan `rehearsal-20260911` (REHEARSAL_STUB), t0 2026-09-11 02:56:00 PDT (epoch 1789120560), window 900 s,
+  courier deadline 03:16 PDT; repo_head = measurement_head = H = THIS commit (the NIGHT_HANDBACK rewrite for the night; descendant of
+  the cure merge a52810c9); measurement_root `/private/tmp/joulewise-rehearsal-20260911-checkout`; custody `~/night-custody/rehearsal-20260911`.
+  INSTALL WINDOW: 2026-09-10 03:00–06:30 PDT ONLY (after that day's 02:56, before 07:00) so the 07:00 dead-man on 09-10 (epoch 1789048800)
+  fires pre-night and stands down (item 5) and the night fires 02:56 on 09-11. Runbook: `2026-09-09-rehearsal-harvest/67-arm-runbook-rehearsal-20260911.md`.
+  The consolidated NIGHT_HANDBACK notice is sent after H and before any move; Ed's NO on thread 1a0800cdb282c3f1 stands the night down.
+  NEXT EXACT ACTION for whichever headless activation is alive on 2026-09-10 03:00–06:30 PDT: execute runbook 67 (Block A → step 3b census
+  → Block B → arm record 21h-shape → durable pointer → exit); if the window is missed, DO NOT install after 07:00 (that would not exercise
+  item 5) — re-plan for the next day with a new plan_id and a fresh notice. Until then: CLONE-READINESS-01 preparation per scout 64 (the
+  rehearsal-clone cut is deferred to just before the pack rehearsal so the head is fresh; the production v5 re-cut is Ed-hardware);
+  ruling-56 addenda 1–3 owed; item 1 (cold_start.json deadline derivation) is desk work. NOTHING IS ARMED at this write.

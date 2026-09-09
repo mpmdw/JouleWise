@@ -1,0 +1,115 @@
+{
+ "goal": "After the watchdog install handoff, run one fresh REHEARSAL_STUB night through the installed LaunchAgent and night-driver courier before any real plan, then send the stage-1 email before the first diagnostic plan is armed.",
+ "status": "blocked",
+ "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) \u2014 the magistrate does not decide it. Nothing is armed.",
+ "acceptance": {
+  "evidence": [
+   "cold_start.json recorded and COURIER_DEADLINE_S set from its median",
+   "A REHEARSAL_STUB result on a night-results branch produced by a launchd-started driver (not a shell-started one), with verdict REHEARSAL_ONLY",
+   "The courier email for that rehearsal is in Ed's inbox (message id recorded)",
+   "The stage-1 plan email (first armed date; launches without Ed's hand unless he replies NO) is sent before install_night_agent.sh arms a DIAGNOSTIC_NO_PACK plan",
+   "A rehearsal with the agents installed the MORNING BEFORE the armed night, so the pre-night 07:00 dead-man firing is observed standing down without writing anything but a log line (coldgate-d1 R-7 amendment)",
+   "After WATCHDOG-INSTALL-01, one fresh REHEARSAL_STUB night fires through the night driver's own courier before any real plan is armed"
+  ],
+  "pointer": {
+   "json_pointer": "/tasks/NIGHT-REHEARSAL-01/acceptance",
+   "label": "NIGHT-REHEARSAL-01 acceptance",
+   "path": "docs/process/state_kernel.json"
+  },
+  "summary": "The installed watchdog is followed by a fresh REHEARSAL_STUB night through the night driver's courier before any real plan is armed, then the first diagnostic-plan email precedes arming."
+ },
+ "dependencies": [
+  {
+   "evidence": {
+    "label": "rehearsal-20260909 fired and harvested with a finding",
+    "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
+   },
+   "kind": "event",
+   "required": "Fresh post-watchdog REHEARSAL_STUB night and its night-driver courier evidence are harvested before any real plan",
+   "scope": "start",
+   "state": "satisfied",
+   "strength": "hard",
+   "target": "POST-WATCHDOG-REHEARSAL-20260909"
+  },
+  {
+   "evidence": null,
+   "kind": "event",
+   "required": "Cold gate or Ed rules whether the merged gate cure requires a second REHEARSAL_STUB night through the installed LaunchAgent before any DIAGNOSTIC_NO_PACK plan (21i acceptance item 6 was MET conditional on the cure landing; items 1/4/5 remain open)",
+   "scope": "start",
+   "state": "pending",
+   "strength": "hard",
+   "target": "SECOND-STUB-NIGHT-RULING"
+  },
+  {
+   "evidence": {
+    "label": "NIGHT-DRIVER-01 merged (PR 265, gauntlet through delta re-audit 4 + cold gate D1)",
+    "path": "docs/process_traces/2026-09-01-unattended/coldgate-d1-RULING.md"
+   },
+   "kind": "task",
+   "required": "driver merged",
+   "scope": "start",
+   "state": "satisfied",
+   "strength": "hard",
+   "target": "NIGHT-DRIVER-01"
+  },
+  {
+   "evidence": {
+    "label": "NIGHT-GATE-01 merged (PR 264)",
+    "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+   },
+   "kind": "task",
+   "required": "gate merged",
+   "scope": "start",
+   "state": "satisfied",
+   "strength": "hard",
+   "target": "NIGHT-GATE-01"
+  },
+  {
+   "evidence": {
+    "label": "PR #309 merged at a52810c9 (cure for the rehearsal-20260909 night_probe_error refusal)",
+    "path": "docs/process_traces/2026-09-09-rehearsal-harvest/59-pr309-row9-waiver-record.md"
+   },
+   "kind": "task",
+   "required": "gate cure merged before any further stub or real night (receipt refused night_probe_error on rehearsal-20260909)",
+   "scope": "start",
+   "state": "satisfied",
+   "strength": "hard",
+   "target": "NIGHT-GATE-STUB-CHAIN-01"
+  },
+  {
+   "evidence": {
+    "label": "T38: 09-06 install and harvested seats; activation branch 1ae91b4d trace 21, launch 00:51:55 PDT and acknowledgement epoch 1788854136.9",
+    "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
+   },
+   "kind": "task",
+   "required": "the merged watchdog is installed from canonical main and its first activation produces notice.ack",
+   "scope": "start",
+   "state": "satisfied",
+   "strength": "hard",
+   "target": "WATCHDOG-INSTALL-01"
+  }
+ ],
+ "fences": [
+  {
+   "authority": {
+    "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+    "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+   },
+   "rule": "Ed's standing NO overrides any armed night; the arming email precedes arming (cold gate coldgate-e10 (b))"
+  },
+  {
+   "authority": {
+    "label": "MAGISTRATE-RULING-UNATTENDED-STAGE1 (D-169, 2026-09-01, three-seat + cold gate coldgate-e10)",
+    "path": "docs/process_traces/2026-09-01-unattended/MAGISTRATE-RULING-UNATTENDED-STAGE1.md"
+   },
+   "rule": "Receipt classes are honest: REHEARSAL_STUB can never carry verdict GO; TRANSACTION_PACK cannot GO from stage-1 code; DIAGNOSTIC_NO_PACK records C2 as NOT_APPLICABLE with basis no_pack_by_design, never PASS"
+  },
+  {
+   "authority": {
+    "label": "D-127 zero-agent rule",
+    "path": "docs/decision_log.md"
+   },
+   "rule": "Zero-agent fence unchanged: the agent census (/usr/bin/pgrep -lf 'codex, claude, or t3 (alternation)' exit exactly 1, empty stdout) is the driver's first act and repeats every 30 s during the chain; any hit refuses or aborts the night"
+  }
+ ]
+}

@@ -41,39 +41,51 @@ have been assigned to later processes.
 
 ## Purpose of this night
 
-Cut rehearsal checkouts as `JouleWise-rehearsal-<date>-<sha>`; the reviewed
-`JouleWise-rehearsal-` prefix is exact and case-sensitive. Replace `<sha>` in
-examples with the reviewed checkout commit. The clone must NOT be listed in
-`configs/production_custody_inventory.json` and must sit at a head carrying
-that file. For T0_REHEARSAL it must also be disjoint from every inventoried
-measurement root (no equality or containment in either direction).
+Plan `rehearsal-20260911`, class `REHEARSAL_STUB`, is planned for
+2026-09-11 at 02:56:00 PDT (`t0`, epoch 1789120560), with a 900-second
+window. The courier deadline is `t0 + 900 + 300`, epoch 1789121760,
+03:16:00 PDT that morning. The driver runs its built-in stub,
+`sleep 2; echo REHEARSAL`: no pack, no model, no measurement, no sudo.
+This notice describes the planned night; the arm record establishes
+whether installation happened.
 
-Plan `rehearsal-20260909`, class `REHEARSAL_STUB`, armed by the headless
-magistrate (activation 1ef89702, spawned by the relaunch watchdog on
-2026-09-08 00:51:55 PDT) for 02:56 local on 2026-09-09 with a 900 s
-window, inside the 02:45–03:30 belt. It is the fresh post-watchdog
-rehearsal the state kernel requires before any real plan
-(`NIGHT-REHEARSAL-01`, last acceptance item). The chain is the driver's
-built-in stub (`sleep 2; echo REHEARSAL`); no pack, no model, no
-measurement, no sudo. The plan is v2: `repo_head` and `measurement_head`
-both pin THIS commit (the one that rewrote this file), and
-`measurement_root` is a disposable detached checkout of this commit at
-`/private/tmp/JouleWise-rehearsal-20260909-<sha>`, used only by this
-stub and removed with the plan root before any real plan; the measurement
-checkout of record (`/Users/edr/JouleWise-measurement-20260813`) is
-untouched. Both night agents are installed FROM that checkout. Ed was
-emailed the arming notice before the arm (thread `1a0800cdb282c3f1`, with
-the exact pins in its follow-up); a NO on that thread stands the night
-down. Expected: `result.json` verdict `REHEARSAL_ONLY`, chain exit 0,
-courier deadline `t0 + 900 + 300` = 03:16 PDT. A receipt refusing
-`night_refused_agent_present` is acceptable for a stub (it can never
-carry GO); any other refusal is a finding. If the agents were installed
-before 07:00 on 2026-09-08, that morning's dead-man firing stands down
-with one `night.log` line (the R-7 observable); otherwise this night does
-not repeat that case. The design ruling and bench pass are in
-`docs/process_traces/2026-09-02-hands-free-week/21b-rehearsal-20260909-arm-plan.md`.
+This second stub night combines two checks for `NIGHT-REHEARSAL-01`.
+Installing both agents on **2026-09-10 between 03:00 and 06:30 PDT**
+lets the 07:00 dead-man fire that morning (epoch 1789048800), before
+the night, and stand down with one line in `night.log` and nothing
+written into `night/` by that firing. That is acceptance item 5's
+R-7 observation. Installing after that day's 02:56 also keeps the night
+agent from firing a day early. The night then fires at 02:56 on 09-11;
+item 6 is re-satisfied only if its receipt is not refused. An
+agent-present refusal can close item 5 only, not item 6.
 
-## Executed — reconciliation dated 2026-09-09 (activation 628c2eed; harvest record 21i)
+`repo_head = measurement_head = H`, where H is **this commit**, the main
+commit that rewrites this handback for this night, descended from the
+cure merge `a52810c9`. The disposable detached checkout at H is
+`/private/tmp/joulewise-rehearsal-20260911-checkout`. Both night agents
+are installed from it. It is used only by this stub and removed with
+the plan root after harvest; it is never reused for a real plan.
+
+The consolidated notice with these pins is sent after commit H and
+before the plan is moved into place. Ed's NO on the notice thread
+stands the night down. The arming activation exits after recording the
+arm. The watchdog's exit boundary is 02:31:00 PDT on 09-11
+(epoch 1789119060, `t0 − 25 minutes`); its relaunch belt is
+02:45–03:30 PDT. Power source, powermode and the timer probe are
+recorded at arm time. Powermode is recorded, not gated, for this stub;
+a green stub says nothing about the capture-timeout seam.
+
+These pins and acceptance conditions come from the
+[magistrate synthesis](../process_traces/2026-09-09-rehearsal-harvest/65-magistrate-synthesis-second-stub-night.md).
+The [arm runbook](../process_traces/2026-09-09-rehearsal-harvest/67-arm-runbook-rehearsal-20260911.md)
+gives the command sequence.
+
+## Executed — rehearsal-20260909 (history)
+
+Reconciliation recorded 2026-09-09 by activation 628c2eed (harvest record 21i).
+The following is the dated record as written then; its pending-cure and
+section references describe that earlier handback. The cure has since
+merged at `a52810c9`, as recorded in the synthesis for the new night.
 
 The night described above was armed by headless activation `784a764e` (not `1ef89702`, which prepared it) with the frozen triple
 (`rehearsal-20260909`, `/private/tmp/joulewise-rehearsal-20260909-checkout`, `ae8f074f`) — the checkout name differs from the
@@ -89,30 +101,40 @@ between-nights template text; whether one should exist is referred to the cold g
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/rehearsal-20260909/night/` —
+- Custody root: `/Users/edr/night-custody/rehearsal-20260911`; records in `night/` —
   `result.json` (expected verdict `REHEARSAL_ONLY`, `chain_exit_code` 0),
   `receipt.json` or `refusal.json` as `result.json` directs,
   `chain.started`, `chain.exited`, `censuses.jsonl`, `courier.sent`,
   `courier.json`.
-- Driver log: `/Users/edr/night-custody/rehearsal-20260909/night.log`
-  (and the dead-man stand-down line if the 2026-09-08 07:00 firing
-  preceded the night).
-- Results branch: `night-results/20260909` on `origin`, if the driver's
+- Driver log: `/Users/edr/night-custody/rehearsal-20260911/night.log`.
+  At harvest, look for the 2026-09-10 07:00 dead-man stand-down line
+  before the 09-11 `night gate verdict=` line.
+- Results branch: `night-results/20260911` on `origin`, if the driver's
   push succeeded — verify, do not presume.
 
-## Next lane
+## Next lane for rehearsal-20260911
 
 The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260909` / `/private/tmp/JouleWise-rehearsal-20260909-<sha>`
+`rehearsal-20260911` / `/private/tmp/joulewise-rehearsal-20260911-checkout`
 / this commit) harvests `result.json`, the receipt or refusal, the courier
 message id and the results-branch evidence, records them under
-`NIGHT-REHEARSAL-01`, then runs
-`scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260909/night_plan.json --hour 2 --minute 56 --uninstall`
+`NIGHT-REHEARSAL-01`. Acceptance requires `receipt.json` verdict
+`REHEARSAL_ONLY`, with C5 recording `chain_stub: built_in_stub_by_design`
+and null `chain_sha256` and `expected_chain_sha256`. The log must show
+the pre-night dead-man standing down, with nothing in `night/` from
+that firing. A receipt refusing `night_refused_agent_present` is
+acceptable only for item 5; item 6 still needs a non-refused night.
+The stub's launchd exit status 3 is not a receipt-refusal signal.
+
+After preserving the evidence, the magistrate runs
+`scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260911/night_plan.json --hour 2 --minute 56 --uninstall`
 FROM the stub checkout, removes the stub checkout (`git worktree remove`)
 and the plan root before any real plan, and then sends the stage-1 plan
 email to Ed before any `DIAGNOSTIC_NO_PACK` plan is armed. Accept only
 `night_refused_agent_present` as a receipt refusal; cure any other cause
 before re-arming; never re-arm the same plan on the same signature twice.
+Item 1, the `cold_start.json` deadline derivation, remains desk work
+separate from this night.
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's
 `measurement_head`; never install the two night agents from the
