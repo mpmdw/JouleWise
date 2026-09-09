@@ -595,3 +595,112 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - STAND-DOWN VOID (later on 2026-09-08): Ed resumed joulewise-53 (pid 83953) for daytime work; fresh stand-down promised by
   1788941700 (01:15 PDT 09-09), fallback: absence judged only by `ps -p 83953` after 1788942600. Message verbatim:
   `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`. Hold the arm while that pid lives.
+- FRESH STAND-DOWN of joulewise-53 received (verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-standdown-2.txt`; main
+  `83ab38ed`). Precondition (b) met; pid 83953 presence is judged by `ps -p 83953` in the window. Arm record follows in this trace.
+- RELAYED (second-hand via joulewise-53; verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-ed-directive-daytime-windows.txt`):
+  Ed's directive that quiet windows may run at any hour. For planning AFTER the rehearsal harvest (CLONE-READINESS-01, then G2-a at the
+  earliest census-clean time); every existing gate (readiness census, email-then-arm lead times, Ed's NO, cold gate 99ey's ordering,
+  all-agents stand-down per window) unchanged. Not applied tonight.
+- RELAYED low-priority daytime task (verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-remote-control-task.txt`): after the
+  rehearsal harvest and never during an armed window, test once whether `claude remote-control` starts under a pty wrapper and email Ed
+  the link or the negative result; stop it before any arm sequence (it is a claude-class process the census refuses).
+
+## ARMED — rehearsal-20260909 (activation 784a764e; record 21h; artifacts `21b-rehearsal-20260909-bench/arm-*`)
+
+- Plan published (`arm-night_plan.json`), both night agents installed from `/private/tmp/joulewise-rehearsal-20260909-checkout` at
+  `ae8f074f`; foreign-agent-session gate clear and informational list empty, while the production census still listed this activation's own codex MCP pair 83123/83143 (`arm-blockB-output.txt`; fidelity refuter 05 F3). Frozen triple: (`rehearsal-20260909`, that checkout, `ae8f074f`).
+- The arming activation exits before 1788946260. NEXT EXACT ACTION for the relaunched magistrate: 21h §Morning after (harvest,
+  NIGHT-REHEARSAL-01 record, `--uninstall` from the stub checkout, remove checkout + plan root), then the relayed daytime lanes above.
+  This branch (`bookkeeping/2026-09-09-rehearsal-arm-record`, PR open) is merged by the successor with its ledger after the harvest.
+
+## 2026-09-09 activation 8844a3d0 (spawned epoch 1788944861, 02:07:41 PDT; events.jsonl seq 12) — pre-window relaunch; no work; stand-down before the plan span
+
+- Launched by the watchdog after 784a764e's clean exit at 1788944349 (seq 9) and the 300 s backoff; predicates clear at 02:07:41.
+  `notice_pending` was empty. Heartbeat written (pid 81330 from the lock), launch email on the arm thread `1a0800cdb282c3f1`:
+  Gmail `1a0856f16a4e6142`; `notice.ack` written for this activation.
+- Observed on disk, not restated: rehearsal-20260909 ARMED (plan v2 authored 1788944188, t0 1788947760 = 02:56 PDT, window 900 s,
+  root `/private/tmp/joulewise-rehearsal-20260909-checkout` @ `ae8f074f`); `com.joulewise.night` and `com.joulewise.night.deadman`
+  loaded; no NO on the arm thread (seven messages, all magistrate-sent); no `standdown.request`; PR #308 OPEN and MERGEABLE.
+- Decision: no new lane started. The watchdog requests stand-down at t0 − 25 min (1788946260, 02:31 PDT) and the 02:45–03:30 belt
+  fences relaunch; a magistrate alive at t0 would be the only foreseeable cause of `night_refused_agent_present`. This activation
+  spawned no Codex child and exits before 1788946260 after the stand-down email (its last external act).
+- NEXT EXACT ACTION (post-belt successor, ~03:30 PDT or later): 21h §Morning after — harvest
+  `/Users/edr/night-custody/rehearsal-20260909/night/{result.json,receipt.json,refusal.json,courier.sent,courier.json}` + `night.log`;
+  verify `night-results/20260909` on origin; record under NIGHT-REHEARSAL-01; `--uninstall` from the stub checkout; remove the stub
+  checkout and plan root; complete PR #308's ledger and merge under the normal gates. Then CLONE-READINESS-01 → G2-a inputs at the
+  earliest census-clean time; the remote-control test between windows. Accept only `night_refused_agent_present` as a receipt refusal.
+
+## 2026-09-09 activation b1e2fd2f (spawned epoch 1788945764, 02:22:44 PDT; events.jsonl seq 16; watchdog attempt 4) — second pre-window relaunch; no work; stand-down before the plan span
+
+- Launched by the watchdog after 8844a3d0's clean exit at 1788945287 (seq 13) and the 300 s backoff; predicates clear at 02:22:44.
+  Clean exit of this activation at 1788945977 (02:26:17 PDT, seq 17, before the 02:31 stand-down deadline) — source:
+  `21b-rehearsal-20260909-bench/night-harvest/watchdog-events-excerpt.txt` (read-only excerpt, Opus review 06 N6).
+  `notice_pending` was empty. Heartbeat written (pid 81638 from the lock), launch email on the arm thread `1a0800cdb282c3f1`:
+  Gmail `1a0857c5399e48b2`; `notice.ack` written for this activation.
+- Verified on disk at 1788945892 (02:24:52 PDT), read-only: plan v2 `rehearsal-20260909` (t0 1788947760, window 900 s, root
+  `/private/tmp/joulewise-rehearsal-20260909-checkout` HEAD `ae8f074f` = plan `measurement_head`, tree clean); `night/` empty (not
+  fired); `com.joulewise.night`, `com.joulewise.night.deadman`, `com.joulewise.magistrate` loaded; no `standdown.request`, no `STOP`;
+  production census = this session's own codex mcp-server pair only (81651/81664); canonical main `83ab38ed` untouched.
+- Not verifiable from a headless session: a NO on the arm thread (send-only Gmail tool). Stated to Ed in the launch email.
+- Decision: no new lane; no Codex child spawned. Same reasoning as 8844a3d0 — the stand-down request lands at 1788946260 (02:31 PDT),
+  the 02:45–03:30 belt fences relaunch, and a magistrate alive at t0 would cause `night_refused_agent_present`. Observation for the
+  successor (not a rule change): the watchdog relaunches into the pre-window gap twice per armed night; whether a plan-aware launch
+  fence belongs in the watchdog goes to the cold gate or Ed, not to this activation.
+- NEXT EXACT ACTION unchanged: 21h §Morning after by the post-belt successor (~03:30 PDT or later) — harvest
+  `/Users/edr/night-custody/rehearsal-20260909/night/*` + `night.log`; verify `night-results/20260909` on origin; record under
+  NIGHT-REHEARSAL-01; `--uninstall` from the stub checkout; remove stub checkout + plan root; complete PR #308's ledger and merge
+  under the normal gates; then CLONE-READINESS-01 → G2-a inputs at the earliest census-clean time; remote-control test between windows.
+
+## 2026-09-09 activation 628c2eed (spawned epoch 1788949981, 03:33:01 PDT; events.jsonl seq 22–23; watchdog attempt 5) — post-belt harvest; agents uninstalled; nothing armed
+
+- Launched after the 02:45–03:30 belt with predicates clear. `notice_pending` carried `transition-20-hold_census` (the night courier's `claude -p` process, pid 82106 in the
+  watchdog census stdout, `night-harvest/watchdog-events-excerpt.txt` seq 19; pid 82210 is the pid recorded in its heartbeat and sent marker (`night-courier.heartbeat`, `night-courier.sent`);
+  FENCED→HOLD_CENSUS→FENCED). Heartbeat written (pid 82637), launch
+  email `1a085bc57dbfabbe` on thread `1a0800cdb282c3f1`, `notice.ack` written.
+- rehearsal-20260909 FIRED and was HARVESTED: record `21i-rehearsal-20260909-harvest-record.md`, byte copies under
+  `21b-rehearsal-20260909-bench/night-harvest/`. result REHEARSAL_ONLY / chain rc 0 / results branch `night-results/20260909` @
+  `a84e0f7f` on origin / courier email `1a08599a4ff4d005`. FINDING: receipt REFUSED `night_probe_error` (gate reads `chain.zsh` for the
+  stub class; the stub arm never writes it) — cure lane NIGHT-GATE-STUB-CHAIN-01; never re-arm this plan on this signature.
+- Documented uninstall done from the stub checkout (rc 0); stub checkout worktree and plan root removed after the harvest. Only
+  `com.joulewise.magistrate` remains loaded. NOTHING IS ARMED; the frozen-checkout list for the next relaunch prompt is the canonical
+  repo only.
+- NEXT EXACT ACTION: 21i §Next exact actions (1) NIGHT-GATE-STUB-CHAIN-01 seat + review + PR; (2) PR #308 ledger + merge under the
+  normal gates; (3) CLONE-READINESS-01 preparation → G2-a inputs; remote-control test between windows. Whether the cure requires a
+  second stub night before G2-a is a cold-gate/Ed ruling, not this activation's.
+
+## 2026-09-09 activation 2145630c (spawned epoch 1788952084, 04:08:04 PDT; events.jsonl seq 26–27; watchdog attempt 6) — harvest bookkeeping landed; cure reviewed; nothing armed
+
+- Launched after activation `628c2eed` exited cleanly at 04:02:54 PDT (seq 24) with two Astra seats and one delta refuter still in
+  flight; `notice_pending` was empty. Heartbeat written (pid 93094); launch email `1a085dce5c24086d` on thread `1a0800cdb282c3f1`;
+  `notice.ack` written. ADDRESS ANOMALY recorded: 628c2eed's two emails (`1a085bc57dbfabbe`, `1a085cd2a5d5a2d5`) went to
+  `claude.ai.copper531@passmail.net`, not the address of record (`claude2.glaring610@passmail.net`) used by the other ten messages on the
+  thread (inventory: `2026-09-09-rehearsal-harvest/49-gmail-thread-inventory-1a0800cdb282c3f1.txt`); this activation re-sent their substance to the address of record and changed no configuration.
+- Preserved and finished 628c2eed's in-flight work: harvest traces committed (`e348a2c3`); kernel-fold seat output (T38d
+  checkpoint, `63a2739f` on `bookkeeping/2026-09-09-kernel-fold`) completed at the bench (EXPECTED_IDS count 157, cure head
+  repin) and cherry-picked into this branch; doc-fix round 4 re-seated as 27b and cherry-picked (`191f4c43`); delta refuter 23b
+  re-run for the cure (clean, same signature none).
+- PR #308 gate shape: Opus final-head contract review 30 (3 should-fix, 4 nits, no blocker) → standing escalation trigger honoured
+  (cross-document drift class seen in rounds 3 and 5): consult 33 (Astra high) enumerated every repeated fact across seven
+  documents and supplied a mechanical fact guard (34, 34b) → fix round 5 at the bench (`5d13d0e6`) → delta 36 clean, same
+  signature none → full-suite replay alone (record 38) → terminal review 37.
+- PR #309 (NIGHT-GATE-STUB-CHAIN-01, head `5db38b58`): delta 23b clean; magistrate terminal review 31 CLEAN (+ addendum A6); CI green
+  on 5db38b58 except the by-design `gate-ledger` row check; merge follows #308 so its trace paths exist at its head.
+- REPLAY VERDICT (rule-11 cold gate 44 + Opus refuter 45): the #308 replay alone recorded 5636 tests, 4 failures, all in
+  `tests.test_run_campaign.IdleAdmissionCoreVerdictTests` (shard 4), pre-existing on the merge base, CI green. Judge: merge under
+  C1–C5 (verbatim tail, independence line, addendum obligation, no precedent, fixture lane). Refuter: cause REFUTED (same test OK on
+  retry with powermode 1 still set) — flaky wall-clock coupling, knife-edge 3.5× timeout margin; wanted a green re-run before merge.
+  Magistrate synthesis: three class re-runs stayed red (4/4/3), so the merge proceeds under the judge's conditions with the refuter's
+  corrections applied and its dissent recorded (42 addendum, 37). Lanes registered: FIXTURE-TIMEOUT-WALLCLOCK-01 (P2),
+  POWERMODE-PREFLIGHT-RECORD-01 (P1, record-only; the no-real-night-under-powermode-1 constraint is a RECOMMENDATION to Ed).
+  Emails to Ed: launch `1a085dce5c24086d`; Low-Power-Mode action `1a086405105b8214` (attribution since withdrawn; correction sent).
+- NOTHING IS ARMED. launchctl lists only `com.joulewise.magistrate`; no plan root exists; the frozen list is the canonical repo.
+  The second-stub-night question stays `needs_ruling` (cold gate or Ed).
+- Process observation for the cold gate (lead-reported, not independently evidenced): 628c2eed's clean exit at 04:02:54 (events seq 24)
+  coincided with seats 23/25/27 still in flight (their .status files read RUNNING; no codex process survived at 04:10), which the lead
+  reads as the activation's turn ending and killing its background children; this activation, by its own account, blocked on every
+  child before ending a turn.
+- NEXT EXACT ACTION: (1) merge PR #308 under the D-072 gate shape once CI is green on its final head; (2) merge origin/main into
+  `fix/2026-09-09-night-gate-stub-chain`, replay alone, fill PR #309's ledger, merge; (2b) per ruling 44 Q2/A1–A6 and the refuter's stricter position, #309 needs its own replay on the integration tree after main
+  moves; EXACTLY the four named failures and nothing else is the judge's door (A1; a subset is not authorized), rc=0 the refuter's; record whichever obtains; (3) CLONE-READINESS-01 preparation (the
+  un-inventoried `JouleWise-rehearsal-<date>-<sha>` clone per 99co + amendment) → G2-a inputs (NEEDS_RULING after rehearsal
+  acceptance); the second-stub-night ruling is a cold gate, not this activation's.

@@ -1,0 +1,182 @@
+1788944252 2026-09-09 01:57:32 PDT
+block B executed verbatim from 21b (extracted to /private/tmp/mag784/blockB.zsh); NO check on thread 1a0800cdb282c3f1 done immediately before (six messages, all sent by the magistrate)
+foreign agent sessions (cond. 5, must be empty): []
+informational matches (Ed's ChatGPT.app tree / substring false positives): []
+production agent_census argv output (pgrep exit 0) — recorded, not gating the arm:
+83123 node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+83143 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+moved /Users/edr/night-custody/rehearsal-20260909/night_plan.json
+gui/501/com.joulewise.night = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /usr/bin/env
+	arguments = {
+		/usr/bin/env
+		python3
+		/private/tmp/joulewise-rehearsal-20260909-checkout/scripts/run_night.py
+		run
+		--plan
+		/Users/edr/night-custody/rehearsal-20260909/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.265
+	}
+
+	working directory = /private/tmp/joulewise-rehearsal-20260909-checkout
+
+	stdout path = /Users/edr/night-custody/rehearsal-20260909/night/launchd.night.out
+	stderr path = /Users/edr/night-custody/rehearsal-20260909/night/launchd.night.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.4N8vPsY7xo/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night
+	}
+
+	domain = gui/501 [100018]
+	asid = 100018
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.268435473 => {
+			keepalive = 0
+			service = com.joulewise.night
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 56
+				"Hour" => 2
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+gui/501/com.joulewise.night.deadman = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /usr/bin/env
+	arguments = {
+		/usr/bin/env
+		python3
+		/private/tmp/joulewise-rehearsal-20260909-checkout/scripts/run_night.py
+		dead-man
+		--plan
+		/Users/edr/night-custody/rehearsal-20260909/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.265
+	}
+
+	working directory = /private/tmp/joulewise-rehearsal-20260909-checkout
+
+	stdout path = /Users/edr/night-custody/rehearsal-20260909/night/launchd.deadman.out
+	stderr path = /Users/edr/night-custody/rehearsal-20260909/night/launchd.deadman.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.4N8vPsY7xo/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night.deadman
+	}
+
+	domain = gui/501 [100018]
+	asid = 100018
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.deadman.268435474 => {
+			keepalive = 0
+			service = com.joulewise.night.deadman
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 0
+				"Hour" => 7
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+validated pins: repo_head=ae8f074ffa554707a9eac95995ab8ec03235d118 measurement_root=/private/tmp/joulewise-rehearsal-20260909-checkout measurement_head=ae8f074ffa554707a9eac95995ab8ec03235d118
+-	0	com.joulewise.night
+-	0	com.joulewise.night.deadman
+blockB rc=0
+1788944253 2026-09-09 01:57:33 PDT
+--- post-arm verification:
+-	0	com.joulewise.night
+-	0	com.joulewise.night.deadman
+plan file: -rw-------@ 1 edr  wheel  761 Sep  9 01:56 /Users/edr/night-custody/rehearsal-20260909/night_plan.json
+custody root listing:
+total 8
+drwxr-xr-x@ 4 edr  staff  128 Sep  9 01:57 .
+drwxr-xr-x@ 7 edr  staff  224 Sep  9 01:57 ..
+drwxr-xr-x@ 2 edr  staff   64 Sep  9 01:57 night
+-rw-------@ 1 edr  wheel  761 Sep  9 01:56 night_plan.json
+staging/scratch removed: staging=gone scratch=gone
+LaunchAgents plists:
+-rw-r--r--@  1 edr  staff  1157 Sep  6 03:08 com.joulewise.magistrate.plist
+-rw-r--r--@  1 edr  staff  1368 Sep  9 01:57 com.joulewise.night.deadman.plist
+-rw-r--r--@  1 edr  staff  1352 Sep  9 01:57 com.joulewise.night.plist

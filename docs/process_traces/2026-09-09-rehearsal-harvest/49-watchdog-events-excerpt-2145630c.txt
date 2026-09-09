@@ -1,0 +1,30 @@
+{"epoch_s": 1788951774.46373, "from": "ACTIVE", "kind": "transition", "reason": "clean activation exit", "schema": "joulewise.magistrate_event.v1", "sequence": 24, "to": "IDLE"}
+{"epoch_s": 1788951782.993808, "from": "IDLE", "kind": "transition", "reason": "backoff has not expired", "schema": "joulewise.magistrate_event.v1", "sequence": 25, "to": "BACKOFF"}
+{"epoch_s": 1788952084.190201, "from": "BACKOFF", "kind": "transition", "reason": "all launch predicates clear", "schema": "joulewise.magistrate_event.v1", "sequence": 26, "to": "LAUNCHING"}
+{"epoch_s": 1788952084.20008, "from": "LAUNCHING", "kind": "transition", "reason": "spawned activation 2145630c-52cd-475a-a392-dcbded2907c6", "schema": "joulewise.magistrate_event.v1", "sequence": 27, "to": "ACTIVE"}
+{"activation_id": "2145630c-52cd-475a-a392-dcbded2907c6", "epoch_s": 1788952246.510728, "kind": "notice_acknowledged", "notice_ids": [], "schema": "joulewise.magistrate_event.v1"}
+== heartbeat (read-only copy at 1788960087)
+pid=93094
+activation_id=2145630c-52cd-475a-a392-dcbded2907c6
+ts=1788952099
+== notice.ack
+
+== state.json resident_session (read-only excerpt)
+{
+ "activation_id": "2145630c-52cd-475a-a392-dcbded2907c6",
+ "attempt": 6,
+ "notice_pending": [],
+ "resident_session": {
+  "activation_id": "2145630c-52cd-475a-a392-dcbded2907c6",
+  "activation_spawn_epoch_s": 1788952084.20008,
+  "binary_symlink": "/Users/edr/.local/bin/claude",
+  "binary_version": "2.1.265 (Claude Code)",
+  "launch_epoch_s": 1788952084.20008,
+  "pid": 93094,
+  "schema": "joulewise.magistrate_lock.v1",
+  "start_time": "Wed Sep 9 04:08:04 2026",
+  "status": "ACTIVE",
+  "supervisor_pid": 93091
+ },
+ "transition_seq": 27
+}

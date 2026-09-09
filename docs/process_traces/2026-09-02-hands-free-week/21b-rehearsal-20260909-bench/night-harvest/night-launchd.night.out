@@ -1,0 +1,18 @@
+Courier duties are complete. Nothing further is pending on my side.
+
+**Outcome.** The email to Ed was accepted and `courier.sent` is written under the custody root. The driver saw the heartbeat, recorded the send, and exited.
+
+**What the night produced**
+
+| Field | Value |
+|---|---|
+| Verdict (result.json) | REHEARSAL_ONLY |
+| Chain exit code | 0 |
+| Receipt verdict | REFUSED, reason `night_probe_error` |
+| Results branch | `night-results/20260909`, verified on origin at d4d494ec |
+| Watchdog | FENCED, age 199.552 s at build, alive |
+| Email id | 1a08599a4ff4d005 |
+
+**The finding.** The receipt refusal is not the one acceptable stub refusal, so it counts as a finding that must be cured before any real plan is armed. The gate in `joulewise/night_gate.py` reads the chain script for every receipt class, while the driver substitutes its built-in stub and never writes that file. The gate refused on the missing file, and the driver then overrode the refusal because the class is a rehearsal. The existing gate test did not catch this because its fake probe source serves chain text. I wrote the root cause, two cure options with a recommendation, and the needed test shape to `night/courier.finding.md` in the custody root for the magistrate to harvest.
+
+**Next lane.** The remaining steps belong to the relaunched magistrate, which the watchdog will spawn once the plan span ends. They include harvesting the records into NIGHT-REHEARSAL-01, uninstalling the two night agents from the stub checkout, removing the stub checkout and plan root, landing the gate cure, and sending Ed the stage-1 plan email. I did not run the uninstall or removal steps. This session runs inside the checkout being removed, and those actions are the magistrate's to take after harvest.

@@ -320,6 +320,9 @@ checkout/scratch/staging paths this attempt created (delta N3); if an existence 
   `pass3`-adjacent artifact `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`, with `ps -p 83953` at capture). Hold the arm
   while pid 83953 lives; a fresh stand-down message is promised by 1788941700 (01:15 PDT 2026-09-09); if none has arrived by
   1788942600 (01:30 PDT), its absence is judged ONLY by `ps -p 83953` showing the pid gone. Precondition (b) is therefore OPEN again.
+- FRESH STAND-DOWN received (message verbatim: `21b-rehearsal-20260909-bench/msg-joulewise-53-standdown-2.txt`, with `ps -p 83953`
+  at capture; census at that instant: `pass3-standdown-2-census.txt`). Precondition (b) is met again; whether pid 83953 is gone is
+  judged only by `ps -p 83953` inside the window, per the ruling.
 - Condition 5 ruling by the synthesis author (recorded in 21c §Ruling of record on condition 5, with a bracketed D6-2 note): agent SESSIONS count;
   Ed's ChatGPT.app helpers do not; the regex list is informational; the night is judged by `joulewise.night_gate.agent_census`
   (`pgrep -lf "codex|claude|t3"`, night_gate.py:38); ask Ed to quit the ChatGPT desktop app before the belt (02:45 PDT = epoch 1788947100) for a clean

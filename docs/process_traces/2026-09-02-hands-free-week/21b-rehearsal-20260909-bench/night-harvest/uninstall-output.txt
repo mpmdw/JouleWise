@@ -1,0 +1,8 @@
+== uninstall run at 1788950218 Wed Sep  9 03:36:58 PDT 2026 from /private/tmp/joulewise-rehearsal-20260909-checkout HEAD ae8f074ffa554707a9eac95995ab8ec03235d118
+rc=0
+== launchctl after
+-	0	com.joulewise.magistrate
+== plists after
+-rw-r--r--@  1 edr  staff  1157 Sep  6 03:08 com.joulewise.magistrate.plist
+== custody root untouched?
+      17
