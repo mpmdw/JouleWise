@@ -764,3 +764,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   head 6881709d): Astra xhigh seat 85 timed out at report_capture (no envelope; contract: protocol failure, work preserved and audited
   independently — lead focused run 187 tests OK); refuters: Astra execution 89 (no findings; execution blocked by sandbox), Opus contract
   90 (in flight). Codex weekly quota at 78 % (rollout token_count); prefer high over xhigh for the rest of the day.
+- UPDATE 2026-09-09 ~12:55 PDT: PR #310 round 3 (consult-authored, 016ac5f0): CI GREEN (run 34395094058); delta 92 clean (Mac-calibrated
+  assumption class closed statically); origin/main merged in and the final replay alone is running on the integration tree. PR #311: Opus
+  contract review 90 (0 blockers, SF-1 comment over-claim, SF-2 drop the fixture copy, N-1 seam signature, N-2 offset rationale); fix round
+  1 at the bench applied SF-1/N-1/N-2, and SF-2 was REFUTED BY EXECUTION — production runs a focused unittest suite by test id inside the
+  copied fixture repository (`joulewise/arm_readiness_evidence.py` `_execute_unittest_suite_subprocess`), so `tests/fixtures/arm_clock.py`
+  must be carried; the copy is restored with `exist_ok=True` and the rationale in the comment; the round is staged uncommitted in
+  `JouleWise-wt-arm-load` until the #310 replay finishes (replays run alone). Ruling-56 ADDENDUM-2 obligation for #311 stays OPEN
+  (no under-load evidence at its head yet; the seat timed out before its burner run).
