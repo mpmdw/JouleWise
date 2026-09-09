@@ -62,3 +62,9 @@ any plan is armed, and this plan is never re-armed on this signature. Cure lane 
    for a REHEARSAL_STUB plan → REHEARSAL_ONLY, no refusal); review lenses; PR under the normal gates.
 2. Complete PR #308's twelve-row gate ledger (CI `gate-ledger` currently fails for the missing section, by design) and merge.
 3. CLONE-READINESS-01 preparation (agent-side only), then G2-a inputs; the `claude remote-control` test between windows.
+
+## Record note (Opus contract review 10, S4 — recorded here, not as a decision-log amendment; rule 11)
+For `REHEARSAL_STUB` plans the night gate performs NO chain-identity check, because the driver substitutes the built-in stub
+(`sleep 2; echo REHEARSAL`) and never executes the plan's declared chain; consequently the `night_chain_digest_mismatch` refusal
+covers `DIAGNOSTIC_NO_PACK` and `TRANSACTION_PACK` only. Authorized by the magistrate's cure brief (trace
+`2026-09-09-rehearsal-harvest/01`); whether this belongs in a standing document is for the cold gate or Ed.
