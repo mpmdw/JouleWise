@@ -9541,12 +9541,34 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         attempt2_records: list[dict] | None,
         expected_strict_valid: bool = True,
     ):
-        from tests.test_controller import produce_retry_powermetrics_bundle
-
-        bundle_path, _summary = produce_retry_powermetrics_bundle(
-            self.root / "runs",
-            bundle_id,
+        from tests.test_controller import (
+            RetryAdmissionPowermetricsAdapter,
+            produce_retry_powermetrics_bundle,
         )
+
+        command = RetryAdmissionPowermetricsAdapter._command
+
+        def unpaced_sentinel(adapter, *args, **kwargs):
+            argv = command(adapter, *args, **kwargs)
+            # Only the bounded sentinel is synthetic. The continuous stream
+            # still owns admission, measured cadence, and the clock bracket.
+            # The bounded capture in this producer is the post-idle sentinel;
+            # its count is DERIVED (ceil(min(5.0, baseline.duration_s) / 0.05),
+            # joulewise/adapters/powermetrics.py:1030-1031), so it is only 100
+            # when the baseline spans the 5 s cap — do not pin it here (delta
+            # re-audit 79 F1 refuted the round-1 pin). Continuous captures pass
+            # count=None and stay paced.
+            if kwargs.get("count") is not None:
+                argv.append("--no-sleep")
+            return argv
+
+        with patch.object(
+            RetryAdmissionPowermetricsAdapter, "_command", unpaced_sentinel
+        ):
+            bundle_path, _summary = produce_retry_powermetrics_bundle(
+                self.root / "runs",
+                bundle_id,
+            )
         attempt1_path = bundle_path / "rich_telemetry_idle.jsonl"
         attempt2_path = bundle_path / "rich_telemetry_idle_attempt_2.jsonl"
         for path, replacements in (
@@ -9578,8 +9600,60 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             info=run_campaign_module.load_config_info(config_path),
             waivers={},
         )
-        self.assertIs(evaluation.strict_valid, expected_strict_valid)
+        self.assertIs(
+            evaluation.strict_valid, expected_strict_valid,
+            (evaluation.validation_problems,
+             evaluation.metadata.get("uncertainty_evidence", {}).get("idle_drift")),
+        )
         return evaluation
+
+    def test_retry_member_survives_fixture_sleep_slack(self) -> None:
+        # Original defect: the sleeping 100 x 50 ms post-idle fixture exceeds
+        # the unchanged 17.5 s capture timeout under >=3.5x simulated slack.
+        # Continuous admission/measured sampling remains paced. The stress
+        # level is a floor (Opus 77 S1). Consult 87 removed the in-controller
+        # cadence/clock-anchor probe: a non-null cadence ratio needs an
+        # internal sample gap inside the ~112 ms measured window, which a
+        # 175 ms stressed sampling interval does not guarantee on a fast host
+        # (the Mac-only pass was scheduling geometry, not the property).
+        scale = max(
+            3.5,
+            float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")),
+        )
+        with patch.dict(
+            os.environ,
+            {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)},
+        ):
+            evaluation = self._produced_retry_member(
+                "timer-slack",
+                attempt1_records=_clean_idle_records(),
+                attempt2_records=_clean_idle_records(),
+            )
+
+        self.assertIs(
+            evaluation.strict_valid,
+            True,
+            evaluation.validation_problems,
+        )
+        drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
+        self.assertEqual(
+            drift["status"],
+            "bounded",
+            (drift, evaluation.validation_problems),
+        )
+        self.assertEqual(drift["post_sample_count"], 100, drift)
+
+    def test_real_powermetrics_capture_timeout_is_unchanged(self) -> None:
+        from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+        from joulewise.clock import FakeClock
+        from tests.test_powermetrics import make_config
+
+        adapter = PowermetricsTelemetryAdapter(
+            FakeClock(), executable="/usr/bin/powermetrics"
+        )
+        config = make_config(sampling={"power_hz": 20.0})
+        self.assertEqual(adapter._capture_timeout_s(config, 100), 17.5)
+        self.assertEqual(adapter._capture_timeout_s(config, 3), 15.0)
 
     def test_cpu_admission_reads_final_attempt_telemetry(self) -> None:
         """Fix round 1 (blocker): pair CPU telemetry with the final attempt.

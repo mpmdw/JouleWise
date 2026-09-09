@@ -470,5 +470,122 @@ class Neg8BracketTests(unittest.TestCase):
         self.assertIn("neg8_bracket_reference_invalid", result["conditions"])
 
 
+class PowermetricsFixtureTimingTests(unittest.TestCase):
+    def test_unpaced_sentinel_preserves_drift_with_synthetic_timestamps(self):
+        import importlib.util
+        import os
+        import sys
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from joulewise.adapters.powermetrics import (
+            PowermetricsTelemetryAdapter, parse_powermetrics_records,
+        )
+        from joulewise.clock import FakeClock
+        from joulewise.schemas import IdleBaseline, TelemetryBackend
+        from tests.test_powermetrics import make_config
+
+        path = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
+        spec = importlib.util.spec_from_file_location("timed_fixture", path)
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        payloads = []
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "post.plist"
+            for unpaced in (False, True):
+                now = [100.0]
+
+                def sleep(seconds):
+                    now[0] += seconds
+
+                argv = [str(path), "-n", "100", "-i", "50", "-o", str(output)]
+                if unpaced:
+                    argv.append("--no-sleep")
+                with (
+                    patch.object(sys, "argv", argv),
+                    patch.dict(os.environ, {
+                        "FAKE_POWERMETRICS_SLEEP_SCALE": "3.5",
+                        "P2038_FAKE_POWERMETRICS_MODE": "normal",
+                        "P2038_FAKE_POWERMETRICS_STATE": "",
+                    }),
+                    patch.object(fixture.signal, "signal"),
+                    patch.object(fixture.time, "monotonic", lambda: now[0]),
+                    patch.object(fixture.time, "sleep", side_effect=sleep) as sleeper,
+                ):
+                    self.assertEqual(fixture.main(), 0)
+                    if unpaced:
+                        sleeper.assert_not_called()
+                    else:
+                        self.assertEqual(sleeper.call_count, 100)
+                        self.assertTrue(all(
+                            call.args == (0.05 * 3.5,) for call in sleeper.call_args_list
+                        ))
+                payloads.append(output.read_bytes())
+
+        paced, synthetic = map(parse_powermetrics_records, payloads)
+        self.assertEqual(len(synthetic), 100)
+        self.assertEqual([r.elapsed_ns for r in synthetic], [50_000_000] * 100)
+        self.assertAlmostEqual(synthetic[-1].timestamp_s - synthetic[0].timestamp_s, 4.95)
+        self.assertEqual(
+            [r.combined_power_w for r in synthetic],
+            [r.combined_power_w for r in paced],
+        )
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        adapter._pre_idle_records = paced[:3]
+        adapter._pre_idle_quality = {"idle_window_suspect": False}
+        baseline = IdleBaseline(1.0, 0.0, 5.0, 3, TelemetryBackend.POWERMETRICS)
+        config = make_config(sampling={"power_hz": 20.0})
+        results = []
+        for data in payloads:
+            with patch.object(adapter, "_run_bounded_capture", return_value=data):
+                results.append(adapter.measure_post_run_idle(config, baseline, None))
+        self.assertEqual(results[0]["idle_drift"]["status"], "bounded")
+        self.assertEqual(results[0], results[1])
+
+    def test_real_capture_timeout_leaves_post_idle_unavailable(self):
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+        from joulewise.clock import FakeClock
+        from joulewise.schemas import IdleBaseline, TelemetryBackend
+        from tests.test_powermetrics import make_config
+
+        fixture = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
+        adapter = PowermetricsTelemetryAdapter(
+            FakeClock(), executable=str(fixture), privilege_prefix=(sys.executable,)
+        )
+        config = make_config(sampling={"power_hz": 20.0})
+        baseline = IdleBaseline(1.0, 0.0, 5.0, 100, TelemetryBackend.POWERMETRICS)
+        real_run = subprocess.run
+        timeouts = []
+
+        def short_deadline(command, **kwargs):
+            self.assertEqual(kwargs["timeout"], 17.5)
+            # Exercise a real child-process TimeoutExpired, not a fabricated
+            # exception or a relaxed strict-validation comparison.
+            kwargs["timeout"] = 0.75
+            try:
+                return real_run(command, **kwargs)
+            except subprocess.TimeoutExpired as exc:
+                timeouts.append(exc)
+                raise
+
+        with (
+            patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": "1"}),
+            patch("joulewise.adapters.powermetrics.subprocess.run", short_deadline),
+        ):
+            result = adapter.measure_post_run_idle(config, baseline, None)
+        self.assertEqual(len(timeouts), 1)
+        self.assertEqual(result, {
+            "idle_drift": {"status": "unknown", "reason": "post_idle_unavailable"},
+        })
+        self.assertEqual(adapter._pending_captures, {})
+
+
 if __name__ == "__main__":
     unittest.main()
