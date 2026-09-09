@@ -1043,6 +1043,8 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     if plan.receipt_class == "REHEARSAL_STUB":
         rows["C5"].measured.update(
             {
+                "chain_path": plan.chain_path,
+                "chain_sha256_path": plan.chain_sha256_path,
                 "chain_sha256": None,
                 "expected_chain_sha256": None,
                 "chain_stub": "built_in_stub_by_design",
@@ -1106,7 +1108,10 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
             )
     rows["C5"].status = "PASS"
     rows["C5"].measured["detail"] = (
-        "window, plan freshness, measurement HEAD, and chain identity passed"
+        "window, plan freshness, and measurement HEAD passed; chain identity not evaluated "
+        "(driver substitutes the built-in stub)"
+        if plan.receipt_class == "REHEARSAL_STUB"
+        else "window, plan freshness, measurement HEAD, and chain identity passed"
     )
 
     if plan.receipt_class == "TRANSACTION_PACK" and plan.pack_night is None:

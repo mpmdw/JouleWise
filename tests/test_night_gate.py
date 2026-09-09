@@ -421,6 +421,11 @@ class NightGateTests(unittest.TestCase):
             [row.status for row in receipt.conditions],
         )
         self.assertEqual("no_pack_by_design", receipt.conditions[1].basis)
+        c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual(
+            "window, plan freshness, measurement HEAD, and chain identity passed",
+            c5.measured["detail"],
+        )
         self.assertEqual([], night_gate.validate_receipt(json.loads(receipt.to_json_bytes())))
 
     def test_a_fully_green_rehearsal_can_never_yield_go(self) -> None:
@@ -439,11 +444,27 @@ class NightGateTests(unittest.TestCase):
         self.assertNotIn(plan.chain_path, source.read_calls)
         self.assertNotIn(plan.chain_sha256_path, source.read_calls)
         c5 = next(row for row in receipt.conditions if row.condition_id == "C5")
+        self.assertEqual(plan.chain_path, c5.measured["chain_path"])
+        self.assertEqual(plan.chain_sha256_path, c5.measured["chain_sha256_path"])
         self.assertIsNone(c5.measured["chain_sha256"])
         self.assertIsNone(c5.measured["expected_chain_sha256"])
         self.assertEqual("built_in_stub_by_design", c5.measured["chain_stub"])
+        self.assertEqual(
+            "window, plan freshness, and measurement HEAD passed; chain identity not evaluated "
+            "(driver substitutes the built-in stub)",
+            c5.measured["detail"],
+        )
         self.assertEqual("PASS", c5.status)
         self.assertIsNone(c5.basis)
+
+    def test_rehearsal_stub_does_not_read_present_mismatched_chain_or_sidecar(self) -> None:
+        plan = make_plan("REHEARSAL_STUB")
+        source = FakeProbeSource(chain_digest="0" * 64)
+        receipt = self.evaluate(plan, source)
+        self.assertEqual("REHEARSAL_ONLY", receipt.verdict, repr(receipt.refusal))
+        self.assertIsNone(receipt.refusal)
+        self.assertNotIn(plan.chain_path, source.read_calls)
+        self.assertNotIn(plan.chain_sha256_path, source.read_calls)
 
     def test_diagnostic_still_refuses_missing_chain_or_sidecar(self) -> None:
         for missing in ("chain_path", "chain_sha256_path"):
