@@ -1,0 +1,5 @@
+{
+ "goal": "Make ARM/launch integration fixtures deterministic through probe-result seams while predicates, bindings and deadlines stay real.",
+ "status": "queued",
+ "status_note": "2026-09-08: READY; option (a) selected by the T38c directive from 99gn recommendation. Evidence: 99ep attempt 2, 99gh attempt 2, 99gm attempt 2 (readiness_clock_preflight_refused), 99gl fourth-occurrence account. FLAG: 99gn is advisory and says census causation is unproven; four occurrences are lead-reported, not four independently reconstructed failing runs."
+}

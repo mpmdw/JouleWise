@@ -67,3 +67,14 @@ branch) may record exactly the four pre-existing `IdleAdmissionCoreVerdictTests`
 recorded), A3 (same four on the merge base, same session), A4 (`tests.test_night_gate tests.test_run_night` green on the integration
 tree, not the branch), A5 (CI green on the final head) and A6 (class re-run green after powermode 0, recorded as a dated addendum) hold.
 Any other failure or error is a hold. Recorded, not decided here.
+
+## Addendum 2 (2026-09-09 ~08:55 PDT, cold gate 56 W8)
+
+Two replays on successive integration trees each recorded the ruling-44 four plus one different extra failure (53: a docs-freshness
+literal check broken by a main commit, cured at a3da3463; 54: `test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses`,
+a 30 s thread-join timeout under four-shard concurrency, green alone 4/4). Cold gate 56 rules that attempt 2 does NOT satisfy 44 A1 as
+written, refuses a general "passes alone + registered lane" clause, and grants a named structural waiver for THIS head (6d76f964) only,
+under W1–W8, on the ground that the PR's only code hunk (`evaluate_night`, night_gate.py 1040–1104) is unreachable from the race test's
+launch path (which reaches night_gate only through the function-local `NightPlan`/`PlanError` import at arm_readiness.py:9933, untouched).
+The first addendum's "any other failure or error is a hold" is superseded for that one named failure on that one head; no precedent.
+Record: `59-pr309-row9-waiver-record.md`.

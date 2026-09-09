@@ -704,3 +704,16 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   moves; EXACTLY the four named failures and nothing else is the judge's door (A1; a subset is not authorized), rc=0 the refuter's; record whichever obtains; (3) CLONE-READINESS-01 preparation (the
   un-inventoried `JouleWise-rehearsal-<date>-<sha>` clone per 99co + amendment) → G2-a inputs (NEEDS_RULING after rehearsal
   acceptance); the second-stub-night ruling is a cold gate, not this activation's.
+
+- UPDATE 2026-09-09 ~09:00 PDT (same activation): PR #308 MERGED at `d7f5d5d9` (ledger 12/12, CI green on 068d144e). The magistrate's
+  README blurb `0d9881ef` broke `test_docs_freshness` (pull-request literals in current sections) — main CI red for one commit — cured at
+  `a3da3463` (docs tests run first this time; rule re-learned: run test_docs_freshness before any README/RUN_STATE push). PR #309 replays
+  on successive integration trees `dd135364` (53) and `6d76f964` (54) each recorded the ruling-44 four plus one different extra failure
+  (a docs test from that README commit; then the launch-capability race test's 30 s join under concurrency, green alone 4/4). Follow-up
+  cold gate 56 + Opus refuter 57: attempt 2 does NOT meet 44 A1; a general "passes alone + lane" clause is REFUSED; a named structural
+  waiver is granted for head `6d76f964` ONLY under W1–W8 (the PR's single hunk in `evaluate_night` is unreachable from the race test's
+  launch path). A4 on 6d76f964: 136 tests OK rc 0 (58). Record 59; 31 addendum 2. Both cold judges disclosed harness-injected memory
+  index/CLAUDE.md context (recorded; the convening pattern needs a project-dir-independent launch — follow-up for the council skill,
+  not ruled here). NEXT EXACT ACTION: fill PR #309's ledger (rows 9/10 cite this bookkeeping commit's sha; rows 11/12 = 6d76f964),
+  merge under W1–W8, then CLONE-READINESS-01 preparation; ADDENDUM-1/2/3 of ruling 56 stay owed (class re-run trigger, next replay's
+  race-test outcome, Ed's answer on row-9 wording).

@@ -35,7 +35,7 @@
       "priority": "p2_next_slice",
       "rank": 165,
       "status": "queued",
-      "status_note": "2026-09-08: READY; option (a) selected by the T38c directive from 99gn recommendation. Evidence: 99ep attempt 2, 99gh attempt 2, 99gm attempt 2 (readiness_clock_preflight_refused), 99gl fourth-occurrence account. FLAG: 99gn is advisory and says census causation is unproven; four occurrences are lead-reported, not four independently reconstructed failing runs.",
+      "status_note": "2026-09-08: READY; option (a) selected by the T38c directive from 99gn recommendation. Evidence: 99ep attempt 2, 99gh attempt 2, 99gm attempt 2 (readiness_clock_preflight_refused), 99gl fourth-occurrence account. FLAG: 99gn is advisory and says census causation is unproven; four occurrences are lead-reported, not four independently reconstructed failing runs. 2026-09-09 (cold gate 56 ADDENDUM-2 + Opus refuter 57): tests/test_arm_readiness_lifecycle.py test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses failed under a four-shard replay (a consumer thread still alive after join(timeout=30); ~91 s CPU at ~370% inside the test), green alone 4/4 on 6d76f964. Gap named by 57: the timeout branch records no discriminating evidence (alive count, partial outcomes, execve.call_count), so slow and stuck are indistinguishable from the tail. Next four-shard replay on any integration tree must record this test's outcome, shard count and the timer-probe reading; if it fails under concurrency again this lane names it and its 30 s join explicitly and no further waiver is available for it (56 ADDENDUM-2).",
       "stop_card": null
     },
     "ARM-PACKET-01": {
