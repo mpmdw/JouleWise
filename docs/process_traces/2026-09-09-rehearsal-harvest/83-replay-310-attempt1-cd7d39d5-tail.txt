@@ -1,0 +1,31 @@
+# PR #310 replay attempt 1 — head cd7d39d5 (= main 21e31107 + lane), alone in-process (four shards concurrent), started 09:53:26 PDT 2026-09-09; timer probe 3.35× at start
+
+SHARD SUMMARY index=1/4 modules=34 tests=545 failures=0 errors=0 skipped=30 result=PASS
+SHARD SUMMARY index=2/4 modules=54 tests=1204 failures=1 errors=0 skipped=53 result=FAIL
+SHARD SUMMARY index=3/4 modules=66 tests=1985 failures=0 errors=0 skipped=9 result=PASS
+SHARD SUMMARY index=4/4 modules=67 tests=1912 failures=0 errors=0 skipped=16 result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5646 failures=1 errors=0 skipped=108 failed_shards=2 result=FAIL
+rc=1
+
+The four IdleAdmissionCoreVerdictTests PASSED under concurrency (first time today on this machine); test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses PASSED under concurrency (ruling 56 ADDENDUM-2 observation: shards=4, probe 3.35×).
+
+FAIL block:
+FAIL: test_identity_arm_evidence_symlink_escape_refuses (test_arm_readiness_integration.ArmReadinessIntegrationTests.test_identity_arm_evidence_symlink_escape_refuses)
+An identity-evidence symlink escape is refused.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-fixture-timeout/tests/test_arm_readiness_integration.py", line 581, in test_identity_arm_evidence_symlink_escape_refuses
+    self.assertEqual(passed["status"], "PASS", passed)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'REFUSE' != 'PASS'
+- REFUSE
++ PASS
+ : {'status': 'REFUSE', 'arm_disposition': 'NO_GO', 'receipt_path': '/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmphlbek16f/window-custody/d117_floor_qwen3-1p7b_v5/arm_readiness.receipts/arm-0001.json', 'receipt_sha256': 'bc01509fc1409ee6840a32944e0c84291fcac7a54b623e88640b4a22cb38fc78', 'reason_codes': ['readiness_clock_preflight_refused']}
+
+----------------------------------------------------------------------
+Ran 10 tests in 93.643s
+
+FAILED (failures=1)
+MODULE FAIL tests.test_arm_readiness_integration tests=10 failures=1 errors=0 skipped=0 seconds=93.643
+
+Alone re-runs on cd7d39d5 (python3 -m unittest tests.test_arm_readiness_integration -k test_identity_arm_evidence_symlink_escape_refuses): 'Ran 1 test in 11.769s OK', 'Ran 1 test in 11.732s OK'.

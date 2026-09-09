@@ -746,3 +746,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   measurement must run outside any armed night or quiet window). Ruling-56 ADDENDUM-1 trigger check 09:20 PDT: timer probe 3.25×/3.44×/3.42×
   (trigger ≤ 2.0× not met; no class re-run). Next agent-side lane opened: FIXTURE-TIMEOUT-WALLCLOCK-01 implementation seat (branch
   fix/2026-09-09-fixture-timeout-wallclock).
+- UPDATE 2026-09-09 ~11:00 PDT — FIXTURE-TIMEOUT-WALLCLOCK-01 lane (PR #310, branch fix/2026-09-09-fixture-timeout-wallclock): seat 74
+  (fixture `--no-sleep` for bounded sentinels; production untouched) → refuters 76 (Astra execution; partial, sandbox) + 77 (Opus
+  contract; 2 should-fix, 3 nits) → fix round 1 e8cfdd4c → delta 79 REFUTED the round-1 count pin (derived count) → fix round 2
+  cd7d39d5 → delta 82 clean. Lead bench: class 105/73 tests OK at scale 1 / 3.5 on this machine. Replay alone at cd7d39d5 (83):
+  5646 tests, 1 failure — the four idle-admission tests PASS under concurrency for the first time today, the race test PASSED, and
+  `test_identity_arm_evidence_symlink_escape_refuses` REFUSED with `readiness_clock_preflight_refused` (the ARM-INTEGRATION-LOAD-01
+  signature; green alone 2/2). CI: the new regression `test_retry_member_survives_fixture_sleep_slack` FAILED on Linux 3.14 shard 4 at
+  cd7d39d5 ('unknown' != 'bounded'); a diagnostic-only commit 3ca9a58c prints the drift record; its first CI run died on an apt
+  index hash-mismatch (infrastructure) and was re-run. HOLD: PR #310 is not mergeable until the Linux reason is known; if a cure needs a
+  third fix round, the standing escalation rule routes it to a consult, not round three. Terminal review draft 80 (replay/verdict open).
