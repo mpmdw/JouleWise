@@ -608,7 +608,7 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 ## ARMED — rehearsal-20260909 (activation 784a764e; record 21h; artifacts `21b-rehearsal-20260909-bench/arm-*`)
 
 - Plan published (`arm-night_plan.json`), both night agents installed from `/private/tmp/joulewise-rehearsal-20260909-checkout` at
-  `ae8f074f`; census clean (`arm-blockB-output.txt`). Frozen triple: (`rehearsal-20260909`, that checkout, `ae8f074f`).
+  `ae8f074f`; foreign-agent-session gate clear and informational list empty, while the production census still listed this activation's own codex MCP pair 83123/83143 (`arm-blockB-output.txt`; fidelity refuter 05 F3). Frozen triple: (`rehearsal-20260909`, that checkout, `ae8f074f`).
 - The arming activation exits before 1788946260. NEXT EXACT ACTION for the relaunched magistrate: 21h §Morning after (harvest,
   NIGHT-REHEARSAL-01 record, `--uninstall` from the stub checkout, remove checkout + plan root), then the relayed daytime lanes above.
   This branch (`bookkeeping/2026-09-09-rehearsal-arm-record`, PR open) is merged by the successor with its ledger after the harvest.

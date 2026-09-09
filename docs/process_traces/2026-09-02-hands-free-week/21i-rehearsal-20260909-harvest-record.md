@@ -2,7 +2,7 @@
 
 Written 1788950400 2026-09-09 ~03:40 PDT by activation `628c2eed-acf6-483d-998e-31c91f36e6d4` (pid 82637, watchdog attempt 5,
 spawned 03:33:01 PDT, events.jsonl seq 22–23). Every fact below is read from a captured artifact under
-`21b-rehearsal-20260909-bench/night-harvest/` (byte copies of the custody root, `SHA256SUMS` alongside); nothing is restated from memory.
+`21b-rehearsal-20260909-bench/night-harvest/` (byte copies of the custody root, `SHA256SUMS` alongside; the three `*.log` copies are force-added past the `docs/process_traces/**/*.log` ignore rule — fidelity refuter 05 F1); nothing is restated from memory.
 
 ## What fired
 - Plan `rehearsal-20260909` (v2, `REHEARSAL_STUB`, t0 1788947760 = 02:56:00 PDT, window 900 s, root
@@ -47,7 +47,7 @@ any plan is armed, and this plan is never re-armed on this signature. Cure lane 
 ## NIGHT-REHEARSAL-01 acceptance, item by item (kernel `/tasks/NIGHT-REHEARSAL-01/acceptance`)
 1. cold_start.json / COURIER_DEADLINE_S — NOT re-verified here; predates this night (out of this record's evidence).
 2. REHEARSAL_STUB result on a night-results branch from a launchd-started driver, verdict REHEARSAL_ONLY — MET (`a84e0f7f`; above).
-3. Courier email in Ed's inbox with message id recorded — MET on the send side (`1a08599a4ff4d005`); inbox receipt not verifiable headless.
+3. Courier email in Ed's inbox with message id recorded — PARTIAL: the send is recorded (`1a08599a4ff4d005`, `night-courier.sent`); inbox receipt is not verifiable from a headless session (fidelity refuter 05 F4).
 4. Stage-1 plan email before any DIAGNOSTIC_NO_PACK arm — NOT YET (no plan authored; owed before G2-a).
 5. Agents installed the morning before with the 07:00 dead-man observed standing down — NOT EXERCISED by this night (installed 01:57
    same night; NIGHT_HANDBACK records that this night does not repeat that case). Still open.
