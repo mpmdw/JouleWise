@@ -33,6 +33,31 @@ class ProductionCensusLoaderTests(unittest.TestCase):
         with self.assertRaisesRegex(cli.BundleLoadError, "production-root census incomplete"):
             fixture_bundle(self.root)
 
+    def test_g7_locator_authenticates_external_bytes_and_acceptance_rechecks(self):
+        bundle = fixture_bundle(self.root)
+        self.assertEqual(rehearsal.evaluate_g7(bundle).status, rehearsal.GateStatus.PASS)
+        path = self.root / cli.MANIFEST_NAME
+        manifest = readiness.parse_json_bytes(path.read_bytes())
+        original = manifest["records"]["g7_control"].copy()
+        for locator in (original["path"], {**original, "extra": True},
+                        {**original, "sha256": "0" * 64},
+                        {**original, "path": str(self.root / "g7_refusal.json")}):
+            manifest["records"]["g7_control"] = locator
+            _write_json(path, manifest)
+            with self.subTest(locator=locator), self.assertRaises(cli.BundleLoadError):
+                fixture_bundle(self.root)
+        manifest["records"]["g7_control"] = original
+        artifact = Path(original["path"])
+        value = readiness.parse_json_bytes(artifact.read_bytes())
+        value["presented"][1]["first_refusal"] = False
+        _write_json(artifact, value)
+        manifest["records"]["g7_control"]["sha256"] = readiness.sha256_bytes(artifact.read_bytes())
+        _write_json(path, manifest)
+        # Correctly rehashed false evidence still fails G7, independent of PASS.
+        result = rehearsal.evaluate_g7(fixture_bundle(self.root))
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("not first", result.message)
+
     def test_inventory_must_equal_plan_repo_head_bytes(self):
         raw = readiness.render_json(fixture_inventory(self.root))
         plan = {"repo_head": "a" * 40, "measurement_head": "b" * 40, "measurement_root": str(self.root)}
@@ -83,7 +108,7 @@ class ProductionCensusLoaderTests(unittest.TestCase):
                 readiness._production_inventory(plan)
 
     def test_production_loader_uses_go_plan_pins_for_inventory(self):
-        go_path = self.root / "records/d149-go.json"
+        go_path = self.root / "night/go_receipt.json"
         value = readiness.parse_json_bytes(go_path.read_bytes())
         value.update(repo_head="a" * 40, measurement_head="b" * 40, measurement_root=str(self.root))
         _write_json(go_path, value)

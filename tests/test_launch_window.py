@@ -2269,6 +2269,204 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
         self.assertFalse(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").exists())
 
+    def test_g7_control_refuses_both_presentations_before_missing_arm(self):
+        self._g7_control_case()
+
+    def test_g7_control_refuses_symlinked_night_without_changing_completed_rehearsal(self):
+        self._g7_control_case(symlink="night")
+
+    def test_g7_control_refuses_symlinked_control_before_writes(self):
+        self._g7_control_case(symlink="control")
+
+    def test_g7_non_pack_plan_refusal_artifact_fails_bytes_only_acceptance(self):
+        self._g7_control_case(non_pack=True)
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def _g7_control_case(self, *, symlink=None, non_pack=False):
+        """§10.5 admission regression: the control deliberately has no ARM.
+
+        This pins the required production-entry behavior, not a substitute
+        validator. The consumer admission must run before the absent ARM is accessed.
+        """
+        from joulewise import t0_rehearsal
+
+        window_id = t0_rehearsal.REHEARSAL_WINDOW_PREFIX + "g7-fixture"
+        parent = Path(self.fixture.temporary.name).resolve() / "home/night-custody"
+        rehearsal_root = parent / window_id
+        control = parent / (window_id + "-g7-control")
+        rehearsal_root.mkdir(parents=True)
+        control.mkdir()
+        # Preserve completed-night evidence while presenting from its sibling.
+        consumed = rehearsal_root / "arm-0001.consumed.json"
+        started = rehearsal_root / "chain.started"
+        consumed.write_bytes(b"completed rehearsal consumption fixture\n")
+        started.write_bytes(b"completed rehearsal capture fixture\n")
+        preserved = {path: path.read_bytes() for path in (consumed, started)}
+        plan = json.loads(self.case.inputs["night_plan"].read_bytes())
+        plan["custody_root"] = str(control)
+        authorization = json.loads(Path(plan["pack_night"]["authorization_record"]["path"]).read_bytes())
+        authorization.update(purpose="CAMPAIGN_TRANSACTION", authority="V5-TRANSACTION-GO-01")
+        auth_path = control / "authorization.json"
+        auth_path.write_bytes(arm_readiness.render_json(authorization))
+        plan["pack_night"]["authorization_record"] = {
+            "path": str(auth_path), "sha256": hashlib.sha256(auth_path.read_bytes()).hexdigest()}
+        confirmation_path = control / "confirmation.json"
+        confirmation_path.write_bytes(Path(plan["pack_night"]["confirmation_record"]["path"]).read_bytes())
+        plan["pack_night"]["confirmation_record"] = {
+            "path": str(confirmation_path), "sha256": hashlib.sha256(confirmation_path.read_bytes()).hexdigest()}
+        plan_path = control / "night_plan.json"
+        plan_path.write_bytes(arm_readiness.render_json(plan))
+        go = copy.deepcopy(self.case.inputs["authenticated_go_receipt"])
+        go["purpose"] = "T0_REHEARSAL"
+        go["authorization"]["purpose"] = "T0_REHEARSAL"
+        source_go = rehearsal_root / "night/go_receipt.json"
+        source_go.parent.mkdir()
+        source_go.write_bytes(arm_readiness.render_json(go))
+        preserved[source_go] = source_go.read_bytes()
+        six_key = {
+            "schema_version": t0_rehearsal.REHEARSAL_RECEIPT_SCHEMA,
+            "receipt_class": t0_rehearsal.REHEARSAL_RECEIPT_CLASS,
+            "claim_eligible": False, "window_id": window_id,
+            "custody_root": str(rehearsal_root), "acceptance_target": "T0-UNATTENDED-01",
+        }
+        from tests.test_run_night import _load_driver
+        driver = _load_driver()
+        source_receipt = rehearsal_root / "rehearsal-receipt.json"
+        source_receipt.write_bytes(arm_readiness.render_json(six_key))
+        preserved[source_receipt] = source_receipt.read_bytes()
+        if symlink:
+            if symlink == "night":
+                (control / "night").symlink_to(source_go.parent, target_is_directory=True)
+            else:
+                actual = control.with_name(control.name + "-actual")
+                control.rename(actual)
+                control.symlink_to(actual, target_is_directory=True)
+            before = {str(path.relative_to(rehearsal_root)): path.read_bytes()
+                      for path in rehearsal_root.rglob("*") if path.is_file()}
+            with mock.patch.object(Path, "home", return_value=parent.parent), \
+                 mock.patch.object(driver.subprocess, "run") as launch:
+                with self.assertRaisesRegex(driver.PackNightRefusal, "non-symlink"):
+                    driver.produce_g7_control(plan_path, source_receipt, source_go)
+            launch.assert_not_called()
+            after = {str(path.relative_to(rehearsal_root)): path.read_bytes()
+                     for path in rehearsal_root.rglob("*") if path.is_file()}
+            self.assertEqual(before, after)  # No new files, and every original byte retained.
+            return
+        if non_pack:
+            # Exercise real admission against a valid non-pack plan. The producer's
+            # own guard also refuses it, but bytes-only acceptance must stand alone.
+            other_plan = {**plan, "schema": "joulewise.night_plan.v2", "schema_version": 2,
+                          "receipt_class": "DIAGNOSTIC_NO_PACK",
+                          "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"}
+            del other_plan["pack_night"]
+            non_pack_path = parent / "non-pack-plan.json"
+            non_pack_path.write_bytes(arm_readiness.render_json(other_plan))
+            with mock.patch.object(Path, "home", return_value=parent.parent):
+                original = plan_path.read_bytes()
+                plan_path.write_bytes(non_pack_path.read_bytes())
+                try:
+                    with self.assertRaisesRegex(driver.PackNightRefusal, "G7 production plan"):
+                        driver.produce_g7_control(plan_path, source_receipt, source_go)
+                finally:
+                    plan_path.write_bytes(original)
+        calls = []
+        def invoke(argv, **kwargs):
+            self.assertEqual(len(argv[2:]), 16)
+            if non_pack:
+                argv = list(argv)
+                argv[argv.index("--night-plan") + 1] = str(non_pack_path)
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            calls.append(argv)
+            output = io.BytesIO()
+            with mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+                rc = launch_window.main(argv[2:])
+            return subprocess.CompletedProcess(argv, rc, output.getvalue(), b"")
+        with mock.patch.object(Path, "home", return_value=parent.parent), \
+             mock.patch.object(driver.subprocess, "run", side_effect=invoke), \
+             mock.patch.object(launch_window, "_verify_arm_receipt") as verify, \
+             mock.patch.object(arm_readiness, "_verify_arm_receipt") as consumer_verify, \
+             mock.patch.object(launch_window, "_consume_launch_capability") as consume, \
+             mock.patch.object(launch_window.os, "execve") as execute:
+            locator = driver.produce_g7_control(plan_path, source_receipt, source_go)
+            with self.assertRaises((driver.PackNightRefusal, FileExistsError)):
+                driver.produce_g7_control(plan_path, source_receipt, source_go)
+        verify.assert_not_called()
+        consumer_verify.assert_not_called()
+        consume.assert_not_called()
+        execute.assert_not_called()
+        self.assertEqual(len(calls), 2)
+        path = Path(locator["path"])
+        artifact = json.loads(path.read_bytes())
+        self.assertEqual(locator["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        if non_pack:
+            self.assertEqual(artifact["verdict"], "FAIL")
+            self.assertEqual([item["refusal"]["detail"] for item in artifact["presented"]],
+                             ["go_receipt.receipt_class", "night_plan.receipt_class"])
+            artifact["verdict"] = "PASS"  # Even a relabeled artifact cannot pass.
+            with self.assertRaisesRegex(ValueError, "class/purpose"):
+                t0_rehearsal.validate_g7_control(json.loads(arm_readiness.render_json(artifact)))
+            return
+        self.assertEqual(artifact["verdict"], "PASS")
+        self.assertEqual(artifact["control_plan_sha256"], hashlib.sha256(plan_path.read_bytes()).hexdigest())
+        t0_rehearsal.validate_g7_control(artifact)
+        self.assertEqual((control / "night/presented_go_receipt.json").read_bytes(), source_go.read_bytes())
+        self.assertEqual(list(control.rglob("*.consumed.json")), [])
+        self.assertEqual(list(control.rglob("chain.started")), [])
+        for path, original in preserved.items():
+            self.assertEqual(path.read_bytes(), original)
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_valid_rehearsal_class_refused_by_production_entry_and_consumer(self):
+        """B4: real six-key rehearsal authority, never a malformed GO surrogate."""
+        from joulewise import t0_rehearsal
+        from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
+
+        with tempfile.TemporaryDirectory() as temporary:
+            rehearsal_root = FixtureBuilder(Path(temporary)).build()
+            rehearsal_consumptions = {
+                path: path.read_bytes() for path in rehearsal_root.rglob("*.consumed.json")
+            }
+            self.assertEqual(len(rehearsal_consumptions), 1)
+            bundle = fixture_bundle(rehearsal_root)
+            self.assertEqual(t0_rehearsal.evaluate_g6(bundle).status,
+                             t0_rehearsal.GateStatus.PASS)
+            presented = bundle.record("rehearsal_receipt")
+            self.assertEqual(set(presented.value), t0_rehearsal._REHEARSAL_RECEIPT_KEYS)
+            go_path = self.case.inputs["go_receipt"]
+            go_path.write_bytes(presented.raw)
+            self.case.inputs.update(authenticated_go_receipt=presented.value,
+                                    go_receipt_sha256=presented.sha256)
+            detail = "go_receipt.receipt_class"
+            output = io.BytesIO()
+            with mock.patch.object(launch_window.os, "execve") as execute, \
+                 mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+                self.assertEqual(launch_window.main(self.argv), 2)
+            self.assertEqual(json.loads(output.getvalue()), {
+                "status": "REFUSE", "reason_codes": ["launch_go_receipt_invalid"],
+                "detail": detail,
+            })
+            execute.assert_not_called()
+            # The launcher checks schema during assembly; independently prove
+            # that bypassing that assembly cannot bypass the callee's check.
+            with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                self.case.consume()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+            self.assertEqual(str(caught.exception), detail)
+            # Bytes/digest authentication must still precede the class check.
+            self.case.inputs["go_receipt_sha256"] = "0" * 64
+            with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                self.case.consume()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+            self.assertIn("sha256", str(caught.exception))
+            self.assertNotIn("class=", str(caught.exception))
+            self.assertEqual(list(self.fixture.custody.rglob("*.consumed.json")), [])
+            self.assertEqual(
+                {path: path.read_bytes() for path in rehearsal_root.rglob("*.consumed.json")},
+                rehearsal_consumptions,
+            )
+            for custody in (self.fixture.custody, rehearsal_root):
+                self.assertEqual(list(custody.rglob("chain.started")), [])
 
 
 if __name__ == "__main__":

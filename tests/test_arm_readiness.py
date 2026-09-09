@@ -171,15 +171,21 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
     # now produce v3. Explicit historical tests below retain v2 coverage.
     def setUp(self) -> None:
         patch_pack_night_dependencies(self)
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        root = Path(self.temporary.name).resolve()
+        if hasattr(self, "_fixture_root"):
+            root = self._fixture_root.resolve()
+        else:
+            self.temporary = tempfile.TemporaryDirectory()
+            self.addCleanup(self.temporary.cleanup)
+            root = Path(self.temporary.name).resolve()
         self.pack = root / sample_arm(root / "context")["pack"]["pack_id"]
         self.pack.mkdir()
-        self.custody = root / "arm-custody"
+        self.custody = (root / "home/night-custody" / self._custody_window
+                        if hasattr(self, "_custody_window") else root / "arm-custody")
         self.arm = sample_arm(root / "context")
         self.arm["boot_session_id"] = TEST_BOOT_SESSION_ID
         self.arm["pack"]["pack_root"] = str(self.pack)
+        if hasattr(self, "_custody_window"):
+            self.arm["arm_context"]["custody_root"] = str(self.custody)
         (self.pack / "committed.txt").write_text("integration fixture\n")
         (self.pack / "member.json").write_text('{"run_id":"member"}\n')
         init_git_fixture(root, "-q")
@@ -201,7 +207,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "claim_backup_destination",
             "bound_backup_destination",
         ):
-            Path(self.arm["arm_context"][name]).mkdir(parents=True)
+            Path(self.arm["arm_context"][name]).mkdir(parents=True, exist_ok=True)
         Path(self.arm["arm_context"]["waiver_path"]).write_bytes(
             readiness.render_json([])
         )
@@ -2111,6 +2117,79 @@ class PackNightConsumerTests(unittest.TestCase):
                 else:
                     self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
                 self.assertFalse(self.consumption.exists())
+
+    def test_four_case_purpose_root_table_through_consumer(self):
+        from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
+        # Production id/rehearsal purpose, prefixed id/production roots,
+        # prefixed id/disjoint roots, and normal production authority.
+        for rehearsal, prefixed, collision, expected in (
+            (True, False, False, "rehearsal_purpose_on_production_id"),
+            (True, True, True, "rehearsal_roots_not_disjoint"),
+            (True, True, False, None),
+            (False, False, False, None),
+        ):
+            with self.subTest(rehearsal=rehearsal, prefixed=prefixed, collision=collision):
+                fixture = LaunchConsumptionV2Tests()
+                fixture._custody_window = REHEARSAL_WINDOW_PREFIX + "consumer-table"
+                fixture.setUp()
+                try:
+                    root = Path(fixture.temporary.name).resolve()
+                    home = root / "home"
+                    measurement = root / "JouleWise-rehearsal-consumer-table"
+                    measurement.mkdir()
+                    inventory = [{"deployment_id": "fixture", "measurement_root": str(
+                        measurement if collision else root / "production"),
+                        "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+                    with mock.patch.object(Path, "home", return_value=home), \
+                         mock.patch.object(readiness, "__file__", str(measurement / "joulewise/arm_readiness.py")), \
+                         mock.patch.object(readiness, "_production_inventory", return_value=inventory):
+                        inputs = fixture._consumer_inputs()
+                        if prefixed:
+                            fixture.arm["pack"]["window_id"] = fixture._custody_window
+                        fixture._rewrite_arm()
+                        arm_sha = readiness.sha256_bytes(fixture.arm_path.read_bytes())
+                        inputs.update(authenticated_arm_receipt=copy.deepcopy(fixture.arm), arm_receipt_sha256=arm_sha)
+                        plan = readiness.parse_json_bytes(inputs["night_plan"].read_bytes())
+                        auth_path = Path(plan["pack_night"]["authorization_record"]["path"])
+                        authorization = readiness.parse_json_bytes(auth_path.read_bytes())
+                        authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
+                                             authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
+                        auth_path.write_bytes(readiness.render_json(authorization))
+                        auth_sha = readiness.sha256_bytes(auth_path.read_bytes())
+                        plan["pack_night"]["authorization_record"]["sha256"] = auth_sha
+                        inputs["night_plan"].write_bytes(readiness.render_json(plan))
+                        go = readiness.parse_json_bytes(inputs["go_receipt"].read_bytes())
+                        go.update(purpose=authorization["purpose"], plan_sha256=readiness.sha256_bytes(inputs["night_plan"].read_bytes()))
+                        go["authorization"].update(purpose=authorization["purpose"], sha256=auth_sha)
+                        go["arm_receipt"]["sha256"] = arm_sha
+                        for condition in go["conditions"]:
+                            for ref in condition["evidence"]:
+                                ref["sha256"] = readiness.sha256_bytes((fixture.custody / ref["path"]).read_bytes())
+                        inputs["go_receipt"].write_bytes(readiness.render_json(go))
+                        inputs.update(authenticated_go_receipt=go, go_receipt_sha256=readiness.sha256_bytes(inputs["go_receipt"].read_bytes()))
+                        if expected:
+                            with self.assertRaisesRegex(readiness.LaunchLineageError, expected) as caught:
+                                fixture._invoke_consumer(inputs)
+                            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+                            self.assertEqual(list(fixture.custody.rglob("*.consumed.json")), [])
+                        else:
+                            result = fixture._invoke_consumer(inputs)
+                            self.assertTrue(Path(result["consumption_path"]).is_file())
+                finally:
+                    fixture.doCleanups()
+
+    def test_pre_arm_admission_rejects_rehearsal_go_and_authenticates_digest_first(self):
+        self.rewrite_go(lambda go: (go.update(purpose="T0_REHEARSAL"),
+                                   go["authorization"].update(purpose="T0_REHEARSAL")))
+        self.fixture.arm_path.unlink()
+        with mock.patch.object(readiness, "_verify_arm_receipt") as verify:
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_purpose_on_production_id"):
+                readiness._consume_launch_capability(**self.inputs)
+            self.inputs["go_receipt_sha256"] = "0" * 64
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "^sha256$"):
+                readiness._consume_launch_capability(**self.inputs)
+        verify.assert_not_called()
+        self.assertFalse(self.consumption.exists())
 
     def test_forged_bindings_class_verdict_and_each_nonpass_condition_refuse_before_write(self):
         original = self.inputs["go_receipt"].read_bytes()

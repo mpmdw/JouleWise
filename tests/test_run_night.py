@@ -1746,8 +1746,9 @@ class PackNightProducerTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.custody = self.root / "custody"
-        self.custody.mkdir()
+        self.custody = (self.root / "home/night-custody/rehearsal-t0-unattended-producer-table"
+                        if getattr(self, "_rehearsal_layout", False) else self.root / "custody")
+        self.custody.mkdir(parents=True)
         self.pack = self.root / "pack-test"
         self.pack.mkdir()
         self.pack_custody = self.custody / self.pack.name
@@ -1832,7 +1833,7 @@ class PackNightProducerTests(unittest.TestCase):
         self.arm_value = {"status": "PASS", "arm_disposition": "GO", "receipt_id": "arm-0001",
             "boot_session_id": BOOT_UUID, "valid_until_monotonic_ns": time.monotonic_ns() + 10**12,
             "pack": {"pack_root": str(self.pack), "pack_sha256": "a" * 64, "pack_id": self.pack.name,
-                     "plan_id": self.plan.plan_id, "window_id": "production-window"},
+                     "plan_id": self.plan.plan_id, "window_id": getattr(self, "_window_id", "production-window")},
             "reviewed_main": {"head_commit": HEAD},
             "arm_context": context, "evidence": self.evidence}
         ref = self.write(self.arm_path, self.arm_value)
@@ -2151,6 +2152,47 @@ class PackNightProducerTests(unittest.TestCase):
             with self.subTest(path=path), self.assertRaisesRegex(self.driver.PackNightRefusal, "t0_evidence"):
                 self.driver._pack_evidence(self.plan, state)
             path.write_bytes(raw)
+
+    def test_go_producer_enforces_two_by_two_purpose_window_table(self):
+        for rehearsal in (False, True):
+            for prefixed in (False, True):
+                with self.subTest(rehearsal=rehearsal, prefixed=prefixed):
+                    case = PackNightProducerTests()
+                    case._rehearsal_layout = True
+                    case.setUp()
+                    try:
+                        measurement = case.root / "JouleWise-rehearsal-producer-table"
+                        measurement.mkdir()
+                        case._window_id = case.custody.name if prefixed else "production-window"
+                        case.authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
+                            authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
+                        ref = case.write(case.custody / "authorization.json", case.authorization)
+                        case.plan = replace(case.plan, measurement_root=str(measurement),
+                            pack_night={**case.plan.pack_night, "authorization_record": ref})
+                        write_night_plan(case.plan_path, case.plan)
+                        inventory = [{"deployment_id": "production", "measurement_root": str(case.root / "production"),
+                            "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+                        with mock.patch.object(Path, "home", return_value=case.root / "home"), \
+                             mock.patch.object(case.readiness, "__file__", str(measurement / "joulewise/arm_readiness.py")), \
+                             mock.patch.object(case.readiness, "_production_inventory", return_value=inventory):
+                            code, calls = case.run_driver()
+                        path = case.custody / "night/go_receipt.json"
+                        if rehearsal == prefixed:
+                            self.assertEqual(code, case.driver.EXIT_GO)
+                            go = json.loads(path.read_bytes())
+                            case.readiness.validate_pack_night_go_receipt(go)
+                            self.assertEqual(go["purpose"], case.authorization["purpose"])
+                            self.assertIs(go["authorization"]["claim_eligible"], False)
+                            self.assertEqual(len(go), 26)
+                            self.assertEqual(len(calls), 1)
+                        else:
+                            self.assertEqual(code, case.driver.EXIT_REFUSED)
+                            self.assertFalse(path.exists())
+                            self.assertEqual(calls, [])
+                            refusal = json.loads((case.custody / "night/refusal.json").read_bytes())
+                            self.assertIn("rehearsal_purpose_on_production_id" if rehearsal else "purpose", str(refusal))
+                    finally:
+                        case.doCleanups()
 
     def test_rehearsal_plan_and_arm_context_roots_follow_sibling_child_rule(self):
         home = self.root / "home"

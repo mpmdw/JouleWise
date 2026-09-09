@@ -114,3 +114,22 @@ interpreter field: the driver, chain, and preflight always derive
 HEAD against `measurement_head`. The preflight's sole argument is the absolute
 v2 plan filename. Future clone naming and the exact locked venv creation
 commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
+
+D-176 pack-bound T0_REHEARSAL post-night handback (separate from the stub above):
+
+1. Harvest and preserve the completed rehearsal's GO, consumption, capture and
+   bundle evidence. The completed bundle loads and evaluates G1–G6 + G8–G10
+   before control production; an absent `g7_control` locator yields G7 FAIL,
+   detail `g7_control_pending`, rather than a bundle load error.
+2. Prepare the fresh sibling control with the production TRANSACTION_PACK plan
+   specified in [the GO contract §10.5](../contracts/pack_night_go_receipt.md#105-g7-control-2026-09-08).
+   Run `scripts/run_night.py g7-control --plan CONTROL_PLAN --rehearsal-receipt
+   REHEARSAL_RECEIPT --rehearsal-go REHEARSAL_GO` after the night. The two source
+   receipts come from the completed rehearsal; the destination is its separate
+   `-g7-control` sibling. Neither the control nor its `night` directory may be a
+   symlink. Retain the returned `{path, sha256}` locator as `records.g7_control`
+   in the bundle manifest, preserving the completed consumption/capture bytes.
+3. Re-evaluate with `scripts/rehearse_t0_unattended.py --custody-root REHEARSAL_ROOT`.
+   G7 PASS requires this post-night control and acceptance from its authenticated
+   bytes; closure requires all ten gates PASS. The sequence is harvest →
+   g7-control → re-evaluate bundle.
