@@ -3,8 +3,8 @@
     "deployment_id": "JouleWise",
     "measurement_root": "/Users/edr/code/JouleWise",
     "custody_root": null,
-    "ledger_path": null,
-    "notes": "D-176 2026-09-08 retained deployment census; no separate custody or ledger locator attested by the ruling."
+    "ledger_path": "/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl",
+    "notes": "D-176 \u00a710.4 canonical runs root is measurement_root/runs; ledger home is calibration_ledger.DEFAULT_LEDGER_PATH. No separate custody root is attested."
   },
   {
     "deployment_id": "JouleWise-measurement-20260813",

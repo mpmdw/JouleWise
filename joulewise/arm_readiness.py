@@ -235,28 +235,43 @@ class ProductionRootSpec:
 
 
 PRODUCTION_CUSTODY_INVENTORY = Path("configs/production_custody_inventory.json")
+REHEARSAL_CLONE_PREFIX = "JouleWise-rehearsal-"
 PRODUCTION_CUSTODY_ROOTS = (
     ProductionRootSpec("magistrate_state", "HOME_RELATIVE", "night-custody/magistrate", "DISJOINT"),
     ProductionRootSpec("night_custody_parent", "HOME_RELATIVE", "night-custody", "SIBLING_CHILD"),
     ProductionRootSpec("backup_icloud", "HOME_RELATIVE", "Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup", "DISJOINT"),
     ProductionRootSpec("quiet_guard_state", "LITERAL", "/Library/Application Support/JouleWise/quiet-guard", "DISJOINT"),
-    ProductionRootSpec("repo_runs", "CLONE_DERIVED", "runs", "DISJOINT"),
     ProductionRootSpec("deployment_measurement_root", "INVENTORY", "measurement_root", "DISJOINT"),
+    ProductionRootSpec("deployment_runs", "INVENTORY", "measurement_root/runs", "DISJOINT"),
+    ProductionRootSpec("deployment_custody", "INVENTORY", "custody_root", "DISJOINT"),
+    ProductionRootSpec("deployment_ledger", "INVENTORY", "ledger_path", "DISJOINT"),
 )
 # Calibration custody has no code default; it is not invented here. ARM-context
 # roots are rehearsal inputs to the predicate, not production census members.
 
 
-def _production_inventory(*, read_bytes=None):
-    """Authenticate the reviewed deployment inventory against this checkout HEAD."""
+def _production_inventory(plan, *, read_bytes=None):
+    """Read inventory pinned to the plan's reviewed driver commit, never HEAD."""
+    value = plan if isinstance(plan, Mapping) else {
+        key: getattr(plan, key, None)
+        for key in ("repo_head", "measurement_root", "measurement_head")
+    }
     repo_root = Path(__file__).resolve().parents[1]
     relative = PRODUCTION_CUSTODY_INVENTORY
     path = repo_root / relative
     if path.is_symlink() or not path.is_file():
         raise ValueError("production-root census incomplete")
     raw = path.read_bytes() if read_bytes is None else read_bytes(path)
-    pinned = _git_blob_at_head(repo_root, relative.as_posix())
-    if pinned is None or pinned != raw:
+    try:
+        _require_lower_git_oid(value["repo_head"], "repo_head")
+        _require_lower_git_oid(value["measurement_head"], "measurement_head")
+        measurement = Path(value["measurement_root"]).resolve(strict=True)
+        if _git_text(measurement, "rev-parse", "HEAD") != value["measurement_head"]:
+            raise ValueError("measurement_head: checkout differs from plan")
+        pinned = _run_git(repo_root, "show", f"{value['repo_head']}:{relative.as_posix()}")
+    except (ArmReadinessError, KeyError, OSError, RuntimeError) as exc:
+        raise ValueError("production-root census incomplete") from exc
+    if pinned != raw:
         raise ValueError("production-root census incomplete")
     return parse_json_bytes(raw)
 
@@ -264,7 +279,7 @@ def _production_inventory(*, read_bytes=None):
 def production_custody_roots(*, home, inventory):
     """Resolve the frozen census without environment overrides or existence filters.
 
-    ``inventory`` is the parsed HEAD-authenticated inventory supplied by the
+    ``inventory`` is the parsed plan-authenticated inventory supplied by the
     caller; tests supply a synthetic inventory. Resolution failures remain
     explicit ProductionRoot records so G6 cannot turn them into absence.
     """
@@ -293,11 +308,11 @@ def production_custody_roots(*, home, inventory):
     roots = []
     for spec in PRODUCTION_CUSTODY_ROOTS:
         if spec.kind == "INVENTORY":
-            candidates = [(f"{spec.role}:{item['deployment_id']}", Path(item[spec.value])) for item in inventory]
+            key, _, suffix = spec.value.partition("/")
+            candidates = [(f"{spec.role}:{item['deployment_id']}", Path(item[key]) / suffix)
+                          for item in inventory if item[key] is not None]
         elif spec.kind == "HOME_RELATIVE":
             candidates = [(spec.role, home / spec.value)]
-        elif spec.kind == "CLONE_DERIVED":
-            candidates = [(spec.role, Path(__file__).resolve().parents[1] / spec.value)]
         elif spec.kind == "LITERAL":
             candidates = [(spec.role, Path(spec.value))]
         else:
@@ -9845,6 +9860,19 @@ def _authenticate_go_t0_evidence(go, arm, custody_pack_root: Path, night_root: P
         previous = end
 
 
+def _authenticate_launcher_identity(measurement_root) -> Path:
+    path = Path(measurement_root)
+    if not path.is_absolute() or any(p.is_symlink() for p in (path, *path.parents)):
+        raise _go_invalid("measurement_root")
+    try:
+        path = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise _go_invalid("measurement_root: resolution_error") from exc
+    if path != Path(__file__).resolve().parents[1]:
+        raise _go_invalid("measurement_root: launcher is not the planned clone")
+    return path
+
+
 def _authenticate_go_purpose(go, arm, plan) -> None:
     from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
 
@@ -9854,11 +9882,12 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
         raise _go_invalid("rehearsal_purpose_on_production_id")
     if prefixed and not rehearsal:
         raise _go_invalid("purpose")
+    measurement = _authenticate_launcher_identity(plan["measurement_root"])
     if rehearsal:
         from joulewise.t0_rehearsal import _contains
 
         try:
-            production = production_custody_roots(home=Path.home(), inventory=_production_inventory())
+            production = production_custody_roots(home=Path.home(), inventory=_production_inventory(plan))
         except (OSError, ValueError, RuntimeError) as exc:
             raise _go_invalid("rehearsal_roots_not_disjoint") from exc
         if not production:
@@ -9885,7 +9914,12 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
                 elif predicate == "SIBLING_CHILD" and field != "measurement_root":
                     continue
                 elif _contains(root.path, path) or _contains(path, root.path):
-                    raise _go_invalid("rehearsal_roots_not_disjoint")
+                    detail = "rehearsal_roots_not_disjoint"
+                    if field == "measurement_root":
+                        detail += ": measurement_root"
+                    raise _go_invalid(detail)
+        if not measurement.name.startswith(REHEARSAL_CLONE_PREFIX):
+            raise _go_invalid("rehearsal_clone_prefix_invalid: measurement_root")
 
 
 def _authenticate_pack_launch_go(

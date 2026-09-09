@@ -741,6 +741,13 @@ def _authenticate_pack_records(plan: NightPlan):
         raise PackNightRefusal("authorization_record.permitted_blocks")
     if purpose == "CAMPAIGN_TRANSACTION" and authorization["authority"] != "V5-TRANSACTION-GO-01":
         raise PackNightRefusal("authorization_record.authority")
+    if purpose == "T0_REHEARSAL":
+        # Preparation runs before the T-0 author and ARM mint. Re-read again
+        # in the gate/GO and in consumption rather than trusting this result.
+        try:
+            readiness._production_inventory(plan)
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise PackNightRefusal(str(exc)) from exc
     confirmation = records["confirmation_record"]
     if set(confirmation) != {"table_path", "table_sha256", "transcript_sha256", "confirmed_at"}:
         raise PackNightRefusal("confirmation_record.keys")
@@ -845,9 +852,18 @@ def _pack_rehearsal_roots(plan, arm, purpose):
     prefixed = isinstance(window_id, str) and window_id.startswith(t0_rehearsal.REHEARSAL_WINDOW_PREFIX)
     if prefixed != (purpose == "T0_REHEARSAL"):
         raise PackNightRefusal("rehearsal_purpose_on_production_id" if purpose == "T0_REHEARSAL" else "purpose")
+    try:
+        measurement = readiness._authenticate_launcher_identity(plan.measurement_root)
+    except readiness.LaunchLineageError as exc:
+        raise PackNightRefusal(str(exc)) from exc
     if not prefixed:
         return
-    production = readiness.production_custody_roots(home=Path.home(), inventory=readiness._production_inventory())
+    try:
+        production = readiness.production_custody_roots(home=Path.home(), inventory=readiness._production_inventory(plan))
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise PackNightRefusal("rehearsal_roots_not_disjoint") from exc
+    if not production:
+        raise PackNightRefusal("rehearsal_roots_not_disjoint")
     roots = {"measurement_root": plan.measurement_root, "custody_root": plan.custody_root}
     roots.update({"arm_context." + key: value for key, value in arm["arm_context"].items()
                   if key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS})
@@ -872,7 +888,12 @@ def _pack_rehearsal_roots(plan, arm, purpose):
             elif predicate == "SIBLING_CHILD" and field != "measurement_root":
                 continue
             elif t0_rehearsal._contains(root.path, path) or t0_rehearsal._contains(path, root.path):
-                raise PackNightRefusal("rehearsal_roots_not_disjoint")
+                detail = "rehearsal_roots_not_disjoint"
+                if field == "measurement_root":
+                    detail += ": measurement_root"
+                raise PackNightRefusal(detail)
+    if not measurement.name.startswith(readiness.REHEARSAL_CLONE_PREFIX):
+        raise PackNightRefusal("rehearsal_clone_prefix_invalid: measurement_root")
 
 
 def _evaluate_pack_conditions(plan, probes, rows, arm_path):

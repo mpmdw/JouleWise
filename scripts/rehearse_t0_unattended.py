@@ -105,10 +105,11 @@ def _crawl(root: Path) -> tuple[tuple[t0_rehearsal.EvidenceArtifact, ...], tuple
     return tuple(artifacts), tuple(issues)
 
 
-def _production_inventory():
+def _production_inventory(plan):
     """Preserve the bundle loader's byte-reader seam and error vocabulary."""
     try:
         return _read_production_inventory(
+            plan,
             read_bytes=lambda path: _regular_bytes(path, label="production custody inventory"))
     except ValueError as exc:
         raise BundleLoadError(str(exc)) from exc
@@ -163,9 +164,15 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_r
     if not isinstance(production_items, list):
         raise BundleLoadError("production_roots must be a list")
     try:
+        # The pack GO retains the plan's repo/measurement pins. G5 separately
+        # authenticates that GO; the loader must not substitute its own HEAD.
+        if inventory is None:
+            go = readiness.parse_json_bytes(_regular_bytes(
+                custody / record_paths["d149_go"], label="pack GO inventory pins"))
+            inventory = _production_inventory(go)
         production_roots = readiness.production_custody_roots(
             home=Path.home() if home is None else home,
-            inventory=_production_inventory() if inventory is None else inventory,
+            inventory=inventory,
         )
         recorded = {}
         for item in production_items:

@@ -931,6 +931,22 @@ live hardware gate.
 | Integrated review F5 shared prefix | `joulewise/arm_readiness.py:9848` (`_authenticate_go_purpose`); `joulewise/night_gate.py:842` (`_pack_rehearsal_roots`) | `tests/test_arm_readiness.py:2492` (`test_rehearsal_prefix_is_shared_by_gate_and_consumer`) | Either site retains a private prefix after the shared constant changes |
 | Integrated review F6 missing pack and §6 detail symmetry | `joulewise/night_gate.py:675` (`_pack_digest`); `joulewise/arm_readiness.py:9891` (`_authenticate_pack_launch_go`); `joulewise/night_gate.py:842` (`_pack_rehearsal_roots`) | `tests/test_arm_readiness.py:2512` (`test_missing_pack_root_has_identical_gate_and_consumer_refusal`); `tests/test_arm_readiness.py:2325` (`test_rehearsal_window_purpose_and_frozen_root_predicates`) asserts equal gate/consumer reason and bare details | Missing pack maps to invalid in one path, or gate appends a field to the §6 bare detail |
 
+### 9.2 Census cure implementation map — 2026-09-08
+
+These are this seat's §10.4 rows. They supersede the earlier census/HEAD pins
+only; other seats' rows and §10.5 remain lead-owned. The §6 amendment and
+replacement census table are installed within §10.4 to honor this seat's
+section-level write boundary.
+
+| Item | File:line | Regression | Counterfactual |
+|---|---|---|---|
+| §10.4 1 — reviewed census only | `joulewise/arm_readiness.py:237` constants, `:279` resolver; `configs/production_custody_inventory.json:6` canonical ledger | `tests/test_arm_readiness_schemas.py:1724` `test_no_census_kind_or_path_is_derived_from_running_clone`; `:1740` `test_every_non_null_inventory_locator_is_in_resolved_census` | A running clone's own runs self-collides; null becomes a path; non-null custody/ledger disappears |
+| §10.4 2 — launcher identity at both sites | `joulewise/arm_readiness.py:9863` `_authenticate_launcher_identity`, `:9876` consumer; `joulewise/night_gate.py:849` gate | `tests/test_arm_readiness.py:2622` `test_launcher_identity_refuses_before_census_for_both_purposes`; `tests/test_launch_window.py:976` `test_real_minted_v4_go_binds_root_and_refuses_content_change` uses `:907` `_install_launch_inputs` to author the GO in the actual launcher checkout | A process in a different clone passes before the census, for rehearsal or production purpose; or a valid original-root launch fails while pack relocation/content-change refusals are lost |
+| §10.4 3 — un-inventoried, reviewed-named rehearsal | `joulewise/arm_readiness.py:9876`; `joulewise/night_gate.py:849` | `tests/test_arm_readiness.py:2611` `test_real_resolver_shipped_inventory_accepts_running_rehearsal_with_runs`; `:2614` `test_inventoried_running_clone_equal_or_containing_in_either_direction_refuses`; `:2631` `test_uninventoried_clone_without_reviewed_prefix_refuses` | A real resolver self-collides on rehearsal runs, permits inventoried overlap, or accepts an unreviewed basename |
+| §10.4 4 — inventory pinned to plan, measurement checked at its pin | `joulewise/arm_readiness.py:253` `_production_inventory`; `joulewise/night_gate.py:698` preparation; `scripts/rehearse_t0_unattended.py:108` reader, `:118` loader | `tests/test_rehearse_t0_unattended.py:36` `test_inventory_must_equal_plan_repo_head_bytes`; `:52` `test_local_commit_cannot_delete_a_plan_pinned_deployment`; `:85` `test_production_loader_uses_go_plan_pins_for_inventory`; `tests/test_arm_readiness.py:2539` `test_rehearsal_inventory_is_pinned_during_pre_arm_preparation` | HEAD replaces repo_head, a local commit drops a fence, a wrong measurement HEAD passes, or preparation/loader drops the plan pins |
+| §10.4 5 — regression census | All item 1–4 sites above | All item 1–4 tests above; `tests/test_rehearse_t0_unattended.py:21` `test_stale_census_cannot_false_pass_g6`; `tests/test_arm_readiness.py:2440` `test_consumer_applies_rehearsal_census_before_one_use_write` | A stale/incomplete manifest or a missing consumption census still passes |
+| §10.4 6 — existing nits preserved | `joulewise/arm_readiness.py:9876` shared window prefix, `_authenticate_pack_launch_go` missing-pack branch; `joulewise/night_gate.py:675` `_pack_digest`, `:849` shared prefix | `tests/test_arm_readiness.py:2502` `test_rehearsal_prefix_is_shared_by_gate_and_consumer`; `:2522` `test_missing_pack_root_has_identical_gate_and_consumer_refusal` | A private window prefix drifts, or missing pack maps to a different reason/detail |
+
 ## 10. Wire addendum (ruled 2026-09-08, second pass)
 
 MAGISTRATE RULING (interactive, 2026-09-08 ~11:00 PDT; within the cold gate's
@@ -1174,3 +1190,89 @@ six causes, the exact agreement between both refusal artifacts, result cause,
 frozen receipt validation and GO absence. Its three driver-only subcases are
 `night_courier_unavailable`, `night_plan_overruns_deadman` and
 `night_chain_already_started`.
+
+### §10.4 census cure (2026-09-08)
+
+Governing second cold-gate magistrate synthesis, items 1–6, retained verbatim
+below. Source in the lead checkout:
+`docs/process_traces/2026-09-08-handoff-redo/99ey-coldgate-packet-d176-second-gate/13-magistrate-synthesis.md`.
+This block supersedes conflicting §6 purpose/root predicates, §10 S4 and
+§10.3 Q1's census derivations and HEAD pin. It does not amend §10.5.
+
+1. **No census member may be derived from the running process** (Opus Q1.1/Q1.2 governs): delete the `CLONE_DERIVED`
+   kind and the `repo_runs` spec; `PRODUCTION_CUSTODY_ROOTS` admits only LITERAL, HOME_RELATIVE, INVENTORY. The runs,
+   custody and ledger roots of every retained deployment come from the reviewed inventory:
+   `deployment_runs` = INVENTORY `measurement_root/runs`, `deployment_custody` = INVENTORY `custody_root`,
+   `deployment_ledger` = INVENTORY `ledger_path` (null locators skipped; the resolver expands `key/suffix`). The
+   inventory entries gain the real values for the canonical checkout (runs root + ledger path) — today they are null
+   and silently dropped (Opus bench).
+2. **Launcher identity** (judge Q1.2-1 = Opus Q1.4): before the census loop the consumer (and the gate) require
+   `Path(arm_readiness.__file__).resolve().parents[1] == resolve(strict=True)(plan.measurement_root)`, else refuse
+   `launch_go_receipt_invalid` detail `measurement_root: launcher is not the planned clone`.
+3. **Rehearsal clone is un-inventoried and reviewed-named** (judge Q1.1 (c) + Q1.3): for a T0_REHEARSAL the running
+   checkout must not equal, contain, or be contained by any `deployment_measurement_root` entry (refuse
+   `rehearsal_roots_not_disjoint: measurement_root`), AND its basename must start with the reviewed literal
+   `JouleWise-rehearsal-` (constant beside the census) — the clause that survives inventory neglect.
+4. **Inventory pin** (Opus Q2.2 governs over the judge's "sound"): the inventory bytes read at ARM and at consumption
+   must equal `git show <plan.repo_head>:configs/production_custody_inventory.json` in the driver checkout (never
+   `HEAD:`), with the measurement clone checked out at exactly `plan.measurement_head`; a local commit that deletes an
+   entry cannot un-fence a deployment.
+5. **Regressions** (Opus Q1.5 + judge Q1.2-4): with the REAL resolver and the shipped inventory, `measurement_root =
+   Path(arm_readiness.__file__).parents[1]` passes when un-inventoried and its runs/ exists, refuses when inventoried;
+   an invariant that no spec kind is CLONE_DERIVED; an invariant that every non-null inventory `custody_root`/
+   `ledger_path` appears in the resolved census; the launcher-identity refusal; the reviewed-prefix refusal.
+6. **Nits folded** (judge Q1.4): one home for the rehearsal prefix; missing pack_root → `launch_go_receipt_missing` in
+   gate and consumer alike (already in the contract-map fix seat's scope).
+
+
+#### Operative §6 census and predicate amendment
+
+The operative census table is the following eight reviewed derivations. There
+is no process-derived member; `measurement_root/runs` is an inventory key plus
+suffix, not a separate inventory key. Each INVENTORY role is suffixed with
+`:<deployment_id>`. Null optional locators emit no member; every non-null
+custody or ledger locator emits one, whether or not the production path exists.
+
+| Role | Kind | Value | Predicate |
+|---|---|---|---|
+| `magistrate_state` | HOME_RELATIVE | `night-custody/magistrate` | DISJOINT |
+| `night_custody_parent` | HOME_RELATIVE | `night-custody` | SIBLING_CHILD |
+| `backup_icloud` | HOME_RELATIVE | `Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup` | DISJOINT |
+| `quiet_guard_state` | LITERAL | `/Library/Application Support/JouleWise/quiet-guard` | DISJOINT |
+| `deployment_measurement_root` | INVENTORY | `measurement_root` | DISJOINT |
+| `deployment_runs` | INVENTORY | `measurement_root/runs` | DISJOINT |
+| `deployment_custody` | INVENTORY | `custody_root` | DISJOINT |
+| `deployment_ledger` | INVENTORY | `ledger_path` | DISJOINT |
+
+The canonical deployment supplies `/Users/edr/code/JouleWise/runs` through its
+measurement-root derivation and the explicit ledger locator
+`/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl`, matching
+`calibration_ledger.DEFAULT_LEDGER_PATH`. No separate canonical custody store
+is attested, so that locator remains null.
+
+The §6 acceptance row additionally requires the running checkout to equal the
+strictly resolved planned measurement root. A T0_REHEARSAL requires its basename
+to start with the single reviewed `REHEARSAL_CLONE_PREFIX` in `arm_readiness.py`.
+Failure is `launch_go_receipt_invalid`, detail
+`rehearsal_clone_prefix_invalid: measurement_root`. Launcher mismatch uses
+item 2's exact detail. Measurement containment uses item 3's exact
+`rehearsal_roots_not_disjoint: measurement_root`; other root refusals retain
+§6's bare detail and both sites agree. Existing strict, absolute, non-symlink
+root checks and the SIBLING_CHILD exception continue to apply.
+
+Inventory authentication during pre-ARM preparation, gate/GO reauthentication
+and consumption receives the plan's `repo_head`, `measurement_head` and
+`measurement_root`. It reads inventory bytes in the running driver checkout,
+compares them to the blob at `plan.repo_head`, and checks the measurement
+checkout's actual HEAD against `plan.measurement_head`. Neither an uncommitted
+edit nor a locally committed entry deletion changes the reviewed census.
+The G6 bundle loader uses the pack GO's retained plan pins for the same reader;
+G5 owns GO authentication. Its manifest still must equal the entire derived
+census. No G6 derivation edit in `joulewise/t0_rehearsal.py` is needed: it already
+uses resolver-supplied roots and looks up each role's frozen predicate.
+
+Item 6's existing window-prefix home remains
+`t0_rehearsal.REHEARSAL_WINDOW_PREFIX`; both gate and consumer import that home.
+The distinct clone-name prefix has the one home specified above. Missing
+`pack_root` remains `launch_go_receipt_missing`, detail `pack_root`, at both
+sites. These are software regressions only; the lead retains the live gate.
