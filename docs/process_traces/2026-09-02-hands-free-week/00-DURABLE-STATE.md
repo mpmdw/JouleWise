@@ -784,3 +784,9 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `now_monotonic_ns`; a fresh CI runner's uptime is minutes (< 1000 s) so the capture reads as invalid/stale, while this Mac's uptime is 6
   days — the same "Mac-calibrated assumption" class as PR #310's rounds. Root-cause consult 99 (Astra high) launched before any fix;
   PR #311 HOLDS. Opus review 90 §4's "no predicate reads absolute realtime" was about REALTIME; the RAW/now coupling is the new fact.
+- UPDATE 2026-09-09 ~15:30 PDT: PR #311 root cause CONFIRMED by consult 99: the integration class froze ordinary time at the HOST reading
+  and the census fixture subtracts _MIN_IDLE_NS (600 s), so a fresh CI runner (< 10 min uptime) drove started_monotonic_ns negative →
+  `_capture` refused; the synthetic RAW anchor was not the failing comparison. Fix round 2 (9dbacb40): setUp freeze = the synthetic instant
+  from coherent_clock_anchor(); regression ArmReadinessIntegrationClockPortabilityTests (census test under simulated host readings
+  1e11/5e11/8e11/5e14). Delta 101 clean (same signature closed in this lane's integration path; consult 99's three extra T0 refusal tests
+  are a recorded coverage follow-up, helpers exist). CI on 9dbacb40 pending; then merge main in, replay alone, ledger, merge.
