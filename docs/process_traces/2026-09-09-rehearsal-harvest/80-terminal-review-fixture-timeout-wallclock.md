@@ -1,8 +1,9 @@
-# Magistrate terminal review — FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310), merge candidate = the integration head named in the ledger rows 11/12
+# Magistrate terminal review — FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310), merge candidate `0478cc5b97c4eace5695a781ccfb37eed5ad0339` (016ac5f0 + merge of main 7f68a31d)
 
 Reviewer: headless magistrate, activation 2145630c (Fable), full session context, not delegated. Diff read in full at the bench in
-`/Users/edr/code/JouleWise-wt-fixture-timeout` (`git diff 21e31107..e8cfdd4c`: tests/fixtures/fake_powermetrics_process.py,
-tests/test_run_campaign.py, tests/test_idle_admission.py; production diff empty).
+`/Users/edr/code/JouleWise-wt-fixture-timeout` (`git diff 21e31107..016ac5f0`: tests/fixtures/fake_powermetrics_process.py,
+tests/test_run_campaign.py, tests/test_idle_admission.py; production diff empty). Round 3 (016ac5f0) is the consult-authored
+regression (87), delta 92 clean.
 
 ## Forcing defect (primary evidence)
 
@@ -44,6 +45,14 @@ introduce defects — proven again; the delta caught it before CI did.
 Round 2 (cd7d39d5): pin removed, derivation cited in the comment; positional predicate stands. Delta 82 (Astra): clean, the
 "machine-timing-dependent sentinel availability" signature closed statically; the stressed regression still derives 100 samples because
 its ≥3.5× floor drives the paced continuous baseline to the cap on any machine.
+Linux CI then failed the regression ('unknown' != 'bounded'); two diagnostic-only commits (3ca9a58c, bdbc9e75) surfaced the cause: the
+regression's own in-controller cadence probe (`assertIsNotNone(ratio)`) raised inside `_run_lifecycle`, so the producer recorded
+post_idle_unavailable. Two consecutive rounds had failed with the same signature (Mac-calibrated test assumptions), so under the standing
+escalation rule round 3 went to consult 87 (Astra xhigh), not to a bench guess: a non-null cadence ratio needs an internal sample gap inside
+the ~112 ms measured window, which the 175 ms stressed sampling interval does not guarantee on a fast host; the Mac pass was scheduling
+geometry. Round 3 (016ac5f0) is the consult's minimal replacement (stress floor, real deadline, strict_valid True, idle_drift bounded, 100
+post samples; the same-stage cadence/clock-anchor immutability coverage is removed and recorded as removed). Delta 92: clean, the
+Mac-calibrated class closed statically. CI green on 016ac5f0 (run 34395094058).
 
 ## Overbuild / merge-ability prune (row 8)
 
@@ -57,8 +66,22 @@ Nothing to prune: one fixture flag with a default that preserves today's behavio
 
 ## Replay (row 9)
 
-REPLAY_TAIL
+Command (unpiped, rc captured): `PYTHONDONTWRITEBYTECODE=1 R7F_CORPUS_ROOT=/Users/edr/code/JouleWise JOULEWISE_BACKUP_ROOTS= python3 scripts/shard_tests.py --workers 4` in
+`/Users/edr/code/JouleWise-wt-fixture-timeout` at 0478cc5b (contains origin/main 7f68a31d), started 12:57:24 PDT, alone in-process (four
+shards concurrent; no seat, reviewer or other test process launched by this session; timer probe 3.45× at start). Verbatim
+(93-replay-310-attempt2-0478cc5b-tail.txt):
+
+```
+WORKERS SUMMARY shards=4 modules=221 tests=5646 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+```
+
+Attempt 1 at cd7d39d5 (83): 5646 tests, 1 failure (`test_identity_arm_evidence_symlink_escape_refuses`, readiness_clock_preflight_refused
+under load, green alone 2/2); the four idle-admission tests and the race test passed under concurrency in both attempts.
 
 ## Verdict
 
-VERDICT_LINE
+CLEAN for merge at 0478cc5b: CI green at 016ac5f0 and re-run at the merge head; full-suite replay alone on the integration tree rc 0 with
+zero failures; three fix rounds each delta-audited (79 refuted round 1's pin; 82 clean; 92 clean); the escalation trigger honoured
+(consult 87 authored round 3). The seat's identity assertion is recorded as vacuous for timestamps (77 S2); the proof of timestamp
+neutrality is the consumer-side route.

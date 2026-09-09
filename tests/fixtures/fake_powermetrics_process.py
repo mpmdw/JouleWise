@@ -4,6 +4,13 @@
 It reuses the committed captured plist documents and changes only the native
 whole-second date plus requested interval. The production parser, NUL framing,
 rail extraction, launch/readiness bracket, and termination path remain real.
+
+Bounded sentinel tests may opt into --no-sleep: elapsed_ns and native dates
+then advance by the requested interval without waiting, so the synthetic
+window ends LEAD the real wall clock (record k is stamped start + (k+1)*i
+regardless of when it is written). Continuous captures must retain real
+pacing because they supply the measured clock bracket and are subject to
+the D-078 causal check; --no-sleep is refused without -n for that reason.
 """
 
 from __future__ import annotations
@@ -31,7 +38,12 @@ def main() -> int:
     parser.add_argument("-n", type=int)
     parser.add_argument("-i", type=int, default=1000)
     parser.add_argument("-o", required=True)
+    parser.add_argument("--no-sleep", action="store_true")
     args, _unknown = parser.parse_known_args()
+    if args.no_sleep and args.n is None:
+        parser.error("--no-sleep requires a bounded capture (-n)")
+    # Test-only fault injection: reproduce the observed per-sample timer slack.
+    sleep_scale = float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "1"))
     mode = os.environ.get("P2038_FAKE_POWERMETRICS_MODE", "normal")
     invocation = 0
     state_path_text = os.environ.get("P2038_FAKE_POWERMETRICS_STATE")
@@ -57,21 +69,30 @@ def main() -> int:
     # never reports support from before its own spawn, and the D-078 causal
     # constraint rejects such data.
     previous_endpoint_s = time.monotonic()
+    native_start = datetime.now(UTC)
     with output.open("wb", buffering=0) as handle:
         while args.n is None or index < args.n:
             if index == 0 and args.n is None and mode == "wide":
                 time.sleep(1.2)
-            if index == 0:
+            if index == 0 and not args.no_sleep:
                 # Real powermetrics emits its first record only after one full
                 # averaging interval; record 0's window END must causally
                 # follow the spawn by at least elapsed_ns (D-078).
-                time.sleep(interval_s)
-            if index:
-                time.sleep(interval_s)
+                time.sleep(interval_s * sleep_scale)
+            if index and not args.no_sleep:
+                time.sleep(interval_s * sleep_scale)
             document = dict(documents[index % len(documents)])
-            endpoint_s = time.monotonic()
-            document["elapsed_ns"] = max(
-                1, int((endpoint_s - previous_endpoint_s) * 1_000_000_000)
+            endpoint_s = (
+                previous_endpoint_s + interval_s
+                if args.no_sleep
+                else time.monotonic()
+            )
+            document["elapsed_ns"] = (
+                args.i * 1_000_000
+                if args.no_sleep
+                else max(
+                    1, int((endpoint_s - previous_endpoint_s) * 1_000_000_000)
+                )
             )
             previous_endpoint_s = endpoint_s
             # Keep the delta-aggregate invariant power * elapsed == energy;
@@ -85,7 +106,11 @@ def main() -> int:
             ):
                 processor[counter] = round(float(processor[rail]) * elapsed_s)
             document["processor"] = processor
-            native_timestamp = datetime.now(UTC)
+            native_timestamp = (
+                native_start + timedelta(seconds=(index + 1) * interval_s)
+                if args.no_sleep
+                else datetime.now(UTC)
+            )
             if mode == "inconsistent":
                 native_timestamp += timedelta(seconds=60)
             document["timestamp"] = native_timestamp
