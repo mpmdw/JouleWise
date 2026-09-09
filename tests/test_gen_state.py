@@ -26,7 +26,6 @@ EXPECTED_IDS = {
     "BRIDGE-BASELINE-ANCHORS-01",
     "UNIT-VOCAB-SHARED-01",
     "REGISTRY-ROW-PIN-DRIFT",
-    "ARM-INTEGRATION-LOAD-01",
     "CLONE-READINESS-01",
     "CONTRACT-PIN-DRIFT-01",
 
@@ -724,7 +723,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 157)  # T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309) and FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) DONE left the kernel
+        self.assertEqual(len(self.tasks), 156)  # T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,

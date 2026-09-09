@@ -790,3 +790,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   from coherent_clock_anchor(); regression ArmReadinessIntegrationClockPortabilityTests (census test under simulated host readings
   1e11/5e11/8e11/5e14). Delta 101 clean (same signature closed in this lane's integration path; consult 99's three extra T0 refusal tests
   are a recorded coverage follow-up, helpers exist). CI on 9dbacb40 pending; then merge main in, replay alone, ledger, merge.
+- UPDATE 2026-09-09 ~16:55 PDT: PR #311 MERGED at `d2dffe4b` (ARM-INTEGRATION-LOAD-01 DONE; kernel 156 live rows). Four PRs merged today
+  (#308, #309, #310, #311); the last three full-suite replays alone were fully green (5646/5649/5650 tests rc 0) — the load-flake class
+  that blocked two ledgers this morning is cured at the fixture level (both lanes), with live machine readiness explicitly not proven by
+  synthetic observations. NOTHING IS ARMED. NEXT EXACT ACTION unchanged: the activation alive 2026-09-10 03:00–06:30 PDT executes runbook
+  67 for rehearsal-20260911 (never install after 07:00; new plan + notice if the window is missed). Open desk items: ruling-44 C3 class
+  re-run addendum on main (cure now on main; one quiet 3-minute slot), consult 99's three T0 refusal tests, item 1 cold_start provenance,
+  CLONE-READINESS-01 agent-side preparation per scout 64 (cut deferred to just before the pack rehearsal); Ed items: powermode question,
+  row-9 wording, production v5 re-cut. Codex weekly quota ~80 %.
