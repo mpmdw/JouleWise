@@ -417,10 +417,13 @@ def make_go_fixture(
     registry_target = repo / registry_relative
     registry_target.parent.mkdir(parents=True)
     registry_target.write_bytes(fixture_row_registry(pack_name))
-    # Authoring replays import these test modules in a copied repository.
-    # Carry their observation helper with the fixture, not the runner's path.
+    # Production executes a focused unittest suite BY TEST ID inside this copied
+    # repository (joulewise/arm_readiness_evidence.py _execute_unittest_suite_subprocess),
+    # and those test modules import tests.fixtures.arm_clock; carry the observation
+    # helper with the fixture (Opus review 90 SF-2 proposed dropping it; refuted by
+    # execution: 'focused suite could not be loaded').
     clock_fixture = Path("tests/fixtures/arm_clock.py")
-    (repo / clock_fixture).parent.mkdir(parents=True)
+    (repo / clock_fixture).parent.mkdir(parents=True, exist_ok=True)
     (repo / clock_fixture).write_bytes((ROOT / clock_fixture).read_bytes())
     detection_floor_sources = tuple(
         detection_floor_source_root / relative
@@ -900,7 +903,9 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             return_value={"exec_argv": exec_argv},
         ), mock.patch.object(launch_window.os, "execve") as execve:
             # Assemble these immutable fixture inputs once through production.
-            # Eight redundant caller-side ARM replays dominated the race cost.
+            # Eight redundant caller-side ARM replays were the largest single
+            # cost of the race (Opus review 90 measured CPU 96.1 s -> 59.1 s,
+            # about -38 %, and per-thread wall -1.4 s against the 30 s join).
             # Each consumer still reauthenticates ARM/GO, hashes and bindings,
             # checks real deadlines, and races the real O_EXCL claim below.
             launch_inputs = launch_window._assemble_launch_inputs(args)
