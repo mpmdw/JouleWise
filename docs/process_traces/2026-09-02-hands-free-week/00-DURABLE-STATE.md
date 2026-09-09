@@ -772,3 +772,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   must be carried; the copy is restored with `exist_ok=True` and the rationale in the comment; the round is staged uncommitted in
   `JouleWise-wt-arm-load` until the #310 replay finishes (replays run alone). Ruling-56 ADDENDUM-2 obligation for #311 stays OPEN
   (no under-load evidence at its head yet; the seat timed out before its burner run).
+- UPDATE 2026-09-09 ~14:00 PDT: PR #310 MERGED at `79920ec9` (FIXTURE-TIMEOUT-WALLCLOCK-01 DONE; kernel 157 live rows). Its final replay alone at
+  0478cc5b: 5646 tests, 0 failures (first fully green local replay of the day; the four idle-admission tests and the race test pass under
+  four-shard concurrency). Ruling-44 C3 / PR #308 row-9 ADDENDUM-1: the class re-run on then-current main is owed once a quiet slot allows
+  (the cure is now on main); ruling-56 ADDENDUM-2: race test PASS under concurrency twice (probe 3.35×/3.45×). PR #311 fix round 1 is
+  in its focused run; then its own replay alone, ledger, merge.

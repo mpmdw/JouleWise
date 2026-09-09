@@ -2331,36 +2331,6 @@
       "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
-    "FIXTURE-TIMEOUT-WALLCLOCK-01": {
-      "acceptance": {
-        "evidence": [
-          "Regression test that fails at 83ab38ed under simulated slack and passes after the cure.",
-          "PR merged."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FIXTURE-TIMEOUT-WALLCLOCK-01/acceptance",
-          "label": "FIXTURE-TIMEOUT-WALLCLOCK-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The four IdleAdmissionCoreVerdictTests pass under a simulated ≥3.5× timer slack without changing `_capture_timeout_s`; defect-shaped regression names the observed trigger (capture TimeoutExpired on powermetrics_idle_post.plist)."
-      },
-      "authority": {
-        "label": "Cold gate 44 Q1 C5 (fixture coupling lane, registration only)",
-        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/44-coldgate-ruling-replay-verdict.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "tests/fixtures/fake_powermetrics_process.py sleeps per sample under the production `_capture_timeout_s` wall-clock timeout (max(15, n·interval·1.5 + 10) s = 17.5 s for 100 samples at 50 ms, a 3.5× margin over the 5.0 s nominal sleep); measured wall-clock slack on the MacBook drifts between ~2.1× and ~3.6× minute to minute, so the post-idle capture intermittently overruns, the producer stores post_idle_unavailable and four IdleAdmissionCoreVerdictTests fail; cure = capture-timeout margin sized against measured slack on the fixture side (fixture-aware timeout or a non-sleeping fixture), production timeout unchanged",
-      "id": "FIXTURE-TIMEOUT-WALLCLOCK-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 169,
-      "status": "queued",
-      "status_note": "2026-09-09: QUEUED by cold gate 44 (C5), reframed per the paired Opus refuter 45: the failure is a flaky wall-clock coupling, not a machine-state defect — the same test returned OK on the same tree minutes later with pmset powermode 1 still set (45 §Refutations), and sleep(0.05) slack measured 0.177 s then ~0.10 s. Observed 2026-09-09: fixture 18.9 s and 11.6 s against the 17.5 s timeout; CI (Linux) unaffected. Addendum obligation (44 C3): PR #308's ledger row 9 carries the failing replay tail and the three RED class re-run tails (4/4/3, 39b logs) from the same session — the refuter's green-before-merge condition was not met; after Ed sets powermode 0 or this cure merges (whichever first), re-run the 71-test class on then-current main and record the tail as a dated addendum to that row; if it is not green with powermode 0 the four failures become an open defect on main. Evidence: docs/process_traces/2026-09-09-rehearsal-harvest/42-bench-rootcause-low-power-mode.md (bench chain), 44-coldgate-ruling-replay-verdict.md, 45-coldgate-opus-refuter-replay-verdict.md.",
-      "stop_card": null
-    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
