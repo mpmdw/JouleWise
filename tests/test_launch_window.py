@@ -2237,6 +2237,127 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
         self.assertFalse(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").exists())
 
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_g7_control_refuses_both_presentations_before_missing_arm(self):
+        """§10.5 admission regression: the control deliberately has no ARM.
+
+        This pins the required production-entry behavior, not a substitute
+        validator. It remains red until the launcher owner installs the ruling.
+        """
+        from joulewise import t0_rehearsal
+
+        window_id = t0_rehearsal.REHEARSAL_WINDOW_PREFIX + "g7-fixture"
+        parent = Path(self.fixture.temporary.name).resolve() / "home/night-custody"
+        rehearsal_root = parent / window_id
+        control = parent / (window_id + "-g7-control")
+        rehearsal_root.mkdir(parents=True)
+        control.mkdir()
+        # Preserve completed-night evidence while presenting from its sibling.
+        consumed = rehearsal_root / "arm-0001.consumed.json"
+        started = rehearsal_root / "chain.started"
+        consumed.write_bytes(b"completed rehearsal consumption fixture\n")
+        started.write_bytes(b"completed rehearsal capture fixture\n")
+        preserved = {path: path.read_bytes() for path in (consumed, started)}
+        plan = json.loads(self.case.inputs["night_plan"].read_bytes())
+        plan["custody_root"] = str(control)
+        authorization = json.loads(Path(plan["pack_night"]["authorization_record"]["path"]).read_bytes())
+        authorization.update(purpose="CAMPAIGN_TRANSACTION", authority="V5-TRANSACTION-GO-01")
+        auth_path = control / "authorization.json"
+        auth_path.write_bytes(arm_readiness.render_json(authorization))
+        plan["pack_night"]["authorization_record"] = {
+            "path": str(auth_path), "sha256": hashlib.sha256(auth_path.read_bytes()).hexdigest()}
+        plan_path = control / "night_plan.json"
+        plan_path.write_bytes(arm_readiness.render_json(plan))
+        go = copy.deepcopy(self.case.inputs["authenticated_go_receipt"])
+        go["purpose"] = "T0_REHEARSAL"
+        go["authorization"]["purpose"] = "T0_REHEARSAL"
+        source_go = rehearsal_root / "go_receipt.json"
+        source_go.write_bytes(arm_readiness.render_json(go))
+        preserved[source_go] = source_go.read_bytes()
+        six_key = {
+            "schema_version": t0_rehearsal.REHEARSAL_RECEIPT_SCHEMA,
+            "receipt_class": t0_rehearsal.REHEARSAL_RECEIPT_CLASS,
+            "claim_eligible": False, "window_id": window_id,
+            "custody_root": str(rehearsal_root), "acceptance_target": "T0-UNATTENDED-01",
+        }
+        for name, raw, detail in (
+            ("presented_rehearsal_receipt.json", arm_readiness.render_json(six_key),
+             "class=" + t0_rehearsal.REHEARSAL_RECEIPT_CLASS),
+            ("presented_go_receipt.json", source_go.read_bytes(),
+             "rehearsal_purpose_on_production_id"),
+        ):
+            with self.subTest(presentation=name):
+                presented = control / "night" / name
+                presented.parent.mkdir(exist_ok=True)
+                presented.write_bytes(raw)
+                argv = list(self.argv)
+                for flag, value in (
+                    ("--arm-receipt", control / "absent-arm.json"),
+                    ("--arm-readiness-custody-root", control),
+                    ("--night-plan", plan_path), ("--go-receipt", presented),
+                ):
+                    argv[argv.index(flag) + 1] = str(value)
+                self.assertEqual(len(argv), 16)
+                output = io.BytesIO()
+                with mock.patch.object(launch_window, "_verify_arm_receipt") as verify, \
+                     mock.patch.object(launch_window, "_consume_launch_capability") as consume, \
+                     mock.patch.object(launch_window.os, "execve") as execute, \
+                     mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+                    self.assertEqual(launch_window.main(argv), 2)
+                verify.assert_not_called()
+                consume.assert_not_called()
+                execute.assert_not_called()
+                self.assertEqual(list(control.rglob("*.consumed.json")), [])
+                self.assertEqual(list(control.rglob("chain.started")), [])
+                for path, original in preserved.items():
+                    self.assertEqual(path.read_bytes(), original)
+                self.assertEqual(json.loads(output.getvalue()), {
+                    "status": "REFUSE", "reason_codes": ["launch_go_receipt_invalid"],
+                    "detail": detail,
+                })
+
+    def test_valid_rehearsal_class_refused_by_production_entry_and_consumer(self):
+        """B4: real six-key rehearsal authority, never a malformed GO surrogate."""
+        from joulewise import t0_rehearsal
+        from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
+
+        with tempfile.TemporaryDirectory() as temporary:
+            rehearsal_root = FixtureBuilder(Path(temporary)).build()
+            bundle = fixture_bundle(rehearsal_root)
+            self.assertEqual(t0_rehearsal.evaluate_g6(bundle).status,
+                             t0_rehearsal.GateStatus.PASS)
+            presented = bundle.record("rehearsal_receipt")
+            self.assertEqual(set(presented.value), t0_rehearsal._REHEARSAL_RECEIPT_KEYS)
+            go_path = self.case.inputs["go_receipt"]
+            go_path.write_bytes(presented.raw)
+            self.case.inputs.update(authenticated_go_receipt=presented.value,
+                                    go_receipt_sha256=presented.sha256)
+            detail = "class=" + t0_rehearsal.REHEARSAL_RECEIPT_CLASS
+            output = io.BytesIO()
+            with mock.patch.object(launch_window.os, "execve") as execute, \
+                 mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+                self.assertEqual(launch_window.main(self.argv), 2)
+            self.assertEqual(json.loads(output.getvalue()), {
+                "status": "REFUSE", "reason_codes": ["launch_go_receipt_invalid"],
+                "detail": detail,
+            })
+            execute.assert_not_called()
+            # The launcher checks schema during assembly; independently prove
+            # that bypassing that assembly cannot bypass the callee's check.
+            with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                self.case.consume()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+            self.assertEqual(str(caught.exception), detail)
+            # Bytes/digest authentication must still precede the class check.
+            self.case.inputs["go_receipt_sha256"] = "0" * 64
+            with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                self.case.consume()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+            self.assertIn("sha256", str(caught.exception))
+            self.assertNotIn("class=", str(caught.exception))
+            for custody in (self.fixture.custody, rehearsal_root):
+                self.assertEqual(list(custody.rglob("*.consumed.json")), [])
+                self.assertEqual(list(custody.rglob("chain.started")), [])
 
 
 if __name__ == "__main__":
