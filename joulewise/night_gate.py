@@ -1040,61 +1040,70 @@ def evaluate_night(plan: NightPlan, probes: Probes, *, pack_arm_receipt=None, pa
     if census_refusal is not None:
         return _finish(plan, probes, rows, census_refusal)
 
-    # The chain and sidecar are read as text by the injected adapter; UTF-8 is
-    # the ruled byte representation for hashing text observations.
-    try:
-        chain_text = probes.read_text(plan.chain_path)
-        sidecar_text = probes.read_text(plan.chain_sha256_path)
-        if not isinstance(chain_text, str) or not isinstance(sidecar_text, str):
-            raise ProbeError("chain and sidecar probes must return text")
-        observed_chain_sha256 = hashlib.sha256(chain_text.encode("utf-8")).hexdigest()
-    except Exception as exc:
-        return _probe_refusal(plan, probes, rows, evidence, exc)
-    sidecar_tokens = sidecar_text.split()
-    expected_chain_sha256 = sidecar_tokens[0] if sidecar_tokens else ""
-    rows["C5"].measured.update(
-        {
-            "chain_path": plan.chain_path,
-            "chain_sha256_path": plan.chain_sha256_path,
-            "chain_sha256": observed_chain_sha256,
-            "expected_chain_sha256": expected_chain_sha256,
-        }
-    )
-    rows["C5"].evidence.extend(
-        (f"chain:{plan.chain_path}", f"chain_sha256:{plan.chain_sha256_path}")
-    )
-    sidecar_defect: str | None = None
-    if not sidecar_tokens:
-        sidecar_defect = "sidecar token check failed: expected one or two tokens, got zero"
-    elif len(sidecar_tokens) >= 3:
-        sidecar_defect = (
-            f"sidecar token check failed: expected one or two tokens, got {len(sidecar_tokens)}"
+    if plan.receipt_class == "REHEARSAL_STUB":
+        rows["C5"].measured.update(
+            {
+                "chain_sha256": None,
+                "expected_chain_sha256": None,
+                "chain_stub": "built_in_stub_by_design",
+            }
         )
-    elif _SHA256_RE.fullmatch(expected_chain_sha256) is None:
-        sidecar_defect = "sidecar digest check failed: first token must be 64 lowercase hex"
-    elif len(sidecar_tokens) == 2:
-        chain_basename = plan.chain_path.rsplit("/", 1)[-1]
-        if sidecar_tokens[1] != chain_basename:
+    else:
+        # The chain and sidecar are read as text by the injected adapter; UTF-8 is
+        # the ruled byte representation for hashing text observations.
+        try:
+            chain_text = probes.read_text(plan.chain_path)
+            sidecar_text = probes.read_text(plan.chain_sha256_path)
+            if not isinstance(chain_text, str) or not isinstance(sidecar_text, str):
+                raise ProbeError("chain and sidecar probes must return text")
+            observed_chain_sha256 = hashlib.sha256(chain_text.encode("utf-8")).hexdigest()
+        except Exception as exc:
+            return _probe_refusal(plan, probes, rows, evidence, exc)
+        sidecar_tokens = sidecar_text.split()
+        expected_chain_sha256 = sidecar_tokens[0] if sidecar_tokens else ""
+        rows["C5"].measured.update(
+            {
+                "chain_path": plan.chain_path,
+                "chain_sha256_path": plan.chain_sha256_path,
+                "chain_sha256": observed_chain_sha256,
+                "expected_chain_sha256": expected_chain_sha256,
+            }
+        )
+        rows["C5"].evidence.extend(
+            (f"chain:{plan.chain_path}", f"chain_sha256:{plan.chain_sha256_path}")
+        )
+        sidecar_defect: str | None = None
+        if not sidecar_tokens:
+            sidecar_defect = "sidecar token check failed: expected one or two tokens, got zero"
+        elif len(sidecar_tokens) >= 3:
             sidecar_defect = (
-                "sidecar basename check failed: "
-                f"expected {chain_basename!r}, got {sidecar_tokens[1]!r}"
+                f"sidecar token check failed: expected one or two tokens, got {len(sidecar_tokens)}"
             )
-    if sidecar_defect is None and observed_chain_sha256 != expected_chain_sha256:
-        sidecar_defect = (
-            f"chain digest check failed: observed {observed_chain_sha256}, "
-            f"sidecar {expected_chain_sha256}"
-        )
-    if sidecar_defect is not None:
-        return _finish(
-            plan,
-            probes,
-            rows,
-            Refusal(
-                "night_chain_digest_mismatch",
-                sidecar_defect,
-                tuple(evidence),
-            ),
-        )
+        elif _SHA256_RE.fullmatch(expected_chain_sha256) is None:
+            sidecar_defect = "sidecar digest check failed: first token must be 64 lowercase hex"
+        elif len(sidecar_tokens) == 2:
+            chain_basename = plan.chain_path.rsplit("/", 1)[-1]
+            if sidecar_tokens[1] != chain_basename:
+                sidecar_defect = (
+                    "sidecar basename check failed: "
+                    f"expected {chain_basename!r}, got {sidecar_tokens[1]!r}"
+                )
+        if sidecar_defect is None and observed_chain_sha256 != expected_chain_sha256:
+            sidecar_defect = (
+                f"chain digest check failed: observed {observed_chain_sha256}, "
+                f"sidecar {expected_chain_sha256}"
+            )
+        if sidecar_defect is not None:
+            return _finish(
+                plan,
+                probes,
+                rows,
+                Refusal(
+                    "night_chain_digest_mismatch",
+                    sidecar_defect,
+                    tuple(evidence),
+                ),
+            )
     rows["C5"].status = "PASS"
     rows["C5"].measured["detail"] = (
         "window, plan freshness, measurement HEAD, and chain identity passed"
