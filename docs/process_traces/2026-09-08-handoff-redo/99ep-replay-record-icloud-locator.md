@@ -12,3 +12,9 @@ rc=0
 ```
 
 FAIL:/ERROR: lines in attempt 3: 0.
+
+Attempt 4 (2051dd01 = branch + main 99a42edb merged, 17:25, alone): PASS.
+```
+WORKERS SUMMARY shards=4 modules=216 tests=5467 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+```
