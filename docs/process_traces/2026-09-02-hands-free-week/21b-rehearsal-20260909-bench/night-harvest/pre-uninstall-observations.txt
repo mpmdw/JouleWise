@@ -1,0 +1,60 @@
+-	3	com.joulewise.night
+-	0	com.joulewise.magistrate
+-	0	com.joulewise.night.deadman
+-rw-r--r--@  1 edr  staff  1157 Sep  6 03:08 com.joulewise.magistrate.plist
+-rw-r--r--@  1 edr  staff  1368 Sep  9 01:57 com.joulewise.night.deadman.plist
+-rw-r--r--@  1 edr  staff  1352 Sep  9 01:57 com.joulewise.night.plist
+## HEAD (no branch)
+ae8f074ffa554707a9eac95995ab8ec03235d118
+a84e0f7f2996d4aaf29e221536d22b5ecc99d11e	refs/heads/night-results/20260909
+a84e0f7f2996d4aaf29e221536d22b5ecc99d11e 2026-09-09 02:57:33 -0700 record night 20260909
+d4d494ec2226e957ee10b5051778f39fa9a21764 2026-09-09 02:56:09 -0700 record night 20260909
+{
+  "activation_id": "628c2eed-acf6-483d-998e-31c91f36e6d4",
+  "activation_spawn_epoch_s": 1788949981.162783,
+  "attempt": 5,
+  "backoff_boot_id": "kern.boottime:{ sec = 1788406516, usec = 224559 } Wed Sep  2 20:35:16 2026",
+  "backoff_index": 0,
+  "clock_drain": false,
+  "clock_sane_samples": 8998,
+  "fenced_checkouts": [
+    [
+      "__canonical_repo__",
+      "/Users/edr/code/JouleWise",
+      null
+    ]
+  ],
+  "generic_backoff_index": 0,
+  "last_clock": {
+    "epoch_s": 1788950204.064847,
+    "monotonic": 375896.723251958
+  },
+  "next_eligible_epoch_s": 0.0,
+  "next_eligible_monotonic": 0.0,
+  "notice_pending": [],
+  "reason": "spawned activation 628c2eed-acf6-483d-998e-31c91f36e6d4",
+  "remote_stop": {
+    "detail": "stop branch absent; positive control present",
+    "observed_monotonic": 375672.821684875,
+    "state": "CLEAR"
+  },
+  "resident_hold_drain": null,
+  "resident_session": {
+    "activation_id": "628c2eed-acf6-483d-998e-31c91f36e6d4",
+    "activation_spawn_epoch_s": 1788949981.162783,
+    "binary_symlink": "/Users/edr/.local/bin/claude",
+    "binary_version": "2.1.265 (Claude Code)",
+    "launch_epoch_s": 1788949981.162783,
+    "pid": 82637,
+    "schema": "joulewise.magistrate_lock.v1",
+    "start_time": "Wed Sep 9 03:33:01 2026",
+    "status": "ACTIVE",
+    "supervisor_pid": 82634
+  },
+  "schema": "joulewise.magistrate_watchdog_state.v1",
+  "standdown_phase": null,
+  "state": "ACTIVE",
+  "transition_epoch_s": 1788949981.162783,
+  "transition_seq": 23,
+  "usage_backoff_index": 0
+}

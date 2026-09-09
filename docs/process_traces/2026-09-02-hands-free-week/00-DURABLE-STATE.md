@@ -648,3 +648,19 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `/Users/edr/night-custody/rehearsal-20260909/night/*` + `night.log`; verify `night-results/20260909` on origin; record under
   NIGHT-REHEARSAL-01; `--uninstall` from the stub checkout; remove stub checkout + plan root; complete PR #308's ledger and merge
   under the normal gates; then CLONE-READINESS-01 → G2-a inputs at the earliest census-clean time; remote-control test between windows.
+
+## 2026-09-09 activation 628c2eed (spawned epoch 1788949981, 03:33:01 PDT; events.jsonl seq 22–23; watchdog attempt 5) — post-belt harvest; agents uninstalled; nothing armed
+
+- Launched after the 02:45–03:30 belt with predicates clear. `notice_pending` carried `transition-20-hold_census` (the night courier,
+  pid 82106, counted by the production census inside the plan span; FENCED→HOLD_CENSUS→FENCED). Heartbeat written (pid 82637), launch
+  email `1a085bc57dbfabbe` on thread `1a0800cdb282c3f1`, `notice.ack` written.
+- rehearsal-20260909 FIRED and was HARVESTED: record `21i-rehearsal-20260909-harvest-record.md`, byte copies under
+  `21b-rehearsal-20260909-bench/night-harvest/`. result REHEARSAL_ONLY / chain rc 0 / results branch `night-results/20260909` @
+  `a84e0f7f` on origin / courier email `1a08599a4ff4d005`. FINDING: receipt REFUSED `night_probe_error` (gate reads `chain.zsh` for the
+  stub class; the stub arm never writes it) — cure lane NIGHT-GATE-STUB-CHAIN-01; never re-arm this plan on this signature.
+- Documented uninstall done from the stub checkout (rc 0); stub checkout worktree and plan root removed after the harvest. Only
+  `com.joulewise.magistrate` remains loaded. NOTHING IS ARMED; the frozen-checkout list for the next relaunch prompt is the canonical
+  repo only.
+- NEXT EXACT ACTION: 21i §Next exact actions (1) NIGHT-GATE-STUB-CHAIN-01 seat + review + PR; (2) PR #308 ledger + merge under the
+  normal gates; (3) CLONE-READINESS-01 preparation → G2-a inputs; remote-control test between windows. Whether the cure requires a
+  second stub night before G2-a is a cold-gate/Ed ruling, not this activation's.

@@ -1,0 +1,80 @@
+{
+  "authored_monotonic_ns": 118207541,
+  "conditions": [
+    {
+      "basis": null,
+      "condition_id": "C1",
+      "evidence": [],
+      "measured": {
+        "detail": "not evaluated after refusal"
+      },
+      "status": "FAIL"
+    },
+    {
+      "basis": "no_pack_by_design",
+      "condition_id": "C2",
+      "evidence": [],
+      "measured": {},
+      "status": "NOT_APPLICABLE"
+    },
+    {
+      "basis": null,
+      "condition_id": "C3",
+      "evidence": [
+        "probe:/usr/bin/pgrep -lf codex|claude|t3"
+      ],
+      "measured": {
+        "agent_census_exit_code": 1,
+        "agent_census_stdout": ""
+      },
+      "status": "FAIL"
+    },
+    {
+      "basis": null,
+      "condition_id": "C4",
+      "evidence": [],
+      "measured": {
+        "detail": "not evaluated after refusal"
+      },
+      "status": "FAIL"
+    },
+    {
+      "basis": null,
+      "condition_id": "C5",
+      "evidence": [],
+      "measured": {
+        "authored_epoch_s": 1788944188.885739,
+        "driver_checkout_head": "ae8f074ffa554707a9eac95995ab8ec03235d118",
+        "measurement_checkout_head": "ae8f074ffa554707a9eac95995ab8ec03235d118",
+        "measurement_root": "/private/tmp/joulewise-rehearsal-20260909-checkout",
+        "observed_epoch_s": 1788947760.988808,
+        "plan_measurement_head": "ae8f074ffa554707a9eac95995ab8ec03235d118",
+        "plan_repo_head": "ae8f074ffa554707a9eac95995ab8ec03235d118",
+        "t0_epoch_s": 1788947760.0,
+        "window_max_s": 900
+      },
+      "status": "FAIL"
+    }
+  ],
+  "plan_id": "rehearsal-20260909",
+  "receipt_class": "REHEARSAL_STUB",
+  "refusal": {
+    "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-custody/rehearsal-20260909/chain.zsh'",
+    "evidence": [
+      {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-lf",
+          "codex|claude|t3"
+        ],
+        "exit_code": 1,
+        "monotonic_ns": 117951125,
+        "stderr": "",
+        "stdout": ""
+      }
+    ],
+    "reason": "night_probe_error"
+  },
+  "schema": "joulewise.unattended_night_receipt.v2",
+  "verdict": "REFUSED"
+}
