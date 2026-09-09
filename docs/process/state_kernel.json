@@ -3263,36 +3263,6 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
-    "NIGHT-GATE-STUB-CHAIN-01": {
-      "acceptance": {
-        "evidence": [
-          "Defect-shaped tests in tests/test_night_gate.py and tests/test_run_night.py pass.",
-          "PR merged."
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/NIGHT-GATE-STUB-CHAIN-01/acceptance",
-          "label": "NIGHT-GATE-STUB-CHAIN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The defect-shaped tests in tests/test_night_gate.py and tests/test_run_night.py pass, and the PR is merged."
-      },
-      "authority": {
-        "label": "21i §The finding (NOT the acceptable stub refusal)",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Night gate skips the chain/sidecar read for REHEARSAL_STUB plans (driver substitutes the built-in stub); C5 records chain_sha256 null + chain_stub; driver logs refusal reason on the gate verdict line",
-      "id": "NIGHT-GATE-STUB-CHAIN-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 168,
-      "status": "active",
-      "status_note": "2026-09-09: IN PROGRESS. Cure branch fix/2026-09-09-night-gate-stub-chain: initial cure bb7090e2, fix round 1 head 5db38b58 (PR #309), under paired review, not yet merged (NIGHT_HANDBACK.md §Executed names the branch and the fix head). Dictated seat report docs/process_traces/2026-09-09-rehearsal-harvest/02-seat-night-gate-stub-chain-astra-report.md and fix round 17-… are outside this branch by design and land with cure PR #309; their evidence is unverified here. The chain_stub field and driver refusal-reason logging are dictated implementation targets, not verified by the available primary artifacts.",
-      "stop_card": null
-    },
     "NIGHT-PACK-REHEARSAL-01": {
       "acceptance": {
         "evidence": [
@@ -3414,6 +3384,15 @@
           "target": "POST-WATCHDOG-REHEARSAL-20260909"
         },
         {
+          "evidence": null,
+          "kind": "event",
+          "required": "Cold gate or Ed rules whether the merged gate cure requires a second REHEARSAL_STUB night through the installed LaunchAgent before any DIAGNOSTIC_NO_PACK plan (21i acceptance item 6 was MET conditional on the cure landing; items 1/4/5 remain open)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "SECOND-STUB-NIGHT-RULING"
+        },
+        {
           "evidence": {
             "label": "NIGHT-DRIVER-01 merged (PR 265, gauntlet through delta re-audit 4 + cold gate D1)",
             "path": "docs/process_traces/2026-09-01-unattended/coldgate-d1-RULING.md"
@@ -3438,11 +3417,14 @@
           "target": "NIGHT-GATE-01"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #309 merged at a52810c9 (cure for the rehearsal-20260909 night_probe_error refusal)",
+            "path": "docs/process_traces/2026-09-09-rehearsal-harvest/59-pr309-row9-waiver-record.md"
+          },
           "kind": "task",
           "required": "gate cure merged before any further stub or real night (receipt refused night_probe_error on rehearsal-20260909)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "NIGHT-GATE-STUB-CHAIN-01"
         },
@@ -3490,7 +3472,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md.",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {

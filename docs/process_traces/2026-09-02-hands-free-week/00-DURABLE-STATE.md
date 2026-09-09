@@ -717,3 +717,10 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   not ruled here). NEXT EXACT ACTION: fill PR #309's ledger (rows 9/10 cite this bookkeeping commit's sha; rows 11/12 = 6d76f964),
   merge under W1–W8, then CLONE-READINESS-01 preparation; ADDENDUM-1/2/3 of ruling 56 stay owed (class re-run trigger, next replay's
   race-test outcome, Ed's answer on row-9 wording).
+- UPDATE 2026-09-09 ~09:10 PDT: PR #309 MERGED at `a52810c9` under the named waiver (head 6d76f964 verified unchanged before the merge).
+  Kernel: NIGHT-GATE-STUB-CHAIN-01 DONE; NIGHT-REHEARSAL-01's cure dependency satisfied, row re-blocked on the pending event
+  SECOND-STUB-NIGHT-RULING (needs_ruling; cold gate or Ed). NEXT EXACT ACTION: (1) convene the cold gate on the second stub night
+  (packet: 21i acceptance items, the merged cure, D-175 conditions, NIGHT_HANDBACK); if YES, author the stub plan and send the
+  NIGHT_HANDBACK email-then-arm notice for the 01:56–02:15 PDT arm window of the next night; if NO, mark item 6 MET and proceed;
+  (2) CLONE-READINESS-01 preparation (agent part: the un-inventoried `JouleWise-rehearsal-<date>-<sha>` clone plan per 99co +
+  amendment; production v5 re-cut is Ed-hardware); (3) ruling-56 addenda 1–3 as their triggers fire. Nothing is armed.
