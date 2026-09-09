@@ -9541,12 +9541,28 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         attempt2_records: list[dict] | None,
         expected_strict_valid: bool = True,
     ):
-        from tests.test_controller import produce_retry_powermetrics_bundle
-
-        bundle_path, _summary = produce_retry_powermetrics_bundle(
-            self.root / "runs",
-            bundle_id,
+        from tests.test_controller import (
+            RetryAdmissionPowermetricsAdapter,
+            produce_retry_powermetrics_bundle,
         )
+
+        command = RetryAdmissionPowermetricsAdapter._command
+
+        def unpaced_sentinel(adapter, *args, **kwargs):
+            argv = command(adapter, *args, **kwargs)
+            # Only the bounded sentinel is synthetic. The continuous stream
+            # still owns admission, measured cadence, and the clock bracket.
+            if kwargs.get("count") is not None:
+                argv.append("--no-sleep")
+            return argv
+
+        with patch.object(
+            RetryAdmissionPowermetricsAdapter, "_command", unpaced_sentinel
+        ):
+            bundle_path, _summary = produce_retry_powermetrics_bundle(
+                self.root / "runs",
+                bundle_id,
+            )
         attempt1_path = bundle_path / "rich_telemetry_idle.jsonl"
         attempt2_path = bundle_path / "rich_telemetry_idle_attempt_2.jsonl"
         for path, replacements in (
@@ -9578,8 +9594,78 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             info=run_campaign_module.load_config_info(config_path),
             waivers={},
         )
-        self.assertIs(evaluation.strict_valid, expected_strict_valid)
+        self.assertIs(
+            evaluation.strict_valid, expected_strict_valid,
+            (evaluation.validation_problems,
+             evaluation.metadata.get("uncertainty_evidence", {}).get("idle_drift")),
+        )
         return evaluation
+
+    def test_retry_member_survives_fixture_sleep_slack(self) -> None:
+        from joulewise.controller import _Execution
+        from joulewise.bundle_read import TracePoint, Window
+        from joulewise.reduce import _window_gap_stats
+
+        sentinel_stage = _Execution._stage_idle_drift_sentinel
+        stages_checked = []
+
+        def checked_sentinel(execution):
+            def cadence():
+                markers = {
+                    event.event_type: event.timestamp_s
+                    for event in execution._events
+                    if event.event_type in {"sampling_started", "sampling_stopped"}
+                }
+                curve = [
+                    TracePoint(t, 0.0)
+                    for t in sorted({s.timestamp_s for s in execution._samples})
+                ]
+                return _window_gap_stats(curve, Window(
+                    markers["sampling_started"], markers["sampling_stopped"]
+                ))["cadence_ratio"]
+
+            clock_anchor = copy.deepcopy(
+                execution._uncertainty_evidence["clock_anchor"]
+            )
+            ratio = cadence()
+            self.assertIsNotNone(ratio)
+            sentinel_stage(execution)
+            self.assertEqual(cadence(), ratio)
+            self.assertEqual(
+                execution._uncertainty_evidence["clock_anchor"], clock_anchor
+            )
+            stages_checked.append(True)
+
+        # Observed trigger: 100 x 50 ms sleeps overrun the real 17.5 s
+        # bounded-capture deadline at >=3.5x slack. Keep the actual subprocess
+        # deadline; removing --no-sleep must restore post_idle_unavailable.
+        scale = os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")
+        with (
+            patch.object(_Execution, "_stage_idle_drift_sentinel", checked_sentinel),
+            patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": scale}),
+        ):
+            evaluation = self._produced_retry_member(
+                "timer-slack", attempt1_records=_clean_idle_records(),
+                attempt2_records=_clean_idle_records(),
+            )
+        self.assertIs(evaluation.strict_valid, True)
+        drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
+        self.assertEqual(drift["status"], "bounded")
+        if float(scale) >= 3.5:
+            self.assertEqual(drift["post_sample_count"], 100)
+        self.assertEqual(stages_checked, [True])
+
+    def test_real_powermetrics_capture_timeout_is_unchanged(self) -> None:
+        from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+        from joulewise.clock import FakeClock
+        from tests.test_powermetrics import make_config
+
+        adapter = PowermetricsTelemetryAdapter(
+            FakeClock(), executable="/usr/bin/powermetrics"
+        )
+        config = make_config(sampling={"power_hz": 20.0})
+        self.assertEqual(adapter._capture_timeout_s(config, 100), 17.5)
+        self.assertEqual(adapter._capture_timeout_s(config, 3), 15.0)
 
     def test_cpu_admission_reads_final_attempt_telemetry(self) -> None:
         """Fix round 1 (blocker): pair CPU telemetry with the final attempt.
