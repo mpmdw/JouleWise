@@ -2269,8 +2269,20 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
         self.assertFalse(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").exists())
 
-    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
     def test_g7_control_refuses_both_presentations_before_missing_arm(self):
+        self._g7_control_case()
+
+    def test_g7_control_refuses_symlinked_night_without_changing_completed_rehearsal(self):
+        self._g7_control_case(symlink="night")
+
+    def test_g7_control_refuses_symlinked_control_before_writes(self):
+        self._g7_control_case(symlink="control")
+
+    def test_g7_non_pack_plan_refusal_artifact_fails_bytes_only_acceptance(self):
+        self._g7_control_case(non_pack=True)
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def _g7_control_case(self, *, symlink=None, non_pack=False):
         """§10.5 admission regression: the control deliberately has no ARM.
 
         This pins the required production-entry behavior, not a substitute
@@ -2322,9 +2334,47 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         source_receipt = rehearsal_root / "rehearsal-receipt.json"
         source_receipt.write_bytes(arm_readiness.render_json(six_key))
         preserved[source_receipt] = source_receipt.read_bytes()
+        if symlink:
+            if symlink == "night":
+                (control / "night").symlink_to(source_go.parent, target_is_directory=True)
+            else:
+                actual = control.with_name(control.name + "-actual")
+                control.rename(actual)
+                control.symlink_to(actual, target_is_directory=True)
+            before = {str(path.relative_to(rehearsal_root)): path.read_bytes()
+                      for path in rehearsal_root.rglob("*") if path.is_file()}
+            with mock.patch.object(Path, "home", return_value=parent.parent), \
+                 mock.patch.object(driver.subprocess, "run") as launch:
+                with self.assertRaisesRegex(driver.PackNightRefusal, "non-symlink"):
+                    driver.produce_g7_control(plan_path, source_receipt, source_go)
+            launch.assert_not_called()
+            after = {str(path.relative_to(rehearsal_root)): path.read_bytes()
+                     for path in rehearsal_root.rglob("*") if path.is_file()}
+            self.assertEqual(before, after)  # No new files, and every original byte retained.
+            return
+        if non_pack:
+            # Exercise real admission against a valid non-pack plan. The producer's
+            # own guard also refuses it, but bytes-only acceptance must stand alone.
+            other_plan = {**plan, "schema": "joulewise.night_plan.v2", "schema_version": 2,
+                          "receipt_class": "DIAGNOSTIC_NO_PACK",
+                          "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"}
+            del other_plan["pack_night"]
+            non_pack_path = parent / "non-pack-plan.json"
+            non_pack_path.write_bytes(arm_readiness.render_json(other_plan))
+            with mock.patch.object(Path, "home", return_value=parent.parent):
+                original = plan_path.read_bytes()
+                plan_path.write_bytes(non_pack_path.read_bytes())
+                try:
+                    with self.assertRaisesRegex(driver.PackNightRefusal, "G7 production plan"):
+                        driver.produce_g7_control(plan_path, source_receipt, source_go)
+                finally:
+                    plan_path.write_bytes(original)
         calls = []
         def invoke(argv, **kwargs):
             self.assertEqual(len(argv[2:]), 16)
+            if non_pack:
+                argv = list(argv)
+                argv[argv.index("--night-plan") + 1] = str(non_pack_path)
             self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
             calls.append(argv)
             output = io.BytesIO()
@@ -2349,6 +2399,14 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         artifact = json.loads(path.read_bytes())
         self.assertEqual(locator["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        if non_pack:
+            self.assertEqual(artifact["verdict"], "FAIL")
+            self.assertEqual([item["refusal"]["detail"] for item in artifact["presented"]],
+                             ["go_receipt.receipt_class", "night_plan.receipt_class"])
+            artifact["verdict"] = "PASS"  # Even a relabeled artifact cannot pass.
+            with self.assertRaisesRegex(ValueError, "class/purpose"):
+                t0_rehearsal.validate_g7_control(json.loads(arm_readiness.render_json(artifact)))
+            return
         self.assertEqual(artifact["verdict"], "PASS")
         self.assertEqual(artifact["control_plan_sha256"], hashlib.sha256(plan_path.read_bytes()).hexdigest())
         t0_rehearsal.validate_g7_control(artifact)
@@ -2357,7 +2415,6 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         self.assertEqual(list(control.rglob("chain.started")), [])
         for path, original in preserved.items():
             self.assertEqual(path.read_bytes(), original)
-        print("G7_ARTIFACT_JSON=" + json.dumps(artifact, sort_keys=True))
 
     @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
     def test_valid_rehearsal_class_refused_by_production_entry_and_consumer(self):
@@ -2367,6 +2424,10 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             rehearsal_root = FixtureBuilder(Path(temporary)).build()
+            rehearsal_consumptions = {
+                path: path.read_bytes() for path in rehearsal_root.rglob("*.consumed.json")
+            }
+            self.assertEqual(len(rehearsal_consumptions), 1)
             bundle = fixture_bundle(rehearsal_root)
             self.assertEqual(t0_rehearsal.evaluate_g6(bundle).status,
                              t0_rehearsal.GateStatus.PASS)
@@ -2376,7 +2437,7 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
             go_path.write_bytes(presented.raw)
             self.case.inputs.update(authenticated_go_receipt=presented.value,
                                     go_receipt_sha256=presented.sha256)
-            detail = "receipt_class"
+            detail = "go_receipt.receipt_class"
             output = io.BytesIO()
             with mock.patch.object(launch_window.os, "execve") as execute, \
                  mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
@@ -2399,8 +2460,12 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
             self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
             self.assertIn("sha256", str(caught.exception))
             self.assertNotIn("class=", str(caught.exception))
+            self.assertEqual(list(self.fixture.custody.rglob("*.consumed.json")), [])
+            self.assertEqual(
+                {path: path.read_bytes() for path in rehearsal_root.rglob("*.consumed.json")},
+                rehearsal_consumptions,
+            )
             for custody in (self.fixture.custody, rehearsal_root):
-                self.assertEqual(list(custody.rglob("*.consumed.json")), [])
                 self.assertEqual(list(custody.rglob("chain.started")), [])
 
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import io
 import tempfile
+import time
+from contextlib import contextmanager
 import unittest
 from pathlib import Path
 from typing import Any, Mapping
@@ -147,11 +149,71 @@ def fixture_bundle(root):
     return cli.load_evidence_bundle(root, home=root.parents[1], inventory=fixture_inventory(root))
 
 
-class FixtureBuilder:
-    """Historical D-149 corpus for the other gates; G5 now always refuses it.
+def install_t0_inventory(fixture):
+    """Synthetic probe bytes; the production T0 inventory authenticator stays real."""
+    from joulewise import arm_readiness_evidence_t0 as author
+    from tests.test_arm_readiness_schemas import sample_evidence
+    root = fixture.custody / fixture.pack.name
+    recipe_path = root / fixture.arm["evidence"][0]["path"]
+    recipe = readiness.parse_json_bytes(recipe_path.read_bytes())
+    source_path = root / recipe["facts"][0]["source_path"]
+    source = readiness.parse_json_bytes(source_path.read_bytes())
+    now = time.monotonic_ns()
+    paths = []
+    for index, (step, name) in enumerate(author._CAPTURE_FILES.items()):
+        path = root / author._INPUT_DIRECTORY / name
+        value = _command_capture(step, ["/fixture/probe"], "",
+                                 started=now - 100 + index * 2,
+                                 finished=now - 99 + index * 2)
+        value["boot_session_id"] = fixture.arm["boot_session_id"]
+        _write_json(path, value)
+        source["input_artifacts"].append(fixture._artifact(path))
+        paths.append(path)
+    _write_json(source_path, source)
+    source_digest = fixture._artifact(source_path)["sha256"]
+    fixture.arm["evidence"] = []
+    for row in author._EXPECTED_ROWS:
+        value = copy.deepcopy(recipe) if row == "t0.single_launch_capability" else sample_evidence()
+        value.update(evidence_id=author._evidence_id(row), kind=author._ROW_KIND[row],
+                     boot_session_id=fixture.arm["boot_session_id"],
+                     pack_sha256=fixture.arm["pack"]["pack_sha256"],
+                     head_commit=fixture.arm["reviewed_main"]["head_commit"],
+                     valid_until_monotonic_ns=fixture.arm["valid_until_monotonic_ns"])
+        for fact in value["facts"]:
+            fact.update(source_kind="PROBE", source_path=str(source_path.relative_to(root)),
+                        source_sha256=source_digest)
+        path = root / author._EVIDENCE_DIRECTORY / author._receipt_name(row)
+        _write_json(path, value)
+        digest = fixture._artifact(path)["sha256"]
+        path.with_name(path.name + ".sha256").write_bytes(readiness.gnu_sidecar(digest, path.name))
+        fixture.arm["evidence"].append({"evidence_id": value["evidence_id"],
+            "receipt_kind": value["kind"], "namespace": "WINDOW_CUSTODY",
+            "path": str(path.relative_to(root)), "sha256": digest,
+            "schema_version": value["schema_version"], "status": "PASS"})
+        paths.append(path)
+    fixture._rewrite_arm()
+    return sorted((_reference(path, fixture.custody) for path in paths), key=lambda ref: ref["path"])
 
-    PackGoReplayTests supplies current GO/consumption evidence separately.
-    """
+
+@contextmanager
+def fixture_replay(root):
+    """Only ARM semantics/pack metadata are synthetic; GO/T0/consumption replay is real."""
+    arm_path, = root.glob("*/arm_readiness.receipts/arm-0001.json")
+    arm = readiness.parse_json_bytes(arm_path.read_bytes())
+    with mock.patch.object(readiness, "_pack_record", return_value=arm["pack"]), \
+         mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
+                           return_value=(arm["rows"], arm["refusals"])), \
+         mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
+        yield
+
+
+def evaluate_fixture(root):
+    with fixture_replay(root):
+        return rehearsal.evaluate_rehearsal(fixture_bundle(root))
+
+
+class FixtureBuilder:
+    """Current pack GO and retained consumption, plus synthetic ten-gate evidence."""
 
     def __init__(
         self,
@@ -177,7 +239,9 @@ class FixtureBuilder:
         self._build_clock_namespace()
         self._build_execution()
         self._build_hid()
-        self._build_d149()
+        self._build_pack_go()
+        if self.broken_gate == "G5":
+            self._build_d149()
         self._build_rehearsal_receipt()
         self._build_process_lineage()
         self._build_lifecycle()
@@ -367,6 +431,27 @@ class FixtureBuilder:
         }
         path.write_text(values[self.hid_case], encoding="utf-8")
 
+    def _build_pack_go(self):
+        from tests.test_arm_readiness import LaunchConsumptionV2Tests
+        fixture = LaunchConsumptionV2Tests()
+        fixture._fixture_root = self.base
+        fixture._custody_window = self.root.name
+        try:
+            fixture.setUp()
+            evidence = install_t0_inventory(fixture)
+            inputs = fixture._consumer_inputs()
+            go = inputs["authenticated_go_receipt"]
+            go["t0_evidence"] = evidence
+            go["t0_evidence_set_sha256"] = readiness.sha256_bytes(readiness.render_json(evidence))
+            go["conditions"][1]["evidence"].extend(evidence)
+            go["conditions"][3]["evidence"] = copy.deepcopy(go["conditions"][1]["evidence"])
+            _write_json(inputs["go_receipt"], go)
+            inputs["go_receipt_sha256"] = readiness.sha256_bytes(inputs["go_receipt"].read_bytes())
+            with mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
+                fixture._invoke_consumer(inputs)
+        finally:
+            fixture.doCleanups()
+
     def _build_d149(self) -> None:
         conditions = []
         for index in range(1, 6):
@@ -384,7 +469,7 @@ class FixtureBuilder:
                 }
             )
         _write_json(
-            self.records / "d149-go.json",
+            self.root / "night/go_receipt.json",
             {
                 "schema_version": rehearsal.D149_SCHEMA,
                 "verdict": "GO",
@@ -538,12 +623,12 @@ class FixtureBuilder:
             "control_custody_root": str(control), "rehearsal_window_id": self.root.name,
             "control_plan_sha256": "a" * 64,
             "presented": [{"kind": kind, "path": str(control / "night" / filename),
-                "sha256": readiness.sha256_bytes((self.records / (
-                    "d149-go.json" if kind == "rehearsal_go" else "rehearsal-receipt.json")).read_bytes()),
+                "sha256": readiness.sha256_bytes((self.root / "night/go_receipt.json" if kind == "rehearsal_go"
+                    else self.records / "rehearsal-receipt.json").read_bytes()),
                 "refusal": {"reason": "launch_go_receipt_invalid", "detail": detail},
                 "first_refusal": True, "presented_monotonic_ns": at}
                 for kind, filename, detail, at in (
-                    ("rehearsal_receipt", "presented_rehearsal_receipt.json", "receipt_class", 10),
+                    ("rehearsal_receipt", "presented_rehearsal_receipt.json", "go_receipt.receipt_class", 10),
                     ("rehearsal_go", "presented_go_receipt.json", "rehearsal_purpose_on_production_id", 20))],
             "absence": {"consumption_absent": True, "chain_started_absent": True, "checked_monotonic_ns": 30},
             "verdict": "PASS"})
@@ -560,7 +645,7 @@ class FixtureBuilder:
                 "records": {
                     "execution": "records/execution.json",
                     "hid_idle": "records/hid-idle.txt",
-                    "d149_go": "records/d149-go.json",
+                    "d149_go": "night/go_receipt.json",
                     "g7_control": {"path": str(self.g7_path), "sha256": readiness.sha256_bytes(self.g7_path.read_bytes())},
                     "rehearsal_receipt": "records/rehearsal-receipt.json",
                     "process_lineage": "records/process-lineage.json",
@@ -629,8 +714,7 @@ class T0RehearsalTests(unittest.TestCase):
             hid_case=hid_case,
             g10_case=g10_case,
         ).build()
-        bundle = fixture_bundle(root)
-        return temporary, root, rehearsal.evaluate_rehearsal(bundle)
+        return temporary, root, evaluate_fixture(root)
 
     def _assert_single_failure(
         self,
@@ -648,17 +732,60 @@ class T0RehearsalTests(unittest.TestCase):
         )
         self.assertEqual(verdict["overall_verdict"], "FAIL")
         failed = [gate for gate in verdict["gates"] if gate["status"] == "FAIL"]
-        self.assertEqual([gate["gate_id"] for gate in failed], sorted({gate_id, "G5"}, key=lambda key: int(key[1:])))
+        self.assertEqual([gate["gate_id"] for gate in failed], [gate_id])
         failed = [gate for gate in failed if gate["gate_id"] == gate_id]
         self.assertIn(message, failed[0]["message"])
         for gate in verdict["gates"]:
-            if gate["gate_id"] not in {gate_id, "G5"}:
+            if gate["gate_id"] != gate_id:
                 self.assertEqual(gate["status"], "PASS", gate)
         return verdict
 
-    def test_legacy_bundle_fails_g5_even_with_passing_g7_control(self) -> None:
-        # This historical fixture deliberately retains D-149, now refused.
+    def test_current_pack_bundle_composes_all_ten_gates_pass_through_loader(self):
         _temporary, _root, verdict = self._evaluate()
+        self.assertEqual(verdict["overall_verdict"], "PASS", verdict)
+        self.assertEqual(verdict["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
+        self.assertEqual([gate["gate_id"] for gate in verdict["gates"]],
+                         [f"G{i}" for i in range(1, 11)])
+
+    def test_completed_bundle_loads_before_post_night_g7_control(self):
+        _temporary, root, _verdict = self._evaluate()
+        path = root / cli.MANIFEST_NAME
+        manifest = readiness.parse_json_bytes(path.read_bytes())
+        locator = manifest["records"].pop("g7_control")
+        Path(locator["path"]).unlink()
+        _write_json(path, manifest)
+        verdict = evaluate_fixture(root)
+        self.assertEqual(verdict["load_issues"], [])
+        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 1, "UNRULED": 0})
+        self.assertEqual(verdict["gates"][6]["message"], "g7_control_pending")
+
+    def test_g5_c2_real_t0_file_mutation_omission_and_substitution_fail(self):
+        _temporary, root, verdict = self._evaluate()
+        self.assertEqual(verdict["gates"][4]["status"], "PASS")
+        go_path = root / "night/go_receipt.json"
+        go_bytes = go_path.read_bytes()
+        go = readiness.parse_json_bytes(go_bytes)
+        capture, substitute = [root / ref["path"] for ref in go["t0_evidence"]
+                               if "arm_readiness.t0.inputs/" in ref["path"]][:2]
+        original = capture.read_bytes()
+        for action in ("mutate", "omit", "substitute"):
+            with self.subTest(action=action):
+                if action == "omit":
+                    capture.unlink()
+                else:
+                    capture.write_bytes(original + b" " if action == "mutate" else substitute.read_bytes())
+                with fixture_replay(root):
+                    result = rehearsal.evaluate_g5(fixture_bundle(root))
+                self.assertEqual(result.status, rehearsal.GateStatus.FAIL, result.message)
+                self.assertIn("t0_evidence", result.message)
+                self.assertEqual(go_path.read_bytes(), go_bytes)  # C2 still advertises PASS.
+                capture.write_bytes(original)
+                with fixture_replay(root):
+                    self.assertEqual(rehearsal.evaluate_g5(fixture_bundle(root)).status,
+                                     rehearsal.GateStatus.PASS)
+
+    def test_legacy_bundle_fails_g5_even_with_passing_g7_control(self) -> None:
+        _temporary, _root, verdict = self._evaluate(broken_gate="G5")
         self.assertEqual(verdict["overall_verdict"], "FAIL")
         self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 1, "UNRULED": 0})
         self.assertEqual(verdict["gates"][6]["status"], "PASS")
@@ -673,10 +800,10 @@ class T0RehearsalTests(unittest.TestCase):
     def test_g1_missing_new_execution_record_is_unruled_not_pass(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         (root / "records/execution.json").unlink()
-        verdict = rehearsal.evaluate_rehearsal(fixture_bundle(root))
+        verdict = evaluate_fixture(root)
         self.assertEqual(verdict["gates"][0]["status"], "UNRULED")
         self.assertIn("current command captures do not record", verdict["gates"][0]["message"])
-        self.assertEqual(verdict["overall_verdict"], "FAIL")
+        self.assertEqual(verdict["overall_verdict"], "INCOMPLETE")
 
     def test_g2_other_receipt_operator_attestation_fails_broad_census(self) -> None:
         verdict = self._assert_single_failure(
@@ -726,6 +853,8 @@ class T0RehearsalTests(unittest.TestCase):
         mutations = [lambda v: v.update(extra=True), lambda v: v.update(schema_version="legacy"),
             lambda v: v.update(presented=v["presented"][:1]),
             lambda v: v["presented"][0]["refusal"].update(detail="ARM missing"),
+            lambda v: v["presented"][0]["refusal"].update(detail="receipt_class"),
+            lambda v: v["presented"][0]["refusal"].update(detail="night_plan.receipt_class"),
             lambda v: v["presented"][1].update(first_refusal=False),
             lambda v: v["absence"].update(consumption_absent=False),
             lambda v: v["absence"].update(chain_started_absent=False),
@@ -759,9 +888,9 @@ class T0RehearsalTests(unittest.TestCase):
         value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
         value["human_interventions"] = [{"action": "made run succeed"}]
         _write_json(path, value)
-        verdict = rehearsal.evaluate_rehearsal(fixture_bundle(root))
+        verdict = evaluate_fixture(root)
         failures = [gate for gate in verdict["gates"] if gate["status"] == "FAIL"]
-        self.assertEqual([gate["gate_id"] for gate in failures], ["G5", "G9"])
+        self.assertEqual([gate["gate_id"] for gate in failures], ["G9"])
         self.assertIn("human intervention occurred", failures[-1]["message"])
 
     def test_g10_real_author_and_real_arm_paths_observe_both_boundaries(self) -> None:
@@ -828,22 +957,24 @@ class T0RehearsalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rehearsal.compose_overall_verdict(())
 
-    def test_fixture_cli_reads_bytes_and_exits_non_success_for_incomplete(self) -> None:
+    def test_fixture_cli_reads_bytes_and_exits_success_for_pass(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
-        code = cli.main(["--fixture-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
+        with fixture_replay(root):
+            code = cli.main(["--fixture-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 2)
-        self.assertEqual(parsed["overall_verdict"], "FAIL")
+        self.assertEqual(code, 0)
+        self.assertEqual(parsed["overall_verdict"], "PASS")
         self.assertEqual(output.getvalue(), readiness.render_json(parsed))
 
     def test_real_custody_cli_mode_uses_the_same_evidence_only_loader(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
-        code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
+        with fixture_replay(root):
+            code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 2)
-        self.assertEqual(parsed["gate_counts"]["FAIL"], 1)
+        self.assertEqual(code, 0)
+        self.assertEqual(parsed["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
 
 
 class PackGoReplayTests(unittest.TestCase):

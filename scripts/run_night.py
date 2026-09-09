@@ -1316,48 +1316,89 @@ def produce_g7_control(control_plan_path, rehearsal_receipt_path, rehearsal_go_p
     if any(path.is_file() and path not in allowed for path in control.rglob("*")):
         raise PackNightRefusal("G7 control must be fresh")
     night = control / "night"
-    night.mkdir(exist_ok=True)
+    def verify_destination():
+        try:
+            if control.resolve(strict=True) != control or control.is_symlink():
+                raise ValueError("control path changed")
+            if night.is_symlink() or (night.exists() and night.resolve(strict=True) != night):
+                raise ValueError("night path changed")
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise PackNightRefusal("G7 destination must be absolute and non-symlink") from exc
+    # Check both destinations before mkdir or any artifact write. Directory-FD
+    # writes below remain confined even if a path is replaced after this check.
+    verify_destination()
+    control_stat = control.stat()
+    control_fd = os.open(control, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        opened = os.fstat(control_fd)
+        if (opened.st_dev, opened.st_ino) != (control_stat.st_dev, control_stat.st_ino):
+            raise PackNightRefusal("G7 control destination changed")
+        try:
+            os.mkdir("night", mode=0o700, dir_fd=control_fd)
+        except FileExistsError:
+            pass
+        verify_destination()
+        night_stat = night.stat()
+        night_fd = os.open("night", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=control_fd)
+        opened = os.fstat(night_fd)
+        if (opened.st_dev, opened.st_ino) != (night_stat.st_dev, night_stat.st_ino):
+            os.close(night_fd)
+            raise PackNightRefusal("G7 night destination changed")
+    finally:
+        os.close(control_fd)
+    def write_control(filename, raw):
+        verify_destination()
+        fd = os.open(filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=night_fd)
+        with os.fdopen(fd, "wb") as output:
+            output.write(raw)
+            output.flush()
+            os.fsync(output.fileno())
     def absence():
         return {"consumption_absent": not any(control.rglob("*.consumed.json"))
                 and not any(p.is_file() for d in control.rglob("arm_readiness.consumptions") for p in d.rglob("*")),
                 "chain_started_absent": not any(control.rglob("chain.started")),
                 "checked_monotonic_ns": time.monotonic_ns()}
-    presented = []
-    for kind, raw, filename in (("rehearsal_receipt", receipt_raw, "presented_rehearsal_receipt.json"),
-                                ("rehearsal_go", go_raw, "presented_go_receipt.json")):
-        _pack_bytes(plan_path, "G7 control plan", readiness.sha256_bytes(plan_raw))
-        before = absence()
-        target = night / filename
-        # The first presented file is the exclusive claim. A racing or resumed
-        # producer cannot present anything before successfully creating it.
-        _write_bytes_exclusive(target, raw)
-        argv = _pack_launcher_argv(plan, plan_path, night / "absent-arm.json",
-                                  night / "absent-manifest.json", target, confirmation)
-        at = time.monotonic_ns()
-        result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, check=False)
-        _pack_bytes(plan_path, "G7 control plan", readiness.sha256_bytes(plan_raw))
-        try:
-            refusal = readiness.parse_json_bytes(result.stdout)
-        except readiness.ArmReadinessError:
-            refusal = {}
-        reasons = refusal.get("reason_codes", [])
-        presented.append({"kind": kind, "path": str(target), "sha256": readiness.sha256_bytes(raw),
-            "refusal": {"reason": reasons[0] if result.returncode == 2 and len(reasons) == 1 else "unexpected_launch_result",
-                        "detail": refusal.get("detail", "missing refusal")},
-            "first_refusal": before["consumption_absent"] and before["chain_started_absent"],
-            "presented_monotonic_ns": at})
-    artifact = {"schema_version": t0_rehearsal.G7_CONTROL_SCHEMA, "control_custody_root": str(control),
-        "rehearsal_window_id": window, "control_plan_sha256": readiness.sha256_bytes(plan_raw),
-        "presented": presented, "absence": absence(), "verdict": "PASS"}
     try:
-        t0_rehearsal.validate_g7_control(artifact)
-    except ValueError:
-        artifact["verdict"] = "FAIL"
-    artifact_path = night / "g7_refusal.json"
-    raw = readiness.render_json(artifact)
-    _write_bytes_exclusive(artifact_path, raw)
-    _fsync_path(night)
-    return {"path": str(artifact_path), "sha256": readiness.sha256_bytes(raw)}
+        presented = []
+        for kind, raw, filename in (("rehearsal_receipt", receipt_raw, "presented_rehearsal_receipt.json"),
+                                    ("rehearsal_go", go_raw, "presented_go_receipt.json")):
+            _pack_bytes(plan_path, "G7 control plan", readiness.sha256_bytes(plan_raw))
+            before = absence()
+            target = night / filename
+            # The first presented file is the exclusive claim. A racing or resumed
+            # producer cannot present anything before successfully creating it.
+            write_control(filename, raw)
+            argv = _pack_launcher_argv(plan, plan_path, night / "absent-arm.json",
+                                      night / "absent-manifest.json", target, confirmation)
+            at = time.monotonic_ns()
+            result = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, check=False)
+            _pack_bytes(plan_path, "G7 control plan", readiness.sha256_bytes(plan_raw))
+            try:
+                refusal = readiness.parse_json_bytes(result.stdout)
+            except readiness.ArmReadinessError:
+                refusal = {}
+            reasons = refusal.get("reason_codes", [])
+            presented.append({"kind": kind, "path": str(target), "sha256": readiness.sha256_bytes(raw),
+                "refusal": {"reason": reasons[0] if result.returncode == 2 and len(reasons) == 1 else "unexpected_launch_result",
+                            "detail": refusal.get("detail", "missing refusal")},
+                "first_refusal": before["consumption_absent"] and before["chain_started_absent"],
+                "presented_monotonic_ns": at})
+        artifact = {"schema_version": t0_rehearsal.G7_CONTROL_SCHEMA, "control_custody_root": str(control),
+            "rehearsal_window_id": window, "control_plan_sha256": readiness.sha256_bytes(plan_raw),
+            "presented": presented, "absence": absence(), "verdict": "PASS"}
+        try:
+            t0_rehearsal.validate_g7_control(artifact)
+        except ValueError:
+            artifact["verdict"] = "FAIL"
+        artifact_path = night / "g7_refusal.json"
+        raw = readiness.render_json(artifact)
+        write_control(artifact_path.name, raw)
+        os.fsync(night_fd)
+        return {"path": str(artifact_path), "sha256": readiness.sha256_bytes(raw)}
+
+    finally:
+        os.close(night_fd)
 
 
 def _pack_refused_receipt(plan, error, probes):

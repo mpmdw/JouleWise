@@ -9941,14 +9941,14 @@ def _admit_pack_launch_go(*, night_plan, go_receipt, go_receipt_sha256,
             raise _go_invalid("sha256")
         parsed = parse_json_bytes(raw)
         if not isinstance(parsed, Mapping) or set(parsed) != PACK_NIGHT_GO_RECEIPT_KEYS:
-            raise _go_invalid("receipt_class")
+            raise _go_invalid("go_receipt.receipt_class")
         go = validate_pack_night_go_receipt(parsed)
         if authenticated_go_receipt is not None and go != authenticated_go_receipt:
             raise _go_invalid("authenticated_go_receipt")
         plan = parse_json_bytes(plan_raw)
         NightPlan.from_mapping(plan)
         if plan["receipt_class"] != "TRANSACTION_PACK":
-            raise _go_invalid("receipt_class")
+            raise _go_invalid("night_plan.receipt_class")
         authorization = _go_record(plan["pack_night"]["authorization_record"],
                                    "authorization", Path(plan["custody_root"]))
         if authorization.get("purpose") != "T0_REHEARSAL" and (

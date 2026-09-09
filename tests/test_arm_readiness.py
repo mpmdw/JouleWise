@@ -171,9 +171,12 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
     # now produce v3. Explicit historical tests below retain v2 coverage.
     def setUp(self) -> None:
         patch_pack_night_dependencies(self)
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        root = Path(self.temporary.name).resolve()
+        if hasattr(self, "_fixture_root"):
+            root = self._fixture_root.resolve()
+        else:
+            self.temporary = tempfile.TemporaryDirectory()
+            self.addCleanup(self.temporary.cleanup)
+            root = Path(self.temporary.name).resolve()
         self.pack = root / sample_arm(root / "context")["pack"]["pack_id"]
         self.pack.mkdir()
         self.custody = (root / "home/night-custody" / self._custody_window
@@ -204,7 +207,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "claim_backup_destination",
             "bound_backup_destination",
         ):
-            Path(self.arm["arm_context"][name]).mkdir(parents=True)
+            Path(self.arm["arm_context"][name]).mkdir(parents=True, exist_ok=True)
         Path(self.arm["arm_context"]["waiver_path"]).write_bytes(
             readiness.render_json([])
         )

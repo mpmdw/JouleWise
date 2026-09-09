@@ -106,6 +106,8 @@ def _load_manifest(path: Path) -> dict[str, object]:
 def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
     """Authenticate and assemble every required input for callee replay."""
 
+    # This entry point consumes a frozen pack ARM. Non-pack night classes do
+    # not enter this pack launcher; they retain the night driver's own route.
     if getattr(args, "night_plan", None) is None or getattr(args, "go_receipt", None) is None:
         raise ArmReadinessError("readiness_usage_invalid", "--night-plan and --go-receipt are required")
     if args.step6_confirmation_table is None or args.expected_confirmation_digest is None:

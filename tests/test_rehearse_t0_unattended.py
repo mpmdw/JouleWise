@@ -108,7 +108,7 @@ class ProductionCensusLoaderTests(unittest.TestCase):
                 readiness._production_inventory(plan)
 
     def test_production_loader_uses_go_plan_pins_for_inventory(self):
-        go_path = self.root / "records/d149-go.json"
+        go_path = self.root / "night/go_receipt.json"
         value = readiness.parse_json_bytes(go_path.read_bytes())
         value.update(repo_head="a" * 40, measurement_head="b" * 40, measurement_root=str(self.root))
         _write_json(go_path, value)

@@ -853,7 +853,7 @@ def validate_g7_control(value: object) -> Mapping[str, Any]:
         if not isinstance(item["sha256"], str) or _SHA256_RE.fullmatch(item["sha256"]) is None:
             raise ValueError("G7 presentation sha256")
         exact(item["refusal"], "reason detail", "refusal")
-        expected = "rehearsal_purpose_on_production_id" if kind == "rehearsal_go" else "receipt_class"
+        expected = "rehearsal_purpose_on_production_id" if kind == "rehearsal_go" else "go_receipt.receipt_class"
         if item["refusal"] != {"reason": "launch_go_receipt_invalid", "detail": expected}:
             raise ValueError("G7 class/purpose refusal missing")
         if item["first_refusal"] is not True:
@@ -876,9 +876,9 @@ def evaluate_g7(bundle: EvidenceBundle) -> GateResult:
     """Authenticate the sibling control again, then recompute its PASS conditions."""
     artifact = bundle.record("g7_control")
     evidence = [] if artifact is None else [artifact.citation()]
+    if artifact is None:
+        return _result("G7", "PRODUCTION REJECTION", GateStatus.FAIL, "g7_control_pending")
     try:
-        if artifact is None:
-            raise ValueError("G7 control artifact is absent")
         locator = bundle.manifest.value["records"]["g7_control"]
         raw = artifact.path.read_bytes()
         if readiness.sha256_bytes(raw) != locator["sha256"] or raw != artifact.raw:
