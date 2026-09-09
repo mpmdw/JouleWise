@@ -313,6 +313,15 @@ Installation is authorized only after the built-artifact gauntlet and cold gate 
 
 6. Read the verification log from an observer after the magistrate exits. The already-proved launchd path (`docs/process_traces/2026-09-02-hands-free-week/17n-bench-launchd-spawn.md` on main) means the next five-minute tick must create the first watchdog-owned one-turn `-p` magistrate. Verify a new `attempts/<activation>/` and a `magistrate.lock` without `first_install_adoption`; a failed handoff receipt or absence of the new attempt after an otherwise eligible tick is a failed handoff. Night fences, stop conditions, and backoff still take precedence; unrelated daytime Claude sessions do not fail the handoff receipt.
 
+Cut rehearsal checkouts as `JouleWise-rehearsal-<date>-<sha>` (for example,
+`/private/tmp/JouleWise-rehearsal-20260909-<sha>` with the reviewed commit
+substituted). The reviewed `JouleWise-rehearsal-` prefix is exact and
+case-sensitive. The clone must NOT be listed in
+`configs/production_custody_inventory.json` and must sit at a head carrying
+that file. For T0_REHEARSAL it must also be disjoint from every inventoried
+measurement root (no equality or containment in either direction). The fake
+bench roots below do not establish these checkout or head requirements.
+
 The first real window must not be armed until a reviewed v2 plan pins its measurement checkout and both night agents have been installed FROM that plan's `measurement_root` at `measurement_head`. Rehearsal stubs may follow watchdog installation, with re-arm after any relevant HEAD move, but their documented `/private/tmp/...` measurement roots are deliberately fake and must never be reused by a real plan. Remove every `REHEARSAL_STUB` plan root before arming any real plan. After arming, neither the development checkout nor the measurement checkout may be moved as fenced above. Arming itself remains outside this watchdog's charter and always uses the email-then-arm handback; Ed's NO overrides.
 
 ## Bench rehearsal (no real night)
@@ -344,7 +353,7 @@ plan = NightPlan(
     window_max_s=600,
     authored_epoch_s=now,
     repo_head="0" * 40,
-    measurement_root="/private/tmp/joulewise-watchdog-bench-fake-measurement",
+    measurement_root="/private/tmp/JouleWise-rehearsal-20260909-0000000",
     measurement_head="0" * 40,
     chain_path=str(plan_root / "chain.sh"),
     chain_sha256_path=str(plan_root / "chain.sh.sha256"),
@@ -434,7 +443,7 @@ plan = NightPlan(
     window_max_s=60,
     authored_epoch_s=now,
     repo_head="0" * 40,
-    measurement_root="/private/tmp/joulewise-watchdog-adoption-fake-measurement",
+    measurement_root="/private/tmp/JouleWise-rehearsal-20260910-0000000",
     measurement_head="0" * 40,
     chain_path=str(root / "chain.sh"),
     chain_sha256_path=str(root / "chain.sh.sha256"),

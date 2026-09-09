@@ -26,6 +26,8 @@ from tests import test_arm_readiness as arm_readiness_tests
 from tests.git_fixture import init_git_fixture
 
 
+REAL_GO_T0_AUTHENTICATOR = arm_readiness._authenticate_go_t0_evidence
+
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
     "launch_window_script", ROOT / "scripts/launch_window.py"
@@ -274,6 +276,10 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 / "operator-confirmation.json",
                 expected_confirmation_digest="e" * 64,
             )
+            go_inputs = fixture._consumer_inputs()
+            for key in ("night_plan", "go_receipt", "step6_confirmation_table", "expected_confirmation_digest"):
+                if getattr(args, key, None) is None:
+                    setattr(args, key, go_inputs[key])
             arm_raw = fixture.arm_path.read_bytes()
             verified_arm = {
                 "status": "PASS",
@@ -343,6 +349,10 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 step6_confirmation_table=None,
                 expected_confirmation_digest=None,
             )
+            go_inputs = fixture._consumer_inputs()
+            for key in ("night_plan", "go_receipt", "step6_confirmation_table", "expected_confirmation_digest"):
+                if getattr(args, key, None) is None:
+                    setattr(args, key, go_inputs[key])
             arm_digest = hashlib.sha256(
                 fixture.arm_path.read_bytes()
             ).hexdigest()
@@ -608,6 +618,10 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             + "from joulewise import arm_readiness_evidence\n"
             + f"arm_readiness_evidence._PACKS_BY_PROFILE = {family!r}\n"
             + "arm_readiness._gate_family_publication = lambda *args, **kwargs: None\n"
+            # This relocation fixture isolates ARM replay. The new GO binder
+            # remains real, including the integrated v3 plan parser. The T0
+            # inventory has a separate synthetic evidence boundary here.
+            + "arm_readiness._authenticate_go_t0_evidence = lambda *args: None\n"
         )
         producer_path = pack / "producer_contract.json"
         producer_raw = arm_readiness.render_json(
@@ -890,6 +904,35 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         git(destination, "config", "gc.auto", "0")
         git(destination, "config", "maintenance.auto", "false")
 
+    def _install_launch_inputs(self, repository, pack, arm_path, manifest_path, custody):
+        # Author in the checkout that will execute the launcher. Import only
+        # the fixture helpers from the test runner; joulewise stays imported
+        # from repository, so both real launcher-identity checks remain live.
+        installed = subprocess.run(
+            [
+                sys.executable, "-c",
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "from joulewise import arm_readiness\n"
+                "assert Path(arm_readiness.__file__).resolve().parents[1] == Path.cwd().resolve()\n"
+                "sys.path.insert(0, sys.argv[1])\n"
+                "from tests.test_arm_readiness import install_pack_night_launch_inputs\n"
+                "inputs = install_pack_night_launch_inputs(*(Path(value) for value in sys.argv[2:]))\n"
+                "print(json.dumps(inputs, default=str))\n",
+                str(ROOT), str(pack), str(arm_path), str(manifest_path), str(custody),
+            ],
+            cwd=repository,
+            env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(installed.returncode, 0, f"{installed.stdout}{installed.stderr}")
+        inputs = json.loads(installed.stdout)
+        plan = json.loads(Path(inputs["night_plan"]).read_bytes())
+        self.assertEqual(plan["measurement_root"], str(repository.resolve()))
+        return inputs
+
     def _run_launch(
         self,
         repository: Path,
@@ -897,11 +940,19 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         arm_path: Path,
         custody: Path,
         manifest_path: Path,
+        go_inputs=None,
     ) -> subprocess.CompletedProcess[str]:
+        if go_inputs is None:
+            go_inputs = self._install_launch_inputs(
+                repository, pack, arm_path, manifest_path, custody)
         return subprocess.run(
             [
                 sys.executable,
                 str(repository / "scripts/launch_window.py"),
+                "--night-plan", str(go_inputs["night_plan"]),
+                "--go-receipt", str(go_inputs["go_receipt"]),
+                "--step6-confirmation-table", str(go_inputs["step6_confirmation_table"]),
+                "--expected-confirmation-digest", go_inputs["expected_confirmation_digest"],
                 "--pack-root",
                 str(pack),
                 "--arm-receipt",
@@ -922,7 +973,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             text=True,
         )
 
-    def test_real_minted_v4_launch_accepts_relocation_and_refuses_content_change(
+    def test_real_minted_v4_go_binds_root_and_refuses_content_change(
         self,
     ) -> None:
         temporary, repository, pack, custody, arm_path, manifest_path = (
@@ -931,6 +982,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         pack_relative = pack.relative_to(repository)
+        go_inputs = self._install_launch_inputs(
+            repository, pack, arm_path, manifest_path, custody)
 
         content_repository = root / "content-different-repository"
         self._clone_repository(repository, content_repository)
@@ -953,6 +1006,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             arm_path,
             custody,
             manifest_path,
+            go_inputs,
         )
         self.assertEqual(refused.returncode, 2, refused.stderr)
         refusal = json.loads(refused.stdout)
@@ -970,13 +1024,23 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         relocated_pack = relocated_repository / pack_relative
         shutil.rmtree(pack)
         pack.symlink_to(relocated_pack, target_is_directory=True)
-        accepted = self._run_launch(
+        relocated = self._run_launch(
             relocated_repository,
             relocated_pack,
             arm_path,
             custody,
             manifest_path,
+            go_inputs,
         )
+        self.assertEqual(relocated.returncode, 2, relocated.stderr)
+        refusal = json.loads(relocated.stdout)
+        self.assertEqual(refusal["reason_codes"], ["launch_go_receipt_invalid"])
+        self.assertIn("pack_root", refusal["detail"])
+        # D-176 binds an absolute pack locator. Restore the original locator
+        # without changing the ARM or GO bytes; its real launch still succeeds.
+        pack.unlink()
+        shutil.copytree(relocated_pack, pack)
+        accepted = self._run_launch(repository, pack, arm_path, custody, manifest_path, go_inputs)
         self.assertEqual(
             accepted.returncode,
             0,
@@ -1232,6 +1296,9 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             for item in lifecycle_registry["refusal_vocabulary"]
             if item["role"] == "DEPENDENCY_CHANGED_SET"
         )
+        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+            launch_fixture.pack, launch_fixture.arm_path, launch_fixture.manifest_path,
+            launch_fixture.custody, table_path, hashlib.sha256(table_raw).hexdigest())
         arm_raw = launch_fixture.arm_path.read_bytes()
         return argparse.Namespace(
             repository=repository,
@@ -1251,6 +1318,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 "pack_sha256": launch_fixture.arm["pack"]["pack_sha256"],
             },
             argv=[
+                "--night-plan", str(go_inputs["night_plan"]),
+                "--go-receipt", str(go_inputs["go_receipt"]),
                 "--pack-root",
                 str(launch_fixture.pack),
                 "--arm-receipt",
@@ -1429,6 +1498,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 }
             )
         )
+        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
+            pack, arm_path, manifest_path, custody, table_path, hashlib.sha256(table_raw).hexdigest())
         return argparse.Namespace(
             arm_path=arm_path,
             boot_session_id=TEST_BOOT_SESSION_ID,
@@ -1436,6 +1507,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             table_digest=hashlib.sha256(table_raw).hexdigest(),
             table_path=table_path,
             argv=[
+                "--night-plan", str(go_inputs["night_plan"]),
+                "--go-receipt", str(go_inputs["go_receipt"]),
                 "--pack-root",
                 str(pack),
                 "--arm-receipt",
@@ -1514,16 +1587,6 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 ],
                 supply.table_path,
             ),
-            (
-                "auto-resolved custody path",
-                [
-                    "--expected-confirmation-digest",
-                    supply.table_digest,
-                ],
-                supply.arm_path.resolve().parent.parent.parent
-                / "family_publication"
-                / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME,
-            ),
         )
         for label, extra_argv, expected_path in cases:
             with self.subTest(case=label):
@@ -1598,7 +1661,10 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         refusal = json.loads(sink.getvalue())
         self.assertEqual(code, 2)
         self.assertEqual(refusal["status"], "REFUSE")
-        self.assertEqual(refusal["reason_codes"], [supply.changed_set_code])
+        missing_pair = not all(flag in extra_argv for flag in (
+            "--step6-confirmation-table", "--expected-confirmation-digest"))
+        self.assertEqual(refusal["reason_codes"],
+                         ["confirmation_missing" if missing_pair else supply.changed_set_code])
         self.assertFalse(supply.gate_discharged)
         consume.assert_not_called()
         verify_consumed.assert_not_called()
@@ -1641,16 +1707,17 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
     ) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=True)
         for label, extra_argv in (
-            ("digest absent", []),
+            ("digest absent", ["--step6-confirmation-table", str(supply.table_path)]),
             (
                 "digest wrong",
-                ["--expected-confirmation-digest", "0" * 64],
+                ["--step6-confirmation-table", str(supply.table_path), "--expected-confirmation-digest", "0" * 64],
             ),
         ):
             with self.subTest(case=label):
                 self._run_confirmation_refusal(supply, extra_argv)
 
         correct_argv = supply.argv + [
+            "--step6-confirmation-table", str(supply.table_path),
             "--expected-confirmation-digest",
             supply.table_digest,
         ]
@@ -1732,37 +1799,19 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                 supply.table_digest,
             )
 
-    def test_launch_cli_leg_b_refuses_correct_digest_without_table_path(
-        self,
-    ) -> None:
+    def test_launch_cli_leg_b_refuses_correct_digest_without_table_path(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
         refusal, verify_arm = self._run_confirmation_refusal(
-            supply,
-            ["--expected-confirmation-digest", supply.table_digest],
-        )
-        self.assertIn("custody artifact is absent", refusal["detail"])
-        self.assertIn(str(supply.default_table_path), refusal["detail"])
-        self.assertNotIn(
-            "table bytes differ from the expected confirmation digest",
-            refusal["detail"],
-        )
-        self.assertIsNone(
-            verify_arm.call_args.kwargs["step6_confirmation_table"]
-        )
+            supply, ["--expected-confirmation-digest", supply.table_digest])
+        self.assertEqual(refusal["reason_codes"], ["confirmation_missing"])
+        verify_arm.assert_not_called()
 
     def test_launch_cli_leg_c_refuses_table_path_without_digest(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
         refusal, verify_arm = self._run_confirmation_refusal(
-            supply,
-            ["--step6-confirmation-table", str(supply.table_path)],
-        )
-        self.assertIn(
-            "no expected confirmation digest supplied", refusal["detail"]
-        )
-        self.assertEqual(
-            verify_arm.call_args.kwargs["step6_confirmation_table"],
-            supply.table_path,
-        )
+            supply, ["--step6-confirmation-table", str(supply.table_path)])
+        self.assertEqual(refusal["reason_codes"], ["confirmation_missing"])
+        verify_arm.assert_not_called()
 
     def test_launch_cli_leg_d_refuses_malformed_digest(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
@@ -1805,15 +1854,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
     def test_launch_cli_leg_f_refuses_when_nothing_is_supplied(self) -> None:
         supply = self._confirmation_supply_fixture(table_at_default=False)
         refusal, verify_arm = self._run_confirmation_refusal(supply, [])
-        self.assertIn(
-            "no expected confirmation digest supplied", refusal["detail"]
-        )
-        self.assertIsNone(
-            verify_arm.call_args.kwargs["step6_confirmation_table"]
-        )
-        self.assertIsNone(
-            verify_arm.call_args.kwargs["expected_confirmation_digest"]
-        )
+        self.assertEqual(refusal["reason_codes"], ["confirmation_missing"])
+        verify_arm.assert_not_called()
 
 
 class CeremonySkipConsumerTests(unittest.TestCase):
@@ -1958,6 +2000,473 @@ class CeremonySkipConsumerTests(unittest.TestCase):
                 require_completion=True,
             )
         self.assertEqual(reasons, ("launch_lineage_conflict",))
+
+
+class PackNightGoRefusalHandlerTests(unittest.TestCase):
+    # Python 3.14 argparse must not probe the mocked stdout for color support.
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_cli_uses_one_json_handler_for_both_exception_families(self) -> None:
+        argv = ["--pack-root", "/pack", "--arm-receipt", "/arm.json",
+                "--arm-readiness-custody-root", "/custody",
+                "--launch-manifest", "/manifest.json"]
+        for error in (
+            arm_readiness.ArmReadinessError("readiness_usage_invalid", "missing keyword"),
+            arm_readiness.LaunchLineageError("launch_go_receipt_missing", "missing GO"),
+            arm_readiness.LaunchLineageError("launch_go_receipt_invalid", "sha256"),
+        ):
+            with self.subTest(code=error.reason_code):
+                output = io.BytesIO()
+                stdout = mock.Mock(buffer=output)
+                with mock.patch.object(launch_window, "launch", side_effect=error), \
+                     mock.patch.object(launch_window.sys, "stdout", stdout):
+                    self.assertEqual(launch_window.main(argv), 2)
+                self.assertEqual(json.loads(output.getvalue()), {
+                    "status": "REFUSE", "reason_codes": [error.reason_code],
+                    "detail": str(error),
+                })
+
+
+class PackNightLaunchBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        self.case = arm_readiness_tests.PackNightConsumerTests()
+        self.case.setUp()
+        self.addCleanup(self.case.doCleanups)
+        self.fixture = self.case.fixture
+        inputs = self.case.inputs
+        self.base_argv = ["--pack-root", str(self.fixture.pack), "--arm-receipt", str(self.fixture.arm_path),
+            "--arm-readiness-custody-root", str(self.fixture.custody),
+            "--launch-manifest", str(self.fixture.manifest_path)]
+        self.argv = self.base_argv + ["--night-plan", str(inputs["night_plan"]),
+            "--go-receipt", str(inputs["go_receipt"]),
+            "--step6-confirmation-table", str(inputs["step6_confirmation_table"]),
+            "--expected-confirmation-digest", inputs["expected_confirmation_digest"]]
+
+    def arm_patches(self):
+        from contextlib import ExitStack
+        stack = ExitStack()
+        verified = {"status": "PASS", "arm_disposition": "GO", "receipt_path": str(self.fixture.arm_path.resolve()),
+                    "receipt_sha256": self.case.inputs["arm_receipt_sha256"],
+                    "pack_sha256": self.fixture.arm["pack"]["pack_sha256"]}
+        for owner, name, value in (
+            (launch_window, "_verify_arm_receipt", verified),
+            (arm_readiness, "_verify_arm_receipt", verified),
+            (arm_readiness, "reviewed_main", self.fixture.arm["reviewed_main"]),
+            (arm_readiness, "_root_policy_refusals", ([], set())),
+            (arm_readiness, "_derive_arm_semantics_for_verification", (self.fixture.arm["rows"], self.fixture.arm["refusals"])),
+        ):
+            stack.enter_context(mock.patch.object(owner, name, return_value=value))
+        return stack
+
+    def test_integrated_driver_arm_go_launcher_consumption_and_replay(self):
+        """Real driver/parser/GO/consumer/replay; synthetic ARM and machine probes."""
+        from dataclasses import replace
+        from datetime import datetime
+        from joulewise import night_gate
+        from joulewise.measurement_liveness import Identity
+        from tests.test_run_night import _load_driver, ProbeSource, FakeProcess, _probe
+        from tests.test_arm_readiness_schemas import sample_evidence
+
+        driver = _load_driver()
+        fixture = self.fixture
+        events = []
+        custody_pack = fixture.custody / fixture.pack.name
+        input_root = custody_pack / t0_evidence._INPUT_DIRECTORY
+        fixture.arm["arm_context"]["custody_root"] = str(fixture.custody)
+        (input_root / "arm-context.json").write_bytes(arm_readiness.render_json(fixture.arm["arm_context"]))
+        plan_path = self.case.inputs["night_plan"]
+        plan = json.loads(plan_path.read_bytes())
+        plan["t0_epoch_s"] = datetime(2026, 9, 2, 1, 0).timestamp()
+        plan["authored_epoch_s"] = plan["t0_epoch_s"] - 1
+        plan_path.write_bytes(arm_readiness.render_json(plan))
+        for name in ("go_receipt.json", "go-census.json"):
+            (fixture.custody / "night" / name).unlink()
+        fixture.arm_path.unlink()
+        fixture.arm_path.with_name(fixture.arm_path.name + ".sha256").unlink()
+
+        def author(pack, custody):
+            events.append("T0")
+            now = time.monotonic_ns()
+            captures = []
+            for index, (step, name) in enumerate(t0_evidence._CAPTURE_FILES.items()):
+                path = input_root / name
+                path.write_bytes(arm_readiness.render_json({
+                    "schema_version": t0_evidence._COMMAND_SCHEMA, "step_id": step,
+                    "argv": ["/fixture/probe"], "cwd": str(custody), "exit_code": 0,
+                    "stdout": "", "stderr": "", "started_monotonic_ns": now - 100 + index * 2,
+                    "finished_monotonic_ns": now - 99 + index * 2,
+                    "boot_session_id": fixture.arm["boot_session_id"]}))
+                captures.append(fixture._artifact(path))
+            recipe_path = custody_pack / fixture.arm["evidence"][0]["path"]
+            recipe = json.loads(recipe_path.read_bytes())
+            source_path = custody_pack / recipe["facts"][0]["source_path"]
+            source = json.loads(source_path.read_bytes())
+            source["input_artifacts"].extend(captures)
+            source_path.write_bytes(arm_readiness.render_json(source))
+            source_digest = fixture._artifact(source_path)["sha256"]
+            paths = []
+            fixture.arm["evidence"] = []
+            for row in t0_evidence._EXPECTED_ROWS:
+                value = copy.deepcopy(recipe) if row == "t0.single_launch_capability" else sample_evidence()
+                value.update(evidence_id=t0_evidence._evidence_id(row), kind=t0_evidence._ROW_KIND[row],
+                             pack_sha256=fixture.arm["pack"]["pack_sha256"],
+                             head_commit=fixture.arm["reviewed_main"]["head_commit"],
+                             valid_until_monotonic_ns=fixture.arm["valid_until_monotonic_ns"])
+                for fact in value["facts"]:
+                    fact.update(source_kind="PROBE", source_path=str(source_path.relative_to(custody_pack)),
+                                source_sha256=source_digest)
+                path = custody_pack / t0_evidence._EVIDENCE_DIRECTORY / t0_evidence._receipt_name(row)
+                path.write_bytes(arm_readiness.render_json(value))
+                digest = fixture._artifact(path)["sha256"]
+                path.with_name(path.name + ".sha256").write_bytes(arm_readiness.gnu_sidecar(digest, path.name))
+                fixture.arm["evidence"].append({"evidence_id": value["evidence_id"],
+                    "receipt_kind": value["kind"], "namespace": "WINDOW_CUSTODY",
+                    "path": str(path.relative_to(custody_pack)), "sha256": digest,
+                    "schema_version": value["schema_version"], "status": "PASS"})
+                paths.append(str(path))
+            return {"status": "PASS", "receipt_paths": paths}
+
+        def mint_arm(*args, **kwargs):
+            events.append("ARM")
+            fixture._rewrite_arm()
+            return verified()
+
+        def verified(*args, **kwargs):
+            return {"status": "PASS", "arm_disposition": "GO", "receipt_path": str(fixture.arm_path),
+                    "receipt_sha256": fixture._artifact(fixture.arm_path)["sha256"],
+                    "pack_sha256": fixture.arm["pack"]["pack_sha256"]}
+
+        source = ProbeSource(plan["t0_epoch_s"] + 1)
+        source.results[night_gate.BOOT_SESSION_ARGV] = _probe(night_gate.BOOT_SESSION_ARGV,
+            stdout=fixture.arm["boot_session_id"] + "\n")
+        probes = replace(source.probes(), checkout_head=lambda: plan["repo_head"],
+                         measurement_head=lambda root: plan["measurement_head"])
+        real_prepare = driver._prepare_pack_night
+        def prepare(*args):
+            events.append("PREPARE")
+            return real_prepare(*args)
+
+        def execute(*args):
+            events.append("CONSUMED")
+            raise SystemExit(0)
+
+        real_popen = subprocess.Popen
+        def spawn(command, **kwargs):
+            if not any(str(arg).endswith("scripts/launch_window.py") for arg in command):
+                return real_popen(command, **kwargs)
+            events.append("GO_ARGV")
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(len(command[2:]), 16)
+            self.assertTrue((fixture.custody / "night/go_receipt.json").is_file())
+            with mock.patch.object(launch_window.os, "execve", side_effect=execute):
+                with self.assertRaises(SystemExit) as caught:
+                    launch_window.main(command[2:])
+            self.assertEqual(caught.exception.code, 0)
+            replay = arm_readiness.verify_consumed_launch(fixture.pack, self.case.consumption)
+            self.assertEqual(replay["status"], "PASS")
+            events.append("REPLAY")
+            return FakeProcess(command)
+
+        with mock.patch.object(driver, "make_probes", return_value=probes), \
+             mock.patch.object(driver, "_prepare_pack_night", side_effect=prepare), \
+             mock.patch.object(driver, "_resolve_courier_bin", return_value=(Path("/fixture/courier"), None, None)), \
+             mock.patch.object(driver, "_finish_reporting", side_effect=lambda c, n, p, code, *a, **k: code), \
+             mock.patch.object(driver, "observe_identity", return_value=Identity("LIVE", "fixture-start")), \
+             mock.patch.object(driver.subprocess, "Popen", side_effect=spawn), \
+             mock.patch.object(t0_evidence, "author_arm_readiness_evidence_t0", side_effect=author), \
+             mock.patch.object(arm_readiness, "generate_arm_receipt", side_effect=mint_arm), \
+             mock.patch.object(arm_readiness, "_verify_arm_receipt", side_effect=verified), \
+             mock.patch.object(launch_window, "_verify_arm_receipt", side_effect=verified), \
+             mock.patch.object(arm_readiness, "_authenticate_go_t0_evidence", REAL_GO_T0_AUTHENTICATOR), \
+             mock.patch.object(arm_readiness, "reviewed_main", return_value=fixture.arm["reviewed_main"]), \
+             mock.patch.object(arm_readiness, "_root_policy_refusals", return_value=([], set())), \
+             mock.patch.object(arm_readiness, "_derive_arm_semantics_for_verification", return_value=(fixture.arm["rows"], fixture.arm["refusals"])):
+            result = driver.run_night(plan_path)
+            self.assertEqual(result, driver.EXIT_GO, (fixture.custody / "night/receipt.json").read_text() if result else events)
+        self.assertEqual(events, ["PREPARE", "T0", "ARM", "PREPARE", "GO_ARGV", "CONSUMED", "REPLAY"])
+        consumption = json.loads(self.case.consumption.read_bytes())
+        go_path = fixture.custody / "night/go_receipt.json"
+        go = json.loads(go_path.read_bytes())
+        import uuid
+        self.assertEqual(uuid.UUID(go["receipt_id"]).version, 4)
+        self.assertEqual(str(uuid.UUID(go["receipt_id"])), go["receipt_id"])
+        self.assertEqual(len(go["t0_evidence"]), 21)
+        self.assertEqual(consumption["go_receipt"]["sha256"], fixture._artifact(go_path)["sha256"])
+        self.assertEqual(consumption["night_plan"]["sha256"], fixture._artifact(plan_path)["sha256"])
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_each_required_cli_flag_omission_refuses_before_consumption(self):
+        for flag in ("--night-plan", "--go-receipt", "--step6-confirmation-table", "--expected-confirmation-digest"):
+            with self.subTest(flag=flag):
+                argv = list(self.argv)
+                index = argv.index(flag)
+                del argv[index:index + 2]
+                output = io.BytesIO()
+                with mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)), \
+                     mock.patch.object(launch_window, "_consume_launch_capability") as consume, \
+                     mock.patch.object(launch_window.os, "execve") as execute:
+                    self.assertEqual(launch_window.main(argv), 2)
+                expected = "readiness_usage_invalid" if flag in ("--night-plan", "--go-receipt") else "confirmation_missing"
+                self.assertEqual(json.loads(output.getvalue())["reason_codes"], [expected])
+                consume.assert_not_called()
+                execute.assert_not_called()
+                self.assertFalse(self.case.consumption.exists())
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_cli_then_callee_go_mutation_is_detected_by_the_real_callee(self):
+        real_consume = arm_readiness._consume_launch_capability
+        def mutate_then_consume(**inputs):
+            path = Path(inputs["go_receipt"])
+            path.write_bytes(path.read_bytes() + b" ")
+            return real_consume(**inputs)
+        output = io.BytesIO()
+        with self.arm_patches(), mock.patch.object(launch_window, "_install_handoff"), \
+             mock.patch.object(launch_window, "_consume_launch_capability", side_effect=mutate_then_consume), \
+             mock.patch.object(launch_window.os, "execve") as execute, \
+             mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+            self.assertEqual(launch_window.main(self.argv), 2)
+        self.assertEqual(json.loads(output.getvalue())["reason_codes"], ["launch_go_receipt_invalid"])
+        self.assertIn("sha256", json.loads(output.getvalue())["detail"])
+        execute.assert_not_called()
+        self.assertFalse(self.case.consumption.exists())
+
+    def test_child_start_uses_persisted_confirmation_and_plan_without_environment_transport(self):
+        digest = self.case.inputs["expected_confirmation_digest"]
+        child_output = io.BytesIO()
+        def execute(_program, _argv, environment):
+            self.assertNotIn(digest, environment)
+            self.assertNotIn(digest, environment.values())
+            self.assertNotIn(str(self.case.inputs["step6_confirmation_table"]), environment.values())
+            args = launch_window._parser().parse_args(self.base_argv + ["--lifecycle-event", "start"])
+            self.assertIsNone(args.night_plan)
+            self.assertIsNone(args.go_receipt)
+            self.assertIsNone(args.step6_confirmation_table)
+            self.assertIsNone(args.expected_confirmation_digest)
+            with mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=child_output)):
+                self.assertEqual(launch_window.lifecycle(args), 0)
+            raise SystemExit(0)
+        with self.arm_patches(), mock.patch.object(launch_window.os, "execve", side_effect=execute):
+            with self.assertRaises(SystemExit) as caught:
+                launch_window.main(self.argv)
+        self.assertEqual(caught.exception.code, 0)
+        self.assertTrue(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").is_file())
+        value = json.loads(self.case.consumption.read_bytes())
+        self.assertEqual(value["step6_confirmation"]["table_sha256"], digest)
+        self.assertEqual(value["night_plan"]["path"], str(self.case.inputs["night_plan"]))
+
+    def test_child_refuses_substituted_pair_changed_plan_and_missing_go(self):
+        self.case.consume()
+        with self.assertRaisesRegex(arm_readiness.LaunchLineageError, "table_sha256"):
+            self.case.verify(expected_confirmation_digest="f" * 64)
+        path = self.case.inputs["night_plan"]
+        raw = path.read_bytes()
+        path.write_bytes(raw + b" ")
+        with self.assertRaisesRegex(arm_readiness.LaunchLineageError, "plan_sha256"):
+            self.case.verify()
+        path.write_bytes(raw)
+        self.case.inputs["go_receipt"].unlink()
+        with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+            self.case.verify()
+        self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
+        self.assertFalse(arm_readiness._lifecycle_receipt_path(self.case.consumption, "start").exists())
+
+    def test_g7_control_refuses_both_presentations_before_missing_arm(self):
+        self._g7_control_case()
+
+    def test_g7_control_refuses_symlinked_night_without_changing_completed_rehearsal(self):
+        self._g7_control_case(symlink="night")
+
+    def test_g7_control_refuses_symlinked_control_before_writes(self):
+        self._g7_control_case(symlink="control")
+
+    def test_g7_non_pack_plan_refusal_artifact_fails_bytes_only_acceptance(self):
+        self._g7_control_case(non_pack=True)
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def _g7_control_case(self, *, symlink=None, non_pack=False):
+        """§10.5 admission regression: the control deliberately has no ARM.
+
+        This pins the required production-entry behavior, not a substitute
+        validator. The consumer admission must run before the absent ARM is accessed.
+        """
+        from joulewise import t0_rehearsal
+
+        window_id = t0_rehearsal.REHEARSAL_WINDOW_PREFIX + "g7-fixture"
+        parent = Path(self.fixture.temporary.name).resolve() / "home/night-custody"
+        rehearsal_root = parent / window_id
+        control = parent / (window_id + "-g7-control")
+        rehearsal_root.mkdir(parents=True)
+        control.mkdir()
+        # Preserve completed-night evidence while presenting from its sibling.
+        consumed = rehearsal_root / "arm-0001.consumed.json"
+        started = rehearsal_root / "chain.started"
+        consumed.write_bytes(b"completed rehearsal consumption fixture\n")
+        started.write_bytes(b"completed rehearsal capture fixture\n")
+        preserved = {path: path.read_bytes() for path in (consumed, started)}
+        plan = json.loads(self.case.inputs["night_plan"].read_bytes())
+        plan["custody_root"] = str(control)
+        authorization = json.loads(Path(plan["pack_night"]["authorization_record"]["path"]).read_bytes())
+        authorization.update(purpose="CAMPAIGN_TRANSACTION", authority="V5-TRANSACTION-GO-01")
+        auth_path = control / "authorization.json"
+        auth_path.write_bytes(arm_readiness.render_json(authorization))
+        plan["pack_night"]["authorization_record"] = {
+            "path": str(auth_path), "sha256": hashlib.sha256(auth_path.read_bytes()).hexdigest()}
+        confirmation_path = control / "confirmation.json"
+        confirmation_path.write_bytes(Path(plan["pack_night"]["confirmation_record"]["path"]).read_bytes())
+        plan["pack_night"]["confirmation_record"] = {
+            "path": str(confirmation_path), "sha256": hashlib.sha256(confirmation_path.read_bytes()).hexdigest()}
+        plan_path = control / "night_plan.json"
+        plan_path.write_bytes(arm_readiness.render_json(plan))
+        go = copy.deepcopy(self.case.inputs["authenticated_go_receipt"])
+        go["purpose"] = "T0_REHEARSAL"
+        go["authorization"]["purpose"] = "T0_REHEARSAL"
+        source_go = rehearsal_root / "night/go_receipt.json"
+        source_go.parent.mkdir()
+        source_go.write_bytes(arm_readiness.render_json(go))
+        preserved[source_go] = source_go.read_bytes()
+        six_key = {
+            "schema_version": t0_rehearsal.REHEARSAL_RECEIPT_SCHEMA,
+            "receipt_class": t0_rehearsal.REHEARSAL_RECEIPT_CLASS,
+            "claim_eligible": False, "window_id": window_id,
+            "custody_root": str(rehearsal_root), "acceptance_target": "T0-UNATTENDED-01",
+        }
+        from tests.test_run_night import _load_driver
+        driver = _load_driver()
+        source_receipt = rehearsal_root / "rehearsal-receipt.json"
+        source_receipt.write_bytes(arm_readiness.render_json(six_key))
+        preserved[source_receipt] = source_receipt.read_bytes()
+        if symlink:
+            if symlink == "night":
+                (control / "night").symlink_to(source_go.parent, target_is_directory=True)
+            else:
+                actual = control.with_name(control.name + "-actual")
+                control.rename(actual)
+                control.symlink_to(actual, target_is_directory=True)
+            before = {str(path.relative_to(rehearsal_root)): path.read_bytes()
+                      for path in rehearsal_root.rglob("*") if path.is_file()}
+            with mock.patch.object(Path, "home", return_value=parent.parent), \
+                 mock.patch.object(driver.subprocess, "run") as launch:
+                with self.assertRaisesRegex(driver.PackNightRefusal, "non-symlink"):
+                    driver.produce_g7_control(plan_path, source_receipt, source_go)
+            launch.assert_not_called()
+            after = {str(path.relative_to(rehearsal_root)): path.read_bytes()
+                     for path in rehearsal_root.rglob("*") if path.is_file()}
+            self.assertEqual(before, after)  # No new files, and every original byte retained.
+            return
+        if non_pack:
+            # Exercise real admission against a valid non-pack plan. The producer's
+            # own guard also refuses it, but bytes-only acceptance must stand alone.
+            other_plan = {**plan, "schema": "joulewise.night_plan.v2", "schema_version": 2,
+                          "receipt_class": "DIAGNOSTIC_NO_PACK",
+                          "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"}
+            del other_plan["pack_night"]
+            non_pack_path = parent / "non-pack-plan.json"
+            non_pack_path.write_bytes(arm_readiness.render_json(other_plan))
+            with mock.patch.object(Path, "home", return_value=parent.parent):
+                original = plan_path.read_bytes()
+                plan_path.write_bytes(non_pack_path.read_bytes())
+                try:
+                    with self.assertRaisesRegex(driver.PackNightRefusal, "G7 production plan"):
+                        driver.produce_g7_control(plan_path, source_receipt, source_go)
+                finally:
+                    plan_path.write_bytes(original)
+        calls = []
+        def invoke(argv, **kwargs):
+            self.assertEqual(len(argv[2:]), 16)
+            if non_pack:
+                argv = list(argv)
+                argv[argv.index("--night-plan") + 1] = str(non_pack_path)
+            self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+            calls.append(argv)
+            output = io.BytesIO()
+            with mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+                rc = launch_window.main(argv[2:])
+            return subprocess.CompletedProcess(argv, rc, output.getvalue(), b"")
+        with mock.patch.object(Path, "home", return_value=parent.parent), \
+             mock.patch.object(driver.subprocess, "run", side_effect=invoke), \
+             mock.patch.object(launch_window, "_verify_arm_receipt") as verify, \
+             mock.patch.object(arm_readiness, "_verify_arm_receipt") as consumer_verify, \
+             mock.patch.object(launch_window, "_consume_launch_capability") as consume, \
+             mock.patch.object(launch_window.os, "execve") as execute:
+            locator = driver.produce_g7_control(plan_path, source_receipt, source_go)
+            with self.assertRaises((driver.PackNightRefusal, FileExistsError)):
+                driver.produce_g7_control(plan_path, source_receipt, source_go)
+        verify.assert_not_called()
+        consumer_verify.assert_not_called()
+        consume.assert_not_called()
+        execute.assert_not_called()
+        self.assertEqual(len(calls), 2)
+        path = Path(locator["path"])
+        artifact = json.loads(path.read_bytes())
+        self.assertEqual(locator["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        if non_pack:
+            self.assertEqual(artifact["verdict"], "FAIL")
+            self.assertEqual([item["refusal"]["detail"] for item in artifact["presented"]],
+                             ["go_receipt.receipt_class", "night_plan.receipt_class"])
+            artifact["verdict"] = "PASS"  # Even a relabeled artifact cannot pass.
+            with self.assertRaisesRegex(ValueError, "class/purpose"):
+                t0_rehearsal.validate_g7_control(json.loads(arm_readiness.render_json(artifact)))
+            return
+        self.assertEqual(artifact["verdict"], "PASS")
+        self.assertEqual(artifact["control_plan_sha256"], hashlib.sha256(plan_path.read_bytes()).hexdigest())
+        t0_rehearsal.validate_g7_control(artifact)
+        self.assertEqual((control / "night/presented_go_receipt.json").read_bytes(), source_go.read_bytes())
+        self.assertEqual(list(control.rglob("*.consumed.json")), [])
+        self.assertEqual(list(control.rglob("chain.started")), [])
+        for path, original in preserved.items():
+            self.assertEqual(path.read_bytes(), original)
+
+    @mock.patch.dict(os.environ, {"PYTHON_COLORS": "0", "NO_COLOR": "1"})
+    def test_valid_rehearsal_class_refused_by_production_entry_and_consumer(self):
+        """B4: real six-key rehearsal authority, never a malformed GO surrogate."""
+        from joulewise import t0_rehearsal
+        from tests.test_t0_rehearsal import FixtureBuilder, fixture_bundle
+
+        with tempfile.TemporaryDirectory() as temporary:
+            rehearsal_root = FixtureBuilder(Path(temporary)).build()
+            rehearsal_consumptions = {
+                path: path.read_bytes() for path in rehearsal_root.rglob("*.consumed.json")
+            }
+            self.assertEqual(len(rehearsal_consumptions), 1)
+            bundle = fixture_bundle(rehearsal_root)
+            self.assertEqual(t0_rehearsal.evaluate_g6(bundle).status,
+                             t0_rehearsal.GateStatus.PASS)
+            presented = bundle.record("rehearsal_receipt")
+            self.assertEqual(set(presented.value), t0_rehearsal._REHEARSAL_RECEIPT_KEYS)
+            go_path = self.case.inputs["go_receipt"]
+            go_path.write_bytes(presented.raw)
+            self.case.inputs.update(authenticated_go_receipt=presented.value,
+                                    go_receipt_sha256=presented.sha256)
+            detail = "go_receipt.receipt_class"
+            output = io.BytesIO()
+            with mock.patch.object(launch_window.os, "execve") as execute, \
+                 mock.patch.object(launch_window.sys, "stdout", mock.Mock(buffer=output)):
+                self.assertEqual(launch_window.main(self.argv), 2)
+            self.assertEqual(json.loads(output.getvalue()), {
+                "status": "REFUSE", "reason_codes": ["launch_go_receipt_invalid"],
+                "detail": detail,
+            })
+            execute.assert_not_called()
+            # The launcher checks schema during assembly; independently prove
+            # that bypassing that assembly cannot bypass the callee's check.
+            with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                self.case.consume()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+            self.assertEqual(str(caught.exception), detail)
+            # Bytes/digest authentication must still precede the class check.
+            self.case.inputs["go_receipt_sha256"] = "0" * 64
+            with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                self.case.consume()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+            self.assertIn("sha256", str(caught.exception))
+            self.assertNotIn("class=", str(caught.exception))
+            self.assertEqual(list(self.fixture.custody.rglob("*.consumed.json")), [])
+            self.assertEqual(
+                {path: path.read_bytes() for path in rehearsal_root.rglob("*.consumed.json")},
+                rehearsal_consumptions,
+            )
+            for custody in (self.fixture.custody, rehearsal_root):
+                self.assertEqual(list(custody.rglob("chain.started")), [])
 
 
 if __name__ == "__main__":

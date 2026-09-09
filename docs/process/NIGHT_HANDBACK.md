@@ -41,6 +41,13 @@ have been assigned to later processes.
 
 ## Purpose of this night
 
+Cut rehearsal checkouts as `JouleWise-rehearsal-<date>-<sha>`; the reviewed
+`JouleWise-rehearsal-` prefix is exact and case-sensitive. Replace `<sha>` in
+examples with the reviewed checkout commit. The clone must NOT be listed in
+`configs/production_custody_inventory.json` and must sit at a head carrying
+that file. For T0_REHEARSAL it must also be disjoint from every inventoried
+measurement root (no equality or containment in either direction).
+
 Plan `rehearsal-20260909`, class `REHEARSAL_STUB`, armed by the headless
 magistrate (activation 1ef89702, spawned by the relaunch watchdog on
 2026-09-08 00:51:55 PDT) for 02:56 local on 2026-09-09 with a 900 s
@@ -51,7 +58,7 @@ built-in stub (`sleep 2; echo REHEARSAL`); no pack, no model, no
 measurement, no sudo. The plan is v2: `repo_head` and `measurement_head`
 both pin THIS commit (the one that rewrote this file), and
 `measurement_root` is a disposable detached checkout of this commit at
-`/private/tmp/joulewise-rehearsal-20260909-checkout`, used only by this
+`/private/tmp/JouleWise-rehearsal-20260909-<sha>`, used only by this
 stub and removed with the plan root before any real plan; the measurement
 checkout of record (`/Users/edr/JouleWise-measurement-20260813`) is
 untouched. Both night agents are installed FROM that checkout. Ed was
@@ -82,7 +89,7 @@ not repeat that case. The design ruling and bench pass are in
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260909` / `/private/tmp/joulewise-rehearsal-20260909-checkout`
+`rehearsal-20260909` / `/private/tmp/JouleWise-rehearsal-20260909-<sha>`
 / this commit) harvests `result.json`, the receipt or refusal, the courier
 message id and the results-branch evidence, records them under
 `NIGHT-REHEARSAL-01`, then runs
@@ -125,3 +132,22 @@ interpreter field: the driver, chain, and preflight always derive
 HEAD against `measurement_head`. The preflight's sole argument is the absolute
 v2 plan filename. Future clone naming and the exact locked venv creation
 commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
+
+D-176 pack-bound T0_REHEARSAL post-night handback (separate from the stub above):
+
+1. Harvest and preserve the completed rehearsal's GO, consumption, capture and
+   bundle evidence. The completed bundle loads and evaluates G1–G6 + G8–G10
+   before control production; an absent `g7_control` locator yields G7 FAIL,
+   detail `g7_control_pending`, rather than a bundle load error.
+2. Prepare the fresh sibling control with the production TRANSACTION_PACK plan
+   specified in [the GO contract §10.5](../contracts/pack_night_go_receipt.md#105-g7-control-2026-09-08).
+   Run `scripts/run_night.py g7-control --plan CONTROL_PLAN --rehearsal-receipt
+   REHEARSAL_RECEIPT --rehearsal-go REHEARSAL_GO` after the night. The two source
+   receipts come from the completed rehearsal; the destination is its separate
+   `-g7-control` sibling. Neither the control nor its `night` directory may be a
+   symlink. Retain the returned `{path, sha256}` locator as `records.g7_control`
+   in the bundle manifest, preserving the completed consumption/capture bytes.
+3. Re-evaluate with `scripts/rehearse_t0_unattended.py --custody-root REHEARSAL_ROOT`.
+   G7 PASS requires this post-night control and acceptance from its authenticated
+   bytes; closure requires all ten gates PASS. The sequence is harvest →
+   g7-control → re-evaluate bundle.

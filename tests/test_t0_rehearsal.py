@@ -3,15 +3,20 @@ from __future__ import annotations
 import copy
 import io
 import tempfile
+import time
+from contextlib import contextmanager
 import unittest
 from pathlib import Path
 from typing import Any, Mapping
+from unittest import mock
 
 from joulewise import arm_readiness as readiness
 from joulewise import clock_reference
 from joulewise import t0_rehearsal as rehearsal
 from scripts import rehearse_t0_unattended as cli
 
+
+REAL_G5_T0_AUTHENTICATOR = readiness._authenticate_go_t0_evidence
 
 BOOT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 HEAD = "a" * 40
@@ -135,8 +140,80 @@ def _clock_value() -> dict[str, object]:
     }
 
 
+def fixture_inventory(root):
+    return [{"deployment_id": "fixture", "measurement_root": str(root.parents[2] / "production"),
+             "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+
+
+def fixture_bundle(root):
+    return cli.load_evidence_bundle(root, home=root.parents[1], inventory=fixture_inventory(root))
+
+
+def install_t0_inventory(fixture):
+    """Synthetic probe bytes; the production T0 inventory authenticator stays real."""
+    from joulewise import arm_readiness_evidence_t0 as author
+    from tests.test_arm_readiness_schemas import sample_evidence
+    root = fixture.custody / fixture.pack.name
+    recipe_path = root / fixture.arm["evidence"][0]["path"]
+    recipe = readiness.parse_json_bytes(recipe_path.read_bytes())
+    source_path = root / recipe["facts"][0]["source_path"]
+    source = readiness.parse_json_bytes(source_path.read_bytes())
+    now = time.monotonic_ns()
+    paths = []
+    for index, (step, name) in enumerate(author._CAPTURE_FILES.items()):
+        path = root / author._INPUT_DIRECTORY / name
+        value = _command_capture(step, ["/fixture/probe"], "",
+                                 started=now - 100 + index * 2,
+                                 finished=now - 99 + index * 2)
+        value["boot_session_id"] = fixture.arm["boot_session_id"]
+        _write_json(path, value)
+        source["input_artifacts"].append(fixture._artifact(path))
+        paths.append(path)
+    _write_json(source_path, source)
+    source_digest = fixture._artifact(source_path)["sha256"]
+    fixture.arm["evidence"] = []
+    for row in author._EXPECTED_ROWS:
+        value = copy.deepcopy(recipe) if row == "t0.single_launch_capability" else sample_evidence()
+        value.update(evidence_id=author._evidence_id(row), kind=author._ROW_KIND[row],
+                     boot_session_id=fixture.arm["boot_session_id"],
+                     pack_sha256=fixture.arm["pack"]["pack_sha256"],
+                     head_commit=fixture.arm["reviewed_main"]["head_commit"],
+                     valid_until_monotonic_ns=fixture.arm["valid_until_monotonic_ns"])
+        for fact in value["facts"]:
+            fact.update(source_kind="PROBE", source_path=str(source_path.relative_to(root)),
+                        source_sha256=source_digest)
+        path = root / author._EVIDENCE_DIRECTORY / author._receipt_name(row)
+        _write_json(path, value)
+        digest = fixture._artifact(path)["sha256"]
+        path.with_name(path.name + ".sha256").write_bytes(readiness.gnu_sidecar(digest, path.name))
+        fixture.arm["evidence"].append({"evidence_id": value["evidence_id"],
+            "receipt_kind": value["kind"], "namespace": "WINDOW_CUSTODY",
+            "path": str(path.relative_to(root)), "sha256": digest,
+            "schema_version": value["schema_version"], "status": "PASS"})
+        paths.append(path)
+    fixture._rewrite_arm()
+    return sorted((_reference(path, fixture.custody) for path in paths), key=lambda ref: ref["path"])
+
+
+@contextmanager
+def fixture_replay(root):
+    """Only ARM semantics/pack metadata are synthetic; GO/T0/consumption replay is real."""
+    arm_path, = root.glob("*/arm_readiness.receipts/arm-0001.json")
+    arm = readiness.parse_json_bytes(arm_path.read_bytes())
+    with mock.patch.object(readiness, "_pack_record", return_value=arm["pack"]), \
+         mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
+                           return_value=(arm["rows"], arm["refusals"])), \
+         mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
+        yield
+
+
+def evaluate_fixture(root):
+    with fixture_replay(root):
+        return rehearsal.evaluate_rehearsal(fixture_bundle(root))
+
+
 class FixtureBuilder:
-    """Test-only builder for one complete or exactly-one-gate-broken tree."""
+    """Current pack GO and retained consumption, plus synthetic ten-gate evidence."""
 
     def __init__(
         self,
@@ -146,9 +223,9 @@ class FixtureBuilder:
         hid_case: str = "pass",
         g10_case: str = "pass",
     ) -> None:
-        self.base = base
-        self.root = base / "fixture"
-        self.root.mkdir()
+        self.base = base.resolve()
+        self.root = self.base / "home/night-custody/rehearsal-t0-unattended-fixture-001"
+        self.root.mkdir(parents=True)
         self.namespace = self.root / "t0-namespace"
         self.inputs = self.namespace / "arm_readiness.t0.inputs"
         self.sources = self.namespace / "arm_readiness.t0.sources"
@@ -162,11 +239,14 @@ class FixtureBuilder:
         self._build_clock_namespace()
         self._build_execution()
         self._build_hid()
-        self._build_d149()
+        self._build_pack_go()
+        if self.broken_gate == "G5":
+            self._build_d149()
         self._build_rehearsal_receipt()
         self._build_process_lineage()
         self._build_lifecycle()
         self._build_falsifiers()
+        self._build_g7()
         self._build_manifest()
         return self.root
 
@@ -351,6 +431,27 @@ class FixtureBuilder:
         }
         path.write_text(values[self.hid_case], encoding="utf-8")
 
+    def _build_pack_go(self):
+        from tests.test_arm_readiness import LaunchConsumptionV2Tests
+        fixture = LaunchConsumptionV2Tests()
+        fixture._custody_window = self.root.name
+        try:
+            # Reuse this bundle's context without weakening the case's setUp.
+            fixture._set_up_fixture(self.base.resolve(), existing_context=True)
+            evidence = install_t0_inventory(fixture)
+            inputs = fixture._consumer_inputs()
+            go = inputs["authenticated_go_receipt"]
+            go["t0_evidence"] = evidence
+            go["t0_evidence_set_sha256"] = readiness.sha256_bytes(readiness.render_json(evidence))
+            go["conditions"][1]["evidence"].extend(evidence)
+            go["conditions"][3]["evidence"] = copy.deepcopy(go["conditions"][1]["evidence"])
+            _write_json(inputs["go_receipt"], go)
+            inputs["go_receipt_sha256"] = readiness.sha256_bytes(inputs["go_receipt"].read_bytes())
+            with mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
+                fixture._invoke_consumer(inputs)
+        finally:
+            fixture.doCleanups()
+
     def _build_d149(self) -> None:
         conditions = []
         for index in range(1, 6):
@@ -368,7 +469,7 @@ class FixtureBuilder:
                 }
             )
         _write_json(
-            self.records / "d149-go.json",
+            self.root / "night/go_receipt.json",
             {
                 "schema_version": rehearsal.D149_SCHEMA,
                 "verdict": "GO",
@@ -383,7 +484,8 @@ class FixtureBuilder:
                 "schema_version": rehearsal.REHEARSAL_RECEIPT_SCHEMA,
                 "receipt_class": rehearsal.REHEARSAL_RECEIPT_CLASS,
                 "claim_eligible": False,
-                "window_id": rehearsal.REHEARSAL_WINDOW_PREFIX + "fixture-001",
+                "window_id": rehearsal.REHEARSAL_WINDOW_PREFIX + "fixture-001" + (
+                    "-wrong-sibling" if self.broken_gate == "G6" else ""),
                 "custody_root": str(self.root.resolve()),
                 "acceptance_target": "T0-UNATTENDED-01",
             },
@@ -513,11 +615,28 @@ class FixtureBuilder:
                 },
             )
 
+    def _build_g7(self):
+        control = self.root.with_name(self.root.name + "-g7-control")
+        self.g7_path = control / "night/g7_refusal.json"
+        _write_json(self.g7_path, {
+            "schema_version": rehearsal.G7_CONTROL_SCHEMA,
+            "control_custody_root": str(control), "rehearsal_window_id": self.root.name,
+            "control_plan_sha256": "a" * 64,
+            "presented": [{"kind": kind, "path": str(control / "night" / filename),
+                "sha256": readiness.sha256_bytes((self.root / "night/go_receipt.json" if kind == "rehearsal_go"
+                    else self.records / "rehearsal-receipt.json").read_bytes()),
+                "refusal": {"reason": "launch_go_receipt_invalid", "detail": detail},
+                "first_refusal": True, "presented_monotonic_ns": at}
+                for kind, filename, detail, at in (
+                    ("rehearsal_receipt", "presented_rehearsal_receipt.json", "go_receipt.receipt_class", 10),
+                    ("rehearsal_go", "presented_go_receipt.json", "rehearsal_purpose_on_production_id", 20))],
+            "absence": {"consumption_absent": True, "chain_started_absent": True, "checked_monotonic_ns": 30},
+            "verdict": "PASS"})
+
     def _build_manifest(self) -> None:
         production = self.base / "production"
         production.mkdir()
-        if self.broken_gate == "G6":
-            production = self.base
+        inventory = fixture_inventory(self.root)
         _write_json(
             self.root / cli.MANIFEST_NAME,
             {
@@ -526,7 +645,8 @@ class FixtureBuilder:
                 "records": {
                     "execution": "records/execution.json",
                     "hid_idle": "records/hid-idle.txt",
-                    "d149_go": "records/d149-go.json",
+                    "d149_go": "night/go_receipt.json",
+                    "g7_control": {"path": str(self.g7_path), "sha256": readiness.sha256_bytes(self.g7_path.read_bytes())},
                     "rehearsal_receipt": "records/rehearsal-receipt.json",
                     "process_lineage": "records/process-lineage.json",
                     "lifecycle": "records/lifecycle.json",
@@ -534,7 +654,9 @@ class FixtureBuilder:
                     "positive_control": "records/positive-control.json",
                 },
                 "production_roots": [
-                    {"role": "production_custody_root", "path": str(production.resolve())}
+                    {"role": item.role, "path": str(item.path)}
+                    for item in readiness.production_custody_roots(
+                        home=self.base / "home", inventory=inventory)
                 ],
             },
         )
@@ -549,7 +671,7 @@ class T0RehearsalTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = FixtureBuilder(Path(temporary.name)).build()
-        bundle = cli.load_evidence_bundle(root)
+        bundle = fixture_bundle(root)
         _artifact, receipt, fact = rehearsal._clock_receipt(bundle)
         value = fact["value"]
         receipt["valid_until_monotonic_ns"] = (
@@ -592,8 +714,7 @@ class T0RehearsalTests(unittest.TestCase):
             hid_case=hid_case,
             g10_case=g10_case,
         ).build()
-        bundle = cli.load_evidence_bundle(root)
-        return temporary, root, rehearsal.evaluate_rehearsal(bundle)
+        return temporary, root, evaluate_fixture(root)
 
     def _assert_single_failure(
         self,
@@ -612,20 +733,62 @@ class T0RehearsalTests(unittest.TestCase):
         self.assertEqual(verdict["overall_verdict"], "FAIL")
         failed = [gate for gate in verdict["gates"] if gate["status"] == "FAIL"]
         self.assertEqual([gate["gate_id"] for gate in failed], [gate_id])
+        failed = [gate for gate in failed if gate["gate_id"] == gate_id]
         self.assertIn(message, failed[0]["message"])
         for gate in verdict["gates"]:
-            if gate["gate_id"] not in {gate_id, "G7"}:
+            if gate["gate_id"] != gate_id:
                 self.assertEqual(gate["status"], "PASS", gate)
         return verdict
 
-    def test_passing_bundle_is_incomplete_for_exact_g7_reason(self) -> None:
+    def test_current_pack_bundle_composes_all_ten_gates_pass_through_loader(self):
         _temporary, _root, verdict = self._evaluate()
-        self.assertEqual(verdict["overall_verdict"], "INCOMPLETE")
-        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 0, "UNRULED": 1})
-        g7 = verdict["gates"][6]
-        self.assertEqual(g7["gate_id"], "G7")
-        self.assertEqual(g7["status"], "UNRULED")
-        self.assertEqual(g7["message"], rehearsal.G7_UNRULED_REASON)
+        self.assertEqual(verdict["overall_verdict"], "PASS", verdict)
+        self.assertEqual(verdict["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
+        self.assertEqual([gate["gate_id"] for gate in verdict["gates"]],
+                         [f"G{i}" for i in range(1, 11)])
+
+    def test_completed_bundle_loads_before_post_night_g7_control(self):
+        _temporary, root, _verdict = self._evaluate()
+        path = root / cli.MANIFEST_NAME
+        manifest = readiness.parse_json_bytes(path.read_bytes())
+        locator = manifest["records"].pop("g7_control")
+        Path(locator["path"]).unlink()
+        _write_json(path, manifest)
+        verdict = evaluate_fixture(root)
+        self.assertEqual(verdict["load_issues"], [])
+        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 1, "UNRULED": 0})
+        self.assertEqual(verdict["gates"][6]["message"], "g7_control_pending")
+
+    def test_g5_c2_real_t0_file_mutation_omission_and_substitution_fail(self):
+        _temporary, root, verdict = self._evaluate()
+        self.assertEqual(verdict["gates"][4]["status"], "PASS")
+        go_path = root / "night/go_receipt.json"
+        go_bytes = go_path.read_bytes()
+        go = readiness.parse_json_bytes(go_bytes)
+        capture, substitute = [root / ref["path"] for ref in go["t0_evidence"]
+                               if "arm_readiness.t0.inputs/" in ref["path"]][:2]
+        original = capture.read_bytes()
+        for action in ("mutate", "omit", "substitute"):
+            with self.subTest(action=action):
+                if action == "omit":
+                    capture.unlink()
+                else:
+                    capture.write_bytes(original + b" " if action == "mutate" else substitute.read_bytes())
+                with fixture_replay(root):
+                    result = rehearsal.evaluate_g5(fixture_bundle(root))
+                self.assertEqual(result.status, rehearsal.GateStatus.FAIL, result.message)
+                self.assertIn("t0_evidence", result.message)
+                self.assertEqual(go_path.read_bytes(), go_bytes)  # C2 still advertises PASS.
+                capture.write_bytes(original)
+                with fixture_replay(root):
+                    self.assertEqual(rehearsal.evaluate_g5(fixture_bundle(root)).status,
+                                     rehearsal.GateStatus.PASS)
+
+    def test_legacy_bundle_fails_g5_even_with_passing_g7_control(self) -> None:
+        _temporary, _root, verdict = self._evaluate(broken_gate="G5")
+        self.assertEqual(verdict["overall_verdict"], "FAIL")
+        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 1, "UNRULED": 0})
+        self.assertEqual(verdict["gates"][6]["status"], "PASS")
 
     def test_g1_wrong_stdin_binding_fails_only_noninteractive_gate(self) -> None:
         self._assert_single_failure(
@@ -637,7 +800,7 @@ class T0RehearsalTests(unittest.TestCase):
     def test_g1_missing_new_execution_record_is_unruled_not_pass(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         (root / "records/execution.json").unlink()
-        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
+        verdict = evaluate_fixture(root)
         self.assertEqual(verdict["gates"][0]["status"], "UNRULED")
         self.assertIn("current command captures do not record", verdict["gates"][0]["message"])
         self.assertEqual(verdict["overall_verdict"], "INCOMPLETE")
@@ -668,26 +831,42 @@ class T0RehearsalTests(unittest.TestCase):
             message="R1 reference agreement intervals have empty intersection",
         )
 
-    def test_g5_non_green_c3_fails_only_d149(self) -> None:
+    def test_g5_refuses_legacy_receipt_even_with_condition_failure(self) -> None:
         self._assert_single_failure(
             "G5",
             broken_gate="G5",
-            message="D-149 C3 is not mechanically green",
+            message="go_receipt",
         )
 
     def test_g6_real_path_containment_rejects_production_overlap(self) -> None:
         self._assert_single_failure(
             "G6",
             broken_gate="G6",
-            message="rehearsal custody overlaps production root",
+            message="rehearsal_roots_not_disjoint",
         )
 
-    def test_g7_is_first_class_unruled_and_never_faked_as_failure_or_pass(self) -> None:
-        _temporary, _root, verdict = self._evaluate()
-        gate = verdict["gates"][6]
-        self.assertEqual(gate["status"], "UNRULED")
-        self.assertIn("RF-32", gate["message"])
-        self.assertNotEqual(verdict["overall_verdict"], "PASS")
+    def test_g7_revalidates_bytes_schema_and_every_pass_condition(self):
+        _temporary, root, _verdict = self._evaluate()
+        bundle = fixture_bundle(root)
+        artifact = bundle.record("g7_control")
+        original = copy.deepcopy(artifact.value)
+        mutations = [lambda v: v.update(extra=True), lambda v: v.update(schema_version="legacy"),
+            lambda v: v.update(presented=v["presented"][:1]),
+            lambda v: v["presented"][0]["refusal"].update(detail="ARM missing"),
+            lambda v: v["presented"][0]["refusal"].update(detail="receipt_class"),
+            lambda v: v["presented"][0]["refusal"].update(detail="night_plan.receipt_class"),
+            lambda v: v["presented"][1].update(first_refusal=False),
+            lambda v: v["absence"].update(consumption_absent=False),
+            lambda v: v["absence"].update(chain_started_absent=False),
+            lambda v: v["absence"].update(checked_monotonic_ns=0),
+            lambda v: v.update(verdict="FAIL")]
+        for mutate in mutations:
+            value = copy.deepcopy(original)
+            mutate(value)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                rehearsal.validate_g7_control(value)
+        artifact.path.write_bytes(artifact.raw + b" ")
+        self.assertEqual(rehearsal.evaluate_g7(bundle).status, rehearsal.GateStatus.FAIL)
 
     def test_g8_capture_census_agent_fails_only_zero_agent_gate(self) -> None:
         self._assert_single_failure(
@@ -709,10 +888,10 @@ class T0RehearsalTests(unittest.TestCase):
         value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
         value["human_interventions"] = [{"action": "made run succeed"}]
         _write_json(path, value)
-        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
+        verdict = evaluate_fixture(root)
         failures = [gate for gate in verdict["gates"] if gate["status"] == "FAIL"]
         self.assertEqual([gate["gate_id"] for gate in failures], ["G9"])
-        self.assertIn("human intervention occurred", failures[0]["message"])
+        self.assertIn("human intervention occurred", failures[-1]["message"])
 
     def test_g10_real_author_and_real_arm_paths_observe_both_boundaries(self) -> None:
         _temporary, _root, verdict = self._evaluate()
@@ -778,22 +957,153 @@ class T0RehearsalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             rehearsal.compose_overall_verdict(())
 
-    def test_fixture_cli_reads_bytes_and_exits_non_success_for_incomplete(self) -> None:
+    def test_fixture_cli_reads_bytes_and_exits_success_for_pass(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
-        code = cli.main(["--fixture-root", str(root)], stdout=output)
+        with fixture_replay(root):
+            code = cli.main(["--fixture-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 3)
-        self.assertEqual(parsed["overall_verdict"], "INCOMPLETE")
+        self.assertEqual(code, 0)
+        self.assertEqual(parsed["overall_verdict"], "PASS")
         self.assertEqual(output.getvalue(), readiness.render_json(parsed))
 
     def test_real_custody_cli_mode_uses_the_same_evidence_only_loader(self) -> None:
         _temporary, root, _verdict = self._evaluate()
         output = io.BytesIO()
-        code = cli.main(["--custody-root", str(root)], stdout=output)
+        with fixture_replay(root):
+            code = cli.main(["--custody-root", str(root)], stdout=output, home=root.parents[1], inventory=fixture_inventory(root))
         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
-        self.assertEqual(code, 3)
-        self.assertEqual(parsed["gate_counts"]["UNRULED"], 1)
+        self.assertEqual(code, 0)
+        self.assertEqual(parsed["gate_counts"], {"PASS": 10, "FAIL": 0, "UNRULED": 0})
+
+
+class PackGoReplayTests(unittest.TestCase):
+    """Real GO/consumption replay; synthetic ARM semantics and T0 prerequisites."""
+
+    def setUp(self):
+        from tests.test_arm_readiness import PackNightConsumerTests
+        self.case = PackNightConsumerTests()
+        self.case.setUp()
+        self.addCleanup(self.case.doCleanups)
+        self.fixture = self.case.fixture
+        self.case.rewrite_go(lambda go: go["conditions"][3].update(
+            evidence=copy.deepcopy(go["conditions"][1]["evidence"])))
+        self.case.consume()
+
+    def bundle(self):
+        artifacts, issues = cli._crawl(self.fixture.custody)
+        go = next(item for item in artifacts if item.relative_path == "night/go_receipt.json")
+        return rehearsal.EvidenceBundle(self.fixture.custody, self.fixture.custody,
+            go, artifacts, {"d149_go": go.relative_path}, (), issues)
+
+    def evaluate(self):
+        with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
+                return_value=(self.fixture.arm["rows"], self.fixture.arm["refusals"])):
+            return rehearsal.evaluate_g5(self.bundle())
+
+    def rebind(self):
+        def references(go):
+            for condition in go["conditions"]:
+                for ref in condition["evidence"]:
+                    ref["sha256"] = readiness.sha256_bytes((self.fixture.custody / ref["path"]).read_bytes())
+        self.case.rewrite_go(references)
+        record = readiness.parse_json_bytes(self.case.consumption.read_bytes())
+        record["go_receipt"]["sha256"] = self.case.inputs["go_receipt_sha256"]
+        self.case.rewrite_consumption(record)
+
+    def test_g5_pack_go_replays_c1_through_c5_and_refuses_d149(self):
+        result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.PASS, result.message)
+        path = self.case.inputs["go_receipt"]
+        _write_json(path, {"schema_version": rehearsal.D149_SCHEMA, "verdict": "GO",
+                          "conditions": [{"condition_id": f"C{i}", "status": "PASS", "evidence": []} for i in range(1, 6)]})
+        self.assertEqual(self.evaluate().status, rehearsal.GateStatus.FAIL)
+
+    def test_g5_recomputes_authorization_despite_pass_labels_and_rebound_hashes(self):
+        path = Path(self.case.inputs["authenticated_go_receipt"]["authorization"]["path"])
+        value = readiness.parse_json_bytes(path.read_bytes())
+        value["permitted_blocks"] = 2
+        _write_json(path, value)
+        digest = readiness.sha256_bytes(path.read_bytes())
+        plan_path = self.case.inputs["night_plan"]
+        plan = readiness.parse_json_bytes(plan_path.read_bytes())
+        plan["pack_night"]["authorization_record"]["sha256"] = digest
+        _write_json(plan_path, plan)
+        plan_digest = readiness.sha256_bytes(plan_path.read_bytes())
+        self.case.rewrite_go(lambda go: (go["authorization"].update(sha256=digest), go.update(plan_sha256=plan_digest)))
+        self.rebind()
+        record = readiness.parse_json_bytes(self.case.consumption.read_bytes())
+        record["night_plan"]["sha256"] = plan_digest
+        record["go_receipt"]["plan_sha256"] = plan_digest
+        self.case.rewrite_consumption(record)
+        result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("G2B_SHAKEDOWN", result.message)
+
+    def test_g5_requires_arm_semantic_replay_and_real_t0_inventory(self):
+        with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
+                return_value=([], [{"reason": "refused"}])):
+            result = rehearsal.evaluate_g5(self.bundle())
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("PASS/GO", result.message)
+        with mock.patch.object(readiness, "_authenticate_go_t0_evidence", REAL_G5_T0_AUTHENTICATOR):
+            result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("t0_evidence", result.message)
+
+    def test_g5_recomputes_census_instead_of_accepting_c3_pass(self):
+        self.case.rewrite_go(lambda go: go["census"].update(exit_code=0))
+        self.rebind()
+        result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("census", result.message)
+
+    def test_g5_recomputes_clock_bounds_instead_of_accepting_c4_pass(self):
+        consumed = readiness.parse_json_bytes(self.case.consumption.read_bytes())["consumed_at_monotonic_ns"]
+        self.case.rewrite_go(lambda go: go.update(valid_until_monotonic_ns=consumed))
+        self.rebind()
+        result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("monotonic", result.message)
+
+    def test_g5_requires_one_consumption_instead_of_accepting_c5_pass(self):
+        self.case.consumption.unlink()
+        result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("exactly one consumption", result.message)
+
+    def test_g5_numeric_types_condition_order_and_vocabulary_are_exact(self):
+        original = copy.deepcopy(self.case.inputs["authenticated_go_receipt"])
+        mutations = [lambda go: go.update(issued_epoch_s=1),
+            lambda go: go.update(issued_monotonic_ns=True),
+            lambda go: go.update(valid_until_monotonic_ns=1.5),
+            lambda go: go["conditions"].reverse(),
+            lambda go: go["conditions"][1].update(condition_id="C1"),
+            lambda go: go["conditions"][0].update(status="NOT_APPLICABLE"),
+            lambda go: go["conditions"][0].update(status="GO"),
+            lambda go: go["conditions"][0].update(basis="no_pack_by_design")]
+        for mutate in mutations:
+            value = copy.deepcopy(original)
+            mutate(value)
+            _write_json(self.case.inputs["go_receipt"], value)
+            self.rebind()
+            with self.subTest(value=value):
+                self.assertEqual(self.evaluate().status, rehearsal.GateStatus.FAIL)
+
+    def test_g5_refuses_higher_arm_on_same_boot(self):
+        value = copy.deepcopy(self.fixture.arm)
+        value["receipt_id"] = "arm-0002"
+        value["supersedes"] = {"receipt_id": self.fixture.arm["receipt_id"],
+            "receipt_path": "arm_readiness.receipts/arm-0001.json",
+            "receipt_sha256": readiness.sha256_bytes(self.fixture.arm_path.read_bytes()),
+            "pack_id": value["pack"]["pack_id"], "pack_sha256": value["pack"]["pack_sha256"]}
+        path = self.fixture.arm_path.with_name("arm-0002.json")
+        _write_json(path, value)
+        path.with_name(path.name + ".sha256").write_bytes(
+            readiness.gnu_sidecar(readiness.sha256_bytes(path.read_bytes()), path.name))
+        result = self.evaluate()
+        self.assertEqual(result.status, rehearsal.GateStatus.FAIL)
+        self.assertIn("superseded", result.message)
 
 
 if __name__ == "__main__":

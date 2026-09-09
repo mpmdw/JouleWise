@@ -199,6 +199,20 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
             chain_sha256_path=str(self.root / "chain.sha256"),
             custody_root=str(custody_root),
             registration_path=None,
+            pack_night={
+                "pack_id": plan_id,
+                "pack_root": str((self.root / "packs" / plan_id).resolve()),
+                "pack_sha256": "0" * 64,
+                "attempt_ordinal": 1,
+                "authorization_record": {
+                    "path": str(custody_root / "authorization.json"),
+                    "sha256": "0" * 64,
+                },
+                "confirmation_record": {
+                    "path": str(custody_root / "confirmation.json"),
+                    "sha256": "0" * 64,
+                },
+            },
         )
 
     def _write_valid(

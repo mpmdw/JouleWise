@@ -1684,5 +1684,291 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertNotIn("clock_probe_failed", READINESS_REASON_CODES)
 
 
+
+
+class ProductionCustodyResolverTests(unittest.TestCase):
+    def inventory(self, root):
+        return [{"deployment_id": "clone", "measurement_root": str(root / "retained"),
+                 "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+
+    def test_shipped_inventory_pins_all_four_retained_deployments(self):
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        expected = {
+            "JouleWise": "/Users/edr/code/JouleWise",
+            "JouleWise-measurement-20260813": "/Users/edr/JouleWise-measurement-20260813",
+            "JouleWise-measurement-20260818": "/Users/edr/JouleWise-measurement-20260818",
+            "JouleWise-measurement-v5-20260910-1c83f2a": "/Users/edr/JouleWise-measurement-v5-20260910-1c83f2a",
+        }
+        self.assertEqual(4, len(inventory))
+        self.assertEqual(expected, {item["deployment_id"]: item["measurement_root"] for item in inventory})
+        roots = readiness.production_custody_roots(home=Path("/synthetic-home"), inventory=inventory)
+        self.assertEqual({"deployment_measurement_root:" + key: Path(value) for key, value in expected.items()},
+                         {item.role: item.path for item in roots if item.role.startswith("deployment_measurement_root:")})
+
+    def test_frozen_derivations_resolve_every_role_without_existence_filter(self):
+        home = Path("/synthetic-home")
+        roots = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
+        self.assertEqual({
+            "magistrate_state": home / "night-custody/magistrate",
+            "night_custody_parent": home / "night-custody",
+            "backup_icloud": home / "Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup",
+            "quiet_guard_state": Path("/Library/Application Support/JouleWise/quiet-guard"),
+            "deployment_measurement_root:clone": home / "retained",
+            "deployment_runs:clone": home / "retained/runs",
+        }, {item.role: item.path for item in roots})
+        self.assertTrue(all(item.resolution_error is None for item in roots))
+        self.assertIsInstance(readiness.PRODUCTION_CUSTODY_ROOTS, tuple)
+        with self.assertRaises(AttributeError):
+            readiness.PRODUCTION_CUSTODY_ROOTS[0].role = "shrunken"
+
+    def test_no_census_kind_or_path_is_derived_from_running_clone(self):
+        from joulewise.t0_rehearsal import _contains
+        self.assertEqual({"LITERAL", "HOME_RELATIVE", "INVENTORY"},
+                         {spec.kind for spec in readiness.PRODUCTION_CUSTODY_ROOTS})
+        self.assertNotIn("repo_runs", {spec.role for spec in readiness.PRODUCTION_CUSTODY_ROOTS})
+        self.assertEqual("JouleWise-rehearsal-", readiness.REHEARSAL_CLONE_PREFIX)
+        measurement = Path(readiness.__file__).resolve().parents[1]
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        self.assertNotIn(str(measurement), {item["measurement_root"] for item in inventory})
+        roots = readiness.production_custody_roots(home=Path.home(), inventory=inventory)
+        self.assertFalse(any(_contains(item.path, measurement) or _contains(measurement, item.path)
+                             for item in roots))
+        inventory.append({**self.inventory(measurement)[0], "measurement_root": str(measurement)})
+        roots = readiness.production_custody_roots(home=Path.home(), inventory=inventory)
+        self.assertTrue(any(_contains(item.path, measurement) for item in roots))
+
+    def test_every_non_null_inventory_locator_is_in_resolved_census(self):
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        canonical = next(item for item in inventory if item["deployment_id"] == "JouleWise")
+        self.assertEqual("/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl",
+                         canonical["ledger_path"])
+        inventory += [{"deployment_id": "synthetic", "measurement_root": "/absent/measurement",
+                       "custody_root": "/absent/custody", "ledger_path": "/absent/ledger", "notes": "synthetic"}]
+        roots = {item.role: item.path for item in readiness.production_custody_roots(
+            home=Path("/synthetic-home"), inventory=inventory)}
+        for item in inventory:
+            identity = item["deployment_id"]
+            self.assertEqual((Path(item["measurement_root"]) / "runs").resolve(),
+                             roots["deployment_runs:" + identity])
+            for key, role in (("custody_root", "deployment_custody"), ("ledger_path", "deployment_ledger")):
+                if item[key] is None:
+                    self.assertNotIn(role + ":" + identity, roots)
+                else:
+                    self.assertEqual(Path(item[key]).resolve(), roots[role + ":" + identity])
+
+    def test_backup_override_cannot_shrink_census_and_three_script_literals_stay_pinned(self):
+        home = Path("/synthetic-home")
+        before = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
+        with mock.patch.dict("os.environ", {"JOULEWISE_BACKUP_ROOTS": "/empty"}):
+            self.assertEqual(before, readiness.production_custody_roots(home=home, inventory=self.inventory(home)))
+        spec = next(item for item in readiness.PRODUCTION_CUSTODY_ROOTS if item.role == "backup_icloud")
+        for filename in ("paper_excursion_decomposition.py", "check_paper_replay_fence.py", "paper_anchor_correction_quantified.py"):
+            self.assertIn(spec.value, (ROOT / "scripts" / filename).read_text())
+
+    def test_inventory_each_entry_counts_and_invalid_or_empty_census_refuses(self):
+        home = Path("/synthetic-home")
+        inventory = self.inventory(home)
+        inventory.append({**inventory[0], "deployment_id": "second", "measurement_root": str(home / "second")})
+        roots = readiness.production_custody_roots(home=home, inventory=inventory)
+        self.assertIn("deployment_measurement_root:second", {item.role for item in roots})
+        for value in ([], {}, [inventory[0], inventory[0]], [{**inventory[0], "measurement_root": "relative"}], [{"deployment_id": "incomplete"}]):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "production-root census incomplete"):
+                readiness.production_custody_roots(home=home, inventory=value)
+
+    def test_resolution_error_is_retained_in_census(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary).resolve()
+            (home / "night-custody").symlink_to(home / "night-custody")
+            roots = readiness.production_custody_roots(home=home, inventory=self.inventory(home))
+            self.assertTrue(next(item for item in roots if item.role == "night_custody_parent").resolution_error)
+def sample_pack_night_go() -> dict[str, Any]:
+    """Wire fixture only: it makes no machine/evidence authentication claim."""
+    ref = {"path": "/custody/record.json", "sha256": ZERO_SHA}
+    return {
+        "schema_version": readiness.PACK_NIGHT_GO_RECEIPT_SCHEMA,
+        "receipt_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "receipt_class": "TRANSACTION_PACK", "purpose": "G2B_SHAKEDOWN",
+        "plan_id": "plan", "plan_sha256": ZERO_SHA,
+        "pack_id": "pack", "pack_sha256": ZERO_SHA,
+        "arm_receipt": {"receipt_id": "arm", "sha256": ZERO_SHA,
+                        "valid_until_monotonic_ns": 100},
+        "boot_session_id": TEST_BOOT_SESSION_ID,
+        "t0_evidence": [{"path": "evidence.json", "sha256": ZERO_SHA}],
+        "t0_evidence_set_sha256": ZERO_SHA,
+        "launch_manifest_sha256": ZERO_SHA, "window_environment_sha256": ZERO_SHA,
+        "window_chain_sha256": ZERO_SHA, "repo_head": "a" * 40,
+        "measurement_root": "/measurement", "measurement_head": "a" * 40,
+        "confirmation_record": dict(ref),
+        "authorization": {**ref, "purpose": "G2B_SHAKEDOWN", "attempt_id": "plan/1",
+                          "claim_eligible": False},
+        "census": {"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"],
+                   "exit_code": 1, "stdout_sha256": ZERO_SHA, "monotonic_ns": 1},
+        "issued_epoch_s": 1.0, "issued_monotonic_ns": 2,
+        "valid_until_monotonic_ns": 99,
+        "conditions": [{"condition_id": f"C{i}", "status": "PASS", "basis": None,
+                        "evidence": [], "measured": {}} for i in range(1, 6)],
+        "verdict": "GO",
+    }
+
+
+class PackNightGoSchemaTests(unittest.TestCase):
+    def test_go_exact_keys_at_every_object(self) -> None:
+        go = sample_pack_night_go()
+        self.assertEqual(len(go), 26)
+        self.assertEqual(readiness.validate_pack_night_go_receipt(go), go)
+        for name in (None, "arm_receipt", "confirmation_record", "authorization",
+                     "census", "conditions", "t0_evidence"):
+            for mutation in ("extra", "missing"):
+                with self.subTest(name=name, mutation=mutation):
+                    changed = copy.deepcopy(go)
+                    target = changed if name is None else changed[name]
+                    if isinstance(target, list):
+                        target = target[0]
+                    if mutation == "extra":
+                        target["unregistered"] = True
+                    else:
+                        target.pop(next(iter(target)))
+                    with self.assertRaises(readiness.LaunchLineageError) as caught:
+                        readiness.validate_pack_night_go_receipt(changed)
+                    self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+
+    def test_go_primitive_class_verdict_and_condition_mutations(self) -> None:
+        mutations = [
+            ("receipt_id", "aaaaaaaa-aaaa-1aaa-8aaa-aaaaaaaaaaaa"),
+            ("receipt_class", "DIAGNOSTIC_NO_PACK"),
+            ("schema_version", "joulewise.t0_unattended_d149_go_receipt.v1"),
+            ("purpose", "UNKNOWN"), ("verdict", "REFUSE"),
+            ("plan_sha256", "A" * 64), ("issued_monotonic_ns", True),
+            ("issued_epoch_s", 1), ("issued_epoch_s", float("nan")),
+            ("valid_until_monotonic_ns", 101), ("valid_until_monotonic_ns", 2),
+            ("measurement_root", "relative"),
+        ]
+        for name, value in mutations:
+            with self.subTest(name=name, value=value):
+                go = sample_pack_night_go()
+                go[name] = value
+                with self.assertRaises(readiness.LaunchLineageError):
+                    readiness.validate_pack_night_go_receipt(go)
+        for i in range(5):
+            for status in ("FAIL", "NOT_APPLICABLE", "UNKNOWN", True):
+                with self.subTest(condition=i, status=status):
+                    go = sample_pack_night_go()
+                    go["conditions"][i]["status"] = status
+                    with self.assertRaisesRegex(readiness.LaunchLineageError, "conditions"):
+                        readiness.validate_pack_night_go_receipt(go)
+        for mutation in ("order", "duplicate", "boolean", "absolute_evidence"):
+            with self.subTest(mutation=mutation):
+                go = sample_pack_night_go()
+                if mutation == "order":
+                    go["conditions"].reverse()
+                elif mutation == "duplicate":
+                    go["t0_evidence"] *= 2
+                elif mutation == "boolean":
+                    go["authorization"]["claim_eligible"] = 0
+                else:
+                    go["t0_evidence"][0]["path"] = "/escape"
+                with self.assertRaises(readiness.LaunchLineageError):
+                    readiness.validate_pack_night_go_receipt(go)
+
+    def test_rehearsal_class_precedes_go_exact_keys(self) -> None:
+        with self.assertRaisesRegex(readiness.LaunchLineageError,
+                                   "^class=T0_UNATTENDED_SUPERVISED_REHEARSAL$"):
+            readiness.validate_pack_night_go_receipt({
+                "schema_version": "joulewise.t0_unattended_rehearsal_receipt.v1",
+                "receipt_class": "T0_UNATTENDED_SUPERVISED_REHEARSAL",
+            })
+
+    def test_v3_consumption_has_23_keys_and_v2_retains_20(self) -> None:
+        from tests.test_arm_readiness import LaunchConsumptionV2Tests
+        fixture = LaunchConsumptionV2Tests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        result = fixture._consume()
+        v2 = parse_json_bytes(Path(result["consumption_path"]).read_bytes())
+        for key in ("go_receipt", "night_plan", "step6_confirmation"):
+            v2.pop(key)
+        v2["schema_version"] = readiness.CONSUMPTION_RECEIPT_SCHEMA_V2
+        readiness.validate_consumption_receipt(v2)
+        self.assertEqual(len(readiness.LEGACY_CONSUMPTION_RECEIPT_KEYS), 8)
+        self.assertEqual(len(v2), 20)
+        v3 = copy.deepcopy(v2)
+        v3.update({
+            "schema_version": readiness.CONSUMPTION_RECEIPT_SCHEMA_V3,
+            "night_plan": {"path": "/custody/plan.json", "sha256": ZERO_SHA},
+            "step6_confirmation": {"table_path": "/custody/table.json", "table_sha256": ZERO_SHA},
+            "go_receipt": {"receipt_id": sample_pack_night_go()["receipt_id"],
+                           "path": "/custody/night/go_receipt.json", "sha256": ZERO_SHA,
+                           "purpose": "G2B_SHAKEDOWN", "receipt_class": "TRANSACTION_PACK",
+                           "claim_eligible": False, "plan_sha256": ZERO_SHA},
+        })
+        self.assertEqual(len(v3), 23)
+        self.assertEqual(len(v3["go_receipt"]), 7)
+        readiness.validate_consumption_receipt(v3)
+        for key in ("go_receipt", "step6_confirmation", "night_plan"):
+            for mutation in ("missing", "extra", "field"):
+                with self.subTest(key=key, mutation=mutation):
+                    changed = copy.deepcopy(v3)
+                    if mutation == "missing":
+                        del changed[key]
+                    elif mutation == "extra":
+                        changed[key]["extra"] = None
+                    elif key == "go_receipt":
+                        changed[key]["claim_eligible"] = 0
+                    elif key == "night_plan":
+                        changed[key]["path"] = "relative"
+                    else:
+                        changed[key]["table_sha256"] = "bad"
+                    with self.assertRaises(ArmReadinessError):
+                        readiness.validate_consumption_receipt(changed)
+
+    def test_go_registration_precedes_emission_and_is_separate_from_readiness(self) -> None:
+        text = (ROOT / "docs/contracts/d078_reason_registry_amendment.md").read_text()
+        for code in ("launch_go_receipt_missing", "launch_go_receipt_invalid"):
+            self.assertIn(f"`{code}`", text)
+            self.assertIn(code, readiness.LAUNCH_LINEAGE_REASON_CODES)
+            self.assertNotIn(code, readiness.READINESS_REASON_CODES)
+            readiness.LaunchLineageError(code, "registered")
+            with mock.patch.object(readiness, "LAUNCH_LINEAGE_REASON_CODES",
+                                   readiness.LAUNCH_LINEAGE_REASON_CODES - {code}):
+                with self.assertRaisesRegex(ValueError, "unregistered"):
+                    readiness.LaunchLineageError(code, "must refuse registry drift")
+
+    def test_go_input_rereads_bytes_and_compares_the_callers_object(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "go.json"
+            go = sample_pack_night_go()
+            raw = render_json(go)
+            path.write_bytes(raw)
+            kwargs = {"expected_sha256": hashlib.sha256(raw).hexdigest(),
+                      "authenticated_go_receipt": go}
+            self.assertEqual(readiness._read_pack_night_go_input(path, **kwargs)[0], go)
+            path.write_bytes(raw + b" ")
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "^sha256$"):
+                readiness._read_pack_night_go_input(path, **kwargs)
+            path.write_bytes(raw)
+            changed = copy.deepcopy(go)
+            changed["receipt_id"] = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+            kwargs["authenticated_go_receipt"] = changed
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "authenticated_go_receipt"):
+                readiness._read_pack_night_go_input(path, **kwargs)
+            path.unlink()
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                readiness._read_pack_night_go_input(path, **kwargs)
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
+
+
+    def test_basis_uses_the_shared_string_or_null_wire_type(self) -> None:
+        go = sample_pack_night_go()
+        go["conditions"][0]["basis"] = ""
+        readiness.validate_pack_night_go_receipt(go)
+        go["conditions"][0]["basis"] = 0
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "conditions.basis"):
+            readiness.validate_pack_night_go_receipt(go)
+        go = sample_pack_night_go()
+        go["purpose"] = []
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "purpose"):
+            readiness.validate_pack_night_go_receipt(go)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -332,8 +332,13 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
                 second._settle()
                 second_root = Path(second.arm["arm_context"]["claim_runs_root"])
                 bundle = selector / "child-bundle"
+                real_run = subprocess.run
 
                 def swap_and_stamp(command, **_kwargs):
+                    # GO replay must use real Git for the committed pack digest.
+                    # Only the synthetic child performs the locator swap.
+                    if command != ["child"]:
+                        return real_run(command, **_kwargs)
                     selector.unlink()
                     selector.symlink_to(second_root, target_is_directory=True)
                     inner = second._authenticate_campaign(selector)

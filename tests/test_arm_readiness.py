@@ -4,12 +4,14 @@ import copy
 import hashlib
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+from tests.git_fixture import init_git_fixture
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
     probe_clock_value,
@@ -69,17 +71,129 @@ class ClockProbePredicateLivenessTests(unittest.TestCase):
         self.assertFalse(self._predicate_passes(-1))
 
 
+def install_pack_night_launch_inputs(pack, arm_path, manifest_path, custody,
+                                     table=None, confirmation_digest=None):
+    """Synthetic custody for launch tests, never live hardware evidence."""
+    import time
+    pack, arm_path, manifest_path = (Path(path).resolve(strict=True) for path in (pack, arm_path, manifest_path))
+    arm = readiness.parse_json_bytes(arm_path.read_bytes())
+    manifest = readiness.parse_json_bytes(manifest_path.read_bytes())
+    window_root = Path(manifest["window_plan_root"])
+    custody = Path(custody).resolve()
+    night_dir = custody / "night"
+    night_dir.mkdir(exist_ok=True)
+    if table is None:
+        table = night_dir / "confirmation-table.json"
+        table.write_bytes(b'{"fixture":true}\n')
+    table = Path(table)
+    if confirmation_digest is None:
+        confirmation_digest = hashlib.sha256(table.read_bytes()).hexdigest()
+    artifact = lambda path: {"path": str(path.resolve()), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    authorization_path = night_dir / "authorization.json"
+    chain = window_root / "window-chain.zsh"
+    authorization = {
+        "purpose": "G2B_SHAKEDOWN", "attempt_id": arm["pack"]["plan_id"] + "/1",
+        "claim_eligible": False, "pack_sha256": arm["pack"]["pack_sha256"],
+        "permitted_chain_sha256": artifact(chain)["sha256"],
+        "permitted_blocks": 1, "authority": "D-171 §3",
+    }
+    authorization_path.write_bytes(readiness.render_json(authorization))
+    confirmation_path = night_dir / "confirmation.json"
+    confirmation_path.write_bytes(readiness.render_json({
+        "table_path": str(table.resolve()), "table_sha256": confirmation_digest,
+        "transcript_sha256": "0" * 64,
+        "confirmed_at": {"epoch_s": 1.0, "iso8601_utc": "1970-01-01T00:00:01.000000Z"},
+    }))
+    plan_path = night_dir / "plan.json"
+    plan = {
+        "schema": "joulewise.night_plan.v3", "schema_version": 3,
+        "plan_id": arm["pack"]["plan_id"], "receipt_class": "TRANSACTION_PACK",
+        "t0_epoch_s": time.time(), "authored_epoch_s": time.time(), "window_max_s": 60,
+        "repo_head": arm["reviewed_main"]["head_commit"],
+        "measurement_root": str(Path(readiness.__file__).resolve().parents[1]),
+        "measurement_head": arm["reviewed_main"]["head_commit"],
+        "chain_path": str(chain.resolve()), "chain_sha256_path": str(chain.resolve()) + ".sha256",
+        "custody_root": str(custody), "registration_path": None,
+        "pack_night": {"pack_id": arm["pack"]["pack_id"], "pack_root": str(pack.resolve()), "pack_sha256": arm["pack"]["pack_sha256"],
+            "attempt_ordinal": 1, "authorization_record": artifact(authorization_path),
+            "confirmation_record": artifact(confirmation_path)},
+    }
+    plan_path.write_bytes(readiness.render_json(plan))
+    # Produce the actual GO wire through seat 2. These lightweight fixtures
+    # isolate ARM/T0 prerequisites; the integrated driver test supplies the
+    # full author inventory and traverses ARM-before-GO as well.
+    from dataclasses import replace
+    from joulewise import night_gate
+    from tests.test_run_night import _load_driver, ProbeSource
+    driver = _load_driver()
+    parsed_plan = night_gate.NightPlan.from_mapping(plan)
+    sidecar = Path(plan["chain_sha256_path"])
+    if not sidecar.exists():
+        sidecar.write_bytes(readiness.gnu_sidecar(artifact(chain)["sha256"], chain.name))
+    source = ProbeSource(plan["t0_epoch_s"] + 1)
+    probes = replace(source.probes(), checkout_head=lambda: plan["repo_head"])
+    receipt = night_gate.Receipt(night_gate.SCHEMA, "TRANSACTION_PACK", plan["plan_id"], "GO",
+        tuple(night_gate.ConditionRow(f"C{i}", "PASS", None, (),
+              {"boot_session_uuid": arm["boot_session_id"]} if i == 4 else {}) for i in range(1, 6)),
+        None, time.monotonic_ns())
+    state = {"path": arm_path, "arm": arm, "sha256": artifact(arm_path)["sha256"]}
+    references = {"launch_manifest": artifact(manifest_path),
+                  "window_environment": artifact(window_root / "window.env"),
+                  "window_chain": artifact(chain)}
+    go_path = night_dir / "go_receipt.json"
+    for name in ("go_receipt.json", "go-census.json"):
+        (night_dir / name).unlink(missing_ok=True)
+    with mock.patch.object(readiness, "_verify_arm_receipt"), \
+         mock.patch.object(readiness, "_current_boot_session_id", return_value=arm["boot_session_id"]), \
+         mock.patch.object(driver, "_pack_no_retry"), \
+         mock.patch.object(driver, "_pack_launch_references", return_value=references), \
+         mock.patch.object(driver, "_pack_evidence", return_value=[]):
+        prepared = driver._prepare_pack_night(parsed_plan, plan_path, plan_path.read_bytes())
+        driver._produce_pack_go(parsed_plan, plan_path, plan_path.read_bytes(), prepared, state, receipt, probes)
+    go = readiness.parse_json_bytes(go_path.read_bytes())
+    return {"night_plan": plan_path, "go_receipt": go_path, "authenticated_go_receipt": go,
+            "go_receipt_sha256": artifact(go_path)["sha256"], "step6_confirmation_table": table,
+            "expected_confirmation_digest": confirmation_digest}
+
+
+def patch_pack_night_dependencies(case):
+    """Synthetic T0/boot boundaries; the integrated v3 parser stays real."""
+    for patch in (
+        mock.patch.object(readiness, "_authenticate_go_t0_evidence"),
+        mock.patch.object(readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID),
+    ):
+        patch.start()
+        case.addCleanup(patch.stop)
+
+
 class LaunchConsumptionV2Tests(unittest.TestCase):
+    # Retained class/method names are imported by other suites; live fixtures
+    # now produce v3. Explicit historical tests below retain v2 coverage.
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        root = Path(self.temporary.name)
-        self.pack = root / "pack-v2"
+        self._set_up_fixture(Path(self.temporary.name).resolve())
+
+    def _set_up_fixture(self, root: Path, *, existing_context: bool = False) -> None:
+        """Build synthetic custody; only the rehearsal factory reuses context."""
+        patch_pack_night_dependencies(self)
+        self.pack = root / sample_arm(root / "context")["pack"]["pack_id"]
         self.pack.mkdir()
-        self.custody = root / "arm-custody"
+        self.custody = (root / "home/night-custody" / self._custody_window
+                        if hasattr(self, "_custody_window") else root / "arm-custody")
         self.arm = sample_arm(root / "context")
         self.arm["boot_session_id"] = TEST_BOOT_SESSION_ID
         self.arm["pack"]["pack_root"] = str(self.pack)
+        if hasattr(self, "_custody_window"):
+            self.arm["arm_context"]["custody_root"] = str(self.custody)
+        (self.pack / "committed.txt").write_text("integration fixture\n")
+        (self.pack / "member.json").write_text('{"run_id":"member"}\n')
+        init_git_fixture(root, "-q")
+        for args in (("add", self.pack.name),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "-c", "commit.gpgsign=false", "commit", "-qm", "fixture")):
+            subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+        self.arm["pack"]["pack_sha256"] = readiness.committed_pack_tree_sha256(self.pack)
         pack_record_patch = mock.patch.object(
             readiness, "_pack_record", return_value=self.arm["pack"]
         )
@@ -93,7 +207,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "claim_backup_destination",
             "bound_backup_destination",
         ):
-            Path(self.arm["arm_context"][name]).mkdir(parents=True)
+            Path(self.arm["arm_context"][name]).mkdir(parents=True, exist_ok=existing_context)
         Path(self.arm["arm_context"]["waiver_path"]).write_bytes(
             readiness.render_json([])
         )
@@ -324,6 +438,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         window_root = Path(str(manifest["window_plan_root"]))
         chain_path = window_root / "window-chain.zsh"
         return {
+            **install_pack_night_launch_inputs(self.pack, self.arm_path, self.manifest_path, self.custody),
             "pack_root": self.pack,
             "arm_receipt": self.arm_path,
             "authenticated_arm_receipt": copy.deepcopy(self.arm),
@@ -1952,6 +2067,652 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
         self.assertEqual(
             caught.exception.reason_code, "readiness_terminal_review_missing"
         )
+
+
+class PackNightConsumerTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture = LaunchConsumptionV2Tests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.inputs = self.fixture._consumer_inputs()
+        self.consumption = self.fixture.custody / self.fixture.pack.name / "arm_readiness.consumptions" / "arm-0001.consumed.json"
+
+    def rewrite_go(self, mutate, *, refresh=True):
+        path = self.inputs["go_receipt"]
+        go = readiness.parse_json_bytes(path.read_bytes())
+        mutate(go)
+        raw = readiness.render_json(go)
+        path.write_bytes(raw)
+        if refresh:
+            self.inputs.update(authenticated_go_receipt=go, go_receipt_sha256=hashlib.sha256(raw).hexdigest())
+        return go
+
+    def rewrite_consumption(self, value):
+        raw = readiness.render_json(value)
+        self.consumption.write_bytes(raw)
+        self.consumption.with_name(self.consumption.name + ".sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(raw).hexdigest(), self.consumption.name))
+
+    def consume(self):
+        return self.fixture._invoke_consumer(self.inputs)
+
+    def verify(self, **kwargs):
+        with mock.patch.object(readiness, "_derive_arm_semantics_for_verification",
+                               return_value=(self.fixture.arm["rows"], self.fixture.arm["refusals"])):
+            return readiness.verify_consumed_launch(self.fixture.pack, self.consumption, **kwargs)
+
+    def test_six_sentinel_inputs_cannot_be_omitted_even_without_conditional_paths(self):
+        import inspect
+        signature = inspect.signature(readiness._consume_launch_capability)
+        for key in ("night_plan", "go_receipt", "authenticated_go_receipt", "go_receipt_sha256",
+                    "step6_confirmation_table", "expected_confirmation_digest"):
+            with self.subTest(key=key):
+                self.assertIs(signature.parameters[key].default, readiness._MISSING_LAUNCH_CONTEXT)
+                inputs = dict(self.inputs)
+                del inputs[key]
+                with self.assertRaises((readiness.ArmReadinessError, readiness.FamilyPublicationError)) as caught:
+                    self.fixture._invoke_consumer(inputs)
+                if key in ("step6_confirmation_table", "expected_confirmation_digest"):
+                    self.assertEqual(caught.exception.check_id, "confirmation_missing")
+                else:
+                    self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
+                self.assertFalse(self.consumption.exists())
+
+    def test_four_case_purpose_root_table_through_consumer(self):
+        from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
+        # Production id/rehearsal purpose, prefixed id/production roots,
+        # prefixed id/disjoint roots, and normal production authority.
+        for rehearsal, prefixed, collision, expected in (
+            (True, False, False, "rehearsal_purpose_on_production_id"),
+            (True, True, True, "rehearsal_roots_not_disjoint"),
+            (True, True, False, None),
+            (False, False, False, None),
+        ):
+            with self.subTest(rehearsal=rehearsal, prefixed=prefixed, collision=collision):
+                fixture = LaunchConsumptionV2Tests()
+                fixture._custody_window = REHEARSAL_WINDOW_PREFIX + "consumer-table"
+                fixture.setUp()
+                try:
+                    root = Path(fixture.temporary.name).resolve()
+                    home = root / "home"
+                    measurement = root / "JouleWise-rehearsal-consumer-table"
+                    measurement.mkdir()
+                    inventory = [{"deployment_id": "fixture", "measurement_root": str(
+                        measurement if collision else root / "production"),
+                        "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+                    with mock.patch.object(Path, "home", return_value=home), \
+                         mock.patch.object(readiness, "__file__", str(measurement / "joulewise/arm_readiness.py")), \
+                         mock.patch.object(readiness, "_production_inventory", return_value=inventory):
+                        inputs = fixture._consumer_inputs()
+                        if prefixed:
+                            fixture.arm["pack"]["window_id"] = fixture._custody_window
+                        fixture._rewrite_arm()
+                        arm_sha = readiness.sha256_bytes(fixture.arm_path.read_bytes())
+                        inputs.update(authenticated_arm_receipt=copy.deepcopy(fixture.arm), arm_receipt_sha256=arm_sha)
+                        plan = readiness.parse_json_bytes(inputs["night_plan"].read_bytes())
+                        auth_path = Path(plan["pack_night"]["authorization_record"]["path"])
+                        authorization = readiness.parse_json_bytes(auth_path.read_bytes())
+                        authorization.update(purpose="T0_REHEARSAL" if rehearsal else "CAMPAIGN_TRANSACTION",
+                                             authority="T0-UNATTENDED-01" if rehearsal else "V5-TRANSACTION-GO-01")
+                        auth_path.write_bytes(readiness.render_json(authorization))
+                        auth_sha = readiness.sha256_bytes(auth_path.read_bytes())
+                        plan["pack_night"]["authorization_record"]["sha256"] = auth_sha
+                        inputs["night_plan"].write_bytes(readiness.render_json(plan))
+                        go = readiness.parse_json_bytes(inputs["go_receipt"].read_bytes())
+                        go.update(purpose=authorization["purpose"], plan_sha256=readiness.sha256_bytes(inputs["night_plan"].read_bytes()))
+                        go["authorization"].update(purpose=authorization["purpose"], sha256=auth_sha)
+                        go["arm_receipt"]["sha256"] = arm_sha
+                        for condition in go["conditions"]:
+                            for ref in condition["evidence"]:
+                                ref["sha256"] = readiness.sha256_bytes((fixture.custody / ref["path"]).read_bytes())
+                        inputs["go_receipt"].write_bytes(readiness.render_json(go))
+                        inputs.update(authenticated_go_receipt=go, go_receipt_sha256=readiness.sha256_bytes(inputs["go_receipt"].read_bytes()))
+                        if expected:
+                            with self.assertRaisesRegex(readiness.LaunchLineageError, expected) as caught:
+                                fixture._invoke_consumer(inputs)
+                            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+                            self.assertEqual(list(fixture.custody.rglob("*.consumed.json")), [])
+                        else:
+                            result = fixture._invoke_consumer(inputs)
+                            self.assertTrue(Path(result["consumption_path"]).is_file())
+                finally:
+                    fixture.doCleanups()
+
+    def test_pre_arm_admission_rejects_rehearsal_go_and_authenticates_digest_first(self):
+        self.rewrite_go(lambda go: (go.update(purpose="T0_REHEARSAL"),
+                                   go["authorization"].update(purpose="T0_REHEARSAL")))
+        self.fixture.arm_path.unlink()
+        with mock.patch.object(readiness, "_verify_arm_receipt") as verify:
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_purpose_on_production_id"):
+                readiness._consume_launch_capability(**self.inputs)
+            self.inputs["go_receipt_sha256"] = "0" * 64
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "^sha256$"):
+                readiness._consume_launch_capability(**self.inputs)
+        verify.assert_not_called()
+        self.assertFalse(self.consumption.exists())
+
+    def test_forged_bindings_class_verdict_and_each_nonpass_condition_refuse_before_write(self):
+        original = self.inputs["go_receipt"].read_bytes()
+        changes = [(key, "b" * (40 if key in ("repo_head", "measurement_head") else 64)) for key in
+            ("pack_sha256", "plan_sha256", "launch_manifest_sha256", "window_environment_sha256",
+             "window_chain_sha256", "repo_head", "measurement_head")]
+        changes += [("pack_id", "other"), ("plan_id", "other"), ("measurement_root", "/other"),
+                    ("receipt_class", "DIAGNOSTIC_NO_PACK"), ("verdict", "REFUSE"),
+                    ("boot_session_id", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")]
+        for key, value in changes:
+            with self.subTest(key=key):
+                self.inputs["go_receipt"].write_bytes(original)
+                self.rewrite_go(lambda go: go.update({key: value}))
+                with self.assertRaises(readiness.LaunchLineageError) as caught:
+                    self.consume()
+                self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+                self.assertFalse(self.consumption.exists())
+        for index in range(5):
+            for status in ("FAIL", "NOT_APPLICABLE"):
+                with self.subTest(condition=index, status=status):
+                    self.inputs["go_receipt"].write_bytes(original)
+                    self.rewrite_go(lambda go: go["conditions"][index].update(status=status))
+                    with self.assertRaisesRegex(readiness.LaunchLineageError, "conditions"):
+                        self.consume()
+                    self.assertFalse(self.consumption.exists())
+        for key, value in (("receipt_id", "another-arm"), ("sha256", "b" * 64)):
+            self.inputs["go_receipt"].write_bytes(original)
+            self.rewrite_go(lambda go: go["arm_receipt"].update({key: value}))
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "arm_receipt"):
+                self.consume()
+
+    def test_cli_context_mutation_and_caller_substituted_plan_refuse(self):
+        self.rewrite_go(lambda go: go.update(pack_id="mutated-after-CLI"), refresh=False)
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "sha256"):
+            self.consume()
+        self.assertFalse(self.consumption.exists())
+        self.inputs = self.fixture._consumer_inputs()
+        replacement = self.inputs["night_plan"].with_name("substituted-plan.json")
+        replacement.write_bytes(self.inputs["night_plan"].read_bytes() + b" ")
+        self.inputs["night_plan"] = replacement
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "plan_sha256"):
+            self.consume()
+        self.assertFalse(self.consumption.exists())
+
+    def test_go_cannot_be_replayed_or_rebound_to_a_new_arm(self):
+        self.consume()
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            self.consume()
+        self.assertEqual(caught.exception.reason_code, "readiness_record_consumed")
+        self.fixture.arm["receipt_id"] = "arm-0002"
+        self.fixture.arm_path = self.fixture.arm_path.with_name("arm-0002.json")
+        self.fixture._rewrite_arm()
+        self.inputs.update(arm_receipt=self.fixture.arm_path, authenticated_arm_receipt=copy.deepcopy(self.fixture.arm),
+                           arm_receipt_sha256=hashlib.sha256(self.fixture.arm_path.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "arm_receipt"):
+            self.consume()
+        self.assertFalse(self.consumption.with_name("arm-0002.consumed.json").exists())
+
+    def test_monotonic_half_open_interval_and_expiry_during_validation(self):
+        issued = self.inputs["authenticated_go_receipt"]["issued_monotonic_ns"]
+        self.rewrite_go(lambda go: go.update(valid_until_monotonic_ns=issued + 100))
+        for now in (issued - 1, issued + 100):
+            with self.subTest(now=now), mock.patch.object(readiness.time, "monotonic_ns", return_value=now):
+                with self.assertRaisesRegex(readiness.LaunchLineageError, "monotonic_ns"):
+                    self.consume()
+                self.assertFalse(self.consumption.exists())
+        clock = [issued]
+        def expired_after_validation(_path):
+            clock[0] = issued + 100
+        with mock.patch.object(readiness.time, "monotonic_ns", side_effect=lambda: clock[0]), \
+             mock.patch.object(readiness, "_fsync_directory", side_effect=expired_after_validation):
+            with self.assertRaisesRegex(readiness.LaunchLineageError, "monotonic_ns"):
+                self.consume()
+        self.assertFalse(self.consumption.exists())
+        with mock.patch.object(readiness.time, "monotonic_ns", return_value=issued):
+            self.consume()
+        self.assertEqual(self.verify(require_current_boot=False)["pack_id"], self.fixture.arm["pack"]["pack_id"])
+
+    def test_v3_persists_authenticated_fields_and_replay_rechecks_identity_and_bytes(self):
+        self.consume()
+        value = readiness.parse_json_bytes(self.consumption.read_bytes())
+        self.assertEqual(len(value), 23)
+        self.assertEqual(value["night_plan"]["path"], str(self.inputs["night_plan"].resolve()))
+        self.assertEqual(value["night_plan"]["sha256"], self.inputs["authenticated_go_receipt"]["plan_sha256"])
+        self.assertEqual(value["step6_confirmation"]["table_sha256"], self.inputs["expected_confirmation_digest"])
+        self.assertFalse(value["go_receipt"]["claim_eligible"])
+        self.assertEqual(self.verify()["status"], "PASS")
+        self.rewrite_go(lambda go: go.update(receipt_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"))
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "^sha256$"):
+            self.verify()
+        value["go_receipt"]["sha256"] = self.inputs["go_receipt_sha256"]
+        self.rewrite_consumption(value)
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "^receipt_id$"):
+            self.verify()
+
+    def test_replay_plan_path_must_stay_in_custody_and_match_both_digests(self):
+        self.consume()
+        original = readiness.parse_json_bytes(self.consumption.read_bytes())
+        outside = Path(self.fixture.temporary.name) / "outside-plan.json"
+        outside.write_bytes(self.inputs["night_plan"].read_bytes())
+        changed = copy.deepcopy(original)
+        changed["night_plan"]["path"] = str(outside)
+        self.rewrite_consumption(changed)
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "outside custody root"):
+            self.verify()
+        changed = copy.deepcopy(original)
+        changed["night_plan"]["sha256"] = "f" * 64
+        self.rewrite_consumption(changed)
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "plan_sha256"):
+            self.verify()
+        self.rewrite_consumption(original)
+        self.rewrite_go(lambda go: go.update(plan_sha256="e" * 64))
+        original["go_receipt"]["sha256"] = self.inputs["go_receipt_sha256"]
+        self.rewrite_consumption(original)
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "plan_sha256"):
+            self.verify()
+
+    def test_v2_is_historical_only_and_child_path_refuses_live_v2(self):
+        self.consume()
+        value = readiness.parse_json_bytes(self.consumption.read_bytes())
+        value["schema_version"] = readiness.CONSUMPTION_RECEIPT_SCHEMA_V2
+        for key in ("go_receipt", "night_plan", "step6_confirmation"):
+            del value[key]
+        self.rewrite_consumption(value)
+        self.inputs["go_receipt"].unlink()
+        self.assertEqual(self.verify(require_current_boot=False)["pack_id"], self.fixture.arm["pack"]["pack_id"])
+        for action in (lambda: self.verify(), lambda: readiness._lifecycle_receipt_path(self.consumption, "start")):
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                action()
+            self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
+        token = b"t" * 32
+        readiness.record_launch_lifecycle_event(self.fixture.pack, self.consumption, "start", handoff_token=token)
+        settled = readiness.record_launch_lifecycle_event(self.fixture.pack, self.consumption, "settle")
+        self.assertEqual(readiness.authenticate_launch_lineage(settled["launch_lineage"],
+            require_completion=False, require_current_boot=False)["pack_id"], self.fixture.arm["pack"]["pack_id"])
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            readiness.authenticate_launch_lineage(settled["launch_lineage"], require_completion=False,
+                                                  require_current_boot=True)
+        self.assertEqual(caught.exception.reason_code, "launch_go_receipt_missing")
+
+    def test_lineage_reader_forwards_live_and_historical_modes_and_boot_gate(self):
+        _path, settled = self.fixture._settle()
+        lineage = settled["launch_lineage"]
+        for live in (False, True):
+            with self.subTest(live=live), mock.patch.object(readiness, "_read_launch_consumption",
+                    side_effect=RuntimeError("mode probe")) as reader:
+                with self.assertRaisesRegex(RuntimeError, "mode probe"):
+                    readiness.authenticate_launch_lineage(lineage, require_completion=False, require_current_boot=live)
+                self.assertIs(reader.call_args.kwargs["require_current_boot"], live)
+        with mock.patch.object(readiness, "_current_boot_session_id", return_value="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"):
+            with self.assertRaises(readiness.LaunchLineageError):
+                readiness.authenticate_launch_lineage(lineage, require_completion=False, require_current_boot=True)
+            self.assertEqual(readiness.authenticate_launch_lineage(lineage, require_completion=False,
+                             require_current_boot=False)["pack_id"], self.fixture.arm["pack"]["pack_id"])
+
+    def test_authorization_copies_attempt_confirmation_and_census_are_reauthenticated(self):
+        mutations = [lambda go: go.pop("authorization"),
+                     lambda go: go.pop("confirmation_record"),
+                     lambda go: go["authorization"].update(sha256="e" * 64),
+                     lambda go: go["authorization"].update(purpose="CAMPAIGN_TRANSACTION"),
+                     lambda go: go["authorization"].update(attempt_id="wrong/2"),
+                     lambda go: go["authorization"].update(claim_eligible=True),
+                     lambda go: go["confirmation_record"].update(sha256="e" * 64),
+                     lambda go: go["census"].update(exit_code=0),
+                     lambda go: go["census"].update(exit_code=2),
+                     lambda go: go["census"].update(exit_code=-1),
+                     lambda go: go["census"].update(stdout_sha256=hashlib.sha256(b"agent").hexdigest()),
+                     lambda go: go["census"].update(argv=["/usr/bin/pgrep", "harmless-helper"]),
+                     lambda go: go["census"].update(monotonic_ns=go["census"]["monotonic_ns"] - 1),
+                     lambda go: go["conditions"][2].update(evidence=[])]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                self.inputs = self.fixture._consumer_inputs()
+                self.rewrite_go(mutate)
+                with self.assertRaises(readiness.LaunchLineageError):
+                    self.consume()
+                self.assertFalse(self.consumption.exists())
+        self.inputs = self.fixture._consumer_inputs()
+        self.inputs["step6_confirmation_table"].write_bytes(b"changed table")
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "step6_confirmation"):
+            self.consume()
+
+    def test_retained_record_fields_are_checked_after_digest_rebinding(self):
+        cases = (
+            ("authorization", "pack_sha256", "e" * 64),
+            ("authorization", "permitted_chain_sha256", "e" * 64),
+            ("authorization", "permitted_blocks", 2),
+            ("authorization", "authority", "unrelated"),
+            ("confirmation_record", "transcript_sha256", "E" * 64),
+            ("confirmation_record", "confirmed_at", {"epoch_s": 1.0, "iso8601_utc": "1970-01-01T00:00:01.0Z"}),
+            ("confirmation_record", "confirmed_at", {"epoch_s": 2.0, "iso8601_utc": "1970-01-01T00:00:01.000000Z"}),
+        )
+        for name, key, value in cases:
+            with self.subTest(name=name, key=key, value=value):
+                self.inputs = self.fixture._consumer_inputs()
+                go = copy.deepcopy(self.inputs["authenticated_go_receipt"])
+                path = Path(go[name]["path"])
+                record = readiness.parse_json_bytes(path.read_bytes())
+                record[key] = value
+                path.write_bytes(readiness.render_json(record))
+                reference = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                plan_path = self.inputs["night_plan"]
+                plan = readiness.parse_json_bytes(plan_path.read_bytes())
+                plan["pack_night"]["authorization_record" if name == "authorization" else name] = reference
+                plan_path.write_bytes(readiness.render_json(plan))
+                go[name].update(reference)
+                go["plan_sha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                self.rewrite_go(lambda value: value.update(go))
+                with self.assertRaises(readiness.LaunchLineageError):
+                    self.consume()
+                self.assertFalse(self.consumption.exists())
+
+    def test_rehearsal_window_purpose_and_frozen_root_predicates(self):
+        from types import SimpleNamespace
+        from joulewise import night_gate
+
+        def authenticate_both(go, arm, plan):
+            # Model the module running in each candidate checkout. Identity
+            # mismatch itself has a separate regression with no such patch.
+            with mock.patch.object(readiness, "__file__", str(Path(plan["measurement_root"]) / "joulewise/arm_readiness.py")):
+                return check_both(go, arm, plan)
+
+        def check_both(go, arm, plan):
+            try:
+                readiness._authenticate_go_purpose(go, arm, plan)
+            except readiness.LaunchLineageError as consumer:
+                with self.assertRaises(night_gate.PackNightRefusal) as gate:
+                    night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+                self.assertEqual(gate.exception.reason, consumer.reason_code)
+                self.assertEqual(str(gate.exception), str(consumer))
+                raise
+            night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+
+        go = copy.deepcopy(self.inputs["authenticated_go_receipt"])
+        arm = copy.deepcopy(self.fixture.arm)
+        plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
+        go["purpose"] = "T0_REHEARSAL"
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_purpose_on_production_id"):
+            authenticate_both(go, arm, plan)
+        arm["pack"]["window_id"] = "rehearsal-t0-unattended-fixture"
+        go["purpose"] = "G2B_SHAKEDOWN"
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "purpose"):
+            authenticate_both(go, arm, plan)
+        go["purpose"] = "T0_REHEARSAL"
+        home = Path(self.fixture.temporary.name).resolve() / "home"
+        custody = home / "night-custody" / arm["pack"]["window_id"]
+        custody.mkdir(parents=True)
+        measurement = home / "JouleWise-rehearsal-fixture"
+        measurement.mkdir()
+        plan["measurement_root"] = str(measurement)
+        plan["custody_root"] = str(custody)
+        arm["arm_context"]["custody_root"] = str(custody)
+        inventory = [{"deployment_id": "fixture", "measurement_root": str(home / "production"),
+                      "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+        with mock.patch.object(Path, "home", return_value=home), \
+             mock.patch.object(readiness, "_production_inventory", return_value=inventory):
+            authenticate_both(go, arm, plan)
+            fields = {key: plan for key in ("measurement_root", "custody_root")}
+            fields.update({"arm_context." + key: arm["arm_context"]
+                           for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS})
+            production_roots = readiness.production_custody_roots(home=home, inventory=inventory)
+            # Keep the SIBLING_CHILD candidate valid while each DISJOINT
+            # production role overlaps it, so custody cannot fail for the
+            # sibling rule and mask a missing DISJOINT check.
+            from dataclasses import replace
+            for production in production_roots:
+                if production.role == "night_custody_parent":
+                    continue
+                census = tuple(replace(item, path=custody) if item == production else item
+                               for item in production_roots)
+                with self.subTest(custody_overlap=production.role), \
+                     mock.patch.object(readiness, "production_custody_roots", return_value=census), \
+                     self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$"):
+                    authenticate_both(go, arm, plan)
+            for field, target in fields.items():
+                key = field.removeprefix("arm_context.")
+                original = target[key]
+                for production in production_roots:
+                    if production.role == "night_custody_parent":
+                        continue
+                    # A synthetic census exercises each frozen role without
+                    # creating directories in the real machine's custody.
+                    production_path = home / "synthetic" / production.role.replace(":", "-")
+                    production_path.mkdir(parents=True, exist_ok=True)
+                    census = tuple(replace(item, path=production_path) if item == production else item
+                                   for item in production_roots)
+                    for candidate in (production_path, production_path / "child", production_path.parent):
+                        candidate.mkdir(exist_ok=True)
+                        target[key] = str(candidate)
+                        with self.subTest(field=field, role=production.role, candidate=candidate), \
+                             mock.patch.object(readiness, "production_custody_roots", return_value=census), \
+                             self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint(?:: measurement_root)?$"):
+                            authenticate_both(go, arm, plan)
+                for candidate in ("relative", str(home / "absent")):
+                    target[key] = candidate
+                    with self.subTest(field=field, candidate=candidate), self.assertRaisesRegex(readiness.LaunchLineageError, field):
+                        authenticate_both(go, arm, plan)
+                alias = home / (field + "-alias")
+                alias.symlink_to(Path(original))
+                target[key] = str(alias)
+                with self.subTest(field=field, candidate="symlink"), self.assertRaisesRegex(readiness.LaunchLineageError, field):
+                    authenticate_both(go, arm, plan)
+                target[key] = original
+            for field, target in (("custody_root", plan), ("custody_root", arm["arm_context"]),
+                                  ("measurement_root", plan)):
+                original = target[field]
+                candidates = (custody.parent, custody / "nested", custody.parent / "wrong-name")
+                for candidate in candidates:
+                    candidate.mkdir(exist_ok=True)
+                    target[field] = str(candidate)
+                    with self.subTest(field=field, candidate=candidate), self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
+                        authenticate_both(go, arm, plan)
+                target[field] = original
+            for key in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS - {"custody_root"}:
+                own = custody / key
+                own.mkdir()
+                arm["arm_context"][key] = str(own)
+            authenticate_both(go, arm, plan)
+            with mock.patch.object(readiness, "_production_inventory", return_value=[]), \
+                 self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
+                authenticate_both(go, arm, plan)
+            broken = (replace(production_roots[0], resolution_error="loop"), *production_roots[1:])
+            with mock.patch.object(readiness, "production_custody_roots", return_value=broken), \
+                 self.assertRaisesRegex(readiness.LaunchLineageError, "rehearsal_roots_not_disjoint"):
+                authenticate_both(go, arm, plan)
+
+    def test_consumer_applies_rehearsal_census_before_one_use_write(self):
+        self.fixture.arm["pack"]["window_id"] = "rehearsal-t0-unattended-fixture"
+        self.fixture._rewrite_arm()
+        arm_digest = hashlib.sha256(self.fixture.arm_path.read_bytes()).hexdigest()
+        self.inputs.update(authenticated_arm_receipt=copy.deepcopy(self.fixture.arm),
+                           arm_receipt_sha256=arm_digest)
+        plan_path = self.inputs["night_plan"]
+        plan = json.loads(plan_path.read_bytes())
+        authorization_path = Path(plan["pack_night"]["authorization_record"]["path"])
+        authorization = json.loads(authorization_path.read_bytes())
+        authorization["purpose"] = "T0_REHEARSAL"
+        authorization_path.write_bytes(readiness.render_json(authorization))
+        auth_digest = hashlib.sha256(authorization_path.read_bytes()).hexdigest()
+        plan["pack_night"]["authorization_record"]["sha256"] = auth_digest
+        plan_path.write_bytes(readiness.render_json(plan))
+        def bind(go):
+            go["purpose"] = "T0_REHEARSAL"
+            go["authorization"].update(purpose="T0_REHEARSAL", sha256=auth_digest)
+            go["plan_sha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+            go["arm_receipt"]["sha256"] = arm_digest
+            for condition in go["conditions"]:
+                for reference in condition["evidence"]:
+                    path = self.fixture.custody / reference["path"]
+                    reference["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        self.rewrite_go(bind)
+        home = self.fixture.pack.parent / "synthetic-home"
+        inventory = [{"deployment_id": "fixture", "measurement_root": str(home / "production"),
+                      "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
+        with mock.patch.object(Path, "home", return_value=home), \
+             mock.patch.object(readiness, "_production_inventory", return_value=inventory), \
+             self.assertRaisesRegex(readiness.LaunchLineageError, "^rehearsal_roots_not_disjoint$") as caught:
+            # The fixture's custody is outside the required named sibling.
+            self.consume()
+        self.assertEqual(caught.exception.reason_code, "launch_go_receipt_invalid")
+        self.assertFalse(self.consumption.exists())
+
+    def test_consumption_recomputes_committed_pack_after_go(self):
+        # ARM and GO remain unchanged; only the committed pack bytes change.
+        (self.fixture.pack / "committed.txt").write_text("mutated after GO\n")
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "pack"):
+            self.consume()
+        self.assertFalse(self.consumption.exists())
+
+    def test_plan_pack_root_and_arm_digest_bindings_are_rechecked(self):
+        plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
+        other = self.fixture.pack.parent / "substitute" / self.fixture.pack.name
+        shutil.copytree(self.fixture.pack, other)
+        for args in (("add", "substitute"),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "-c", "commit.gpgsign=false", "commit", "-qm", "substitute fixture")):
+            subprocess.run(["git", "-C", str(self.fixture.pack.parent), *args], check=True, capture_output=True)
+        self.assertEqual(readiness.committed_pack_tree_sha256(other), plan["pack_night"]["pack_sha256"])
+        for mutate in (lambda p: p["pack_night"].update(pack_root=str(other)),
+                       lambda p: p["pack_night"].update(pack_sha256="f" * 64)):
+            changed = copy.deepcopy(plan)
+            mutate(changed)
+            self.inputs["night_plan"].write_bytes(readiness.render_json(changed))
+            self.rewrite_go(lambda go: go.update(plan_sha256=hashlib.sha256(self.inputs["night_plan"].read_bytes()).hexdigest()))
+            with self.assertRaises(readiness.LaunchLineageError):
+                self.consume()
+            self.assertFalse(self.consumption.exists())
+
+    def test_rehearsal_prefix_is_shared_by_gate_and_consumer(self):
+        from types import SimpleNamespace
+        from joulewise import night_gate, t0_rehearsal
+        arm = copy.deepcopy(self.fixture.arm)
+        plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
+        go = {"purpose": "G2B_SHAKEDOWN"}
+        with mock.patch.object(t0_rehearsal, "REHEARSAL_WINDOW_PREFIX", "changed-prefix-"):
+            for window, refuses in (("changed-prefix-fixture", True),
+                                     ("rehearsal-t0-unattended-fixture", False)):
+                arm["pack"]["window_id"] = window
+                with self.subTest(window=window):
+                    if refuses:
+                        with self.assertRaisesRegex(readiness.LaunchLineageError, "^purpose$"):
+                            readiness._authenticate_go_purpose(go, arm, plan)
+                        with self.assertRaisesRegex(night_gate.PackNightRefusal, "^purpose$"):
+                            night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+                    else:
+                        readiness._authenticate_go_purpose(go, arm, plan)
+                        night_gate._pack_rehearsal_roots(SimpleNamespace(**plan), arm, go["purpose"])
+
+    def test_missing_pack_root_has_identical_gate_and_consumer_refusal(self):
+        from joulewise import night_gate
+        plan_path = self.inputs["night_plan"]
+        plan = readiness.parse_json_bytes(plan_path.read_bytes())
+        plan["pack_night"]["pack_root"] = str(self.fixture.pack.parent / "missing" / self.fixture.pack.name)
+        plan_path.write_bytes(readiness.render_json(plan))
+        self.rewrite_go(lambda go: go.update(plan_sha256=hashlib.sha256(plan_path.read_bytes()).hexdigest()))
+        with self.assertRaises(night_gate.PackNightRefusal) as gate:
+            night_gate._pack_digest(night_gate.NightPlan.from_mapping(plan))
+        with self.assertRaises(readiness.LaunchLineageError) as consumer:
+            self.consume()
+        self.assertEqual(gate.exception.reason, "launch_go_receipt_missing")
+        self.assertEqual(consumer.exception.reason_code, gate.exception.reason)
+        self.assertEqual(str(gate.exception), "pack_root")
+        self.assertEqual(str(consumer.exception), str(gate.exception))
+        self.assertFalse(self.consumption.exists())
+
+    def test_rehearsal_inventory_is_pinned_during_pre_arm_preparation(self):
+        from joulewise import night_gate
+        plan = readiness.parse_json_bytes(self.inputs["night_plan"].read_bytes())
+        path = Path(plan["pack_night"]["authorization_record"]["path"])
+        authorization = readiness.parse_json_bytes(path.read_bytes())
+        authorization["purpose"] = "T0_REHEARSAL"
+        path.write_bytes(readiness.render_json(authorization))
+        plan["pack_night"]["authorization_record"]["sha256"] = readiness.sha256_bytes(path.read_bytes())
+        parsed = night_gate.NightPlan.from_mapping(plan)
+        with mock.patch.object(readiness, "_production_inventory",
+                               side_effect=ValueError("production-root census incomplete")) as inventory:
+            with self.assertRaisesRegex(night_gate.PackNightRefusal, "production-root census incomplete"):
+                night_gate._authenticate_pack_records(parsed)
+        inventory.assert_called_once_with(parsed)
+
+
+class CensusCureLaunchTests(unittest.TestCase):
+    """Real census and shipped inventory; only the synthetic launcher home is patched."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name).resolve()
+        self.measurement = root / (readiness.REHEARSAL_CLONE_PREFIX + "fixture")
+        (self.measurement / "runs").mkdir(parents=True)
+        self.home = root / "home"
+        window = "rehearsal-t0-unattended-census-cure"
+        custody = self.home / "night-custody" / window
+        custody.mkdir(parents=True)
+        self.arm = {"pack": {"window_id": window}, "arm_context": {}}
+        for field in readiness.ARM_CONTEXT_KEYS - readiness.ARM_CONTEXT_NON_PATH_KEYS:
+            path = custody if field == "custody_root" else custody / field
+            path.mkdir(exist_ok=True)
+            self.arm["arm_context"][field] = str(path)
+        self.plan = {"measurement_root": str(self.measurement), "custody_root": str(custody),
+                     "repo_head": "a" * 40, "measurement_head": "b" * 40}
+        self.inventory = json.loads((Path(readiness.__file__).resolve().parents[1]
+                                    / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+
+    def check_both(self, detail=None, *, purpose="T0_REHEARSAL", launcher=None):
+        from types import SimpleNamespace
+        from joulewise import night_gate
+        module = (self.measurement if launcher is None else launcher) / "joulewise/arm_readiness.py"
+        with mock.patch.object(readiness, "__file__", str(module)), \
+             mock.patch.object(Path, "home", return_value=self.home), \
+             mock.patch.object(readiness, "_production_inventory", return_value=self.inventory) as inventory:
+            if detail is None:
+                self.assertEqual(Path(self.plan["measurement_root"]),
+                                 Path(readiness.__file__).resolve().parents[1])
+                self.assertTrue((Path(readiness.__file__).resolve().parents[1] / "runs").is_dir())
+            calls = (
+                (readiness.LaunchLineageError,
+                 lambda: readiness._authenticate_go_purpose({"purpose": purpose}, self.arm, self.plan)),
+                (night_gate.PackNightRefusal,
+                 lambda: night_gate._pack_rehearsal_roots(SimpleNamespace(**self.plan), self.arm, purpose)),
+            )
+            for error, call in calls:
+                if detail is None:
+                    call()
+                else:
+                    with self.assertRaises(error) as caught:
+                        call()
+                    self.assertEqual(detail, str(caught.exception))
+                    reason = getattr(caught.exception, "reason_code", getattr(caught.exception, "reason", None))
+                    self.assertEqual("launch_go_receipt_invalid", reason)
+            if launcher is not None:
+                inventory.assert_not_called()
+            elif purpose == "T0_REHEARSAL":
+                self.assertEqual(2, inventory.call_count)
+                self.assertEqual(self.plan, inventory.call_args_list[0].args[0])
+                self.assertEqual(self.plan, vars(inventory.call_args_list[1].args[0]))
+
+    def test_real_resolver_shipped_inventory_accepts_running_rehearsal_with_runs(self):
+        self.check_both()
+
+    def test_inventoried_running_clone_equal_or_containing_in_either_direction_refuses(self):
+        for path in (self.measurement, self.measurement.parent, self.measurement / "runs"):
+            with self.subTest(deployment=path):
+                self.inventory.append({"deployment_id": "collision", "measurement_root": str(path),
+                                       "custody_root": None, "ledger_path": None, "notes": "synthetic retained deployment"})
+                self.check_both("rehearsal_roots_not_disjoint: measurement_root")
+                self.inventory.pop()
+
+    def test_launcher_identity_refuses_before_census_for_both_purposes(self):
+        other = self.measurement.with_name(readiness.REHEARSAL_CLONE_PREFIX + "other")
+        other.mkdir()
+        for purpose, window in (("T0_REHEARSAL", self.arm["pack"]["window_id"]),
+                                ("G2B_SHAKEDOWN", "production-window")):
+            self.arm["pack"]["window_id"] = window
+            self.check_both("measurement_root: launcher is not the planned clone",
+                            launcher=other, purpose=purpose)
+
+    def test_uninventoried_clone_without_reviewed_prefix_refuses(self):
+        self.measurement = self.measurement.with_name("unreviewed-clone")
+        self.measurement.mkdir()
+        self.plan["measurement_root"] = str(self.measurement)
+        self.check_both("rehearsal_clone_prefix_invalid: measurement_root")
+
 
 
 if __name__ == "__main__":

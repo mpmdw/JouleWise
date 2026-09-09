@@ -556,6 +556,8 @@ def synthetic_family_publication_verification(*_args, **_kwargs) -> dict[str, ob
 
 class ArmReadinessLifecycleTests(unittest.TestCase):
     def setUp(self) -> None:
+        from tests.test_arm_readiness import patch_pack_night_dependencies
+        patch_pack_night_dependencies(self)
         boot_patcher = mock.patch.object(
             readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
         )
@@ -579,7 +581,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         return path
 
     def install_launch_manifest(
-        self, root: Path, pack: Path, custody: Path, arm_path: Path
+        self, root: Path, pack: Path, custody: Path, arm_path: Path, *, pack_go: bool = True
     ) -> tuple[argparse.Namespace, list[str]]:
         window_root = custody / "window-plan"
         window_root.mkdir()
@@ -624,6 +626,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             step6_confirmation_table=None,
             expected_confirmation_digest=None,
         )
+        if pack_go:
+            from tests.test_arm_readiness import install_pack_night_launch_inputs
+            go_inputs = install_pack_night_launch_inputs(pack, arm_path, manifest_path, custody)
+            for name in ("night_plan", "go_receipt", "step6_confirmation_table", "expected_confirmation_digest"):
+                setattr(args, name, go_inputs[name])
         return args, exec_argv
 
     def launch_artifact_references(
@@ -972,8 +979,8 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
 
     def test_consume_collision_never_emits_defensive_lock_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            pack = root / "pack"
+            root = Path(temporary).resolve()
+            pack = root / sample_arm(root / "context")["pack"]["pack_id"]
             pack.mkdir()
             custody = root / "custody"
             arm_path = (
@@ -983,8 +990,19 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 / "arm-0001.json"
             )
             arm_path.parent.mkdir(parents=True)
-            arm_path.write_bytes(b"placeholder\n")
             receipt = sample_arm(root / "context")
+            (pack / "committed.txt").write_text("collision fixture\n")
+            init_git_fixture(root)
+            # CI runners carry no global identity; pin one like make_go_fixture.
+            git(root, "config", "user.email", "tests@joulewise.invalid")
+            git(root, "config", "user.name", "JouleWise tests")
+            git(root, "add", pack.name)
+            git(root, "commit", "-qm", "collision fixture")
+            receipt["pack"]["pack_root"] = str(pack)
+            receipt["pack"]["pack_sha256"] = readiness.committed_pack_tree_sha256(pack)
+            arm_raw = render_json(receipt)
+            arm_path.write_bytes(arm_raw)
+            arm_digest = hashlib.sha256(arm_raw).hexdigest()
             args, exec_argv = self.install_launch_manifest(
                 root, pack, custody, arm_path
             )
@@ -997,7 +1015,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 "pack_root": pack,
                 "arm_receipt": arm_path,
                 "authenticated_arm_receipt": receipt,
-                "arm_receipt_sha256": "0" * 64,
+                "arm_receipt_sha256": arm_digest,
                 "window_custody_root": custody,
                 "launch_manifest": args.launch_manifest,
                 "authenticated_launch_manifest": manifest,
@@ -1013,6 +1031,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 ).hexdigest(),
                 "exec_argv": exec_argv,
             }
+            go_raw = args.go_receipt.read_bytes()
+            launch_inputs.update(night_plan=args.night_plan, go_receipt=args.go_receipt,
+                authenticated_go_receipt=readiness.parse_json_bytes(go_raw),
+                go_receipt_sha256=hashlib.sha256(go_raw).hexdigest())
             with mock.patch.object(
                 readiness,
                 "_verify_arm_receipt",
@@ -1020,13 +1042,13 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                     "status": "PASS",
                     "arm_disposition": "GO",
                     "receipt_path": str(arm_path.resolve()),
-                    "receipt_sha256": "0" * 64,
+                    "receipt_sha256": arm_digest,
                     "pack_sha256": receipt["pack"]["pack_sha256"],
                 },
             ), mock.patch.object(
                 readiness,
                 "_read_arm_with_sidecar",
-                return_value=(receipt, b"placeholder\n", "0" * 64),
+                return_value=(receipt, arm_raw, arm_digest),
             ), mock.patch.object(
                 readiness,
                 "reviewed_main",
@@ -1072,9 +1094,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         (dry_path.parent / "dry-run-0001.json.sha256").write_bytes(
             gnu_sidecar(hashlib.sha256(raw).hexdigest(), dry_path.name)
         )
+        # Seat-4 ordering: the launcher refuses usage before any receipt IO
+        # when the GO inputs are absent, so a dry run can only reach receipt
+        # verification behind a real GO. Bind the GO to the real ARM, then
+        # present the dry-run receipt in its place.
         args, _exec_argv = self.install_launch_manifest(
-            Path(temporary.name), pack, custody, dry_path
+            Path(temporary.name), pack, custody, arm_path, pack_go=True
         )
+        args.arm_receipt = dry_path
         with self.assertRaisesRegex(
             readiness.LaunchLineageError, "arm receipt is invalid"
         ) as caught:
@@ -3030,6 +3057,102 @@ class PostSupersessionLayeringTests(unittest.TestCase):
             receipt["predecessor"]["pack_sha256"],
             readiness.committed_pack_tree_sha256(predecessor),
         )
+
+
+class PackNightT0InventoryTests(unittest.TestCase):
+    """Exercise the GO inventory authenticator without the launch-fixture seam."""
+    def setUp(self):
+        from joulewise import arm_readiness_evidence_t0 as author
+        from tests.test_arm_readiness_schemas import sample_evidence
+        self.author = author
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        self.custody = self.root / "pack"
+        self.arm = sample_arm(self.root / "context")
+        self.arm["evidence"] = []
+        self.paths = []
+        for row in author._EXPECTED_ROWS:
+            path = self.custody / author._EVIDENCE_DIRECTORY / author._receipt_name(row)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            receipt = sample_evidence()
+            receipt.update(evidence_id=author._evidence_id(row), kind=author._ROW_KIND[row],
+                           pack_sha256=self.arm["pack"]["pack_sha256"],
+                           head_commit=self.arm["reviewed_main"]["head_commit"])
+            path.write_bytes(render_json(receipt))
+            self.arm["evidence"].append({"namespace": "WINDOW_CUSTODY",
+                "path": path.relative_to(self.custody).as_posix(),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+            self.paths.append(path)
+        for index, (step, name) in enumerate(author._CAPTURE_FILES.items()):
+            path = self.custody / author._INPUT_DIRECTORY / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(render_json({"schema_version": author._COMMAND_SCHEMA,
+                "step_id": step, "argv": ["/fixture/command"], "cwd": str(self.root),
+                "exit_code": 0, "stdout": "", "stderr": "",
+                "started_monotonic_ns": index * 2, "finished_monotonic_ns": index * 2 + 1,
+                "boot_session_id": self.arm["boot_session_id"]}))
+            self.paths.append(path)
+        self.go = {}
+        self.refresh_inventory()
+
+    def refresh_inventory(self):
+        refs = sorted([{"path": path.relative_to(self.root).as_posix(),
+                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in self.paths],
+                      key=lambda ref: ref["path"])
+        self.go.update(t0_evidence=refs, t0_evidence_set_sha256=hashlib.sha256(render_json(refs)).hexdigest())
+
+    def verify(self):
+        readiness._authenticate_go_t0_evidence(self.go, self.arm, self.custody, self.root, 1000)
+
+    def test_exact_author_receipts_and_capture_membership_and_set_digest(self):
+        self.assertEqual(len(self.paths), 21)
+        self.verify()
+        original = copy.deepcopy(self.go)
+        for mutation in ("missing", "extra", "duplicate", "set_digest"):
+            with self.subTest(mutation=mutation):
+                self.go = copy.deepcopy(original)
+                if mutation == "missing":
+                    self.go["t0_evidence"].pop()
+                elif mutation == "extra":
+                    self.go["t0_evidence"].append({"path": "extra.json", "sha256": "0" * 64})
+                elif mutation == "duplicate":
+                    self.go["t0_evidence"].append(self.go["t0_evidence"][0])
+                else:
+                    self.go["t0_evidence_set_sha256"] = "e" * 64
+                with self.assertRaises(readiness.LaunchLineageError):
+                    self.verify()
+        self.go = original
+        for path in (self.paths[0], self.paths[-1]):
+            original_bytes = path.read_bytes()
+            path.write_bytes(original_bytes + b" ")
+            with self.assertRaises(readiness.LaunchLineageError):
+                self.verify()
+            path.write_bytes(original_bytes)
+
+    def test_receipts_are_arm_bound_and_capture_boot_order_and_expiry_are_checked(self):
+        self.arm["evidence"][0]["sha256"] = "e" * 64
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "ARM binding"):
+            self.verify()
+        self.arm["evidence"][0]["sha256"] = hashlib.sha256(self.paths[0].read_bytes()).hexdigest()
+        capture = self.paths[-1]
+        original = capture.read_bytes()
+        for key, value in (("boot_session_id", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+                           ("started_monotonic_ns", 0), ("finished_monotonic_ns", 1001),
+                           ("exit_code", 1)):
+            with self.subTest(key=key):
+                changed = readiness.parse_json_bytes(original)
+                changed[key] = value
+                capture.write_bytes(render_json(changed))
+                self.refresh_inventory()
+                with self.assertRaisesRegex(readiness.LaunchLineageError, "capture"):
+                    self.verify()
+        capture.write_bytes(original)
+        self.refresh_inventory()
+        with self.assertRaisesRegex(readiness.LaunchLineageError, "expiry"):
+            readiness._authenticate_go_t0_evidence(self.go, self.arm, self.custody, self.root,
+                self.author._MAX_T0_SEQUENCE_AGE_NS + 1001)
+
 
 
 if __name__ == "__main__":
