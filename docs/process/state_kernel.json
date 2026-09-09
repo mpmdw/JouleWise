@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38c — 2026-09-08 ~23:10 PDT: merged implementation, open clone/live gates and flagged evidence discrepancies",
-    "path": "docs/process_traces/2026-09-08-handoff-redo/99gk-bookkeeping-t38c-astra.md"
+    "label": "T38d — 2026-09-09: rehearsal harvest, stub-chain finding and post-completion cleanup",
+    "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1099,7 +1099,7 @@
       "priority": "p1_phase_gate",
       "rank": 166,
       "status": "queued",
-      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed.",
+      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding).",
       "stop_card": null
     },
     "COLDGATE-HANDOFF-01": {
@@ -3233,6 +3233,36 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "NIGHT-GATE-STUB-CHAIN-01": {
+      "acceptance": {
+        "evidence": [
+          "Defect-shaped tests in tests/test_night_gate.py and tests/test_run_night.py pass.",
+          "PR merged."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-GATE-STUB-CHAIN-01/acceptance",
+          "label": "NIGHT-GATE-STUB-CHAIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The defect-shaped tests in tests/test_night_gate.py and tests/test_run_night.py pass, and the PR is merged."
+      },
+      "authority": {
+        "label": "21i §The finding (NOT the acceptable stub refusal)",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Night gate skips the chain/sidecar read for REHEARSAL_STUB plans (driver substitutes the built-in stub); C5 records chain_sha256 null + chain_stub; driver logs refusal reason on the gate verdict line",
+      "id": "NIGHT-GATE-STUB-CHAIN-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 168,
+      "status": "active",
+      "status_note": "2026-09-09: IN PROGRESS. NIGHT_HANDBACK.md §Executed records cure branch fix/2026-09-09-night-gate-stub-chain at bb7090e2 with fix round 1 at 5db38b58 (PR #309), under paired review, not yet merged. Dictated seat report docs/process_traces/2026-09-09-rehearsal-harvest/02-seat-night-gate-stub-chain-astra-report.md and fix round 17-… are outside this branch by design and land with cure PR #309; their evidence is unverified here. The chain_stub field and driver refusal-reason logging are dictated implementation targets, not verified by the available primary artifacts.",
+      "stop_card": null
+    },
     "NIGHT-PACK-REHEARSAL-01": {
       "acceptance": {
         "evidence": [
@@ -3342,11 +3372,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "rehearsal-20260909 fired and harvested with a finding",
+            "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
+          },
           "kind": "event",
           "required": "Fresh post-watchdog REHEARSAL_STUB night and its night-driver courier evidence are harvested before any real plan",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "POST-WATCHDOG-REHEARSAL-20260909"
         },
@@ -3373,6 +3406,15 @@
           "state": "satisfied",
           "strength": "hard",
           "target": "NIGHT-GATE-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "gate cure merged before any further stub or real night (receipt refused night_probe_error on rehearsal-20260909)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "NIGHT-GATE-STUB-CHAIN-01"
         },
         {
           "evidence": {
@@ -3418,7 +3460,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "WATCHDOG-INSTALL-01 is DONE (T38 evidence in durable state). Remains blocked pending the fresh post-watchdog REHEARSAL_STUB night; rehearsal-20260909 is prepared for 2026-09-09 02:56 PDT on activation branch 1ae91b4d, trace 21b. Interactive stand-down, Ed no-NO and NIGHT_HANDBACK conditions still precede arming; no real plan is armed.",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -7346,5 +7388,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-08"
+  "updated": "2026-09-09"
 }

@@ -21,6 +21,7 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    "NIGHT-GATE-STUB-CHAIN-01",
     # T38c: six live follow-ups; DONE liveness-docs stays outside the kernel.
     "BRIDGE-BASELINE-ANCHORS-01",
     "UNIT-VOCAB-SHARED-01",
@@ -723,7 +724,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 156)  # T38c: 150 + 6 live follow-ups
+        self.assertEqual(len(self.tasks), 157)  # T38d: 156 + NIGHT-GATE-STUB-CHAIN-01 (lead bench edit)
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,
