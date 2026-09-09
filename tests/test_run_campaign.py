@@ -9608,76 +9608,40 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         return evaluation
 
     def test_retry_member_survives_fixture_sleep_slack(self) -> None:
-        from joulewise.controller import _Execution
-        from joulewise.bundle_read import TracePoint, Window
-        from joulewise.reduce import _window_gap_stats
-
-        sentinel_stage = _Execution._stage_idle_drift_sentinel
-        stages_checked = []
-
-        def checked_sentinel(execution):
-            def cadence():
-                markers = {
-                    event.event_type: event.timestamp_s
-                    for event in execution._events
-                    if event.event_type in {"sampling_started", "sampling_stopped"}
-                }
-                curve = [
-                    TracePoint(t, 0.0)
-                    for t in sorted({s.timestamp_s for s in execution._samples})
-                ]
-                return _window_gap_stats(curve, Window(
-                    markers["sampling_started"], markers["sampling_stopped"]
-                ))["cadence_ratio"]
-
-            clock_anchor = copy.deepcopy(
-                execution._uncertainty_evidence["clock_anchor"]
-            )
-            ratio = cadence()
-            self.assertIsNotNone(ratio)
-            sentinel_stage(execution)
-            self.assertEqual(cadence(), ratio)
-            self.assertEqual(
-                execution._uncertainty_evidence["clock_anchor"], clock_anchor
-            )
-            stages_checked.append(True)
-
-        # Observed trigger: 100 x 50 ms sleeps overrun the real 17.5 s
-        # bounded-capture deadline at >=3.5x slack. Keep the actual subprocess
-        # deadline; removing --no-sleep must restore post_idle_unavailable.
-        # Opus contract review 77 S1: the stress level is a floor, never
-        # overridable downward by an inherited environment value.
-        scale = max(3.5, float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")))
-        with (
-            patch.object(_Execution, "_stage_idle_drift_sentinel", checked_sentinel),
-            patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)}),
+        # Original defect: the sleeping 100 x 50 ms post-idle fixture exceeds
+        # the unchanged 17.5 s capture timeout under >=3.5x simulated slack.
+        # Continuous admission/measured sampling remains paced. The stress
+        # level is a floor (Opus 77 S1). Consult 87 removed the in-controller
+        # cadence/clock-anchor probe: a non-null cadence ratio needs an
+        # internal sample gap inside the ~112 ms measured window, which a
+        # 175 ms stressed sampling interval does not guarantee on a fast host
+        # (the Mac-only pass was scheduling geometry, not the property).
+        scale = max(
+            3.5,
+            float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")),
+        )
+        with patch.dict(
+            os.environ,
+            {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)},
         ):
             evaluation = self._produced_retry_member(
-                "timer-slack", attempt1_records=_clean_idle_records(),
+                "timer-slack",
+                attempt1_records=_clean_idle_records(),
                 attempt2_records=_clean_idle_records(),
             )
-        self.assertIs(evaluation.strict_valid, True)
-        drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
-        # Diagnostic message: CI (Linux) reports post_idle_unavailable here
-        # with the baseline at the 5 s cap (count 100) while this test is
-        # 'bounded' on the MacBook; the producer swallows the capture
-        # exception, so surface the controller log and the raw post-idle
-        # artifact state in the failure text.
-        bundle_dir = self.root / "runs"
-        controller_logs = sorted(bundle_dir.rglob("controller.log"))
-        log_tail = "\n".join(
-            path.read_text(encoding="utf-8", errors="replace")[-3000:]
-            for path in controller_logs
+
+        self.assertIs(
+            evaluation.strict_valid,
+            True,
+            evaluation.validation_problems,
         )
-        raw_post = sorted(bundle_dir.rglob("powermetrics_idle_post.plist"))
-        self.assertEqual(drift["status"], "bounded", (
-            drift, evaluation.validation_problems,
-            evaluation.metadata.get("idle_baseline"),
-            [(str(path), path.stat().st_size) for path in raw_post],
-            log_tail,
-        ))
+        drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
+        self.assertEqual(
+            drift["status"],
+            "bounded",
+            (drift, evaluation.validation_problems),
+        )
         self.assertEqual(drift["post_sample_count"], 100, drift)
-        self.assertEqual(stages_checked, [True])
 
     def test_real_powermetrics_capture_timeout_is_unchanged(self) -> None:
         from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
