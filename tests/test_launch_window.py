@@ -904,6 +904,35 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         git(destination, "config", "gc.auto", "0")
         git(destination, "config", "maintenance.auto", "false")
 
+    def _install_launch_inputs(self, repository, pack, arm_path, manifest_path, custody):
+        # Author in the checkout that will execute the launcher. Import only
+        # the fixture helpers from the test runner; joulewise stays imported
+        # from repository, so both real launcher-identity checks remain live.
+        installed = subprocess.run(
+            [
+                sys.executable, "-c",
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "from joulewise import arm_readiness\n"
+                "assert Path(arm_readiness.__file__).resolve().parents[1] == Path.cwd().resolve()\n"
+                "sys.path.insert(0, sys.argv[1])\n"
+                "from tests.test_arm_readiness import install_pack_night_launch_inputs\n"
+                "inputs = install_pack_night_launch_inputs(*(Path(value) for value in sys.argv[2:]))\n"
+                "print(json.dumps(inputs, default=str))\n",
+                str(ROOT), str(pack), str(arm_path), str(manifest_path), str(custody),
+            ],
+            cwd=repository,
+            env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(installed.returncode, 0, f"{installed.stdout}{installed.stderr}")
+        inputs = json.loads(installed.stdout)
+        plan = json.loads(Path(inputs["night_plan"]).read_bytes())
+        self.assertEqual(plan["measurement_root"], str(repository.resolve()))
+        return inputs
+
     def _run_launch(
         self,
         repository: Path,
@@ -914,8 +943,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         go_inputs=None,
     ) -> subprocess.CompletedProcess[str]:
         if go_inputs is None:
-            go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
-                pack, arm_path, manifest_path, custody)
+            go_inputs = self._install_launch_inputs(
+                repository, pack, arm_path, manifest_path, custody)
         return subprocess.run(
             [
                 sys.executable,
@@ -953,8 +982,8 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         pack_relative = pack.relative_to(repository)
-        go_inputs = arm_readiness_tests.install_pack_night_launch_inputs(
-            pack, arm_path, manifest_path, custody)
+        go_inputs = self._install_launch_inputs(
+            repository, pack, arm_path, manifest_path, custody)
 
         content_repository = root / "content-different-repository"
         self._clone_repository(repository, content_repository)
@@ -2157,6 +2186,9 @@ class PackNightLaunchBoundaryTests(unittest.TestCase):
         consumption = json.loads(self.case.consumption.read_bytes())
         go_path = fixture.custody / "night/go_receipt.json"
         go = json.loads(go_path.read_bytes())
+        import uuid
+        self.assertEqual(uuid.UUID(go["receipt_id"]).version, 4)
+        self.assertEqual(str(uuid.UUID(go["receipt_id"])), go["receipt_id"])
         self.assertEqual(len(go["t0_evidence"]), 21)
         self.assertEqual(consumption["go_receipt"]["sha256"], fixture._artifact(go_path)["sha256"])
         self.assertEqual(consumption["night_plan"]["sha256"], fixture._artifact(plan_path)["sha256"])

@@ -1713,13 +1713,48 @@ class ProductionCustodyResolverTests(unittest.TestCase):
             "night_custody_parent": home / "night-custody",
             "backup_icloud": home / "Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup",
             "quiet_guard_state": Path("/Library/Application Support/JouleWise/quiet-guard"),
-            "repo_runs": Path(readiness.__file__).resolve().parents[1] / "runs",
             "deployment_measurement_root:clone": home / "retained",
+            "deployment_runs:clone": home / "retained/runs",
         }, {item.role: item.path for item in roots})
         self.assertTrue(all(item.resolution_error is None for item in roots))
         self.assertIsInstance(readiness.PRODUCTION_CUSTODY_ROOTS, tuple)
         with self.assertRaises(AttributeError):
             readiness.PRODUCTION_CUSTODY_ROOTS[0].role = "shrunken"
+
+    def test_no_census_kind_or_path_is_derived_from_running_clone(self):
+        from joulewise.t0_rehearsal import _contains
+        self.assertEqual({"LITERAL", "HOME_RELATIVE", "INVENTORY"},
+                         {spec.kind for spec in readiness.PRODUCTION_CUSTODY_ROOTS})
+        self.assertNotIn("repo_runs", {spec.role for spec in readiness.PRODUCTION_CUSTODY_ROOTS})
+        self.assertEqual("JouleWise-rehearsal-", readiness.REHEARSAL_CLONE_PREFIX)
+        measurement = Path(readiness.__file__).resolve().parents[1]
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        self.assertNotIn(str(measurement), {item["measurement_root"] for item in inventory})
+        roots = readiness.production_custody_roots(home=Path.home(), inventory=inventory)
+        self.assertFalse(any(_contains(item.path, measurement) or _contains(measurement, item.path)
+                             for item in roots))
+        inventory.append({**self.inventory(measurement)[0], "measurement_root": str(measurement)})
+        roots = readiness.production_custody_roots(home=Path.home(), inventory=inventory)
+        self.assertTrue(any(_contains(item.path, measurement) for item in roots))
+
+    def test_every_non_null_inventory_locator_is_in_resolved_census(self):
+        inventory = json.loads((ROOT / readiness.PRODUCTION_CUSTODY_INVENTORY).read_bytes())
+        canonical = next(item for item in inventory if item["deployment_id"] == "JouleWise")
+        self.assertEqual("/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl",
+                         canonical["ledger_path"])
+        inventory += [{"deployment_id": "synthetic", "measurement_root": "/absent/measurement",
+                       "custody_root": "/absent/custody", "ledger_path": "/absent/ledger", "notes": "synthetic"}]
+        roots = {item.role: item.path for item in readiness.production_custody_roots(
+            home=Path("/synthetic-home"), inventory=inventory)}
+        for item in inventory:
+            identity = item["deployment_id"]
+            self.assertEqual((Path(item["measurement_root"]) / "runs").resolve(),
+                             roots["deployment_runs:" + identity])
+            for key, role in (("custody_root", "deployment_custody"), ("ledger_path", "deployment_ledger")):
+                if item[key] is None:
+                    self.assertNotIn(role + ":" + identity, roots)
+                else:
+                    self.assertEqual(Path(item[key]).resolve(), roots[role + ":" + identity])
 
     def test_backup_override_cannot_shrink_census_and_three_script_literals_stay_pinned(self):
         home = Path("/synthetic-home")

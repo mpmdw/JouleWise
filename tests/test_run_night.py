@@ -2157,14 +2157,14 @@ class PackNightProducerTests(unittest.TestCase):
         window_id = "rehearsal-t0-unattended-test"
         custody = home / "night-custody" / window_id
         custody.mkdir(parents=True)
-        measurement = self.root / "isolated-measurement"
-        measurement.mkdir()
+        # Keep launcher identity real; this test isolates the root predicates.
+        measurement = Path(self.readiness.__file__).resolve().parents[1]
         claim = self.root / "isolated-claim"
         claim.mkdir()
         plan = replace(self.plan, custody_root=str(custody), measurement_root=str(measurement))
         arm = {"pack": {"window_id": window_id}, "arm_context": {"custody_root": str(custody), "claim_runs_root": str(claim)}}
         inventory = [{"deployment_id": "production", "measurement_root": str(self.root / "production"), "custody_root": None, "ledger_path": None, "notes": "synthetic"}]
-        with mock.patch.object(Path, "home", return_value=home), mock.patch.object(self.readiness, "_production_inventory", return_value=inventory):
+        with mock.patch.object(Path, "home", return_value=home), mock.patch.object(self.readiness, "_production_inventory", return_value=inventory), mock.patch.object(self.readiness, "REHEARSAL_CLONE_PREFIX", measurement.name):
             self.driver._pack_rehearsal_roots(plan, arm, "T0_REHEARSAL")
             # Every non-custody ARM path may live inside this rehearsal child.
             for key in ("claim_runs_root", "bound_runs_root", "quarantine_root",
@@ -2179,10 +2179,12 @@ class PackNightProducerTests(unittest.TestCase):
                     changed = {**arm, "arm_context": {**arm["arm_context"], key: str(production)}}
                     with self.subTest(key=key, production=production), self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
                         self.driver._pack_rehearsal_roots(plan, changed, "T0_REHEARSAL")
-            for production in (self.root / "production", self.root / "production" / "nested", self.root):
-                production.mkdir(parents=True, exist_ok=True)
+            # Exercise equality and both containment directions without changing
+            # the authenticated launcher or creating paths in the real checkout.
+            for production in (measurement, measurement / "runs", measurement.parent):
                 with self.subTest(production=production), self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
-                    self.driver._pack_rehearsal_roots(replace(plan, measurement_root=str(production)), arm, "T0_REHEARSAL")
+                    with mock.patch.object(self.readiness, "_production_inventory", return_value=[{**inventory[0], "measurement_root": str(production)}]):
+                        self.driver._pack_rehearsal_roots(plan, arm, "T0_REHEARSAL")
             for root in (custody.parent, custody / window_id, custody.parent / "another"):
                 root.mkdir(parents=True, exist_ok=True)
                 with self.subTest(root=root), self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
@@ -2193,9 +2195,9 @@ class PackNightProducerTests(unittest.TestCase):
                 with self.subTest(field=field), self.assertRaisesRegex(self.driver.PackNightRefusal, field):
                     self.driver._pack_rehearsal_roots(replace(plan, **{field: str(alias)}), arm, "T0_REHEARSAL")
             with self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
-                self.driver._pack_rehearsal_roots(replace(plan, measurement_root=str(custody)), arm, "T0_REHEARSAL")
+                self.driver._pack_rehearsal_roots(replace(plan, custody_root=str(measurement)), arm, "T0_REHEARSAL")
             changed = {**arm, "arm_context": {**arm["arm_context"], "claim_runs_root": str(custody.parent)}}
-            with self.assertRaisesRegex(self.driver.PackNightRefusal, "arm_context.claim_runs_root"):
+            with self.assertRaisesRegex(self.driver.PackNightRefusal, "rehearsal_roots_not_disjoint"):
                 self.driver._pack_rehearsal_roots(plan, changed, "T0_REHEARSAL")
             for purpose, changed_arm, detail in (
                 ("G2B_SHAKEDOWN", arm, "purpose"),
@@ -2204,6 +2206,15 @@ class PackNightProducerTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.driver.PackNightRefusal, detail) as caught:
                     self.driver._pack_rehearsal_roots(plan, changed_arm, purpose)
                 self.assertEqual("launch_go_receipt_invalid", caught.exception.reason)
+
+    def test_pack_rehearsal_gate_refuses_another_measurement_checkout(self):
+        other = self.root / (self.readiness.REHEARSAL_CLONE_PREFIX + "other")
+        other.mkdir()
+        plan = replace(self.plan, measurement_root=str(other))
+        arm = {"pack": {"window_id": "rehearsal-t0-unattended-test"}, "arm_context": {}}
+        with self.assertRaisesRegex(self.driver.PackNightRefusal, "launcher is not the planned clone") as caught:
+            self.driver._pack_rehearsal_roots(plan, arm, "T0_REHEARSAL")
+        self.assertEqual("launch_go_receipt_invalid", caught.exception.reason)
 
     def test_pack_gate_requires_absolute_strict_custody_root(self):
         alias = self.root / "custody-alias"
