@@ -1,0 +1,10 @@
+# PR #311 replay — integration tree 0661d1d2 (17843715 + merge of main 6981c9b4), alone in-process (four shards concurrent), started 14:19:20 PDT 2026-09-09; timer probe 3.57× at start
+
+SHARD SUMMARY index=1/4 modules=34 tests=545 failures=0 errors=0 skipped=30 result=PASS
+SHARD SUMMARY index=2/4 modules=54 tests=1207 failures=0 errors=0 skipped=53 result=PASS
+SHARD SUMMARY index=3/4 modules=66 tests=1985 failures=0 errors=0 skipped=9 result=PASS
+SHARD SUMMARY index=4/4 modules=67 tests=1912 failures=0 errors=0 skipped=16 result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5649 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+
+failures=0 errors=0. The integration/launch fixtures with specified clock observations, the race test (ruling 56 ADDENDUM-2: PASS under shards=4 at probe 3.57×) and the four idle-admission tests all passed under concurrency.
