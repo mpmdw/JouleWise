@@ -699,6 +699,6 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   seats (628c2eed lost seats 23/25/27 mid-run); this activation blocked on every child before ending a turn.
 - NEXT EXACT ACTION: (1) merge PR #308 under the D-072 gate shape once CI is green on its final head; (2) merge origin/main into
   `fix/2026-09-09-night-gate-stub-chain`, replay alone, fill PR #309's ledger, merge; (2b) per ruling 44 Q2/A1–A6 and the refuter's stricter position, #309 needs its own replay on the integration tree after main
-  moves; exactly-the-four-or-fewer-and-nothing-else is the judge's door, rc=0 the refuter's; record whichever obtains; (3) CLONE-READINESS-01 preparation (the
+  moves; EXACTLY the four named failures and nothing else is the judge's door (A1; a subset is not authorized), rc=0 the refuter's; record whichever obtains; (3) CLONE-READINESS-01 preparation (the
   un-inventoried `JouleWise-rehearsal-<date>-<sha>` clone per 99co + amendment) → G2-a inputs (NEEDS_RULING after rehearsal
   acceptance); the second-stub-night ruling is a cold gate, not this activation's.
