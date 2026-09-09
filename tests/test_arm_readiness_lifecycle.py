@@ -35,6 +35,7 @@ from joulewise.arm_readiness import (
 )
 from scripts import generate_arm_readiness as arm_readiness_cli
 from tests.git_fixture import init_git_fixture
+from tests.fixtures.arm_clock import coherent_clock_anchor
 from tests.test_arm_readiness_schemas import (
     sample_arm,
     sample_dry_run,
@@ -416,6 +417,11 @@ def make_go_fixture(
     registry_target = repo / registry_relative
     registry_target.parent.mkdir(parents=True)
     registry_target.write_bytes(fixture_row_registry(pack_name))
+    # Authoring replays import these test modules in a copied repository.
+    # Carry their observation helper with the fixture, not the runner's path.
+    clock_fixture = Path("tests/fixtures/arm_clock.py")
+    (repo / clock_fixture).parent.mkdir(parents=True)
+    (repo / clock_fixture).write_bytes((ROOT / clock_fixture).read_bytes())
     detection_floor_sources = tuple(
         detection_floor_source_root / relative
         for relative in _DETECTION_FLOOR_REGISTRY_BUNDLE
@@ -570,6 +576,12 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         publication_patcher.start()
         self.addCleanup(publication_patcher.stop)
         self.addCleanup(boot_patcher.stop)
+        self.enterContext(
+            mock.patch.object(
+                readiness._clock_reference, "sample_anchor",
+                side_effect=coherent_clock_anchor,
+            )
+        )
 
     def write_namespace_receipt(self, root: Path, name: str, receipt: dict) -> Path:
         root.mkdir(parents=True, exist_ok=True)
@@ -858,19 +870,23 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             Path(temporary.name), pack, custody, arm_path
         )
         barrier = threading.Barrier(8)
-        outcomes: list[str] = []
+        outcomes: dict[int, str] = {}
         lock = threading.Lock()
 
-        def consume() -> None:
-            barrier.wait()
+        def consume(consumer_id: int) -> None:
+            outcome = "launch_returned_without_refusal"
             try:
+                barrier.wait()
                 launch_window.launch(args)
             except ArmReadinessError as exc:
                 outcome = exc.reason_code
             except readiness.LaunchLineageError as exc:
                 outcome = exc.reason_code
-            with lock:
-                outcomes.append(outcome)
+            except Exception as exc:
+                outcome = f"unexpected {type(exc).__name__}: {exc}"
+            finally:
+                with lock:
+                    outcomes[consumer_id] = outcome
 
         with mock.patch.object(
             launch_window, "_install_handoff"
@@ -883,15 +899,36 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             "verify_consumed_launch",
             return_value={"exec_argv": exec_argv},
         ), mock.patch.object(launch_window.os, "execve") as execve:
-            threads = [threading.Thread(target=consume) for _ in range(8)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join(timeout=30)
-        self.assertFalse(
-            any(thread.is_alive() for thread in threads),
-            "every concurrent consumer must reach a recorded outcome",
-        )
+            # Assemble these immutable fixture inputs once through production.
+            # Eight redundant caller-side ARM replays dominated the race cost.
+            # Each consumer still reauthenticates ARM/GO, hashes and bindings,
+            # checks real deadlines, and races the real O_EXCL claim below.
+            launch_inputs = launch_window._assemble_launch_inputs(args)
+            with mock.patch.object(
+                launch_window, "_assemble_launch_inputs", return_value=launch_inputs
+            ):
+                threads = [
+                    threading.Thread(
+                        target=consume, args=(index,), name=f"consumer-{index}"
+                    )
+                    for index in range(8)
+                ]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=30)
+                alive = [thread.name for thread in threads if thread.is_alive()]
+                with lock:
+                    partial_outcomes = dict(sorted(outcomes.items()))
+                self.assertFalse(
+                    alive,
+                    "every concurrent consumer must reach a recorded outcome; "
+                    f"alive_count={len(alive)} alive={alive} "
+                    f"completed_consumers={list(partial_outcomes)} "
+                    f"execve.call_count={execve.call_count} "
+                    f"partial_outcomes={partial_outcomes}",
+                )
+        outcomes = list(outcomes.values())
         self.assertEqual(execve.call_count, 1)
         self.assertEqual(outcomes.count("launch_consumption_invalid"), 1, outcomes)
         self.assertEqual(outcomes.count("readiness_record_consumed"), 7, outcomes)

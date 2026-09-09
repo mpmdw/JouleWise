@@ -24,6 +24,7 @@ from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
 from tests import test_arm_readiness as arm_readiness_tests
 from tests.git_fixture import init_git_fixture
+from tests.fixtures.arm_clock import coherent_clock_anchor
 
 
 REAL_GO_T0_AUTHENTICATOR = arm_readiness._authenticate_go_t0_evidence
@@ -437,9 +438,8 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
 
 
 class ProductionArmRelocationLaunchTests(unittest.TestCase):
-    # Inspect authored clock evidence with fixed readers, then stop before ARM
-    # samples live subprocess clocks. This isolates clock-family arithmetic
-    # from the independent live drift and sampling-skew gates.
+    # Inspect authored clock evidence with specified readers. RAW remains
+    # independent of the ordinary-monotonic capture and capability clocks.
     def test_mint_keeps_raw_anchors_separate_from_sequence_clock(self) -> None:
         from tests import test_arm_readiness_evidence_t0 as fixtures
 
@@ -518,9 +518,6 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
                         time, "monotonic_ns", return_value=ordinary
                     ),
                     mock.patch.object(
-                        clock_reference, "sample_anchor", return_value=anchor
-                    ),
-                    mock.patch.object(
                         fixtures, "make_t0_fixture", side_effect=tracked_fixture
                     ),
                     mock.patch.object(
@@ -530,10 +527,14 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
                     ),
                     self.assertRaises(AuthoringChecked),
                 ):
-                    self._mint_v4_arm()
+                    self._mint_v4_arm(sample_anchor=lambda: anchor)
 
     def _mint_v4_arm(
         self,
+        *,
+        sample_anchor=coherent_clock_anchor,
+        arm_sample_anchor=None,
+        expected_arm_status="PASS",
     ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path, Path]:
         from joulewise import arm_readiness_evidence as generic_evidence
         from tests.test_arm_readiness_evidence_author import make_author_fixture
@@ -562,16 +563,18 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         live_fixture_now = time.monotonic_ns()
         # Give the synthetic command-capture timeline a complete positive
         # ten-minute history even when a Linux runner booted only seconds ago.
-        # The subprocess clock remains live: this offset is confined to the
-        # in-process T-0 author and cannot mint the arm capability deadline.
+        # The subprocess monotonic clock remains live: this offset is confined
+        # to the in-process T-0 author and cannot mint the capability deadline.
         # The clock-separation regression can deliberately put ordinary time
         # below zero on a freshly booted host. Only the capture timeline needs
-        # this floor; keep the live RAW/REALTIME anchors intact for ARM replay.
+        # this floor; RAW/REALTIME observations are independently specified.
         fixture_now = max(live_fixture_now, 0) + t0_evidence._MIN_IDLE_NS + 1_000
+        clock_anchor = sample_anchor()
         temporary, repository, pack, custody, context, input_root = (
             make_t0_fixture(
                 now_monotonic_ns=fixture_now,
                 synthetic_clock=False,
+                sample_anchor=lambda: clock_anchor,
                 # This test is the only one that reaches the real `os.execve`,
                 # so its frozen argv must name a program that exists on the CI
                 # runner as well as on Darwin.
@@ -601,16 +604,19 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         tree["arm_attachments"]["arm_readiness"]["freeze_receipt"] = None
         # The sandbox denies the production kern.bootsessionuuid sysctl.  The
         # open v4 transaction also has no three-pack publication marker yet,
-        # so a temporary one-pack arm cannot cross that independent gate.  The
-        # copied module replaces those two prerequisites only; clocks, pack
-        # authentication, arm derivation, consumption, and consumed-arm replay
-        # all remain production paths.
+        # so a temporary one-pack arm cannot cross that independent gate.
+        # Bootstrap the same RAW/REALTIME observation in the ARM subprocess.
+        # Pack authentication, numeric predicates, ARM derivation, consumption,
+        # and ordinary-monotonic capability deadlines remain production paths.
         _install_synthetic_identity_inputs(
             repository,
             pack,
             tree,
             boot_session_override=TEST_BOOT_SESSION_ID,
             clock_override=None,
+            clock_anchor_override=(
+                clock_anchor if arm_sample_anchor is None else arm_sample_anchor()
+            ),
         )
         sitecustomize_path = repository / "sitecustomize.py"
         sitecustomize_path.write_text(
@@ -828,32 +834,12 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         reservation_capture_path.write_bytes(
             arm_readiness.render_json(reservation_capture)
         )
-        # Main now derives the attestation from this captured R0 reference.
-        # Keep capture ordering on the synthetic ordinary-monotonic timeline
-        # and R0/author duration on RAW, as in make_t0_fixture. Give R0 the ambient
-        # REALTIME-minus-MONOTONIC_RAW relation that the real ARM subprocess
-        # independently resamples and checks within the production 5 ms gate.
-        # Sample here, immediately before authoring and ARM, so Linux clock
-        # discipline cannot accumulate avoidable RAW/realtime drift during the
-        # comparatively expensive synthetic mint setup above.
-        live_clock_anchor = clock_reference.sample_anchor()
-        live_clock_offset_ns = (
-            live_clock_anchor.realtime_ns - live_clock_anchor.monotonic_raw_ns
-        )
-        clock_capture_path = input_root / "clock-reference.json"
-        clock_capture = json.loads(clock_capture_path.read_text())
-        r0_reference = json.loads(clock_capture["stdout"])
-        r0_reference["anchor_realtime_ns"] = (
-            live_clock_offset_ns + r0_reference["anchor_monotonic_raw_ns"]
-        )
-        clock_capture["stdout"] = arm_readiness.render_json(r0_reference).decode(
-            "utf-8"
-        )
-        clock_capture_path.write_bytes(arm_readiness.render_json(clock_capture))
+        # R0, the author, and the subprocess carry the same numeric clock
+        # relation. Only observations are supplied; all gates adjudicate them.
         with author_environment(
             repository,
             now_monotonic_ns=fixture_now,
-            sample_anchor=lambda: live_clock_anchor,
+            sample_anchor=lambda: clock_anchor,
         ):
             authored_t0 = author_arm_readiness_evidence_t0(pack, custody)
         self.assertEqual(authored_t0["status"], "PASS", authored_t0)
@@ -881,12 +867,45 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(armed.returncode, 0, f"{armed.stdout}{armed.stderr}")
+        self.assertEqual(
+            armed.returncode, 0 if expected_arm_status == "PASS" else 1,
+            f"{armed.stdout}{armed.stderr}",
+        )
         arm_result = json.loads(armed.stdout)
-        self.assertEqual(arm_result["status"], "PASS", arm_result)
+        self.assertEqual(arm_result["status"], expected_arm_status, arm_result)
+        self.assertEqual(
+            arm_result["reason_codes"],
+            [] if expected_arm_status == "PASS"
+            else ["readiness_clock_preflight_refused"],
+        )
         arm_path = Path(arm_result["receipt_path"])
         manifest_path = input_root / "launch-manifest.json"
         return temporary, repository, pack, custody, arm_path, manifest_path
+
+    def test_subprocess_clock_observations_keep_refusal_predicates_real(self) -> None:
+        for skew, drift, status in (
+            (1_000_000, 5_000_000, "PASS"),
+            (1_000_001, 0, "REFUSE"),
+            (1_000, 5_000_001, "REFUSE"),
+        ):
+            with self.subTest(skew_ns=skew, drift_ns=drift):
+                temporary, _repo, _pack, _custody, arm_path, _manifest = (
+                    self._mint_v4_arm(
+                        arm_sample_anchor=lambda: coherent_clock_anchor(
+                            skew_ns=skew, drift_ns=drift
+                        ),
+                        expected_arm_status=status,
+                    )
+                )
+                try:
+                    receipt = json.loads(arm_path.read_text())
+                    clock_row = next(
+                        row for row in receipt["rows"]
+                        if row["row_id"] == "clock.correct_and_prior_state"
+                    )
+                    self.assertEqual(clock_row["verdict"], status)
+                finally:
+                    temporary.cleanup()
 
     def _clone_repository(self, source: Path, destination: Path) -> None:
         from tests.test_arm_readiness_lifecycle import git

@@ -30,6 +30,7 @@ from joulewise.arm_readiness_evidence_t0 import (
     author_arm_readiness_evidence_t0,
 )
 from scripts import author_arm_evidence_t0 as t0_cli
+from tests.fixtures.arm_clock import REALTIME_OFFSET_NS, coherent_clock_anchor
 from tests.test_arm_readiness_dry_run import install_passing_freeze
 from tests.test_arm_readiness_integration import (
     clear_initial_arm,
@@ -49,7 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OTHER_BOOT_SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 SYNTHETIC_MONOTONIC_NS = 1_000_000_000_000
 SYNTHETIC_UTC_NOW = "2026-08-13T20:30:00Z"
-SYNTHETIC_REALTIME_OFFSET_NS = 2_000_000_000_000_000_000
+SYNTHETIC_REALTIME_OFFSET_NS = REALTIME_OFFSET_NS
 
 
 def _sntp_line(server: str, *, offset: str = "+0.010000", uncertainty: str = "0.020000") -> str:
@@ -196,6 +197,7 @@ def _install_synthetic_identity_inputs(
     *,
     boot_session_override: str | None,
     clock_override: tuple[int, str] | None,
+    clock_anchor_override: t0._clock_reference.ClockAnchor | None = None,
 ) -> None:
     shutil.rmtree(pack / "identity_pin_projection.receipts")
     model = pack / "synthetic-model"
@@ -281,17 +283,24 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
         )
     if clock_override is not None:
         monotonic_ns, utc_now = clock_override
-        live_anchor = {
-            "boot_session_id": boot_session_override,
-            "realtime_ns": SYNTHETIC_REALTIME_OFFSET_NS + monotonic_ns,
-            "monotonic_raw_ns": monotonic_ns,
-            "read_skew_ns": 1_000,
-        }
+        if clock_anchor_override is None:
+            clock_anchor_override = coherent_clock_anchor(raw_ns=monotonic_ns)
         customization += (
             "arm_readiness.time.monotonic_ns = "
             f"lambda: {monotonic_ns!r}\n"
             "arm_readiness._utc_now = "
             f"lambda: {utc_now!r}\n"
+        )
+    if clock_anchor_override is not None:
+        # Observation-only override: launch capability deadlines still use
+        # ordinary monotonic time unless clock_override explicitly freezes it.
+        live_anchor = {
+            "boot_session_id": boot_session_override,
+            "realtime_ns": clock_anchor_override.realtime_ns,
+            "monotonic_raw_ns": clock_anchor_override.monotonic_raw_ns,
+            "read_skew_ns": clock_anchor_override.read_skew_ns,
+        }
+        customization += (
             "arm_readiness._sample_live_clock_anchor = "
             f"lambda: {live_anchor!r}\n"
         )
@@ -334,6 +343,7 @@ def make_t0_fixture(
     synthetic_boot_session: bool = True,
     synthetic_clock: bool = True,
     portable_launch_program: bool = False,
+    sample_anchor=None,
 ):
     temporary, repository, pack, custody, _arm_path = make_go_fixture()
     repository = repository.resolve()
@@ -555,11 +565,11 @@ def make_t0_fixture(
     )
     time_origin = now_monotonic_ns - t0._MIN_IDLE_NS - 1_000
     r0_anchor_monotonic_raw_ns = time_origin + 20
-    if synthetic_clock:
+    if synthetic_clock and sample_anchor is None:
         r0_anchor_realtime_ns = None
         r0_anchor_read_skew_ns = 1_000
     else:
-        real_anchor = t0._clock_reference.sample_anchor()
+        real_anchor = (sample_anchor or t0._clock_reference.sample_anchor)()
         # R0 and the author anchor use RAW; capture ordering stays monotonic.
         # On Darwin these clock families can diverge across sleep and uptime.
         r0_anchor_monotonic_raw_ns = (
@@ -826,12 +836,7 @@ def author_environment(
                 sample_anchor=(
                     sample_anchor
                     if sample_anchor is not None
-                    else lambda: t0._clock_reference.ClockAnchor(
-                        realtime_ns=SYNTHETIC_REALTIME_OFFSET_NS
-                        + now_monotonic_ns,
-                        monotonic_raw_ns=now_monotonic_ns,
-                        read_skew_ns=1_000,
-                    )
+                    else lambda: coherent_clock_anchor(raw_ns=now_monotonic_ns)
                 ),
             )
             stack.enter_context(
