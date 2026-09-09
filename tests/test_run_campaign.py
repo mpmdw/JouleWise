@@ -9552,10 +9552,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             argv = command(adapter, *args, **kwargs)
             # Only the bounded sentinel is synthetic. The continuous stream
             # still owns admission, measured cadence, and the clock bracket.
-            # Opus review 77 N2: pin the artifact shape, not just the
-            # positional predicate — the sentinel is the 100-sample capture.
+            # The bounded capture in this producer is the post-idle sentinel;
+            # its count is DERIVED (ceil(min(5.0, baseline.duration_s) / 0.05),
+            # joulewise/adapters/powermetrics.py:1030-1031), so it is only 100
+            # when the baseline spans the 5 s cap — do not pin it here (delta
+            # re-audit 79 F1 refuted the round-1 pin). Continuous captures pass
+            # count=None and stay paced.
             if kwargs.get("count") is not None:
-                assert kwargs["count"] == 100, kwargs
                 argv.append("--no-sleep")
             return argv
 
