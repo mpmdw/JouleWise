@@ -9552,7 +9552,10 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             argv = command(adapter, *args, **kwargs)
             # Only the bounded sentinel is synthetic. The continuous stream
             # still owns admission, measured cadence, and the clock bracket.
+            # Opus review 77 N2: pin the artifact shape, not just the
+            # positional predicate — the sentinel is the 100-sample capture.
             if kwargs.get("count") is not None:
+                assert kwargs["count"] == 100, kwargs
                 argv.append("--no-sleep")
             return argv
 
@@ -9639,10 +9642,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         # Observed trigger: 100 x 50 ms sleeps overrun the real 17.5 s
         # bounded-capture deadline at >=3.5x slack. Keep the actual subprocess
         # deadline; removing --no-sleep must restore post_idle_unavailable.
-        scale = os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")
+        # Opus contract review 77 S1: the stress level is a floor, never
+        # overridable downward by an inherited environment value.
+        scale = max(3.5, float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")))
         with (
             patch.object(_Execution, "_stage_idle_drift_sentinel", checked_sentinel),
-            patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": scale}),
+            patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)}),
         ):
             evaluation = self._produced_retry_member(
                 "timer-slack", attempt1_records=_clean_idle_records(),
@@ -9651,8 +9656,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertIs(evaluation.strict_valid, True)
         drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
         self.assertEqual(drift["status"], "bounded")
-        if float(scale) >= 3.5:
-            self.assertEqual(drift["post_sample_count"], 100)
+        self.assertEqual(drift["post_sample_count"], 100)
         self.assertEqual(stages_checked, [True])
 
     def test_real_powermetrics_capture_timeout_is_unchanged(self) -> None:

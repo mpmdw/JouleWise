@@ -6,8 +6,11 @@ whole-second date plus requested interval. The production parser, NUL framing,
 rail extraction, launch/readiness bracket, and termination path remain real.
 
 Bounded sentinel tests may opt into --no-sleep: elapsed_ns and native dates
-then advance by the requested interval without waiting. Continuous captures
-must retain real pacing because they supply the measured clock bracket.
+then advance by the requested interval without waiting, so the synthetic
+window ends LEAD the real wall clock (record k is stamped start + (k+1)*i
+regardless of when it is written). Continuous captures must retain real
+pacing because they supply the measured clock bracket and are subject to
+the D-078 causal check; --no-sleep is refused without -n for that reason.
 """
 
 from __future__ import annotations
