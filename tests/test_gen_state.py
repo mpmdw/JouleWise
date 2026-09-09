@@ -21,6 +21,14 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # T38c: six live follow-ups; DONE liveness-docs stays outside the kernel.
+    "BRIDGE-BASELINE-ANCHORS-01",
+    "UNIT-VOCAB-SHARED-01",
+    "REGISTRY-ROW-PIN-DRIFT",
+    "ARM-INTEGRATION-LOAD-01",
+    "CLONE-READINESS-01",
+    "CONTRACT-PIN-DRIFT-01",
+
     # 2026-09-08 D-176 decision 5: isolated pack-bound rehearsal successor.
     "NIGHT-PACK-REHEARSAL-01",
     # 2026-09-03 post-merge kernel batch. Thirteen rows, from four sources:
@@ -715,11 +723,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 150)  # 2026-09-08 D-176: 149 + 1 pack rehearsal
+        self.assertEqual(len(self.tasks), 156)  # T38c: 150 + 6 live follow-ups
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,
-        # not the still-unbuilt GO consumer or any live rehearsal acceptance.
+        # not live rehearsal acceptance; T38c separately records the merged consumer.
         ruling = (
             "docs/process_traces/2026-09-08-handoff-redo/"
             "78-coldgate-packet-d169-stage3/13-magistrate-synthesis.md"
@@ -737,11 +745,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertIn(("task", "T0-UNATTENDED-01", "pending", "hard"), edges("UNATTENDED-LAUNCH-01", "close"))
         self.assertIn(("task", "UNATTENDED-LAUNCH-01", "pending", "hard"), edges("S9-06-WINDOW-T0-GO-RECEIPT-GATE-01", "close"))
         self.assertEqual(edges("D169-STAGE3-01", "close"), {
-            ("event", "D176-DECISIONS-1-4-MERGED", "pending", "hard"),
+            ("event", "D176-DECISIONS-1-4-MERGED", "satisfied", "hard"),
             ("task", "NIGHT-PACK-REHEARSAL-01", "pending", "hard"),
         })
         self.assertEqual(edges("NIGHT-PACK-REHEARSAL-01", "start"), {
-            ("task", "UNATTENDED-LAUNCH-01", "pending", "hard"),
+            ("task", "UNATTENDED-LAUNCH-01", "satisfied", "hard"),
+            ("event", "UNINVENTORIED-REHEARSAL-CLONE-CUT", "pending", "hard"),
             ("task", "NIGHT-REHEARSAL-01", "pending", "hard"),
         })
         self.assertIn(("task", "NIGHT-PACK-REHEARSAL-01", "pending", "hard"), edges("V5-G2B-SHAKEDOWN-01", "start"))
@@ -749,7 +758,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertTrue(gen_state._dependency_ready(self.tasks[task_id]))
         self.assertEqual(
             {d["target"] for d in gen_state._hard_start_blockers(self.tasks["NIGHT-PACK-REHEARSAL-01"])},
-            {"UNATTENDED-LAUNCH-01", "NIGHT-REHEARSAL-01"},
+            {"UNINVENTORIED-REHEARSAL-CLONE-CUT", "NIGHT-REHEARSAL-01"},
         )
         rehearsal = self.tasks["NIGHT-PACK-REHEARSAL-01"]
         self.assertEqual(rehearsal["lane"], "agent")

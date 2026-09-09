@@ -3,12 +3,41 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "2026-09-08 D-176 decision, kernel and seat-1 contract installation; wire ruling pending",
-    "path": "docs/process_traces/2026-09-08-handoff-redo/85-d176-install-astra-report.md"
+    "label": "T38c — 2026-09-08 ~23:10 PDT: merged implementation, open clone/live gates and flagged evidence discrepancies",
+    "path": "docs/process_traces/2026-09-08-handoff-redo/99gk-bookkeeping-t38c-astra.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
   "tasks": {
+    "ARM-INTEGRATION-LOAD-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99gn-consult-arm-integration-load-astra-report.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ARM-INTEGRATION-LOAD-01/acceptance",
+          "label": "ARM-INTEGRATION-LOAD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Use author_environment(probe=…, sample_anchor=…) patching _execute_probe/_production_clock and coherent parent/subprocess anchors via the fixture bootstrap hook. Bad clock/census results still refuse; focused and four-worker replays pass under controlled concurrent agent load; no test deletions or production-gate relaxation. Reject relaxed thresholds, retries-until-PASS, skipped rows and PASS-returning predicate mocks."
+      },
+      "authority": {
+        "label": "2026-09-08 T38c follow-up evidence",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99gn-consult-arm-integration-load-astra-report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make ARM/launch integration fixtures deterministic through probe-result seams while predicates, bindings and deadlines stay real.",
+      "id": "ARM-INTEGRATION-LOAD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 165,
+      "status": "queued",
+      "status_note": "2026-09-08: READY; option (a) selected by the T38c directive from 99gn recommendation. Evidence: 99ep attempt 2, 99gh attempt 2, 99gm attempt 2 (readiness_clock_preflight_refused), 99gl fourth-occurrence account. FLAG: 99gn is advisory and says census causation is unproven; four occurrences are lead-reported, not four independently reconstructed failing runs.",
+      "stop_card": null
+    },
     "ARM-PACKET-01": {
       "acceptance": {
         "evidence": [
@@ -722,6 +751,35 @@
       "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) from the draft docs/process_traces/2026-08-27-t26/bracket-binding/bracket-evaluator-plan-identity-01.md (written on #223 from #217's split verdict F2). Soundness-consistency: the chain is fail-closed today, so this is not a pre-night blocker. Priority p1_phase_gate and lane agent per the draft.",
       "stop_card": null
     },
+    "BRIDGE-BASELINE-ANCHORS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BRIDGE-BASELINE-ANCHORS-01/acceptance",
+          "label": "BRIDGE-BASELINE-ANCHORS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A wrapper invocation emits all three anchors matching its immutable launch snapshot; validate the baseline digest."
+      },
+      "authority": {
+        "label": "2026-09-08 T38c follow-up evidence",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Emit BASE_HEAD, BASELINE_MANIFEST and BASELINE_DIGEST from codex-run-v3.",
+      "id": "BRIDGE-BASELINE-ANCHORS-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 162,
+      "status": "queued",
+      "status_note": "2026-09-08: READY; refreshes the existing S2 synthesis ruling 8 follow-up (99be/13), also registered in 99co; owner: bridge runner maintainer.",
+      "stop_card": null
+    },
     "C3-RECOGNIZER-EXACT-01": {
       "acceptance": {
         "evidence": [
@@ -1015,6 +1073,35 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "CLONE-READINESS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CLONE-READINESS-01/acceptance",
+          "label": "CLONE-READINESS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Production: restore runs/calibration_observation_ledger.jsonl and all referenced custody byte-exact; authenticate with verify_custody=True against the existing pin; egg-info clean and preflight lock diff empty. Rehearsal: fresh JouleWise-rehearsal-<date>-<sha> at an inventory-bearing head after census cure and seat 4; not inventoried, disjoint from production, exact plan head/inventory pins; no production-ledger restore to rehearsal."
+      },
+      "authority": {
+        "label": "2026-09-08 T38c follow-up evidence",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-cut the production v5 clone at the post-merge head and prepare a separate un-inventoried rehearsal clone.",
+      "id": "CLONE-READINESS-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 166,
+      "status": "queued",
+      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed.",
+      "stop_card": null
+    },
     "COLDGATE-HANDOFF-01": {
       "acceptance": {
         "evidence": [
@@ -1176,6 +1263,35 @@
       "rank": 117,
       "status": "blocked",
       "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) from the draft docs/process_traces/2026-08-27-t26/bracket-binding/consumption-session-identity-param-01.md (written on #223 from #217's split verdict F3). Should-fix; touches joulewise/whole_window.py. Priority p2_next_slice and lane agent per the draft.",
+      "stop_card": null
+    },
+    "CONTRACT-PIN-DRIFT-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99gi-final-head-review-d176-opus.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CONTRACT-PIN-DRIFT-01/acceptance",
+          "label": "CONTRACT-PIN-DRIFT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The proposed check detects displaced definitions and nonexistent symbols; respects explicitly frozen historical pins. 99gi found 55/186 stale pins; 99gj and final-head review 99gl record mechanical repinning."
+      },
+      "authority": {
+        "label": "2026-09-08 T38c follow-up evidence",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99gi-final-head-review-d176-opus.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Propose a pin-check test that detects contract path/line/symbol drift after implementation edits.",
+      "id": "CONTRACT-PIN-DRIFT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 167,
+      "status": "queued",
+      "status_note": "2026-09-08: READY; current repair landed in 58d9225b through PR #307; this follow-up proposes continuing pin-check coverage.",
       "stop_card": null
     },
     "D080-TRIGGER-01": {
@@ -1532,11 +1648,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #307 merge edb4f0edc32551d02c85295f40fc196ca25635b0; terminal review 99gl",
+            "path": "docs/process_traces/2026-09-08-handoff-redo/99gl-terminal-review-d176.md"
+          },
           "kind": "event",
           "required": "D-176 decisions 1–4 are implemented and merged after the prescribed contract, C-028 gauntlet, mutation audit and replay gates",
           "scope": "close",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "D176-DECISIONS-1-4-MERGED"
         },
@@ -1570,8 +1689,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 160,
-      "status": "queued",
-      "status_note": "D-176 2026-09-08: prior needs_ruling start satisfied by the adopted synthesis. Seat-1 contract draft is next for Opus refutation; contract landing precedes code scope. Runtime implementation and live rehearsal remain open; this installation does not close stage 3.",
+      "status": "partial",
+      "status_note": "T38c 2026-09-08: contract PR #303 and producer/consumer/census cure/G7 control PR #307 landed at edb4f0ed. Implementation milestone satisfied; NIGHT-PACK-REHEARSAL-01 live harvest remains pending. No stage-3 live closure or arming.",
       "stop_card": null
     },
     "D173-PAPER-SUPPLY-COLD-GATE-01": {
@@ -2305,7 +2424,8 @@
     "G2A-FIRST-WINDOW-01": {
       "acceptance": {
         "evidence": [
-          "Create the _v5 measurement clone at a reviewed head by trace 27 recipe, author the G2-a DIAGNOSTIC_NO_PACK v2 plan, install both night agents, and email then arm."
+          "docs/process_traces/2026-09-08-handoff-redo/99cd-g2a-first-window-plan/README.md (draft and remaining inputs; not arm-ready)",
+          "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md (clone recipe + amendment)"
         ],
         "pointer": {
           "json_pointer": "/tasks/G2A-FIRST-WINDOW-01/acceptance",
@@ -2315,8 +2435,8 @@
         "summary": "Create the _v5 measurement clone at a reviewed head by trace 27 recipe, author the G2-a DIAGNOSTIC_NO_PACK v2 plan, install both night agents, and email then arm."
       },
       "authority": {
-        "label": "T38 dictated task registration and repository verification",
-        "path": "docs/process_traces/2026-09-08-handoff-redo/50-bookkeeping-t38-astra.md"
+        "label": "2026-09-08 G2-a plan draft landed dd27e53b; magistrate inputs remain NEEDS_RULING",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99cd-g2a-first-window-plan/README.md"
       },
       "dependencies": [
         {
@@ -2338,7 +2458,7 @@
       "priority": "p1_phase_gate",
       "rank": 159,
       "status": "blocked",
-      "status_note": "H1; Routing branch 44519d14 trace 27 sections 2-5 is the runbook. Agent lane covers preparation only; actual collection requires zero agents. After the post-watchdog rehearsal and routing merge.",
+      "status_note": "T38c 2026-09-08: plan draft landed dd27e53b9895ea19704d4280ea292f4cc164af57 (cherry-pick 6b7e2614). NEEDS_RULING remains: PLAN_ID/NIGHT_ROOT/T0/WINDOW_MAX_S only AFTER rehearsal acceptance; dry sample values are not authorized production values. Production clone readiness follows 99co + amendment. Agent lane is preparation only; actual collection requires zero agents.",
       "stop_card": null
     },
     "G2A-PREFLIGHT-ARGV-ASSERT-01": {
@@ -3118,7 +3238,7 @@
         "evidence": [
           "G1–G10 all PASS from producer-emitted evidence; no UNRULED or INCOMPLETE counted as success",
           "T0_REHEARSAL GO consumed only for a rehearsal-t0-unattended- window id with roots disjoint from the independent production-root census",
-          "G7 presents a valid T0_UNATTENDED_SUPERVISED_REHEARSAL-class receipt to the production launcher, records class refusal and proves no .consumed.json exists",
+          "G7 uses a separate production-plan control custody with two authenticated class/purpose refusals (six-key rehearsal receipt and 26-key GO), both first; no consumption or chain.started in the control; authenticated g7_control locator (99fe items 1–9).",
           "Zero operator action at T-0 and no agent presence at T-0/capture; stdin=subprocess.DEVNULL; dedicated identity, custody, ledger, runs and backups; launch/relaunch evidence",
           "Ed-owned privileged-anchor positive control is evidenced, not assumed; second cold gate on integrated head and real plan bytes precedes the night"
         ],
@@ -3136,6 +3256,15 @@
       "dependencies": [
         {
           "evidence": null,
+          "kind": "event",
+          "required": "CLONE-READINESS-01 rehearsal portion: fresh un-inventoried JouleWise-rehearsal-<date>-<sha> at the reviewed inventory-bearing post-cure/seat-4 head",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "UNINVENTORIED-REHEARSAL-CLONE-CUT"
+        },
+        {
+          "evidence": null,
           "kind": "task",
           "required": "NIGHT-REHEARSAL-01 harvested",
           "scope": "start",
@@ -3144,11 +3273,14 @@
           "target": "NIGHT-REHEARSAL-01"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "PR #307 merge edb4f0edc32551d02c85295f40fc196ca25635b0; terminal review 99gl",
+            "path": "docs/process_traces/2026-09-08-handoff-redo/99gl-terminal-review-d176.md"
+          },
           "kind": "task",
           "required": "UNATTENDED-LAUNCH-01 merged",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "UNATTENDED-LAUNCH-01"
         }
@@ -3184,7 +3316,7 @@
       "priority": "p1_phase_gate",
       "rank": 161,
       "status": "blocked",
-      "status_note": "Registered 2026-09-08 by D-176 decision 5. Build may precede NIGHT-REHEARSAL-01 harvest, but this night hard-starts only after that harvest and UNATTENDED-LAUNCH-01 merges. A second cold gate on the integrated head and real plan bytes precedes the first pack-bound night. Agent lane covers preparation and harvest only; no quiet-machine collection while an agent is active. Privileged-anchor positive control remains NEEDS-ED.",
+      "status_note": "T38c 2026-09-08: second cold gate 99ey and G7 control ruling 99fe (including addendum 6–9) landed through PR #307. NO pack-bound night before the separate un-inventoried rehearsal clone in 99co + amendment is cut. Stub harvest and real G1–G10 evidence remain pending; agent lane is preparation/harvest only; privileged-anchor positive control remains NEEDS-ED.",
       "stop_card": null
     },
     "NIGHT-REHEARSAL-01": {
@@ -4802,6 +4934,35 @@
       "status_note": "Registered from the S-0 packet-1 cold-gate round (both seats: archival retention, not a defect). Defer landing until after the _v4 transaction closes.",
       "stop_card": null
     },
+    "REGISTRY-ROW-PIN-DRIFT": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REGISTRY-ROW-PIN-DRIFT/acceptance",
+          "label": "REGISTRY-ROW-PIN-DRIFT acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A later line insertion does not silently retarget a registry row pin; any change of row identity is detected."
+      },
+      "authority": {
+        "label": "2026-09-08 T38c follow-up evidence",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99co-magistrate-note-clone-readiness-plan.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Prevent registry row pins from drifting under later commits; evaluate ordinal keying like the custody census.",
+      "id": "REGISTRY-ROW-PIN-DRIFT",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 164,
+      "status": "queued",
+      "status_note": "2026-09-08: READY; 99co registers the D-165 allowlist line-keying follow-up. FLAG: dictated evidence 99fa concerns GO refusal-code registry validity, not row-pin drift; retain that citation in the T38c report without treating it as proof.",
+      "stop_card": null
+    },
     "REISSUE-V3-GENERATION-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -5115,8 +5276,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 124,
-      "status": "queued",
-      "status_note": "D-176 2026-09-08: closes through UNATTENDED-LAUNCH-01, not a separate implementation; required launch refusal remains unimplemented. UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
+      "status": "partial",
+      "status_note": "T38c 2026-09-08: D-176 implementation landed via PR #307 at edb4f0ed (99gl terminal review). Live obligations and existing close dependencies remain open; earlier unimplemented/design-next language below is historical. D-176 2026-09-08: closes through UNATTENDED-LAUNCH-01, not a separate implementation; required launch refusal remains unimplemented. UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-09-02 by the magistrate per the cold-gate ruling §B4 (S9 row 06 of the ruled-not-installed sweep). A window can currently reach execve without proving or custodying the five-condition D-149 T-0 GO.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -5615,7 +5776,7 @@
       "priority": "p1_phase_gate",
       "rank": 80,
       "status": "partial",
-      "status_note": "D-176 2026-09-08: hard-start on NIGHT-REHEARSAL-01 replaced by the adopted ruling; ARM T-0 evidence author exists, while GO and rehearsal-bundle producers remain to be built. G7 and the consumer codes are ruled by D-176; live closure is still owed. Historical notes below are superseded on those points. RE-STATED AS BLOCKED 2026-09-03 (fresh-Fable docs-vs-truth audit A9). The row was PARTIAL in the agent lane, which renders as READY in the queue view, while its own status note already said the opposite: branch impl/t0-unattended-01 is content-identical to main and the remaining rehearsal-evaluator blockers are folded into the D-169 unattended lane, to be scheduled by that lane's staged ruling. The dependency now names NIGHT-REHEARSAL-01, which is D-169 stage 2 and the row that owns that scheduling. Prior note follows. PARTIAL on branch impl/t0-unattended-01 (PR pending). Landed: the ruled REASON_CODE_COVERAGE enumerated delta (first deliverable, gauntlet-complete: audit -> fix -> delta re-audit -> fix -> delta re-audit -> one lead bench fix); the D-127.1 scope-closure amendment drafted as a proposed decision-log delta for the magistrate to land (the lieutenant does not edit docs/decision_log.md); the clock-reference collector; and the machine-authored T-0 clock evidence itself -- R0 pre-pin plus R1 live-at-authoring across a fixed three-operator roster with quorum>=2 and an agreement-interval intersection inside the governed 0.5 s ceiling, a separately-gated 5 ms CLOCK_MONOTONIC_RAW anchor falsifier never summed into that bound, the anchor endpoints published for an arm-side step re-check, an untouched 6 h horizon, a ceremony with no prompt and no stdin read, and a strengthened exact-Off postcondition. No new reason code in either vocabulary; the live coverage gate stays 55/45/10. Acceptance item 1 MET; item 3 MET for the amendment draft, with its four Ed-hands sub-items surfaced and not assumed. REMAINS: (a) acceptance item 2, the supervised rehearsal window -- the ten-gate evaluator is committed and green in fixture mode but its first audit REFUTED it with seven blockers (six gates accept self-declared evidence; no producer writes the records the live gates need), the fix round was killed mid-flight by a window reset and reverted, and the live sitting is Ed's hands; (b) TWO magistrate questions, both recorded in full in the delta document -- which production entry point consumes a rehearsal receipt for gate G7 and which refusal code it emits (HEAD has no consumer of a D-149 GO receipt at all), and how to reconcile the ruled R1-before-censuses ordering with the ruled 5 s R1-completion-to-validity-origin bound, which HEAD's derivation order cannot satisfy and which is ill-typed today because validity origin and the R1 endpoints are read from different clocks. [2026-09-02: that 5 s bound was STRUCK by the T26 cold gate (item 3, D-170) and replaced by the ruled 600 s liveness bound on the ordinary monotonic clock, installed in joulewise/arm_readiness.py; its empirical margin is unmeasured and is carried by T0-LIVENESS-BOUND-EMPIRICAL-01.] Before that ruling the upper bound was deliberately NOT implemented and no inert substitute was added; the six-hour lower relation is enforced and non-tautological. 2026-09-01: branch impl/t0-unattended-01 is content-identical to main (its first deliverable is merged); the remaining rehearsal-evaluator blockers are folded into the D-169 unattended lane and will be scheduled by that lane's staged ruling rather than as a separate PR.",
+      "status_note": "T38c 2026-09-08: D-176 implementation landed via PR #307 at edb4f0ed (99gl terminal review). Live obligations and existing close dependencies remain open; earlier unimplemented/design-next language below is historical. D-176 2026-09-08: hard-start on NIGHT-REHEARSAL-01 replaced by the adopted ruling; ARM T-0 evidence author exists, while GO and rehearsal-bundle producers remain to be built. G7 and the consumer codes are ruled by D-176; live closure is still owed. Historical notes below are superseded on those points. RE-STATED AS BLOCKED 2026-09-03 (fresh-Fable docs-vs-truth audit A9). The row was PARTIAL in the agent lane, which renders as READY in the queue view, while its own status note already said the opposite: branch impl/t0-unattended-01 is content-identical to main and the remaining rehearsal-evaluator blockers are folded into the D-169 unattended lane, to be scheduled by that lane's staged ruling. The dependency now names NIGHT-REHEARSAL-01, which is D-169 stage 2 and the row that owns that scheduling. Prior note follows. PARTIAL on branch impl/t0-unattended-01 (PR pending). Landed: the ruled REASON_CODE_COVERAGE enumerated delta (first deliverable, gauntlet-complete: audit -> fix -> delta re-audit -> fix -> delta re-audit -> one lead bench fix); the D-127.1 scope-closure amendment drafted as a proposed decision-log delta for the magistrate to land (the lieutenant does not edit docs/decision_log.md); the clock-reference collector; and the machine-authored T-0 clock evidence itself -- R0 pre-pin plus R1 live-at-authoring across a fixed three-operator roster with quorum>=2 and an agreement-interval intersection inside the governed 0.5 s ceiling, a separately-gated 5 ms CLOCK_MONOTONIC_RAW anchor falsifier never summed into that bound, the anchor endpoints published for an arm-side step re-check, an untouched 6 h horizon, a ceremony with no prompt and no stdin read, and a strengthened exact-Off postcondition. No new reason code in either vocabulary; the live coverage gate stays 55/45/10. Acceptance item 1 MET; item 3 MET for the amendment draft, with its four Ed-hands sub-items surfaced and not assumed. REMAINS: (a) acceptance item 2, the supervised rehearsal window -- the ten-gate evaluator is committed and green in fixture mode but its first audit REFUTED it with seven blockers (six gates accept self-declared evidence; no producer writes the records the live gates need), the fix round was killed mid-flight by a window reset and reverted, and the live sitting is Ed's hands; (b) TWO magistrate questions, both recorded in full in the delta document -- which production entry point consumes a rehearsal receipt for gate G7 and which refusal code it emits (HEAD has no consumer of a D-149 GO receipt at all), and how to reconcile the ruled R1-before-censuses ordering with the ruled 5 s R1-completion-to-validity-origin bound, which HEAD's derivation order cannot satisfy and which is ill-typed today because validity origin and the R1 endpoints are read from different clocks. [2026-09-02: that 5 s bound was STRUCK by the T26 cold gate (item 3, D-170) and replaced by the ruled 600 s liveness bound on the ordinary monotonic clock, installed in joulewise/arm_readiness.py; its empirical margin is unmeasured and is carried by T0-LIVENESS-BOUND-EMPIRICAL-01.] Before that ruling the upper bound was deliberately NOT implemented and no inert substitute was added; the six-hour lower relation is enforced and non-tautological. 2026-09-01: branch impl/t0-unattended-01 is content-identical to main (its first deliverable is merged); the remaining rehearsal-evaluator blockers are folded into the D-169 unattended lane and will be scheduled by that lane's staged ruling rather than as a separate PR.",
       "stop_card": null
     },
     "T26-RULING-INSTALL-01": {
@@ -6170,8 +6331,37 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 81,
+      "status": "partial",
+      "status_note": "T38c 2026-09-08: D-176 implementation landed via PR #307 at edb4f0ed (99gl terminal review). Live obligations and existing close dependencies remain open; earlier unimplemented/design-next language below is historical. D-176 INSTALLED 2026-09-08: design authority is the adopted synthesis; build start no longer waits on T0-UNATTENDED-01, which is a close dependency. This row owns the consumer and S9-06 closure, with the same GO-check-deletion regression. Contract refutation and landing precede code; no live acceptance is claimed. Historical registration follows. Registered 2026-08-23 by the T0 synthesis ruling (both seats co-signed the separation). Design round required before implementation. RULED ADDITION 2026-08-26 (magistrate, from T0-UNATTENDED-01's G7 gap and the separately-raised 'window launches with no T-0 GO receipt' finding — they are ONE missing mechanism seen from two ends): this row also owns the PRODUCTION CONSUMER of the D-149 GO receipt. Nothing in scripts/ or joulewise/ consumes a GO receipt at HEAD, so there is no launch precondition to weaken — it was never built. The consumer is scripts/launch_window.py's launch-capability consumption: a window launches ONLY against a valid, non-rehearsal GO receipt, and a receipt whose class is T0_UNATTENDED_SUPERVISED_REHEARSAL is refused BY CLASS. That class refusal is what discharges the T0 ruling's 'production-side mechanical REJECTION of the valid rehearsal receipt' requirement and closes rehearsal gate G7, which T0-UNATTENDED-01 correctly ships as first-class UNRULED rather than faking. The refusal code is this row's to select and must be fully registered before it emits (the T0 delta document's §4.5 gives the exhaustive R1 family/type/role/registry path if a new spelling is chosen; reusing an existing registered spelling avoids that churn). Do NOT implement it inside T0-UNATTENDED-01 — the T0 ruling's scope fence reserves every launch-side mechanism to this row. Evidence pointer: docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md §6.2. REPRIORITIZED 2026-09-01 by D-169 (Ed: 'that should be done first. so you can drive the experiments entirely'): this row and the T0-UNATTENDED-01 remainder are now the TOP lane, ahead of the remaining _v5 transaction ladder. A mechanical scout of the launch path (zero-agent predicate, sudoers slices already installed, no launchd artifacts, no GO-receipt producer or consumer, nine gaps G-1..G-9) and a three-seat design consult (Sol xhigh, Opus 5, blind Fable) are in flight; the magistrate synthesizes a staged ruling whose stage 1 is the smallest merge that removes Ed from a G2-a night (D-167: diagnostic windows need no Ed GO). Ed-hands residue is limited to what rulings literally require; the quiet-guard sudo install is NOT on this critical path. RULED 2026-09-01 (MAGISTRATE-RULING-UNATTENDED-STAGE1, cold-gated): stage 1 is a night gate (joulewise/night_gate.py) plus a night driver (scripts/run_night.py) wrapping the reviewed generated G2-a chain, scheduled by a user LaunchAgent (no sudo); it is split into rows NIGHT-GATE-01, NIGHT-DRIVER-01, NIGHT-REHEARSAL-01. This row keeps the pack-bound consumer (stage 3) and the E-10 amendment; G2-b is pack-bound and stays here, not in stage 1.",
+      "stop_card": null
+    },
+    "UNIT-VOCAB-SHARED-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-08-handoff-redo/99dt-consult-s3-units-astra-report.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/UNIT-VOCAB-SHARED-01/acceptance",
+          "label": "UNIT-VOCAB-SHARED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Manifest, verdict and S3 consumers share the validator; valid J/null and J/token/B8 forms pass and incompatible or unknown units refuse."
+      },
+      "authority": {
+        "label": "2026-09-08 T38c follow-up evidence",
+        "path": "docs/process_traces/2026-09-08-handoff-redo/99dt-consult-s3-units-astra-report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Use ratio.validate_metric_unit_and_ratio as the shared metric-unit/ratio vocabulary in manifest and verdict validation.",
+      "id": "UNIT-VOCAB-SHARED-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 163,
       "status": "queued",
-      "status_note": "D-176 INSTALLED 2026-09-08: design authority is the adopted synthesis; build start no longer waits on T0-UNATTENDED-01, which is a close dependency. This row owns the consumer and S9-06 closure, with the same GO-check-deletion regression. Contract refutation and landing precede code; no live acceptance is claimed. Historical registration follows. Registered 2026-08-23 by the T0 synthesis ruling (both seats co-signed the separation). Design round required before implementation. RULED ADDITION 2026-08-26 (magistrate, from T0-UNATTENDED-01's G7 gap and the separately-raised 'window launches with no T-0 GO receipt' finding — they are ONE missing mechanism seen from two ends): this row also owns the PRODUCTION CONSUMER of the D-149 GO receipt. Nothing in scripts/ or joulewise/ consumes a GO receipt at HEAD, so there is no launch precondition to weaken — it was never built. The consumer is scripts/launch_window.py's launch-capability consumption: a window launches ONLY against a valid, non-rehearsal GO receipt, and a receipt whose class is T0_UNATTENDED_SUPERVISED_REHEARSAL is refused BY CLASS. That class refusal is what discharges the T0 ruling's 'production-side mechanical REJECTION of the valid rehearsal receipt' requirement and closes rehearsal gate G7, which T0-UNATTENDED-01 correctly ships as first-class UNRULED rather than faking. The refusal code is this row's to select and must be fully registered before it emits (the T0 delta document's §4.5 gives the exhaustive R1 family/type/role/registry path if a new spelling is chosen; reusing an existing registered spelling avoids that churn). Do NOT implement it inside T0-UNATTENDED-01 — the T0 ruling's scope fence reserves every launch-side mechanism to this row. Evidence pointer: docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md §6.2. REPRIORITIZED 2026-09-01 by D-169 (Ed: 'that should be done first. so you can drive the experiments entirely'): this row and the T0-UNATTENDED-01 remainder are now the TOP lane, ahead of the remaining _v5 transaction ladder. A mechanical scout of the launch path (zero-agent predicate, sudoers slices already installed, no launchd artifacts, no GO-receipt producer or consumer, nine gaps G-1..G-9) and a three-seat design consult (Sol xhigh, Opus 5, blind Fable) are in flight; the magistrate synthesizes a staged ruling whose stage 1 is the smallest merge that removes Ed from a G2-a night (D-167: diagnostic windows need no Ed GO). Ed-hands residue is limited to what rulings literally require; the quiet-guard sudo install is NOT on this critical path. RULED 2026-09-01 (MAGISTRATE-RULING-UNATTENDED-STAGE1, cold-gated): stage 1 is a night gate (joulewise/night_gate.py) plus a night driver (scripts/run_night.py) wrapping the reviewed generated G2-a chain, scheduled by a user LaunchAgent (no sudo); it is split into rows NIGHT-GATE-01, NIGHT-DRIVER-01, NIGHT-REHEARSAL-01. This row keeps the pack-bound consumer (stage 3) and the E-10 amendment; G2-b is pack-bound and stays here, not in stage 1.",
+      "status_note": "2026-09-08: READY; 99dt recommends shared authority; ratio.validate_metric_unit_and_ratio now exists and S3 consumes it; remaining manifest/verdict integration is the follow-up.",
       "stop_card": null
     },
     "V4-TRANSACTION-01": {
