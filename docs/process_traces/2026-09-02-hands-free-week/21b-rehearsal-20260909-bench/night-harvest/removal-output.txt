@@ -1,0 +1,20 @@
+== removal at 1788950258 Wed Sep  9 03:37:38 PDT 2026
+-- results-clone state
+## night-results/20260909
+a84e0f7 record night 20260909
+d4d494e record night 20260909
+a84e0f7f2996d4aaf29e221536d22b5ecc99d11e
+origin=a84e0f7f2996d4aaf29e221536d22b5ecc99d11e local=a84e0f7f2996d4aaf29e221536d22b5ecc99d11e
+results-clone pushed and clean
+-- worktree remove
+worktree removed rc=0
+ls: /private/tmp/joulewise-rehearsal-20260909-checkout: No such file or directory
+-- plan root remove
+plan root removed rc=0
+total 0
+drwxr-xr-x@  6 edr  staff   192 Sep  9 03:37 .
+drwxr-x---+ 54 edr  staff  1728 Sep  9 03:33 ..
+drwxr-xr-x@  2 edr  staff    64 Sep  8 22:08 active-campaigns
+drwxr-xr-x@ 13 edr  staff   416 Sep  9 03:37 magistrate
+drwxr-xr-x@  4 edr  staff   128 Sep  4 01:43 magistrate-bench
+drwxr-xr-x@  4 edr  staff   128 Sep  4 21:20 retired-v1

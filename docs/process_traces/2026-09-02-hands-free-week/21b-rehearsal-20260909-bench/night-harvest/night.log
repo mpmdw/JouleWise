@@ -1,0 +1,6 @@
+2026-09-09T02:56:00.988608-07:00 night driver started
+2026-09-09T02:56:01.041690-07:00 night gate verdict=REFUSED
+2026-09-09T02:56:03.367167-07:00 night result verdict=REHEARSAL_ONLY
+2026-09-09T02:56:10.980604-07:00 durable record pushed branch=night-results/20260909
+2026-09-09T02:57:33.117809-07:00 courier attempt=1 heartbeat=True sent=True
+2026-09-09T02:57:35.070205-07:00 durable record pushed branch=night-results/20260909

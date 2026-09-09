@@ -1,0 +1,51 @@
+test_environment_refusal_does_not_hide_valid_retry_telemetry (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_environment_refusal_does_not_hide_valid_retry_telemetry) ... CAPTURE_EXCEPTION powermetrics_idle_post.plist
+Traceback (most recent call last):
+  File "/tmp/diag41.py", line 12, in capture
+    return original_capture(self, *args, **kwargs)
+  File "/Users/edr/code/JouleWise-wt-idle-rc/joulewise/adapters/powermetrics.py", line 1203, in _run_bounded_capture
+    completed = subprocess.run(
+        command,
+    ...<3 lines>...
+        check=False,
+    )
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2154, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1268, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['/opt/homebrew/opt/python@3.14/bin/python3.14', '/Users/edr/code/JouleWise-wt-idle-rc/tests/fixtures/fake_powermetrics_process.py', '-n', '100', '-b', '0', '-i', '50', '--samplers', 'cpu_power,gpu_power,ane_power,thermal', '--format', 'plist', '-o', '/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/joulewise-powermetrics-_lu_nlbf.plist']' timed out after 17.5 seconds
+STORED {"idle_baseline": {"duration_s": 5.386561154, "gpu_freq_hz_mean": 325.9148, "gpu_freq_mhz_mean": 325.9148, "gpu_idle_ratio_mean": 0.9611138, "gpu_idle_ratio_min": 0.846584, "idle_window_suspect": false, "power_w_mean": 0.4829831231902636, "power_w_stddev": 0.5454502725075989, "sample_count": 30, "telemetry_backend": "powermetrics"}, "idle_drift": {"reason": "post_idle_unavailable", "status": "unknown"}, "idle_drift_bound_w": null}
+DERIVED [{"calibration_artifact_sha256": null, "calibration_cell_id": null, "calibration_guard_w": null, "calibration_status": "interim_run_sentinels_only", "effective_bound_w": 0.9927368768097363, "method": "pre_post_idle_observed_envelope_v1", "post_artifact": "raw/powermetrics_idle_post.plist", "post_idle_window_suspect": false, "post_sample_count": 94, "pre_artifact": "raw/powermetrics_idle.plist", "pre_idle_window_suspect": false, "pre_power_w_mean": 0.4829831231902636, "pre_sample_count": 30, "run_observed_envelope_w": 0.9927368768097363, "status": "bounded"}, {"artifact_sha256": null, "bundle_sha256": [], "calibration_status": "pending_calibration", "cell_id": null, "guard_w": null, "method": "p2_015_prediction_guard_v1", "n_bundles": 0}, 0.9927368768097363]
+PROBLEMS ('strict: uncertainty evidence: idle_drift does not match pre/post raw sentinel derivation', 'strict: uncertainty evidence: idle_drift_bound_w does not match effective drift derivation')
+1788958497.207321 run environment-refused started
+1788958532.423844 run environment-refused succeeded
+
+FAIL
+
+======================================================================
+FAIL: test_environment_refusal_does_not_hide_valid_retry_telemetry (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_environment_refusal_does_not_hide_valid_retry_telemetry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-idle-rc/tests/test_run_campaign.py", line 9610, in test_environment_refusal_does_not_hide_valid_retry_telemetry
+    evaluation = self._produced_retry_member(
+        "environment-refused",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_clean_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-idle-rc/tests/test_run_campaign.py", line 9581, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+----------------------------------------------------------------------
+Ran 1 test in 38.839s
+
+FAILED (failures=1)

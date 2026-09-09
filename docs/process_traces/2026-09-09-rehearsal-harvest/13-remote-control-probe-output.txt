@@ -1,0 +1,34 @@
+== probe at 1788950816 Wed Sep  9 03:46:56 PDT 2026 — one-shot test per relayed Ed task (msg-joulewise-53-remote-control-task.txt); bounded 90 s
+cmd: script -q /dev/null /Users/edr/.local/bin/claude remote-control --name joulewise-remote
+still running after 90 s → killing pid 86233 (and children)
+== captured output (first 60 lines, ANSI stripped) ==
+^D
+Remote Control is launching in spawn mode, which lets you start new sessions in this project from claude.ai/code or the Claude mobile app. Learn more: https://code.claude.com/docs/en/remote-control
+
+Spawn mode for this project:
+  [1] same-dir — sessions share the current directory (default)
+  [2] worktree — each session gets an isolated git worktree
+
+This can be changed later or explicitly set with --spawn=same-dir or --spawn=worktree.
+
+Choose [1/2] (default: 1): == residual claude remote-control processes ==
+86229 tee docs/process_traces/2026-09-09-rehearsal-harvest/13-remote-control-probe-output.txt
+
+== second attempt at 1788950926 Wed Sep  9 03:48:46 PDT 2026: the first stalled on the spawn-mode prompt; pass --spawn=same-dir (documented flag), bounded 90 s, cwd = this bookkeeping worktree
+cmd: script -q /dev/null /Users/edr/.local/bin/claude remote-control --name joulewise-remote --spawn=same-dir
+exited rc=0
+== captured output (ANSI stripped, first 80 lines) ==
+^D
+·|· Connecting · JouleWise · bookkeeping/2026-09-09-rehearsal-arm-record
+·✔︎· Ready · JouleWise · bookkeeping/2026-09-09-rehearsal-arm-record
+    Capacity: 0/32 · New sessions will be created in the current directory
+
+Code anywhere with the Claude mobile app or https://claude.ai/code?environment=env_019rqCzDUCg8nxGSbnPY7iwM
+space to show QR code · w to toggle spawn mode
+·✔︎· Ready · JouleWise · bookkeeping/2026-09-09-rehearsal-arm-record
+    Capacity: 0/32 · New sessions will be created in the current directory
+
+Code anywhere with the Claude mobile app or https://claude.ai/code?environment=env_019rqCzDUCg8nxGSbnPY7iwM
+space to show QR code · w to toggle spawn mode
+== residual ==
+none

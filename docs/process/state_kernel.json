@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T38c — 2026-09-08 ~23:10 PDT: merged implementation, open clone/live gates and flagged evidence discrepancies",
-    "path": "docs/process_traces/2026-09-08-handoff-redo/99gk-bookkeeping-t38c-astra.md"
+    "label": "T38d — 2026-09-09: rehearsal harvest, stub-chain finding and post-completion cleanup",
+    "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -1099,7 +1099,7 @@
       "priority": "p1_phase_gate",
       "rank": 166,
       "status": "queued",
-      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed.",
+      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding).",
       "stop_card": null
     },
     "COLDGATE-HANDOFF-01": {
@@ -2331,6 +2331,36 @@
       "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
+    "FIXTURE-TIMEOUT-WALLCLOCK-01": {
+      "acceptance": {
+        "evidence": [
+          "Regression test that fails at 83ab38ed under simulated slack and passes after the cure.",
+          "PR merged."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-TIMEOUT-WALLCLOCK-01/acceptance",
+          "label": "FIXTURE-TIMEOUT-WALLCLOCK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The four IdleAdmissionCoreVerdictTests pass under a simulated ≥3.5× timer slack without changing `_capture_timeout_s`; defect-shaped regression names the observed trigger (capture TimeoutExpired on powermetrics_idle_post.plist)."
+      },
+      "authority": {
+        "label": "Cold gate 44 Q1 C5 (fixture coupling lane, registration only)",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/44-coldgate-ruling-replay-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "tests/fixtures/fake_powermetrics_process.py sleeps per sample under the production `_capture_timeout_s` wall-clock timeout (max(15, n·interval·1.5 + 10) s = 17.5 s for 100 samples at 50 ms, a 3.5× margin over the 5.0 s nominal sleep); measured wall-clock slack on the MacBook drifts between ~2.1× and ~3.6× minute to minute, so the post-idle capture intermittently overruns, the producer stores post_idle_unavailable and four IdleAdmissionCoreVerdictTests fail; cure = capture-timeout margin sized against measured slack on the fixture side (fixture-aware timeout or a non-sleeping fixture), production timeout unchanged",
+      "id": "FIXTURE-TIMEOUT-WALLCLOCK-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 169,
+      "status": "queued",
+      "status_note": "2026-09-09: QUEUED by cold gate 44 (C5), reframed per the paired Opus refuter 45: the failure is a flaky wall-clock coupling, not a machine-state defect — the same test returned OK on the same tree minutes later with pmset powermode 1 still set (45 §Refutations), and sleep(0.05) slack measured 0.177 s then ~0.10 s. Observed 2026-09-09: fixture 18.9 s and 11.6 s against the 17.5 s timeout; CI (Linux) unaffected. Addendum obligation (44 C3): PR #308's ledger row 9 carries the failing replay tail and the three RED class re-run tails (4/4/3, 39b logs) from the same session — the refuter's green-before-merge condition was not met; after Ed sets powermode 0 or this cure merges (whichever first), re-run the 71-test class on then-current main and record the tail as a dated addendum to that row; if it is not green with powermode 0 the four failures become an open defect on main. Evidence: docs/process_traces/2026-09-09-rehearsal-harvest/42-bench-rootcause-low-power-mode.md (bench chain), 44-coldgate-ruling-replay-verdict.md, 45-coldgate-opus-refuter-replay-verdict.md.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -3233,6 +3263,36 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "NIGHT-GATE-STUB-CHAIN-01": {
+      "acceptance": {
+        "evidence": [
+          "Defect-shaped tests in tests/test_night_gate.py and tests/test_run_night.py pass.",
+          "PR merged."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-GATE-STUB-CHAIN-01/acceptance",
+          "label": "NIGHT-GATE-STUB-CHAIN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The defect-shaped tests in tests/test_night_gate.py and tests/test_run_night.py pass, and the PR is merged."
+      },
+      "authority": {
+        "label": "21i §The finding (NOT the acceptable stub refusal)",
+        "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Night gate skips the chain/sidecar read for REHEARSAL_STUB plans (driver substitutes the built-in stub); C5 records chain_sha256 null + chain_stub; driver logs refusal reason on the gate verdict line",
+      "id": "NIGHT-GATE-STUB-CHAIN-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 168,
+      "status": "active",
+      "status_note": "2026-09-09: IN PROGRESS. Cure branch fix/2026-09-09-night-gate-stub-chain: initial cure bb7090e2, fix round 1 head 5db38b58 (PR #309), under paired review, not yet merged (NIGHT_HANDBACK.md §Executed names the branch and the fix head). Dictated seat report docs/process_traces/2026-09-09-rehearsal-harvest/02-seat-night-gate-stub-chain-astra-report.md and fix round 17-… are outside this branch by design and land with cure PR #309; their evidence is unverified here. The chain_stub field and driver refusal-reason logging are dictated implementation targets, not verified by the available primary artifacts.",
+      "stop_card": null
+    },
     "NIGHT-PACK-REHEARSAL-01": {
       "acceptance": {
         "evidence": [
@@ -3342,11 +3402,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "rehearsal-20260909 fired and harvested with a finding",
+            "path": "docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md"
+          },
           "kind": "event",
           "required": "Fresh post-watchdog REHEARSAL_STUB night and its night-driver courier evidence are harvested before any real plan",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "POST-WATCHDOG-REHEARSAL-20260909"
         },
@@ -3373,6 +3436,15 @@
           "state": "satisfied",
           "strength": "hard",
           "target": "NIGHT-GATE-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "gate cure merged before any further stub or real night (receipt refused night_probe_error on rehearsal-20260909)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "NIGHT-GATE-STUB-CHAIN-01"
         },
         {
           "evidence": {
@@ -3418,7 +3490,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "WATCHDOG-INSTALL-01 is DONE (T38 evidence in durable state). Remains blocked pending the fresh post-watchdog REHEARSAL_STUB night; rehearsal-20260909 is prepared for 2026-09-09 02:56 PDT on activation branch 1ae91b4d, trace 21b. Interactive stand-down, Ed no-NO and NIGHT_HANDBACK conditions still precede arming; no real plan is armed.",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -4700,6 +4772,45 @@
       "rank": 106,
       "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row. AMENDED 2026-08-28 in the T27 second kernel wave per D-162 R-1: the diagnostic-family path (Path A) that the corrected live-proof gate declined to build pre-campaign moves into this row's acceptance; PIPELINE-SMOKE-LIVE-01 is re-scoped to G1/G2/G3 and carries no family design.",
+      "stop_card": null
+    },
+    "POWERMODE-PREFLIGHT-RECORD-01": {
+      "acceptance": {
+        "evidence": [
+          "Defect-shaped consumption test for powermode mismatch passes.",
+          "Calibration corpus powermode recorded with source and confidence.",
+          "PR merged."
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/POWERMODE-PREFLIGHT-RECORD-01/acceptance",
+          "label": "POWERMODE-PREFLIGHT-RECORD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Plan and receipt carry the powermode record; consumption validation has a defect-shaped test for a mismatch; the calibration corpus's powermode is recorded with its source."
+      },
+      "authority": {
+        "label": "Cold gate 44 Q3 (registration only; refuse-vs-flag design deferred)",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/44-coldgate-ruling-replay-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold gate 44 Q3 (registration only; refuse-vs-flag design deferred)",
+            "path": "docs/process_traces/2026-09-09-rehearsal-harvest/44-coldgate-ruling-replay-verdict.md"
+          },
+          "rule": "Refuse-vs-flag on a powermode mismatch is a cold-gate design decision, not this lane's to choose; the lane records, it does not gate (paired refuter 45 dissent recorded)."
+        }
+      ],
+      "flags": [],
+      "goal": "Night readiness / arm preflight records `pmset -g custom` powermode for the active power source and `pmset -g batt` source into the plan and the receipt; consumption-side validation refuses or flags a night whose recorded powermode differs from the calibration corpus's recorded powermode; the corpus's own powermode is established by record or by Ed's recollection with a stated confidence",
+      "id": "POWERMODE-PREFLIGHT-RECORD-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 170,
+      "status": "queued",
+      "status_note": "2026-09-09: QUEUED by cold gate 44 (Q3), record-only. The comparability argument stands on its own: Low Power Mode changes frequency caps and scheduling, so a night measured under powermode 1 is a different machine state from a calibration taken under powermode 0, and the state is currently unrecorded in plan and receipt (observed AC Power powermode 1 on 2026-09-09). The paired refuter 45 dissents from GATING on powermode (it was shown not to be the cause of the local test failures); the judge's constraint therefore stands as a RECOMMENDATION to Ed, not a gate: prefer powermode 0 for real or pack-bound nights until the calibration corpus's powermode is recorded; REHEARSAL_STUB nights are unaffected. Ed is asked whether Low Power Mode was on during the 2026-09-08 replay 58d9225b (rc 0). Refuse-vs-flag is deferred to a cold-gate design decision.",
       "stop_card": null
     },
     "Q-R1-2-COMPOSITION-RULE-COLD-GATE-01": {
@@ -7346,5 +7457,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-08"
+  "updated": "2026-09-09"
 }

@@ -1,0 +1,12 @@
+1788944187 2026-09-09 01:56:27 PDT
+block A executed verbatim from 21b (extracted to /private/tmp/mag784/blockA.zsh)
+Preparing worktree (detached HEAD ae8f074f)
+HEAD is now at ae8f074f NIGHT_HANDBACK: rehearsal-20260909 (REHEARSAL_STUB, 02:56 PDT 2026-09-09) — the three sections rewritten for the first post-watchdog rehearsal; plan pins this commit
+/private/tmp/joulewise-rehearsal-20260909-staging/night_plan.json
+/private/tmp/joulewise-rehearsal-20260909-validate/night_plan.json
+validated pins: repo_head=ae8f074ffa554707a9eac95995ab8ec03235d118 measurement_root=/private/tmp/joulewise-rehearsal-20260909-checkout measurement_head=ae8f074ffa554707a9eac95995ab8ec03235d118
+/private/tmp/joulewise-rehearsal-20260909-validate/render/com.joulewise.night.plist: OK
+/private/tmp/joulewise-rehearsal-20260909-validate/render/com.joulewise.night.deadman.plist: OK
+plan differing fields: ['chain_path', 'chain_sha256_path', 'custody_root']
+blockA rc=0
+1788944189 2026-09-09 01:56:29 PDT

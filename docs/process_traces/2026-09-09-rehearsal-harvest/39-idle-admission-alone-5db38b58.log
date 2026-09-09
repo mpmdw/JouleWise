@@ -1,0 +1,93 @@
+........F.......F..............F...............F.......................
+======================================================================
+FAIL: test_cpu_admission_reads_final_attempt_telemetry (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_cpu_admission_reads_final_attempt_telemetry)
+Fix round 1 (blocker): pair CPU telemetry with the final attempt.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9596, in test_cpu_admission_reads_final_attempt_telemetry
+    evaluation = self._produced_retry_member(
+        "p2-work-a__r1",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_busy_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9581, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+======================================================================
+FAIL: test_environment_refusal_does_not_hide_valid_retry_telemetry (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_environment_refusal_does_not_hide_valid_retry_telemetry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9610, in test_environment_refusal_does_not_hide_valid_retry_telemetry
+    evaluation = self._produced_retry_member(
+        "environment-refused",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_clean_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9581, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+======================================================================
+FAIL: test_missing_final_attempt_telemetry_fails_closed (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_missing_final_attempt_telemetry_fails_closed)
+Fix round 1 (blocker): absent retried telemetry fails closed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9643, in test_missing_final_attempt_telemetry_fails_closed
+    evaluation = self._produced_retry_member(
+        "p2-work-a__r1",
+    ...<8 lines>...
+        expected_strict_valid=True,
+    )
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9581, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+======================================================================
+FAIL: test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9676, in test_retry_attempt_ledger_must_be_ordered_unique_and_decision_bound
+    base_evaluation = self._produced_retry_member(
+        "malformed-ledger",
+        attempt1_records=_clean_idle_records(),
+        attempt2_records=_clean_idle_records(),
+    )
+  File "/Users/edr/code/JouleWise-wt-ref-stub-astra/tests/test_run_campaign.py", line 9581, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not True
+
+----------------------------------------------------------------------
+Ran 71 tests in 153.215s
+
+FAILED (failures=4)
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_ambiguous_reference
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: adapter_observations_missing
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+  condition: whole_window_campaign_membership_unresolved
+NEG-8 WHOLE-WINDOW VERDICT: flagged
+  decision: passed
+rc=1
