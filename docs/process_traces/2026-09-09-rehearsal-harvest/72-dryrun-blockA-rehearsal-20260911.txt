@@ -1,0 +1,29 @@
+# Bench dry run of runbook 67 Block A (magistrate 2145630c, 2026-09-09 ~09:30 PDT) — throwaway paths, no install, no move
+
+H=57ddad20226c6921d81a87b9d78e61950c14a74f; checkout /private/tmp/joulewise-rehearsal-20260911-DRYRUN-checkout (worktree add --detach from the kernel-fold worktree); staging/validate under /private/tmp/joulewise-rehearsal-20260911-DRYRUN-*; NIGHT_CUSTODY dry path never created.
+writer: both plans written (real to staging, twin to validate) rc=0
+install_night_agent.sh --plan <twin> --hour 2 --minute 56 --render-only <scratch>/render: 'validated pins: repo_head=57ddad20… measurement_root=/private/tmp/joulewise-rehearsal-20260911-DRYRUN-checkout measurement_head=57ddad20…' rc=0
+plutil -lint: both plists OK; night plist Hour/Minute = 2/56; deadman plist Hour/Minute = 7/0
+
+== staged plan (dry) ==
+{
+  "authored_epoch_s": 1788970634.1373901,
+  "chain_path": "/private/tmp/joulewise-rehearsal-20260911-DRYRUN-custody/chain.zsh",
+  "chain_sha256_path": "/private/tmp/joulewise-rehearsal-20260911-DRYRUN-custody/chain.zsh.sha256",
+  "custody_root": "/private/tmp/joulewise-rehearsal-20260911-DRYRUN-custody",
+  "measurement_head": "57ddad20226c6921d81a87b9d78e61950c14a74f",
+  "measurement_root": "/private/tmp/joulewise-rehearsal-20260911-DRYRUN-checkout",
+  "plan_id": "rehearsal-20260911",
+  "receipt_class": "REHEARSAL_STUB",
+  "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json",
+  "repo_head": "57ddad20226c6921d81a87b9d78e61950c14a74f",
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "t0_epoch_s": 1789120560.0,
+  "window_max_s": 900
+}
+
+== cleanup ==
+dry checkout removed
+dry staging/validate removed
+(note) leftover seat log: /private/tmp/joulewise-rehearsal-20260911-docs-freshness.log (Astra seat 68 acceptance log; not a runbook path)

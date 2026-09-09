@@ -739,3 +739,10 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - NOTICE SENT 2026-09-09 09:15 PDT: consolidated arm notice for rehearsal-20260911 = Gmail `1a086f4174733bfb` on thread
   `1a0800cdb282c3f1`, sent AFTER H = `57ddad20226c6921d81a87b9d78e61950c14a74f` and before any move (D-175 condition 1). The arming
   activation records these ids in the arm record; a relayed NO aborts.
+- UPDATE 2026-09-09 ~09:40 PDT: runbook 67 Block A DRY-RUN PASSED at H with throwaway paths (72: writer OK, installer pins validated
+  from the disposable checkout, both plists lint at 02:56 / 07:00; all dry artifacts removed; nothing installed, nothing moved).
+  Item 1 (cold_start.json / COURIER_DEADLINE_S): derivation verified (300 s = min(600, max(3·5.303 s, 300))) but disposition
+  OPEN-NEEDS-CAPTURE-PROVENANCE (70/71: the committed JSON does not attest the night-driver machine or script version; a fresh traced
+  measurement must run outside any armed night or quiet window). Ruling-56 ADDENDUM-1 trigger check 09:20 PDT: timer probe 3.25×/3.44×/3.42×
+  (trigger ≤ 2.0× not met; no class re-run). Next agent-side lane opened: FIXTURE-TIMEOUT-WALLCLOCK-01 implementation seat (branch
+  fix/2026-09-09-fixture-timeout-wallclock).
