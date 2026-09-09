@@ -466,3 +466,8 @@ this detached checkout at drafting time.
   verified imported function shown above. The new orchestration blocks have
   not been live-rehearsed; the future activation's own task-stop and file-editor
   calls depend on its actual task IDs and allocated bookkeeping paths.
+
+## Addendum (2026-09-09 09:20 PDT, magistrate 2145630c) — H and notice ids
+
+H = `57ddad20226c6921d81a87b9d78e61950c14a74f` (main; the NIGHT_HANDBACK rewrite commit). Consolidated notice: Gmail message
+`1a086f4174733bfb`, thread `1a0800cdb282c3f1`, sent 09:15 PDT 2026-09-09 (after H, before any move). Use these in step 0.

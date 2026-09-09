@@ -736,3 +736,6 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   item 5) — re-plan for the next day with a new plan_id and a fresh notice. Until then: CLONE-READINESS-01 preparation per scout 64 (the
   rehearsal-clone cut is deferred to just before the pack rehearsal so the head is fresh; the production v5 re-cut is Ed-hardware);
   ruling-56 addenda 1–3 owed; item 1 (cold_start.json deadline derivation) is desk work. NOTHING IS ARMED at this write.
+- NOTICE SENT 2026-09-09 09:15 PDT: consolidated arm notice for rehearsal-20260911 = Gmail `1a086f4174733bfb` on thread
+  `1a0800cdb282c3f1`, sent AFTER H = `57ddad20226c6921d81a87b9d78e61950c14a74f` and before any move (D-175 condition 1). The arming
+  activation records these ids in the arm record; a relayed NO aborts.
