@@ -993,6 +993,9 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             receipt = sample_arm(root / "context")
             (pack / "committed.txt").write_text("collision fixture\n")
             init_git_fixture(root)
+            # CI runners carry no global identity; pin one like make_go_fixture.
+            git(root, "config", "user.email", "tests@joulewise.invalid")
+            git(root, "config", "user.name", "JouleWise tests")
             git(root, "add", pack.name)
             git(root, "commit", "-qm", "collision fixture")
             receipt["pack"]["pack_root"] = str(pack)
@@ -1091,9 +1094,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         (dry_path.parent / "dry-run-0001.json.sha256").write_bytes(
             gnu_sidecar(hashlib.sha256(raw).hexdigest(), dry_path.name)
         )
+        # Seat-4 ordering: the launcher refuses usage before any receipt IO
+        # when the GO inputs are absent, so a dry run can only reach receipt
+        # verification behind a real GO. Bind the GO to the real ARM, then
+        # present the dry-run receipt in its place.
         args, _exec_argv = self.install_launch_manifest(
-            Path(temporary.name), pack, custody, dry_path, pack_go=False
+            Path(temporary.name), pack, custody, arm_path, pack_go=True
         )
+        args.arm_receipt = dry_path
         with self.assertRaisesRegex(
             readiness.LaunchLineageError, "arm receipt is invalid"
         ) as caught:

@@ -102,6 +102,7 @@ PY
   courier_path="${courier_bin:h}:/usr/bin:/bin:/usr/sbin:/sbin"
   courier_bin="${courier_bin:A}"
 else
+  # Uninstall only removes existing agents; no plan validation is needed to locate what to remove.
   custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
 fi
 read -r deadman_hour deadman_minute < <(

@@ -1,0 +1,16 @@
+WRITE_SCOPE: ["docs/contracts/pack_night_go_receipt.md", "scripts/install_night_agent.sh"]
+
+# D-176 contract §9 traceability repin at the final head (gpt-6-astra, MEDIUM, genre implementation)
+
+You are in a detached worktree at 7d1cffb0 (branch tmp/2026-09-08-d176-repin). Mechanical task; no design changes; no commit.
+
+Problem (Opus final-head review, read it: docs/process_traces/2026-09-08-handoff-redo/99gi-final-head-review-d176-opus.md is NOT in this tree — the findings are restated here):
+S1. `docs/contracts/pack_night_go_receipt.md` carries ~186 pins of the form `path:line` (`symbol`) — e.g. `joulewise/arm_readiness.py:9891` (`_authenticate_pack_launch_go`). At this head 55 of them are stale (drift up to 139 lines); two land inside the WRONG function (`:782` pins arm_readiness.py:9891 as `_authenticate_pack_launch_go`, actual :9966; `:766` pins scripts/run_night.py:1272 as `run_night`, actual :1411). Others: arm_readiness.py:10231→10306 (`_consume_launch_capability`), :2742→2757 (`validate_pack_night_go_receipt`), night_gate.py:918→945 (`evaluate_night`), tests/test_arm_readiness.py:2268→2348.
+S2. Contract line ~885 cites `tests/test_rehearse_t0_unattended.py:34` (`test_inventory_must_equal_head_bytes`) — no such test exists; the real one is `test_inventory_must_equal_plan_repo_head_bytes` at :61. Fix name AND line.
+N1. `scripts/install_night_agent.sh`: the install path derives custody_root from the NightPlan-validated parse; the uninstall `else` branch keeps a raw `json.load(...)["custody_root"]` read. Add a ONE-LINE comment on the uninstall branch stating why the raw read is acceptable there (removal only; no plan validation is needed to locate what to remove). No behavior change.
+
+Method (write your checker inline with `python3 - <<'EOF' ... EOF` — you may NOT create files outside WRITE_SCOPE):
+1. Parse every pin in the contract matching the regex `` `([A-Za-z0-9_./-]+\.(?:py|sh|json|md)):(\d+)(?:[–-](\d+))?` `` optionally followed by `` (`symbol`) ``. For pins with a symbol: locate the symbol's DEFINITION line in the file (`def symbol`, `class symbol`, `symbol =`, or for a shell script the function/assignment) and repin the number to that line. For pins without a symbol (bare line or range): find what the surrounding contract sentence describes (read the pinned region in the file at the OLD line, identify the code by content, re-locate it at the current head) and repin; if you cannot identify the described code unambiguously, leave the pin and list it under "unresolved" in your report with the sentence — never guess.
+2. Historical/frozen pins: rows explicitly marked as recorded at a named earlier sha (e.g. "at 0a29b075", "seat-2 intake") are records of that moment — do NOT repin them; list them as "frozen" in the report.
+3. After repinning, re-run the checker: every symbol pin must land on its definition line (0 stale). Print the counts: total pins, repinned, frozen, unresolved.
+Acceptance (rc-gated to a log in the worktree; named modules ONLY, NEVER `unittest discover` or `scripts/shard_tests.py`; end your turn after the named acceptance): `python3 -m unittest tests.test_docs_freshness tests.test_gen_state`; `git diff --check`; no commit; header < 8192 bytes. Report: counts, the list of repinned pins as `old → new (symbol)`, frozen list, unresolved list, and the S2/N1 diffs.
