@@ -1,0 +1,45 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "f894b3a4d731e3a794795251fb596b442cb498964ea468c307346f0bee5bae13"
+    },
+    {
+      "path": "night/receipt.json",
+      "sha256": "7671d526e1707ed53953c276197ea3437873f297ab9ac84bf1bf7787bc882f91"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "16736667359113b4ef29cf41a0e5520c9774c2dc4d435c6ff267fe5a873adf38"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "d354edaeaac2c599b0a2091cd07798f4be88dd012f4738f36341cbd5aef8e952"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "4b46c6bbfea5715b5235a85b44f15e7f377f1452c85b0ec991f720a6506886e0"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "be6b9b84d52776c20a2bfb27b214878c6bbb50983a3730bae0038bb85ecb4c29"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "census_count": 1,
+  "census_hits": [],
+  "chain_exit_code": 0,
+  "chain_sha256": null,
+  "ended_epoch_s": 1788947763.363041,
+  "ended_monotonic_ns": 2440215000,
+  "plan_id": "rehearsal-20260909",
+  "receipt_class": "REHEARSAL_STUB",
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1788947760.9884858,
+  "started_monotonic_ns": 65634208,
+  "verdict": "REHEARSAL_ONLY"
+}
