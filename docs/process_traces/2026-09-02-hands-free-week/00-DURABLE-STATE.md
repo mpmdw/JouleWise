@@ -633,6 +633,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 ## 2026-09-09 activation b1e2fd2f (spawned epoch 1788945764, 02:22:44 PDT; events.jsonl seq 16; watchdog attempt 4) — second pre-window relaunch; no work; stand-down before the plan span
 
 - Launched by the watchdog after 8844a3d0's clean exit at 1788945287 (seq 13) and the 300 s backoff; predicates clear at 02:22:44.
+  Clean exit of this activation at 1788945977 (02:26:17 PDT, seq 17, before the 02:31 stand-down deadline) — source:
+  `21b-rehearsal-20260909-bench/night-harvest/watchdog-events-excerpt.txt` (read-only excerpt, Opus review 06 N6).
   `notice_pending` was empty. Heartbeat written (pid 81638 from the lock), launch email on the arm thread `1a0800cdb282c3f1`:
   Gmail `1a0857c5399e48b2`; `notice.ack` written for this activation.
 - Verified on disk at 1788945892 (02:24:52 PDT), read-only: plan v2 `rehearsal-20260909` (t0 1788947760, window 900 s, root
@@ -651,8 +653,9 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 
 ## 2026-09-09 activation 628c2eed (spawned epoch 1788949981, 03:33:01 PDT; events.jsonl seq 22–23; watchdog attempt 5) — post-belt harvest; agents uninstalled; nothing armed
 
-- Launched after the 02:45–03:30 belt with predicates clear. `notice_pending` carried `transition-20-hold_census` (the night courier,
-  pid 82106, counted by the production census inside the plan span; FENCED→HOLD_CENSUS→FENCED). Heartbeat written (pid 82637), launch
+- Launched after the 02:45–03:30 belt with predicates clear. `notice_pending` carried `transition-20-hold_census` (the night courier's `claude -p` process, pid 82106 in the
+  watchdog census stdout, `night-harvest/watchdog-events-excerpt.txt` seq 19; the courier's own heartbeat records its shell pid 82210;
+  FENCED→HOLD_CENSUS→FENCED). Heartbeat written (pid 82637), launch
   email `1a085bc57dbfabbe` on thread `1a0800cdb282c3f1`, `notice.ack` written.
 - rehearsal-20260909 FIRED and was HARVESTED: record `21i-rehearsal-20260909-harvest-record.md`, byte copies under
   `21b-rehearsal-20260909-bench/night-harvest/`. result REHEARSAL_ONLY / chain rc 0 / results branch `night-results/20260909` @

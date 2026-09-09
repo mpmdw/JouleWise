@@ -26,3 +26,8 @@ remove the stub checkout (`git -C /Users/edr/code/JouleWise-wt-magistrate-1ef897
 Arming obligates exit by 1788946260 (02:31 PDT). All own background tasks were stopped at step 3b; this record is committed and
 pushed on `bookkeeping/2026-09-09-rehearsal-arm-record` (PR opened, ledger to be completed by the successor after the harvest);
 Ed is emailed the arm record on thread `1a0800cdb282c3f1`; the session then ends its turn with no live background work.
+
+## Addendum 2026-09-09 (activation 628c2eed; Opus review 06 N1)
+D-175 condition 4 (email before the arm) is discharged by the arm email `1a0800cdb282c3f1` (2026-09-08 01:05:21 PDT), the pins follow-up
+`1a08012045894ef7` (01:10:59) and the consolidated notice `1a080d1adf46c7b2` (04:40:20), all recorded in 21b and all before the 01:57:32
+`os.replace` in `arm-blockB-output.txt`.
