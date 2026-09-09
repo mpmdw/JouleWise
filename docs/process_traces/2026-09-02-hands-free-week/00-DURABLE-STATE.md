@@ -612,3 +612,20 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - The arming activation exits before 1788946260. NEXT EXACT ACTION for the relaunched magistrate: 21h §Morning after (harvest,
   NIGHT-REHEARSAL-01 record, `--uninstall` from the stub checkout, remove checkout + plan root), then the relayed daytime lanes above.
   This branch (`bookkeeping/2026-09-09-rehearsal-arm-record`, PR open) is merged by the successor with its ledger after the harvest.
+
+## 2026-09-09 activation 8844a3d0 (spawned epoch 1788944861, 02:07:41 PDT; events.jsonl seq 12) — pre-window relaunch; no work; stand-down before the plan span
+
+- Launched by the watchdog after 784a764e's clean exit at 1788944349 (seq 9) and the 300 s backoff; predicates clear at 02:07:41.
+  `notice_pending` was empty. Heartbeat written (pid 81330 from the lock), launch email on the arm thread `1a0800cdb282c3f1`:
+  Gmail `1a0856f16a4e6142`; `notice.ack` written for this activation.
+- Observed on disk, not restated: rehearsal-20260909 ARMED (plan v2 authored 1788944188, t0 1788947760 = 02:56 PDT, window 900 s,
+  root `/private/tmp/joulewise-rehearsal-20260909-checkout` @ `ae8f074f`); `com.joulewise.night` and `com.joulewise.night.deadman`
+  loaded; no NO on the arm thread (seven messages, all magistrate-sent); no `standdown.request`; PR #308 OPEN and MERGEABLE.
+- Decision: no new lane started. The watchdog requests stand-down at t0 − 25 min (1788946260, 02:31 PDT) and the 02:45–03:30 belt
+  fences relaunch; a magistrate alive at t0 would be the only foreseeable cause of `night_refused_agent_present`. This activation
+  spawned no Codex child and exits before 1788946260 after the stand-down email (its last external act).
+- NEXT EXACT ACTION (post-belt successor, ~03:30 PDT or later): 21h §Morning after — harvest
+  `/Users/edr/night-custody/rehearsal-20260909/night/{result.json,receipt.json,refusal.json,courier.sent,courier.json}` + `night.log`;
+  verify `night-results/20260909` on origin; record under NIGHT-REHEARSAL-01; `--uninstall` from the stub checkout; remove the stub
+  checkout and plan root; complete PR #308's ledger and merge under the normal gates. Then CLONE-READINESS-01 → G2-a inputs at the
+  earliest census-clean time; the remote-control test between windows. Accept only `night_refused_agent_present` as a receipt refusal.
