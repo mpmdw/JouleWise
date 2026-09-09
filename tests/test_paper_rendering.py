@@ -43,6 +43,50 @@ class PaperRenderingTests(unittest.TestCase):
             guarded(value)
         body.assert_not_called()
 
+    def test_reported_energy_fixture_projection_renders_through_typed_field(self):
+        from joulewise.paper_reported_energy import _synthetic_projection
+        from tests.test_paper_reported_energy import synthetic_input
+        fixture = _FamilyFixture("reported_energy_parents")
+        self.addCleanup(fixture.close)
+        projection = _synthetic_projection(synthetic_input())
+        subject = projection["cells"][0]["cell_id"]
+        value = _issued_control(fixture, subjects=(subject,), projection=projection,
+                                payload={"extraction_report": "deliberately unusable"})
+        self.assertEqual(rendering.render_reported_energy(value), f"{subject}: 42.5")
+        self.assertIsInstance(value.reported_energy_projection, custody._FrozenObject)
+        # This is a private synthetic issuing control, never production admission.
+        with self.assertRaises(custody.PaperCustodyRefusal):
+            rendering.render_reported_energy(custody.open_paper_input(fixture.ref))
+
+    def test_reported_energy_absent_projection_refuses_with_closed_code(self):
+        from joulewise.paper_reported_energy import PaperReportedEnergyRefusal
+        fixture = _FamilyFixture("reported_energy_parents")
+        self.addCleanup(fixture.close)
+        value = _issued_control(fixture)
+        self.assertIsNone(value.reported_energy_projection)
+        fixture_value = custody.open_paper_input(fixture.ref)
+        self.assertIsNone(fixture_value.reported_energy_projection)
+        tokenless = object.__new__(custody.VerifiedReportedEnergyParents)
+        with self.assertRaises(custody.PaperCustodyRefusal):
+            _ = tokenless.reported_energy_projection
+        with self.assertRaises(PaperReportedEnergyRefusal) as raised:
+            rendering.render_reported_energy(value)
+        self.assertEqual(raised.exception.code, "paper_reported_energy_projection_absent")
+        self.assertEqual(raised.exception.rendered_output, ())
+
+    def test_reported_energy_missing_or_malformed_cells_refuses_with_closed_code(self):
+        from joulewise.paper_reported_energy import PaperReportedEnergyRefusal
+        fixture = _FamilyFixture("reported_energy_parents")
+        self.addCleanup(fixture.close)
+        for projection in ({}, {"cells": None}, {"cells": {}}):
+            with self.subTest(projection=projection):
+                value = _issued_control(fixture, projection=projection)
+                self.assertIsNotNone(value.reported_energy_projection)
+                with self.assertRaises(PaperReportedEnergyRefusal) as raised:
+                    rendering.render_reported_energy(value)
+                self.assertEqual(raised.exception.code, "paper_reported_energy_projection_mismatch")
+                self.assertEqual(raised.exception.rendered_output, ())
+
     def test_non_admission_carrier_is_deferred(self):
         self.assertFalse(hasattr(rendering, "render_non_admission"))
         self.assertNotIn(("whole_window_verdict", "whole-window.v1"), custody._ISSUANCE_GATES)

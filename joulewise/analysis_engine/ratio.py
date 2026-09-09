@@ -31,6 +31,9 @@ from .estimators import (
 )
 
 
+ABSOLUTE_METRIC_UNIT = "J"
+RATIO_METRIC_UNIT = "J/token"
+
 RATIO_ESTIMAND_KEYS = frozenset(
     {
         "form",
@@ -282,6 +285,23 @@ def validate_ratio_estimand(value: object) -> Mapping[str, Any]:
         if value.get(key) != required:
             raise ValueError(f"ratio_estimand.{key} must equal {required!r}")
     return value
+
+
+def validate_metric_unit_and_ratio(
+    unit: object, ratio_estimand: object,
+) -> Mapping[str, Any] | None:
+    """Validate the absolute/B8 metric pairing, preserving the ratio mapping.
+
+    These are verdict metric units, not AP-SPEC v2 estimand units. No unit
+    conversion or normalization takes place here.
+    """
+    if type(unit) is not str or unit not in {ABSOLUTE_METRIC_UNIT, RATIO_METRIC_UNIT}:
+        raise ValueError("metric.unit must be 'J' or 'J/token'")
+    if unit == ABSOLUTE_METRIC_UNIT:
+        if ratio_estimand is not None:
+            raise ValueError("absolute J metrics require ratio_estimand null")
+        return None
+    return validate_ratio_estimand(ratio_estimand)
 
 
 def estimation_metric(metric: Mapping[str, Any]) -> Mapping[str, Any]:

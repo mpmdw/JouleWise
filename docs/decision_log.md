@@ -220,6 +220,9 @@ be re-derived by a future agent gets an entry here.
 | D-174 | Submission scope freeze | open (installs via DECISION-LOG-RATIFY) |
 | D-175 | Headless magistrate arming authority: relaunch prompt line 19 amended; eight REHEARSAL_STUB arming conditions | adopted by cold gate + Opus refuter synthesis 2026-09-08 (Ed may veto) |
 | D-176 | Unattended pack-night GO: authenticated consumption, purpose-bound authorization, confirmation custody and staged rehearsal | adopted by cold gate + Opus refuter + magistrate synthesis 2026-09-08 (Ed may veto) |
+| D-177 | Omit empirical Window C characterization; narrow the claim precondition and disclose uncharacterized phase attribution | adopted (magistrate synthesis, 2026-09-08) |
+| D-178 | Claim-side v2 copy-only deterministic widening, exact numeral custody and verdict-resolution join | adopted |
+| D-179 | REPORTED PHASE ENERGY — fixed ordered 50-member mean; 20 independent units (10 repeats + 10 ABBA blocks), stratified t9 interval plus recorded kind bounds; attribution floor beside; runtime-observed ratio of totals; both Qwen3 v5 registrations before frozen specs; closed typed refusals through D-173 custody; X5 remains RETIRED_FALLBACK; normative home `docs/contracts/paper_reported_energy.md` | adjudicated (magistrate synthesis, 2026-09-08; S2 fix rulings installed; production issuance unregistered) |
 
 ---
 
@@ -11266,3 +11269,182 @@ and [§10.1](contracts/pack_night_go_receipt.md#101-third-pass-rulings-2026-09-0
 rulings govern where they refine this decision's §1; §10.1 supersedes conflicting
 second-pass wording. Seat 1 owns this addendum. The original decision and
 earlier dated rulings remain preserved above; no code or live gate is closed.
+
+## D-177: Omit empirical Window C characterization (magistrate, 2026-09-08)
+
+**Status:** ADJUDICATED by the magistrate synthesis dated 2026-09-08.
+Window C is the separate instrument-characterization campaign: the measured
+checks of the instrument's response to work. The comparison successor omits
+its empirical characterization results. P.2 retains the four questions as
+prospective methods (methods for a future campaign), with their fixed
+calculations and minimum counts labelled design requirements. X13–X16 remain
+`PROPOSED_STOP_FILL`, meaning no proposed
+result site may be filled, and the P.2 summary remains `STOP_FILL`; this is a
+ruled omission, not a pending inclusion decision. No report, result, custody
+family (a class of paper inputs checked against their named sources), producer,
+grant (permission to render a result), placement or supply-map key (an input
+lookup identifier) is adopted.
+
+**Two conditions:**
+
+1. Narrow P.2's universal “before any campaign result may rely on the
+   instrument” precondition to per-token conversion (the fitted joules per
+   output token), issued-floor claims (claims using a published resolution
+   guard for assigned-energy differences), and phase-specific claims
+   (statements about energy assigned to prompt processing or token generation).
+   These are the classes named by P.2's withdrawal clause; failure withdraws
+   the dependent claim in a future campaign.
+2. Disclose the uncharacterized phase attribution, meaning the assignment of
+   energy to phases without a measured check of that assignment. The lead
+   rules that the D-123 mean cells, the average energies assigned to each phase,
+   ARE phase-specific results. The successor must state, adjacent to those
+   placements and in the protocol's limitations section, that phase attribution
+   is reported without an instrument phase-accounting characterization; the
+   phase-accounting check registered in P.2 was not run for this paper; phase
+   energies are per-window accounting under the registered boundary rule
+   (energy assigned by overlap with sampled power records), not independently
+   characterized attributions.
+
+**Wording disposition:** preserve the installed §6 Variant-0 refusal paragraph
+in `docs/paper/fill-rehearsal/rendered-refusal.md` and P.2's paragraph beginning
+“The following are registered characterization methods” verbatim. The synthesis
+adopts the Opus disposition paragraph as the closing paragraph of P.2 and once
+in §6 Variant 0, adding to rather than replacing the installed text.
+
+**Options Considered:** A, omit measured characterization while retaining its
+methods, is adopted with the two conditions above. B, include it through a
+separately designed and authorized campaign, requires a new campaign and a
+future design ruling. C, reuse existing comparison input families to supply
+characterization, is barred by the custody contract: authenticating a parent
+input does not authorize another result, and floor-building blocks cannot
+also be disjoint characterization tests (tests using different evidence).
+
+**Considerations:** the comparison claim gates do not name characterization
+as a general precondition. The former universal sentence would nevertheless
+impose a condition this paper does not meet. The D-123 means also require the
+explicit phase-attribution limitation. Omitting characterization reduces the
+claims the paper can make; an unperformed campaign is not an observed refusal.
+No evidence rule, calculation, minimum count, or publication permission changes.
+
+**Revisit trigger:** any proposal to add measured characterization to this
+successor requires a separate design ruling and new campaign; proposed sites
+and historical retired rows supply no authority to do so.
+
+**Evidence:** governing synthesis
+`docs/process_traces/2026-09-08-handoff-redo/99bc-coldgate-packet-paper-characterization/13-magistrate-synthesis.md`,
+with `10-coldgate-fable-ruling.md` and `11-coldgate-opus-refutation.md` beside it
+in the lead's `/Users/edr/code/JouleWise` checkout. The synthesis governs over
+the two evidence opinions.
+
+## D-178: claim-side deterministic widening under the cold-gate ruling (magistrate, 2026-09-08)
+
+**Status:** adopted. Governing authority: the interactive magistrate's
+`13-magistrate-synthesis.md`, in the lead checkout's
+`docs/process_traces/2026-09-08-handoff-redo/99bb-coldgate-packet-paper-s3/`,
+with cold Fable ruling 10 and Opus contract refutation 11 as evidence.
+The implementation instruction defers renderer projection to a later seat
+after S2 lands; X6/X7 remain `PROPOSED_STOP_FILL`.
+
+**Named failure:** the scaffold joined a nonexistent v3 manifest cell key,
+allowed tolerant arithmetic to stand in for source identity, and conflated
+the complete estimator bound with a clock-anchor planning token. The existing
+custody gate had no completed sidecar producer/contract. The smallest repair
+is the v2 copy producer and exact validator, used by the existing claim gate.
+
+**Ruling, items 1–7:**
+
+1. Adopt B, the complete estimator deterministic-bound total, copied from
+   verdict `deterministic_bounds.total`; copy every `{name, bound}` term from
+   `deterministic_bounds.terms`. Do not recompute either quantity in S3.
+2. Name it `deterministic_widening_total`, typed by `unit`, `estimator_id`,
+   `ratio_estimand`, with per-kind `deterministic_bounds`. DS-29 binds to this
+   field. The S6 `claim_side_bound_j` token keeps its non-gating clock-anchor
+   planning meaning within F+B. The judge's propagation-channel interpretation
+   is recorded as dissent; the Opus naming/type interpretation governs.
+3. Join to verdict `floor.resolutions[].source_cell_ids` by ordered
+   concatenation without sort/dedup, requiring exact/transported resolutions
+   and injectivity across contrasts. The manifest schema does not change.
+4. Require exact verdict JSON numeral bytes; reject bool; `isclose` is
+   diagnostic only. Adopt `joulewise.claim_side_bound.v2`, never issue v1.
+   This overrides Opus's tolerant-equality proposal and the judge's v1 proposal.
+5. Copy decision endpoints without another expansion; bind metrology endpoints
+   to verdict `estimator.metrology_aware_CI95` inside the S3 contract. Require
+   the anchor term in the list; term sums remain the verdict owner's job.
+6. Install the union of judge 6 and Opus 6(a–h) regressions: anchor-only,
+   omitted kind, sum-for-mean, precedence flip, double widening, decision-as-CI,
+   changed/permuted/deduplicated/refused-resolution cells, 1e-13 drift, coherently
+   edited interval/scalar, J/token into a J cell, and sign flip. The contract's
+   clause-to-test table and scoped kill runner specify each counterfactual.
+7. Complete the producer/validator before registering `claim-evidence.v1`;
+   reevaluate only from verdicts. Replace the invented manifest-key fixture,
+   document DS-26/28/29 bindings, and retain the display stop. Per the explicit
+   implementation-seat instruction, no renderer projection lands in S3.
+
+**Implementation and verification ownership:**
+[paper_claim_side_bound.md](contracts/paper_claim_side_bound.md) owns symbols,
+formulas, wire, API, refusals, custody boundary and regression mapping.
+Applicability is a claim-evidence supply using a deterministic-bound sidecar;
+this is a bounded implementation and test increment, with no new review layer
+or quiet-machine work. The lead retains final verification, integration,
+receipt reissuance and renderer authorization. Retire the v2 layer only with
+an explicitly governed successor preserving its source-identity guarantees.
+
+## D-179: Reported phase-energy supplier semantics (magistrate, 2026-09-08)
+
+**Status:** adjudicated. Governing synthesis:
+`docs/process_traces/2026-09-08-handoff-redo/99be-coldgate-packet-paper-s2-semantics/13-magistrate-synthesis.md`.
+The three seats (10/11/12) are evidence; the synthesis governs. This entry
+records rulings 1–7; it does not issue measurements or restore retired placement.
+
+1. The point estimate is `arithmetic_mean_over_fixed_member_universe.v1`,
+   equal weight over the complete ordered 50-member universe, `expected_n: 50`,
+   `missing_or_invalid_member: refuse_reported_mean`. No post-collection
+   admission filter exists: any absent/invalid member refuses the cell, never a
+   49-member mean. `[N_bundles]` renders `expected_n`. Exclusion by admission
+   code is narrowed to this complete-universe refusal.
+2. The independence unit census is 20 per cell: ten absolute repeats and ten
+   complete A/B/B/A blocks. The fifty bundles are not fifty independent draws.
+3. With block energies averaged over their four members,
+   canonical `m = statistics.fmean(ordered_50_energies)` (algebraically
+   `0.2 mean(r) + 0.8 mean(b)`) and
+   `V = 0.2² s_r²/10 + 0.8² s_b²/10`. Use conservative reference `ν = 9`
+   and `h = t(0.975,9) sqrt(V)`. Reject the pooled `s/sqrt(20)` form: it
+   weights units equally in the variance but not in the mean. A synthetic
+   regression with unequal stratum standard deviations must distinguish them.
+4. Endpoints are `m ∓ (h+B)`, where B sums the average of each registered
+   deterministic-bound kind across the same members. Any absent recorded kind
+   refuses, never defaults to zero. Publish the D-078 approximately 1-J
+   attribution limit as a labelled floor beside the cell, never composed into
+   its interval. Exclude `detection_floor.py`'s `sqrt(1+1/n)` prediction term by
+   name. Record n, s_r, s_b, V, h, each kind average and B so the endpoint span
+   is independently recomputable as `2(h+B)`. The Cartesian-product envelope
+   alternative is rejected as unauditable and unregistered.
+5. Per-token energy is `ΣE_i/ΣT_i` across exactly the same fifty members. A
+   new sibling `phase_ratio_estimand` uses form `ratio_of_totals`, numerator
+   `gross_phase_energy_j`, phase, denominator `runtime_observed_prompt_tokens`
+   or `runtime_observed_output_tokens`, and tokenizer/output-policy scope.
+   Validate exact keys and fail closed; do not loosen the existing ratio
+   estimand. Prefill counts are observed total minus observed output,
+   cross-checked across the four bundle-reader surfaces. Absent, zero,
+   malformed or fallback-sourced denominators refuse the per-token value,
+   without dropping members or changing the energy mean.
+6. Install executable registrations now in both v5 generators and the S2
+   contract. A document alone is not pre-registration. The absent frozen
+   extraction specification blocks numbers, not estimands. The registration
+   digest must predate the specification's first existence.
+7. X5 rows remain `RETIRED_FALLBACK` under D-174; these registrations restore
+   no placement. Every registration binds a specific `cell_id`: decode,
+   prefill-p42 or prefill-p512 per model, never merely "prefill". The paper's
+   prefill cell remains G2-a's `[PREFILL_LENGTH]`.
+
+**Options Considered:** filtered means, treating fifty bundles as independent,
+pooled twenty-unit uncertainty, Cartesian-product envelopes, configured token
+counts and means of ratios; all rejected as above.
+
+**Considerations:** preserve the registered member universe, account for the
+unequal strata, retain recorded deterministic displacement terms, distinguish
+an attribution floor from mean uncertainty, and use runtime-observed counts.
+The registration/kernel increment is in `docs/contracts/paper_reported_energy.md`
+and `tests/test_paper_reported_energy.py`. Production custody replay remains
+unregistered and non-issuing; lead final verification and source-order evidence
+are still required. Revisit only through a new ruling before a future freeze.

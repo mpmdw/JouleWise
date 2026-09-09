@@ -7,6 +7,14 @@
       "input_role": "extraction_spec",
       "path": "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json",
       "status": "pending_desk_day"
+    },
+    "production.reported_energy_parents.qwen3-8b.v5": {
+      "authority": "git_blob",
+      "base": "repository",
+      "family": "reported_energy_parents",
+      "input_role": "extraction_spec",
+      "path": "configs/campaigns/d117_floor_qwen3-8b_v5/extraction_spec.json",
+      "status": "pending_desk_day"
     }
   },
   "roles": {
@@ -44,14 +52,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "37a75570ad222ebab5cd50d4a93f274669f508dbe27750900bef9f128653b249",
+        "expected_sha256": "8e428955c4af40cbe6fe39958b260d20c6a6cbc87e00442b8ce6fc834aa7905d",
         "path": "claim_evidence/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "27f8150aa7834402610686e93bed7b679d8cdc5169c04e920e84ad576a5a4c54",
+        "expected_sha256": "52c9726ef5f4ccd3fe489908ed41347c55334eb38bb8194c11db0c73412c8edc",
         "path": "claim_evidence/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -99,14 +107,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "175c1078ebe3de597ea2561c2d2c9ff2f0f6338d203dcc7b9918c3e6c43260f0",
+        "expected_sha256": "b6bc31e8d8f624c1a554d968de74c1c1bb769770d2f7f9d3849a20463246e4f7",
         "path": "d165_closeout/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "0277fb6b4ffc50a0e0c3a7268753312c6b982a0be4f302d15156095c61681cc8",
+        "expected_sha256": "e0b37ebd7809bfc2cf73e3eca84e54bc66f290a5bbfd2046b456ca0cfbb74ac3",
         "path": "d165_closeout/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -161,14 +169,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "321bcb592b9bf800072c906707926dddf8c206befdecc798fe2b78effac29f33",
+        "expected_sha256": "bc2ee4961ead49b819519b688cff346ee8fd9956513823717ab5670bac32784c",
         "path": "reported_energy_parents/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "c76d635466573e2c15977b9b5e45d5efe5953835494826c153c83ac9075e5b28",
+        "expected_sha256": "a0f54407f347f8f9533a68805db764d971eb7fecdb42f3d48dbd11be62e17c80",
         "path": "reported_energy_parents/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -230,14 +238,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "5d449ad21344d3dead581ac49ed59d78335eb3944d6dfe03571c61e1a29463a4",
+        "expected_sha256": "114d05f14a789fa0cdcc52a2f67f1ca7e9032bf4c8058dcd539cebe5019d9dba",
         "path": "transfer_projection/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "4b9ff4dea0f2f68d43a1f60da68652d64bfd3fbf9fd5ac7d24985b5792779a57",
+        "expected_sha256": "e65fb32831db7eb114344f0308d0564e67113f06f2c6077d31fd2abbca3dce2d",
         "path": "transfer_projection/inputs/validator_receipt.json"
       },
       "source_census": [
@@ -285,14 +293,14 @@
       ],
       "inventory": {
         "base": "runs_root",
-        "expected_sha256": "10b946224cb69708418e1c4c34008f2bb92e31224a24f75e13e3e37c7b8b7d93",
+        "expected_sha256": "d6d4e5679f9f85e3ff271416ab97e8f128e727d63566fb3407a13e33248dfd0b",
         "path": "whole_window_verdict/inventory.json"
       },
       "issuance_gate_id": null,
       "mode": "test_fixture_non_issuing",
       "receipt": {
         "base": "runs_root",
-        "expected_sha256": "d2257ef42b330422d53f8b34f20278121b097ce7a7486bd206640b3c559fecd4",
+        "expected_sha256": "f17966ac4a54a1783b0d2279a98afeed6d0253d1bc91d9e35fcb3cc96ae8066c",
         "path": "whole_window_verdict/inputs/validator_receipt.json"
       },
       "source_census": [

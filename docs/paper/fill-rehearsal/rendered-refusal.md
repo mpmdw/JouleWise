@@ -20,3 +20,5 @@ is reported. The collection must retain the paper’s calibration, admission,
 custody, floor, and whole-window verdict rules. Its paired per-token comparisons
 must also require both arms to record the SAME tokenizer identity; no resulting
 number may be compared with a stack carrying a different tokenizer.
+
+This submission reports no measured instrument characterization. Section P.2 registers four characterization questions — workload response, identical-condition null containment, phase accounting, and drift and recovery — as methods for a separate future campaign, together with their fixed calculations and their registered minimum bundle and block counts. Those counts are design requirements, not counts collected here. No characterization report is issued, no characterization result is quoted anywhere in this paper, and no result reported here is authorized by one; the claim gates of Section P.3 name no characterization precondition. If such a campaign is later run and any of its four checks fails, that failure withdraws only the per-token conversion, floor, or phase-specific claim depending on it.

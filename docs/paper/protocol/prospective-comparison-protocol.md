@@ -57,8 +57,11 @@ generality claim. No result for that pair is reported here.
 
 <!-- Source: characterization_result_schema_v1; reviewer D3 and C5. -->
 
-Instrument characterization asks four physical questions before any campaign
-result may rely on the instrument. Does energy change with the amount of work
+Instrument characterization asks four physical questions before relying on
+per-token conversion (the fitted joules per output token), a floor
+(the registered resolution guard for assigned-energy differences, called the cell floor in P.3), or a
+phase-specific claim (a statement about energy assigned to prompt processing
+or token generation). Does energy change with the amount of work
 in the planned way? Under identical conditions, do repeated paired blocks stay
 inside a comparator—an upper limit fixed from earlier, disjoint evidence? Do
 the two phase energies account for their enclosing request without leaking dependence across the phase boundary, meaning without prompt-processing energy
@@ -227,6 +230,8 @@ If issued, an identical-condition result would have a deliberately narrow
 meaning: five contained measured blocks would establish only the containment
 drawn above. It would neither estimate a percentage of a wider population nor
 supply an independent coverage guarantee. <!-- reviewer C5: containment caveat -->
+
+This submission reports no measured instrument characterization. Section P.2 registers four characterization questions — workload response, identical-condition null containment, phase accounting, and drift and recovery — as methods for a separate future campaign, together with their fixed calculations and their registered minimum bundle and block counts. Those counts are design requirements, not counts collected here. No characterization report is issued, no characterization result is quoted anywhere in this paper, and no result reported here is authorized by one; the claim gates of Section P.3 name no characterization precondition. If such a campaign is later run and any of its four checks fails, that failure withdraws only the per-token conversion, floor, or phase-specific claim depending on it.
 
 ## P.3 Directional comparison and claim gates
 
@@ -451,6 +456,15 @@ were frozen—generated-state checks, and reissue workflow. Article Appendix A g
 and P.8 here specify the prospective characterization and contrast route.
 
 ## P.5 Campaign dependence and custody limitations
+
+Where the successor reports phase attribution—assigning energy to prompt
+processing or token generation—it is reported without an instrument
+phase-accounting characterization, a measured
+check of how those phase energies account for the enclosing request. The
+phase-accounting check registered in P.2 was not run for this paper. Phase
+energies are per-window accounting under the registered boundary rule—energy
+assigned to each phase from its overlap with sampled power records—not
+independently characterized attributions.
 
 The prospective design's ten blocks in one measurement window would not automatically be ten
 independent physical draws. Consecutive member runs inside a block share the same

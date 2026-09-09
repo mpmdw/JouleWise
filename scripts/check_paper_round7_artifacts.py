@@ -258,11 +258,22 @@ def _retired_sites(text: str) -> tuple[str, ...]:
     """Validate dated dispositions, including non-DX and metadata-only rows."""
     sites = []
     for line in text.splitlines():
-        if not line.startswith("| ") or "RETIRED_FALLBACK" not in line:
+        if not line.startswith("| "):
             continue
         # Escaped pipes occur inside the historical DS row anchors.
         cells = [cell.strip() for cell in re.split(r"(?<!\\)\|", line)[1:-1]]
         notes = [cell for cell in cells if cell.startswith(RETIREMENT_DATE)]
+        if not notes:
+            # Proposal census rows may name RETIRED_FALLBACK without being
+            # dated retirement records. Historical tables have 5–7 columns,
+            # with the disposition immediately before the sources column;
+            # still reject a missing/malformed note in those historical rows.
+            historical_retirement = len(cells) in (5, 6, 7) and (
+                cells[-2].startswith("RETIRED_FALLBACK")
+                or cells[-3] == "RETIRED_FALLBACK"
+            )
+            if not historical_retirement:
+                continue
         if len(notes) != 1:
             raise RegistryError(f"{cells[0]} must carry exactly one dated retirement note")
         note = notes[0]

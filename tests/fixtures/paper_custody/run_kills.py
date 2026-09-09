@@ -1,4 +1,7 @@
-"""Run the Round-5 kill mutations sequentially, restoring scoped bytes exactly.
+"""Run the Round-5 or --s3 kill mutations, restoring selected bytes exactly.
+
+--s3 runs only claim-side-bound tests and mutates the claim-side/ratio modules;
+it never repins the supply map. Legacy Round-5 mode has broader write scope.
 
 Only the four user-permitted unittest modules may run. These mutations are
 synthetic test controls, and fixture receipt repins prevent stale receipts
@@ -17,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CUSTODY = 'joulewise/paper_custody.py'
 RENDER = 'joulewise/paper_rendering.py'
 BOUND = 'joulewise/analysis_engine/claim_side_bound.py'
+RATIO = 'joulewise/analysis_engine/ratio.py'
 CONTRACT = 'docs/contracts/paper_supply_custody.md'
 MAP = 'configs/paper_supply/supply_map.json'
 C = 'tests.test_paper_custody.RoundFiveTests.'
@@ -61,17 +65,17 @@ MUTATIONS = [
   'if contrast["claim_evaluation"]["claim_ready_for_l2_l3"] is True:', C+'test_claim_gate_per_contrast'),
  ('F3-claim-owner-skipped', CUSTODY, 'codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest))',
   'codes.extend([])', C+'test_claim_gate_per_contrast'),
- ('F3-sidecar-skipped', CUSTODY, 'codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_sha256=_sha256(ctx.raws[InputRole.CLAIM_VERDICTS]),\n                                           finalized_manifest=manifest, floor_artifact=floor))',
+ ('F3-sidecar-skipped', CUSTODY, 'codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_raw=ctx.raws[InputRole.CLAIM_VERDICTS],\n                                           finalized_manifest=manifest, floor_artifact=floor))',
   'codes.extend([])', C+'test_claim_gate_per_contrast'),
  ('F3-embedded-floor-skipped', CUSTODY, 'if embedded_floor != ctx.raws[InputRole.FLOOR_ARTIFACT]:',
   'if False:', C+'test_claim_gate_per_contrast'),
- ('F3-sidecar-wrong-digest', BOUND, 'return ("claim_side_bound_reader_digest_mismatch",)',
+ ('F3-sidecar-wrong-digest', BOUND, 'return ("paper_claim_side_bound_reader_digest_mismatch",)',
   'return ()', C+'test_claim_gate_per_contrast'),
- ('F3-sidecar-wrong-cell', BOUND, 'return ("claim_side_bound_cell_mismatch",)',
+ ('F3-sidecar-wrong-cell', BOUND, 'return ("paper_claim_side_bound_cell_mismatch",)',
   'return ()', C+'test_claim_gate_per_contrast'),
- ('F3-sidecar-wrong-lineage', BOUND, 'return ("claim_side_bound_lineage_mismatch",)',
+ ('F3-sidecar-wrong-lineage', BOUND, 'return ("paper_claim_side_bound_lineage_mismatch",)',
   'return ()', C+'test_claim_gate_per_contrast'),
- ('F3-sidecar-wrong-bound', BOUND, 'return ("claim_side_bound_arithmetic_mismatch",)',
+ ('F3-sidecar-wrong-bound', BOUND, 'return ("paper_claim_side_bound_copy_mismatch",)',
   'return ()', C+'test_claim_gate_per_contrast'),
  ('F3-source-owner-omitted', CUSTODY, '("analysis_engine.claims.evaluate_claim", evaluate_claim),',
   '', C+'test_gate_sources_change_receipt_digest'),
@@ -94,7 +98,84 @@ MUTATIONS = [
 ]
 
 
+
+# Each numeric counterfactual independently disables the exact-copy rejection;
+# the named data mutation must then escape that boundary and fail its regression.
+S3_NUMERIC_CASES = (
+    "anchor_only_substitution", "dropped_kind", "sum_for_mean", "precedence_flip",
+    "decision_fed_as_ci95", "double_widen", "edited_interval_matching_scalar",
+    "ci_recomputed_from_decision", "drift_1e13", "sign_flip",
+    "numeral_bytes_not_numeric_equality",
+)
+S3_MUTATIONS = [
+    (name, 'if row != source:', 'if False:', 'test_' + name)
+    for name in S3_NUMERIC_CASES
+] + [
+    (name, 'if row["source_cell_ids"] != source["source_cell_ids"]:',
+     'if False:', 'test_' + name)
+    for name in ("permuted_cells", "deduplicated_cells")
+] + [
+    ("refused_resolution", 'resolution["status"] not in {"exact", "transported"}',
+     'False', 'test_refused_resolution'),
+    ("anchor_required", 'if _ANCHOR not in {term["name"] for term in terms}:',
+     'if False:', 'test_anchor_required'),
+    ("join_injective", 'if join in joins:', 'if False:', 'test_join_injective'),
+    ("ratio_in_j_cell", 'if any(row[key] != source[key] for key in ("unit", "estimator_id", "ratio_estimand")):',
+     'if False:', 'test_ratio_in_j_cell'),
+    ("bool_rejected", 'or not _number(deterministic["total"], nonnegative=True)',
+     'or False', 'test_bool_rejected'),
+    ("producer_numeral_normalization", 'return value.token', 'return str(float(value.token))',
+     'test_numeral_bytes_not_numeric_equality'),
+    ("producer_anchor_substitution", '"deterministic_widening_total": deterministic["total"],',
+     '"deterministic_widening_total": terms[0]["bound"],', 'test_copy_only_control'),
+]
+
+
+S3_MUTATIONS = [(identity, BOUND, old, new, method)
+                for identity, old, new, method in S3_MUTATIONS] + [
+    ("units_membership", RATIO,
+     ' or unit not in {ABSOLUTE_METRIC_UNIT, RATIO_METRIC_UNIT}', '',
+     'test_b8_unit_vocabulary_through_both_apis'),
+]
+
+
+def run_s3_kills():
+    """No map writes/repins: these regressions do not construct custody receipts."""
+    originals = {relative: (ROOT / relative).read_bytes()
+                 for _, relative, _, _, _ in S3_MUTATIONS}
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
+    records = []
+    distinct_guards = len({(relative, old) for _, relative, old, _, _ in S3_MUTATIONS})
+    for identity, relative, old, new, method in S3_MUTATIONS:
+        path = ROOT / relative
+        original = originals[relative]
+        source = original.decode()
+        if source.count(old) != 1:
+            raise ValueError(f'{identity}: mutation target count {source.count(old)}')
+        test = 'tests.test_claim_side_bound.ClaimSideBoundTests.' + method
+        try:
+            path.write_text(source.replace(old, new, 1))
+            result = subprocess.run([sys.executable, '-m', 'unittest', test], cwd=ROOT,
+                                    env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            killed = (result.returncode == 1 and 'FAILED (failures=' in result.stdout
+                      and 'errors=' not in result.stdout and 'Ran 1 test' in result.stdout)
+            records.append({'id': identity, 'test': test, 'counterfactual': {'file': relative, 'old': old, 'new': new},
+                            'exit_code': result.returncode, 'killed': killed,
+                            'tail': result.stdout.rstrip().splitlines()[-9:]})
+            print(f'S3-{identity}: {"KILLED" if killed else "SURVIVED/ERROR"}', flush=True)
+            if not killed:
+                print(result.stdout, flush=True)
+        finally:
+            path.write_bytes(original)
+    Path('/tmp/paper-s3-kills.json').write_text(json.dumps(records, indent=2) + '\n')
+    passed = bool(records) and all(row['killed'] for row in records)
+    print(f'S3 KILL SUMMARY: {sum(row["killed"] for row in records)}/{len(records)} killed; {len(records)} mutations over {distinct_guards} distinct guards (including producer sites); scoped bytes restored.')
+    return 0 if passed else 1
+
+
 def main():
+    if sys.argv[1:] == ['--s3']:
+        return run_s3_kills()
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1')
     records = []
     paths = {ROOT / item[1] for item in MUTATIONS} | {ROOT / MAP}
