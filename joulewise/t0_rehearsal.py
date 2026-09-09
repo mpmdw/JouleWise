@@ -37,12 +37,7 @@ from joulewise import clock_reference
 
 REHEARSAL_RECEIPT_CLASS = "T0_UNATTENDED_SUPERVISED_REHEARSAL"
 REHEARSAL_WINDOW_PREFIX = "rehearsal-t0-unattended-"
-G7_UNRULED_REASON = (
-    "production rejection is UNRULED: HEAD has no production D-149 GO-receipt "
-    "consumer or ruled refusal code; the open RF-32 question is recorded in "
-    "docs/process_traces/2026-08-23-t22/t0-unattended/impl/"
-    "reason-code-coverage-delta.md section 6.2"
-)
+G7_CONTROL_SCHEMA = "joulewise.pack_night_g7_control.v1"
 
 EXECUTION_SCHEMA = "joulewise.t0_unattended_execution_record.v1"
 D149_SCHEMA = "joulewise.t0_unattended_d149_go_receipt.v1"
@@ -83,8 +78,6 @@ _EXECUTION_PROCESS_KEYS = {
     "eof_refusal",
     "timed_out",
 }
-_D149_KEYS = {"schema_version", "verdict", "conditions"}
-_D149_CONDITION_KEYS = {"condition_id", "status", "evidence"}
 _REHEARSAL_RECEIPT_KEYS = {
     "schema_version",
     "receipt_class",
@@ -708,34 +701,68 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
 
 
 def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
-    """Evaluate the structured D-149 C1-C5 GO receipt and evidence hashes."""
+    """Recompute C1–C5 through retained v3 launch and ARM evidence replay.
 
-    name = "D-149 EVALUATION"
+    Historical clock mode uses the consumption instant on its recorded boot;
+    it never requires a completed night's GO to remain live on today's boot.
+    ARM semantics are nevertheless re-derived explicitly (ordinary historical
+    launch replay intentionally skips that step).
+    """
+    name = "PACK GO EVALUATION"
     artifact, value, error = _json_record(bundle, "d149_go")
-    if artifact is None or value is None:
-        return _result("G5", name, GateStatus.FAIL, error or "D-149 receipt is absent")
-    evidence = [artifact.citation()]
+    evidence = [] if artifact is None else [artifact.citation()]
     try:
-        if set(value) != _D149_KEYS or value.get("schema_version") != D149_SCHEMA or value.get("verdict") != "GO":
-            raise ValueError("D-149 VERDICT is not GO")
-        conditions = value.get("conditions")
-        if not isinstance(conditions, list) or [item.get("condition_id") if isinstance(item, Mapping) else None for item in conditions] != [f"C{index}" for index in range(1, 6)]:
-            raise ValueError("D-149 condition census is not exactly C1 through C5 in order")
-        for condition in conditions:
-            condition_id = str(condition["condition_id"])
-            if set(condition) != _D149_CONDITION_KEYS:
-                raise ValueError(f"D-149 {condition_id} keys are not exact")
-            if condition.get("status") != "PASS":
-                raise ValueError(f"D-149 {condition_id} is not mechanically green")
-            references = condition.get("evidence")
-            if not isinstance(references, list) or not references:
-                raise ValueError(f"D-149 {condition_id} has no evidence/hash record")
-            for index, reference in enumerate(references):
-                used = _verify_artifact_reference(bundle, reference, label=f"D-149 {condition_id} evidence {index}")
+        if artifact is None or value is None:
+            raise ValueError(error or "pack GO receipt is absent")
+        raw = artifact.path.read_bytes()
+        if raw != artifact.raw or readiness.sha256_bytes(raw) != artifact.sha256:
+            raise ValueError("GO digest changed")
+        go = readiness.validate_pack_night_go_receipt(readiness.parse_json_bytes(raw))
+        candidates = [item for item in bundle.artifacts
+                      if item.path.name.endswith(".consumed.json")
+                      and item.path.is_relative_to(bundle.custody_root / go["pack_id"])]
+        same_boot = []
+        for item in candidates:
+            record, _raw, _digest, path = readiness._read_launch_consumption(
+                item.path, require_current_boot=False)
+            if record["boot_session_id"] == go["boot_session_id"]:
+                same_boot.append((item, record, path))
+        if len(same_boot) != 1:
+            raise ValueError("C5 requires exactly one consumption this boot")
+        consumed, record, path = same_boot[0]
+        if (record["schema_version"] != readiness.CONSUMPTION_RECEIPT_SCHEMA_V3
+                or record["go_receipt"]["sha256"] != artifact.sha256
+                or record["go_receipt"]["path"] != str(artifact.path)
+                or record["go_receipt"]["receipt_id"] != go["receipt_id"]):
+            raise ValueError("C5 consumption does not bind this pack GO")
+        evidence.append(consumed.citation())
+        # C1 authorization/attempt/confirmation, C2 exact evidence, C3 census,
+        # C4 boot/clock/time bounds and C5 persisted attempt are re-read here.
+        table, digest = readiness._consumed_confirmation_pair(record, None, None)
+        arm, arm_path, pack_root, _pack = readiness._replay_consumed_arm(
+            None, record, path, require_current_boot=False, require_unexpired=False,
+            replay_arm_semantics=True, step6_confirmation_table=table,
+            expected_confirmation_digest=digest)
+        readiness.verify_consumed_launch(pack_root, path, require_current_boot=False)
+        issued = go["issued_monotonic_ns"]
+        if not issued <= record["consumed_at_monotonic_ns"] < go["valid_until_monotonic_ns"]:
+            raise ValueError("C4 consumption outside GO interval")
+        for item in readiness.scan_receipt_namespace(arm_path.parent, "arm"):
+            if (item["receipt"]["boot_session_id"] == arm["boot_session_id"]
+                    and item["number"] > int(arm_path.stem.removeprefix("arm-"))):
+                raise ValueError("C5 higher-numbered ARM/re-arm this boot")
+        for condition in go["conditions"]:
+            if not condition["evidence"] or condition["basis"] is not None:
+                raise ValueError(f"{condition['condition_id']} evidence/basis")
+            for reference in condition["evidence"]:
+                used = _verify_artifact_reference(bundle, reference, label=condition["condition_id"])
+                if used.path.read_bytes() != used.raw:
+                    raise ValueError("condition evidence changed")
                 evidence.append(used.citation())
-    except ValueError as exc:
+    except (ValueError, OSError, TypeError, KeyError, readiness.ArmReadinessError) as exc:
         return _result("G5", name, GateStatus.FAIL, str(exc), *evidence)
-    return _result("G5", name, GateStatus.PASS, "D-149 VERDICT is GO and C1-C5 are mechanically green with matching custody hashes", *evidence)
+    return _result("G5", name, GateStatus.PASS,
+                   "pack GO C1–C5 recomputed from authenticated ARM, launch, census and one-use custody", *evidence)
 
 
 def _contains(parent: Path, child: Path) -> bool:
@@ -794,10 +821,80 @@ def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
     return _result("G6", name, GateStatus.PASS, "receipt is non-claim rehearsal authority; resolved custody is the named night-custody child and disjoint from every DISJOINT census role", artifact.citation(), bundle.manifest.citation())
 
 
-def evaluate_g7(_bundle: EvidenceBundle) -> GateResult:
-    """Preserve the unresolved production-consumer question as a gate."""
+def validate_g7_control(value: object) -> Mapping[str, Any]:
+    """Recompute PASS from the exact §10.5 artifact, never its verdict alone."""
+    def exact(item, keys, label):
+        if not isinstance(item, Mapping) or set(item) != set(keys.split()):
+            raise ValueError(f"G7 {label} keys are not exact")
+    exact(value, "schema_version control_custody_root rehearsal_window_id control_plan_sha256 presented absence verdict", "artifact")
+    if value["schema_version"] != G7_CONTROL_SCHEMA:
+        raise ValueError("G7 schema_version")
+    window = value["rehearsal_window_id"]
+    if not isinstance(window, str) or not window.startswith(REHEARSAL_WINDOW_PREFIX) or Path(window).name != window:
+        raise ValueError("G7 rehearsal_window_id")
+    root = value["control_custody_root"]
+    if not isinstance(root, str) or not Path(root).is_absolute() or Path(root).name != window + "-g7-control":
+        raise ValueError("G7 control_custody_root")
+    if not isinstance(value["control_plan_sha256"], str) or _SHA256_RE.fullmatch(value["control_plan_sha256"]) is None:
+        raise ValueError("G7 control_plan_sha256")
+    presented = value["presented"]
+    if not isinstance(presented, list) or len(presented) != 2:
+        raise ValueError("G7 requires two presentations")
+    kinds = set()
+    for item in presented:
+        exact(item, "kind path sha256 refusal first_refusal presented_monotonic_ns", "presentation")
+        kind = item["kind"]
+        if not isinstance(kind, str) or kind not in {"rehearsal_receipt", "rehearsal_go"} or kind in kinds:
+            raise ValueError("G7 presentation kind")
+        kinds.add(kind)
+        filename = "presented_go_receipt.json" if kind == "rehearsal_go" else "presented_rehearsal_receipt.json"
+        if item["path"] != str(Path(root) / "night" / filename):
+            raise ValueError("G7 presentation path")
+        if not isinstance(item["sha256"], str) or _SHA256_RE.fullmatch(item["sha256"]) is None:
+            raise ValueError("G7 presentation sha256")
+        exact(item["refusal"], "reason detail", "refusal")
+        expected = "rehearsal_purpose_on_production_id" if kind == "rehearsal_go" else "receipt_class"
+        if item["refusal"] != {"reason": "launch_go_receipt_invalid", "detail": expected}:
+            raise ValueError("G7 class/purpose refusal missing")
+        if item["first_refusal"] is not True:
+            raise ValueError("G7 refusal was not first")
+        if not _real_int(item["presented_monotonic_ns"]) or item["presented_monotonic_ns"] < 0:
+            raise ValueError("G7 presentation timestamp")
+    absence = value["absence"]
+    exact(absence, "consumption_absent chain_started_absent checked_monotonic_ns", "absence")
+    if absence["consumption_absent"] is not True or absence["chain_started_absent"] is not True:
+        raise ValueError("G7 control consumption/capture must be absent")
+    if (not _real_int(absence["checked_monotonic_ns"])
+            or absence["checked_monotonic_ns"] < max(item["presented_monotonic_ns"] for item in presented)):
+        raise ValueError("G7 absence timestamp")
+    if value["verdict"] != "PASS":
+        raise ValueError("G7 verdict is not PASS")
+    return value
 
-    return _result("G7", "PRODUCTION REJECTION", GateStatus.UNRULED, G7_UNRULED_REASON)
+
+def evaluate_g7(bundle: EvidenceBundle) -> GateResult:
+    """Authenticate the sibling control again, then recompute its PASS conditions."""
+    artifact = bundle.record("g7_control")
+    evidence = [] if artifact is None else [artifact.citation()]
+    try:
+        if artifact is None:
+            raise ValueError("G7 control artifact is absent")
+        locator = bundle.manifest.value["records"]["g7_control"]
+        raw = artifact.path.read_bytes()
+        if readiness.sha256_bytes(raw) != locator["sha256"] or raw != artifact.raw:
+            raise ValueError("G7 control digest changed")
+        value = validate_g7_control(readiness.parse_json_bytes(raw, require_canonical=True))
+        expected_root = bundle.custody_root.with_name(bundle.custody_root.name + "-g7-control")
+        if value["control_custody_root"] != str(expected_root) or value["rehearsal_window_id"] != bundle.custody_root.name:
+            raise ValueError("G7 control is not this rehearsal's sibling")
+        for item in value["presented"]:
+            source = bundle.record("d149_go" if item["kind"] == "rehearsal_go" else "rehearsal_receipt")
+            if source is None or item["sha256"] != readiness.sha256_bytes(source.raw):
+                raise ValueError("G7 presentation is not this rehearsal's retained bytes")
+    except (OSError, ValueError, TypeError, KeyError, readiness.ArmReadinessError) as exc:
+        return _result("G7", "PRODUCTION REJECTION", GateStatus.FAIL, str(exc), *evidence)
+    return _result("G7", "PRODUCTION REJECTION", GateStatus.PASS,
+                   "two first class/purpose refusals; control consumption and capture absent", *evidence)
 
 
 def _process_is_agent(process: object) -> bool:
@@ -1138,7 +1235,7 @@ __all__ = [
     "EvidenceArtifact",
     "EvidenceBundle",
     "FALSIFIER_SCHEMA",
-    "G7_UNRULED_REASON",
+    "G7_CONTROL_SCHEMA",
     "GATE_EVALUATORS",
     "GateResult",
     "GateStatus",

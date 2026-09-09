@@ -26,6 +26,7 @@ RECORD_NAMES = frozenset(
         "execution",
         "hid_idle",
         "d149_go",
+        "g7_control",
         "rehearsal_receipt",
         "process_lineage",
         "lifecycle",
@@ -146,8 +147,26 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_r
         raise BundleLoadError("bundle manifest record census is not exact")
     record_paths = {
         name: _safe_relative(records[name], label=f"records.{name}")
-        for name in sorted(RECORD_NAMES)
+        for name in sorted(RECORD_NAMES - {"g7_control"})
     }
+    locator = records["g7_control"]
+    if (not isinstance(locator, Mapping) or set(locator) != {"path", "sha256"}
+            or not isinstance(locator["path"], str)):
+        raise BundleLoadError("g7_control locator must be {path, sha256}")
+    control_path = Path(locator["path"])
+    expected = custody.with_name(custody.name + "-g7-control") / "night/g7_refusal.json"
+    if control_path != expected or any(p.is_symlink() for p in (control_path, *control_path.parents)):
+        raise BundleLoadError("g7_control must name the sibling control artifact")
+    control_raw = _regular_bytes(control_path, label="g7_control")
+    if readiness.sha256_bytes(control_raw) != locator["sha256"]:
+        raise BundleLoadError("g7_control sha256 mismatch")
+    control_artifact = _artifact(control_path.parent, control_path)
+    if control_artifact.raw != control_raw:
+        raise BundleLoadError("g7_control changed during load")
+    # Absolute record identity distinguishes external control from local records.
+    from dataclasses import replace
+    control_artifact = replace(control_artifact, relative_path=str(control_path))
+    record_paths["g7_control"] = str(control_path)
     namespace_relative = _safe_relative(
         manifest_value.get("t0_namespace"), label="t0_namespace"
     )
@@ -187,6 +206,7 @@ def load_evidence_bundle(root: Path | str, *, home=None, inventory=None) -> t0_r
         raise BundleLoadError("production-root census incomplete") from exc
 
     artifacts, crawl_issues = _crawl(custody)
+    artifacts = (*artifacts, control_artifact)
     manifest_artifact = next(
         (item for item in artifacts if item.relative_path == MANIFEST_NAME), None
     )

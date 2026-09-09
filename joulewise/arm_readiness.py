@@ -9922,6 +9922,47 @@ def _authenticate_go_purpose(go, arm, plan) -> None:
             raise _go_invalid("rehearsal_clone_prefix_invalid: measurement_root")
 
 
+def _admit_pack_launch_go(*, night_plan, go_receipt, go_receipt_sha256,
+                          authenticated_go_receipt=None):
+    """Authenticate presented bytes and reject rehearsal authority before ARM IO.
+
+    A control intentionally presents another plan's GO. Plan/GO binding is a
+    later check; the pinned plan's authorization determines its purpose here.
+    The ARM's window identity and the complete census remain later checks.
+    """
+    from joulewise.night_gate import NightPlan, PlanError
+    from joulewise.t0_rehearsal import REHEARSAL_WINDOW_PREFIX
+
+    try:
+        _plan_path, plan_raw = _go_file(night_plan, "night_plan")
+        _path, raw = _go_file(go_receipt, "go_receipt")
+        digest = sha256_bytes(raw)
+        if digest != go_receipt_sha256:
+            raise _go_invalid("sha256")
+        parsed = parse_json_bytes(raw)
+        if not isinstance(parsed, Mapping) or set(parsed) != PACK_NIGHT_GO_RECEIPT_KEYS:
+            raise _go_invalid("receipt_class")
+        go = validate_pack_night_go_receipt(parsed)
+        if authenticated_go_receipt is not None and go != authenticated_go_receipt:
+            raise _go_invalid("authenticated_go_receipt")
+        plan = parse_json_bytes(plan_raw)
+        NightPlan.from_mapping(plan)
+        if plan["receipt_class"] != "TRANSACTION_PACK":
+            raise _go_invalid("receipt_class")
+        authorization = _go_record(plan["pack_night"]["authorization_record"],
+                                   "authorization", Path(plan["custody_root"]))
+        if authorization.get("purpose") != "T0_REHEARSAL" and (
+            go["purpose"] == "T0_REHEARSAL"
+            or go["plan_id"].startswith(REHEARSAL_WINDOW_PREFIX)
+        ):
+            raise _go_invalid("rehearsal_purpose_on_production_id")
+        return go
+    except LaunchLineageError:
+        raise
+    except (ArmReadinessError, PlanError, OSError, ValueError, TypeError, KeyError) as exc:
+        raise _go_invalid(str(exc)) from exc
+
+
 def _authenticate_pack_launch_go(
     *, night_plan, go_receipt, authenticated_go_receipt, go_receipt_sha256,
     arm, arm_sha256, custody_pack_root, manifest_ref, env_ref, chain_ref,
@@ -10313,6 +10354,11 @@ def _consume_launch_capability(
         step6_confirmation_table, expected_confirmation_digest,
     )):
         raise FamilyPublicationError("confirmation_missing", "both confirmation inputs are required")
+    _admit_pack_launch_go(
+        night_plan=night_plan, go_receipt=go_receipt,
+        go_receipt_sha256=go_receipt_sha256,
+        authenticated_go_receipt=authenticated_go_receipt,
+    )
     if not isinstance(authenticated_arm_receipt, Mapping):
         raise ArmReadinessError(
             "readiness_usage_invalid",
