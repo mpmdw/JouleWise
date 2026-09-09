@@ -1,0 +1,10 @@
+# PR #310 replay attempt 2 (FINAL) — integration tree 0478cc5b (016ac5f0 + merge of main 7f68a31d), alone in-process (four shards concurrent), started 12:57:24 PDT 2026-09-09; timer probe 3.45× at start
+
+SHARD SUMMARY index=1/4 modules=34 tests=545 failures=0 errors=0 skipped=30 result=PASS
+SHARD SUMMARY index=2/4 modules=54 tests=1204 failures=0 errors=0 skipped=53 result=PASS
+SHARD SUMMARY index=3/4 modules=66 tests=1985 failures=0 errors=0 skipped=9 result=PASS
+SHARD SUMMARY index=4/4 modules=67 tests=1912 failures=0 errors=0 skipped=16 result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5646 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+
+All four IdleAdmissionCoreVerdictTests, the race test and the identity/symlink test passed under concurrency; failures=0 errors=0; first fully green local replay of the day (ruling 56 ADDENDUM-2 observation: race test PASS under shards=4 at probe 3.45×).
