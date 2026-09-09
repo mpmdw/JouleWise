@@ -80,7 +80,7 @@ The night described above was armed by headless activation `784a764e` (not `1ef8
 `JouleWise-rehearsal-20260909-<sha>` example above; the arm record is
 `docs/process_traces/2026-09-02-hands-free-week/21h-rehearsal-20260909-arm-record.md`. It fired at 02:56 PDT on 2026-09-09:
 result `REHEARSAL_ONLY`, chain exit 0, results branch `night-results/20260909` at `a84e0f7f`, courier email `1a08599a4ff4d005`.
-The receipt refused `night_probe_error` (the gate read `chain.zsh`, which the stub arm never writes) — a finding, cured by
+The receipt refused `night_probe_error` (the gate read `chain.zsh`, which the stub arm never writes) — a finding; the cure is committed on branch `fix/2026-09-09-night-gate-stub-chain` at `bb7090e2` under review, not yet merged, as lane
 NIGHT-GATE-STUB-CHAIN-01; the plan is not re-armed on that signature. The §Next lane harvest, `--uninstall` from the stub checkout,
 and removal of the stub checkout and plan root are DONE (record 21i); nothing is armed and the frozen-checkout list is empty apart
 from the canonical repo. The standing rules below are unchanged; the next plan's author rewrites §Purpose, §Where the results are and
