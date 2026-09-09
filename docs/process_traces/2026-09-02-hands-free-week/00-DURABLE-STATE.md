@@ -777,3 +777,10 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   four-shard concurrency). Ruling-44 C3 / PR #308 row-9 ADDENDUM-1: the class re-run on then-current main is owed once a quiet slot allows
   (the cure is now on main); ruling-56 ADDENDUM-2: race test PASS under concurrency twice (probe 3.35×/3.45×). PR #311 fix round 1 is
   in its focused run; then its own replay alone, ledger, merge.
+- UPDATE 2026-09-09 ~15:25 PDT: PR #311 — fix round 1 (17843715) delta 95 clean; replay alone at 0661d1d2: 5649 tests rc 0 (97); terminal
+  review 96 on main. BUT Linux CI at 0661d1d2 FAILED: `test_specified_census_observations_refuse_before_publication` →
+  `T0EvidenceAuthoringError: clock-reference command capture fields are invalid or stale` (arm_readiness_evidence_t0.py `_capture`).
+  Lead hypothesis: the synthetic RAW anchor (1_000_000_000_000 ns = 1000 s since boot) is compared with the fixture's real
+  `now_monotonic_ns`; a fresh CI runner's uptime is minutes (< 1000 s) so the capture reads as invalid/stale, while this Mac's uptime is 6
+  days — the same "Mac-calibrated assumption" class as PR #310's rounds. Root-cause consult 99 (Astra high) launched before any fix;
+  PR #311 HOLDS. Opus review 90 §4's "no predicate reads absolute realtime" was about REALTIME; the RAW/now coupling is the new fact.
