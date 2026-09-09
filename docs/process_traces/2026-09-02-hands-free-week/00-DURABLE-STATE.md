@@ -595,3 +595,5 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
 - STAND-DOWN VOID (later on 2026-09-08): Ed resumed joulewise-53 (pid 83953) for daytime work; fresh stand-down promised by
   1788941700 (01:15 PDT 09-09), fallback: absence judged only by `ps -p 83953` after 1788942600. Message verbatim:
   `21b-rehearsal-20260909-bench/msg-joulewise-53-resumed.txt`. Hold the arm while that pid lives.
+- FRESH STAND-DOWN of joulewise-53 received (verbatim in `21b-rehearsal-20260909-bench/msg-joulewise-53-standdown-2.txt`; main
+  `83ab38ed`). Precondition (b) met; pid 83953 presence is judged by `ps -p 83953` in the window. Arm record follows in this trace.
