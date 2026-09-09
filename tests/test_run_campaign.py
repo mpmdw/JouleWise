@@ -9658,8 +9658,15 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             )
         self.assertIs(evaluation.strict_valid, True)
         drift = evaluation.metadata["uncertainty_evidence"]["idle_drift"]
-        self.assertEqual(drift["status"], "bounded")
-        self.assertEqual(drift["post_sample_count"], 100)
+        # Diagnostic message: CI (Linux) reported 'unknown' here while this
+        # test is 'bounded' on the MacBook; the reason must be visible in the
+        # failure text (validation problems, the drift record, the baseline).
+        self.assertEqual(drift["status"], "bounded", (
+            drift, evaluation.validation_problems,
+            evaluation.metadata.get("idle_baseline"),
+            evaluation.metadata.get("uncertainty_evidence", {}).get("idle_drift_guard"),
+        ))
+        self.assertEqual(drift["post_sample_count"], 100, drift)
         self.assertEqual(stages_checked, [True])
 
     def test_real_powermetrics_capture_timeout_is_unchanged(self) -> None:
