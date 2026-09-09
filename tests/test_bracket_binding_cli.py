@@ -487,7 +487,7 @@ def _three_window_runtime(
         mock.patch(
             "joulewise.calibration_bracketing._candidate_from_observation",
             side_effect=source._candidate,
-        ),
+        ) as authenticate,
         mock.patch(
             "joulewise.calibration_bracketing.BundleReader",
             return_value=reader,
@@ -497,7 +497,7 @@ def _three_window_runtime(
             return_value=fixture["snapshot"],
         ),
     ):
-        yield
+        yield authenticate
 
 
 def _run_whole_window_evaluation(
@@ -580,13 +580,39 @@ class BracketBindingCliTests(unittest.TestCase):
                 fixture["produced_path"].read_bytes()
             ).hexdigest()
 
-            with _three_window_runtime(
-                fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+            with (
+                _three_window_runtime(
+                    fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+                ) as authenticate,
+                mock.patch.object(
+                    run_campaign_module,
+                    "_idle_admission_core_evaluation",
+                    wraps=run_campaign_module._idle_admission_core_evaluation,
+                ) as evaluate_core,
             ):
                 evaluate_code, verdict = _run_whole_window_evaluation(
                     fixture,
                     binding_path=fixture["produced_path"],
                     verdict_output_path=fixture["verdict_path"],
+                )
+                self.assertEqual(
+                    [call.kwargs["mode"] for call in authenticate.call_args_list],
+                    ["read_replay"] * 6,
+                )
+                evaluate_core.assert_called_once()
+                replay_call = evaluate_core.call_args
+                self.assertEqual(replay_call.kwargs["mode"], "read_replay")
+                issuing_kwargs = dict(replay_call.kwargs)
+                del issuing_kwargs["mode"]
+                authenticate.reset_mock()
+                issuing_core = evaluate_core(*replay_call.args, **issuing_kwargs)
+                self.assertEqual(
+                    [call.kwargs["mode"] for call in authenticate.call_args_list],
+                    ["issuing"] * 6,
+                )
+                self.assertEqual(
+                    issuing_core.core["instrument_calibration_bracket"]["status"],
+                    "passed",
                 )
             self.assertEqual(evaluate_code, 0)
             self.assertEqual(verdict["status"], "passed")

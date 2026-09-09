@@ -1,0 +1,31 @@
+# Cold-gate ruling: ICLOUD-CUSTODY-LOCATOR-01 issuing boundary
+
+Contamination disclosure: the harness pre-loaded the global CLAUDE.md and the MEMORY.md index (titles and hooks only) into my context before I read anything. I opened no RUN_STATE, CLAUDE.md, AGENTS.md, or memory file myself. Packet sha256 verified f42565ba…916e9. Checkout HEAD ae09cad7.
+
+Executed: grep census of `load_calibration_ledger_snapshot` / `probe_custody` / `_refuse_custody_override_mint` callers; read of every call site cited below; `python3 -B -m unittest tests.test_calibration_ledger_custody` → 20 tests OK. NOT EXECUTED: the other three module suites, any fixture with a planted replacement root.
+
+## Findings
+
+1. **F1 is correctly a blocker.** None of the four issuing modules calls any of the seven guarded ledger functions in exhibit E (grep over `scripts/mint_floor_artifact.py`, `scripts/mint_floor_artifact_generalized.py`, `scripts/build_bracket_binding.py`, `joulewise/analysis_manifest_v3.py` for all seven names plus `artifact_hashes`: zero hits). Each writes output without ever passing a guard: `write_outputs_exclusive` (mint_floor_artifact.py:1981), `_write_v2_artifact_outputs` (generalized:3940), `_publish_no_clobber` (build_bracket_binding.py:306), `_write_append_only` / `write_manifest_atomic` (analysis_manifest_v3.py:4005, 4506). At each of the five cited snapshot loads (mint 2036, generalized 3454, binding 492 and 509, analysis 3637) `verify_custody=True` and no `mode` kwarg, so `_custody_reasons` (calibration_ledger.py:1778) probes with `mode="read_replay"` and a missing original plus valid replacement bytes yields an empty reason set, i.e. a valid snapshot feeding an issued artifact. The guards are not on these paths at all, so they are not defence in depth here; they are absent.
+
+2. **Ruled disposition: 3 (invert the default at the snapshot), with a structural pin. Not 1, not 2 as the mechanism.** Dispositions 1 and 2 both leave the invariant dependent on a reviewer enumerating issuing sites, which is the exact signature that has now recurred three times. Inverting the default makes omission fail-closed: a forgotten site can only lose the override (absent → existing refusal or a replay hang), never gain replacement bytes. After part 4, `probe_custody`, `_custody_probe_paths`, and `_custody_state` already default to `issuing`; only `load_calibration_ledger_snapshot` and `_custody_reasons` still default to `read_replay`. Two edits align every default. The remaining way to reach mapped bytes on an issuing path is an explicit `mode="read_replay"` argument, which is a reviewed diff, not an omission, and is frozen by the pin in finding 5.
+
+3. **Exact changes at this checkout (each read).**
+   - `joulewise/calibration_ledger.py:1976` default `mode` → `"issuing"`; `:1778` `_custody_reasons` default → `"issuing"`.
+   - Replay opt-ins, add `mode="read_replay"`: `joulewise/whole_window.py:512`; `joulewise/analysis_engine/inputs.py:1630` and `:3125`; `scripts/run_campaign.py:4817` (add to `loader_arguments`, consumed at :4829); `scripts/generate_g2a_probe_inputs.py:675`; `scripts/recover_calibration_ledger.py:233` and `:264` (audit commands, verify_custody=True).
+   - No change needed (verify_custody=False, custody never probed, mode irrelevant): `joulewise/receipt_oracle.py:143`; `scripts/check_window_provenance.py:322`, `:854`; `calibration_ledger.py:4853`, `:5242`. `calibration_ledger.py:4968` already selects the mode conditionally; keep.
+   - No edit, become issuing by default: mint_floor_artifact.py:969, 1745, 2036; generalized:3454; build_bracket_binding.py:492, 509; analysis_manifest_v3.py:3637. The generalized route is safe: its "pinned core" is the live `scripts/mint_floor_artifact.py` loaded fresh (generalized:99, :1501), whose ledger import is the live function.
+   - Line 1745 ("replay rebinding") lives inside the mint script and rebinds for issuance; leaving it issuing is the correct fail-closed default. If a replay use appears, opting in is a reviewed choice.
+
+4. **Disposition 2 as optional defence in depth only.** A `_refuse_custody_override_mint()` call at the head of `mint_floor_artifact` (mint:2010), `mint_multi_cell_floor_artifact` (generalized:3983), `build_bracket_binding.main` (:416), and `finalize_prospective_analysis_manifest_v3` (:4045) is cheap and harmless, but it must not be presented as the invariant, because entry points are again a reviewed list. Optional; do not let it delay landing.
+
+5. **Regression pins that make the property structural.**
+   - Signature pin: `inspect.signature(...)["mode"].default == "issuing"` for `load_calibration_ledger_snapshot`, `_custody_reasons`, `probe_custody`, `_custody_probe_paths`, `_custody_state`. Counterfactual: flip any default back; fails.
+   - Opt-in census pin: an AST walk over `joulewise/` and `scripts/` asserting the set of (file, enclosing function) sites passing `mode="read_replay"` equals the frozen allowlist from finding 3 plus the existing part-4 sites. A new replay opt-in must edit the allowlist. Counterfactual: add `mode="read_replay"` at mint:2036; fails.
+   - Fixture pin: non-empty override, original absent, planted valid replacement, `load_calibration_ledger_snapshot(verify_custody=True)` with no mode → `calibration_ledger_custody_invalid` and zero opens under the replacement root; with `mode="read_replay"` → valid. Counterfactual: restore the replay default; the issuing branch passes and the test fails.
+
+6. **Empty override spurious-REFUSE is acceptable.** `_custody_probe_paths` (calibration_ledger.py:4706-4708) returns `()` for `""` in both modes, `probe_custody` returns `absent()` without probing (:4763), and the guard permits empty (:4684). This can only refuse, is unchanged from base 20cd559f, and supplies no bytes. Document it in the contract addendum; do not change it.
+
+7. **F2 (census scope) stands as should-fix**, resolved by the allowlist pin in finding 5, which replaces prose census with an executable one.
+
+**Verdict: adopt disposition 3 (issuing default at `load_calibration_ledger_snapshot` and `_custody_reasons`, eight replay opt-ins, signature + opt-in-census + fixture pins); F1 confirmed blocker; empty-override refuse acceptable; disposition 2 optional only.**

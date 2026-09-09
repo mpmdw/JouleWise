@@ -41,7 +41,7 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Callable, Literal, TypeVar
 
 from joulewise.authentication_io import (
     V2AuthenticationInputError,
@@ -271,9 +271,13 @@ def content_id_from_artifact_hashes(artifact_sha256: Mapping[str, Any]) -> str |
 
 
 def artifact_hashes(custody_dir: Path) -> dict[str, str]:
-    """Hash every governed artifact present in one finalized custody tree."""
+    """Hash governed artifacts for issuance; refuse relocated custody roots."""
 
-    root = Path(custody_dir)
+    _refuse_custody_override_mint()
+    return probe_custody(Path(custody_dir), _artifact_hashes_unbounded, dict, mode="issuing")
+
+
+def _artifact_hashes_unbounded(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for relative in GOVERNED_ARTIFACTS:
         path = root / relative
@@ -1771,7 +1775,8 @@ def _target_state_transition_is_valid(
 
 
 def _custody_reasons(
-    observations: Sequence[LedgerObservation], repo_root: Path
+    observations: Sequence[LedgerObservation], repo_root: Path, *,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> set[str]:
     for observation in observations:
         if not observation.artifact_sha256:
@@ -1781,23 +1786,12 @@ def _custody_reasons(
         root = Path(observation.custody_locator)
         if not root.is_absolute():
             root = Path(repo_root) / root
-        for relative, expected in observation.artifact_sha256.items():
-            path = root / relative
-            try:
-                actual = hashlib.sha256(
-                    read_authentication_input(
-                        path,
-                        grammar="raw",
-                        label=(
-                            f"calibration ledger custody {observation.attempt_id} "
-                            f"artifact {relative}"
-                        ),
-                    )
-                ).hexdigest()
-            except OSError:
-                return {"calibration_ledger_custody_invalid"}
-            if actual != expected:
-                return {"calibration_ledger_custody_invalid"}
+        reasons = probe_custody(
+            root, lambda path: _observation_custody_reasons(observation, path),
+            lambda: {"calibration_ledger_custody_invalid"}, mode=mode,
+        )
+        if reasons:
+            return reasons
     return set()
 
 
@@ -1980,6 +1974,7 @@ def load_calibration_ledger_snapshot(
     verify_custody: bool = True,
     repo_root: Path = REPO_ROOT,
     calibration_custody_store: Path | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
 ) -> CalibrationLedgerSnapshot:
     """Load, authenticate, and freeze exactly one ledger snapshot.
 
@@ -2075,7 +2070,7 @@ def load_calibration_ledger_snapshot(
     if calibration_custody_store is not None and not verify_custody:
         reasons.add("calibration_ledger_custody_invalid")
     elif verify_custody and calibration_custody_store is None:
-        reasons.update(_custody_reasons(custody_observations, repo_root))
+        reasons.update(_custody_reasons(custody_observations, repo_root, mode=mode))
     elif verify_custody:
         store_reasons, custody_store_manifest_sha256 = _custody_store_reasons(
             custody_observations,
@@ -2333,6 +2328,13 @@ def _historical_directories(roots: Sequence[Path]) -> tuple[Path, ...]:
 
 
 def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
+    return probe_custody(
+        directory, _assert_absolute_nonsymlink_directory_unbounded,
+        lambda: _missing_custody(directory), mode="issuing",
+    )
+
+
+def _assert_absolute_nonsymlink_directory_unbounded(directory: Path) -> Path:
     path = Path(directory)
     if not path.is_absolute():
         raise CalibrationLedgerError("custody locator is not absolute")
@@ -2354,7 +2356,14 @@ def _assert_absolute_nonsymlink_directory(directory: Path) -> Path:
 
 
 def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
-    root = _assert_absolute_nonsymlink_directory(directory)
+    return probe_custody(
+        directory, lambda root: _read_contained_nofollow_unbounded(root, relative),
+        lambda: _missing_custody(directory), mode="issuing",
+    )
+
+
+def _read_contained_nofollow_unbounded(directory: Path, relative: str) -> bytes:
+    root = _assert_absolute_nonsymlink_directory_unbounded(directory)
     try:
         return read_authentication_input_nofollow(
             root,
@@ -2369,8 +2378,15 @@ def _read_contained_nofollow(directory: Path, relative: str) -> bytes:
 
 
 def _governed_raw_nofollow(directory: Path) -> dict[str, bytes]:
+    return probe_custody(
+        directory, _governed_raw_nofollow_unbounded,
+        lambda: _missing_custody(directory), mode="issuing",
+    )
+
+
+def _governed_raw_nofollow_unbounded(directory: Path) -> dict[str, bytes]:
     return {
-        relative: _read_contained_nofollow(directory, relative)
+        relative: _read_contained_nofollow_unbounded(directory, relative)
         for relative in GOVERNED_ARTIFACTS
     }
 
@@ -2529,6 +2545,8 @@ def generate_historical_custody_manifest(
 ) -> Mapping[str, Any]:
     """Apply the lexicographic selection rule for a lead-reviewed manifest."""
 
+    _refuse_custody_override_mint()
+
     table = _authenticated_json_object(
         disposition_table_raw,
         expected_disposition_table_sha256,
@@ -2586,6 +2604,8 @@ def prepare_historical_import(
     expected_custody_manifest_sha256: str,
 ) -> HistoricalImportPlan:
     """Authenticate reviewed inputs and prepare the canonical genesis chain."""
+
+    _refuse_custody_override_mint()
 
     disposition_table = _authenticated_json_object(
         disposition_table_raw,
@@ -3438,6 +3458,8 @@ def bootstrap_historical_import(
     complete chain outside the reader-visible ledger path, then atomically
     replaces the empty ledger. The head pin is never written.
     """
+
+    _refuse_custody_override_mint()
 
     ledger = Path(ledger_path)
     pin = Path(head_pin_path)
@@ -4378,6 +4400,8 @@ def finalize_bracket_session_slot(
 ) -> Mapping[str, Any]:
     """Fill exactly one reserved session slot in mandatory pre/post order."""
 
+    _refuse_custody_override_mint()
+
     if slot not in BRACKET_SESSION_SLOTS:
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
@@ -4647,7 +4671,154 @@ def validate_frozen_reservation_plan(
     return _frozen_mapping(value)
 
 
-def _custody_state(path: Path) -> str:
+BACKUP_ROOTS = (
+    Path("/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup"),
+)
+CUSTODY_PROBE_TIMEOUT_S = 2.0
+
+
+_CustodyResult = TypeVar("_CustodyResult")
+
+
+def _refuse_custody_override_mint() -> None:
+    """Never issue original locators authenticated using replacement bytes."""
+
+    if any(os.environ.get("JOULEWISE_BACKUP_ROOTS", "").split(os.pathsep)):
+        raise CalibrationLedgerError("custody_locator_override_mint_forbidden")
+
+
+def _custody_probe_paths(
+    path: Path, *, mode: Literal["read_replay", "issuing"] = "issuing",
+) -> tuple[Path, ...]:
+    """Map only replay locators; empty overrides retain the absent shortcut."""
+
+    if mode not in {"read_replay", "issuing"}:
+        raise ValueError(f"invalid custody resolution mode: {mode}")
+
+    override = os.environ.get("JOULEWISE_BACKUP_ROOTS")
+    if override is not None:
+        for root in BACKUP_ROOTS:
+            try:
+                relative = Path(os.path.abspath(path)).relative_to(root)
+            except ValueError:
+                continue
+            parts = tuple(part for part in override.split(os.pathsep) if part)
+            if not parts:
+                return ()
+            if mode == "read_replay":
+                return tuple(Path(part) / relative for part in parts)
+            break
+    return (path,)
+
+
+def _custody_backup_disabled(path: Path) -> bool:
+    return not _custody_probe_paths(path, mode="issuing")
+
+
+def _observation_custody_reasons(observation: LedgerObservation, root: Path) -> set[str]:
+    for relative, expected in observation.artifact_sha256.items():
+        path = root / relative
+        try:
+            actual = hashlib.sha256(
+                read_authentication_input(
+                    path,
+                    grammar="raw",
+                    label=(
+                        f"calibration ledger custody {observation.attempt_id} "
+                        f"artifact {relative}"
+                    ),
+                )
+            ).hexdigest()
+        except OSError:
+            return {"calibration_ledger_custody_invalid"}
+        if actual != expected:
+            return {"calibration_ledger_custody_invalid"}
+    return set()
+
+
+def probe_custody(
+    path: Path,
+    inspect: Callable[[Path], _CustodyResult],
+    absent: Callable[[], _CustodyResult],
+    *,
+    not_directory: Callable[[], _CustodyResult] | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
+) -> _CustodyResult:
+    """Bound only a pure path probe; inspect synchronously on the caller.
+
+    The daemon performs only exists/is_dir filesystem calls, without entering
+    an authentication session, inheriting its context, or acquiring its locks.
+    Timeout or any probe exception has the same decision as absence, with a
+    distinguishable stderr diagnostic. Only explicit read_replay mode maps
+    backup roots. Issuing mode probes the original locator. Replay retains
+    the suffix; the first existing replacement remains authoritative even if
+    invalid. An empty override skips default backup locators without probing.
+
+    A responsive but slow complete tree is also reported absent when exists
+    or is_dir takes longer than CUSTODY_PROBE_TIMEOUT_S (2 seconds).
+
+    Accepted race: a mount can stall between a successful probe and the
+    unchanged, unbounded authenticated read (the roughly two-second post-probe
+    window). This narrows the hang window; it does not bound reads. No timed-out
+    worker can retain an authentication lock. Existing non-directory outcomes
+    remain the caller's responsibility.
+    """
+
+    paths = _custody_probe_paths(path, mode=mode)
+    if not paths:
+        if mode == "issuing":
+            print(f"custody_backup_roots_disabled: {path}", file=sys.stderr)
+        return absent()
+    result: list[tuple[Path, bool]] = []
+    failed: list[bool] = []
+
+    def probe() -> None:
+        try:
+            for candidate in paths:
+                if candidate.exists():
+                    result.append((candidate, candidate.is_dir()))
+                    return
+        except BaseException:
+            failed.append(True)
+            # No partial selection, authentication, or caller callback escapes
+            # a failed path probe, including failures other than OSError.
+            return
+
+    worker = threading.Thread(
+        target=probe, daemon=True, name="custody-locator-probe"
+    )
+    worker.start()
+    worker.join(CUSTODY_PROBE_TIMEOUT_S)
+    reason = "timeout" if worker.is_alive() else "exception" if failed else None
+    if reason is not None:
+        print(
+            f"custody_locator_unreachable reason={reason} locator={path} "
+            f"budget_s={CUSTODY_PROBE_TIMEOUT_S}",
+            file=sys.stderr,
+        )
+        return absent()
+    if not result:
+        return absent()
+    selected, is_directory = result[0]
+    if not is_directory and not_directory is not None:
+        return not_directory()
+    return inspect(selected)
+
+
+def _missing_custody(path: Path) -> Any:
+    raise CalibrationLedgerError(f"custody locator is missing: {path}")
+
+
+def _custody_state(
+    path: Path, *, mode: Literal["read_replay", "issuing"] = "issuing",
+) -> str:
+    return probe_custody(
+        path, _custody_state_unbounded, lambda: "absent",
+        not_directory=lambda: "unreadable", mode=mode,
+    )
+
+
+def _custody_state_unbounded(path: Path) -> str:
     try:
         if not path.exists():
             return "absent"
@@ -4660,7 +4831,7 @@ def _custody_state(path: Path) -> str:
         return "empty"
     if present == set(GOVERNED_ARTIFACTS):
         try:
-            raw_by_name = _governed_raw_nofollow(path)
+            raw_by_name = _governed_raw_nofollow_unbounded(path)
             manifest = json.loads(raw_by_name["manifest.json"])
             evidence = json.loads(raw_by_name["instrument_evidence.json"])
         except (CalibrationLedgerError, UnicodeDecodeError, json.JSONDecodeError):
@@ -4688,6 +4859,7 @@ def calibration_session_status(
         head_pin_path,
         require_committed_pin=require_committed_pin,
         verify_custody=False,
+        mode="read_replay",
         repo_root=repo_root,
     )
     session = snapshot.bracket_session_by_id.get(session_id)
@@ -4716,7 +4888,7 @@ def calibration_session_status(
         slots[slot] = {
             "attempt_id": session.slot_attempt_ids.get(slot),
             "custody_locator": str(locator) if locator is not None else None,
-            "custody_state": _custody_state(locator) if locator is not None else None,
+            "custody_state": _custody_state(locator, mode="read_replay") if locator is not None else None,
             "finalized": slot in session.finalized_slots,
         }
     next_slot = (
@@ -4797,6 +4969,7 @@ def calibration_readiness(
         )
     if enforcing_under_lease and _current_writer_lease(ledger_path) is None:
         raise CalibrationLedgerError(RefusalCode.PRE_SLOT_NOT_READY)
+    mode = "issuing" if enforcing_under_lease else "read_replay"
     inspection = inspect_calibration_ledger(ledger_path)
     snapshot = load_calibration_ledger_snapshot(
         ledger_path,
@@ -4805,6 +4978,7 @@ def calibration_readiness(
         # The enforcing gate authenticates every finalized observation in the
         # snapshot, not merely the custody path for the upcoming slot.
         verify_custody=enforcing_under_lease,
+        mode=mode,
         repo_root=repo_root,
     )
     relation = _pin_relation(snapshot)
@@ -4852,7 +5026,10 @@ def calibration_readiness(
                 else None
             )
             if isinstance(reserved, Mapping):
-                custody_state = _custody_state(Path(str(reserved["custody_locator"])))
+                custody_state = _custody_state(
+                    Path(str(reserved["custody_locator"])),
+                    mode=mode,
+                )
             claims = [
                 receipt
                 for receipt in snapshot.receipts
@@ -4983,6 +5160,7 @@ def advance_calibration_head_pin(
             head_pin_path,
             require_committed_pin=require_committed_pin,
             verify_custody=True,
+            mode="issuing",
             repo_root=repo_root,
         )
         if _pin_relation(snapshot) is not PinRelation.PHYSICAL_AHEAD:
@@ -5059,6 +5237,8 @@ def resume_finalize_bracket_session(
 ) -> Mapping[str, Any]:
     """Finalize authenticated complete custody from a fresh process."""
 
+    _refuse_custody_override_mint()
+
     with CalibrationWriterLease(ledger_path):
         repair_calibration_ledger(
             ledger_path,
@@ -5070,6 +5250,7 @@ def resume_finalize_bracket_session(
             head_pin_path,
             require_committed_pin=require_committed_pin,
             verify_custody=False,
+            mode="read_replay",
             repo_root=repo_root,
         )
         session = snapshot.bracket_session_by_id.get(session_id)
@@ -5092,7 +5273,7 @@ def resume_finalize_bracket_session(
         assert open_receipt is not None
         reserved = open_receipt["slots"][slot]
         custody = Path(str(reserved["custody_locator"]))
-        state = _custody_state(custody)
+        state = _custody_state(custody, mode="issuing")
         if state != "complete":
             raise CalibrationLedgerError(
                 RefusalCode.CUSTODY_PARTIAL
@@ -5215,6 +5396,8 @@ def abort_calibration_session(
     repo_root: Path = REPO_ROOT,
 ) -> Mapping[str, Any]:
     """Abort an open session under the writer lease without deleting custody."""
+
+    _refuse_custody_override_mint()
 
     with CalibrationWriterLease(ledger_path):
         repair_calibration_ledger(
@@ -5391,6 +5574,8 @@ def finalize_attempt_receipt(
 ) -> Mapping[str, Any]:
     """Append the sole final state for a previously reserved attempt."""
 
+    _refuse_custody_override_mint()
+
     if disposition not in FINAL_DISPOSITIONS:
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
@@ -5543,6 +5728,7 @@ __all__ = [
     "claim_bracket_session_slot",
     "abort_bracket_session",
     "artifact_hashes",
+    "probe_custody",
     "calibration_custody_store_manifest",
     "calibration_custody_store_manifest_bytes",
     "bootstrap_historical_import",

@@ -54,6 +54,7 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_admitted_report_vocabulary,
     validate_d117_mint_consumption_report,
 )
+from joulewise.calibration_ledger import _refuse_custody_override_mint  # noqa: E402
 from joulewise import detection_floor  # noqa: E402
 from joulewise import dominance_closeout  # noqa: E402
 from joulewise import floor_mint_estimator as mint_estimator  # noqa: E402
@@ -182,6 +183,7 @@ _CORE_SIGNATURES = {
         "<callable:_authenticated_consumption_summaries>, allowance_deriver: "
         "'AllowanceDeriver' = <callable:whole_window_drift_allowances>, "
         "expected_consumption_semantics_id: 'str | None' = None, "
+        "mode: \"Literal['read_replay', 'issuing']\" = 'issuing', "
         "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None, "
         "calibration_bracket_binding: 'Mapping[str, Any] | None' = None) -> "
         "'AuthenticatedComponent'"
@@ -189,6 +191,7 @@ _CORE_SIGNATURES = {
     "bind_floor_artifact_evidence": (
         "(artifact: 'Mapping[str, Any]', floor_path: 'Path', evidence_roots: "
         "'Mapping[str, Path]', *, strict_validator: 'StrictValidator', "
+        "mode: \"Literal['read_replay', 'issuing']\" = 'issuing', "
         "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None, "
         "calibration_bracket_binding: 'Mapping[str, Any] | None' = None) -> "
         "'Mapping[str, tuple[str, ...]]'"
@@ -3995,6 +3998,7 @@ def mint_multi_cell_floor_artifact(
     d165_replay_out: Path | None = None,
 ) -> Mapping[str, Any]:
     """Authenticate all v2 sources, mint once, rebind, and write exclusively."""
+    _refuse_custody_override_mint()
 
     if active_v2_authentication_session() is not None:
         return _mint_multi_cell_floor_artifact_active(

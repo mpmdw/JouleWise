@@ -2602,9 +2602,11 @@ class AnalysisIntegrationTests(unittest.TestCase):
         summary_path = self.runs_root / target_id / "summary_metrics.json"
         stored_bytes = summary_path.read_bytes()
         widened_by_bundle: dict[str, Mapping[str, object]] = {}
+        observed_modes: list[str] = []
 
         class FakeConsumptionSession:
-            def __init__(self, runs_root, bundle_ids):
+            def __init__(self, runs_root, bundle_ids, *, mode):
+                observed_modes.append(mode)
                 self.runs_root = Path(runs_root)
                 self.bundle_ids = frozenset(bundle_ids)
                 self.ready = True
@@ -2687,6 +2689,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             for evidence in loaded.effective.values()
             if evidence.bundle_id == target_id
         )
+        self.assertEqual(observed_modes, ["issuing"])
         self.assertIs(target.summary, widened_by_bundle[target_id])
         self.assertEqual(
             target.summary["energy_anchor_shift_envelopes"][

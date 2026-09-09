@@ -59,6 +59,61 @@ UNRECORDED_ENVELOPE = "anchor_energy_envelope_unrecorded"
 SENTINEL_J = 987_654_321.125
 
 
+class CandidateDiscoveryModeTests(unittest.TestCase):
+    def test_session_candidate_discovery_uses_original_unless_replay(self):
+        import os
+        from joulewise import calibration_bracketing as bracketing
+        from joulewise import calibration_ledger as ledger
+        from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            original_root, replacement = root / "absent", root / "replacement"
+            original = original_root / "runs/member"
+            mapped = replacement / "runs/member"
+            mapped.mkdir(parents=True)
+            (mapped / "marker").write_text("replacement bytes")
+            candidate = bracketing.CalibrationCandidate(
+                relative_path=str(original), manifest_sha256="a" * 64,
+                evidence_sha256="b" * 64, protocol_id="fixture",
+                capture_wall_time_s=1.0, b_fiducial_s="0.02",
+                bindings={"anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD},
+            )
+            snapshot, _ = _fixture_snapshot([candidate])
+            inspected = []
+
+            def inspect_candidate(directory, *, runs_root):
+                inspected.append(directory)
+                self.assertEqual((directory / "marker").read_text(), "replacement bytes")
+                self.assertEqual(runs_root, replacement)
+                return candidate
+
+            for kwargs, replay in (({}, False), ({"mode": "issuing"}, False),
+                                   ({"mode": "read_replay"}, True)):
+                inspected.clear()
+                with (
+                    self.subTest(mode=kwargs),
+                    patch.object(ledger, "BACKUP_ROOTS", (original_root,)),
+                    patch.dict(os.environ, {"JOULEWISE_BACKUP_ROOTS": str(replacement)}),
+                    patch.object(bracketing, "BundleReader") as reader,
+                    patch.object(bracketing, "_load_calibration_candidate_unbounded",
+                                 side_effect=inspect_candidate),
+                    patch.object(bracketing, "evaluate_calibration_bracket",
+                                 return_value=({"b_fiducial_s": None}, ())) as evaluate,
+                ):
+                    reader.return_value.measured_window.return_value = SimpleNamespace(start_s=2, end_s=3)
+                    reader.return_value.metadata.return_value = {"instrument_calibration": {"bindings": {}}}
+                    session = AuthenticatedConsumptionSession(root, {"consumer"},
+                        calibration_ledger_snapshot=snapshot, **kwargs)
+                    session._prepare(bundle_paths={"consumer": root / "consumer"},
+                                     policy=SimpleNamespace(calibration_bracketing=object()))
+                    self.assertEqual(inspected, [mapped] if replay else [])
+                    self.assertEqual(len(evaluate.call_args.args[0]), 1 if replay else 0)
+                    if not replay:
+                        self.assertIn("calibration_ledger_custody_invalid", session.refusal_reasons)
+                    self.assertFalse(original.exists())
+
+
 class CampaignManifestVerdictAuthenticationTests(unittest.TestCase):
     POLICY_SHA = "a" * 64
     BRACKET_POLICY = {"require_bracket": True}

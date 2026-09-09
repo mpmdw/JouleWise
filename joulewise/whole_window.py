@@ -20,7 +20,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Literal
 
 from joulewise.aggregate import student_t_critical_95
 from joulewise.authentication_io import (
@@ -481,6 +481,7 @@ class AuthenticatedConsumptionSession:
         *,
         evaluation_basis_sha256: str | None = None,
         consumption_semantics_id: str = MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
+        mode: Literal["read_replay", "issuing"] = "issuing",
         calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
         calibration_bracket_binding: Mapping[str, Any] | None = None,
         _allow_unissued_calibration_fixture: bool = False,
@@ -493,6 +494,7 @@ class AuthenticatedConsumptionSession:
             raise ValueError(
                 f"unknown whole-window consumption semantics: {consumption_semantics_id!r}"
             )
+        self.mode = mode
         self.runs_root = Path(runs_root)
         self.referenced_bundle_ids = frozenset(referenced_bundle_ids)
         self.evaluation_basis_sha256 = evaluation_basis_sha256
@@ -510,6 +512,7 @@ class AuthenticatedConsumptionSession:
                 else None
             )
             self.calibration_ledger_snapshot = load_calibration_ledger_snapshot(
+                mode=mode,
                 baseline_sequence=(
                     cutoff.get("sequence") if isinstance(cutoff, Mapping) else None
                 ),
@@ -691,6 +694,7 @@ class AuthenticatedConsumptionSession:
             self.runs_root,
             [bundle_paths[bundle_id] for bundle_id in sorted(bundle_paths)],
             policy.calibration_bracketing,
+            mode=self.mode,
             ledger_snapshot=self.calibration_ledger_snapshot,
             bracket_binding=bracket_binding,
             bracket_window_id=(

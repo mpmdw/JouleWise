@@ -39,7 +39,7 @@ import json
 import math
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 # A strict validator returns the list of D-030 strict-validation problems for a
 # bundle directory (empty == strict-valid).  Signature matches
@@ -2835,6 +2835,7 @@ def extract_cells(
     consumption_semantics_id: str | None = None,
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
+    mode: Literal["read_replay", "issuing"] = "issuing",
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> dict[str, Any]:
     """Extract every cell in a spec document into one fail-closed report."""
@@ -2869,6 +2870,7 @@ def extract_cells(
     consumption_session = AuthenticatedConsumptionSession(
         runs_root,
         referenced_bundle_ids,
+        mode=mode,
         evaluation_basis_sha256=evaluation_basis_sha256,
         consumption_semantics_id=(
             consumption_semantics_id or MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
