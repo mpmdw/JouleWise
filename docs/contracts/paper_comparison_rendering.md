@@ -62,9 +62,11 @@ all five active roles below are `test_fixture_non_issuing`.
 | NEW — characterization result or verified not-collected evidence | No family or role exists today; names and issuing adoption remain for S1/S3 | NEW; input census must be adopted, not inferred |
 
 G2-a is **not a family**: `g2a_selection` is an EXISTING input role inside
-Reported energy. The only pending production role is EXISTING
-`production.reported_energy_parents.qwen3-1p7b.v5`, input role `extraction_spec`,
-status `pending_desk_day`; it is not an active issuing role. D-173 additionally
+Reported energy. Both pending production roles are EXISTING:
+`production.reported_energy_parents.qwen3-1p7b.v5` and
+`production.reported_energy_parents.qwen3-8b.v5`, input role `extraction_spec`,
+status `pending_desk_day`; neither is an active issuing role. The S2 fix ruling
+includes 8b because both models are cells of the D-179 registration. D-173 additionally
 requires `custody_inventory` and `validator_receipt` locators for every family,
 transitive `source_census`, and `floor_acceptance` for production D-165 and
 Claims inputs. NEW production roles, projections or grants needed for these

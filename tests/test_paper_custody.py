@@ -705,7 +705,7 @@ def _assert_refusal_census(source: str, expected: set[str]) -> None:
         raise AssertionError("refusal constructor/registry/contract census mismatch")
 
 
-def _issued_control(fixture: _FamilyFixture, *, grants=None, subjects=None, payload=None):
+def _issued_control(fixture: _FamilyFixture, *, grants=None, subjects=None, payload=None, projection=None):
     """Deliberate private reconstruction for wrapper controls, never live evidence."""
     opened = custody.open_paper_input(fixture.ref)
     spec = custody._FAMILY_SPECS[type(fixture.ref)]
@@ -717,7 +717,8 @@ def _issued_control(fixture: _FamilyFixture, *, grants=None, subjects=None, payl
     values.update(mode="production", issuance_authorized=True, subjects=subjects, grants=grants)
     evidence = custody._construct_custody_evidence(token, **values)
     return custody._construct_verified(token, spec.issuing_type, evidence,
-                                       opened._payload if payload is None else custody._freeze_json(payload))
+                                       opened._payload if payload is None else custody._freeze_json(payload),
+                                       None if projection is None else custody._freeze_json(projection))
 
 
 class RoundFiveTests(unittest.TestCase):
@@ -800,7 +801,8 @@ class RoundFiveTests(unittest.TestCase):
                                      opened._custody_token, other, issued.evidence, opened._payload)
 
     def test_closed_gate_registry(self):
-        self.assertEqual(set(custody._ISSUANCE_GATES), {("d165_closeout", "d165-closeout.v1")})
+        self.assertEqual(set(custody._ISSUANCE_GATES), {("d165_closeout", "d165-closeout.v1"),
+                                                            ("claim_evidence", "claim-evidence.v1")})
         ctx = self.context()
         for gate_id in (None, "unknown.v1", "reported-energy.v1"):
             self.assert_code("paper_custody_issuance_gate_unregistered", custody._run_issuance_gate,
@@ -870,8 +872,10 @@ class RoundFiveTests(unittest.TestCase):
         ctx = self.context("claim_evidence")
         supported = {"contrast_id": "supported", "claim_role": "primary",
                      "sampling": {"confirmatory_status": "confirmatory"},
-                     "estimator": {"estimate": 10, "metrology_aware_CI95": {"lower": 9, "upper": 11}},
-                     "deterministic_bounds": {"total": 1, "decision_interval": {"lower": 8, "upper": 12}},
+                     "metric": {"unit": "J", "ratio_estimand": None},
+                     "estimator": {"name": "abba_block_arm_mean_difference_t_v1", "estimate": 10, "metrology_aware_CI95": {"lower": 9, "upper": 11}},
+                     "deterministic_bounds": {"terms": [{"name": "E_clock_anchor_shift_bound_j", "bound": 1}],
+                                              "total": 1, "decision_interval": {"lower": 8, "upper": 12}},
                      "floor": {"active_floor_j": 2}, "multiplicity": {"rejected": True},
                      "claim_evaluation": {"reason_codes": [], "claim_ready_for_l2_l3": True,
                                           "claim_level_ceiling": "L2", "outcome": "direction_supported"}}
@@ -881,20 +885,20 @@ class RoundFiveTests(unittest.TestCase):
         demoted["sampling"]["confirmatory_status"] = "exploratory"
         artifact = {"evidence_class": "current", "contrasts": [supported, unsupported, demoted],
                     "inputs": {"floor_artifact": {"embedded_bytes_base64": ""}}}
-        floor = {"artifact_id": "synthetic-floor", "cells": [{"cell_id": "cell"}]}
+        for row in artifact["contrasts"]:
+            row["floor"]["resolutions"] = [{"status": "exact", "source_cell_ids": [row["contrast_id"]]}]
+        floor = {"artifact_id": "synthetic-floor",
+                 "cells": [{"cell_id": row["contrast_id"]} for row in artifact["contrasts"]]}
         ctx.raws[custody.InputRole.FLOOR_ARTIFACT] = _json_bytes(floor)
         artifact["inputs"]["floor_artifact"]["embedded_bytes_base64"] = base64.b64encode(ctx.raws[custody.InputRole.FLOOR_ARTIFACT]).decode()
         ctx.raws[custody.InputRole.CLAIM_VERDICTS] = _json_bytes(artifact)
-        manifest = {"contrasts": [{"contrast_id": row["contrast_id"], "source_cell_ids": ["cell"]} for row in artifact["contrasts"]]}
+        manifest = {"contrasts": [{"contrast_id": row["contrast_id"],
+                                   "floor_estimator_registration": {}} for row in artifact["contrasts"]]}
         ctx.raws[custody.InputRole.FINALIZED_MANIFEST] = _json_bytes(manifest)
-        sidecar = {"schema_version": "joulewise.claim_side_bound.v1",
-                   "claim_verdicts_sha256": _sha(ctx.raws[custody.InputRole.CLAIM_VERDICTS]),
-                   "contrasts": [{"contrast_id": row["contrast_id"], "source_cell_ids": ["cell"],
-                                  "floor_artifact_id": "synthetic-floor", "claim_side_bound_j": 1,
-                                  "metrology_aware_CI95": row["estimator"]["metrology_aware_CI95"],
-                                  "decision_interval": row["deterministic_bounds"]["decision_interval"]}
-                                 for row in artifact["contrasts"]]}
-        ctx.raws[custody.InputRole.CLAIM_SIDE_BOUND] = _json_bytes(sidecar)
+        sidecar_raw = claim_side_bound.produce_claim_side_bound(
+            ctx.raws[custody.InputRole.CLAIM_VERDICTS], finalized_manifest=manifest, floor_artifact=floor)
+        sidecar = json.loads(sidecar_raw)
+        ctx.raws[custody.InputRole.CLAIM_SIDE_BOUND] = sidecar_raw
         ctx.raws[custody.InputRole.FLOOR_ACCEPTANCE] = self.acceptance(ctx)
         with ExitStack() as stack:
             owner = stack.enter_context(mock.patch("joulewise.analysis_engine.artifact.validate_claim_verdicts", return_value=[]))
@@ -911,7 +915,7 @@ class RoundFiveTests(unittest.TestCase):
                 self.assertEqual({(grant.kind, grant.subject_id) for grant in result.grants}, kinds)
             self.assertEqual(owner.call_count, 5); self.assertEqual(disk.call_count, 5); self.assertEqual(side.call_count, 5)
             for field, replacement in (("source_cell_ids", ["wrong"]), ("floor_artifact_id", "wrong"),
-                                       ("claim_side_bound_j", 4), ("contrast_id", "wrong")):
+                                       ("deterministic_widening_total", 4), ("contrast_id", "wrong")):
                 bad = copy.deepcopy(sidecar); bad["contrasts"][0][field] = replacement
                 ctx.raws[custody.InputRole.CLAIM_SIDE_BOUND] = _json_bytes(bad)
                 self.assertFalse(custody._claim_issuance_gate(dataclasses.replace(ctx, subjects=("supported",))).authentic)
@@ -921,7 +925,7 @@ class RoundFiveTests(unittest.TestCase):
             ctx.raws[custody.InputRole.CLAIM_SIDE_BOUND] = _json_bytes(sidecar)
             ctx.raws[custody.InputRole.FLOOR_ARTIFACT] += b" "
             self.assertFalse(custody._claim_issuance_gate(dataclasses.replace(ctx, subjects=("supported",))).authentic)
-        self.assertNotIn(("claim_evidence", "claim-evidence.v1"), custody._ISSUANCE_GATES)
+        self.assertIs(custody._ISSUANCE_GATES[("claim_evidence", "claim-evidence.v1")], custody._claim_issuance_gate)
 
     def test_gate_sources_change_receipt_digest(self):
         original = inspect.getsource
@@ -939,7 +943,12 @@ class RoundFiveTests(unittest.TestCase):
                 self.assertIn(f"paper_custody.{required}", members)
             if family == "claim_evidence":
                 for required in ("analysis_engine.claims.evaluate_claim", "analysis_engine.claim_side_bound.validate_claim_side_bound",
-                                 "analysis_engine.artifact._validate_cross_field_claim_semantics"):
+                                 "analysis_engine.artifact._validate_cross_field_claim_semantics",
+                                 "analysis_engine.claim_side_bound.produce_claim_side_bound",
+                                 "analysis_engine.ratio.validate_ratio_estimand",
+                                 "analysis_engine.ratio.validate_metric_unit_and_ratio",
+                                 "module:joulewise.analysis_engine.ratio",
+                                 "module:joulewise.analysis_engine.claim_side_bound"):
                     self.assertIn(required, members)
             for member_id, member in census:
                 with self.subTest(family=family, owner=member_id), mock.patch.object(
@@ -954,21 +963,22 @@ class RoundFiveTests(unittest.TestCase):
 
     def test_production_git_blob_coverage(self):
         supply = json.loads(SUPPLY_MAP.read_bytes())
-        role = "production.reported_energy_parents.qwen3-1p7b.v5"
-        path = "configs/campaigns/d117_floor_qwen3-1p7b_v5/extraction_spec.json"
-        if role not in supply["roles"]:
-            self.assertEqual(supply["pending_roles"][role], {
-                "status": "pending_desk_day", "family": "reported_energy_parents", "input_role": "extraction_spec",
-                "base": "repository", "authority": "git_blob", "path": path})
-            self.assertTrue(all(entry["mode"] == "test_fixture_non_issuing" for entry in supply["roles"].values()))
-            print("PENDING production Git-blob role: fixture coverage is not production coverage")
-        else:
-            entry = supply["roles"][role]
-            self.assertEqual(entry["mode"], "production")
-            row = next(row for row in entry["inputs"] if row["role"] == "extraction_spec")
-            self.assertEqual((row["base"], row["authority"], row["path"]), ("repository", "git_blob", path))
-            self.assertEqual(_sha(custody._git_blob(ROOT, "HEAD", path)), row["expected_sha256"])
-            self.assertTrue(entry["source_census"])
+        for model in ("qwen3-1p7b", "qwen3-8b"):
+            role = f"production.reported_energy_parents.{model}.v5"
+            path = f"configs/campaigns/d117_floor_{model}_v5/extraction_spec.json"
+            if role not in supply["roles"]:
+                self.assertEqual(supply["pending_roles"][role], {
+                    "status": "pending_desk_day", "family": "reported_energy_parents", "input_role": "extraction_spec",
+                    "base": "repository", "authority": "git_blob", "path": path})
+                self.assertTrue(all(entry["mode"] == "test_fixture_non_issuing" for entry in supply["roles"].values()))
+                print("PENDING production Git-blob role: fixture coverage is not production coverage")
+            else:
+                entry = supply["roles"][role]
+                self.assertEqual(entry["mode"], "production")
+                row = next(row for row in entry["inputs"] if row["role"] == "extraction_spec")
+                self.assertEqual((row["base"], row["authority"], row["path"]), ("repository", "git_blob", path))
+                self.assertEqual(_sha(custody._git_blob(ROOT, "HEAD", path)), row["expected_sha256"])
+                self.assertTrue(entry["source_census"])
 
     def test_git_blob_dispatch_checks_blob_before_parse_and_worktree(self):
         fixture = self.fixture("reported_energy_parents")

@@ -369,6 +369,38 @@ class RegistryAndDigestTests(unittest.TestCase):
         checked = {c.label for c in FENCE.check_rendered_rows(self.spec, self.artifacts)}
         self.assertTrue({f"row {row_id}" for row_id in retired_dx - {"DX-002"}} <= checked)
 
+    def test_proposal_census_wording_is_not_a_dated_retirement(self) -> None:
+        proposal = next(line for line in self.text.splitlines()
+                        if line.startswith("| X5 | CP-X05-1p7b-prefill |"))
+        retirement = next(line for line in self.text.splitlines()
+                          if line.startswith("| DS-09 — "))
+        self.assertIn("RETIRED_FALLBACK under D-174; no placement restored", proposal)
+        self.assertIn("D-177 adjacent phase-energy limitation required", proposal)
+        self.assertIn(FENCE.RETIREMENT_DATE, retirement)
+        self.assertEqual(FENCE._retired_sites(proposal), ())
+        for rows in ((proposal, retirement), (retirement, proposal)):
+            with self.subTest(rows=rows):
+                self.assertEqual(FENCE._retired_sites("\n".join(rows)), ("DS-09",))
+
+    def test_malformed_historical_retirement_notes_are_refused(self) -> None:
+        retirement = next(line for line in self.text.splitlines()
+                          if line.startswith("| DS-09 — "))
+        self.assertEqual(FENCE._retired_sites(retirement), ("DS-09",))
+        note = next(cell.strip() for cell in re.split(r"(?<!\\)\|", retirement)
+                    if cell.strip().startswith(FENCE.RETIREMENT_DATE))
+        malformed = {
+            "undated": retirement.replace(
+                FENCE.RETIREMENT_DATE, "RETIRED_FALLBACK (undated)", 1),
+            # An extra dated-note column must be refused even outside the
+            # historical table's current 5–7-column shape heuristic.
+            "double_dated_extra_column": retirement + f" {note} |",
+        }
+        for case, row in malformed.items():
+            with self.subTest(case=case), self.assertRaisesRegex(
+                FENCE.RegistryError, "must carry exactly one dated retirement note"
+            ):
+                FENCE._retired_sites(row)
+
     def test_all_retired_sites_are_absent_and_reinsertion_is_refused(self) -> None:
         draft = SKELETON_PATH.read_text(encoding="utf-8")
         checks = FENCE.check_retired_placement(draft, self.spec)

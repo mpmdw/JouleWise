@@ -149,6 +149,7 @@ _CAPABILITY_FIELDS = frozenset(
         "subjects",
         "evidence",
         "_payload",
+        "reported_energy_projection",
     }
 )
 
@@ -186,6 +187,7 @@ def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
         output_type: type,
         evidence: object,
         payload: object,
+        reported_energy_projection: _FrozenObject | None = None,
     ) -> object:
         if presented is not token:
             raise PaperCustodyRefusal("paper_custody_request_invalid")
@@ -206,6 +208,10 @@ def _make_custody_capability_mint() -> tuple[Callable[..., object], ...]:
         result = object.__new__(output_type)
         object.__setattr__(result, "evidence", evidence)
         object.__setattr__(result, "_payload", payload)
+        if spec.family == "reported_energy_parents":
+            if reported_energy_projection is not None and type(reported_energy_projection) is not _FrozenObject:
+                raise PaperCustodyRefusal("paper_custody_request_invalid")
+            object.__setattr__(result, "reported_energy_projection", reported_energy_projection)
         object.__setattr__(result, "_custody_token", token)
         return result
 
@@ -255,7 +261,7 @@ class _CustodyResult:
 
 @dataclass(frozen=True, init=False, slots=True)
 class VerifiedReportedEnergyParents(_CustodyResult):
-    pass
+    reported_energy_projection: _FrozenObject | None
 
 
 @dataclass(frozen=True, init=False, slots=True)
@@ -280,7 +286,7 @@ class VerifiedTransferProjection(_CustodyResult):
 
 @dataclass(frozen=True, init=False, slots=True)
 class FixtureReportedEnergyParents(_CustodyResult):
-    pass
+    reported_energy_projection: _FrozenObject | None
 
 
 @dataclass(frozen=True, init=False, slots=True)
@@ -475,6 +481,7 @@ class _FamilyReplay:
     admitted: bool
     grants: tuple[_RenderGrant, ...]
     validator_codes: tuple[str, ...]
+    reported_energy_projection: _FrozenObject | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -588,7 +595,7 @@ def _d165_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
 
 
 def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
-    """Candidate only: no registry entry until sidecar contract/producer lands."""
+    """Authenticate the v2 copy, then reevaluate claims only from verdicts."""
     from joulewise.analysis_engine.artifact import validate_claim_verdicts
     from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound
     from joulewise.analysis_engine.claims import evaluate_claim
@@ -598,12 +605,12 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     manifest = _json_object(ctx.raws[InputRole.FINALIZED_MANIFEST])
     artifact = _json_object(ctx.raws[InputRole.CLAIM_VERDICTS])
     floor = _json_object(ctx.raws[InputRole.FLOOR_ARTIFACT])
-    sidecar = _json_object(ctx.raws[InputRole.CLAIM_SIDE_BOUND])
+    sidecar = ctx.raws[InputRole.CLAIM_SIDE_BOUND]
     codes = list(validate_finalized_analysis_manifest_v3(
         manifest, manifest_path=_binding_root(manifest_binding, ctx.repository, ctx.runs_root) / manifest_binding.path,
         custody_root=ctx.runs_root))
     codes.extend(validate_claim_verdicts(artifact, frozen_manifest=manifest))
-    codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_sha256=_sha256(ctx.raws[InputRole.CLAIM_VERDICTS]),
+    codes.extend(validate_claim_side_bound(sidecar, claim_verdicts_raw=ctx.raws[InputRole.CLAIM_VERDICTS],
                                            finalized_manifest=manifest, floor_artifact=floor))
     embedded = artifact.get("inputs", {}).get("floor_artifact", {}).get("embedded_bytes_base64")
     try:
@@ -616,17 +623,12 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
         return _FamilyReplay(False, False, (), tuple(codes))
     _validate_floor_acceptance(ctx)
     contrasts = {row["contrast_id"]: row for row in artifact["contrasts"]}
-    bounds = {row["contrast_id"]: row for row in sidecar["contrasts"]}
-    if not ctx.subjects or any(subject not in contrasts or subject not in bounds for subject in ctx.subjects):
+    if not ctx.subjects or any(subject not in contrasts for subject in ctx.subjects):
         raise PaperCustodyRefusal("paper_custody_binding_mismatch")
     grants = []
     for subject in ctx.subjects:
         contrast = contrasts[subject]
         deterministic = contrast["deterministic_bounds"]
-        if (bounds[subject]["claim_side_bound_j"] != deterministic["total"]
-            or bounds[subject]["decision_interval"] != deterministic["decision_interval"]
-            or bounds[subject]["metrology_aware_CI95"] != contrast["estimator"]["metrology_aware_CI95"]):
-            raise PaperCustodyRefusal("paper_custody_binding_mismatch")
         if artifact["evidence_class"] != "current" or contrast["sampling"]["confirmatory_status"] != "confirmatory":
             continue
         floor_metadata_keys = {"floor_limit_class", "floor_source", "point_floor_diagnostics", "single_count_discipline"}
@@ -651,10 +653,20 @@ def _claim_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
 
 
 # Register only completed gate implementations. Maps still contain no production
-# roles. Energy joins, claim sidecar producer, F6, and transfer remain absent.
+# roles. Energy joins, F6, and transfer remain absent.
 _ISSUANCE_GATES: dict[tuple[str, str], Callable[[_GateContext], _FamilyReplay]] = {
     ("d165_closeout", "d165-closeout.v1"): _d165_issuance_gate,
+    ("claim_evidence", "claim-evidence.v1"): _claim_issuance_gate,
 }
+
+
+def _register_reported_energy_gate(gate_id: str, gate, *, repository: Path) -> None:
+    """Prospective registration only; no production energy gate is installed."""
+    from joulewise.paper_reported_energy import _verify_gate_ordering
+    _verify_gate_ordering(repository)
+    if not isinstance(gate_id, str) or not gate_id or not callable(gate):
+        raise PaperCustodyRefusal("paper_custody_issuance_gate_unregistered")
+    _ISSUANCE_GATES[("reported_energy_parents", gate_id)] = gate
 
 
 def _run_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
@@ -663,6 +675,10 @@ def _run_issuance_gate(ctx: _GateContext) -> _FamilyReplay:
     gate = _ISSUANCE_GATES.get((ctx.family, ctx.issuance_gate_id))
     if gate is None:
         raise PaperCustodyRefusal("paper_custody_issuance_gate_unregistered")
+    if ctx.family == "reported_energy_parents":
+        from joulewise.paper_reported_energy import _verify_gate_ordering
+        # Recheck this repository: direct registry insertion cannot omit the fence.
+        _verify_gate_ordering(ctx.repository)
     replay = gate(ctx)
     if (type(replay) is not _FamilyReplay or type(replay.authentic) is not bool
         or type(replay.admitted) is not bool or type(replay.validator_codes) is not tuple
@@ -720,7 +736,7 @@ def _validator_source_census(
     common: tuple[tuple[str, Callable[..., object]], ...] = tuple(
         (f"paper_custody.{member.__name__}", member) for member in (
             _replay_family, _validate_fixture_documents, _validate_production_documents,
-            _run_issuance_gate, _validate_grants, _validate_floor_acceptance,
+            _run_issuance_gate, _register_reported_energy_gate, _validate_grants, _validate_floor_acceptance,
             _floor_binder_source_sha256, _d165_issuance_gate, _claim_issuance_gate,
             _make_custody_capability_mint, _FamilySpec, _load_supply_entry,
             _read_once, _open_paper_input_impl,
@@ -732,7 +748,23 @@ def _validator_source_census(
             validate_extraction_spec,
         )
 
+        from joulewise.paper_reported_energy import (
+            _validate_registered_spec, _project_cell, _validate_projection,
+            _synthetic_projection, validate_phase_ratio_estimand,
+        )
+        from joulewise.bundle_read import BundleReader
+        from joulewise.analysis_engine.inputs import deterministic_bounds
+        from joulewise.whole_window import validate_whole_window_verdict_row
+
         owners = (
+            ("paper_reported_energy._validate_registered_spec", _validate_registered_spec),
+            ("paper_reported_energy._project_cell", _project_cell),
+            ("paper_reported_energy._validate_projection", _validate_projection),
+            ("paper_reported_energy._synthetic_projection", _synthetic_projection),
+            ("paper_reported_energy.validate_phase_ratio_estimand", validate_phase_ratio_estimand),
+            ("bundle_read.BundleReader", BundleReader),
+            ("analysis_engine.inputs.deterministic_bounds", deterministic_bounds),
+            ("whole_window.validate_whole_window_verdict_row", validate_whole_window_verdict_row),
             ("floor_extraction.validate_extraction_spec", validate_extraction_spec),
             (
                 "floor_extraction.validate_d117_mint_consumption_report",
@@ -783,7 +815,8 @@ def _validator_source_census(
     elif family == "claim_evidence":
         from joulewise.analysis_engine.artifact import validate_claim_verdicts, _validate_cross_field_claim_semantics
         from joulewise.analysis_engine.claims import evaluate_claim
-        from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound, _interval
+        from joulewise.analysis_engine.claim_side_bound import validate_claim_side_bound, produce_claim_side_bound, _interval
+        from joulewise.analysis_engine.ratio import validate_metric_unit_and_ratio, validate_ratio_estimand
         from joulewise.analysis_manifest_v3 import validate_finalized_analysis_manifest_v3
 
         owners = (
@@ -791,6 +824,9 @@ def _validator_source_census(
             ("analysis_engine.artifact._validate_cross_field_claim_semantics", _validate_cross_field_claim_semantics),
             ("analysis_engine.claim_side_bound.validate_claim_side_bound", validate_claim_side_bound),
             ("analysis_engine.claim_side_bound._interval", _interval),
+            ("analysis_engine.claim_side_bound.produce_claim_side_bound", produce_claim_side_bound),
+            ("analysis_engine.ratio.validate_ratio_estimand", validate_ratio_estimand),
+            ("analysis_engine.ratio.validate_metric_unit_and_ratio", validate_metric_unit_and_ratio),
             ("analysis_manifest_v3.validate_finalized_analysis_manifest_v3", validate_finalized_analysis_manifest_v3),
             ("analysis_engine.artifact.validate_claim_verdicts", validate_claim_verdicts),
         )
@@ -1279,6 +1315,13 @@ def _validate_fixture_documents(
         except (UnicodeError, json.JSONDecodeError, ValueError):
             errors.append(f"{binding.role.value}_invalid")
             continue
+        if (family == "reported_energy_parents" and binding.role is InputRole.EXTRACTION_SPEC
+            and "projection_input" in value):
+            from joulewise.paper_reported_energy import _synthetic_projection
+            try:
+                _synthetic_projection(value.pop("projection_input"))
+            except (ValueError, KeyError, TypeError, ArithmeticError):
+                errors.append("reported_energy_projection_invalid")
         if value != {
             "family": family,
             "marker": "synthetic-no-measurement-value",
@@ -1445,8 +1488,14 @@ def _open_paper_input_impl(
         )
         payload = _FrozenObject(tuple((binding.role.value, _freeze_json(_json_object(raws[binding.role])))
                                       for binding in sources))
+        projection = replay.reported_energy_projection
+        if spec.family == "reported_energy_parents" and mode == "test_fixture_non_issuing":
+            document = _json_object(raws[InputRole.EXTRACTION_SPEC])
+            if "projection_input" in document:
+                from joulewise.paper_reported_energy import _synthetic_projection
+                projection = _freeze_json(_synthetic_projection(document["projection_input"]))
         output_type = spec.issuing_type if mode == "production" else spec.fixture_type
-        return _construct_verified(_custody_token, output_type, evidence, payload)
+        return _construct_verified(_custody_token, output_type, evidence, payload, projection)
 
 
 __all__ = [

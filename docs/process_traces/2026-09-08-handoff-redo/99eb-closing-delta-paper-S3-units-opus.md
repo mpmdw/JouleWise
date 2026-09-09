@@ -1,0 +1,16 @@
+**Contract-lens delta — S3 unit vocabulary, worktree `/Users/edr/code/JouleWise-wt-paper-S3`, branch `feat/2026-09-08-paper-S3`, HEAD `6c34cfe6` (`git diff 9760ee53 HEAD`, 10 files).** Read-only; nothing written.
+
+**Executed this session:** `python3 -m unittest tests.test_claim_side_bound tests.test_analysis_ratio` → 28 OK; `tests.test_paper_custody` → OK; `python3 tests/fixtures/paper_custody/run_kills.py --s3` → **21/21 KILLED, 21 mutations over 10 distinct guards**, bytes restored (`git status` clean); direct calls into `validate_metric_unit_and_ratio`.
+
+**Addendum, 2026-09-08 — correcting my own finding 2 in `99cz`:** my claim that `"J/token"` "is not a unit that exists in this repo" was wrong — `joulewise/analysis_manifest.py:1320-1321` already required `metric.unit == "J/token"` for ratio estimands (and `:540` `J` with null ratio for absolute) at both `ac092ccd` and `9760ee53`; my grep missed it. `J/token` was the pre-existing B8 manifest vocabulary; the AP-SPEC `estimands[].unit` strings I named belong to the separate v2 path, as ruling `99dt` holds.
+
+1. **Validator/constants — verified by execution.** `ratio.py:290-305`, `ABSOLUTE_METRIC_UNIT="J"`, `RATIO_METRIC_UNIT="J/token"`. Accepts exactly `("J", None)` → `None` and `("J/token", exact B8)` → the same mapping object (identity preserved, no conversion). Refused: `J`+mapping, `J/token`+null, `J/parsecs`, `J/committed_output_token`, `J/accepted_draft_token`, `""`, `None`, `1`, `True`, `"j"`, bare-string and extra-key mappings. `type(unit) is not str` short-circuits before set membership, so unhashable units raise cleanly.
+2. **S3 uses it; AP-SPEC vocabulary gone.** `_UNITS` deleted; `claim_side_bound.py:122-125` delegates and maps any `TypeError/ValueError` to `paper_claim_side_bound_unit_mismatch`. No `ap_spec`/`committed_output_token`/`accepted_draft_token` remains in the module; in tests they appear only as refusal inputs.
+3. **Regression.** `test_b8_unit_vocabulary_through_both_apis` accepts both B8 forms with matching estimators and all other fields valid, then refuses `J/parsecs` and both AP-SPEC strings (plus `""`,`None`,`1`,`True`,`[]`,`{}`) through **produce** and **validate**, with the candidate's unit matched to the source so copy-equality cannot mask it. `J/token`+null and `J`+mapping refuse through both APIs via `assert_source_refuses` (`:138-143`).
+4. **`units_membership` mutation** (deletes only ` or unit not in {…}`) → KILLED; 21/21 over 10 guards, matching contract `:162-167`.
+5. **Docs.** Contract `:51` and registry `:1141-1144` name the B8 vocabulary and disclaim AP-SPEC conversion; the `analysis_manifest.py` claim is bench-true. `UNIT-VOCAB-SHARED-01` recorded at contract `:197`.
+6. **Manifest and verdict validators untouched** — neither `analysis_manifest.py` nor `analysis_engine/artifact.py` appears in the diff.
+7. **Supply map digest-only** — non-`expected_sha256` changed lines: **0**.
+8. **New, both NIT.** (a) `artifact.py:1820` still admits any nonempty unit string, so S3 is strictly narrower than verdict validation — the intended `UNIT-VOCAB-SHARED-01` gap, direction fail-closed. (b) The follow-up lives only in the contract; no `TASK_QUEUE.md` row.
+
+**VERDICT: LAND**
