@@ -6547,8 +6547,9 @@ screen is not applied: `preflight_systematic_screen_s` is `None`, the
 comparison is skipped, and every finalization path — including recovery
 finalization after a crash — records only `valid` or `ordinary-invalid`,
 never `systematic-invalid`. Whether the bound exceeded the prior level screen
-is kept as a hashed diagnostic. Physics and evidence refusals remain
-fail-closed under D-161.
+is kept in both hashed files as the boolean `exceeds_prior_level_screen`: a
+diagnostic that is never a refusal and never changes the disposition.
+Physics and evidence refusals remain fail-closed under D-161.
 
 Each derivation night is ONE `derivation`-kind ledger session — a reservation
 covering several attempts under one open receipt — with N declared, ordered
@@ -6664,8 +6665,9 @@ departs from a ratified floor.
   cannot settle D-125 implicitly. The preflight level screen is the new
   corpus maximum quantized to 1e-15 s, matching r6's stored precision.
 - **Screen challenge.** If two or more retained members exceed r6's level
-  screen `0.032898493715362`, the corpus is NOT issued and Ed rules in writing
-  before any further capture. A second diagnostic is recorded but decides
+  screen `0.032898493715362` — the per-capture comparison each derivation row
+  already carries as its hashed boolean `exceeds_prior_level_screen` — the
+  corpus is NOT issued and Ed rules in writing before any further capture. A second diagnostic is recorded but decides
   nothing: whether the new maximum exceeds `0.04262208300415633`, the Decimal
   sum of r6's exact maximum `0.03289849371536248` and exact range
   `0.00972358928879385`. Neither diagnostic edits corpus membership; both
