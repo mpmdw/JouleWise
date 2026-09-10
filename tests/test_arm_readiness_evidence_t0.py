@@ -1699,6 +1699,43 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             detail="R1 reference bound exceeds 0.5 seconds",
         )
 
+    def test_insufficient_positive_capture_history_refuses(self) -> None:
+        self._assert_clock_refusal(
+            now_monotonic_ns=500_000_000_000,
+            detail="clock-reference command capture fields are invalid or stale",
+        )
+
+    def test_r0_raw_anchor_ahead_of_author_raw_refuses(self) -> None:
+        now = SYNTHETIC_MONOTONIC_NS
+
+        def mutate(inputs: Path) -> None:
+            self._replace_r0(
+                inputs,
+                anchor_raw=now + 1,
+                anchor_realtime=SYNTHETIC_REALTIME_OFFSET_NS + now + 1,
+            )
+
+        self._assert_clock_refusal(
+            now_monotonic_ns=now,
+            mutate=mutate,
+            detail="T-0 RAW anchor span is below 600000000000 ns",
+        )
+
+    def test_capture_finish_ahead_of_ordinary_now_refuses(self) -> None:
+        now = SYNTHETIC_MONOTONIC_NS
+
+        def mutate(inputs: Path) -> None:
+            path = inputs / "clock-reference.json"
+            capture = json.loads(path.read_text(encoding="utf-8"))
+            capture["finished_monotonic_ns"] = now + 1
+            _write_json(path, capture)
+
+        self._assert_clock_refusal(
+            now_monotonic_ns=now,
+            mutate=mutate,
+            detail="clock-reference command capture is not a live T-0 artifact",
+        )
+
     def test_rf09_rf10_author_span_boundaries_gate(self) -> None:
         now = 5_000_000_000_000
         for span, expected in (
