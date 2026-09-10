@@ -1,0 +1,17 @@
+SESSION_MODE: delegated
+WRITE_SCOPE: []
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+# Execution-lens refuter — GATE-SENSIBILITY-SWEEP-01 branch `8da99190` vs main `078a13a4` (gpt-6-astra, xhigh, genre review, read-only)
+
+Worktree: this one, detached at `8da99190`. Diff under review: `git diff 078a13a4..8da99190` (three code repairs R1/R3/R4 + `tests/test_gate_sensibility_rounding.py` + two contract sentences; and `scripts/generate_g2a_probe_inputs.py` idle_seconds 30→75 with a pin test in `tests/test_generate_g2a_probe_inputs.py`). Authority and design: Ed 2026-09-10 ~04:20 "no silly gates on accepting numbers"; seat A inventory `docs/process_traces/2026-09-10-activation-96bfeca7/02a-gate-inventory-capture-side-astra-report.md` §B R1–R4 (R2 deliberately NOT landed: reduce.py is a D-138 governed input — confirm the branch leaves `joulewise/reduce.py` byte-identical to main and `tests/test_reduce.py::test_d138_reduce_source_bytes_remain_at_issued_pin` passes); sizing scout `09-g2a-capture-sizing-astra-report.md` (read both from `/Users/edr/code/JouleWise-wt-bk-96bfeca7/docs/process_traces/2026-09-10-activation-96bfeca7/`).
+
+Refute by EXECUTION, not by reading the report:
+1. Run `python3 -m unittest tests.test_gate_sensibility_rounding tests.test_environment_admission tests.test_controller tests.test_load_transition_alignment tests.test_generate_g2a_probe_inputs tests.test_reduce -v 2>&1 | tail -40` (gate on the process rc). Known: `test_controller::test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce` fails on this Mac at main too (CI green) — confirm it is the ONLY failure and unrelated to the diff.
+2. Mutation kill: for each of R1, R3, R4 revert the production hunk alone (in a scratch copy or by `git stash`-free editing followed by `git checkout --`), run the new module, and record which ADMIT test fails; then restore and confirm byte identity with `git diff --stat` empty. Then MUTATE THE OTHER WAY: widen each new allowance ×1000 (1e-6 → 1e-3 s) and confirm at least one REFUSE test fails — a refuse test that survives a 1000× widening is not defect-shaped.
+3. Same-signature sweep: grep the three repaired modules and their callers for any remaining `1e-9`/`1e-12` second-slack compared against epoch-scale timestamps that the seat did not touch (seat A's table says which rows are identity checks and must stay; you check that nothing on the SAME predicate family was missed, e.g. another admission containment site or a second cooldown path).
+4. idle_seconds 75: run the producer's own `check` path in the tests; confirm no committed artifact, pin, frozen plan, inventory or runsheet byte pins 30 s (grep `idle_seconds`, `30.0`, `"idle_seconds": 30` across configs/, docs/contracts/, docs/process_traces/2026-08-28-live-smoke/, tests/). Recompute the chain time delta (24 members × 45 s at the ~115 ms observed cadence ≈ 20.7 min) and state whether `WINDOW_MAX_S 13500` at t0 02:56 still ends its courier allocation before 07:00 (show arithmetic; strict inequality, 300 s courier).
+5. Contract sentences: quote them and say whether each is replicable-from-text (a reader can rebuild the rule) and whether any test pins those document bytes (`tests/test_docs_freshness`, pinsets).
+
+Findings by severity (blocker / should_fix / nit) with a reproduction command each; explicit "no finding" per numbered item you cleared. Read-only; no commits. Report claude-codex-report/v1, genre review, header < 8192 bytes.
