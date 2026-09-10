@@ -7,7 +7,8 @@ The night driver hands a chain exactly four variables and no argv
 against a ``shasum``-form sidecar before launching it
 (``scripts/run_night.py:1576-1610``).  The tracked derivation chain
 ``scripts/night_chains/calibration_derivation_only.zsh`` needs thirteen more
-variables and twenty-four per-slot binding arguments, so a night is armed by
+variables and 24 per-slot binding flag/value pairs (48 argv words), so a night
+is armed by
 pinning a *wrapper* emitted here: the wrapper carries the night's whole
 environment as literal ``export`` lines, re-derives and cross-checks the frozen
 calibration plan, verifies the tracked chain's bytes, and ``exec``s the tracked
@@ -39,6 +40,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from joulewise.calibration_ledger import (  # noqa: E402
+    IDENTITY_EPOCH_FIELDS,
+    MAX_DECLARED_SESSION_SLOTS,
+)
 from joulewise.night_gate import NightPlan, PlanError  # noqa: E402
 
 RUNSHEET_PATH = (
@@ -169,6 +174,60 @@ def _validated_ruling(value: str | None) -> str:
     return _census_clean("slot-count ruling reference", value)
 
 
+# The chain hardcodes `--power-policy ac_high_power`, and the writer compares
+# its measured bindings against the reserved slot's identity epoch, so an epoch
+# naming a different policy refuses at d01 with the settle already spent.
+CHAIN_POWER_POLICY = "ac_high_power"
+
+
+def _identity_epoch_value_ok(value: object) -> bool:
+    """Mirror the ledger's rule: present, and neither None nor empty."""
+
+    if isinstance(value, str):
+        return value != ""
+    # `sampling_interval_ms` is an integer in every issued acceptance, so a
+    # string-only rule would refuse every real epoch.
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _validated_json_object(path: Path, label: str) -> dict:
+    """Parse a desk-produced input, rather than only hashing its bytes."""
+
+    try:
+        value = json.loads(path.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        raise GenerationRefusal(f"{label} is not readable JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise GenerationRefusal(f"{label} must be a JSON object")
+    return value
+
+
+def _validated_identity_epoch(path: Path) -> dict:
+    epoch = _validated_json_object(path, "identity epoch json")
+    if set(epoch) != set(IDENTITY_EPOCH_FIELDS):
+        missing = sorted(set(IDENTITY_EPOCH_FIELDS) - set(epoch))
+        extra = sorted(set(epoch) - set(IDENTITY_EPOCH_FIELDS))
+        raise GenerationRefusal(
+            "identity epoch json keys are not exactly the six "
+            f"IDENTITY_EPOCH_FIELDS (missing={missing}, extra={extra})"
+        )
+    empty = sorted(
+        field for field in IDENTITY_EPOCH_FIELDS
+        if not _identity_epoch_value_ok(epoch[field])
+    )
+    if empty:
+        raise GenerationRefusal(
+            f"identity epoch json fields are empty or not scalar: {empty}"
+        )
+    if epoch["power_policy"] != CHAIN_POWER_POLICY:
+        raise GenerationRefusal(
+            f"identity epoch power_policy is {epoch['power_policy']!r}, but the "
+            f"chain captures with --power-policy {CHAIN_POWER_POLICY}; the "
+            "writer would refuse at d01 with the settle already spent"
+        )
+    return epoch
+
+
 def _next_deadman_epoch(t0_epoch_s: float) -> float:
     """Mirror ``scripts/run_night.py:947-955``: the next local 07:00 after t0."""
 
@@ -272,7 +331,8 @@ def render_wrapper(spec: WrapperSpec) -> str:
         "# The driver supplies NIGHT_PLAN_ID, MEASUREMENT_ROOT, MEASUREMENT_HEAD and",
         "# PY and no argv (scripts/run_night.py:430-444).  This wrapper supplies the",
         "# thirteen chain variables as literals frozen with the plan, verifies the",
-        "# tracked chain's bytes, and execs it with the per-slot bindings as argv.",
+        "# tracked chain's bytes, and execs it with the per-slot bindings as argv:",
+        f"# {2 * spec.slot_count} flag/value pairs, {4 * spec.slot_count} argv words.",
         "set -euo pipefail",
         "",
         "route_refuse() { printf 'FAIL %s\\n' \"$1\" >&2; exit 1; }",
@@ -441,6 +501,14 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
         _validated_ruling(args.slot_count_ruling)
     if slot_count < 1:
         raise GenerationRefusal("slot count must be positive")
+    # The ledger refuses a declared-slot list longer than this, and it refuses
+    # it INSIDE the window, at the reservation, with the night already spent.
+    if slot_count > MAX_DECLARED_SESSION_SLOTS:
+        raise GenerationRefusal(
+            f"slot count {slot_count} exceeds the ledger's "
+            f"MAX_DECLARED_SESSION_SLOTS ({MAX_DECLARED_SESSION_SLOTS}); the "
+            "reservation would refuse it after the settle"
+        )
 
     # The window must hold the schedule the chain will actually run, or the
     # night opens its session and aborts part-way with window_exhausted.
@@ -515,6 +583,10 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
         t1_bindings_bytes = t1_bindings_path.read_bytes()
     except OSError as error:
         raise GenerationRefusal(f"a pinned input is unreadable: {error}") from error
+    # Hashing bytes pins WHICH file the night uses; parsing them is what tells
+    # the desk, before the window, that the file can do its job at all.
+    _validated_identity_epoch(identity_epoch_path)
+    _validated_json_object(t1_bindings_path, "t1 bindings json")
     spec = WrapperSpec(
         plan_id=_census_clean("night plan id", plan.plan_id),
         measurement_root=measurement_root,
@@ -587,6 +659,35 @@ def example_spec(chain_bytes: bytes) -> WrapperSpec:
     )
 
 
+EXAMPLE_T0_EPOCH_S = 1789206960
+EXAMPLE_WINDOW_MAX_S = 9000
+
+
+def example_night_plan(spec: WrapperSpec) -> dict:
+    """The exact key set ``NightPlan.from_mapping`` requires, with example values.
+
+    Rendered from the same coordinates as the example wrapper, so the two agree:
+    ``chain_path`` is the wrapper, and ``chain_sha256_path`` is its sidecar.
+    """
+
+    return {
+        "schema": "joulewise.night_plan.v2",
+        "schema_version": 2,
+        "plan_id": spec.plan_id,
+        "receipt_class": DERIVATION_RECEIPT_CLASS,
+        "t0_epoch_s": EXAMPLE_T0_EPOCH_S,
+        "window_max_s": EXAMPLE_WINDOW_MAX_S,
+        "authored_epoch_s": EXAMPLE_T0_EPOCH_S - 7200,
+        "repo_head": "<40-hex commit of this repository at arm time>",
+        "measurement_root": spec.measurement_root,
+        "measurement_head": "<40-hex commit H the clone is cut at>",
+        "chain_path": f"{spec.window_custody_root}/chain.zsh",
+        "chain_sha256_path": f"{spec.window_custody_root}/chain.zsh.sha256",
+        "custody_root": spec.window_custody_root,
+        "registration_path": "<repo-relative path of the committed pre-registration>",
+    }
+
+
 def render_region(chain_bytes: bytes) -> str:
     spec = example_spec(chain_bytes)
     return (
@@ -600,8 +701,8 @@ def render_region(chain_bytes: bytes) -> str:
         "exactly four variables (`NIGHT_PLAN_ID`, `MEASUREMENT_ROOT`,\n"
         "`MEASUREMENT_HEAD`, `PY`) and no command-line arguments, while the\n"
         f"tracked chain `{TRACKED_CHAIN_RELPATH}`\n"
-        "needs thirteen more variables and twenty-four per-slot binding\n"
-        "arguments.  The wrapper supplies both, then `exec`s the chain.\n"
+        "needs thirteen more variables and 24 per-slot binding flag/value pairs\n"
+        "(48 argv words).  The wrapper supplies both, then `exec`s the chain.\n"
         "\n"
         "### The three emitted files\n"
         "\n"
@@ -620,12 +721,19 @@ def render_region(chain_bytes: bytes) -> str:
         "   run, at the commit `H` the plan names as `measurement_head`, and\n"
         "   record `git -C <CLONE> status --porcelain`; it must be empty, because\n"
         "   nothing downstream detects uncommitted edits outside the chain itself.\n"
-        "2. **Author the night plan**, naming `t0_epoch_s`, `window_max_s`,\n"
-        "   `custody_root`, `measurement_root`, `measurement_head` = `H`,\n"
-        "   `chain_path` = `<NIGHT_ROOT>/chain.zsh`, and `chain_sha256_path` =\n"
-        "   that path plus `.sha256`.  The plan must exist first: the generator\n"
-        "   reads all of those from it, and refuses if `chain_path` is anything\n"
-        "   else.\n"
+        "2. **Author the night plan** in the shape below — the key set is exact,\n"
+        "   and `NightPlan.from_mapping` refuses a plan with any key missing or\n"
+        "   any key extra.  The plan must exist before step 3: the generator\n"
+        "   reads `t0_epoch_s`, `window_max_s`, `custody_root`,\n"
+        "   `measurement_root`, `measurement_head` and `chain_path` from it, and\n"
+        "   refuses if `chain_path` is not the wrapper it is about to write.\n"
+        "\n"
+        "```json\n"
+        f"{json.dumps(example_night_plan(spec), indent=2)}\n"
+        "```\n"
+        "\n"
+        "   The angle-bracket values are the ones the arm fills in; every other\n"
+        "   value above is what this night's coordinates imply.\n"
         "3. **Generate the wrapper** with the command below.  The generator\n"
         "   digests the tracked chain **from the clone**, never from the checkout\n"
         "   it is run in, and bakes that digest — plus the frozen calibration\n"

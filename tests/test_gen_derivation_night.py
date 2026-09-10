@@ -32,6 +32,18 @@ CHAIN_PATH = REPO_ROOT / CHAIN_RELPATH
 T0_EPOCH_S = 1789206960.0
 WINDOW_MAX_S = 9000
 
+# The six joulewise.calibration_ledger.IDENTITY_EPOCH_FIELDS, with the policy
+# the chain captures under; `sampling_interval_ms` is an integer in every issued
+# acceptance, so the fixture keeps it one.
+IDENTITY_EPOCH = {
+    "os_build": "25G83",
+    "hardware_model": "Mac16,6",
+    "power_policy": "ac_high_power",
+    "sampling_interval_ms": 100,
+    "estimator_revision": "r6",
+    "pulse_protocol_id": "p2",
+}
+
 FAKE_PYTHON = (
     "#!" + sys.executable + "\n"
     "import json, pathlib, sys\n"
@@ -122,7 +134,11 @@ class WrapperFixture:
             target.write_text("{}\n")
         self.frozen_plan = self.night_root / "calibration_plan.json"
         self.frozen_plan.write_text(json.dumps({"plan_id": "cal-derivation-20260912"}) + "\n")
-        (self.night_root / "identity_epoch.json").write_text("{}\n")
+        # A real-shaped identity epoch: the generator parses it now, not only
+        # hashes it, and the six fields are the ledger's exact key set.
+        (self.night_root / "identity_epoch.json").write_text(
+            json.dumps(IDENTITY_EPOCH, indent=2, sort_keys=True) + "\n"
+        )
         (self.night_root / "t1_bindings.json").write_text("{}\n")
         self.session_id = session_id
         self.out = self.night_root / "chain.zsh"
@@ -870,6 +886,98 @@ class DerivationNightWrapperTests(unittest.TestCase):
                 self.assertNotIn(f" {command} ", code)
         self.assertIn('/usr/bin/git -C "$MEASUREMENT_ROOT"', wrapper)
 
+    # --- fix round 4 ------------------------------------------------------
+
+    def test_a_slot_count_above_the_ledger_ceiling_refuses(self) -> None:
+        """The ledger caps a declared-slot list, and refuses INSIDE the window.
+
+        A 100-slot wrapper renders d100 bindings, settles for 600 s, and is then
+        refused at the reservation with the night already spent.
+        """
+
+        from joulewise.calibration_ledger import (  # noqa: PLC0415
+            MAX_DECLARED_SESSION_SLOTS,
+        )
+
+        over = MAX_DECLARED_SESSION_SLOTS + 1
+        result = self.fixture.emit(
+            "--slot-count", str(over), "--allow-slot-count",
+            "--slot-count-ruling", "cold-gate-46-addendum-9",
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(
+            f"slot count {over} exceeds the ledger's MAX_DECLARED_SESSION_SLOTS "
+            f"({MAX_DECLARED_SESSION_SLOTS})",
+            result.stderr,
+        )
+        self.assertFalse(self.fixture.out.exists())
+
+    def test_the_identity_epoch_is_parsed_not_only_hashed(self) -> None:
+        """Hashing pins WHICH file the night uses; parsing says it can do its job.
+
+        Each rejected shape below would otherwise be discovered by the writer at
+        d01, after the settle, with the window spent.
+        """
+
+        from joulewise.calibration_ledger import IDENTITY_EPOCH_FIELDS  # noqa: PLC0415
+
+        good = dict(IDENTITY_EPOCH)
+        self.assertEqual(set(good), set(IDENTITY_EPOCH_FIELDS))
+        epoch = self.fixture.night_root / "identity_epoch.json"
+        epoch.write_text(json.dumps(good) + "\n")
+        self.assertEqual(self.fixture.emit().returncode, 0)
+
+        missing = {key: value for key, value in good.items() if key != "os_build"}
+        extra = {**good, "surprise": "x"}
+        empty = {**good, "estimator_revision": ""}
+        wrong_policy = {**good, "power_policy": "ac_default"}
+        for payload, fragment in (
+            (b"{ not json\n", "not readable JSON"),
+            (b'["a list"]\n', "must be a JSON object"),
+            (json.dumps(missing).encode(), "not exactly the six"),
+            (json.dumps(extra).encode(), "not exactly the six"),
+            (json.dumps(empty).encode(), "empty or not scalar"),
+            (json.dumps(wrong_policy).encode(), "--power-policy ac_high_power"),
+        ):
+            with self.subTest(fragment=fragment):
+                epoch.write_bytes(payload)
+                result = self.fixture.emit()
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(fragment, result.stderr)
+        epoch.write_text(json.dumps(good) + "\n")
+
+    def test_the_t1_bindings_file_must_be_a_json_object(self) -> None:
+        """Its contents are copied verbatim into every slot record."""
+
+        bindings = self.fixture.night_root / "t1_bindings.json"
+        for payload, fragment in (
+            (b"not json at all\n", "not readable JSON"),
+            (b"[1, 2, 3]\n", "must be a JSON object"),
+        ):
+            with self.subTest(fragment=fragment):
+                bindings.write_bytes(payload)
+                result = self.fixture.emit()
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("t1 bindings json", result.stderr)
+                self.assertIn(fragment, result.stderr)
+        bindings.write_text("{}\n")
+
+    def test_the_binding_count_is_stated_in_words_that_match_the_argv(self) -> None:
+        """"Twenty-four arguments" read as 24 argv words; there are 48.
+
+        The wrapper's own header states both numbers, and they must equal what
+        the exec line actually carries.
+        """
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        wrapper = self.fixture.out.read_text()
+        arguments = _exec_arguments(wrapper)[3:]
+        self.assertEqual(len(arguments), 48)
+        self.assertIn("24 flag/value pairs, 48 argv words.", wrapper)
+        self.assertNotIn("twenty-four per-slot binding arguments", wrapper)
+        source = SCRIPT_PATH.read_text()
+        self.assertNotIn("twenty-four per-slot binding arguments", source)
+
 
 class GeneratedRegionTests(unittest.TestCase):
     def test_the_runsheet_region_matches_the_generator(self) -> None:
@@ -910,9 +1018,45 @@ class GeneratedRegionTests(unittest.TestCase):
             "The **courier",
             "they are unrelated and",
             "digests the tracked chain **from the clone**",
+            "```json",
+            '"schema": "joulewise.night_plan.v2"',
+            "24 per-slot binding flag/value pairs",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, region)
+
+    def test_the_example_plan_is_one_the_driver_would_accept(self) -> None:
+        """Arm-order step 2 has to be replicable, so its shape must be real.
+
+        A plan whose key set is not exact is refused by the gate's own parser,
+        and the example is the only shape the arm has to copy.
+        """
+
+        from joulewise.night_gate import NightPlan  # noqa: PLC0415
+
+        spec = GEN.example_spec(CHAIN_PATH.read_bytes())
+        plan = GEN.example_night_plan(spec)
+        concrete = {
+            **plan,
+            "repo_head": "a" * 40,
+            "measurement_head": "b" * 40,
+            "registration_path": "configs/campaigns/example/registration.json",
+        }
+        parsed = NightPlan.from_mapping(concrete)
+        self.assertEqual(parsed.receipt_class, "DIAGNOSTIC_NO_PACK")
+        # chain_path is the WRAPPER, not the tracked chain, and the sidecar is
+        # the one the generator writes beside it.
+        self.assertEqual(parsed.chain_path, f"{spec.window_custody_root}/chain.zsh")
+        self.assertEqual(parsed.chain_sha256_path, parsed.chain_path + ".sha256")
+        self.assertEqual(parsed.custody_root, spec.window_custody_root)
+        self.assertEqual(parsed.measurement_root, spec.measurement_root)
+        # And the window it declares survives this generator's own fences.
+        self.assertGreaterEqual(
+            parsed.window_max_s,
+            GEN.programmed_span_s(GEN.PRE_REGISTERED_SLOT_COUNT)
+            + GEN.PRE_SETTLE_ALLOWANCE_S,
+        )
+        self.assertIn(json.dumps(plan, indent=2), GEN.render_region(CHAIN_PATH.read_bytes()))
 
     def test_the_g2a_emitter_still_passes_its_own_check(self) -> None:
         """The new region must not move the G2-a emitter's pinned fence lines."""

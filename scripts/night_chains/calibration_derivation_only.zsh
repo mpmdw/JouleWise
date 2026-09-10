@@ -23,16 +23,23 @@
 # against its arm-time digest, and execs this file with the per-slot bindings
 # as argv.
 #
-# LANDED SURFACE, re-read at this HEAD (was UNLANDED when this file was written):
+# LANDED SURFACE. Cited by ANCHOR TEXT, never by line number: line numbers in
+# those files move, and a stale citation in a header claiming to be re-read is
+# worse than none. Grep the quoted line to find the code.
 #   reserve_calibration_window_bracket.py  --session-kind derivation --slot-count N
-#     and the repeated --slot-attempt-id/--slot-custody-locator list flags
-#     (scripts/reserve_calibration_window_bracket.py:82-106); a repeated-flag
-#     count that does not equal --slot-count is refused with reason
-#     declared_slot_flag_count_mismatch (:167-186).
-#   validate_powermetrics_fiducial.py      --derivation-only (:1771), which
-#     requires --session-id, --slot and --attempt-id of a declared
-#     derivation-kind session (:1946); --slot takes the exact predeclared slot
-#     name (:1759-1761), so d01..dNN are accepted.
+#     and the repeated list flags, declared by
+#       "--slot-attempt-id",
+#       "--slot-custody-locator",
+#     each with action="append"; a repeated-flag count that does not equal
+#     --slot-count is refused by
+#       "reason": "declared_slot_flag_count_mismatch",
+#   validate_powermetrics_fiducial.py      --derivation-only, declared by
+#       "--derivation-only",
+#     and required to name a declared derivation-kind session by
+#       "--derivation-only requires --session-id, --slot, and "
+#     --slot is free-form, not a pre/post choice, per its own help line
+#       help="exact predeclared slot name to capture, from the session's list",
+#     so d01..dNN are accepted.
 #   The declared per-slot bindings arrive as this script's argv and are
 #   forwarded verbatim ("$@" at the reservation below), binding d01..dNN to
 #   attempt ids ${SESSION_ID}-dNN with custody under
@@ -81,8 +88,12 @@ for _value in "$SLOT_COUNT" "$SETTLE_S" "$SLOT_CADENCE_S" \
         exit 64
     fi
 done
-if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 || SETTLE_S < 1 )); then
-    print -u2 -- "SLOT_COUNT, SLOT_CADENCE_S and SETTLE_S must be positive"
+# SLOT_CAPTURE_BUDGET_S belongs here too: at 0 the window check below becomes
+# vacuous (start + 0 > end is false until the very last second), so a slot could
+# start one second before the agent-free window ends and capture past it.
+if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 || SETTLE_S < 1 \
+    || SLOT_CAPTURE_BUDGET_S < 1 )); then
+    print -u2 -- "SLOT_COUNT, SLOT_CADENCE_S, SETTLE_S and SLOT_CAPTURE_BUDGET_S must be positive"
     exit 64
 fi
 
