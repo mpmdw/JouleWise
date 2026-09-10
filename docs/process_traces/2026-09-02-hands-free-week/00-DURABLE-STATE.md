@@ -843,3 +843,12 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   firing (expect the stand-down line in `night.log`, nothing in `night/`); t0 2026-09-11 02:56 PDT; harvest after 03:16 PDT 09-11 and
   outside the 02:45–03:30 belt per record 123 §Harvest pointer; do not move the checkout; never re-arm this plan on the same signature.
   Claude weekly limit resets 16:00 PDT 09-10 — desk work waits for it. This activation exits now with no own background work.
+- UPDATE 2026-09-10 ~05:20 PDT (headless activation `96bfeca7`, pid 51696, attempt 11, launched 04:22:32 PDT after 7ce7af2a armed and exited): launch email
+  `1a08b1161c884dc7`, notice.ack written, no pending notices, no directive issues. rehearsal-20260911 ARMED and untouched (t0 09-11 02:56, harvest after 03:16 by the
+  next activation; this one exits on the watchdog's 02:31 request). Done: production clone cut at 078a13a4 (record 05, ledger authenticated with custody replay);
+  GATE-SENSIBILITY-SWEEP-01 inventory (02a/02b) and repairs R1/R3/R4 + idle_seconds 75 on `feat/2026-09-10-gate-sensibility-sweep` @ 8da99190 (R2 staged for D-138, record 15);
+  G2-a packet 04 (no short chain exists; Ed emailed `1a08b223b02862e9`, silence = full chain 09-12 02:56, WINDOW_MAX_S 13500) and arm materials 11/12/13 on
+  `feat/2026-09-10-g2a-handback-20260912`. In flight: execution + contract refuters, full replay at 8da99190, root cause of the local-only controller test failure.
+  NEXT EXACT ACTION: this activation closes the sweep gauntlet and merges; the 09-11 activation runs checklist 13 (harvest → accept 5/6 → uninstall stub → handback+inventory
+  commit H → fresh clone at H → runbook 68 → email-then-arm before 06:05 → exit). RUN_STATE T38h.
+
