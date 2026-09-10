@@ -15,7 +15,7 @@ emergency stop; observation is RUN_STATE.md and the durable pointer on GitHub pl
 ## Why this shape
 
 The relaunch prompt's tool allowlist has Gmail send only (scripts/magistrate_watchdog.py, `--allowedTools`), so the resident session
-cannot read replies; adding Gmail read would add a prompt-injection surface and need a sender filter. `gh` already works under its Bash
+cannot read replies; adding Gmail read would add a prompt-injection surface and need a sender filter. The issue channel has the same shape of risk, bounded mechanically: the server-side `--author mpmdw` filter plus the `author.login` check, body-only (comments excluded), on a public repository. `gh` already works under its Bash
 tool. An issue is written from GitHub mobile, needs no process on the measurement machine, and lands in the repository record.
 
 ## Change
@@ -26,9 +26,13 @@ tool. An issue is written from GitHub mobile, needs no process on the measuremen
   an instruction).
 - GitHub label `directive` created on `mpmdw/JouleWise` (03:06 PDT).
 
-Takes effect at the next headless relaunch; activation 7ce7af2a (launched 20:52 PDT 09-09 with the previous prompt) is unaffected.
+Takes effect only after the PR merges AND the canonical checkout is fast-forwarded to that merge (the live watchdog renders the prompt from `/Users/edr/code/JouleWise`; MAGISTRATE_WATCHDOG.md step 0's five-file digest check is the proof), at the next headless relaunch; activation 7ce7af2a (launched 20:52 PDT 09-09 with the previous prompt) is unaffected.
 
 ## Machine state at write
 
 03:03 PDT: activation 7ce7af2a ACTIVE (pid 18817), waiting on its own monitor (deadline 06:05 PDT) for the two interactive `claude`
 sessions (pids 16371, 17047) to close before running runbook 67; nothing armed; no plan directory; AC power, AC profile sleep 0.
+
+## Fix round 1 (refuters 116 Codex execution / 117 Opus contract)
+
+Adopted: `--author mpmdw` server-side filter and `author.login` check (Opus Q1, Codex Q2 nit); comments excluded from the channel (Opus Q1); NO semantics corrected in prompt and document (an issue NO stops work slices at the next boundary, a night NO stays on the notice thread, the kill switch stops the service not an armed night — Opus Q2); 'work slice' defined and 'resident session' replaced by the document's own term 'relaunched magistrate' (Opus Q5); prompt-authorities paragraph names the new external write authority (Opus Q3 nit); this record's take-effect and rationale sentences corrected (Codex Q5 should-fix, Opus Q4 nit). Prompt stays 24 lines.
