@@ -17,6 +17,7 @@ from joulewise.calibration_ledger import (
     BRACKET_SESSION_SLOTS,
     LEDGER_SCHEMA,
     SESSION_KIND_DERIVATION,
+    abort_bracket_session,
     append_bracket_session_receipt,
     artifact_hashes,
     claim_bracket_session_slot,
@@ -115,6 +116,7 @@ def build_derivation_ledger(
     session_kind: str = SESSION_KIND_DERIVATION,
     second_session: tuple[str, Sequence[Slot]] | None = None,
     fill_slots: int | None = None,
+    abort_reason: str | None = None,
 ) -> dict[str, Path]:
     """Create a Git-committed ledger holding one or two closed sessions.
 
@@ -141,11 +143,14 @@ def build_derivation_ledger(
     _commit(root, "genesis pin")
     # A bracket-kind session's slot list is fixed at ("pre", "post"); only a
     # derivation session declares an arbitrary ordered list.
-    _write_session(ledger, runs, pin, session_id, slots, session_kind, fill_slots)
+    _write_session(
+        ledger, runs, pin, session_id, slots, session_kind, fill_slots, abort_reason
+    )
     if second_session is not None:
         _write_session(
             ledger, runs, pin, second_session[0], second_session[1],
             SESSION_KIND_DERIVATION,
+            None,
             None,
         )
     snapshot = load_calibration_ledger_snapshot(
@@ -176,6 +181,7 @@ def _write_session(
     slots: Sequence[Slot],
     session_kind: str,
     fill_slots: int | None = None,
+    abort_reason: str | None = None,
 ) -> None:
     # A session opens only at head-equals-pin, so a fixture writing a SECOND
     # session advances the working pin to the physical head first, exactly as
@@ -245,6 +251,11 @@ def _write_session(
             capture_wall_time_s="99.0",
             exact_bound_lexeme_s=slot.b_fiducial_s,
         )
+    # The pre-registration's planned early close: the window ended before the
+    # declared slots ran out, so the session is ABORTED -- terminal, with its
+    # finalized slots retained as observations.
+    if abort_reason is not None:
+        abort_bracket_session(ledger, session_id=session_id, reason=abort_reason)
 
 
 def tamper_member_bundle(fixture: dict[str, Path], attempt_id: str, name: str) -> None:

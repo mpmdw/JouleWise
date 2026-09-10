@@ -8,28 +8,55 @@ Neither subcommand authorizes a capture, issues anything, or writes into
 the ledger, then prints how the machine's identity today compares with the epoch
 that artifact binds; it does not evaluate a trigger observation and does not
 change the D-102 prior-artifact rule. Given `--session-ids`, it additionally
-prints a REGISTRATION DRY RUN: for each named ledger session, its kind, whether
-it is terminal, its declared slots, how many rows are `valid`, how many are
-excluded and by which mechanism, and whether the prior-set prefix holds a
-pending or unresolved row. The dry run reports no measured value of any kind,
-because the pre-registration forbids examining one before the registration's
-last session is terminal.
+prints a REGISTRATION DRY RUN: for each named ledger session, its kind, its
+state and whether that state is terminal, how many slots it declared and how
+many are filled, and how many captures are excluded under each named mechanism;
+then how many prior-set prefix rows are pending or unresolved, and whether the
+registration would be admissible. Every field is a count, a state name or a
+mechanism name. The dry run reports no measured value of any kind, because the
+pre-registration forbids examining one before the registration's last session is
+terminal, and this is the tool one runs BETWEEN capture nights.
 
 `prepare-candidate` WRITES EXACTLY ONE FILE, to the path the caller names with
 `--out`; there is no default destination, so this tool cannot write into
 `configs/calibration/` by omission. That file is a CANDIDATE, marked
-`candidate_not_issued: true`, which the production acceptance loader refuses:
-issuing is the D-138 transaction's act, after the cold science gate, not this
-tool's. The command derives the successor acceptance from the ledger --
-selecting corpus members by the registration, computing the Decimal statistics
-and the D-125 envelope operatives -- and REFUSES, printing its reason and
-writing nothing, when: any registration session is not yet terminal; the
-`--d125-ruling` reference is absent; the retained corpus is below the required
-size (19, or 17 with `--ed-ruling`); a prior-set row is pending or unresolved;
-a valid same-epoch observation lies outside the registration; a member's stored
-bytes disagree with its ledger row; the realized degrees of freedom fail the
-quantile proof; the bracket screen is not strictly below the budget ceiling; or
-two or more retained members exceed the predecessor's level screen.
+`candidate_not_issued: true`, which the production acceptance loader refuses.
+Issuing it is the act of the D-138 transaction -- the single reviewed commit
+that swaps the live acceptance and every pin that names it -- and happens only
+after the COLD SCIENCE GATE, the fresh-eyes review of the exclusions and the
+per-night diagnostics that no one involved in the capture may sit on.
+
+The command derives the successor acceptance from the ledger: it selects corpus
+members by the registration (the ledger sessions the capture nights were
+reserved under), computes the Decimal statistics, and sets the OPERATIVES --
+the three numbers the acceptance actually governs measurement with. They are
+the BRACKET SCREEN, the drift below which a measurement window passes without
+spending any of its error budget; the BUDGET CEILING, the largest drift the
+generation will ever budget for; and the LEVEL SCREEN, the absolute bound above
+which a single capture is refused before a window opens. Two more inputs are
+named on the command line. The PRIOR-SET PREFIX is the run of ledger rows at or
+below the cutoff, which the candidate must account for exactly. The QUANTILE
+PROOF is the record showing that the Student-t quantile for this corpus's
+realized degrees of freedom was computed correctly, checked two independent
+ways, before any threshold derived from it was written down.
+
+Decision ids appear in the artifact and in refusals: D-102 is the acceptance
+artifact's own contract (how a generation is derived and what may judge it);
+D-109 is the raw-physics and artifact-hash verification the member table rests
+on; D-125 fixes the envelope rule that carries operatives from one generation to
+the next; D-126 fixes the minimum corpus size and the strict screen-below-ceiling
+rule. A TRIGGER OBSERVATION is a later capture whose result would oblige the
+generation to be re-derived; the candidate lists the conditions, and this tool
+never evaluates one.
+
+`prepare-candidate` REFUSES, printing its reason and writing nothing, when: any
+registration session is not yet terminal; the `--d125-ruling` reference is
+absent; the retained corpus is below the required size (19, or 17 with
+`--ed-ruling`); a prior-set row is pending or unresolved; a valid same-epoch
+observation lies outside the registration; a member's stored bytes disagree with
+its ledger row; the realized degrees of freedom fail the quantile proof; the
+bracket screen is not strictly below the budget ceiling; or two or more retained
+members exceed the predecessor's level screen.
 """
 
 from __future__ import annotations
@@ -126,26 +153,36 @@ def mismatched_fields(
     )
 
 
+DRY_RUN_HEADER = "Registration dry run (counts and states only; no measured value)"
+# Exit code for `check` when a named registration is NOT admissible.  Distinct
+# from the epoch watch's 3 so a caller can tell "the machine has drifted" from
+# "the registration is not ready".
+DRY_RUN_INADMISSIBLE_EXIT = 5
+
+
 def registration_dry_run(
     snapshot: Any, session_ids: Sequence[str]
 ) -> tuple[int, list[str]]:
     """Report whether a registration WOULD be admissible, naming no value.
 
     CG46 V5 defines `check` as the desk epoch watch AND a registration dry run.
-    Blindness binds here exactly as it binds `prepare-candidate`: this reports
-    kinds, states, slot counts and exclusion mechanisms, and never a bound, a
-    screen, a statistic or a member's value -- so it is safe to run between
-    capture nights, which is the only time it is useful.
+    Blindness binds here exactly as it binds `prepare-candidate`, because this
+    is the tool one runs BETWEEN capture nights: every line below is a count, a
+    state name or a mechanism name, and no line can carry a bound, a screen, a
+    statistic or a member's value.  The slot counts come from the session
+    record's own `declared_slots` and `finalized_slots` -- the LENGTH of each,
+    never the slot objects -- so an open session reports its progress without
+    anything reading a captured value.
     """
 
-    lines = ["", "Registration dry run (no measured value is reported)"]
+    lines = ["", DRY_RUN_HEADER]
     blockers: list[str] = []
     by_id = snapshot.bracket_session_by_id
     for session_id in session_ids:
         session = by_id.get(session_id)
         if session is None:
             blockers.append(f"session {session_id} is not in the ledger")
-            lines.append(f"{session_id}: ABSENT")
+            lines.append(f"{session_id}: absent")
             continue
         terminal = session.state in TERMINAL_SESSION_STATES
         if session.session_kind != SESSION_KIND_DERIVATION:
@@ -154,22 +191,17 @@ def registration_dry_run(
             )
         if not terminal:
             blockers.append(f"session {session_id} is {session.state!r}, not terminal")
-        rows = [
-            observation
-            for observation in snapshot.observations
-            if observation.bracket_session_id == session_id
-        ]
-        valid = [
-            observation
-            for observation in rows
-            if observation.classification_disposition == "valid"
-        ]
         excluded: dict[str, int] = {}
-        # Exclusion mechanisms are read ONLY when the session is terminal: the
-        # bundle read is harmless, but keeping the whole branch behind the
-        # terminal gate means no path can leak a value before the gate opens.
+        # The bundle reads that classify exclusions live ONLY inside this
+        # branch.  Not because reading is itself a leak -- nothing read here is
+        # printed -- but because a gate that no path can go around is a
+        # guarantee, while a reviewed one is a promise.  `finalized_slots` is
+        # non-empty for an open session too, so removing this `if` really does
+        # open bundles mid-campaign.
         if terminal:
-            for observation in valid:
+            for observation in session.finalized_slots.values():
+                if observation.classification_disposition != "valid":
+                    continue
                 try:
                     evidence, _ = _read_member_evidence(observation)
                 except PrepareRefusal as refusal:
@@ -177,7 +209,8 @@ def registration_dry_run(
                     continue
                 resolved, detail = anchor_v3_replay_outcome(evidence)
                 if not resolved:
-                    excluded[detail or "unknown"] = excluded.get(detail or "unknown", 0) + 1
+                    mechanism = detail or "unknown"
+                    excluded[mechanism] = excluded.get(mechanism, 0) + 1
                     if detail not in REGISTERED_CORPUS_EXCLUSION_REASONS:
                         blockers.append(
                             f"session {session_id}: unregistered exclusion "
@@ -185,40 +218,37 @@ def registration_dry_run(
                         )
         lines.append(
             f"{session_id}: kind={session.session_kind} state={session.state} "
-            f"terminal={'yes' if terminal else 'NO'} "
-            f"declared_slots={len(session.declared_slots)} "
-            f"rows={len(rows)} valid={len(valid)} "
-            f"excluded={excluded or 'none'}"
+            f"terminal={'yes' if terminal else 'no'} "
+            f"declared={len(session.declared_slots)} "
+            f"filled={len(session.finalized_slots)} "
+            f"excluded={_excluded_summary(excluded)}"
         )
-    unresolved = [
-        observation.attempt_id
+    unresolved = sum(
+        1
         for observation in snapshot.observations
         if observation.content_id is None
         or observation.classification_disposition not in PRIOR_SET_DISPOSITIONS
-    ]
-    lines.append(
-        "prefix pending or unresolved rows: "
-        + (", ".join(sorted(unresolved)) if unresolved else "none")
     )
+    # A COUNT, not the attempt ids: naming rows invites reading them, and the
+    # count is all a desk decision needs.
+    lines.append(f"prefix pending or unresolved rows: {unresolved}")
     if unresolved:
         blockers.append("prior set holds pending or unresolved attempts")
-    retained = sum(
-        1
-        for observation in snapshot.observations
-        if observation.bracket_session_id in set(session_ids)
-        and observation.classification_disposition == "valid"
-    )
     lines.append(
-        "registration would be admissible for prepare-candidate: "
-        + ("YES" if not blockers else "NO")
+        "registration admissible for prepare-candidate: "
+        + ("yes" if not blockers else "no")
     )
     for blocker in blockers:
         lines.append(f"  blocker: {blocker}")
-    # `retained` is a COUNT of rows, never a value; it is printed only once the
-    # registration is admissible, i.e. once blindness has lapsed.
-    if not blockers:
-        lines.append(f"  retained valid rows in the registration: {retained}")
-    return (0 if not blockers else 3), lines
+    return (0 if not blockers else DRY_RUN_INADMISSIBLE_EXIT), lines
+
+
+def _excluded_summary(excluded: Mapping[str, int]) -> str:
+    """Exclusion mechanisms and their counts, in a fixed order."""
+
+    if not excluded:
+        return "none"
+    return ",".join(f"{name}:{count}" for name, count in sorted(excluded.items()))
 
 
 def check(args: argparse.Namespace) -> int:
@@ -268,15 +298,19 @@ def check(args: argparse.Namespace) -> int:
         print("mismatched fields: " + ", ".join(mismatches))
     # The epoch-watch output above is byte-identical whether or not a
     # registration was named; the dry run only ever APPENDS.
-    dry_run_code = 0
     # An empty `--session-ids` value names no session, so it is not a request
     # for a dry run; it must leave the watch output byte-identical.
     named = [session_id for session_id in args.session_ids if session_id]
-    if named:
-        dry_run_code, lines = registration_dry_run(snapshot, named)
-        for line in lines:
-            print(line)
-    return 3 if errors or mismatches else dry_run_code
+    if not named:
+        return 3 if errors or mismatches else 0
+    dry_run_code, lines = registration_dry_run(snapshot, named)
+    for line in lines:
+        print(line)
+    # When a registration is named, the ANSWER is the registration's: the epoch
+    # watch above still prints in full, but an epoch that has drifted is the
+    # whole reason a new corpus is being captured, so it must not mask the
+    # question the caller actually asked.
+    return dry_run_code
 
 
 # ---------------------------------------------------------------------------
@@ -645,13 +679,12 @@ def build_quantile_proof(degrees_of_freedom: int) -> dict[str, Any]:
         ),
         "precision": DECIMAL_WORK_PRECISION,
         "bounds_origin": (
-            "issuer-declared bounds, recorded here in the candidate: the "
-            "pre-registration requires a proof for the realized df and states "
-            "no numeric bound, so these two are the issuer's, chosen because "
-            "each is tighter than the 20 published digits the artifact records "
-            "and looser than the realized agreement; ratifying them in the "
-            "pre-registration or the D-138 transaction record is the "
-            "magistrate's edit, not this tool's"
+            "issuer-declared bounds, stated in the pre-registration's "
+            "quantile-proof clause and recorded here in the candidate: a "
+            "forward residual of at most 1e-30 and agreement of at least 30 "
+            "significant digits between the two routes, each chosen tighter "
+            "than the 20 published digits the artifact records and looser than "
+            "the agreement the implementation realizes"
         ),
     }
 
@@ -1469,10 +1502,28 @@ def derivation_input_sha256(payload: Mapping[str, Any]) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    watch = commands.add_parser("check", help="read-only desk epoch watch")
-    watch.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
-    watch.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
-    watch.add_argument("--acceptance", type=Path, default=DEFAULT_ACCEPTANCE_BOUND_PATH)
+    watch = commands.add_parser(
+        "check",
+        help=(
+            "read-only desk epoch watch, plus a blind registration dry run when "
+            "--session-ids names one"
+        ),
+    )
+    watch.add_argument(
+        "--ledger", type=Path, default=DEFAULT_LEDGER_PATH,
+        help="the append-only calibration observation ledger to read",
+    )
+    watch.add_argument(
+        "--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH,
+        help=(
+            "the committed file naming the ledger row count and last digest "
+            "consumers trust; it must match both Git and the physical ledger"
+        ),
+    )
+    watch.add_argument(
+        "--acceptance", type=Path, default=DEFAULT_ACCEPTANCE_BOUND_PATH,
+        help="the ACTIVE issued acceptance artifact whose epoch is compared",
+    )
     watch.add_argument(
         "--session-ids", action="append", default=[],
         help=(
@@ -1484,9 +1535,24 @@ def build_parser() -> argparse.ArgumentParser:
         "prepare-candidate",
         help="derive a NOT-ISSUED successor acceptance candidate from the ledger",
     )
-    prepare.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
-    prepare.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
-    prepare.add_argument("--repo-root", type=Path, default=REPO_ROOT)
+    prepare.add_argument(
+        "--ledger", type=Path, default=DEFAULT_LEDGER_PATH,
+        help="the append-only calibration observation ledger to derive from",
+    )
+    prepare.add_argument(
+        "--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH,
+        help=(
+            "the committed head pin; the whole history through it becomes the "
+            "candidate's prior set, and its head becomes the ledger cutoff"
+        ),
+    )
+    prepare.add_argument(
+        "--repo-root", type=Path, default=REPO_ROOT,
+        help=(
+            "the checkout the ledger and the evidence bundles live in; member "
+            "paths are recorded relative to it"
+        ),
+    )
     prepare.add_argument(
         "--preregistration", type=Path, required=True,
         help="the pre-registration this corpus was captured under",
@@ -1501,16 +1567,54 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # Deliberately NOT `required=True`: an absent D-125 reference must produce
     # the ruled REFUSAL with its reason, not an argparse usage error.
-    prepare.add_argument("--d125-ruling", default=None)
-    prepare.add_argument("--ed-ruling", default=None)
+    prepare.add_argument(
+        "--d125-ruling", default=None,
+        help=(
+            "reference to the ruling that fixes the D-125 envelope rule for "
+            "this generation; without it the derivation would settle D-125 by "
+            "accident, so the command refuses"
+        ),
+    )
+    prepare.add_argument(
+        "--ed-ruling", default=None,
+        help=(
+            "reference to Ed's written ruling that a 17-member corpus is "
+            f"acceptable; required with --minimum-corpus-size "
+            f"{RULED_ALTERNATIVE_CORPUS_SIZE}, and licenses no other value"
+        ),
+    )
     prepare.add_argument(
         "--minimum-corpus-size", type=int, default=SUCCESSOR_MINIMUM_CORPUS_SIZE,
+        help=(
+            f"how many members the retained corpus must hold: "
+            f"{SUCCESSOR_MINIMUM_CORPUS_SIZE} (the ratified floor) or "
+            f"{RULED_ALTERNATIVE_CORPUS_SIZE} with --ed-ruling; no other value"
+        ),
     )
-    prepare.add_argument("--epoch-catalog-id", default="d079_epoch_25g83")
-    prepare.add_argument("--acceptance-id", default=None)
+    prepare.add_argument(
+        "--epoch-catalog-id", default="d079_epoch_25g83",
+        help=(
+            "the name the candidate's epoch catalog gives the NEW identity "
+            "epoch; it must not collide with the predecessor's entry"
+        ),
+    )
+    prepare.add_argument(
+        "--acceptance-id", default=None,
+        help=(
+            "override the artifact's id; the default names the corpus size and "
+            "the realized OS build"
+        ),
+    )
     # No default: writing into configs/calibration is the D-138 transaction's
     # act, never this tool's, so the caller always names the destination.
-    prepare.add_argument("--out", type=Path, required=True)
+    prepare.add_argument(
+        "--out", type=Path, required=True,
+        help=(
+            "where to write the single candidate file; REQUIRED and without a "
+            "default, so this tool cannot write into configs/calibration by "
+            "omission"
+        ),
+    )
     return parser
 
 

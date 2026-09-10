@@ -8,6 +8,7 @@ real ledger, and no capture.
 
 from __future__ import annotations
 
+import argparse
 from contextlib import redirect_stdout
 import hashlib
 import io
@@ -1364,9 +1365,9 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("kind=derivation", text)
         self.assertIn("terminal=yes", text)
-        self.assertIn("declared_slots=20", text)
-        self.assertIn("valid=20", text)
-        self.assertIn("admissible for prepare-candidate: YES", text)
+        self.assertIn("declared=20", text)
+        self.assertIn("filled=20", text)
+        self.assertIn("admissible for prepare-candidate: yes", text)
 
     def test_the_dry_run_reports_no_measured_value(self) -> None:
         """Blindness binds the dry run too — it is run BETWEEN nights."""
@@ -1375,9 +1376,9 @@ class PrepareCandidateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = build_derivation_ledger(Path(tmp) / "dryopen", rows, fill_slots=6)
             code, text = self.dry_run_output(fixture, SESSION)
-        self.assertEqual(code, 3)
-        self.assertIn("terminal=NO", text)
-        self.assertIn("admissible for prepare-candidate: NO", text)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("terminal=no", text)
+        self.assertIn("admissible for prepare-candidate: no", text)
         self.assert_no_measured_value_leaked(text)
 
     def test_the_dry_run_names_exclusion_mechanisms_and_unresolved_rows(self) -> None:
@@ -1388,10 +1389,12 @@ class PrepareCandidateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fixture = build_derivation_ledger(Path(tmp) / "dryexcl", rows)
             code, text = self.dry_run_output(fixture, SESSION)
-        self.assertEqual(code, 3)
-        self.assertIn("affine_clock_fit_empty", text)
-        self.assertIn("prefix pending or unresolved rows: derivation-night-1-d03", text)
-        self.assertIn("admissible for prepare-candidate: NO", text)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("affine_clock_fit_empty:1", text)
+        # A COUNT, never the attempt ids.
+        self.assertIn("prefix pending or unresolved rows: 1", text)
+        self.assertNotIn("derivation-night-1-d03", text)
+        self.assertIn("admissible for prepare-candidate: no", text)
 
     def test_check_output_is_unchanged_when_no_registration_is_named(self) -> None:
         """`--session-ids` only ever APPENDS to the epoch watch."""
@@ -1409,10 +1412,10 @@ class PrepareCandidateTest(unittest.TestCase):
 
         baseline = run()
         self.assertEqual(baseline, run("--session-ids", ""))
-        self.assertNotIn("Registration dry run", baseline)
+        self.assertNotIn(issuer.DRY_RUN_HEADER, baseline)
         with_registration = run("--session-ids", SESSION)
         self.assertTrue(with_registration.startswith(baseline))
-        self.assertIn("Registration dry run", with_registration)
+        self.assertIn(issuer.DRY_RUN_HEADER, with_registration)
 
     # 93 SF-7 the tool describes itself truthfully
 
@@ -1430,8 +1433,11 @@ class PrepareCandidateTest(unittest.TestCase):
                        "outside the registration", "quantile proof", "budget ceiling"):
             with self.subTest(reason=reason):
                 self.assertIn(reason, text)
+        # argparse rewraps the docstring, so normalise before matching.
         parser = issuer.build_parser()
-        self.assertIn("WRITES EXACTLY ONE FILE", parser.format_help())
+        self.assertIn(
+            "WRITES EXACTLY ONE FILE", " ".join(parser.format_help().split())
+        )
 
     # 93 wording: the selection string says what the code does
 
@@ -1460,7 +1466,12 @@ class PrepareCandidateTest(unittest.TestCase):
         self.run_issuer(self.wide)
         proof = self.payload()["decimal_derivation"]["quantile_proof"]
         self.assertIn("issuer-declared bounds", proof["bounds_origin"])
-        self.assertIn("states no numeric bound", proof["bounds_origin"])
+        self.assertIn(
+            "stated in the pre-registration's quantile-proof clause",
+            proof["bounds_origin"],
+        )
+        self.assertIn("1e-30", proof["bounds_origin"])
+        self.assertIn("30 significant digits", proof["bounds_origin"])
         # It is inside the seal, so the bounds cannot be edited quietly.
         mutated = json.loads(json.dumps(self.payload()))
         mutated["decimal_derivation"]["quantile_proof"]["bounds_origin"] = "whatever"
@@ -1503,6 +1514,189 @@ class PrepareCandidateTest(unittest.TestCase):
         )
         # It says what the loader does, and the loader does it.
         self.assertIsNone(load_calibration_acceptance_bound(self.out))
+
+
+    # ---- fix round 4 ----------------------------------------------------
+
+    DRY_RUN_SESSION_PATTERN = re.compile(
+        r"^(?P<id>[\w-]+): kind=(?P<kind>\w+) state=(?P<state>\w+) "
+        r"terminal=(?P<terminal>yes|no) declared=(?P<declared>\d+) "
+        r"filled=(?P<filled>\d+) excluded=(?P<excluded>none|[\w:,]+)$"
+    )
+
+    # E-1: filled comes from the session record, not from published rows
+
+    def test_the_dry_run_counts_filled_slots_on_an_open_session(self) -> None:
+        """An open session publishes no observation; its progress still shows.
+
+        `len(session.finalized_slots)` is a COUNT of the session record's own
+        slots, so it reports 6 of 20 without anything reading a captured value.
+        """
+
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "open6", rows, fill_slots=6)
+            code, text = self.dry_run_output(fixture, SESSION)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        match = self.DRY_RUN_SESSION_PATTERN.match(
+            next(line for line in text.splitlines() if line.startswith(SESSION))
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group("declared"), "20")
+        self.assertEqual(match.group("filled"), "6")
+        self.assertEqual(match.group("terminal"), "no")
+        self.assert_no_measured_value_leaked(text)
+
+    # E-2: the "aborted" arm of the terminal set, witnessed literally
+
+    def test_an_aborted_session_is_terminal(self) -> None:
+        """`window_exhausted` is the pre-registration's planned early close.
+
+        Deliberately written against the literal state name rather than by
+        iterating `TERMINAL_SESSION_STATES`, so removing `"aborted"` from that
+        set fails here instead of quietly agreeing with itself.
+        """
+
+        rows = [Slot(v) for v in _grid(24, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "aborted", rows, fill_slots=20,
+                abort_reason="window_exhausted",
+            )
+            code, text = self.dry_run_output(fixture, SESSION)
+            self.assertEqual(self.run_issuer(fixture), 0)
+        self.assertEqual(code, 0)
+        self.assertIn("state=aborted", text)
+        self.assertIn("terminal=yes", text)
+        self.assertIn("declared=24", text)
+        self.assertIn("filled=20", text)
+        # prepare-candidate proceeds past the blindness gate on it.
+        self.assertEqual(self.payload()["derivation_corpus"]["n"], 20)
+
+    # E-4: check's exit code when a registration is named
+
+    def check_exit(self, fixture: dict[str, Path], *extra: str) -> tuple[int, str]:
+        stream = io.StringIO()
+        args = issuer.build_parser().parse_args(
+            ["check", "--ledger", str(fixture["ledger"]),
+             "--head-pin", str(fixture["pin"]), "--acceptance", str(R6), *extra]
+        )
+        with redirect_stdout(stream):
+            code = issuer.check(args)
+        return code, stream.getvalue()
+
+    def test_check_returns_the_registration_verdict_when_one_is_named(self) -> None:
+        """The epoch has drifted — that is WHY a new corpus is being captured.
+
+        So with `--session-ids` the exit code answers the question asked, and
+        the epoch-watch table still prints in full above it.
+        """
+
+        code, text = self.check_exit(self.wide, "--session-ids", SESSION)
+        self.assertEqual(code, 0)
+        self.assertIn("MISMATCH", text)
+        self.assertIn("Desk epoch watch", text)
+        self.assertIn("admissible for prepare-candidate: yes", text)
+
+    def test_check_returns_a_distinct_code_for_an_inadmissible_registration(self) -> None:
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "opencli", rows, fill_slots=6)
+            code, text = self.check_exit(fixture, "--session-ids", SESSION)
+        self.assertEqual(code, 5)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertNotEqual(code, 3)
+        self.assertIn("blocker:", text)
+        self.assert_no_measured_value_leaked(text)
+
+    # E-5: the terminal gate around the bundle reads
+
+    def test_no_bundle_is_opened_for_an_open_session(self) -> None:
+        """The `if terminal:` gate is structural, not reviewed.
+
+        The reader is replaced with one that raises, so ANY path reaching a
+        member's primary bytes for an open session fails this test.
+        """
+
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+
+        def forbidden(observation):
+            raise AssertionError(
+                f"bundle read for {observation.attempt_id} before the session is terminal"
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "nogate", rows, fill_slots=6)
+            with mock.patch.object(issuer, "_read_member_evidence", forbidden):
+                code, text = self.dry_run_output(fixture, SESSION)
+        self.assertEqual(code, issuer.DRY_RUN_INADMISSIBLE_EXIT)
+        self.assertIn("filled=6", text)
+
+    # E-6: every flag documents itself, and the prose passes the first-use test
+
+    def test_every_flag_carries_a_help_string(self) -> None:
+        parser = issuer.build_parser()
+        subparsers = next(
+            action for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        )
+        for name, sub in subparsers.choices.items():
+            for action in sub._actions:
+                if action.dest == "help":
+                    continue
+                with self.subTest(command=name, flag=action.dest):
+                    self.assertTrue(action.help, action.dest)
+
+    def test_the_docstring_glosses_every_term_of_art_at_first_use(self) -> None:
+        """Each term is built before it does any work, or it is not used."""
+
+        # Line wrapping is not meaning: collapse it before matching, so a term
+        # broken across two lines still counts as used.
+        text = " ".join((issuer.__doc__ or "").split())
+        glossed = {
+            "OPERATIVES": "the three numbers the acceptance actually governs",
+            "BRACKET SCREEN": "the drift below which a measurement window passes",
+            "BUDGET CEILING": "the largest drift the generation will ever budget",
+            "LEVEL SCREEN": "above which a single capture is refused",
+            "PRIOR-SET PREFIX": "the run of ledger rows at or below the cutoff",
+            "QUANTILE PROOF": "checked two independent ways",
+            "TRIGGER OBSERVATION": "would oblige the generation to be re-derived",
+            "COLD SCIENCE GATE": "the fresh-eyes review",
+            "D-138 transaction": "the single reviewed commit",
+        }
+        for term, gloss in glossed.items():
+            with self.subTest(term=term):
+                self.assertIn(term, text)
+                self.assertIn(gloss, text)
+                # The gloss must arrive at or before the term's first use.
+                self.assertLess(text.index(term), text.index(gloss) + len(gloss))
+        for decision in ("D-102", "D-109", "D-125", "D-126"):
+            with self.subTest(decision=decision):
+                self.assertIn(decision + " ", text)
+
+    # E-7: the dry run's lines match a fixed template
+
+    def test_every_dry_run_line_matches_the_fixed_template(self) -> None:
+        """Only integers and enum words vary — nothing free-form can appear."""
+
+        values = _grid(19, "0.0200", "0.0006")
+        rows = [Slot(v) for v in values]
+        rows.append(Slot("0.0260", unresolved_detail="affine_clock_fit_empty"))
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "template", rows)
+            _, text = self.dry_run_output(fixture, SESSION, "absent-session")
+        lines = text.splitlines()
+        self.assertEqual(lines[0], "")
+        self.assertEqual(lines[1], issuer.DRY_RUN_HEADER)
+        self.assertIsNotNone(self.DRY_RUN_SESSION_PATTERN.match(lines[2]))
+        self.assertEqual(lines[3], "absent-session: absent")
+        self.assertRegex(lines[4], r"^prefix pending or unresolved rows: \d+$")
+        self.assertRegex(
+            lines[5], r"^registration admissible for prepare-candidate: (yes|no)$"
+        )
+        for line in lines[6:]:
+            self.assertRegex(line, r"^  blocker: .+$")
+        self.assert_no_measured_value_leaked(text)
 
 
 if __name__ == "__main__":
