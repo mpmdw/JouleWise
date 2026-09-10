@@ -209,6 +209,14 @@ committed inside H with `[DD]`, `[MLX_VERSION]`, `[SEQ]`, `[DIGEST]` and
 was written; filling them reopens no scientific rule. The plan's
 `registration_path` points at this file (`joulewise/night_gate.py:38`).
 
+`[CHAIN_SHA256]` takes the **tracked chain's** SHA-256 — one value shared by all
+three nights — and NOT any night's wrapper digest. The registration reserves a
+single blank for it, and three nights produce three different wrappers (three
+plans, three session IDs, three `t0`s), so only the tracked chain's digest can
+fill it. That digest is also the literal each night's wrapper compares against
+before it `exec`s (§1.1a step 4), which is what makes the registered value and
+the value in force at capture the same number.
+
 **V3 requires Ed's affirmative written acknowledgment before the first
 capture's arm — silence is not consent for V3.** V3 is the night count, the
 slots per night, and the retained-corpus minimum: three nights × 12 slots,
@@ -613,7 +621,8 @@ There is no minimum notice interval beyond that ordering.
 Send Ed the night notice with the activation's mail tool, under its standing
 email authority, containing: plan ID; class `DIAGNOSTIC_NO_PACK`; the full H
 twice; the handback commit (= H); measurement root, night custody root and runs
-root; `t0` local and UTC; `window_max_s` = 9000; the chain digest and sidecar;
+root; `t0` local and UTC; `window_max_s` = 9000; the emitted wrapper's digest
+and its sidecar path (§1.1a), and the tracked chain's digest the wrapper pins;
 the courier deadline; the exit boundary; the planned install span; and the
 cancellation instruction — **launch needs no action from Ed unless he replies
 NO**. Record the actual send acceptance, time, message and thread IDs, and
@@ -1045,9 +1054,19 @@ means. A term is listed only if it does technical work.
 | `[QUIET-MAC]` | §0.6 | The agent-free machine discipline a capture night runs under. |
 | measurement root / measurement head | §0.2, §1.1 | The fresh clone both night agents are installed from, and the commit it is detached at. |
 | `DIAGNOSTIC_NO_PACK` | §1.1 | The receipt class for a night with no measurement pack; only C2 is not-applicable. |
+| clean tree | §0.8 | The measurement clone has no uncommitted change of any kind: `git status --porcelain` prints zero bytes. |
+| wrapper | §1.1a | The generated zsh file, one per night, that carries the night's whole environment as literal `export` lines, authenticates its pinned inputs, and then `exec`s the tracked chain. The plan's `chain_path` names it. |
+| night root | §1.1a | `<NIGHT_ROOT>`, the custody directory the plan calls `custody_root`; the three emitted files and the night's desk-produced JSON inputs live in it. |
+| sidecar | §1.1a | A small companion file holding another file's SHA-256 in `shasum` output form — the digest, two spaces, a name. |
+| advisory (of the third emitted file) | §1.1a | Written for a human's hand-check only; nothing reads it at launch, so deleting or rewriting it changes nothing about what the night will accept. |
+| tripwire | §1.1b step 4 | A check that writes nothing and exists only to fail loudly if an input drifted — here, `--verify` re-deriving the wrapper and comparing it byte-for-byte. |
+| `zsh -n` | §1.1b step 5 | A syntax check: zsh parses the file and runs none of it. |
+| census substring | §1.1b, §5 | `codex`, `claude` or `t3` — the strings the night's own 30 s process census matches; the generator refuses to bake any of them into an emitted literal. |
+| programmed span | §1.2 | Chain start to the end of the last slot's capture budget: settle + (slots − 1) × cadence + one budget = 7680 s for twelve slots. |
+| pre-settle allowance | §1.2 | 300 s INSIDE the window and BEFORE the settle — the chain's input preflight, its pre-reserve readiness check and the session reservation, plus the driver's pre-launch work. The generator refuses a window below programmed span + this. |
 | start-to-start cadence | §1.2 | Slot `d(k+1)` starts 600 s after `dk` STARTED; a long capture is never caught up by compressing a later slot. |
 | window_max_s / `WINDOW_END_EPOCH_S` | §1.2 | The plan's window length in seconds, and the exclusive window end the chain enforces. |
-| courier / courier deadline | §1.2, §2.1 | The process that emails the night's result, and the 300 s allowance the deadline arithmetic reserves for it. |
+| courier / courier deadline / courier allowance | §1.2, §2.1 | The process that emails the night's result; the 300 s the deadline arithmetic reserves for it AFTER the window ends. Distinct from the pre-settle allowance, which is spent inside the window; the two share a number by coincidence. |
 | plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 25 min` in which no agent may be resident; the activation's hard exit time. |
 | census | §0.6 | The enumerated process inventory proving no foreign or own agent is live. |
 | T1 bindings | §0.3 | The toolchain-identity block a finalization receipt records, including the MLX version in force. |
