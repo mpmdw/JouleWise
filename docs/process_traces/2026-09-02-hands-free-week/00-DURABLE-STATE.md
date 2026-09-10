@@ -872,4 +872,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   S2, S4 (issuer prepare-candidate) after S3/S5; each through the gauntlet. Ed emailed 08:39 (`1a08bf970c5cedf5`) with FOUR items needing his written
   yes (V3 corpus 3×12 n≥19 — silence is NOT consent; V7 envelope; screen challenge; daytime windows + no macOS updates). Calendar if yes: corpus nights
   09-12/13/14 → transaction 09-15 → first G2-a ≈ 09-16. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request. Records 38–56.
+- UPDATE 2026-09-10 ~09:25 PDT (headless activation `96bfeca7`): CODEX USAGE LIMIT hit 08:41 (reset 2026-09-15 00:52 PDT; record 57) — every
+  Astra seat since fails; implementation of ACCEPTANCE-EPOCH-25G83-01 pivoted to Opus agents under the same briefs (runner scope enforcement lost;
+  the lead reviews diffs against footprints). Seat state on `feat/2026-09-10-epoch-*` branches: S6 docs+pre-registration FINAL (39e813ff; refuter 62,
+  delta 66 applied; merged into `feat/2026-09-10-epoch-integration`); S5 chain skeleton + `check` tool round 1 (8a9eec61; refuter 63; delta pending);
+  S3 acceptance validator round 1 (93799321; refuters 64/65; delta pending); S2 ledger sessions RUNNING (Opus; carries the session_kind constant
+  binding for S3's barrier); S1 (writer) after S2, S4 (issuer prepare-candidate) after S3/S5 (briefs 55/56). Integration obligations: a real
+  derivation-kind session skipped at all three validator sites; `calibration_bracketing.DERIVATION_SESSION_KIND == calibration_ledger.SESSION_KIND_DERIVATION`;
+  a canonical-checkout run of tests/verify_calibration_acceptance_corpus.py before any transaction. Ed's four written-yes items (08:39 email) still open;
+  no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
 
