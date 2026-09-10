@@ -358,3 +358,178 @@ two registry rows in §7. **If any OTHER test in that module fails, treat this
 report as INCOMPLETE for that module** — the lead should re-run
 `python3 -m unittest tests.test_calibration_exits` at the gate and confirm the
 failure set is that single row-staleness assertion and nothing else.
+
+---
+
+# Fix round 1
+
+On top of `73eab3f8`. No git state changed. Both lead decisions implemented;
+one FORCED deviation from the brief's registry class is flagged in §F3 — it is
+not a preference, the requested class is structurally unreachable.
+
+## F1. Item 1 — scope granted, registry rows landed
+
+`docs/contracts/calibration_ledger_append.md` regenerated from
+`REFUSAL_INVENTORY` itself (not hand-typed), so the generated block cannot drift
+from the enum. The diff is `3 insertions(+)` and nothing else — verified by
+`git diff --stat`. Enum order placed all three after
+`calibration_power_policy_required`.
+
+```
+| `calibration_derivation_only_epoch_unchanged` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_derivation_only_epoch_unchanged` | `scripts/validate_powermetrics_fiducial.py` | `writer_capture_valid_slot_finalized` |
+| `calibration_derivation_only_session_kind_required` | `operational` | writer | preflight | `correct-preflight` | `ready_to_arm` | `false` | `witness.calibration_derivation_only_session_kind_required` | `scripts/validate_powermetrics_fiducial.py` | `writer_capture_valid_slot_finalized` |
+| `calibration_derivation_session_requires_derivation_only` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_derivation_session_requires_derivation_only` | `` | `` |
+```
+
+Verified by the single named test:
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_calibration_exits.RefusalInventoryTests.test_generated_contract_projection_and_runbook_anchors_are_fresh \
+    > /tmp/fr1fresh.log 2>&1; RC=$?
+RC=0
+Ran 1 test in 0.001s
+OK
+```
+
+**The seat landing's prediction is now confirmed, not assumed.** The pre-fix
+full-module run finished after the seat report was written:
+`Ran 47 tests in 484.438s / FAILED (failures=1)`, the single failure being
+exactly `test_generated_contract_projection_and_runbook_anchors_are_fresh`. That
+is the failure these rows cure, and no other test in the module was red.
+
+## F2. Item 2 — the hole is closed, fail-closed
+
+| Site | Change |
+|---|---|
+| `joulewise/calibration_exits.py:100-102` | `DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY = "calibration_derivation_session_requires_derivation_only"` |
+| `:263` | description |
+| `:279` | `_ABORT` membership (see §F3) |
+| `:366` | `_WRITER_COMPONENT` membership |
+| `scripts/validate_powermetrics_fiducial.py:1309` | `_CaptureLedgerLifecycle.__init__` gains `derivation_only: bool = False` |
+| `:1378-1395` | the guard, inside `begin()`, in the `if self.is_bracket_session:` block and BEFORE `self._validate_slot()` |
+| `:1930` | `main` passes `derivation_only=args.derivation_only` |
+
+The guard sits before `self.writer_lease.acquire()`, so on refusal nothing is
+appended, no custody directory exists, and the session is untouched — the test
+asserts the ledger bytes are identical before and after.
+
+**No collision with `test_main_preserves_symlinked_custody_spelling_used_by_reservation`,
+and no test double was weakened.** The double is
+`class StopAfterCustodyCapture: def __init__(self, **kwargs)` — it absorbs the
+new keyword, and because it replaces the real class entirely, the guard never
+runs inside it. The double is byte-for-byte unedited; that test is unedited.
+This is exactly why `begin()` was the right placement and the pre-lifecycle
+placement of fix round 0 was not.
+
+## F3. FORCED DEVIATION — the registry class is `abort-session`, not `correct-preflight`
+
+The brief asked for "preflight, same corrected-success path convention as your
+other two". **That class is structurally unreachable for this code, and I did
+not silently substitute — here is the mechanism.**
+
+A row whose `terminal_result` is `ready_to_arm` obliges
+`PublicGovernedExitWitnessTests._execute_case` to EXECUTE the correction on the
+SAME state and prove it succeeds (`_execute_valid_writer(case.code, state)`).
+For this refusal:
+
+1. The guard is only reachable when the machine epoch MATCHES the active
+   acceptance — otherwise `main`'s ordinary epoch preflight refuses
+   `FROZEN_PROTOCOL_INVALID` first, before the lifecycle is ever constructed.
+2. On a matching epoch, adding `--derivation-only` is NOT a correction: it
+   refuses `DERIVATION_ONLY_EPOCH_UNCHANGED` by design.
+3. The only writer-argument correction would be capturing an ordinary bracket
+   slot — which needs a SECOND open session in the same state, and
+   `is_governed_open_bracket_extension` tolerates exactly one open session, so
+   a second `_open_session` poisons every snapshot consumer.
+
+So there is no writer-argument correction. The operator's real exit is to abort
+the session that was opened in the wrong kind — which is precisely
+`exit_kind="abort-session"`, `terminal_result=session_aborted`, and the class
+the three sibling capture-time writer refusals (`display_arm_failed`,
+`sampler_never_ready`, `rollover_gate_timeout`) already use. I put the code in
+`_ABORT` + `_WRITER_COMPONENT`, mirroring them exactly. The witness then
+executes `abort-session` as its terminal exit — a real, demonstrated recovery,
+not a skipped one. **If the lead prefers the preflight class, it needs a
+different mechanism than a writer flag, and I recommend against it.**
+
+## F4. Tests and cuts
+
+New defect-shaped tests in
+`tests/test_validate_powermetrics_fiducial_derivation_only.py`, plus the third
+executed witness in `tests/test_calibration_exits.py`
+(`_state_derivation_kind_writer` state helper, `writer-derivation-session`
+observer). `_open_session` gained optional `session_kind`/`slots` parameters
+with defaults identical to today's behaviour; every existing caller is
+unchanged.
+
+| Clause | Test | Production call site killed | Mutation | Result |
+|---|---|---|---|---|
+| ordinary writer refuses a derivation-kind slot, appends nothing | `DerivationOnlyLiveCaptureTests::test_ordinary_mode_refuses_a_derivation_kind_slot_and_appends_nothing` | `_CaptureLedgerLifecycle.begin()` `:1378` `if self.is_derivation_session and not self.derivation_only:` | → `if False:` | `Ran 1 test in 21.874s` / `FAILED (failures=1)` rc 1 |
+| the guard is KIND-scoped, not a blanket ordinary refusal | `DerivationOnlyLiveCaptureTests::test_ordinary_mode_still_fills_a_bracket_kind_slot_unchanged` | same line | → `if not self.derivation_only:` (drops the kind conjunct) | `Ran 1 test in 0.540s` / `FAILED (failures=1)` rc 1 |
+| executed governed exit | `PublicGovernedExitWitnessTests` case `calibration_derivation_session_requires_derivation_only` | `begin()` guard + the `abort-session` terminal exit | — | `CASE PASS` (all three derivation witnesses re-verified) |
+
+Baseline `scripts/validate_powermetrics_fiducial.py` sha256
+`9affd15e6b23d24de2ec895e4fa651998d40391d1a14690b597aac392b5592d4`; both cuts
+ran with `PYTHONDONTWRITEBYTECODE=1`, single named test each, bytes restored and
+the sha256 re-verified (`restored_sha_ok=True` both).
+
+**Second defect caught in this round.** My first `writer-derivation-session`
+witness failed with
+`AssertionError: 'calibration_derivation_only_epoch_unchanged' != 'calibration_derivation_session_requires_derivation_only'`.
+Cause: the fix-round-0 observer branch was written as
+`case.observer.startswith("writer-derivation-")`, which shadowed the new
+sibling observer and ran it WITH `--derivation-only`. Cured by narrowing that
+branch to an exact set `{"writer-derivation-epoch", "writer-derivation-standalone"}`
+with a comment naming why it must not be a prefix match. A prefix match in a
+dispatch table is a latent trap for the next observer added; worth a refuter's
+eye elsewhere in that dispatch.
+
+## F5. Runs
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_validate_powermetrics_fiducial_derivation_only \
+    tests.test_powermetrics_fiducial tests.test_calibration_ledger \
+    tests.test_docs_freshness > /tmp/fr1focused.log 2>&1; RC=$?
+RC=0
+Ran 204 tests in 109.202s
+OK (skipped=2)
+```
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_validate_powermetrics_fiducial_derivation_only \
+    > /tmp/fr1mod.log 2>&1; RC=$?
+RC=0
+Ran 9 tests in 43.190s
+OK (skipped=1)
+```
+
+```
+$ python3 -m compileall -q scripts joulewise
+rc=0
+```
+
+The whole exits module was NOT run, per the brief; the lead runs it in the
+sharded replay. What is proven here: the one freshness test alone (`Ran 1`, OK)
+and all three derivation witnesses executed directly (`CASE PASS` each).
+
+## F6. Footprint
+
+```
+$ git status --short
+ M docs/contracts/calibration_ledger_append.md
+ M joulewise/calibration_exits.py
+ M scripts/validate_powermetrics_fiducial.py
+ M tests/test_calibration_exits.py
+ M tests/test_validate_powermetrics_fiducial_derivation_only.py
+```
+
+Granted scope plus the original WRITE_SCOPE. `tests/test_powermetrics_fiducial.py`
+still needed no edit.
+
+## F7. Item 3 unchanged
+
+The TRUE branch of `exceeds_prior_level_screen` remains the documented
+`@unittest.skip` with its blocker and two candidate cures inline, per the lead's
+instruction. §4 of the seat report is the analysis for the refuter.
