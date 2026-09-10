@@ -59,14 +59,14 @@ No new module, no new gate, no decision-log edit. The branch merges cleanly onto
 
 Row 9: WAIVED, not passed — the unpiped single-process replay at beb808bc ran 5668 tests, rc=1, with exactly one failure,
 `test_controller.HappyPathTests.test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce`, a pre-existing sleeping-fixture
-timeout that fails identically on main 078a13a4 on this host and is unreachable from the PR's only controller hunks (all inside
-`cooldown_gate`); waiver named and conditioned by cold gate 35 (W1–W8), CI green at beb808bc, cure lane FIXTURE-SENTINEL-CONTROLLER-01
+timeout that fails identically on main 078a13a4 on this host and is unaffected by both production changes the PR makes on its path —
+the three `controller.py` hunks sit inside `cooldown_gate`, which the test never reaches, and the `environment_admission.py` tolerance
+widening can only withdraw an admission refusal, never emit an `idle_drift` reason (Opus pairing on ruling 35, addendum 11 A1); waiver named and conditioned by cold gate 35 (W1–W8), CI green at beb808bc, cure lane FIXTURE-SENTINEL-CONTROLLER-01
 registered, addendum owed when it lands. (Sentence verbatim from ruling 35 Q2.) Packet correction carried: the packet's "disjoint from
 the PR's code changes" was false at file level — `joulewise/controller.py` IS on the failing path and IS changed; independence holds at
 hunk level (three hunks at :2516/:2523/:2552 inside `cooldown_gate`, one caller at :3072, never reached by the single-run test), and
-the capture/salvage/strict-validation code that emits the two reasons is byte-identical to main. W7 (no further row-9 waiver for this
-test name on any PR until the cure lands) is carried as a condition of THIS waiver; whether it binds future PRs as a standing rule is
-for the cold gate or Ed, not the resident magistrate.
+the capture/salvage/strict-validation code that emits the two reasons is byte-identical to main. W7 as amended (addendum 11 A3): the next PR whose replay shows this test is a fresh cold-gate trigger under 44 C4; no standing bar is
+ruled. W9 (addendum 11 A4): the machine state during the replay window is recorded in the addendum.
 
 ## Verdict
 
