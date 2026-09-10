@@ -1,5 +1,5 @@
 SESSION_MODE: delegated
-WRITE_SCOPE: ["joulewise/calibration_bracketing.py", "tests/test_calibration_bracketing.py", "tests/verify_calibration_acceptance_corpus.py"]
+WRITE_SCOPE: ["joulewise/calibration_bracketing.py", "tests/test_calibration_bracketing.py", "tests/verify_calibration_acceptance_corpus.py", "tests/test_calibration_live_three_window.py", "tests/test_paper_first_use_ledger.py", "tests/test_floor_mint_pinsets_schema.py"]
 BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 
@@ -21,3 +21,10 @@ S4 implements the refusal later): rows carry `screen_rule` AND an `inherited_cei
 is S4's, but leave the schema slot for it. Also add to your regression sweep the literal pins found by the refuter: `tests/test_calibration_live_three_window.py:332,435`,
 `tests/test_paper_first_use_ledger.py`, `tests/test_floor_mint_pinsets_schema.py` — if any of them pins the single-epoch catalog or the registry by literal
 and is outside your WRITE_SCOPE, STOP with NEEDS_SCOPE naming it (do not widen scope yourself).
+
+## Scope ruling (magistrate, 08:55 PDT; supersedes the census STOP for these three files)
+
+The three test files above are IN scope for generation-aware fixture adjustments where a single-epoch catalog or the registry is pinned by literal
+(first launch stopped at `tests/test_calibration_live_three_window.py:331-333, :435`): preserve every historical fixture's behaviour (r3–r6 and the
+genesis fixture load byte-identically); register nothing for the successor; in `test_calibration_live_three_window.py` touch ONLY the epoch-catalog
+literal lines (seat S2 owns its slot-name lines in parallel). Any FURTHER out-of-scope pin: STOP with NEEDS_SCOPE as before.
