@@ -442,3 +442,248 @@ $ git diff --stat
 - **The envelope's predecessor arm remains inert for this generation** (noted in
   the first round and unchanged): with r6 as predecessor, `S ≥ 0.010818 >
   0.010164834757777545`, so `C = max(predecessor, Q99)` can only resolve to Q99.
+
+---
+
+# Fix round 2 (seat S4, on top of `a3ae7bf8` = S4 round 1 + S3 final)
+
+Every item of delta 91 and contract refuter 93 addressed. No git state changed;
+scope unchanged. **16 cuts, one term each, all KILLED**; suite `Ran 202 tests …
+OK (skipped=1)`, rc 0; `compileall` rc 0.
+
+## 1. SF-1 BLINDNESS — the pre-registered fence now has code
+
+`refuse_open_registration` (`:857`) refuses while ANY named registration session
+has a `state` outside `TERMINAL_SESSION_STATES = {"finalized", "aborted"}`
+(`:854`). It is called at `_prepare_candidate`'s **third** statement — after the
+argument checks and the snapshot load, and **before the generic ledger-refusal
+check, before member selection, before any bundle is read and before any
+statistic is formed**. Nothing is printed but the refusal reason.
+
+It deliberately precedes the ledger check: an open derivation session is the
+physical/pin gap every snapshot consumer tolerates by design (CG46 A7), so the
+ledger reports the opaque `calibration_ledger_bracket_session_open`; the seat
+must say *which session is open and why that stops the run*.
+
+Two tests, because one alone would be masked:
+
+- `test_the_blindness_gate_is_isolated_from_the_ledger_refusal` drives
+  `refuse_open_registration` against a synthetic snapshot with **no refusal
+  reason at all** — the state the desk is in once the pin has been advanced
+  between nights — and also asserts both terminal states pass. This is the
+  isolating counterfactual (cut G1).
+- `test_an_open_registration_session_refuses_before_anything_is_computed` runs
+  the CLI on a 20-slot fixture with only 6 slots filled (new fixture parameter
+  `fill_slots`), asserts rc 3, the reason names the open session and
+  "Blindness", and — the point — that stdout contains **no member value, no
+  screen, no ceiling and no count** (`assert_no_measured_value_leaked` over the
+  lexeme fragments `0.02`, `0.03`, `0.011`, `0.010818`, `corpus n`). Cut G1b
+  deletes the call site and this test dies.
+
+## 2. SF-2 — the only ruled floor departure is exactly 17
+
+`:775-790`: a `--minimum-corpus-size` other than 19 must be exactly
+`RULED_ALTERNATIVE_CORPUS_SIZE = 17` (`:304`) **and** carry `--ed-ruling`.
+`--minimum-corpus-size 3 --ed-ruling <anything>` no longer emits an n = 3 corpus.
+The old "may not exceed the ratified floor" refusal is subsumed: 20 is not a
+ruled floor either. `test_only_seventeen_is_a_ruled_alternative_floor` exercises
+3, 18 and 20, each with a ruling present.
+
+## 3. SF-4 — pending or unresolved prefix rows refuse
+
+`:1170`: any snapshot observation with no content id, or whose classification is
+outside `PRIOR_SET_DISPOSITIONS`, refuses issuance naming the attempt ids,
+instead of being filtered out of the prior set. Counterfactual fixture: one slot
+finalized with disposition `abandoned` (classification `unresolved`), which
+leaves the session terminal so the blindness gate cannot mask it.
+
+## 4. SF-3 / 91 — `source_directory` is repo-relative
+
+`_repo_relative_custody` (`:664`) relativises against **the run's `--repo-root`**
+(not the issuer's own `REPO_ROOT`, which would be wrong for any checkout but this
+one) and refuses a member whose custody lies outside it.
+`test_member_source_directory_is_repo_relative_and_re_resolves` asserts every
+emitted path is relative, that `root / path` re-resolves to a real directory
+named for the member, and that r6 stores its members the same way.
+
+## 5. DF-1 — the envelope arithmetic as pure functions, both operands exercised
+
+`envelope_screen(quantized_range, floor)` (`:689`) and
+`envelope_ceiling(predecessor_ceiling, own_q99)` (`:700`) replace the two inline
+`max(...)` calls. `test_the_ceiling_takes_whichever_operand_is_larger` covers
+predecessor-wins, Q99-wins and the tie, plus both screen arms — so **all four
+operand-collapse cuts (G5a–G5d) die**. This is the only way to exercise the
+ceiling's predecessor arm at all: r6's ceiling `0.010164834757777545` sits below
+the `0.010818` screen floor, so through the CLI the predecessor can never win the
+max without failing strict `S < C` first. The finding from rounds 1 and 2 that
+the arm is "inert this generation" is now covered by test rather than by prose.
+
+## 6. SF-6 ruled-not-installed — `check`'s registration dry run (CG46 V5)
+
+`registration_dry_run` (`:129`), wired into `check` behind `--session-ids`
+(repeatable, `:1463`). Per session it prints kind, state, `terminal=yes|NO`,
+declared-slot count, row count, `valid` count, and excluded counts **by
+mechanism**; then the prefix's pending/unresolved rows; then whether the
+registration would be admissible for `prepare-candidate`, with one line per
+blocker. Exit 0 when admissible, 3 otherwise.
+
+**Blindness binds the dry run too** — it is the tool one runs *between* nights,
+which is exactly when a leaked value would be fatal. So it reports no bound, no
+screen, no statistic and no member value; the bundle reads that classify
+exclusions sit **inside** the `if terminal:` branch, so no path touches primary
+bytes before the gate opens; and the one count that could carry information (the
+retained-valid count) is printed only when the registration is already
+admissible. `test_the_dry_run_reports_no_measured_value` asserts the same
+no-leak predicate as the CLI test.
+
+`check`'s existing epoch-watch output is **byte-identical** when no registration
+is named: `test_check_output_is_unchanged_when_no_registration_is_named` compares
+the no-argument output against `--session-ids ""` (empty ids are ignored, `:272`)
+and asserts the registration run merely **prefixes**-matches, i.e. the dry run
+only ever appends. Cut G6c makes empty ids trigger a dry run and dies.
+
+## 7. SF-7 — the tool describes itself truthfully
+
+The module docstring (surfaced verbatim by `--help`) is rewritten: both
+subcommands named; `check` stated READ-ONLY; `prepare-candidate` stated to WRITE
+EXACTLY ONE FILE to a caller-named `--out` with **no default destination**, so it
+cannot write into `configs/calibration/` by omission; the file stated to be a
+candidate the production loader refuses, with issuing named as the D-138
+transaction's act; and every refusal enumerated. `"reserved for S4"` is gone.
+`test_the_module_docstring_describes_both_subcommands_truthfully` is the
+first-use test: it checks each claim and each named refusal term, and that
+`--help` carries the text.
+
+## 8. Wording — `derivation_corpus.selection`
+
+Now says what the code does: the member's ledger disposition is `valid` and its
+**stored** anchor-v3 record, read from primary evidence bytes **authenticated
+against its ledger row**, reports a resolved clock anchor; the value is the
+bundle's own `b_fiducial_s` lexeme cross-checked against the row's exact bound
+lexeme; and **"no value is re-derived here"**. The pre-registration glossary edit
+is S6's and was not touched.
+
+## 9. Nits
+
+`two_draw_prediction_lexeme`'s docstring now states the sealed property
+("shortest round-tripping decimal") and notes that Python's float `repr` IS that
+decimal. `_PI`'s comment states why the digits past precision 80 are **inert**
+(Decimal rounds the literal into the working context on first use; they are guard
+digits for a future precision raise) and that the proof route computes π by
+Machin instead of reading it, so a typo surfaces as a proof failure.
+`derivation_notes.predecessor` now restates the predecessor's `file_sha256`
+(computed from the bytes actually loaded) and its `derivation_sha256`, so the note
+identifies the predecessor by bytes rather than by a path.
+
+## 10. SF-5 — the proof bounds say whose they are
+
+`quantile_proof.bounds_origin` (`:641`) records, inside the artifact and inside
+`derivation_input_sha256`, that 1e-30 and 30 digits are the **issuer's declared
+bounds**, that the pre-registration requires a proof and states no numeric bound,
+why each was chosen (tighter than the 20 published digits, looser than the
+realized 56–57), and that ratifying them in the pre-registration or the D-138
+record is the magistrate's edit, not this tool's. The bounds themselves are
+unchanged.
+
+## Cut table (fix round 2)
+
+One term per cut, one named test, `Ran 1 test` parsed, bytes restored and
+sha256-asserted after every cut, `PYTHONDONTWRITEBYTECODE=1` throughout.
+Harness `/tmp/s4_mutate3.py`; baseline = restored =
+`156b6fd2f09ff1b1358a7d138e1878f958f3037d93346254c0441759a94a9ff3`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| G1 | `if session is not None and session.state not in TERMINAL_SESSION_STATES:` → `if False:` | `test_the_blindness_gate_is_isolated_from_the_ledger_refusal` | Ran 1 | KILLED |
+| G1b | delete the `refuse_open_registration(...)` call site | `test_an_open_registration_session_refuses_before_anything_is_computed` | Ran 1 | KILLED |
+| G2 | `if minimum != RULED_ALTERNATIVE_CORPUS_SIZE:` → `if False:` | `test_only_seventeen_is_a_ruled_alternative_floor` | Ran 1 | KILLED |
+| G3 | `if unresolved: raise PrepareRefusal(` → `if False:` | `test_an_unresolved_prefix_row_refuses` | Ran 1 | KILLED |
+| G4 | `_repo_relative_custody(...)` → `observation.custody_locator` | `test_member_source_directory_is_repo_relative_and_re_resolves` | Ran 1 | KILLED |
+| G5a | `max(predecessor_ceiling, own_q99)` → `own_q99` | `test_the_ceiling_takes_whichever_operand_is_larger` | Ran 1 | KILLED |
+| G5b | `max(predecessor_ceiling, own_q99)` → `predecessor_ceiling` | same | Ran 1 | KILLED |
+| G5c | `max(quantized_range, floor)` → `quantized_range` | same | Ran 1 | KILLED |
+| G5d | `max(quantized_range, floor)` → `floor` | same | Ran 1 | KILLED |
+| G6 | `terminal = session.state in TERMINAL_SESSION_STATES` → `terminal = True` | `test_the_dry_run_reports_no_measured_value` | Ran 1 | KILLED |
+| G6b | dry-run `if unresolved:` → `if False:` | `test_the_dry_run_names_exclusion_mechanisms_and_unresolved_rows` | Ran 1 | KILLED |
+| G6c | `[s for s in args.session_ids if s]` → `list(args.session_ids)` | `test_check_output_is_unchanged_when_no_registration_is_named` | Ran 1 | KILLED |
+| G7 | docstring "WRITES EXACTLY ONE FILE" → "writes something" | `test_the_module_docstring_describes_both_subcommands_truthfully` | Ran 1 | KILLED |
+| G8 | selection "stored … record, read from" → "replay re-derived from" | `test_the_selection_string_describes_a_read_not_a_re_derivation` | Ran 1 | KILLED |
+| G9 | predecessor `file_sha256` computed → `"0"*64` | `test_the_predecessor_note_identifies_it_by_bytes` | Ran 1 | KILLED |
+| G10 | `bounds_origin` "issuer-declared bounds" → "ratified bounds" | `test_the_quantile_proof_records_where_its_bounds_came_from` | Ran 1 | KILLED |
+
+## Runner tails
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation \
+    tests.test_calibration_bracketing tests.test_docs_freshness
+----------------------------------------------------------------------
+Ran 202 tests in 77.317s
+
+OK (skipped=1)
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts joulewise
+COMPILEALL_RC=0
+```
+
+`tests.test_issue_calibration_acceptance_generation` alone: `Ran 81 tests` OK.
+No full suite, no commit.
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/fixtures/epoch_bootstrap/build.py
+ M tests/test_issue_calibration_acceptance_generation.py
+
+$ git diff --stat
+ scripts/issue_calibration_acceptance_generation.py | 324 +++++++++++++++++++--
+ tests/fixtures/epoch_bootstrap/build.py            |  10 +-
+ ...test_issue_calibration_acceptance_generation.py | 258 +++++++++++++++-
+ 3 files changed, 565 insertions(+), 27 deletions(-)
+```
+
+## Decisions made this round
+
+1. **The blindness gate precedes the ledger-refusal check.** An open derivation
+   session makes the snapshot report `calibration_ledger_bracket_session_open`,
+   which would mask the ruled reason. Ordering the gate first makes the tool say
+   which session is open and why, and makes the clause isolable.
+2. **One home for the gate, two tests.** The check lives only in
+   `refuse_open_registration`, not also inside `_registration_observations`. The
+   synthetic-snapshot test isolates the clause; the CLI test proves the
+   end-to-end no-leak property. I say plainly that the CLI test alone would be
+   masked by the ledger reason.
+3. **The dry run's exclusion classification sits inside the terminal branch.**
+   Reading a bundle to name a mechanism leaks nothing by itself, but keeping the
+   whole branch behind the gate means no code path can reach a member value
+   before the registration is terminal — a structural guarantee rather than a
+   reviewed one.
+4. **`--minimum-corpus-size 20` now refuses too.** The previous "may not exceed
+   the floor" refusal is gone as a separate clause; a stricter floor is simply
+   not one of the two ruled values. This changes an existing refusal message and
+   is noted here rather than left for a refuter to notice.
+5. **Relativise against `--repo-root`, not `REPO_ROOT`.** The issuer's own repo
+   root is wrong for any run whose ledger lives elsewhere (every test fixture,
+   and any clone-based rehearsal). Refusing a custody path outside that root is
+   the fail-closed half.
+6. **`envelope_screen` / `envelope_ceiling` extracted as pure functions.** Not
+   cosmetic: it is the only way to exercise the ceiling's predecessor arm, which
+   the current predecessor makes unreachable through the CLI, and it makes all
+   four operand-collapse cuts killable.
+7. **Empty `--session-ids` values are ignored** so the epoch-watch output stays
+   byte-identical, which is the property the round asked to be tested.
+8. **Not touched, deliberately:** the pre-registration (S6's, per rule 11 — SF-5
+   and the glossary wording both need a magistrate/S6 edit, and this report names
+   both), and SF-8's licence sentence in `issuance.reason`, which was not in this
+   round's list; it is a one-string change that moves `derivation_sha256` and not
+   `derivation_input_sha256`, and is the next obvious bench-sized item.
+
+## Still open
+
+- **SF-8** (the candidate saying in words what it licenses) — not in this round's
+  brief; one string in `issuance.reason`.
+- **The member sort** still has no isolating test (fixture slot names are already
+  ordered).
+- **Pre-registration edits are S6's**: the SF-5 bounds sentence and the
+  "Anchor-v3 replay" glossary definition. The artifact side of both is done.
