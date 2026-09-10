@@ -864,4 +864,12 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   08:05 (`1a08bd6ccb79ea1d`) with the route and his two decisions (corpus design rules; ledger representation), defaults stated. A blind three-seat
   design consult on the bootstrap mechanism (brief 40; Astra 41, cold Fable 42, Opus) is in flight; next: synthesis → cold-gate ruling → implementation
   under the gauntlet. rehearsal-20260911 ARMED and untouched; this activation exits on the 02:31 request. RUN_STATE T38j.
+- UPDATE 2026-09-10 ~08:45 PDT (headless activation `96bfeca7`): ACCEPTANCE-EPOCH-25G83-01 mechanism RULED — cold gate 46 (+ Opus addendum 11,
+  eight amendments incl. the recovery finalization path, the D-126 corpus-size floor of 19 → default THREE nights × 12 slots, the full D-125
+  envelope for S and C): derivation-only writer mode, derivation-kind ledger sessions, generation-keyed issuance validation, parameterized issuer,
+  one D-138 transaction (+ staged R2), desk epoch watch tool (step-0 wiring proposed to Ed). Implementation seats S2 (ledger sessions), S3 (validator),
+  S6 (contracts + D-102 addendum + pre-registration), S5 (chain skeleton + `check`) running on `feat/2026-09-10-epoch-s*` worktrees; S1 (writer) after
+  S2, S4 (issuer prepare-candidate) after S3/S5; each through the gauntlet. Ed emailed 08:39 (`1a08bf970c5cedf5`) with FOUR items needing his written
+  yes (V3 corpus 3×12 n≥19 — silence is NOT consent; V7 envelope; screen challenge; daytime windows + no macOS updates). Calendar if yes: corpus nights
+  09-12/13/14 → transaction 09-15 → first G2-a ≈ 09-16. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request. Records 38–56.
 
