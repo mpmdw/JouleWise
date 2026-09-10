@@ -204,7 +204,7 @@ the lieutenant rather than acted on:
   ahead of `--execute`. `recover_calibration_ledger.py abort-session --session-id --plan
   --reason` DOES exist today and takes `--ledger`/`--head-pin` as *global* args before the
   subcommand — the chain now spells that ordering correctly.
-- **O-4, where `check` must be run.** `DEFAULT_LEDGER_PATH` is `<repo>/runs/
+- **O-4, where `check` must be run. — SUPERSEDED — see Fix round 1 F-5.** `DEFAULT_LEDGER_PATH` is `<repo>/runs/
   calibration_observation_ledger.jsonl`, resolved from the script's own location, and
   `runs/` is untracked — so in any linked worktree the watch reports
   `calibration_ledger_missing, calibration_ledger_rollback` (as it does above) and the T1
@@ -326,7 +326,136 @@ Stated as a note, with the decision left where the coordinator put it.
 
 ## Standing open items after this round
 
-O-1 RESOLVED (F-1). O-4 CORRECTED and narrowed to a `--repo-root` follow-up (F-5).
+O-1 RESOLVED (F-1). O-4 **SUPERSEDED — see Fix round 1 F-5** (its "pass `--ledger/--head-pin` from another checkout" workaround does not exist); narrowed to a `--repo-root` follow-up.
 O-2 (writer `--arm-countdown-s` / `--sleep-display-before-capture` parity with the r6
 collection) and O-3 (unlanded S1/S2 flags, now including `--slot dNN` per F-6) stand
 unchanged for the integration replay.
+
+---
+
+# Fix round 2 (Claude Opus, seat S5)
+
+Applied on top of `8a9eec61` in the same worktree: D-1, D-2, D-7, D-8. D-3, D-4, D-5, D-6
+left as integration-replay notes with no code change, recorded below. No commit, push, or
+checkout; the diff is left in the worktree (`git status --short`: the chain and the test
+module modified; the issuer script unchanged this round). WRITE_SCOPE unchanged.
+
+**Every guard clause added this round carries a named killing mutation, verified by
+mutating the chain, running the suite, and restoring — each restoration confirmed by
+`shasum -a 256 -c` against the pre-probe digest (`… : OK` each time).**
+
+## Verification (verbatim)
+
+```
+$ python3 -m unittest tests.test_issue_calibration_acceptance_generation tests.test_docs_freshness
+.............................................................
+----------------------------------------------------------------------
+Ran 61 tests in 28.873s
+
+OK
+UNITTEST_RC=0
+
+$ zsh -n scripts/night_chains/calibration_derivation_only.zsh
+ZSH_RC=0
+```
+
+30 seat tests (was 27) + 31 docs-freshness = 61. `git diff --stat` for this round:
+2 files, 81 insertions, 22 deletions.
+
+## D-1 — both positivity clauses pinned, each individually killable
+
+Guard: `scripts/night_chains/calibration_derivation_only.zsh:76`
+`if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 || SETTLE_S < 1 ))`, message at `:77`.
+The clauses stay in one disjunction (one refusal, one message) but each disjunct is now
+mutated and killed separately.
+
+Regression: `tests/test_issue_calibration_acceptance_generation.py:427-437`,
+`test_zero_settle_or_cadence_refuses_before_readiness_or_settle`, subtested over
+`SETTLE_S` and `SLOT_CADENCE_S`, driven through the new `run_chain(knobs={…})` kwarg
+(`tests:309, 349`). Each subtest asserts rc 64, `"must be positive"` on stderr,
+`calls == []` and `log == []` — i.e. the refusal precedes the readiness call, the
+reservation, the settle, and even the first operator-log write.
+
+**Mutation observations (killing mutation named for each clause):**
+
+| deleted clause | result | failing test |
+|---|---|---|
+| `\|\| SETTLE_S < 1` at `:76` | `Ran 13 tests … FAILED (failures=1)` | `test_zero_settle_or_cadence_refuses_before_readiness_or_settle (knob='SETTLE_S')` |
+| `\|\| SLOT_CADENCE_S < 1` at `:76` | `Ran 13 tests … FAILED (failures=1)` | `test_zero_settle_or_cadence_refuses_before_readiness_or_settle (knob='SLOT_CADENCE_S')` |
+
+Each deletion fails **exactly** its own subtest and nothing else — the "guard without a
+killing test" recurrence the delta re-audit found is closed for both clauses.
+
+## D-2 — G2-a parity: pre-reserve readiness before the reservation
+
+Chain `:130-139`: after `preflight_inputs` and before the reservation,
+
+```
+"$PY" "$REPO/scripts/recover_calibration_ledger.py" \
+    --ledger "$CALIBRATION_LEDGER" \
+    --head-pin "$LEDGER_HEAD_PIN" \
+    readiness \
+    --phase pre-reserve \
+    --session-id "$SESSION_ID" \
+    --plan "$PLAN"
+```
+
+Same explicit `--ledger`/`--head-pin` globals as every other ledger call in the chain, and
+`--ledger`/`--head-pin` precede the subcommand because `recover_calibration_ledger.py`
+declares them on the top-level parser. Subcommand and flags exist today
+(`recover_calibration_ledger.py:165-174`); nothing here is unlanded surface. Order comment
+updated at `:122-127` to name the readiness step. Under `set -e` a non-zero readiness
+stops the chain before any ledger write.
+
+Harness: the stub now models the readiness call and can fail it
+(`tests:295-297` `FAIL_READINESS`, wired at `tests:333` and the `fail_readiness` kwarg at
+`:308`). Call-order test `tests:366-390` asserts `calls[0]` is
+`recover_calibration_ledger.py` with `readiness` and `--phase pre-reserve`, `calls[1]` is
+`reserve_calibration_window_bracket.py`, and the reservation still precedes the ONE 600 s
+settle. Refusal test `tests:418-425`
+`test_unready_ledger_refuses_before_any_reservation`: rc 3, `len(calls) == 1` and that one
+call is the readiness call, `log == []` — nothing reserved, nothing settled, no window
+time spent. Every other chain test's python-call count moved by one for the new call
+(`tests:370, 443, 460, 480, 487, 497`).
+
+**Mutation observation (killing mutation):** deleting the whole readiness block from
+`:133-139` gives `Ran 13 tests … FAILED (failures=7)`, led by
+`test_unready_ledger_refuses_before_any_reservation` (the unique one that fails *for the
+right reason* — the unready ledger is no longer detected) plus the six order/count tests.
+
+## D-8 — the two header warnings pinned
+
+`tests:531-545`, `test_chain_header_pins_its_hand_written_and_unlanded_flag_warnings`,
+pinning chain `:18-19` (HAND-WRITTEN / not a generated region of `gen_g2_phase_d.py`) and
+chain `:25-26` (`--slot dNN` vs today's `choices=("pre","post")`).
+
+**Mutation observations (killing mutation named for each line):**
+
+| deleted header line | result | failing test |
+|---|---|---|
+| `# This file is HAND-WRITTEN and is NOT a generated region of` (`:18`) | `Ran 13 tests … FAILED (failures=1)` | `test_chain_header_pins_its_hand_written_and_unlanded_flag_warnings` |
+| `#   validate_powermetrics_fiducial.py      --slot dNN — today the writer's --slot` (`:25`) | `Ran 13 tests … FAILED (failures=1)` | `test_chain_header_pins_its_hand_written_and_unlanded_flag_warnings` |
+
+## D-7 — O-4 marked superseded inline
+
+Both occurrences now carry it: the Open-items bullet (report line 207,
+"**O-4, where `check` must be run. — SUPERSEDED — see Fix round 1 F-5.**") and the
+standing-items summary (report line 329).
+
+## D-3 … D-6 — recorded as integration-replay notes, no code change
+
+- **D-3.** The `test -f` on `$CALIBRATION_LEDGER` in `preflight_inputs` (chain `:113-114`)
+  is presence-only and is NOT an authentication of the ledger. Real authentication happens
+  inside the readiness and reservation calls, which now run before the settle. Kept as a
+  cheap early refusal, not as a custody claim; nothing downstream may treat it as one.
+- **D-4, D-5, D-6.** Carried unchanged into the integration-replay note set alongside O-2
+  (writer `--arm-countdown-s` / `--sleep-display-before-capture` parity with the r6
+  collection) and O-3 (unlanded S1/S2 flags: `--session-kind`, `--slot-count`,
+  `--derivation-only`, `--slot dNN`, and the per-slot binding list of addendum 11 N2).
+  None of them can be closed inside this seat's WRITE_SCOPE.
+
+## Standing items after round 2
+
+O-1 RESOLVED (round 1 F-1). O-4 SUPERSEDED (round 1 F-5), narrowed to a `--repo-root`
+follow-up on `joulewise/calibration_ledger.py` for whoever lands S4. O-2, O-3, D-3, D-4,
+D-5, D-6 stand as integration-replay notes.
