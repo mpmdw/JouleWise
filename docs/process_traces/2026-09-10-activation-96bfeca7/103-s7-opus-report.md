@@ -268,3 +268,165 @@ only — the region went to the runsheet (§6, D2).
    mismatch is a mid-night refusal.
 6. **`ACCEPTANCE-EPOCH-25G83-01` still blocks any arm.** Nothing here authorizes
    a night; this is desk work only.
+
+---
+
+# Fix round 1 (2026-09-10, on top of 94e4fc89)
+
+Both refuter reports read first (104 execution, 105 contract). Same worktree,
+same WRITE_SCOPE, no git state changes. Every item below has a defect-shaped
+test and a mutation cut (single test, `Ran 1`, source SHA-256-restored,
+`PYTHONDONTWRITEBYTECODE=1`).
+
+## Blockers
+
+**1. F1 / B-1 — the chain digest is now a LITERAL in the wrapper's bytes.**
+`render_wrapper` emits
+`[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = '<hex>' ] || route_refuse …`
+using a `sha256_of()` helper it also defines; the unpinned
+`shasum --status -c <sidecar path>` check is gone. The false comment is
+replaced by a true one: *the plan pins the wrapper's digest, and the capturing
+chain's digest is a literal in those bytes, so the plan-pinned digest moves
+whenever the capturing chain moves.* The third file
+(`<wrapper>.chain-source.sha256`) is still emitted but is now **advisory only**
+— labelled as such in the wrapper's comment, in `emit`'s docstring, and in the
+generated region's file table.
+Tests: `test_the_chain_digest_is_a_literal_in_the_wrapper_bytes` (edit the
+clone's chain → re-emit → **wrapper bytes must change**, and the new digest must
+appear in them) and `test_rewriting_the_advisory_sidecar_cannot_move_the_pin`
+(104 F1(a)'s exact attack: edit the chain, rewrite the sidecar, launch → refusal
+before `exec`, `calls == []`; then delete the sidecar entirely and confirm the
+night still runs — proof that nothing trusts it).
+
+**2. B-2 — a window that cannot hold the programmed span is refused.**
+`programmed_span_s(n) = settle + (n-1)·cadence + budget` (600 + 11×600 + 480 =
+**7680 s** for twelve) plus `PRE_SETTLE_ALLOWANCE_S = 300` for the chain's
+pre-settle preflight/readiness/reservation and the driver's own pre-launch work.
+The refusal states both numbers:
+`window_max_s 3600 < required 7680 + 300 = 7980 s: the programmed span of 12
+slots is settle 600 + 11 x cadence 600 + budget 480, plus the pre-settle
+allowance; lengthen the window rather than shortening the schedule`.
+`--allow-slot-count` recomputes the requirement rather than bypassing it.
+Tests: `test_a_window_too_short_for_the_programmed_span_refuses` (3600 refuses,
+7979 refuses, **7980 emits**, 9000 emits) and
+`test_the_span_constants_are_the_chains_own_defaults`, which resolves each
+constant against the chain's own anchor line (`SETTLE_S="${SETTLE_S:-600}"` etc.)
+so the arithmetic can never quietly diverge from the file it describes.
+
+## Should-fix
+
+**3. F3 — the chain is digested from `plan.measurement_root`**, i.e. the clone
+the night runs, never `REPO_ROOT` (the checkout the generator happens to execute
+in). Test: `test_the_chain_is_digested_from_the_measurement_clone` makes the
+clone's chain differ from the generator's, asserts the wrapper carries the
+clone's digest and **not** the generator's, and then launches it successfully.
+
+**4. F4 — every in-wrapper refusal prints `FAIL <reason>`.** The three bare
+`test -f` lines became `[ -f "$X" ] || route_refuse '<name> is missing'`.
+Test: `test_every_in_wrapper_refusal_prints_a_reason` asserts, for each of the
+three files, `rc == 1`, `stderr.strip() == "FAIL <reason>"` exactly, and nothing
+ran.
+
+**5. S-1 — `IDENTITY_EPOCH_JSON` and `T1_BINDINGS_JSON` carry literal SHA-256
+pins**, compared in-wrapper like `PLAN`. Their bytes are copied verbatim into
+every slot record by the reservation, so a swapped file silently changes what
+every capture is bound to. Test: `test_modified_identity_or_t1_bytes_refuse`.
+
+**6. S-2 — all chain citations are anchor texts, not line numbers.**
+`CHAIN_ANCHORS` holds nine exact chain lines; the module docstring, the export
+block's comment, and the two citations baked into every night's artifact quote
+them. Test: `test_every_chain_citation_resolves_to_a_real_chain_line` requires
+each anchor to occur **exactly once** in the chain, requires the generator source
+to contain no `calibration_derivation_only.zsh:<n>` citation at all, and checks
+the two anchors that reach the emitted wrapper.
+
+**7. S-4 — the region documents the third file and the arm order.** New
+subsections: a three-row file table (wrapper / plan-pinned sidecar / ADVISORY
+ONLY sidecar, each with its role) and a five-step arm order — cut the clone at H
+and record `git status --porcelain` → author the plan → generate → re-emit and
+assert byte equality → `zsh -n` and install — plus a paragraph enumerating every
+generation-time refusal. First-use test applied: "wrapper", "night root",
+"programmed span", "dead-man", "advisory" and "`zsh -n`" are each glossed in
+plain words at first use. Test:
+`test_the_region_documents_the_third_file_and_the_arm_order`.
+
+## Nits
+
+**8a. F5 — the pack guard became a receipt-class ALLOW-LIST** (`!=
+DIAGNOSTIC_NO_PACK`). The old form was, as 104 found, unreachable for the plan
+shape a reviewer would try, because `NightPlan.from_mapping` refuses a pack plan
+without `pack_night` first; the allow-list is reachable and now tested through a
+`REHEARSAL_STUB` plan (a class whose chain the driver never runs at all), which
+also closes 105's N-1. Test: `test_a_non_diagnostic_receipt_class_refuses`.
+
+**8b. F6 — `--allow-slot-count` now requires `--slot-count-ruling <ref>`**,
+prints `DEPARTURE this night declares N slots, NOT the pre-registered 12
+(cold-gate ruling 46 §R-c); authority: <ref>` to stderr, and writes a
+`DEPARTURE FROM THE PRE-REGISTRATION` block naming the ruling into the emitted
+wrapper's header. Test:
+`test_departing_from_twelve_slots_requires_a_named_ruling`.
+
+**Not done, by instruction:** S-3 (the runbook draft's plan table) is the
+writer's revision and was not touched.
+
+## Fix-round cut table
+
+| # | Cut | Test | Result |
+|---|---|---|---|
+| R1 | `chain_sha256=` sha256(chain) → `"0"*64` | `test_the_chain_digest_is_a_literal_in_the_wrapper_bytes` | Ran 1, FAILED (1), restored |
+| R1b | neuter the in-wrapper chain-digest comparison | `test_rewriting_the_advisory_sidecar_cannot_move_the_pin` | Ran 1, FAILED (1), restored |
+| R2 | window-fit check → `if False:` | `test_a_window_too_short_for_the_programmed_span_refuses` | Ran 1, FAILED (1), restored |
+| R3 | digest the chain from the generator's own repo | `test_the_chain_is_digested_from_the_measurement_clone` | Ran 1, FAILED (1), restored |
+| R4 | restore the silent `test -f "$PLAN"` | `test_every_in_wrapper_refusal_prints_a_reason` | Ran 1, FAILED (1), restored |
+| R5 | drop the identity-epoch digest pin | `test_modified_identity_or_t1_bytes_refuse` | Ran 1, FAILED (2 subtests), restored |
+| R6 | rot the `forward_argv` anchor text | `test_every_chain_citation_resolves_to_a_real_chain_line` | Ran 1, FAILED (1), restored |
+| R7 | allow-list → old pack-only guard | `test_a_non_diagnostic_receipt_class_refuses` | Ran 1, FAILED (1), restored |
+| R8 | ruling requirement → `if False:` | `test_departing_from_twelve_slots_requires_a_named_ruling` | Ran 1, FAILED (1), restored |
+| R9 | delete the ADVISORY ONLY row from the region | `test_the_region_documents_the_third_file_and_the_arm_order` | Ran 1, FAILED (2), restored |
+
+10/10 killed. Two pre-existing tests needed their fixtures widened, not their
+assertions weakened: `test_window_end_is_the_integer_sum_of_t0_and_window_max`
+used a 600 s window (now 8000 s, still with the fractional t0 the integer cast
+must survive) and `test_a_slot_count_other_than_the_pre_registered_twelve_refuses`
+now passes `--slot-count-ruling`.
+
+## Fix-round runs and footprint
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_gen_derivation_night tests.test_issue_calibration_acceptance_generation \
+    tests.test_run_night tests.test_docs_freshness
+Ran 233 tests in 76.345s
+OK                                                SUITE_RC=0
+
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_gen_derivation_night
+Ran 29 tests in 4.797s
+OK                                                FINAL_GEN_RC=0   (final bytes)
+
+compileall_rc=0
+PASS generated derivation-night wrapper region matches        d_rc=0
+PASS generated Phase D matches pinned runbook bytes           g2_rc=0
+
+$ git status --short
+ M docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md
+ M scripts/gen_derivation_night.py
+ M tests/test_gen_derivation_night.py
+```
+
+`tests/test_issue_calibration_acceptance_generation.py` and
+`scripts/night_chains/calibration_derivation_only.zsh` needed no fix-round edit;
+the chain's bytes are unchanged from 94e4fc89, so the digest the wrapper now
+bakes in is the reviewed one.
+
+## What the fix round did NOT change
+
+- The attestation shape (plan → wrapper → chain) and the `exec`-with-24-bindings
+  mechanism are unchanged; B-1 changed *where the chain digest lives*, not the
+  design.
+- No driver, gate, schema or chain behaviour was touched.
+- Open questions 1 (identity-epoch / T1 provenance), 2 (clean tree) and 3
+  (`EVIDENCE_ROOT_ID`) still stand for the arm checklist. 105 CLOSED my open
+  question 5 (custody locator): the writer computes
+  `out_dir = output_root / attempt_id` in bracket mode, which is byte-identical
+  to the locator the wrapper declares — no mid-night mismatch. The clean-tree
+  requirement is now also written into the region's arm order as step 1.
