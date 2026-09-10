@@ -1,6 +1,4 @@
 #!/bin/zsh
-# SKELETON: pending S1/S2 flag landing; not to be pinned in a plan until the integration replay
-#
 # One DIAGNOSTIC_NO_PACK derivation night for the new identity epoch, per
 # cold-gate ruling 46 §R-c: ONE 600 s settle after the last operator action,
 # then ONE derivation-kind ledger session of $SLOT_COUNT declared slots, then
@@ -16,24 +14,32 @@
 # lifecycle transition, absolute interpreter and coreutil paths.
 #
 # This file is HAND-WRITTEN and is NOT a generated region of
-# scripts/gen_g2_phase_d.py; whether the pinned night chain is generated from a
-# runbook section instead is the lead's call at the integration replay.
+# scripts/gen_g2_phase_d.py; it is the pinned CAPTURING chain. A night does not
+# pin this file in its plan: it pins the wrapper emitted by
+# scripts/gen_derivation_night.py, which supplies the thirteen required
+# variables below as literals frozen with the plan, verifies these bytes
+# against its arm-time digest, and execs this file with the per-slot bindings
+# as argv.
 #
-# UNLANDED SURFACE, written exactly as ruling 46 specifies (seats S1/S2):
+# LANDED SURFACE, re-read at this HEAD (was UNLANDED when this file was written):
 #   reserve_calibration_window_bracket.py  --session-kind derivation --slot-count N
-#   validate_powermetrics_fiducial.py      --derivation-only
-#   validate_powermetrics_fiducial.py      --slot dNN — today the writer's --slot
-#   is choices=("pre","post") and REJECTS every d01..dNN name; seat S2's declared
-#   slot list generalizes it, and no slot of this chain runs until it lands.
-#   the declared per-slot bindings, whose CLI shape becomes a list (addendum 11
-#   N2). Until it lands, S2 integration supplies them as this script's argv,
-#   binding d01..dNN to attempt ids ${SESSION_ID}-dNN with custody under
-#   ${RUNS_ROOT}/instrument_validation; they are forwarded verbatim.
+#     and the repeated --slot-attempt-id/--slot-custody-locator list flags
+#     (scripts/reserve_calibration_window_bracket.py:82-106); a repeated-flag
+#     count that does not equal --slot-count is refused with reason
+#     declared_slot_flag_count_mismatch (:167-186).
+#   validate_powermetrics_fiducial.py      --derivation-only (:1771), which
+#     requires --session-id, --slot and --attempt-id of a declared
+#     derivation-kind session (:1946); --slot takes the exact predeclared slot
+#     name (:1759-1761), so d01..dNN are accepted.
+#   The declared per-slot bindings arrive as this script's argv and are
+#   forwarded verbatim ("$@" at the reservation below), binding d01..dNN to
+#   attempt ids ${SESSION_ID}-dNN with custody under
+#   ${RUNS_ROOT}/instrument_validation.
 # The G2-a chain's --arm-countdown-s and --sleep-display-before-capture writer
 # flags are deliberately ABSENT: this night has no operator present and no
-# display action to schedule. Confirm with S1 before the integration replay.
+# display action to schedule; the writer requires neither.
 #
-# Required environment comes from the future frozen plan, not a desk run.
+# Required environment comes from the plan-pinned wrapper, not a desk run.
 # WINDOW_END_EPOCH_S is the exclusive window end in Unix seconds.
 set -euo pipefail
 
