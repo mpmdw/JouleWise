@@ -495,7 +495,14 @@ def _config_for(
             },
         },
         "interconnect": {"name": "local"},
-        "sampling": {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0},
+        # idle_seconds 75 (was 30): the anchor-v3 rate fit needs >= 60 s of raw sampler
+        # intervals over ONE member's continuous capture (uncertainty_evidence.py
+        # MIN_RATE_FIT_BASELINE_S). A fast 512-token member supplied ~48 s at 30 s idle
+        # (historical bundle mtnull-o0512-b02-b2: 48.16 s), which would void the member
+        # with clock_fit_span_insufficient. 75 s idle alone gives ~81 s at nominal cadence
+        # and 750 idle records, clear of the 3(L+1) idle-count rule at exactly 100 ms
+        # (303). GATE-SENSIBILITY-SWEEP-01, activation 96bfeca7 record 09, 2026-09-10.
+        "sampling": {"power_hz": 10.0, "idle_seconds": 75.0, "warmup_seconds": 5.0},
         "run_metadata": {
             "project": "capstone-joulewise",
             "operator": "lead",

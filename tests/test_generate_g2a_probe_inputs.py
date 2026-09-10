@@ -470,6 +470,37 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         self.assertEqual(probe_workload["name"], "g2a_prefill_p512_diagnostic")
         self.assertEqual(v5_workload["name"], "df_ph_prefill_p512_candidate")
 
+    def test_idle_capture_alone_clears_rate_fit_span_and_idle_count_gates(self) -> None:
+        """GATE-SENSIBILITY-SWEEP-01 (2026-09-10): the anchor-v3 rate fit needs >= 60 s of
+        raw sampler intervals over ONE member's continuous capture, and the idle estimator
+        needs n >= 3(L+1) records with L = floor(10 s / median interval). A fast 512-token
+        member at the old 30 s idle supplied ~48 s (historical bundle mtnull-o0512-b02-b2)
+        and exactly 300 records against 303 at an exact 100 ms cadence, so the member would
+        be voided by rounding luck. The idle capture alone must clear both with margin."""
+        import math
+
+        from joulewise.uncertainty_evidence import MIN_RATE_FIT_BASELINE_S
+
+        self._build()
+        config = json.loads(
+            (
+                self.root
+                / "prefill-probe-configs/small-p512/g2a-small-p0512-r01.json"
+            ).read_text()
+        )
+        sampling = config["sampling"]
+        nominal_interval_s = 1.0 / sampling["power_hz"]
+        idle_s = sampling["idle_seconds"]
+        # rate-fit span: idle alone >= 60 s with a 25 % margin (30 s fails, 75 s passes)
+        self.assertGreaterEqual(idle_s, MIN_RATE_FIT_BASELINE_S * 1.25)
+        # idle-count rule at the exact nominal cadence (the worst case for the count)
+        idle_records = math.ceil(idle_s / nominal_interval_s)
+        lag_count = math.floor(10.0 / nominal_interval_s)
+        self.assertGreaterEqual(idle_records, 3 * (lag_count + 1) + 30)
+        # counterfactual: the old value fails both bounds
+        self.assertLess(30.0, MIN_RATE_FIT_BASELINE_S * 1.25)
+        self.assertLess(math.ceil(30.0 / nominal_interval_s), 3 * (lag_count + 1))
+
     def test_probe_expectation_matches_each_realized_ladder_rung(self) -> None:
         self._build()
         ladder = json.loads(
