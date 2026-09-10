@@ -42,7 +42,11 @@ TARGET_EPOCH = {
 T1_BINDINGS = {
     "os_build": "25G83",
     "hardware_model": "Mac15,9",
-    "powermetrics_sha256": "b7" + "6" * 62,
+    # The digest the pre-registration is registered under; a fixture that used
+    # any other value would exercise the void-registration path on every test.
+    "powermetrics_sha256": (
+        "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5"
+    ),
     "mlx_version": "0.31.2",
     "protocol_sha256": "9e" + "a" * 62,
     "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
@@ -118,6 +122,8 @@ def build_derivation_ledger(
     fill_slots: int | None = None,
     abort_reason: str | None = None,
     second_session_epoch: Mapping[str, object] | None = None,
+    t1_bindings: Mapping[str, object] | None = None,
+    session_epoch: Mapping[str, object] | None = None,
 ) -> dict[str, Path]:
     """Create a Git-committed ledger holding one or two closed sessions.
 
@@ -146,7 +152,8 @@ def build_derivation_ledger(
     # derivation session declares an arbitrary ordered list.
     _write_session(
         ledger, runs, pin, session_id, slots, session_kind, fill_slots, abort_reason,
-        TARGET_EPOCH,
+        session_epoch or TARGET_EPOCH,
+        t1_bindings or T1_BINDINGS,
     )
     if second_session is not None:
         _write_session(
@@ -155,6 +162,7 @@ def build_derivation_ledger(
             None,
             None,
             second_session_epoch or TARGET_EPOCH,
+            t1_bindings or T1_BINDINGS,
         )
     snapshot = load_calibration_ledger_snapshot(
         ledger, pin, require_committed_pin=False, verify_custody=False,
@@ -186,6 +194,7 @@ def _write_session(
     fill_slots: int | None = None,
     abort_reason: str | None = None,
     epoch: Mapping[str, object] | None = None,
+    t1: Mapping[str, object] | None = None,
 ) -> None:
     # A session opens only at head-equals-pin, so a fixture writing a SECOND
     # session advances the working pin to the physical head first, exactly as
@@ -224,7 +233,7 @@ def _write_session(
                 "attempt_id": f"{session_id}-{name}",
                 "custody_locator": str(runs / "instrument_validation" / f"{session_id}-{name}"),
                 "identity_epoch": epoch or TARGET_EPOCH,
-                "t1_bindings": T1_BINDINGS,
+                "t1_bindings": t1 or T1_BINDINGS,
             }
             for name in declared
         },
@@ -251,7 +260,7 @@ def _write_session(
             custody_locator=str(custody),
             artifact_sha256=artifact_hashes(custody),
             identity_epoch=epoch or TARGET_EPOCH,
-            t1_bindings=T1_BINDINGS,
+            t1_bindings=t1 or T1_BINDINGS,
             capture_wall_time_s="99.0",
             exact_bound_lexeme_s=slot.b_fiducial_s,
         )
