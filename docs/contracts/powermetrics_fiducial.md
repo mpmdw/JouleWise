@@ -90,6 +90,69 @@ none may be restated as an empirically proved universal instrument property.
   sustained mixed-load regime; until that variant is validated, T3 remains an
   explicit limitation.
 
+## Derivation-only capture for a new identity epoch
+
+Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); NOT
+YET LANDED.** Seat S1 installs `--derivation-only` against seat S2's
+derivation-kind session interface; no shipped writer accepts the flag, and no
+shipped ledger offers the slot it requires.
+
+The writer's `--derivation-only` mode exists for one situation. The machine's
+**identity epoch** — the six-field vector the issued acceptance binds: OS
+build, hardware model, power policy, sampling interval, estimator revision,
+and pulse protocol — has changed, so that acceptance is stale by design and an
+ordinary capture refuses before touching hardware. New-epoch observations must
+nevertheless be captured before any acceptance of that epoch can be derived
+from them. A derivation-only capture is that observation: taken to build a
+future acceptance, never to license a measurement.
+
+What the mode still authenticates is unchanged: the active issued artifact's
+exact bytes, its pulse-protocol digest, and its estimator-code digest. What it
+inverts is one test. It REQUIRES the live identity epoch to differ from the
+artifact's epoch, and refuses when they match — a matching epoch means an
+ordinary capture is possible, so derivation-only would be a way around
+ordinary judgment. It also refuses without a derivation-kind session slot; a
+standalone attempt and a bracket-kind slot are both rejected. Sessions, slots,
+and the derivation kind are defined in
+[the ledger contract](calibration_ledger.md#derivation-sessions-for-a-new-identity-epoch).
+
+Provenance is recorded in hashed bytes, not in prose. Both
+`instrument_evidence.json` and `manifest.json` carry `derivation_only: true`
+and a `screen_basis` object naming the prior acceptance's ID, its file
+SHA-256, its `preflight_level_screen_s` — the **level screen**, that
+acceptance's corpus maximum, the threshold one observation's bound is judged
+against — and its epoch, so every derivation row states for itself which
+artifact it was captured under.
+
+The prior artifact's level screen is not applied to the capture. The writer
+sets `preflight_systematic_screen_s = None` and skips the comparison, so the
+ledger disposition can only be `valid` or `ordinary-invalid`. The
+`systematic-invalid` disposition means "exceeds the level screen of this
+epoch's acceptance", and no acceptance of this epoch exists yet, so it cannot
+arise here; excluding a valid new-epoch capture for exceeding a retired
+epoch's threshold would fit the new screen to the old one. Whether the bound
+did exceed the prior artifact's level screen is recorded in the hashed
+evidence as a diagnostic. It feeds the pre-registered screen-challenge rule,
+which halts issuance for a written ruling instead of editing corpus
+membership. Every finalization path carries this classification rule,
+including recovery finalization after a crash: for a derivation-kind session
+the recovery path passes no screen either, and the recovery path's
+`slot == "pre"` auto-abort does not apply, since a derivation session closes
+only on its last declared slot or an explicit abort.
+
+Every physics and evidence gate stays fail-closed. The `DIAGNOSTIC_NO_PACK`
+night class still requires a registration path and marks only condition C2,
+the verified pack ARM ceremony, `NOT_APPLICABLE` (`no_pack_by_design`), since
+such a night arms no measurement pack; C1 (purpose-bound transaction
+authorization), C3 (quiet-machine census), C4 (boot and clock validity), and
+C5 (the no-retry bound) must all still pass.
+
+The mode licenses nothing. No measurement window — G2-a or any other — no
+floor, no claim, and no bracket endpoint, before or after a successor
+acceptance names these observations. D-102 clause 2 is unchanged: a trigger
+observation is judged under the PRIOR artifact, never under a threshold that
+incorporates it, so no observation judges itself.
+
 ## V2/v3 capture-time freshness and authentication
 
 Every v2/v3 `instrument_evidence.json` records

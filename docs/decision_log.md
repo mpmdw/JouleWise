@@ -6510,6 +6510,184 @@ the D-100 repair (shared write surfaces).
 Revisit when: CAL-BRACKET-D079-01's delta audit reports, or any
 re-derivation trigger fires.
 
+### Addendum 2026-09-10 — new-epoch derivation bootstrap (cold gate 46, amended)
+
+Authority: cold gate 46 §R-a through §R-e, as amended by its dated addendum
+11 (A-1–A-8) and the paired Opus contract refutation 12. All three are
+custodied on branch `bookkeeping/2026-09-10-activation-96bfeca7` under
+`docs/process_traces/2026-09-10-activation-96bfeca7/46-coldgate-packet-epoch-bootstrap/`
+as `10-coldgate-fable-ruling.md`, `11-ruling-addendum-opus-amendments.md`,
+and `12-opus-pairing-refuter-on-ruling-46.md`.
+
+**The triggering facts.** The machine's identity epoch (this decision's
+clause 2 vector) changed: `os_build` moved from `25F84` to `25G83`, with
+`hw.model` `Mac15,9` unchanged, and `/usr/bin/powermetrics` now hashes
+`b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5`. The
+issued acceptance `d079_calibration_acceptance_v2_n17_r6` is therefore stale
+by design and refuses every ordinary capture, which is the intended behaviour
+and not a defect. Recorded gap, confirmed against code and left uncured for
+now: the powermetrics binary hash is not one of the six epoch fields, so a
+binary rotation without an OS-build change would not stale the artifact
+through the epoch check alone. The desk epoch watch below covers the binary;
+no contract change is made for it in this addendum.
+
+**MECHANISM — adopted by cold gate 46, Ed veto window open.** Adopted under
+rule 11 as contract and process mechanism; Ed may veto any item.
+
+A **derivation-only capture** is an observation taken to build a future
+acceptance, never to license a measurement. The writer authenticates the
+active issued artifact's exact bytes, pulse-protocol digest, and
+estimator-code digest; requires the live six-field identity epoch to DIFFER
+from the artifact's (a matching epoch refuses, because then an ordinary
+capture is possible and this mode would be a bypass); and records
+`derivation_only: true` plus a `screen_basis` naming the prior acceptance's
+ID, file SHA-256, `preflight_level_screen_s`, and epoch in the hashed
+`instrument_evidence.json` and `manifest.json`. The prior artifact's level
+screen is not applied: `preflight_systematic_screen_s` is `None`, the
+comparison is skipped, and every finalization path — including recovery
+finalization after a crash — records only `valid` or `ordinary-invalid`,
+never `systematic-invalid`. Whether the bound exceeded the prior level screen
+is kept as a hashed diagnostic. Physics and evidence refusals remain
+fail-closed under D-161.
+
+Each derivation night is ONE `derivation`-kind ledger session — a reservation
+covering several attempts under one open receipt — with N declared, ordered
+slots. The session opens only at head-equals-pin (the physical receipt count
+and last digest equal the committed head pin) and is not re-checked against
+the pin while its own reserved slots are claimed and finalized in declared
+order. This is what makes several observations per night possible at all: a
+standalone reservation refuses `RESERVATION_HEAD_MISMATCH` once the head has
+moved two receipts past the pin, and advancing the pin is desk work under Git
+review that never runs inside an agent-free window. No standalone derivation
+capture, bracket-kind slot, foreign receipt in the reserved tail, or second
+open session is admitted. The session closes on its last declared slot's
+finalization, or on an explicit abort with reason `window_exhausted`, which
+keeps already-finalized slots as observations. The night commits nothing to
+Git; the desk reviews and commits the terminal head-pin candidate before the
+next night opens. While a session is open the physical head is ahead of the
+committed pin, so claim consumers refuse for the duration of the night by
+design.
+
+Prospective issuance is generation-keyed. Each registered generation carries
+its own `epoch_catalog_ids`, `prior_prefix_mode`, `prior_observation_count`,
+`cutoff_sequence`, and screen rule, so the historical `import_only` fence and
+the r3–r6 bytes are untouched while a registered successor may use
+`import_plus_live`. The successor's prior set (every observation through its
+cutoff) contains the complete authenticated bootstrap history, not only the
+retained corpus, because every corpus member's content ID must lie inside the
+prior set. Its corpus is epoch-pure and registration-complete: every valid,
+target-epoch prior-set row belonging to this registration is a member or is
+listed in `derivation_notes.excluded_members` with a registered mechanism
+reason; a valid same-epoch row OUTSIDE the registration refuses issuance
+rather than being absorbed. Exclusion entries carry `member_id`,
+`manifest_sha256`, and `instrument_evidence_sha256`, and match their prior-set
+row by the content ID derived from those two hashes; r6's predecessor-shaped
+key `excluded_predecessor_members` is unchanged. Pending or `unresolved`
+attempts in the prefix refuse as they do today.
+
+Bootstrap rows are non-claim-bearing until a successor names them, and are
+never bracket endpoints even after issuance. Candidate discovery and the
+`registered_valid` endpoint universe both skip derivation-kind sessions, and
+they must move together: a caller's candidate set must equal that universe
+exactly or evaluation refuses `calibration_ledger_off_ledger_artifact`. The
+bootstrap rows are nonetheless a permanent obligation: once the successor
+issues, its prior set must keep equalling the ledger prefix at its cutoff, so
+every bootstrap row must stay present and authenticable for as long as that
+acceptance is consumed, and the custody manifest is pinned and backed up
+before the issuance transaction. The successor judges only ordinary captures taken after
+it, and this decision's clause 2 rule stands: a trigger observation is judged
+under the PRIOR artifact, never incorporated into a threshold that judges
+itself.
+
+Tooling: one tracked issuer, `scripts/issue_calibration_acceptance_generation.py`,
+with subcommands `check` (desk epoch watch plus registration dry run) and
+`prepare-candidate`; session reservation extends
+`scripts/reserve_calibration_window_bracket.py` with `--session-kind` and
+`--slot-count`. The desk epoch watch compares the live `kern.osversion`,
+`hw.model`, `/usr/bin/powermetrics` hash, and MLX version against the active
+artifact's epoch and the last ledger row's T1 vector. The watch itself is
+adopted; **wiring it into the magistrate's step-0 relaunch cadence is
+PROPOSED to Ed, not adopted here**, because step-0 is a relaunch-contract
+cadence and its amendment is Ed's.
+
+The r6 bytes, the 76-row ledger prefix, and every historical generation remain
+unchanged. Successor issuance waits for corpus closure, raw replay, a cold
+science gate, and the single D-138 atomic transaction. Nothing here licenses a
+G2-a window.
+
+**SCIENTIFIC DEFAULTS — adopted by cold gate 46, Ed veto window open.** These
+are the rules the cold gate could not settle on mechanism grounds because they
+are scientific choices. They stand as **proposed defaults** and bind if no NO
+arrives before the first capture's arm; they are re-labelled **ratified** only
+on Ed's reply, and Ed may veto or amend by reply or directive issue. **V3
+additionally requires Ed's AFFIRMATIVE written acknowledgment before the first
+capture's arm; silence is not consent for V3**, because its retained-n default
+departs from a ratified floor.
+
+- **V3 — sample size and schedule.** THREE agent-free nights on distinct
+  calendar days, each one derivation session of 12 declared slots. Retained
+  n ≥ 19 is REQUIRED: D-126 clause 2's ratified Q13 floor
+  (`SUCCESSOR_MINIMUM_CORPUS_SIZE = 19`) is a corpus-SIZE floor guarding the
+  df = 1 / t ≈ 63.66 tail, not the `0.010818` screen floor, and the n = 17
+  r-series was a LOSS from a 19-member corpus rather than a corpus
+  pre-registered at 17. Ed may instead rule in writing that n = 17 is
+  acceptable; nothing issues below 19 without that written ruling. Three
+  nights rather than two follows from the arithmetic: at the historical valid
+  rate 30/38 and the r6 replay-retention ratio 17/19, two nights of 12 slots
+  project 24 × (30/38) × (17/19) = 16.95 retained, below the floor, while
+  three project 25.4. Each night runs all 12 declared slots regardless of
+  interim values; fewer than 19 retained after the third night means NOT
+  ISSUED with the shortfall recorded, and any further capture is Ed's written
+  ruling, not this registration's. No top-ups, retries, early stops, or
+  outcome-driven extra nights. No person or agent examines any member value,
+  screen, or statistic before the last session is terminal and its pin
+  candidate is emitted.
+- **V4 — cadence.** One 600 s settle after the last operator action, then a
+  600 s start-to-start slot cadence, with thermal state re-checked by the
+  writer per capture. The schedule fits with margin: 600 s settle + 11 × 600 s
+  cadence + one ~8 min capture is 128 of a 210 min window. The cadence mirrors
+  r6's members, which are sparse within a day (9 to 60 min apart). A slot the
+  window cannot reach is recorded unused through the session abort, never
+  compressed or replaced.
+- **V7 — the successor's screen and ceiling.** The FULL D-125 envelope governs
+  both: `S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818)` AND
+  `C = max(inherited ceiling, new Q99)`, where the inherited ceiling is the
+  predecessor generation's `maximum_budgetable_drift_s` and Q99 is the new
+  corpus's 99 % two-draw prediction. The C half is not optional: r6's own
+  ceiling `0.010164834757777545` is BELOW the `0.010818` screen floor, so a
+  successor derived under an S-only rule would trip D-126 clause 3's ratified
+  `successor_screen_exceeds_budget_ceiling` refusal (screen ≥ ceiling) and the
+  stored identity `screen + excess = maximum` would demand a negative excess.
+  Cap is `C − S` with no silent clamp, per D-126 clause 3. The generation row
+  carries the inherited ceiling and an explicit `d125_ruling` reference, and
+  the issuer refuses to emit while that reference is absent, so the successor
+  cannot settle D-125 implicitly. The preflight level screen is the new
+  corpus maximum quantized to 1e-15 s, matching r6's stored precision.
+- **Screen challenge.** If two or more retained members exceed r6's level
+  screen `0.032898493715362`, the corpus is NOT issued and Ed rules in writing
+  before any further capture. A second diagnostic is recorded but decides
+  nothing: whether the new maximum exceeds `0.04262208300415633`, the Decimal
+  sum of r6's exact maximum `0.03289849371536248` and exact range
+  `0.00972358928879385`. Neither diagnostic edits corpus membership; both
+  halt for a ruling instead.
+- **Exclusions.** Only predeclared, outcome-independent mechanisms exclude an
+  observation: the anchor-v3 replay refusal `affine_clock_fit_empty`; a
+  protocol gate failure (plateau, SNR, 59-pulse detection, spurious plateau,
+  edge coverage), which the writer records as `ordinary-invalid`; or a
+  recorded operator or system event that interrupted the window. Every
+  exclusion names its mechanism and retains its ledger row, and none depends
+  on the observed `b_fiducial_s`. A powermetrics-binary or MLX-version change
+  voids the registration, and so does an estimator-code rotation mid-campaign.
+  The scientific rules are fixed before data exists and are never selected
+  after seeing it.
+
+The proposed registration text is
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`; its bracketed
+fields are filled at commit before the first capture. Still Ed's, and NOT
+decided here: whether a daytime quiet window may serve as one of the three
+nights, and whether macOS auto-update is deferred for the campaign's
+duration.
+
 ## D-103: C3 structural cold-gate synthesis — WAL attestation ordering, two named aggregation policies (cold instance overruled on B2 with recorded dissent), reader-tolerant/writer-strict path discipline
 
 - Date: 2026-08-01
