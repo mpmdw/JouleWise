@@ -1190,3 +1190,83 @@ $ git diff --stat
    only printing: the binary having rotated is exactly the condition that voids
    an armed campaign, and a desk watch that reports it as informational would be
    the wrong shape.
+
+---
+
+# Fix round 7 (seat S4, on top of `4bf2ce9f`)
+
+One item: row-10 review 117's nit. Nothing else touched.
+
+## The defect
+
+The three-nights fence counted flag REPETITIONS. `--registration-session-id A`
+given three times satisfied `len(session_ids) != 3` while the ledger held a
+single session, so a one-night corpus could present itself as the pre-registered
+three-night shape.
+
+## The fix, in two independent places
+
+`refuse_repeated_sessions` (`:953`) refuses a repeated id **on its own terms**,
+naming it: a registration that names the same night twice is malformed whatever
+the count fence would have said, because the caller who typed it meant something
+the ledger cannot supply. It runs before the blindness gate — a malformed
+registration is malformed regardless of session state, and the refusal reveals
+nothing about any value.
+
+The fence itself now counts `distinct_nights = len(set(session_ids))` (`:1218`).
+Deduplicating alone would have been enough to close the hole, but then one check
+would rest on the other having run, and deleting either would silently restore
+the other's defect.
+
+## Tests
+
+`test_a_repeated_registration_session_refuses` gives the same id twice with no
+nights ruling and asserts the printed reason
+`registration names a session more than once: derivation-night-1`.
+
+`test_the_night_count_fence_counts_distinct_sessions` disables
+`refuse_repeated_sessions` — the only way to reach the count fence with
+duplicates at all — and asserts the fence then refuses with
+`registration names 1 sessions, not the pre-registered 3`. Extracting the
+repetition check into a named function was done for exactly this reason: inline,
+the second term had no isolating counterfactual, and a term nothing can isolate
+is either dead or unruled.
+
+## Cut table (fix round 7)
+
+Baseline = restored = `46eacce5c4ce8422f93ac2c661427d9d03199bc816db364f2e190ad9e3c8ad85`;
+one term per cut, `Ran 1 test` parsed, sha256-asserted after each,
+`PYTHONDONTWRITEBYTECODE=1`. Harness `/tmp/s4_mutate8.py`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| L1 | `if repeated:` → `if False:` | `test_a_repeated_registration_session_refuses` | Ran 1 test | KILLED |
+| L1b | `if list(session_ids).count(session_id) > 1` → `if False` | same | Ran 1 test | KILLED |
+| L2 | `len(set(session_ids))` → `len(session_ids)` | `test_the_night_count_fence_counts_distinct_sessions` | Ran 1 test | KILLED |
+
+L1b is the operand cut: with the detector gone the set is empty and the refusal
+never forms, so the condition is under test and not only its `if`. L2 is the
+original defect, restored and caught.
+
+## Runner tail
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation
+----------------------------------------------------------------------
+Ran 108 tests in 203.303s
+
+OK
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts joulewise
+COMPILEALL_RC=0
+```
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/test_issue_calibration_acceptance_generation.py
+```
+
+No git state changed, no commit, nothing outside the two files touched.
