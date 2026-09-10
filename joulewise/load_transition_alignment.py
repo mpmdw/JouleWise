@@ -392,7 +392,7 @@ def _transition_result(
     response_start_s, response_end_s, response_power_w, _ = parsed[response_index]
     support_start_offset_s = response_start_s - marker_s
     support_end_offset_s = response_end_s - marker_s
-    offset_s = (response_start_s + response_end_s) / 2.0 - marker_s
+    offset_s = (support_start_offset_s + support_end_offset_s) / 2.0
     bound_s = max(abs(support_start_offset_s), abs(support_end_offset_s))
     return {
         "transition_id": planned["transition_id"],
