@@ -1,0 +1,14 @@
+# PR #313 replay — branch head 7d1354d5 (main b501f08c unmoved, so the branch head is the integration tree), alone in-process (four shards concurrent), started 03:17:43 PDT 2026-09-10, finished 04:01:43 PDT; timer probe 1.13× at start
+
+Thu Sep 10 03:17:43 PDT 2026
+7d1354d5d67be3f9579d08136c76638751056155
+timer probe x 1.13
+
+SHARD SUMMARY index=1/4 modules=34 tests=545 failures=0 errors=0 skipped=30 result=PASS
+SHARD SUMMARY index=2/4 modules=54 tests=1208 failures=0 errors=0 skipped=53 result=PASS
+SHARD SUMMARY index=3/4 modules=66 tests=1989 failures=0 errors=0 skipped=9 result=PASS
+SHARD SUMMARY index=4/4 modules=67 tests=1912 failures=0 errors=0 skipped=16 result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5654 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+
+failures=0 errors=0 (5654 tests). Command (unpiped, rc captured): PYTHONDONTWRITEBYTECODE=1 R7F_CORPUS_ROOT=/Users/edr/code/JouleWise JOULEWISE_BACKUP_ROOTS= python3 scripts/shard_tests.py --workers 4 in /Users/edr/code/JouleWise-wt-directives at 7d1354d5. Other processes during the run: the resident activation 7ce7af2a idle on its monitor, two interactive claude sessions idle, no other test process.
