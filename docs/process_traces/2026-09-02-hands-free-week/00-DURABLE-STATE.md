@@ -888,3 +888,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   Q99) or own Q99 at genesis; strict screen<ceiling) after its Opus pairing, plus the seam fixes (import S2's SESSION_KIND constants; fail-closed
   on a missing session). Ed's four written-yes items still open; no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
 
+- UPDATE 2026-09-10 ~11:50 PDT (headless activation `96bfeca7`): cold gate 69 upheld by its Opus pairing with amendments A1–A6 (packet 69
+  addendum 11). S3 rounds 2+3 landed (57d0044d: `predecessor_ceiling_s` paired with `predecessor_acceptance_id`, ruled ceiling relation,
+  `is None` before parsing, fail-closed unresolved session; delta 73 three should-fix cured; delta of round 3 = record 77, running). S2 FINAL
+  9558152e (execution refuter 74 MERGEABLE AFTER FIXES; test-only fix round; bench delta 78 CLEAN). S6 pre-registration renamed to
+  "predecessor ceiling" (074197d1). Integration `feat/2026-09-10-epoch-integration` = **0fe1fc5e** (main + S6 + S5 + S2 + S3; seam shim deleted;
+  266 focused tests OK). RUNNING: S1 writer `--derivation-only` (Opus, wt-s1-writer-derivation from 1e43d1cc → report 76); S4 issuer
+  `prepare-candidate` (Opus, wt-s4-issuer-prepare from 0fe1fc5e → report 79; pre-registration screen rule encoded as cold gate 46's adopted
+  default, record 80; the consult-vs-prereg conflict stays Ed's open V7 item). NEXT: verify S1/S4 at the bench → refuters → integrate →
+  sharded replay → PR(s) with twelve-row ledgers → cold science gate before any issuance. Ed's four written-yes items still open; no directive
+  issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
