@@ -6652,16 +6652,15 @@ departs from a ratified floor.
   compressed or replaced.
 - **V7 — the successor's screen and ceiling.** The FULL D-125 envelope governs
   both: `S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818)` AND
-  `C = max(predecessor ceiling, new Q99)`, where the predecessor ceiling is
-  the predecessor generation's `maximum_budgetable_drift_s`, carried on the
-  successor's generation row as `predecessor_ceiling_s`, and Q99 is the new
+  `C = max(inherited ceiling, new Q99)`, where the inherited ceiling is the
+  predecessor generation's `maximum_budgetable_drift_s` and Q99 is the new
   corpus's 99 % two-draw prediction. The C half is not optional: r6's own
   ceiling `0.010164834757777545` is BELOW the `0.010818` screen floor, so a
   successor derived under an S-only rule would trip D-126 clause 3's ratified
   `successor_screen_exceeds_budget_ceiling` refusal (screen ≥ ceiling) and the
   stored identity `screen + excess = maximum` would demand a negative excess.
   Cap is `C − S` with no silent clamp, per D-126 clause 3. The generation row
-  carries the predecessor ceiling and an explicit `d125_ruling` reference, and
+  carries the inherited ceiling and an explicit `d125_ruling` reference, and
   the issuer refuses to emit while that reference is absent, so the successor
   cannot settle D-125 implicitly. The preflight level screen is the new
   corpus maximum quantized to 1e-15 s, matching r6's stored precision.
@@ -6683,6 +6682,13 @@ departs from a ratified floor.
   voids the registration, and so does an estimator-code rotation mid-campaign.
   The scientific rules are fixed before data exists and are never selected
   after seeing it.
+  *Dated addendum (2026-09-10, activation 96bfeca7, transcribing cold-gate ruling 69 and its addendum A1; not an amendment by the seat):* the
+  quantity this clause calls the "inherited ceiling" is named the **predecessor ceiling** by ruling 69, carried on the successor's
+  generation row as `predecessor_ceiling_s` and paired with `predecessor_acceptance_id`; the pre-registration was renamed under 69-A1.
+  The wording above is cold gate 46's and stands as ruled.
+  *Dated note (2026-09-10, activation 96bfeca7; open item, not an amendment):* the armed window is `window_max_s` = 9000 s
+  (150 min; the generator's minimum is 7980 s); 210 min is the 03:00–06:30 install span, not a window. The pre-registration
+  (rev1) states the reconciliation; this clause's "210 min window" awaits a dated correction by the cold science gate or Ed.
 
 The proposed registration text is
 `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`; its bracketed

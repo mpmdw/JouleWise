@@ -141,8 +141,11 @@ or the file.** Three fences are installed in the issuer,
 statistic is computed rather than being caught in review afterwards.
 
 - **Epoch match.** `prepare-candidate` refuses when the pre-registration's
-  recorded `/usr/bin/powermetrics` SHA-256, or its recorded `os_build`,
-  differs from the target identity epoch the registration declares. A machine
+  recorded `os_build` differs from the registration's target identity epoch,
+  or when any registration row's recorded T1 bindings carry a
+  `/usr/bin/powermetrics` SHA-256 other than the pre-registered one (the
+  sampler digest is a T1 binding, not one of the six identity-epoch fields,
+  so it is checked on every row rather than once). A machine
   that has moved off the declared epoch since the text was written would
   otherwise contribute rows to a corpus the registration never governed.
 - **Registration shape.** It refuses when the registration is not exactly
