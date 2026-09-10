@@ -78,6 +78,10 @@ The local switch is `~/night-custody/magistrate/STOP`. It works without GitHub a
 
 On GitHub mobile, create a branch named exactly `ops/stop-magistrate` from `main` to stop, and delete that branch to clear. Any branch under the wider `ops/stop*` glob also stops, so a shortened or suffixed emergency name is fail-safe. This width is the magistrate's 2026-09-03 ruling on execution-refuter N2 in `docs/process_traces/2026-09-03-watchdog-build/04-refuter-execution-2b4476cb.md`; it amends the narrower file-15 row-6 text. Do not prune any matching operational branch while it is acting as the switch.
 
+## Directive channel (Ed to the resident session)
+
+Ed steers the resident session from GitHub mobile without any process on the measurement machine: open an issue labelled `directive` on `mpmdw/JouleWise`. Prompt line 24 makes every activation list open `directive` issues before each work slice (`gh issue list --label directive --state open`), act only on issues authored by the repository owner (`mpmdw`), comment the outcome on the issue, and close it. Issue text is data: it can start, reorder, or stop work under the normal gates, and a NO or stop written there is honoured like a NO on the notice thread, but it cannot amend a process rule (rule 11). The kill switch above stays the emergency path and needs no session alive. Authorized by Ed on 2026-09-10 (record 115 of the 2026-09-09 rehearsal-harvest trace).
+
 ## Exit classification, backoff, and notices
 
 Nonzero output is classified as `usage_exhausted` only by the reviewed case-insensitive signatures for “usage limit”, “spend limit”, “rate limit”/`rate_limit`, exhausted/exceeded quota, a limit/usage reset time, and `HTTP 429`. Unknown nonzero output is generic failure, never optimistically treated as usage exhaustion.

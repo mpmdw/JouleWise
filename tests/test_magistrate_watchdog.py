@@ -1860,7 +1860,18 @@ class ContractTests(WatchdogTestCase):
         self.assertIn("cold gate or Ed", prompt)
         self.assertIn("Arming a night obligates this session to end its loop", prompt)
         self.assertIn("under a v2 plan", prompt)
+        self.assertIn("--label directive --state open", prompt)
+        self.assertIn("authored by `mpmdw`", prompt)
+        self.assertIn("never amends a process rule", prompt)
         self.assertIn("installed from that plan's `measurement_root`", prompt)
+
+    def test_directive_channel_is_documented_as_owner_only_data(self) -> None:
+        """Counterfactual input: a relaunch reads any GitHub issue as an instruction."""
+        document = (wd.REPO_ROOT / "docs/process/MAGISTRATE_WATCHDOG.md").read_text()
+        section = document.split("## Directive channel", 1)[1].split("## Exit classification", 1)[0]
+        self.assertIn("authored by the repository owner (`mpmdw`)", section)
+        self.assertIn("cannot amend a process rule (rule 11)", section)
+        self.assertIn("gh issue list --label directive --state open", section)
 
     def test_documented_example_plans_use_the_production_writer(self) -> None:
         repo = Path(__file__).resolve().parents[1]
