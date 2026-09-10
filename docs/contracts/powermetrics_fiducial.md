@@ -140,6 +140,27 @@ the recovery path passes no screen either, and the recovery path's
 `slot == "pre"` auto-abort does not apply, since a derivation session closes
 only on its last declared slot or an explicit abort.
 
+The screen-to-kind check runs in both directions, and either disagreement
+refuses `systematic_screen_kind_mismatch`. Finalization compares one fact —
+whether a level screen was supplied — against the session's kind. A
+derivation-kind slot finalized WITH a screen refuses, because the retired
+epoch's threshold must not judge a new-epoch capture. A bracket-kind slot
+finalized with NO screen refuses as well, because an ordinary capture that
+skipped the comparison would be recorded `valid` without ever having been
+tested against the screen it is owed; omitting the screen is not a route
+around it. The refusal names the session kind it saw.
+
+The recovery tool authenticates the acceptance artifact before it reads the
+ledger at all. The prior epoch's acceptance is unauthenticatable when its
+bytes are missing or do not match the pinned SHA-256, so no
+`preflight_level_screen_s` can be derived from it. In that state the tool
+returns `FROZEN_PROTOCOL_INVALID` (reason `acceptance_artifact_underivable`)
+before opening the ledger path — including on a derivation resume-finalize,
+which will not consult that screen anyway. The ordering is deliberate: an
+unreadable or tampered artifact is diagnosed as the artifact fault it is,
+never surfacing later as a ledger fault, and the operator sees the same
+refusal the desk already knows from ordinary recovery.
+
 Every physics and evidence gate stays fail-closed. The `DIAGNOSTIC_NO_PACK`
 night class still requires a registration path and marks only condition C2,
 the verified pack ARM ceremony, `NOT_APPLICABLE` (`no_pack_by_design`), since

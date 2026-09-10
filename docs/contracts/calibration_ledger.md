@@ -65,9 +65,18 @@ finalized.
 **Session kinds.** A `bracket`-kind session reserves the two endpoints (`pre`,
 `post`) around one measured window. A `derivation`-kind session reserves N
 declared slots — N fixed in the capture registration before any data exists —
-for one derivation night. It opens at head-equals-pin; its slots are claimed
-and finalized in declared order; no receipt belonging to another session may
-sit in the reserved tail; and at most one session is open at a time.
+for one derivation night. A bracket session records no `session_kind` and no
+`declared_slots`; the absence of both fields IS the bracket kind, which is why
+every receipt written before derivation kinds existed reads back unchanged. An
+explicit `session_kind: "bracket"` in an open receipt refuses, so one session
+shape has exactly one byte representation. A derivation session records both
+fields. That encoding rule binds receipts only: the reservation tool run
+without `--execute` — a dry run, which validates the inputs and writes nothing
+— prints a JSON summary rather than a receipt, and that summary reports
+`session_kind` and `declared_slots` explicitly for both kinds. A derivation
+session opens at head-equals-pin; its slots are claimed and finalized in
+declared order; no receipt belonging to another session may sit in the
+reserved tail; and at most one session is open at a time.
 Derivation-only capture requires a derivation-kind slot, so a standalone
 attempt (one reserved directly against the pin, outside any session) and a
 bracket-kind slot both refuse. The session closes when its last declared slot
@@ -77,6 +86,16 @@ remain observations; slots never reached are recorded unused, never compressed
 or replaced. The night commits nothing to Git. The desk reviews the terminal
 head-pin candidate the closed session emits and commits it before the next
 session opens.
+
+**Recovery finalizes a declared slot, never a free string.** When a crash
+leaves a claimed slot unfinalized, the desk finishes it with the recovery
+tool, naming the slot in a `--slot` argument. Slot names are no longer the
+fixed pair `pre`/`post`, so the tool cannot enumerate the legal values in its
+own argument parser; it reads the ordered list the session's open receipt
+declared and refuses any `--slot` outside that list with
+`RESERVED_SLOT_MISMATCH` (reason `slot_not_declared`), naming the slot given
+and the declared list. A mistyped or invented slot name therefore cannot
+finalize a place the session never reserved.
 
 **Claim consumers refuse while a session is open.** From the open receipt
 until that terminal pin is committed, the physical head is ahead of the
