@@ -687,3 +687,86 @@ $ git diff --stat
   ordered).
 - **Pre-registration edits are S6's**: the SF-5 bounds sentence and the
   "Anchor-v3 replay" glossary definition. The artifact side of both is done.
+
+---
+
+# Fix round 3 (seat S4, on top of `6e9d2a63`)
+
+One item: contract refuter 93 **SF-8**. Nothing else touched.
+
+## What landed
+
+`CANDIDATE_LICENCE` (`:306`) carries the sentence verbatim, and the `issuance`
+block emits it under `licence` (`:1351`):
+
+> These bytes license nothing: no measurement window, no claim, no threshold.
+> No tool may load them as authority; the production loader refuses them by
+> artifact_role.
+
+It sits **inside the sealed artifact**, so `derivation_sha256` (the production
+recipe, the canonical digest of everything but itself) covers it and it cannot be
+edited away without moving the artifact's own digest.
+
+## Where it sits in the transaction, and why
+
+`licence` is a **candidate-LABEL field**, in the same class as
+`issuance.status`, `issuance.claim_eligible`, `candidate_not_issued` and the two
+`backfill_candidate` label fields. The D-138 transaction **rewrites the whole
+`issuance` block** when it issues rather than editing fields inside it, so the
+sentence cannot survive into an issued artifact and quietly contradict it — an
+issued acceptance saying "these bytes license nothing" would be worse than no
+sentence at all.
+
+`test_only_the_candidate_label_stops_the_candidate_authenticating` now states
+that explicitly: it asserts `licence` IS present on the candidate, replaces the
+whole block, asserts `licence` is NOT present afterwards, and still finds the
+production `_valid_acceptance_bound` **admits** the result. So the key is proven
+to be a label field rather than assumed to be one, and the round-1 property (only
+the candidate label stops the artifact authenticating) still holds with the key
+present.
+
+## Test
+
+`test_the_candidate_states_its_licence_in_words` asserts the sentence verbatim;
+asserts that rewriting it **moves** `derivation_sha256` (it is sealed) and does
+**not** move `derivation_input_sha256` (prose is deliberately outside the input
+seal, which is exactly what that seal was built for); and asserts the loader does
+what the sentence says it does — `load_calibration_acceptance_bound` returns
+`None` on the emitted file.
+
+## Cut table (fix round 3)
+
+Baseline = restored = `e4e0260d30ac459efe5f2d72c3dbbe56431cdd724d82671040a0497bb2acd602`;
+`PYTHONDONTWRITEBYTECODE=1`; harness `/tmp/s4_mutate4.py`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| H1 | delete `"licence": CANDIDATE_LICENCE,` | `test_the_candidate_states_its_licence_in_words` | Ran 1 test | KILLED |
+| H1b | same deletion | `test_only_the_candidate_label_stops_the_candidate_authenticating` | Ran 1 test | KILLED |
+
+H1b is the label-class assertion: with the key gone, the "is it present, then is
+it stripped" pair in the authentication test fails, so the claim that `licence`
+belongs to the stripped label set is itself under test.
+
+## Runner tail
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation
+----------------------------------------------------------------------
+Ran 82 tests in 64.834s
+
+OK
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts
+COMPILEALL_RC=0
+```
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/test_issue_calibration_acceptance_generation.py
+```
+
+No git state changed, no commit, nothing outside the two files touched.
