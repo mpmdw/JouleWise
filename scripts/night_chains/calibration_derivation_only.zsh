@@ -15,9 +15,16 @@
 # (scripts/gen_g2_phase_d.py): timestamp(), settle(), one operator-log line per
 # lifecycle transition, absolute interpreter and coreutil paths.
 #
+# This file is HAND-WRITTEN and is NOT a generated region of
+# scripts/gen_g2_phase_d.py; whether the pinned night chain is generated from a
+# runbook section instead is the lead's call at the integration replay.
+#
 # UNLANDED SURFACE, written exactly as ruling 46 specifies (seats S1/S2):
 #   reserve_calibration_window_bracket.py  --session-kind derivation --slot-count N
 #   validate_powermetrics_fiducial.py      --derivation-only
+#   validate_powermetrics_fiducial.py      --slot dNN — today the writer's --slot
+#   is choices=("pre","post") and REJECTS every d01..dNN name; seat S2's declared
+#   slot list generalizes it, and no slot of this chain runs until it lands.
 #   the declared per-slot bindings, whose CLI shape becomes a list (addendum 11
 #   N2). Until it lands, S2 integration supplies them as this script's argv,
 #   binding d01..dNN to attempt ids ${SESSION_ID}-dNN with custody under
@@ -66,13 +73,13 @@ for _value in "$SLOT_COUNT" "$SETTLE_S" "$SLOT_CADENCE_S" \
         exit 64
     fi
 done
-if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 )); then
-    print -u2 -- "SLOT_COUNT and SLOT_CADENCE_S must be positive"
+if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 || SETTLE_S < 1 )); then
+    print -u2 -- "SLOT_COUNT, SLOT_CADENCE_S and SETTLE_S must be positive"
     exit 64
 fi
 
 OPERATOR_LOG_ROOT="$WINDOW_CUSTODY_ROOT/operator_logs"
-mkdir -p "$OPERATOR_LOG_ROOT" "$RUNS_ROOT/instrument_validation"
+/bin/mkdir -p "$OPERATOR_LOG_ROOT" "$RUNS_ROOT/instrument_validation"
 CHAIN_LOG="$OPERATOR_LOG_ROOT/derivation-chain.log"
 
 timestamp() {
@@ -98,12 +105,26 @@ abort_window_exhausted() {
         --reason window_exhausted
 }
 
-log_event "chain_start session=$SESSION_ID window=$WINDOW_ID slots=$SLOT_COUNT"
+preflight_inputs() {
+    local input
+    # Every file input is authenticated as PRESENT before any window time is
+    # spent. A missing frozen plan or T1 vector discovered after the settle
+    # would burn the settle and the window's agent-free head.
+    for input in "$PLAN" "$IDENTITY_EPOCH_JSON" "$T1_BINDINGS_JSON" \
+        "$CALIBRATION_LEDGER" "$LEDGER_HEAD_PIN"; do
+        if [[ ! -f "$input" ]]; then
+            print -u2 -- "derivation_chain_input_missing: $input"
+            exit 66
+        fi
+    done
+}
 
-# The ONE settle of the night. The cadence below is start-to-start and never
-# inserts a second one.
-settle
-log_event "settle_complete settle_s=$SETTLE_S"
+# Order follows the pinned G2-a chain (SHAKEDOWN-G2-RUNSHEET.md:509-536):
+# input preflight and session reservation FIRST, then chain_start, then the ONE
+# settle, then the captures. Reserving after the settle would make the
+# reservation the last machine action before slot d01 and the pre-registration's
+# "one 600 s settle after the last operator action" literally false.
+preflight_inputs
 
 "$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" \
     --ledger "$CALIBRATION_LEDGER" \
@@ -122,6 +143,14 @@ log_event "settle_complete settle_s=$SETTLE_S"
     "$@" \
     --execute
 log_event "session_open kind=derivation slots=$SLOT_COUNT"
+log_event "chain_start session=$SESSION_ID window=$WINDOW_ID slots=$SLOT_COUNT \
+settle_s=$SETTLE_S slot_cadence_s=$SLOT_CADENCE_S slot_capture_budget_s=$SLOT_CAPTURE_BUDGET_S"
+
+# The ONE settle of the night, and the last machine action before it is the
+# reservation above. The cadence below is start-to-start and never inserts a
+# second settle.
+settle
+log_event "settle_complete settle_s=$SETTLE_S"
 
 next_start=$("$DATE" +%s)
 for (( index = 1; index <= SLOT_COUNT; index++ )); do

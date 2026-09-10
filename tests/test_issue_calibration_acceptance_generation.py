@@ -298,9 +298,11 @@ else:
     sys.exit(98)
 '''
 
+    INPUT_FILES = ("plan.json", "epoch.json", "t1.json", "ledger.jsonl", "head.json")
+
     def run_chain(
         self, *, end: int = 10000, slots: str | None = None, fail: str = "",
-        capture: int = 480,
+        capture: int = 480, absent_input: str = "",
     ) -> tuple[subprocess.CompletedProcess, list[dict], list[str]]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -309,6 +311,9 @@ else:
                 path = root / name
                 path.write_text(self.FAKE)
                 path.chmod(0o755)
+            for name in self.INPUT_FILES:
+                if name != absent_input:
+                    (root / name).write_text("{}\n")
             custody = root / "custody"
             env = os.environ.copy()
             for knob in (
@@ -361,11 +366,13 @@ else:
         self.assertIn("derivation", python[0]["args"])
         self.assertEqual(python[0]["args"][python[0]["args"].index("--slot-count") + 1], "12")
         self.assertEqual([call["time"] for call in python[1:]], list(range(600, 7800, 600)))
-        # The ONE settle: a single 600 s sleep, before the reservation. Every
-        # later sleep only fills the start-to-start cadence.
+        # The ONE settle: a single 600 s sleep, and the reservation is the last
+        # machine action BEFORE it (pinned G2-a order). Every later sleep only
+        # fills the start-to-start cadence.
         sleeps = [call for call in calls if call["name"] == "sleep"]
         self.assertEqual(sleeps[0], {"name": "sleep", "args": ["600"], "time": 0})
-        self.assertLess(sleeps[0]["time"], python[0]["time"])
+        self.assertIn("reserve_calibration_window_bracket.py", calls[0]["args"][0])
+        self.assertLess(calls.index(python[0]), calls.index(sleeps[0]))
         self.assertEqual([call["args"][0] for call in sleeps[1:]], ["120"] * 11)
         for index, call in enumerate(python[1:], 1):
             self.assertIn("--derivation-only", call["args"])
@@ -375,14 +382,28 @@ else:
 
     def test_operator_log_records_each_lifecycle_transition(self) -> None:
         _result, _calls, log = self.run_chain(slots="2")
+        # chain_start carries all three timing knobs, so a night's log states
+        # the cadence it actually ran rather than the one someone assumed.
         self.assertEqual(log, [
-            "chain_start session=fixture-session window=fixture-window slots=2",
-            "settle_complete settle_s=600",
             "session_open kind=derivation slots=2",
+            "chain_start session=fixture-session window=fixture-window slots=2"
+            " settle_s=600 slot_cadence_s=600 slot_capture_budget_s=480",
+            "settle_complete settle_s=600",
             "slot_start slot=d01", "slot_end slot=d01",
             "slot_start slot=d02", "slot_end slot=d02",
             "derivation_night_complete slots=2",
         ])
+
+    def test_missing_file_input_refuses_before_reservation_or_settle(self) -> None:
+        for absent in self.INPUT_FILES:
+            with self.subTest(absent=absent):
+                result, calls, log = self.run_chain(absent_input=absent)
+                self.assertEqual(result.returncode, 66, result.stderr)
+                self.assertIn("derivation_chain_input_missing: ", result.stderr)
+                self.assertIn(absent, result.stderr)
+                # No reservation, no settle, no window time spent.
+                self.assertEqual(calls, [])
+                self.assertEqual(log, [])
 
     def test_window_exhausted_refuses_next_slot_and_aborts_once(self) -> None:
         result, calls, log = self.run_chain(end=1800)
@@ -408,6 +429,24 @@ else:
         self.assertEqual(len(python), 3)  # open, d01, abort
         captures = [call for call in python if "validate_powermetrics_fiducial.py" in call["args"][0]]
         self.assertEqual([call["args"][call["args"].index("--slot") + 1] for call in captures], ["d01"])
+        self.assertIn("slot_unused slot=d02 reason=window_exhausted", log)
+
+    def test_overrunning_capture_stops_the_next_slot_after_the_cadence_wait(self) -> None:
+        # A 700 s capture overruns the 600 s cadence, so d02's turn arrives with
+        # the clock already at 1300: the PRE-wait check passes (next_start 1200
+        # + 480 <= 1700) and only the POST-wait check sees 1300 + 480 > 1700.
+        # Deleting that second check leaves every other test green.
+        result, calls, log = self.run_chain(end=1700, capture=700)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        python = [call for call in calls if call["name"] == "python3"]
+        captures = [
+            call for call in python
+            if "validate_powermetrics_fiducial.py" in call["args"][0]
+        ]
+        self.assertEqual(
+            [call["args"][call["args"].index("--slot") + 1] for call in captures], ["d01"]
+        )
+        self.assertEqual(len(python), 3)  # open, d01, abort
         self.assertIn("slot_unused slot=d02 reason=window_exhausted", log)
 
     def test_first_slot_that_cannot_finish_aborts_with_no_capture(self) -> None:
