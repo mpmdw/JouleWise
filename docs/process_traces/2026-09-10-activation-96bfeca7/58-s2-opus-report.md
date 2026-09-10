@@ -294,3 +294,8 @@ The interface S1 builds against is fixed:
   `is_derivation_session`; `--slot` no longer has argparse `choices`.
 - `tests/test_powermetrics_fiducial.py` was NOT modified (it passes unchanged), so S1's rebase
   on that file is clean.
+
+
+## Lead correction (contract refuter 71 F1, 2026-09-10 09:45 PDT)
+
+The report's claims that the bracket reserve CLI's output is unchanged are FALSE: `scripts/reserve_calibration_window_bracket.py` now emits `session_kind` and `declared_slots` in its dry-run JSON for BOTH kinds (the seat's own test asserts `bracket_payload["session_kind"] == "bracket"`). Receipt bytes for bracket sessions are unchanged; the CLI's informational JSON is not. F10: the mutation table lists nine kills; the commit message says ten; the table is authoritative.
