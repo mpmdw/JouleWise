@@ -191,7 +191,8 @@ ACCEPTANCE_IDENTITY_FIELDS = IDENTITY_EPOCH_FIELDS
 # ``identity_epoch``, and is resolved from the artifact rather than registered,
 # so a catalog can never disagree with the identity it claims to bind.
 D079_EPOCH_CATALOG_ID = "d079_epoch"
-# Ledger session kinds (ruling 46 §R-a A7, written by seat S2).  A `bracket`
+# Ledger session kinds (ruling 46 §R-a A7), stamped on the session's open
+# receipt by the ledger writer.  A `bracket`
 # session reserves the endpoints of one claim window; a `derivation` session
 # reserves a night of derivation-only captures that build a future acceptance
 # and license no measurement.  A row with no kind at all predates the field
@@ -212,13 +213,17 @@ _PRIOR_PREFIX_MODES = frozenset(
 # rule every issued generation was actually derived under is implemented here:
 # the quantized corpus range IS the operative screen.  The D-125 envelope rule
 # a successor may be derived under is Ed's open item and its
-# ``successor_screen_exceeds_budget_ceiling`` refusal is seat S4's, so an
-# unimplemented rule name refuses rather than silently degrading to this one.
+# ``successor_screen_exceeds_budget_ceiling`` refusal is not implemented in
+# this module, so an unimplemented rule name refuses here rather than silently
+# degrading to the rule below.
 SCREEN_RULE_RANGE_EQUALS_SCREEN = "range_equals_screen"
 _REGISTERED_SCREEN_RULES = frozenset({SCREEN_RULE_RANGE_EQUALS_SCREEN})
 # Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
-# Today's only registered class is the anchor-v3 replay result recorded at r6
-# `derivation_notes.excluded_predecessor_members`.
+# Today's only registered class is `affine_clock_fit_empty`: the anchor-v3
+# replay found NO feasible affine wall-versus-monotonic clock fit for that
+# capture, so no bound can be derived from it at all.  The exclusion turns on
+# that replay outcome, never on the value the capture produced.  It is the
+# class recorded at r6 `derivation_notes.excluded_predecessor_members`.
 REGISTERED_CORPUS_EXCLUSION_REASONS = frozenset({"affine_clock_fit_empty"})
 # Terminal dispositions a LIVE row may carry inside an `import_plus_live`
 # cutoff prefix.  `abandoned` is deliberately absent: it maps to the
@@ -269,8 +274,9 @@ _D102_N19_DERIVATION: dict[str, Any] = {
     "cutoff_sequence": 76,
     "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
     # The ceiling in force for this generation (its 99 % two-draw prediction),
-    # which a D-125 successor lineage inherits as a lower bound.  Nothing in
-    # this module compares it; the slot exists for seat S4's issuer.
+    # which a D-125 successor lineage inherits as a lower bound.  The row states
+    # it explicitly because the issuer that derives the successor reads it from
+    # here rather than recomputing it from the predecessor's bytes.
     "inherited_ceiling_s": "0.012093166090593858",
     # Import-only generations have no live capture registration.
     "registration_session_ids": (),
@@ -315,6 +321,18 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     prefix mode and screen rule from this row instead of from literals, so a
     row that omits or malforms one of them must refuse rather than let the
     corresponding check evaporate.
+
+    Two of the row's numbers are restatements rather than independent facts,
+    and both are checked here rather than trusted.  ``inherited_ceiling_s`` is
+    the same quantity as the row's own ``maximum_budgetable_drift_s`` and its
+    99 % two-draw prediction: three copies a hand edit can silently
+    desynchronise, after which the issuer would derive a successor's floor from
+    a ceiling the predecessor never had.  And the operative screen must sit
+    strictly BELOW that ceiling, because D-102 cl.3 spends the allowance
+    ``max(observed_drift_s, bracket_screen_s)`` against it, and
+    ``screen + excess == maximum`` at the bottom of ``_valid_acceptance_bound``
+    would otherwise demand a zero or negative budgetable excess.  That is the
+    shape of D-125's ``successor_screen_exceeds_budget_ceiling`` refusal.
     """
 
     if not isinstance(generation, Mapping):
@@ -324,21 +342,46 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     catalog_ids = generation["epoch_catalog_ids"]
     session_ids = generation["registration_session_ids"]
     counts = (generation["prior_observation_count"], generation["cutoff_sequence"])
+    operatives = generation["operatives"]
+    if not isinstance(operatives, Mapping):
+        return False
+    ceiling = _decimal(generation["inherited_ceiling_s"])
+    drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
+    prediction = _decimal(generation["prediction_99_two_draw_s"])
+    screen = _decimal(operatives.get("bracket_screen_s"))
+    if (
+        ceiling is None
+        or drift is None
+        or prediction is None
+        or screen is None
+        or ceiling != drift
+        or drift != prediction
+        or not screen < drift
+    ):
+        return False
+    if not all(
+        isinstance(count, int) and not isinstance(count, bool) and count > 0
+        for count in counts
+    ):
+        return False
+    # The cutoff sequence is TWO ledger rows per observation (a reservation and
+    # a finalization).  That relation is exact for a prefix built only from the
+    # genesis import, and it is deliberately NOT imposed on a live prefix, whose
+    # sessions add open and abort control rows the observation count does not
+    # predict.
+    if (
+        generation["prior_prefix_mode"] == PRIOR_PREFIX_MODE_IMPORT_ONLY
+        and generation["cutoff_sequence"]
+        != 2 * generation["prior_observation_count"]
+    ):
+        return False
     return (
-        isinstance(generation["operatives"], Mapping)
-        and isinstance(catalog_ids, tuple)
+        isinstance(catalog_ids, tuple)
         and bool(catalog_ids)
         and all(isinstance(item, str) and item for item in catalog_ids)
         and len(set(catalog_ids)) == len(catalog_ids)
         and generation["prior_prefix_mode"] in _PRIOR_PREFIX_MODES
-        and all(
-            isinstance(count, int)
-            and not isinstance(count, bool)
-            and count > 0
-            for count in counts
-        )
         and generation["screen_rule"] in _REGISTERED_SCREEN_RULES
-        and _decimal(generation["inherited_ceiling_s"]) is not None
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
         and len(set(session_ids)) == len(session_ids)
@@ -1531,17 +1574,24 @@ def _candidate_from_observation(
     )
 
 
+def _session_record_kind(session: Any) -> str:
+    """Read one session record's kind, defaulting to ``bracket``.
+
+    The kind is stamped on the session's open receipt.  This reader is
+    deliberately defensive: a ledger written before that field existed carries
+    no kind at all, and the only safe reading of a missing kind is the ordinary
+    bracket session every historical row belongs to.
+    """
+
+    kind = getattr(session, "session_kind", None)
+    return kind if isinstance(kind, str) and kind else BRACKET_SESSION_KIND
+
+
 def _observation_session_kind(
     observation: Any,
     ledger_snapshot: CalibrationLedgerSnapshot,
 ) -> str:
-    """Resolve one ledger row's session kind, defaulting to ``bracket``.
-
-    Seat S2 stamps ``session_kind`` on the session's open receipt; this reader
-    is deliberately defensive because a ledger written before that field
-    existed carries no kind at all, and the only safe reading of a missing
-    kind is the ordinary bracket session every historical row belongs to.
-    """
+    """Resolve one ledger ROW's session kind, defaulting to ``bracket``."""
 
     kind = getattr(observation, "session_kind", None)
     if isinstance(kind, str) and kind:
@@ -1552,10 +1602,7 @@ def _observation_session_kind(
     session = ledger_snapshot.bracket_session_by_id.get(session_id)
     if session is None:
         return BRACKET_SESSION_KIND
-    kind = getattr(session, "session_kind", None)
-    if isinstance(kind, str) and kind:
-        return kind
-    return BRACKET_SESSION_KIND
+    return _session_record_kind(session)
 
 
 def _is_derivation_kind_observation(
@@ -1622,7 +1669,8 @@ def discover_calibration_candidates(
             # Derivation-only rows are skipped, never returned as a discovery
             # failure: they are ordinary valid observations that simply cannot
             # bracket a claim window.  A `return None` here would empty the
-            # whole enumeration (`:1339-1341`), and this skip must stay
+            # whole enumeration (the `return ()` on a `None` candidate at the
+            # bottom of this loop), and this skip must stay
             # symmetric with the `registered_valid` universe below or the
             # anti-withholding equality every caller satisfies exactly would
             # break on a night that captured any of them.
@@ -1671,6 +1719,22 @@ def _prior_set_matches_import_cutoff_prefix(
         return False
     prefix_mode = generation["prior_prefix_mode"]
     live_prefix_allowed = prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE
+    if live_prefix_allowed:
+        # `registration_session_ids` must name DERIVATION-kind sessions, and the
+        # ledger is what says so.  Without this, a registration could point at
+        # ordinary claim-window bracket sessions, and the completeness check
+        # would then treat captures taken to MEASURE something as if they had
+        # been pre-registered to derive the successor's screens.  A session the
+        # ledger does not hold, or one whose kind is missing (read as
+        # `bracket`), refuses.
+        sessions = ledger_snapshot.bracket_session_by_id
+        for session_id in generation["registration_session_ids"]:
+            session = sessions.get(session_id)
+            if (
+                session is None
+                or _session_record_kind(session) != DERIVATION_SESSION_KIND
+            ):
+                return False
     for observation in prefix:
         if observation.is_historical_import:
             continue

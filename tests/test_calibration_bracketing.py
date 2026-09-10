@@ -3095,7 +3095,11 @@ def _live_prefix_generation() -> tuple[str, dict, dict]:
         "prior_observation_count": len(prior["observations"]),
         "cutoff_sequence": sequence,
         "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
-        "inherited_ceiling_s": "0.010164834757777545",
+        # The ceiling IS this generation's own 99 % two-draw prediction and its
+        # own maximum budgetable drift; the first draft of this fixture copied
+        # r6's number instead, which is exactly the desynchronisation the row
+        # guard now refuses.
+        "inherited_ceiling_s": "0.009000",
         "registration_session_ids": (_LIVE_SESSION_ID,),
     }
     return acceptance_id, generation, _reseal(artifact)
@@ -3176,12 +3180,12 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     ) -> None:
         artifact = load_calibration_acceptance_bound()
         self.assertTrue(_valid_acceptance_bound(artifact))
+        # Both numbers move together so the row stays internally consistent
+        # (cutoff = 2 x count); only the comparison against the ARTIFACT can
+        # refuse, which is what makes this counterfactual name the right site.
         rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R6_ACCEPTANCE_ID])
         rekeyed["cutoff_sequence"] = 80
-        with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
-            self.assertFalse(_valid_acceptance_bound(artifact))
-        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R6_ACCEPTANCE_ID])
-        rekeyed["prior_observation_count"] = 39
+        rekeyed["prior_observation_count"] = 40
         with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
@@ -3345,8 +3349,17 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             self.assertTrue(_valid_acceptance_bound(artifact))
 
     @staticmethod
-    def _prefix_snapshot(artifact: dict) -> CalibrationLedgerSnapshot:
-        """Build the exact cutoff prefix an artifact's prior set declares."""
+    def _prefix_snapshot(
+        artifact: dict,
+        *,
+        session_kind: str | None = DERIVATION_SESSION_KIND,
+    ) -> CalibrationLedgerSnapshot:
+        """Build the exact cutoff prefix an artifact's prior set declares.
+
+        `session_kind` is the kind the ledger records for every session the
+        prior set names: `None` drops the session records entirely, which is
+        the shape of a registration pointing at sessions the ledger never held.
+        """
 
         prior = artifact["prior_observation_set"]
         catalog = prior["epoch_catalog"]
@@ -3377,9 +3390,29 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             for index, row in enumerate(prior["observations"], start=1)
         )
         cutoff = artifact["ledger_cutoff"]
+        session_ids = sorted(
+            {
+                row["session_id"]
+                for row in prior["observations"]
+                if row.get("session_id")
+            }
+        )
+        sessions = (
+            ()
+            if session_kind is None
+            else tuple(
+                SimpleNamespace(
+                    session_id=session_id,
+                    state="finalized",
+                    session_kind=session_kind,
+                )
+                for session_id in session_ids
+            )
+        )
         return CalibrationLedgerSnapshot(
             ledger_schema=LEDGER_SCHEMA,
             ledger_path=Path("prefix-ledger.jsonl"),
+            bracket_sessions=sessions,
             head_sequence=cutoff["sequence"],
             head_digest=cutoff["head_digest"],
             receipts=(),
@@ -3493,3 +3526,130 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         self.assertFalse(
             _prior_set_matches_import_cutoff_prefix(artifact, snapshot)
         )
+
+    def test_registration_must_name_derivation_kind_sessions(self) -> None:
+        # F1.  The registration is a claim about WHY those captures exist.  A
+        # bracket-kind session's rows were taken to measure something, under an
+        # acceptance that already judged them; treating them as pre-registered
+        # derivation captures would let the successor's screens be built from
+        # whatever the machine happened to be doing.
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact,
+                    self._prefix_snapshot(
+                        artifact, session_kind=DERIVATION_SESSION_KIND
+                    ),
+                )
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact, self._prefix_snapshot(artifact, session_kind="bracket")
+                )
+            )
+            # A ledger written before the kind field existed reads as `bracket`
+            # and refuses; so does a registration naming a session the ledger
+            # does not hold at all.
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact, self._prefix_snapshot(artifact, session_kind="")
+                )
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact, self._prefix_snapshot(artifact, session_kind=None)
+                )
+            )
+
+    def test_generation_row_refuses_a_desynchronised_inherited_ceiling(self) -> None:
+        # F3.  Three copies of one number: the row's `inherited_ceiling_s`, its
+        # `maximum_budgetable_drift_s`, and its 99 % two-draw prediction.
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        for field, value in (
+            ("inherited_ceiling_s", "0.010164834757777545"),
+            ("prediction_99_two_draw_s", "0.010164834757777545"),
+        ):
+            with self.subTest(field=field):
+                desynchronised = dict(generation)
+                desynchronised[field] = value
+                with _registered_generation(acceptance_id, desynchronised):
+                    self.assertFalse(_valid_acceptance_bound(artifact))
+        drifted = dict(generation)
+        drifted["operatives"] = {
+            **generation["operatives"],
+            "maximum_budgetable_drift_s": "0.010164834757777545",
+        }
+        with _registered_generation(acceptance_id, drifted):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_generation_row_refuses_a_screen_at_or_above_its_ceiling(self) -> None:
+        # F3.  D-102 cl.3 spends `max(observed_drift_s, bracket_screen_s)`
+        # against the ceiling, and `screen + excess == maximum` would demand a
+        # zero or negative excess.  This is D-125's
+        # `successor_screen_exceeds_budget_ceiling` shape.
+        acceptance_id, generation, artifact = _live_prefix_generation()
+
+        def retuned(ceiling: str, excess: str):
+            """Move the row AND the artifact to the same ceiling, together."""
+
+            operatives = {
+                **generation["operatives"],
+                "max_budgetable_excess_s": excess,
+                "maximum_budgetable_drift_s": ceiling,
+            }
+            row = dict(generation)
+            row["operatives"] = operatives
+            row["prediction_99_two_draw_s"] = ceiling
+            row["inherited_ceiling_s"] = ceiling
+            tuned = copy.deepcopy(artifact)
+            tuned["decimal_derivation"]["ratified_operatives"].update(operatives)
+            tuned["decimal_derivation"]["source_statistics"][
+                "prediction_99_two_draw_s"
+            ] = ceiling
+            return row, _reseal(tuned)
+
+        # The screen is 0.006000.  A ceiling one millisecond above it leaves a
+        # real budgetable excess and admits; a ceiling EQUAL to the screen
+        # leaves none, and that is the only clause that can refuse it.
+        row, tuned = retuned("0.007000", "0.001000")
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(tuned))
+        row, tuned = retuned("0.006000", "0.000000")
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(tuned))
+
+    def test_import_only_cutoff_sequence_is_two_rows_per_observation(self) -> None:
+        # F5.  One reservation row plus one finalization row per imported
+        # observation; a live prefix adds session open and abort control rows,
+        # so the relation is asserted for import-only generations alone.
+        acceptance_id, generation, artifact = _two_epoch_import_only_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The artifact and the row agree on both numbers, so nothing downstream
+        # can refuse: only the 2-rows-per-observation relation is left.
+        skewed_artifact = copy.deepcopy(artifact)
+        skewed_artifact["ledger_cutoff"]["sequence"] = 77
+        skewed_artifact["prior_observation_set"]["cutoff"]["sequence"] = 77
+        skewed = dict(generation)
+        skewed["cutoff_sequence"] = 77
+        with _registered_generation(acceptance_id, skewed):
+            self.assertFalse(_valid_acceptance_bound(_reseal(skewed_artifact)))
+        # A live prefix is exempt: three session control rows (one open, one
+        # abort) put the head past twice the observation count, and refusing
+        # that would make the successor unissuable.
+        acceptance_id, generation, live_artifact = _live_prefix_generation()
+        offset_sequence = generation["cutoff_sequence"] + 3
+        live_artifact["ledger_cutoff"]["sequence"] = offset_sequence
+        live_artifact["prior_observation_set"]["cutoff"]["sequence"] = (
+            offset_sequence
+        )
+        exempt = dict(generation)
+        exempt["cutoff_sequence"] = offset_sequence
+        self.assertNotEqual(
+            offset_sequence, 2 * exempt["prior_observation_count"]
+        )
+        with _registered_generation(acceptance_id, exempt):
+            self.assertTrue(_valid_acceptance_bound(_reseal(live_artifact)))
