@@ -1,5 +1,7 @@
 # Activation checklist — 2026-09-11, proposed G2-a arm for 09-12
 
+> **SUPERSESSION — 2026-09-10 08:10 PDT (record 39):** Steps 1–4 STAND: launch email; harvest and inventory `night/` BEFORE 07:00 with the item-5 predicate §3a; items 5/6 decision; uninstall the stub FROM its checkout and remove checkout + plan root. Steps 5–10 (H, clone, runbook 68, email-then-arm for 09-12) are SUPERSEDED by [record 39](39-lead-record-os-build-epoch-blocker.md) — do NOT author, notice or arm any G2-a plan. Instead, after step 4, read the newest activation records (`ls docs/process_traces/2026-09-10-activation-96bfeca7/ | tail`) for the ACCEPTANCE-EPOCH-25G83-01 ruling and, if it is ruled and implemented, prepare the corpus-capture night per that ruling's runbook; otherwise remain resident on desk work and exit on the watchdog's request.
+
 > Budget note (magistrate, 2026-09-10 ~05:30 PDT): WINDOW_MAX_S raised from the packet's 12,600 s to **13,500 s** to absorb the idle_seconds 30→75 change (record 09; ~+21 min over 24 members). Arithmetic: t0 1789206960 (02:56 PDT) + 13500 = 1789220460 (06:41) ; + 300 s courier = 1789220760 (06:46) < 07:00; strict maximum 14,339.
 
 PROPOSED (magistrate ruling due after rehearsal acceptance). Preparation

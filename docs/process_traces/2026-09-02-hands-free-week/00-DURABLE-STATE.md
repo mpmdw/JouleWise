@@ -857,4 +857,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   FIXTURE-SENTINEL-CONTROLLER-01, GATE-R2-COVERAGE-ULP-01) and the G2-a arm materials 11/12/13. rehearsal-20260911 ARMED and untouched; this
   activation exits on the 02:31 request. NEXT EXACT ACTION: the 09-11 activation runs checklist 13 end to end (harvest before 07:00 → H → clone at H →
   runbook 68 → email-then-arm before 06:05 for t0 2026-09-12 02:56, WINDOW_MAX_S 13500). RUN_STATE T38i.
+- UPDATE 2026-09-10 ~08:15 PDT (headless activation `96bfeca7`): BLOCKER — the 2026-09-02 macOS update (25F84 → 25G83, new powermetrics binary)
+  invalidates the issued calibration acceptance (D-102 exact identity epoch); `bind-window` refuses `acceptance_artifact_epoch_mismatch` in a fresh
+  clone at d84da72e (record 39; consult 38). No installed new-epoch bootstrap route. The 09-12 02:56 G2-a arm is OFF; G2A-FIRST-WINDOW-01 blocked on
+  the new p1 lane ACCEPTANCE-EPOCH-25G83-01; checklist 13 steps 5–10 superseded (steps 1–4 stand: harvest, items 5/6, retire the stub). Ed emailed
+  08:05 (`1a08bd6ccb79ea1d`) with the route and his two decisions (corpus design rules; ledger representation), defaults stated. A blind three-seat
+  design consult on the bootstrap mechanism (brief 40; Astra 41, cold Fable 42, Opus) is in flight; next: synthesis → cold-gate ruling → implementation
+  under the gauntlet. rehearsal-20260911 ARMED and untouched; this activation exits on the 02:31 request. RUN_STATE T38j.
 

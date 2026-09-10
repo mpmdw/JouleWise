@@ -9,6 +9,38 @@
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
   "tasks": {
+    "ACCEPTANCE-EPOCH-25G83-01": {
+      "acceptance": {
+        "evidence": [
+          "Cold-gate ruling on the derivation-only capture route, ledger representation, and prospective corpus design (brief 40; Ed owns scientific rules)",
+          "Corpus design pre-registered before the first agent-free quiet-window capture; complete retained raw evidence and derivation + cold science gate",
+          "D-138 atomic successor transaction includes the staged R2 patch (GATE-R2-COVERAGE-ULP-01), generation registration in tests/verify_calibration_acceptance_corpus.py, and regenerated G2-a inputs",
+          "Fresh-clone bind-window and check pass at the transaction head with live os_build 25G83 and the new powermetrics binary; every prior artifact unchanged and every consumer refusal intact"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ACCEPTANCE-EPOCH-25G83-01/acceptance",
+          "label": "ACCEPTANCE-EPOCH-25G83-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "bind-window and check pass in a fresh clone at the transaction head with the live epoch; the successor's generation is registered in tests/verify_calibration_acceptance_corpus.py; every prior artifact unchanged; corpus design pre-registered before the first capture; every consumer refusal intact."
+      },
+      "authority": {
+        "label": "Record 39: OS-build epoch blocker and successor acceptance route",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/39-lead-record-os-build-epoch-blocker.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Issue a successor D-079 calibration acceptance under identity epoch os_build 25G83 and the new powermetrics binary through a governed new-epoch bootstrap: (1) cold-gate ruling on the derivation-only capture route, ledger representation, and pre-registered corpus design (brief 40; Ed owns the scientific rules); (2) implementation under the gauntlet; (3) an agent-free quiet-window corpus capture night; (4) derivation + cold science gate; (5) the D-138 atomic successor transaction carrying the staged R2 patch (GATE-R2-COVERAGE-ULP-01); (6) regenerate G2-a inputs and prove bind-window/check at the desk.",
+      "id": "ACCEPTANCE-EPOCH-25G83-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 179,
+      "status": "queued",
+      "status_note": "2026-09-10: found by the desk dry run in the fresh clone (record 39); blocks G2A-FIRST-WINDOW-01; design consult in flight (brief 40, seats 41/42 + Opus); earliest credible calendar per consult 38: corpus night 09-12, first G2-a 09-14.",
+      "stop_card": null
+    },
     "ARM-CENSUS-IDLE-INTERACTIVE-01": {
       "acceptance": {
         "evidence": [
@@ -1128,7 +1160,7 @@
       "priority": "p1_phase_gate",
       "rank": 166,
       "status": "queued",
-      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding). 2026-09-10: production clone provisionally cut at 078a13a4 (record 05: clean tree, lock diff empty, ledger authenticated with custody replay at sequence 76, tokenizer pins match); fresh cut at H on 09-11 per checklist 13 §6.",
+      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding). 2026-09-10: production clone provisionally cut at 078a13a4 (record 05: clean tree, lock diff empty, ledger authenticated with custody replay at sequence 76, tokenizer pins match); fresh cut at H on 09-11 per checklist 13 §6. 2026-09-10: provisional clone re-cut at d84da72e (clean, lock diff empty, ledger authenticated with custody replay); the final cut waits for the transaction head.",
       "stop_card": null
     },
     "COLDGATE-HANDOFF-01": {
@@ -2501,6 +2533,15 @@
         {
           "evidence": null,
           "kind": "task",
+          "required": "Successor calibration acceptance issued for the live epoch, with fresh-clone bind-window and check passing at the D-138 transaction head",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ACCEPTANCE-EPOCH-25G83-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
           "required": "Post-watchdog rehearsal acceptance harvested",
           "scope": "start",
           "state": "pending",
@@ -2517,7 +2558,7 @@
       "priority": "p1_phase_gate",
       "rank": 159,
       "status": "blocked",
-      "status_note": "T38c 2026-09-08: plan draft landed dd27e53b9895ea19704d4280ea292f4cc164af57 (cherry-pick 6b7e2614). NEEDS_RULING remains: PLAN_ID/NIGHT_ROOT/T0/WINDOW_MAX_S only AFTER rehearsal acceptance; dry sample values are not authorized production values. Production clone readiness follows 99co + amendment. Agent lane is preparation only; actual collection requires zero agents. 2026-09-10: no supported short chain (packet 04); proposed inputs PLAN_ID d117-g2a-prefill-probe-20260912, NIGHT_ROOT /Users/edr/night-custody/d117-g2a-prefill-probe-20260912, t0 2026-09-12T02:56:00-07:00, WINDOW_MAX_S 13500, measurement root /Users/edr/JouleWise-measurement-v5-20260911-g2a at H = the handback commit (inventory row inside H); arm materials 11/12/13 on `feat/2026-09-10-g2a-handback-20260912`; Ed emailed 04:50 (1a08b223b02862e9), silence = full chain; ruling due after rehearsal acceptance.",
+      "status_note": "T38c 2026-09-08: plan draft landed dd27e53b9895ea19704d4280ea292f4cc164af57 (cherry-pick 6b7e2614). NEEDS_RULING remains: PLAN_ID/NIGHT_ROOT/T0/WINDOW_MAX_S only AFTER rehearsal acceptance; dry sample values are not authorized production values. Production clone readiness follows 99co + amendment. Agent lane is preparation only; actual collection requires zero agents. 2026-09-10: no supported short chain (packet 04); proposed inputs PLAN_ID d117-g2a-prefill-probe-20260912, NIGHT_ROOT /Users/edr/night-custody/d117-g2a-prefill-probe-20260912, t0 2026-09-12T02:56:00-07:00, WINDOW_MAX_S 13500, measurement root /Users/edr/JouleWise-measurement-v5-20260911-g2a at H = the handback commit (inventory row inside H); arm materials 11/12/13 on `feat/2026-09-10-g2a-handback-20260912`; Ed emailed 04:50 (1a08b223b02862e9), silence = full chain; ruling due after rehearsal acceptance. 2026-09-10: BLOCKED — the 09-12 02:56 arm is off; runbook 68 / checklist 13 arm steps superseded until the successor acceptance is issued (record 39).",
       "stop_card": null
     },
     "G2A-PREFLIGHT-ARGV-ASSERT-01": {
@@ -2696,7 +2737,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 178,
       "status": "queued",
-      "status_note": "2026-09-10: STAGED, not landed (reduce.py is a D-138 governed input); a rare near-boundary false refusal until then, not a G2-a blocker.",
+      "status_note": "2026-09-10: STAGED, not landed (reduce.py is a D-138 governed input); a rare near-boundary false refusal until then, not a G2-a blocker. 2026-09-10: rides the ACCEPTANCE-EPOCH-25G83-01 D-138 transaction.",
       "stop_card": null
     },
     "GATE-SENSIBILITY-SWEEP-01": {
@@ -3611,7 +3652,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open. 2026-09-10 07:00 PDT: pre-night dead-man observed standing down (record 30); item 5 ruled MET by cold gate 31 subject to the harvest predicate P1–P4 (checklist 13 §3a); items 4 and 6 await the 09-11 harvest.",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open. 2026-09-10 07:00 PDT: pre-night dead-man observed standing down (record 30); item 5 ruled MET by cold gate 31 subject to the harvest predicate P1–P4 (checklist 13 §3a); items 4 and 6 await the 09-11 harvest. 2026-09-10 08:10: the 09-11 activation still harvests and closes items 5/6 and retires the stub; no real plan follows it until ACCEPTANCE-EPOCH-25G83-01.",
       "stop_card": null
     },
     "NIGHT-STREAM-PATHS-01": {
