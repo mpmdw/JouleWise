@@ -222,3 +222,223 @@ are the two sites that change.
 fixture would have to mutate a bundle after finalization. The clause is small and
 fail-closed, but by the isolation rule an untested atomic term is `should_fix`,
 not a nit, and I am naming it rather than leaving it for a refuter to find.
+
+---
+
+# Fix round 1 (seat S4, on top of `a18cb812` = S4 `f31884d7` + S3's seam round)
+
+Every item of refuter report 81 addressed. No git state changed; write scope
+unchanged (`scripts/issue_calibration_acceptance_generation.py`,
+`tests/test_issue_calibration_acceptance_generation.py`,
+`tests/fixtures/epoch_bootstrap/**`). The statistics and the quantile the refuter
+verified byte-exact are untouched except for one strictly-additive change (the
+quantile now pins its own Decimal context); its outputs are unchanged, and the
+new independent route re-derives r6's df-16 pins as a regression.
+
+## B1 — triggers derived from the emitted row, never copied. FIXED.
+
+`prospective_rederivation.triggers` is now built by `rederivation_triggers(...)`
+(`:517`) around the emitted row's own `corpus_doubling_trigger`, which is the
+same five-name rule `_valid_acceptance_bound` (`:779-787`) demands; the
+protocol digest is recomputed by `protocol_sha256(PROTOCOL_ID)` rather than
+copied too. `rederivation_triggers` is the one home for the rule.
+
+Chasing B1 to the end found **four more shape defects that would each have
+blocked authentication on their own**, none of them reported, all now fixed and
+each killed by a cut:
+
+| # | defect | fix |
+|---|---|---|
+| B1a | `derivation_sha256` was a curated subset digest; the production definition is `_canonical_sha256(artifact minus derivation_sha256)` (`calibration_bracketing.py:660,764`), so no candidate could ever match | `derivation_sha256` now IS the production recipe; the curated seal moved to a second key, `derivation_input_sha256` (which is what SF3 asked for) |
+| B1b | no `backfill_candidate` block; the issued role requires one, and the validator recomputes `candidate_inventory` over the WHOLE prior set with one entry per admissible disposition **including the zeros** (`:869-884`) | emitted, truthfully labelled `candidate_not_issued`, inventory computed over `prior_observations` across `PRIOR_SET_DISPOSITIONS` |
+| B1c | `decision_ids` was `["D-079","D-102","D-125","D-126"]`; the validator demands exactly `["D-102","D-109"]` (`:762`) | emitted as the demanded pair; the D-079/D-125/D-126 provenance travels in `derivation_notes` and in the row's machine-checked `d125_ruling` |
+| B1d | `"quantum_s": str(PREFLIGHT_LEVEL_SCREEN_QUANTUM_S)` renders `"1E-15"`; the validator compares against the literal `"0.000000000000001"` | `_plain()` (`format(d, "f")`) on all three quanta/floor lexemes |
+
+Members are also emitted in `member_id` order now (`:958`), which the validator
+requires (`:832`).
+
+**The test that makes this class of defect visible**:
+`test_only_the_candidate_label_stops_the_candidate_authenticating`. It flips the
+three label fields (and registers the row and the id, as the D-138 transaction
+will) and asserts the production `_valid_acceptance_bound` **ADMITS** the result.
+So the refusal reason really is `candidate_not_issued` and nothing else — any
+future shape defect, copied trigger or wrong digest recipe surfaces here as a
+still-refusing artifact, which is exactly what the old "assert it is refused"
+test could not do.
+
+## B2 — one screen-rule name, unconditionally. FIXED.
+
+`D125_SCREEN_FLOOR_S`, `BRACKET_SCREEN_QUANTUM_S`,
+`PREFLIGHT_LEVEL_SCREEN_QUANTUM_S`, `SCREEN_RULE_FLOORED_RANGE_ENVELOPE` and
+`protocol_sha256`/`PROTOCOL_ID` are now imported from
+`joulewise.calibration_bracketing`; my restatements are deleted. The rule is named
+`floored_range_envelope_screen` unconditionally (`:871`) — the name is the
+pre-registered RULE, not which arm of the `max` won; naming it by the realized
+branch would make the registered rule a function of the data. The stale
+`screen_rule_registered_in_validator` flag and the `SEAM:` warning are removed.
+`test_range_bound_corpus_row_is_admitted_alongside_r6` and
+`test_floor_bound_corpus_row_is_admitted_alongside_r6` both assert the emitted
+row — with `d125_ruling`, `predecessor_ceiling_s` = r6's registered ceiling and
+`predecessor_acceptance_id` = r6's id — is ADMITTED by
+`_registered_generation_row_is_complete` alongside r6.
+
+**Where the list→tuple conversion lives (S3 delta 83 F2).** On the EMITTING side,
+in `generation_row_for_registry` (`:559`), with `GENERATION_ROW_TUPLE_FIELDS`
+naming the two fields. The JSON artifact serialises them as arrays either way;
+anything handing the row to S3's `isinstance(..., tuple)` fences — the future
+`_D102_GENERATION_DERIVATIONS` entry the D-138 transaction writes, and both B2
+tests — calls that function rather than re-deriving the conversion. The tests
+assert the converted fields ARE tuples, so a regression in the helper is caught.
+**Transaction seat: call `generation_row_for_registry(payload["registered_generation_row"])`;
+do not hand the JSON row to the registry directly.**
+
+## B3 — the realized df is proven, two independent ways, before issuance. FIXED.
+
+`build_quantile_proof(df)` (`:450`) runs before any prediction and refuses
+`quantile_proof_failed` on either bound:
+
+- **forward check** — `student_t_survival` evaluated AT the returned quantile
+  reproduces `1 − p`; residual bound `1e-30` (realized: ~1e-80).
+- **independent route** — `student_t_quantile_closed_form` (`:423`) inverts the
+  exact Abramowitz & Stegun **26.7.3 (odd df) / 26.7.4 (even df)** finite forms,
+  with `arctan` by Euler's series (reflected into `|x| ≤ 1`, or it crawls — that
+  cost me one debugging round) and **π by Machin's formula, computed**, not the
+  transcribed `_PI` the continued-fraction route uses. Bound ≥ 30 significant
+  digits; realized **56–57**. The two routes share no code, and because one
+  computes π and the other transcribes it, a mistyped digit in `_PI` now shows up
+  as a proof failure rather than as a wrong number.
+
+Recorded as `decimal_derivation.quantile_proof` (df, both probabilities, both
+quantiles, forward residuals and their bound, agreement digits and their bound,
+the closed-form method, the precision) and sealed. `test_realized_df_carries_a_two_route_quantile_proof`
+uses a 22-slot fixture (**df 21 — pinned by no test**) and asserts the record;
+`test_the_closed_form_route_reproduces_r6_and_both_parities` shows the
+independent route is independently right, not merely agreeing.
+
+## SF1 / SF2 / SF3 — all implemented and killed
+
+- **SF1**: `tamper_member_bundle()` rewrites one member's `manifest.json` after
+  finalization and re-commits; `test_a_manifest_edited_after_finalization_refuses`
+  asserts the printed reason. Cut F5 (the refuter's surviving X1) now dies.
+- **SF2** (addendum A-7): a `valid` row carrying the target epoch that belongs to
+  no registered session **refuses issuance** (`:831`), naming the offending
+  attempt ids. Fixture support: `build_derivation_ledger(second_session=...)`
+  writes a second, unregistered derivation session into the same ledger.
+  Note S3 independently enforces the same rule inside the validator
+  (`calibration_bracketing.py:917-927`); the issuer-side refusal fires earlier
+  and says which rows.
+- **SF3**: `derivation_input_sha256` now seals `identity_epoch`, the ledger
+  cutoff, `predecessor_acceptance_id` and `quantile_proof` alongside the member
+  lexemes, statistics, rounding rules, operatives, screen rule and `d125_ruling`.
+  `test_the_input_seal_covers_every_derivation_input` rewrites each of six inputs
+  and asserts the digest moves, and asserts prose does NOT move it.
+
+## Nits
+
+N1 — `student_t_quantile` pins `prec = DECIMAL_WORK_PRECISION` in its own
+`localcontext` (`:320`); `test_the_quantile_pins_its_own_precision` calls it at
+ambient prec 15 and still gets 20 correct places. N2 — `default_acceptance_id`
+(`:535`) derives the epoch segment from `identity_epoch["os_build"]` and refuses
+if absent. N3 — `TWO_DRAW_PREDICTION_RULE` copied verbatim from the r6 artifact
+("shortest round-tripping decimal"), asserted equal to r6's string by test
+because it is digest-bearing.
+
+## Cut table (fix round 1)
+
+One term per cut, one named test, `Ran 1 test` parsed, bytes restored and
+sha256-asserted after every cut, `PYTHONDONTWRITEBYTECODE=1` throughout.
+Harness `/tmp/s4_mutate2.py`; baseline = restored =
+`da8deb1189fbd88bcf03697251952017ab9372f3709f3f9ed3677e0784be8aa8`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| F1 | `rederivation_triggers(row["corpus_doubling_trigger"])` → the predecessor's copy | `test_emitted_triggers_are_derived_from_the_emitted_row` | Ran 1 | KILLED |
+| F2 | `screen_rule = SCREEN_RULE_FLOORED_RANGE_ENVELOPE` → `"range_equals_screen"` | `test_floor_bound_corpus_row_is_admitted_alongside_r6` | Ran 1 | KILLED |
+| F3 | `if residual > QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL:` → `if False:` | `test_a_failing_forward_check_refuses` | Ran 1 | KILLED |
+| F4 | `if digits < QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS:` → `if False:` | `test_a_disagreeing_independent_route_refuses` | Ran 1 | KILLED |
+| F5 | `for name in ("manifest.json", "instrument_evidence.json"):` → `for name in ():` | `test_a_manifest_edited_after_finalization_refuses` | Ran 1 | KILLED |
+| F6 | `if foreign:` → `if False:` | `test_a_valid_same_epoch_row_outside_the_registration_refuses` | Ran 1 | KILLED |
+| F7 | delete `"identity_epoch": payload["identity_epoch"],` from the seal | `test_the_input_seal_covers_every_derivation_input` | Ran 1 | KILLED |
+| F8 | `{os_build.lower()}` → literal `25g83` | `test_the_default_acceptance_id_names_the_realized_epoch` | Ran 1 | KILLED |
+| F9 | delete `context.prec = DECIMAL_WORK_PRECISION` in `student_t_quantile` | `test_the_quantile_pins_its_own_precision` | Ran 1 | KILLED |
+| F10 | inventory `sorted(PRIOR_SET_DISPOSITIONS)` → `("valid",)` | `test_only_the_candidate_label_stops_the_candidate_authenticating` | Ran 1 | KILLED |
+| F11 | `_plain(PREFLIGHT_LEVEL_SCREEN_QUANTUM_S)` → `str(...)` | same | Ran 1 | KILLED |
+| F12 | `decision_ids ["D-102","D-109"]` → the old four | same | Ran 1 | KILLED |
+| F13 | "shortest round-tripping decimal" → "shortest repr" | `test_the_two_draw_rule_string_matches_r6` | Ran 1 | KILLED |
+| F14 | production digest recipe → the curated seal | `test_the_artifact_digest_uses_the_production_recipe` | Ran 1 | KILLED |
+
+The seat's original eleven cuts are unchanged in intent; C8 (`screen = max(...)`)
+and C9 (`predecessor_ceiling_s` on the row) still hold, and the two tests they
+named were rewritten under B2 (F2 and the rebase test now carry them).
+
+## Runner tails
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation \
+    tests.test_calibration_bracketing tests.test_docs_freshness
+----------------------------------------------------------------------
+Ran 185 tests in 56.711s
+
+OK (skipped=1)
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts joulewise
+COMPILEALL_RC=0
+```
+
+`tests.test_issue_calibration_acceptance_generation` alone: `Ran 66 tests` OK.
+No full suite, no commit.
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/fixtures/epoch_bootstrap/build.py
+ M tests/test_issue_calibration_acceptance_generation.py
+
+$ git diff --stat
+ scripts/issue_calibration_acceptance_generation.py | 452 ++++++++++++++++++---
+ tests/fixtures/epoch_bootstrap/build.py            |  93 ++++-
+ ...test_issue_calibration_acceptance_generation.py | 329 +++++++++++++--
+ 3 files changed, 751 insertions(+), 123 deletions(-)
+```
+
+## Decisions made this round
+
+1. **Two digests, not one.** `derivation_sha256` must be the production recipe or
+   the artifact cannot authenticate; the curated input seal SF3 asked for is real
+   and useful but is a different invariant, so it is a second key,
+   `derivation_input_sha256`, sealed inside the first.
+2. **`decision_ids` follows the validator.** Losing the D-079/D-125/D-126
+   provenance from that field is acceptable because `d125_ruling` on the row is
+   machine-checked (S3 requires it on envelope rows) and `derivation_notes`
+   carries the rest — whereas a decision-id list the validator rejects would make
+   the artifact unusable.
+3. **`backfill_candidate` is emitted, labelled `candidate_not_issued`** with
+   `production_issuance_blocked: true`, so the candidate differs from an issued
+   artifact ONLY in its label fields. That is what makes the B1 test a real fence
+   rather than a tautology.
+4. **A-7 refused at the issuer, not merely relied on in the validator.** S3
+   enforces it too; issuance stops earlier and names the rows, and the two
+   enforcement points are independent.
+5. **Machin π for the proof route, transcribed `_PI` for the quantile route.**
+   Deliberate asymmetry: it turns the proof into a check on the constant.
+6. **Registration epoch resolved up front.** The target epoch is read from the
+   registration's rows (unanimity enforced) before the A-7 scan, so an empty
+   registration now refuses with `registration: its sessions hold no observations`
+   rather than reporting a corpus-size shortfall.
+
+## Still open for the next lens
+
+- **`source_directory` is the absolute custody locator.** The validator only
+  checks it is a string, and r6 stores a repo-relative path. For the real
+  transaction it should be relativised against the repo root; the candidate is
+  a desk artifact so it is not wrong today, but the D-138 transaction should not
+  inherit an absolute path into a committed config. Not fixed this round —
+  flagging rather than changing an emitted field under time pressure.
+- **The member sort (`:958`) has no isolating test**: the fixtures' slot names
+  (`d01…d20`) are already in order, so a cut to the sort survives. Building a
+  fixture with out-of-order attempt ids is the missing counterfactual.
+- **The envelope's predecessor arm remains inert for this generation** (noted in
+  the first round and unchanged): with r6 as predecessor, `S ≥ 0.010818 >
+  0.010164834757777545`, so `C = max(predecessor, Q99)` can only resolve to Q99.
