@@ -908,3 +908,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   head (`scripts/shard_tests.py --workers 4`) → PR(s) with twelve-row ledgers → derivation-night runbook → cold science gate before issuance.
   Screen-rule name judgment (record 82) and the pre-registration screen rule as cold gate 46's adopted default (record 80): Ed veto open.
   Ed's four written-yes items still open; no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~14:12 PDT (headless activation `96bfeca7`): ALL SIX SEATS FINAL — S1 36197c5a, S2 9558152e, S3 4c43089a, S4 4832dc75 (rounds
+  1–4; refuters 81/93; deltas 91/96 + bench), S5 c1655a32, S6 23f797be (rounds 4–5). Early sharded replay at integration 51565cee was RED (14 new
+  results, three clusters, records 94/98); root cause 97: all test/fixture-side (authoring fixture missing the production ledger fixture; v2 surface
+  guard line pins shifted +121; custody census rows for the issuer), zero production change. Integration `feat/2026-09-10-epoch-integration` =
+  **aea38b1a** (main + all seats + fixes + census rows). Fresh sharded replay at aea38b1a RUNNING (`JouleWise-wt-replay-2`, record 100); derivation-
+  night runbook draft RUNNING (record 99). NEXT: replay 2 green → PR from integration with the twelve-row ledger (terminal review + delta on the
+  PR head) → merge → clone at H → `check` dry run → NIGHT_HANDBACK for derivation night 1 (three nights × 12 slots) → cold science gate → D-138.
+  Open rulings for Ed (veto window): screen-rule name (82), pre-registration screen rule as CG46 default (80), isolation rule + operand-collapse
+  cuts (69/88); v2 surface guard re-keying (97) needs a ruling. Ed's four written-yes items still open; no directive issues. rehearsal-20260911
+  ARMED and untouched; exit on the 02:31 request.
