@@ -828,3 +828,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   churn + a launch email per relaunch, 21b). NEXT EXACT ACTION unchanged: at 03:00 PDT 2026-09-10 stop the monitor, run runbook 67 Block A →
   step 3b → Block B → record (step 8) with H = `57ddad20`, notice `1a086f4174733bfb`; if the census still shows the foreign sessions, wait
   (re-census) until 06:30 and, if the window is missed, author a NEW plan + NEW notice (never reuse); never install after 07:00.
+- UPDATE 2026-09-10 ~04:12 PDT (headless activation `7ce7af2a`): **rehearsal-20260911 ARMED.** Both interactive sessions closed at
+  04:09 PDT (FOREIGN_CLEAR); runbook 67 Block A rc=0 (attempt 1 failed closed on the census parser reading this activation's own
+  multi-line Monitor — finding, no write happened), step 3b clean, Block B rc=0: install 04:10:57–04:10:58 PDT from
+  `/private/tmp/joulewise-rehearsal-20260911-checkout` at H = `57ddad20`; frozen triple (`rehearsal-20260911`, that checkout, H);
+  custody `/Users/edr/night-custody/rehearsal-20260911` with `night/` EMPTY at install; agents `com.joulewise.night` (02:56) and
+  `com.joulewise.night.deadman` (07:00) loaded; powermode 0 on both profiles, AC attached (battery 80 %, not charging — observed),
+  timer 3.3× slack (recorded, not gated). Arm record 115 + evidence dir. NEXT EXACT ACTION: nothing until the 07:00 PDT 09-10 dead-man
+  firing (expect the stand-down line in `night.log`, nothing in `night/`); t0 2026-09-11 02:56 PDT; harvest after 03:16 PDT 09-11 and
+  outside the 02:45–03:30 belt per record 115 §Harvest pointer; do not move the checkout; never re-arm this plan on the same signature.
+  Claude weekly limit resets 16:00 PDT 09-10 — desk work waits for it. This activation exits now with no own background work.

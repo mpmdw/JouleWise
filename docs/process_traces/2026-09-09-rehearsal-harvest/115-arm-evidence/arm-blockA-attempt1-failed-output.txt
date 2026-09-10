@@ -1,0 +1,24 @@
+arm clock: 1789038582.3970351 2026-09-10T04:09:42.397035-07:00
+launchctl list | grep joulewise:
+-	0	com.joulewise.magistrate
+pgrep -fl "codex|claude|t3" rc= 0
+18831 node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+18848 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+26102 /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1789012346676-ptqow6.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \builtin unalias -- 'unsetenv'; \builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'last=0; prev=""
+while true; do
+  now=$(date +%s); s=""
+  [ -e /Users/edr/night-custody/magistrate/standdown.request ] && s="$s STANDDOWN"
+  [ -e /Users/edr/night-custody/magistrate/STOP ] && s="$s STOP"
+  ls /Users/edr/night-custody/*/night_plan.json >/dev/null 2>&1 && s="$s PLAN_PRESENT"
+  f=$(pgrep -f '"'"'^claude$'"'"' 2>/dev/null | tr '"'"'\n'"'"' '"'"','"'"')
+  [ -z "$f" ] && s="$s FOREIGN_CLEAR" || s="$s foreign_interactive=[$f]"
+  if [ "$s" != "$prev" ]; then echo "CHANGE $(date '"'"'+%H:%M:%S'"'"')$s"; prev="$s"; last=$now
+  elif [ $((now-last)) -ge 540 ]; then echo "tick $(date '"'"'+%H:%M:%S'"'"')$s"; last=$now; fi
+  if [ "$now" -ge 1789045500 ]; then echo "DEADLINE_0605 $(date '"'"'+%H:%M:%S'"'"')$s"; exit 0; fi
+  sleep 20
+done' < /dev/null && pwd -P >| /tmp/claude-d2d4-cwd
+Traceback (most recent call last):
+  File "/private/tmp/joulewise-rehearsal-20260911-staging/preconditions.py", line 37, in <module>
+    hits = [int(line.split(None, 1)[0]) for line in probe.stdout.splitlines() if line.strip()]
+            ~~~^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: invalid literal for int() with base 10: 'while'

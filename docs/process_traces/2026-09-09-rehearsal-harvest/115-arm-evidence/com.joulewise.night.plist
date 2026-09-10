@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joulewise.night</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>/private/tmp/joulewise-rehearsal-20260911-checkout/scripts/run_night.py</string>
+    <string>run</string>
+    <string>--plan</string>
+    <string>/Users/edr/night-custody/rehearsal-20260911/night_plan.json</string>
+    <string>--courier-bin</string>
+    <string>/Users/edr/.local/share/claude/versions/2.1.267</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/private/tmp/joulewise-rehearsal-20260911-checkout</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>56</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/edr/night-custody/rehearsal-20260911/night/launchd.night.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/edr/night-custody/rehearsal-20260911/night/launchd.night.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
