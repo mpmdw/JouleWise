@@ -90,25 +90,59 @@ none may be restated as an empirically proved universal instrument property.
   sustained mixed-load regime; until that variant is validated, T3 remains an
   explicit limitation.
 
-The writer's `--derivation-only` mode captures observations solely to derive a
-future acceptance. It authenticates the active issued artifact's exact bytes,
-protocol digest, and estimator-code digest, but **requires the live identity
-epoch to differ** from that artifact's six-field epoch (OS build, hardware
-model, power policy, sampling interval, estimator revision, pulse protocol).
-A matching epoch refuses, as does use without a derivation-kind session slot
-(one ordered reserved attempt; see [the ledger contract](calibration_ledger.md#derivation-sessions-and-epoch-bootstrap)).
-Both hashed `instrument_evidence.json` and `manifest.json` record
-`derivation_only: true` and `screen_basis` containing the prior acceptance ID,
-artifact SHA-256, `preflight_level_screen_s`, and epoch. The prior artifact's
-level screen and whether the bound exceeds it are diagnostic only: the active
-comparison is disabled (`preflight_systematic_screen_s = None`), and every
-finalization path, including recovery, records only `valid` or
-`ordinary-invalid`, never `systematic-invalid`. All physics and evidence gates
-remain fail-closed. The existing `DIAGNOSTIC_NO_PACK` class requires a
-registration and exempts only C2; C1 and C3–C5 still apply. This mode licenses
-nothing: no G2-a window, floor, claim, or bracket endpoint, even after a
-successor names the observations. D-102 clause 2's PRIOR-artifact judgment of
-trigger observations is unchanged; no observation judges itself.
+## Derivation-only capture for a new identity epoch
+
+The writer's `--derivation-only` mode exists for one situation. The machine's
+**identity epoch** — the six-field vector the issued acceptance binds: OS
+build, hardware model, power policy, sampling interval, estimator revision,
+and pulse protocol — has changed, so that acceptance is stale by design and an
+ordinary capture refuses before touching hardware. New-epoch observations must
+nevertheless be captured before any acceptance of that epoch can be derived
+from them. A derivation-only capture is that observation: taken to build a
+future acceptance, never to license a measurement.
+
+What the mode still authenticates is unchanged: the active issued artifact's
+exact bytes, its pulse-protocol digest, and its estimator-code digest. What it
+inverts is one test. It REQUIRES the live identity epoch to differ from the
+artifact's epoch, and refuses when they match — a matching epoch means an
+ordinary capture is possible, so derivation-only would be a way around
+ordinary judgment. It also refuses without a derivation-kind session slot; a
+standalone attempt and a bracket-kind slot are both rejected. Sessions, slots,
+and the derivation kind are defined in
+[the ledger contract](calibration_ledger.md#derivation-sessions-and-epoch-bootstrap).
+
+Provenance is recorded in hashed bytes, not in prose. Both
+`instrument_evidence.json` and `manifest.json` carry `derivation_only: true`
+and a `screen_basis` object naming the prior acceptance's ID, its file
+SHA-256, its `preflight_level_screen_s`, and its epoch, so every bootstrap row
+states for itself which artifact it was captured under.
+
+The prior artifact's level screen is not applied to the capture. The writer
+sets `preflight_systematic_screen_s = None` and skips the comparison, so the
+ledger disposition can only be `valid` or `ordinary-invalid`. The
+`systematic-invalid` disposition means "exceeds the level screen of this
+epoch's acceptance", and no acceptance of this epoch exists yet, so it cannot
+arise here; excluding a valid new-epoch capture for exceeding a retired
+epoch's threshold would fit the new screen to the old one. Whether the bound
+did exceed the prior artifact's level screen is recorded in the hashed
+evidence as a diagnostic. It feeds the pre-registered screen-challenge rule,
+which halts issuance for a written ruling instead of editing corpus
+membership. Every finalization path carries this classification rule,
+including recovery finalization after a crash: for a derivation-kind session
+the recovery path passes no screen either.
+
+Every physics and evidence gate stays fail-closed. The `DIAGNOSTIC_NO_PACK`
+night class still requires a registration path and marks only condition C2,
+the verified pack ARM ceremony, `NOT_APPLICABLE` (`no_pack_by_design`), since
+such a night arms no measurement pack; C1 (purpose-bound transaction
+authorization), C3 (quiet-machine census), C4 (boot and clock validity), and
+C5 (the no-retry bound) must all still pass.
+
+The mode licenses nothing. No measurement window — G2-a or any other — no
+floor, no claim, and no bracket endpoint, before or after a successor
+acceptance names these observations. D-102 clause 2 is unchanged: a trigger
+observation is judged under the PRIOR artifact, never under a threshold that
+incorporates it, so no observation judges itself.
 
 ## V2/v3 capture-time freshness and authentication
 
