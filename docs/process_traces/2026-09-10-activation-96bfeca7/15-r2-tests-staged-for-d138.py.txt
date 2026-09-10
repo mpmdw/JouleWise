@@ -1,0 +1,74 @@
+# R2 regression tests extracted from tests/test_gate_sensibility_rounding.py (staged for the D-138 re-freeze)
+
+    def test_r2_admits_one_endpoint_ulp_at_both_shifted_edges(self):
+        """The later coverage gate must honor the existing tail gate's one ULP."""
+        for edge in ("left", "right"):
+            with self.subTest(edge=edge):
+                contributions, bound_s = self._contributions(edge, math.ulp(EPOCH_S))
+                curve, windows = contributions[0]
+                window = windows[0]
+                # Explicitly demonstrate the old predicate's rounding-only refusal.
+                old_ok = (curve[0].support_start_s + bound_s <= window.start_s
+                          and curve[-1].support_end_s - bound_s >= window.end_s)
+                self.assertFalse(old_ok)
+                self.assertTrue(_anchor_coverage_ok(contributions, bound_s))
+                self.assertIsNotNone(_anchor_shift_envelope(contributions, bound_s))
+
+    def test_r2_tail_gate_and_later_coverage_agree_on_epoch_endpoint(self):
+        """Both actual reducer gates admit one ULP and refuse two or 100 ms."""
+        window = Window(EPOCH_S - 1.0, 1789000000.0001)
+        bound_s = 0.009724
+        required_end_s = math.fsum((window.end_s, bound_s))
+        for deficit_s, expected in ((math.ulp(EPOCH_S), True),
+                                    (2 * math.ulp(EPOCH_S), False), (0.1, False)):
+            with self.subTest(deficit_s=deficit_s), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "raw").mkdir()
+                (root / "raw/powermetrics.plist").write_bytes(b"synthetic parser input")
+                reader = SimpleNamespace(path=root, measured_window=lambda: window)
+                metadata = {
+                    "device": {"telemetry": "powermetrics"},
+                    "uncertainty_evidence": {"clock_anchor": {"clock_stamps": {}}},
+                    "instrument_calibration": {},
+                }
+                derivation = {
+                    "status": "bounded",
+                    "first_sample_end_point_epoch_s": required_end_s - deficit_s,
+                    "effective_clock_anchor_bound_s": bound_s,
+                }
+                # Supply a pre-resolved synthetic anchor; curve construction and
+                # both endpoint gates execute unchanged, with no hardware claim.
+                with (
+                    patch("joulewise.adapters.powermetrics.parse_powermetrics_records",
+                          return_value=[SimpleNamespace(elapsed_ns=2_000_000_000,
+                                                        combined_power_w=10.0)]),
+                    patch("joulewise.adapters.powermetrics.anchor_records_from_powermetrics",
+                          return_value=[]),
+                    patch("joulewise.reduce.resolve_anchor_reconstructor",
+                          return_value=lambda **kwargs: derivation),
+                    patch("joulewise.reduce._verify_instrument_calibration",
+                          return_value=(0.0, None)),
+                ):
+                    context = _derive_anchor_context(reader, metadata, reducer_version="0.5.2")
+                self.assertFalse(context.unresolved)
+                self.assertEqual(context.detail, None if expected else
+                                 "post_window_trace_tail_shorter_than_anchor_bound")
+                self.assertEqual(_anchor_coverage_ok([(context.curve, [window])], bound_s),
+                                 expected)
+
+    def test_r2_refuses_two_endpoint_ulps_at_either_edge(self):
+        for edge in ("left", "right"):
+            with self.subTest(edge=edge):
+                contributions, bound_s = self._contributions(edge, 2 * math.ulp(EPOCH_S))
+                self.assertFalse(_anchor_coverage_ok(contributions, bound_s))
+                self.assertIsNone(_anchor_shift_envelope(contributions, bound_s))
+
+    def test_r2_refuses_one_missing_sample_at_either_edge(self):
+        """No 100 ms interval may be extrapolated under an admissible shift."""
+        for edge in ("left", "right"):
+            with self.subTest(edge=edge):
+                contributions, bound_s = self._contributions(edge, 0.1)
+                self.assertFalse(_anchor_coverage_ok(contributions, bound_s))
+                self.assertIsNone(_anchor_shift_envelope(contributions, bound_s))
+
+

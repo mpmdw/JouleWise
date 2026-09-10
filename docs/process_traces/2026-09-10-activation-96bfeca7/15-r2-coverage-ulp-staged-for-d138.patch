@@ -1,0 +1,33 @@
+diff --git a/docs/contracts/run_bundle_layout.md b/docs/contracts/run_bundle_layout.md
+index cd86cd74..b86ecaa2 100644
+--- a/docs/contracts/run_bundle_layout.md
++++ b/docs/contracts/run_bundle_layout.md
+@@ -522,7 +522,9 @@ nonpositive/nonfinite elapsed, energy-versus-power*duration inconsistency,
+ no native second rollover before the workload, empty intersection,
+ wall-minus-monotonic range > 5 ms or step, first-parse lag > 0.25 s,
+ missing edge coverage under any admissible shift) is the
+-`clock_anchor_unresolved` claim barrier - never a fallback. The adapter's
++`clock_anchor_unresolved` claim barrier - never a fallback. Current reducer
++endpoint coverage uses the same one-ULP arithmetic allowance at both edges
++under every admissible shift, without extrapolating a missing interval. The adapter's
+ `start_sampling` refuses to return before one native whole-second rollover,
+ and measured-run `rich_telemetry.jsonl` timestamps move with the corrected
+ anchor. The retained stop prefix keeps a record that brackets the stop marker
+diff --git a/joulewise/reduce.py b/joulewise/reduce.py
+index 82449d58..c99a3835 100644
+--- a/joulewise/reduce.py
++++ b/joulewise/reduce.py
+@@ -1983,9 +1983,11 @@ def _anchor_coverage_ok(
+             trace_start_s = curve[0].t
+             trace_end_s = curve[-1].t
+         for window in windows:
+-            if trace_start_s + bound_s > window.start_s:
++            required_start_s = math.fsum((window.start_s, -bound_s))
++            required_end_s = math.fsum((window.end_s, bound_s))
++            if trace_start_s > required_start_s + math.ulp(required_start_s):
+                 return False
+-            if trace_end_s - bound_s < window.end_s:
++            if trace_end_s < required_end_s - math.ulp(required_end_s):
+                 return False
+     return True
+ 
