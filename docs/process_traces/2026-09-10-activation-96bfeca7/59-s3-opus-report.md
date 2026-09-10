@@ -244,3 +244,119 @@ the refuters can overturn them cheaply.
 
 Also recorded, not blocking: the ruling's line numbers are from `origin/main` before this diff; the
 `:562` per-row epoch check is at `:566` on `7c4366ec` (the other cited offsets match).
+
+---
+
+# Fix round 1 (contract refuter: MERGEABLE AFTER FIXES)
+
+Applied on top of `3f498026` in the same worktree; the diff is again left uncommitted
+(`git status --short` = the same two files). F2 (integration test with a real derivation session) and
+F4 (the contract's fifth binding) were routed elsewhere and are not touched here.
+
+## F1 — `registration_session_ids` must name DERIVATION-kind sessions
+
+`_prior_set_matches_import_cutoff_prefix` now resolves every id in
+`generation["registration_session_ids"]` through `ledger_snapshot.bracket_session_by_id` and refuses
+unless the ledger holds that session AND its kind is `derivation`. A session the ledger does not hold
+refuses; a session whose kind field is missing reads as `bracket` through the same defensive reader
+and refuses.
+
+The kind reader was split so both callers share it: `_session_record_kind(session)` (the defensive
+`getattr` with the `bracket` default) is now the one home, and `_observation_session_kind` delegates to
+it after resolving the row's session.
+
+Scope note for the refuters: the check is on the REGISTRATION, not on every live prefix row. Requiring
+`derivation` kind of *every* live row in an `import_plus_live` prefix would also refuse the ordinary
+claim-window captures that sit on the ledger between sequence 76 and the derivation nights, which would
+make the successor unissuable. The named defect — "`registration_session_ids` must name derivation-kind
+sessions" — is closed exactly, and the per-row `session_id` binding added in the first round already
+forces a registration row to be one of those sessions.
+
+New: `test_registration_must_name_derivation_kind_sessions` (admit: derivation kind; refuse: `bracket`
+kind, missing kind, session absent from the ledger). `_prefix_snapshot` gained a `session_kind`
+parameter and now builds the session records the prior set names.
+
+## F3 — `inherited_ceiling_s` is checked, not trusted
+
+`_registered_generation_row_is_complete` now requires, by Decimal equality,
+`inherited_ceiling_s == operatives["maximum_budgetable_drift_s"] == prediction_99_two_draw_s`, and
+requires the operative screen to sit STRICTLY below that ceiling
+(`bracket_screen_s < maximum_budgetable_drift_s`).
+
+**The refuter was right that the field was unvalidated, and it was carrying a real defect**: my own
+`_live_prefix_generation` fixture registered `inherited_ceiling_s` `0.010164834757777545` (r6's number,
+copied) against its own `maximum_budgetable_drift_s` `0.009000`, and the code accepted it. The fixture
+now registers `0.009000` and the guard would refuse the old value.
+
+Reading recorded for overturn: I applied the strict `screen < ceiling` inequality to EVERY registered
+row, not only to rows registering an envelope screen rule. All three current rows satisfy it
+(n19 `0.010818 < 0.012093166090593858`; n17 `0.009724 < 0.010164834757777545`; the test fixture
+`0.006000 < 0.009000`), it is fail-closed, and it is the same relation `screen + excess == maximum` at
+the bottom of `_valid_acceptance_bound` already implies for a non-negative excess. Narrow it to
+envelope-rule rows if that was the intent.
+
+New: `test_generation_row_refuses_a_desynchronised_inherited_ceiling` (each of the three copies moved
+in turn) and `test_generation_row_refuses_a_screen_at_or_above_its_ceiling` (admit at a ceiling one
+millisecond above the screen, refuse at a ceiling equal to it).
+
+## F5 — the `cutoff_sequence == 2 x prior_observation_count` relation
+
+Restored inside `_registered_generation_row_is_complete`, for `import_only` generations only: one
+reservation row plus one finalization row per imported observation. It is deliberately NOT imposed on a
+live prefix, whose sessions add open and abort control rows the observation count does not predict —
+`test_import_only_cutoff_sequence_is_two_rows_per_observation` asserts both halves (an import-only row
+at 77/38 refuses; a live row three control rows past twice its count admits).
+
+## F6 / F9 — comments
+
+- The stale citation `(:1339-1341)` is replaced by a description of the actual site ("the `return ()`
+  on a `None` candidate at the bottom of this loop"), which cannot drift with line numbers.
+- `affine_clock_fit_empty` is now glossed at its first use: the anchor-v3 replay found NO feasible
+  affine wall-versus-monotonic clock fit for that capture, so no bound can be derived from it at all,
+  and the exclusion turns on that replay outcome rather than on the value produced.
+- The ephemeral seat-role names are gone: "seat S2 stamps" became "stamped on the session's open
+  receipt by the ledger writer", and the two "seat S4's issuer" references became the mechanism
+  ("the issuer that derives the successor reads it from here", "not implemented in this module").
+
+## Mutation sweep, re-run in full
+
+20 mutations, **20/20 KILLED** (`/tmp/s3_mutations.py`, byte-identical restoration asserted at exit:
+`restored: True`). The four new entries:
+
+| Mutation (production call site) | Naming test | rc |
+|---|---|---|
+| registration derivation-kind check deleted (`_prior_set_matches_import_cutoff_prefix`) | `test_registration_must_name_derivation_kind_sessions` | 1 |
+| `ceiling != drift or drift != prediction` deleted (`_registered_generation_row_is_complete`) | `test_generation_row_refuses_a_desynchronised_inherited_ceiling` | 1 |
+| `not screen < drift` deleted | `test_generation_row_refuses_a_screen_at_or_above_its_ceiling` | 1 |
+| the 2-rows-per-observation relation deleted | `test_import_only_cutoff_sequence_is_two_rows_per_observation` | 1 |
+
+**Three first-round counterfactuals were masked by the new upstream checks and had to be re-cut** —
+the same failure mode the first round's screen-rule survivor showed, and worth recording as a pattern:
+adding a fence upstream silently blunts every counterfactual that reached the old fence through it.
+
+1. `test_registered_cutoff_sequence_is_read_from_the_row_not_a_literal` moved `cutoff_sequence` alone,
+   which the new F5 relation now refuses before the artifact comparison is reached. It now moves
+   `cutoff_sequence` and `prior_observation_count` together (80/40), keeping the row internally
+   consistent so only the comparison against the ARTIFACT can refuse.
+2. The `screen < ceiling` counterfactual first changed the screen in the ROW only; the artifact's own
+   `ratified_operatives` then disagreed and refused downstream. It now retunes the row and the artifact
+   to the same ceiling together, so the strict inequality is the only clause left.
+3. The F5 counterfactual first used the r6 artifact, whose 38 rows and sequence 76 cannot violate the
+   relation without also violating the row-versus-artifact comparison. It now uses the synthetic
+   import-only artifact with both sides moved to 77.
+
+## Test rcs (verbatim, rc captured in `RC`)
+
+```
+python3 -m unittest tests.test_calibration_bracketing tests.test_calibration_live_three_window \
+    tests.test_paper_first_use_ledger tests.test_floor_mint_pinsets_schema tests.test_docs_freshness
+FIXROUND1_RC=0 :: Ran 140 tests in 4.837s  OK (skipped=4)
+
+python3 -m compileall -q joulewise tests   rc=0
+python3 scripts/gen_state.py --check       rc=0
+```
+
+`tests.test_calibration_bracketing` is now 74 tests (22 in
+`GenerationKeyedIssuanceValidationTests`). The byte-identical sweep over every artifact under
+`configs/calibration/` and the genesis fixture still passes unchanged, which is the fence that matters:
+none of these four fixes moved an issued byte.

@@ -213,3 +213,120 @@ the lieutenant rather than acted on:
   Step-0 runs from canonical, so the proposed wiring is fine; anyone running the watch
   from a worktree must pass `--ledger`/`--head-pin` explicitly. Worth one sentence in
   whatever text proposes step-0 to Ed.
+
+---
+
+# Fix round 1 (Claude Opus, seat S5)
+
+Applied on top of `ae4a5ef9` in the same worktree. The six required fixes plus both
+optional nits, and nothing else. No commit, push, checkout, stash, or reset; the diff is
+left in the worktree (`git status --short`: the chain and the test module modified; the
+issuer script is unchanged this round). WRITE_SCOPE unchanged and honoured.
+
+## Verification (verbatim)
+
+```
+$ python3 -m unittest tests.test_issue_calibration_acceptance_generation tests.test_docs_freshness
+..........................................................
+----------------------------------------------------------------------
+Ran 58 tests in 28.752s
+
+OK
+UNITTEST_RC=0
+
+$ zsh -n scripts/night_chains/calibration_derivation_only.zsh
+ZSH_RC=0
+```
+
+27 seat tests (was 25) + 31 docs-freshness = 58. `git diff --stat` for this round:
+2 files, 82 insertions, 14 deletions.
+
+## The six fixes
+
+**F-1 (BLOCKER) — reservation and preflight moved before the settle.**
+`scripts/night_chains/calibration_derivation_only.zsh:122-127` (order comment citing
+`SHAKEDOWN-G2-RUNSHEET.md:509-536`), `:127` `preflight_inputs`, `:129-144` the
+reservation, `:145` `session_open`, `:146-147` `chain_start`, `:152` `settle`,
+`:153` `settle_complete`. The night is now preflight → reserve → `session_open` →
+`chain_start` → ONE settle → captures, matching the pinned G2-a chain
+(`reserve … / cd / echo g2a_chain_start / settle / calibrate_slot`), so the
+pre-registration's "one 600 s settle after the last operator action" is literally true:
+the last machine action before the settle is the reservation, and slot d01's approach is
+now identical to d02…d12's.
+Regression: `tests/test_issue_calibration_acceptance_generation.py:373-375` asserts the
+reservation is `calls[0]` and precedes the 600 s settle in call order;
+`:397` and the operator-log test at `:388-396` pin the new transition order.
+**Report item O-1 is RESOLVED** — the open question it raised (d01 preceded by the
+reservation rather than by idle) no longer exists, because the reservation now happens
+before the settle rather than after it.
+
+**F-2 — regression that kills deletion of the post-wait completability guard.**
+`tests/test_issue_calibration_acceptance_generation.py:434-451`,
+`test_overrunning_capture_stops_the_next_slot_after_the_cadence_wait`, driving
+`run_chain(end=1700, capture=700)`. A 700 s capture overruns the 600 s cadence, so d02's
+turn arrives with the clock already at 1300: the PRE-wait check passes (`next_start`
+1200 + 480 ≤ 1700) and only the POST-wait check at
+`calibration_derivation_only.zsh:171-176` sees 1300 + 480 > 1700.
+**Mutation observation:** deleting that post-wait block (production call site
+`calibration_derivation_only.zsh` slot loop, after the cadence wait) and re-running
+`DerivationChainSkeletonTests` gives `Ran 10 tests … FAILED (failures=1)` — the single
+failure is `test_overrunning_capture_stops_the_next_slot_after_the_cadence_wait`. The
+refuter's finding is confirmed exactly: before this test the deletion survived every
+other test; now it is uniquely killed. Chain restored and re-verified (`zsh -n` rc 0).
+
+**F-3 — file-input preflight before any window time.**
+`calibration_derivation_only.zsh:108-120` `preflight_inputs()`, called at `:127` before
+the reservation and the settle. It `test -f`s all five file inputs — `$PLAN`,
+`$IDENTITY_EPOCH_JSON`, `$T1_BINDINGS_JSON`, `$CALIBRATION_LEDGER`, `$LEDGER_HEAD_PIN` —
+and on the first absent one prints the named refusal
+`derivation_chain_input_missing: <path>` to stderr (`:116`) and exits 66 (EX_NOINPUT,
+distinct from the 64 the declaration checks use).
+Regression: `tests/…:397-406`, subtested over each of the five inputs, asserting rc 66,
+the named reason, the offending path, and — the load-bearing part — an empty call list
+and an empty operator log, i.e. no reservation and no settle were reached.
+
+**F-4 — all three timing knobs logged at `chain_start`; `SETTLE_S` guarded.**
+`calibration_derivation_only.zsh:146-147` logs
+`chain_start session=… window=… slots=… settle_s=… slot_cadence_s=… slot_capture_budget_s=…`,
+so a night's own log states the cadence it actually ran rather than the one a reader
+assumes from the defaults. `:76` now reads
+`if (( SLOT_COUNT < 1 || SLOT_CADENCE_S < 1 || SETTLE_S < 1 ))`, with the message at `:77`
+updated to name all three. Regression: the exact `chain_start` line is asserted verbatim
+in `tests/…:388-396`.
+
+**F-5 — O-4 corrected.** The original O-4 said anyone running the watch from a worktree
+"must pass `--ledger`/`--head-pin` explicitly". That is WRONG and is withdrawn.
+Correction: passing `--ledger`/`--head-pin` from another checkout FAILS with
+`calibration_ledger_head_uncommitted`, because `REPO_ROOT` is hardcoded in the loader and
+the committed-pin byte source is read from that repo, not from the supplied paths; and
+`runs/` is gitignored, so no clone or linked worktree has the ledger at all. The upshot:
+**the T1 half of the desk watch works only from the canonical checkout.** Step-0 runs
+from canonical, so the proposed wiring is unaffected — but the "run it anywhere with
+flags" workaround does not exist. The general fix is a `--repo-root` flag on the watch
+(and a loader that honours it); it is deliberately NOT added in this round and is
+recorded as a follow-up for whoever lands S4, since it touches
+`joulewise/calibration_ledger.py`, outside this seat's WRITE_SCOPE.
+
+**F-6 — writer `--slot` generalization named in the unlanded-surface header.**
+`calibration_derivation_only.zsh:25-27`: "today the writer's `--slot` is
+`choices=("pre","post")` and REJECTS every `d01..dNN` name; seat S2's declared slot list
+generalizes it, and no slot of this chain runs until it lands." This sits with the
+existing `--session-kind`/`--slot-count`/`--derivation-only` entries, so the header now
+enumerates every flag the chain writes that the tree does not yet accept.
+
+## Optional nits (both applied)
+
+**F-7** — `calibration_derivation_only.zsh:82` now uses `/bin/mkdir -p`, consistent with
+the absolute `SLEEP`/`DATE`/`PY` bindings; nothing in the chain resolves through `PATH`.
+
+**F-8** — `calibration_derivation_only.zsh:18-20`: "This file is HAND-WRITTEN and is NOT
+a generated region of `scripts/gen_g2_phase_d.py`; whether the pinned night chain is
+generated from a runbook section instead is the lead's call at the integration replay."
+Stated as a note, with the decision left where the coordinator put it.
+
+## Standing open items after this round
+
+O-1 RESOLVED (F-1). O-4 CORRECTED and narrowed to a `--repo-root` follow-up (F-5).
+O-2 (writer `--arm-countdown-s` / `--sleep-display-before-capture` parity with the r6
+collection) and O-3 (unlanded S1/S2 flags, now including `--slot dNN` per F-6) stand
+unchanged for the integration replay.

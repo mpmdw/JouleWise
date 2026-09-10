@@ -179,3 +179,154 @@ references across `docs/**/*.md`) all pass unmodified. No edit made.
    slots per night; seat S2's declared-slot list is what enforces it. If S2
    lands a different slot-list shape, the bracketed `[SEQ]`/`[DIGEST]` fill
    step is the last chance to reconcile.
+
+---
+
+## Fix round 1 (contract refuter: MERGEABLE AFTER FIXES)
+
+Applied on top of `3c60f0ec` in the same worktree; nothing committed. All six
+required fixes applied, plus two of the three optional nits. Line numbers are
+post-fix.
+
+1. **Status lines on both new contract sections, following the `Status:`
+   convention at `docs/contracts/pack_night_go_receipt.md:3`.**
+   - `docs/contracts/calibration_ledger.md:19-26` — "Ruled by cold gate 46 and
+     its dated addendum 11 (2026-09-10); NOT YET LANDED", naming seats S1-S4
+     and stating what the shipped code actually does today (`bracket`-kind
+     sessions only; the import-only prefix fence for every generation). The
+     generation-keyed clauses live in a different section, so
+     `calibration_ledger.md:155-157` carries an inline "(ruled 2026-09-10, not
+     yet landed; see ...)" pointing back to it.
+   - `docs/contracts/powermetrics_fiducial.md:95-99` — same status, naming
+     seat S1 and seat S2's session interface, and stating that no shipped
+     writer accepts the flag and no shipped ledger offers the slot.
+   - **Cutoff drift fixed:** `calibration_ledger.md:149-152` now says the
+     prior set must equal the prefix "at the cutoff the artifact itself
+     declares in `ledger_cutoff`"; `:167-172` says the two registered numbers
+     (`prior_observation_count`, `cutoff_sequence`) are EXPECTED values that
+     the artifact's declaration must agree with, not the cutoff itself. The
+     same drift at `:383-385` is corrected to "declares a `ledger_cutoff` at
+     the authenticated head after its last derivation row".
+2. **Degrees of freedom** — `configs/calibration/preregistration_d079_epoch_25g83_rev1.md:129-132`.
+   "proven for both df 18 and df 19" is replaced by the range the schedule
+   actually produces: retained n from 19 (the required floor) to 36 (all
+   declared slots retained), so df = n-1 runs 18 to 35; the quantile
+   implementation's proof for the REALIZED df is computed and recorded before
+   issuance, and no corpus issues on a df absent from that record.
+3. **Named halt for `S >= C`** — pre-registration `:139-142`, its own clause in
+   Analysis with the same shape as the screen challenge: if the new Q99 is at
+   or below the `0.010818` screen floor, the inherited ceiling
+   `0.010164834757777545` cannot rescue `C > S`, D-126 clause 3's
+   `successor_screen_exceeds_budget_ceiling` fires, the corpus is not issued,
+   and Ed rules in writing before any further capture. Explicitly: the refusal
+   is never cured by lowering S.
+4. **`anchor-v3 replay`, `b_fiducial_s`, `DIAGNOSTIC_NO_PACK` built at first
+   use** — added to the Terms block at pre-registration `:49-58`, ahead of the
+   Membership clause that uses them (replay resolution and the no-exclusion-on-
+   `b_fiducial_s` rule) and of the Sample clause that names the night class.
+   `DIAGNOSTIC_NO_PACK` is glossed as the class for a night running no
+   measurement pack: registration path required, only the pack ARM condition
+   (C2) not-applicable, the other four still required to pass.
+5. **"Level screen" built at first use** — `powermetrics_fiducial.md:120-125`,
+   inline at the first mention (`preflight_level_screen_s` inside
+   `screen_basis`): "the **level screen**, that acceptance's corpus maximum,
+   the threshold one observation's bound is judged against".
+6. **"Bootstrap" disambiguated in `calibration_ledger.md`.** The word now
+   means only the historical-import CLI sense it already had (`:197`, `:232`,
+   `:251`, `:281`, `### Bootstrap CLI` at `:390`, and the function name
+   `bootstrap_historical_import`). Every new-section use is renamed: heading
+   `:17` "Derivation sessions for a new identity epoch" (with both anchor
+   links updated — `calibration_ledger.md:156` and
+   `powermetrics_fiducial.md:117`), `:43` "that new-epoch corpus", `:87`
+   "**Derivation rows are non-claim-bearing...**", `:99` "Derivation rows are
+   also a permanent obligation", `:114` "A new identity epoch is served
+   instead by the live derivation sessions ... never by a second historical
+   import", `:383` and `:386` "its last derivation row" / "its derivation
+   rows". `powermetrics_fiducial.md:125` likewise says "every derivation row".
+
+Optional nits: **taken** — the recovery path's `slot == "pre"` auto-abort is
+now stated not to apply to a derivation session
+(`powermetrics_fiducial.md:138-141`, A-1); and "present and authenticable" is
+softened to what the prefix matcher actually compares
+(`calibration_ledger.md:99-103`: the attempt ID, content ID, classification
+disposition, and epoch). **Not taken** — the canonical comma-form STATUS
+string: the decision-log addendum already uses the comma form on both halves
+(`docs/decision_log.md:6534`, `:6616`), but the pre-registration's two STATUS
+lines (`:3` and the fenced `:65`) are the brief's verbatim strings, which are
+semicolon-separated lists rather than the label phrase. Changing them would
+break the literal string brief 49 specified; flagging rather than deviating.
+
+Verification, rc captured in a variable:
+
+```
+$ python3 -m unittest tests.test_docs_freshness tests.test_gen_state; rc=$?
+Ran 75 tests in 2.308s
+
+OK
+RC=0
+```
+
+Working tree after the fix round (nothing committed):
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`,
+`docs/contracts/calibration_ledger.md`,
+`docs/contracts/powermetrics_fiducial.md` modified against `3c60f0ec`
+(+87/-46); `docs/decision_log.md` unchanged this round.
+
+---
+
+## Fix round 2 (seat S3 contract refuter, F4: the fifth per-row binding)
+
+Applied on top of `921c1102`; only `docs/contracts/calibration_ledger.md`
+changed (+33/-15), nothing committed. Line numbers are post-fix.
+
+1. **Row shape defined with the four bindings named as the `import_only`
+   shape** — `:149-156`. The prior-set row now explicitly "carries four
+   per-row bindings — attempt ID, content ID, classification disposition, and
+   identity epoch — and a generation registered `import_only` refuses a row
+   carrying any fifth key". That makes the historical shape exact rather than
+   merely listed, so the addition below cannot be read back onto r3-r6.
+2. **The fifth binding, scoped to `import_plus_live`** — new paragraph at
+   `:170-182`, immediately after the per-generation `prior_prefix_mode`
+   paragraph and before the registered-counts paragraph. It states: the row
+   carries `session_id`, compared against the ledger row's
+   `bracket_session_id`, and the session it names must be derivation-kind.
+   Reason given, in the terms the section already built: the purity and
+   completeness checks range over "rows of this registration", so without the
+   binding the artifact would be the only thing saying which rows those are —
+   it could name a convenient subset or disown a row the ledger recorded, and
+   the check would be judging the artifact against the artifact's own claim.
+   Binding each row to the ledger's recorded session is what keeps D-102
+   clause 2's rule (nothing judges itself) true of registration membership and
+   not only of thresholds. Closes with the no-historical-change clause
+   (`import_only` keeps the four-key shape and refuses a `session_id` key) and
+   the status marker "(Ruled 2026-09-10, not yet landed; seats S3 and S4
+   install it.)", consistent with the section status line at `:19-26` and the
+   inline marker at `:158-160`.
+3. **Issued-artifact check 4 carries the fifth binding** — `:377-387`: "...
+   and identity epoch, plus, for a generation registered `import_plus_live`,
+   the row's `session_id` against the ledger row's `bracket_session_id`".
+4. **Derivation-section permanence clause updated** — `:99-103` now lists the
+   five fields the prefix matcher compares (attempt ID, content ID,
+   classification disposition, epoch, session ID), so the obligation stated
+   there matches the row shape defined below it.
+5. **Residual cutoff drift from round 1 cleared** — check 4 at `:378` said
+   "the cutoff registered for that generation"; it now says "the artifact's
+   declared `ledger_cutoff`", matching the correction already made at `:150`
+   and `:167-172`.
+
+Verification, rc captured in a variable:
+
+```
+$ python3 -m unittest tests.test_docs_freshness tests.test_gen_state; rc=$?
+Ran 75 tests in 2.334s
+
+OK
+RC=0
+```
+
+Nothing else changed: `docs/decision_log.md`,
+`docs/contracts/powermetrics_fiducial.md`, and the pre-registration are
+untouched this round. The pre-registration's Membership clause says a member
+"belongs to a session of this registration", which the new binding is the
+mechanism for; no wording change was needed there, but a refuter wanting the
+`session_id` field named in the registration text should say so.
