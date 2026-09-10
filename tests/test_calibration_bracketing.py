@@ -22,7 +22,9 @@ from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     ACCEPTANCE_IDENTITY_FIELDS,
     D079_EPOCH_CATALOG_ID,
-    DERIVATION_SESSION_KIND,
+    SESSION_KIND_BRACKET,
+    SESSION_KIND_DERIVATION,
+    SESSION_KIND_UNRESOLVED,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
     GENESIS_FIXTURE_ACCEPTANCE_SHA256,
@@ -49,6 +51,8 @@ from joulewise.calibration_bracketing import (
     _canonical_sha256,
     _D102_GENERATION_DERIVATIONS,
     _acceptance_artifact_sha256,
+    _is_derivation_kind_observation,
+    _observation_session_kind,
     _prior_set_matches_import_cutoff_prefix,
     _valid_acceptance_bound,
     acceptance_generation_operatives,
@@ -2343,7 +2347,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         session = SimpleNamespace(
             session_id="session-derivation-night-1",
             state="finalized",
-            session_kind=DERIVATION_SESSION_KIND,
+            session_kind=SESSION_KIND_DERIVATION,
         )
         return replace(snapshot, bracket_sessions=(session,)), registered, row
 
@@ -3095,11 +3099,9 @@ def _live_prefix_generation() -> tuple[str, dict, dict]:
         "prior_observation_count": len(prior["observations"]),
         "cutoff_sequence": sequence,
         "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
-        # The ceiling IS this generation's own 99 % two-draw prediction and its
-        # own maximum budgetable drift; the first draft of this fixture copied
-        # r6's number instead, which is exactly the desynchronisation the row
-        # guard now refuses.
-        "inherited_ceiling_s": "0.009000",
+        # No predecessor: this fixture's ceiling is simply its own Q99.  The
+        # envelope cases register a predecessor row explicitly.
+        "predecessor_ceiling_s": None,
         "registration_session_ids": (_LIVE_SESSION_ID,),
     }
     return acceptance_id, generation, _reseal(artifact)
@@ -3170,9 +3172,14 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                     generation["screen_rule"], SCREEN_RULE_RANGE_EQUALS_SCREEN
                 )
                 self.assertEqual(generation["registration_session_ids"], ())
+                # Neither registered generation is a D-125 envelope successor:
+                # the n=19 corpus is the genesis, and the anchor-v3 r-series is
+                # a re-derivation of the same captures under changed estimator
+                # bytes, whose ceiling is its own Q99 and sits BELOW n=19's.
+                self.assertIsNone(generation["predecessor_ceiling_s"])
                 self.assertEqual(
-                    generation["inherited_ceiling_s"],
                     generation["operatives"]["maximum_budgetable_drift_s"],
+                    generation["prediction_99_two_draw_s"],
                 )
 
     def test_registered_cutoff_sequence_is_read_from_the_row_not_a_literal(
@@ -3199,7 +3206,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             "prior_observation_count",
             "cutoff_sequence",
             "screen_rule",
-            "inherited_ceiling_s",
+            "predecessor_ceiling_s",
             "registration_session_ids",
         ):
             with self.subTest(dropped=dropped):
@@ -3352,7 +3359,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def _prefix_snapshot(
         artifact: dict,
         *,
-        session_kind: str | None = DERIVATION_SESSION_KIND,
+        session_kind: str | None = SESSION_KIND_DERIVATION,
     ) -> CalibrationLedgerSnapshot:
         """Build the exact cutoff prefix an artifact's prior set declares.
 
@@ -3539,7 +3546,7 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 _prior_set_matches_import_cutoff_prefix(
                     artifact,
                     self._prefix_snapshot(
-                        artifact, session_kind=DERIVATION_SESSION_KIND
+                        artifact, session_kind=SESSION_KIND_DERIVATION
                     ),
                 )
             )
@@ -3562,64 +3569,192 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
                 )
             )
 
-    def test_generation_row_refuses_a_desynchronised_inherited_ceiling(self) -> None:
-        # F3.  Three copies of one number: the row's `inherited_ceiling_s`, its
-        # `maximum_budgetable_drift_s`, and its 99 % two-draw prediction.
+    _PREDECESSOR_FIXTURE_ID = "d079_calibration_acceptance_predecessor_fixture"
+
+    def _envelope_case(self, predecessor: str | None, q99: str, ceiling: str):
+        """Move the row AND the artifact onto one lineage position.
+
+        A row-only move is refused upstream by the row-versus-artifact
+        comparisons of the 99 % prediction and the operatives, which proves
+        nothing about the ceiling relation.  Every case here therefore carries
+        the artifact with it, retunes the budgetable excess so
+        `screen + excess == maximum` still holds, and leaves the screen at
+        0.006000 so `screen < ceiling` still holds.
+        """
+
         acceptance_id, generation, artifact = _live_prefix_generation()
-        with _registered_generation(acceptance_id, generation):
-            self.assertTrue(_valid_acceptance_bound(artifact))
-        for field, value in (
-            ("inherited_ceiling_s", "0.010164834757777545"),
-            ("prediction_99_two_draw_s", "0.010164834757777545"),
-        ):
-            with self.subTest(field=field):
-                desynchronised = dict(generation)
-                desynchronised[field] = value
-                with _registered_generation(acceptance_id, desynchronised):
-                    self.assertFalse(_valid_acceptance_bound(artifact))
-        drifted = dict(generation)
-        drifted["operatives"] = {
+        excess = str(Decimal(ceiling) - Decimal(generation["operatives"][
+            "bracket_screen_s"
+        ]))
+        operatives = {
             **generation["operatives"],
-            "maximum_budgetable_drift_s": "0.010164834757777545",
+            "max_budgetable_excess_s": excess,
+            "maximum_budgetable_drift_s": ceiling,
         }
-        with _registered_generation(acceptance_id, drifted):
+        row = dict(generation)
+        row["operatives"] = operatives
+        row["prediction_99_two_draw_s"] = q99
+        row["predecessor_ceiling_s"] = predecessor
+        row["predecessor_acceptance_id"] = self._PREDECESSOR_FIXTURE_ID
+        tuned = copy.deepcopy(artifact)
+        tuned["decimal_derivation"]["ratified_operatives"].update(operatives)
+        tuned["decimal_derivation"]["source_statistics"][
+            "prediction_99_two_draw_s"
+        ] = q99
+        return acceptance_id, row, _reseal(tuned)
+
+    @contextlib.contextmanager
+    def _predecessor_row(self, ceiling: str | None = "0.009"):
+        """Register the predecessor generation the lineage is read back from."""
+
+        if ceiling is None:
+            yield
+            return
+        predecessor = dict(_D102_GENERATION_DERIVATIONS[PREDECESSOR_ACCEPTANCE_ID])
+        predecessor["operatives"] = {
+            **predecessor["operatives"],
+            "maximum_budgetable_drift_s": ceiling,
+        }
+        predecessor["prediction_99_two_draw_s"] = ceiling
+        with _registered_generation(self._PREDECESSOR_FIXTURE_ID, predecessor):
+            yield
+
+    def test_envelope_ceiling_equals_max_of_predecessor_and_own_q99(self) -> None:
+        # Ruling 69 §Q1's admit control, which the round-1 clause wrongly
+        # refused: a legitimate D-125 successor whose INHERITED ceiling won the
+        # max, so the ceiling in force sits above this corpus's own Q99.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.009", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.009"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_envelope_ceiling_that_fell_below_its_predecessor_refuses(self) -> None:
+        # D-125 cl.2's whole point: a lineage's ceiling can never FALL.  An
+        # inequality against the row's own Q99 admits this input, which is why
+        # the relation is an exact equation.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_envelope_ceiling_invented_above_both_inputs_refuses(self) -> None:
+        # The other direction: headroom the corpus did not earn and the
+        # predecessor did not carry.  `ceiling >= own Q99` admits it too.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0085", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_genesis_ceiling_that_is_not_its_own_q99_refuses(self) -> None:
+        # With no predecessor the relation collapses to `ceiling == own Q99`,
+        # which is what all six issued artifacts satisfy today.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.008", ceiling="0.009"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_absent_predecessor_ceiling_is_none_and_never_a_present_zero(
+        self,
+    ) -> None:
+        # ABSENT and MALFORMED are different facts.  `None` says "no
+        # predecessor"; a present `0`, or an unparseable string, says the row
+        # is broken -- and reading `0` as absence would silently convert an
+        # envelope successor into a genesis one.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.009000", ceiling="0.009000"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        for malformed in (0, "", "not-a-decimal", Decimal("0.009")):
+            with self.subTest(predecessor=repr(malformed)):
+                broken = dict(row)
+                broken["predecessor_ceiling_s"] = malformed
+                with self._predecessor_row("0.009"), _registered_generation(
+                    acceptance_id, broken
+                ):
+                    self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_predecessor_ceiling_must_match_the_predecessor_row(self) -> None:
+        # The number is read BACK from the predecessor's own registered row, so
+        # a lineage cannot be rebased by editing one string in the successor.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.009", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.009"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The predecessor row says something else.
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # No predecessor row is registered at all.
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # The row names no predecessor generation.
+        unnamed = dict(row)
+        unnamed.pop("predecessor_acceptance_id")
+        with self._predecessor_row("0.009"), _registered_generation(
+            acceptance_id, unnamed
+        ):
             self.assertFalse(_valid_acceptance_bound(artifact))
 
     def test_generation_row_refuses_a_screen_at_or_above_its_ceiling(self) -> None:
-        # F3.  D-102 cl.3 spends `max(observed_drift_s, bracket_screen_s)`
-        # against the ceiling, and `screen + excess == maximum` would demand a
-        # zero or negative excess.  This is D-125's
-        # `successor_screen_exceeds_budget_ceiling` shape.
-        acceptance_id, generation, artifact = _live_prefix_generation()
-
-        def retuned(ceiling: str, excess: str):
-            """Move the row AND the artifact to the same ceiling, together."""
-
-            operatives = {
-                **generation["operatives"],
-                "max_budgetable_excess_s": excess,
-                "maximum_budgetable_drift_s": ceiling,
-            }
-            row = dict(generation)
-            row["operatives"] = operatives
-            row["prediction_99_two_draw_s"] = ceiling
-            row["inherited_ceiling_s"] = ceiling
-            tuned = copy.deepcopy(artifact)
-            tuned["decimal_derivation"]["ratified_operatives"].update(operatives)
-            tuned["decimal_derivation"]["source_statistics"][
-                "prediction_99_two_draw_s"
-            ] = ceiling
-            return row, _reseal(tuned)
-
-        # The screen is 0.006000.  A ceiling one millisecond above it leaves a
-        # real budgetable excess and admits; a ceiling EQUAL to the screen
-        # leaves none, and that is the only clause that can refuse it.
-        row, tuned = retuned("0.007000", "0.001000")
+        # D-102 cl.3 spends `max(observed_drift_s, bracket_screen_s)` against
+        # the ceiling, and `screen + excess == maximum` would demand a zero or
+        # negative excess.  This is D-125's
+        # `successor_screen_exceeds_budget_ceiling` shape, and it is universal:
+        # it holds with or without a predecessor.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.007000", ceiling="0.007000"
+        )
         with _registered_generation(acceptance_id, row):
-            self.assertTrue(_valid_acceptance_bound(tuned))
-        row, tuned = retuned("0.006000", "0.000000")
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.006000", ceiling="0.006000"
+        )
         with _registered_generation(acceptance_id, row):
-            self.assertFalse(_valid_acceptance_bound(tuned))
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_unresolvable_session_is_barred_not_read_as_bracket(self) -> None:
+        # S2 refuter 71 F4.  `LedgerObservation` carries no kind of its own, so
+        # the session lookup is the only path; a row naming a session the
+        # snapshot does not hold may BE a derivation row, and admitting it on
+        # that doubt is the fail-open reading.
+        acceptance_id, _generation, artifact = _live_prefix_generation()
+        del acceptance_id
+        snapshot = self._prefix_snapshot(artifact, session_kind=None)
+        orphan = next(
+            observation
+            for observation in snapshot.observations
+            if observation.bracket_session_id
+        )
+        self.assertEqual(
+            _observation_session_kind(orphan, snapshot), SESSION_KIND_UNRESOLVED
+        )
+        self.assertTrue(_is_derivation_kind_observation(orphan, snapshot))
+        # A row belonging to no session at all is still an ordinary bracket
+        # row: that is every capture written before derivation kinds existed.
+        standalone = next(
+            observation
+            for observation in snapshot.observations
+            if not observation.bracket_session_id
+        )
+        self.assertEqual(
+            _observation_session_kind(standalone, snapshot), SESSION_KIND_BRACKET
+        )
+        self.assertFalse(_is_derivation_kind_observation(standalone, snapshot))
 
     def test_import_only_cutoff_sequence_is_two_rows_per_observation(self) -> None:
         # F5.  One reservation row plus one finalization row per imported

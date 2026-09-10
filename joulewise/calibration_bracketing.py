@@ -26,6 +26,20 @@ from joulewise.calibration_ledger import (
     content_id_from_artifact_hashes,
     probe_custody,
 )
+try:  # pragma: no cover - exercised on whichever side of the seam is present
+    from joulewise.calibration_ledger import (
+        SESSION_KIND_BRACKET,
+        SESSION_KIND_DERIVATION,
+    )
+except ImportError:  # pragma: no cover - pre-seam fallback, delete on merge
+    # TEMPORARY SEAM SHIM.  The ledger owns this vocabulary and exports both
+    # names; this checkout predates that export, so the values are restated
+    # here to keep this module importable until the two branches meet.  The
+    # integration tree REQUIRES the real import: delete this fallback there,
+    # because two sources for one vocabulary is exactly the drift the import
+    # exists to prevent.
+    SESSION_KIND_BRACKET = "bracket"
+    SESSION_KIND_DERIVATION = "derivation"
 from joulewise.powermetrics_fiducial import (
     CAPTURE_TIME_FIELD,
     MAX_AGE_S,
@@ -191,14 +205,14 @@ ACCEPTANCE_IDENTITY_FIELDS = IDENTITY_EPOCH_FIELDS
 # ``identity_epoch``, and is resolved from the artifact rather than registered,
 # so a catalog can never disagree with the identity it claims to bind.
 D079_EPOCH_CATALOG_ID = "d079_epoch"
-# Ledger session kinds (ruling 46 §R-a A7), stamped on the session's open
-# receipt by the ledger writer.  A `bracket`
-# session reserves the endpoints of one claim window; a `derivation` session
-# reserves a night of derivation-only captures that build a future acceptance
-# and license no measurement.  A row with no kind at all predates the field
-# and is read as `bracket`.
-BRACKET_SESSION_KIND = "bracket"
-DERIVATION_SESSION_KIND = "derivation"
+# Ledger session kinds (ruling 46 §R-a A7) are stamped on the session's open
+# receipt by the ledger writer and imported above from the ledger, which owns
+# the vocabulary.  A `bracket` session reserves the endpoints of one claim
+# window; a `derivation` session reserves a night of derivation-only captures
+# that build a future acceptance and license no measurement.  A session record
+# that carries no kind at all predates the field and reads as `bracket`; a row
+# whose session cannot be resolved at all reads as neither and is barred.
+SESSION_KIND_UNRESOLVED = "unresolved-session"
 # Prior-set prefix modes (ruling 46 §R-b V6).  ``import_only`` is the genesis
 # fence every issued generation to date was derived under: every ledger row at
 # or below the cutoff is a historical import.  ``import_plus_live`` is reserved
@@ -245,7 +259,7 @@ _GENERATION_ROW_REQUIRED_KEYS = frozenset(
         "prior_observation_count",
         "cutoff_sequence",
         "screen_rule",
-        "inherited_ceiling_s",
+        "predecessor_ceiling_s",
         "registration_session_ids",
     }
 )
@@ -273,11 +287,14 @@ _D102_N19_DERIVATION: dict[str, Any] = {
     "prior_observation_count": 38,
     "cutoff_sequence": 76,
     "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
-    # The ceiling in force for this generation (its 99 % two-draw prediction),
-    # which a D-125 successor lineage inherits as a lower bound.  The row states
-    # it explicitly because the issuer that derives the successor reads it from
-    # here rather than recomputing it from the predecessor's bytes.
-    "inherited_ceiling_s": "0.012093166090593858",
+    # The ceiling of the generation this one was derived FROM under D-125's
+    # envelope rule, or None when there is no such predecessor.  None here is
+    # the truthful registration: the n=19 corpus is the genesis, derived from
+    # no predecessor at all, so its ceiling is simply its own 99 % two-draw
+    # prediction.  A generation that DOES inherit also names the predecessor's
+    # registered row in `predecessor_acceptance_id`, and this number is checked
+    # against that row rather than trusted.
+    "predecessor_ceiling_s": None,
     # Import-only generations have no live capture registration.
     "registration_session_ids": (),
 }
@@ -297,7 +314,12 @@ _D102_N17_DERIVATION: dict[str, Any] = {
     "prior_observation_count": 38,
     "cutoff_sequence": 76,
     "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
-    "inherited_ceiling_s": "0.010164834757777545",
+    # None, not the n=19 ceiling.  The anchor-v3 r-series is a RE-DERIVATION of
+    # the same captures under changed estimator bytes (D-145), not a D-125
+    # envelope successor of the n=19 generation: its ceiling is its own Q99 and
+    # sits BELOW n=19's, which registering n=19 as its predecessor would
+    # correctly refuse.
+    "predecessor_ceiling_s": None,
     "registration_session_ids": (),
 }
 _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
@@ -322,13 +344,20 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     row that omits or malforms one of them must refuse rather than let the
     corresponding check evaporate.
 
-    Two of the row's numbers are restatements rather than independent facts,
-    and both are checked here rather than trusted.  ``inherited_ceiling_s`` is
-    the same quantity as the row's own ``maximum_budgetable_drift_s`` and its
-    99 % two-draw prediction: three copies a hand edit can silently
-    desynchronise, after which the issuer would derive a successor's floor from
-    a ceiling the predecessor never had.  And the operative screen must sit
-    strictly BELOW that ceiling, because D-102 cl.3 spends the allowance
+    The row's CEILING IN FORCE (``operatives.maximum_budgetable_drift_s``, the
+    largest drift this generation will ever budget) is not an independent fact:
+    D-125 cl.2 fixes it exactly.  A generation derived from no predecessor
+    takes its own 99 % two-draw prediction; a generation derived from one under
+    the envelope rule takes ``max(predecessor ceiling, own Q99)``, so the
+    ceiling of a lineage can never FALL.  An inequality cannot transcribe that:
+    ``ceiling >= own Q99`` admits both a successor whose ceiling dropped below
+    its predecessor's and one whose ceiling was invented above both inputs.
+    Only the exact equation refuses both, and only if the row states the
+    predecessor's ceiling, which is why ``predecessor_ceiling_s`` exists and is
+    checked against the predecessor's own registered row rather than trusted.
+
+    The operative screen must additionally sit strictly BELOW that ceiling, in
+    every case: D-102 cl.3 spends the allowance
     ``max(observed_drift_s, bracket_screen_s)`` against it, and
     ``screen + excess == maximum`` at the bottom of ``_valid_acceptance_bound``
     would otherwise demand a zero or negative budgetable excess.  That is the
@@ -345,17 +374,44 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     operatives = generation["operatives"]
     if not isinstance(operatives, Mapping):
         return False
-    ceiling = _decimal(generation["inherited_ceiling_s"])
+    # ABSENT and MALFORMED are different: `None` is a generation with no
+    # predecessor, while a present value that will not parse as a Decimal --
+    # including a non-string such as `0`, which is why the `is None` test comes
+    # BEFORE `_decimal` -- is a broken row and refuses.
+    predecessor_lexeme = generation["predecessor_ceiling_s"]
+    predecessor: Decimal | None = None
+    if predecessor_lexeme is not None:
+        predecessor = _decimal(predecessor_lexeme)
+        # The predecessor's ceiling is READ BACK from the predecessor's own
+        # registered row, so a lineage cannot be rebased by editing one number
+        # in the successor's row -- and a present value that will not parse
+        # dies here too, because it is `None` and no registered Decimal equals
+        # `None`.  One term, one job: an unparseable predecessor is not silently
+        # promoted to an absent one.
+        predecessor_row = _D102_GENERATION_DERIVATIONS.get(
+            generation.get("predecessor_acceptance_id")
+        )
+        predecessor_operatives = (
+            predecessor_row.get("operatives")
+            if isinstance(predecessor_row, Mapping)
+            else None
+        )
+        registered = (
+            _decimal(predecessor_operatives.get("maximum_budgetable_drift_s"))
+            if isinstance(predecessor_operatives, Mapping)
+            else None
+        )
+        if registered is None or registered != predecessor:
+            return False
     drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
     prediction = _decimal(generation["prediction_99_two_draw_s"])
     screen = _decimal(operatives.get("bracket_screen_s"))
     if (
-        ceiling is None
-        or drift is None
+        drift is None
         or prediction is None
         or screen is None
-        or ceiling != drift
-        or drift != prediction
+        or drift
+        != (prediction if predecessor is None else max(predecessor, prediction))
         or not screen < drift
     ):
         return False
@@ -1584,24 +1640,35 @@ def _session_record_kind(session: Any) -> str:
     """
 
     kind = getattr(session, "session_kind", None)
-    return kind if isinstance(kind, str) and kind else BRACKET_SESSION_KIND
+    return kind if isinstance(kind, str) and kind else SESSION_KIND_BRACKET
 
 
 def _observation_session_kind(
     observation: Any,
     ledger_snapshot: CalibrationLedgerSnapshot,
 ) -> str:
-    """Resolve one ledger ROW's session kind, defaulting to ``bracket``."""
+    """Resolve one ledger ROW's session kind.
+
+    A row belonging to no session, or to a session the ledger holds without a
+    kind, is ``bracket`` -- that is every row written before derivation kinds
+    existed.  A row naming a session the snapshot CANNOT resolve is neither:
+    it returns ``SESSION_KIND_UNRESOLVED`` and is barred from the endpoint
+    universe.
+    """
 
     kind = getattr(observation, "session_kind", None)
     if isinstance(kind, str) and kind:
         return kind
     session_id = getattr(observation, "bracket_session_id", None)
     if not isinstance(session_id, str) or not session_id:
-        return BRACKET_SESSION_KIND
+        return SESSION_KIND_BRACKET
     session = ledger_snapshot.bracket_session_by_id.get(session_id)
     if session is None:
-        return BRACKET_SESSION_KIND
+        # FAIL CLOSED.  A row that names a session the snapshot does not hold
+        # is not a bracket endpoint by default; nothing here can tell whether
+        # the missing session was a derivation night, so the row is barred from
+        # the endpoint universe rather than admitted into it.
+        return SESSION_KIND_UNRESOLVED
     return _session_record_kind(session)
 
 
@@ -1616,11 +1683,15 @@ def _is_derivation_kind_observation(
     was bracketed.  After the successor issues, such a row is same-epoch and
     inside the endpoint horizon, so without this predicate a corpus member
     would end up judging itself (D-102 cl.2).
+
+    A row whose session cannot be resolved is barred for the same reason: it
+    may be a derivation row, and admitting it on that doubt is the fail-open
+    reading.
     """
 
-    return (
-        _observation_session_kind(observation, ledger_snapshot)
-        == DERIVATION_SESSION_KIND
+    return _observation_session_kind(observation, ledger_snapshot) in (
+        SESSION_KIND_DERIVATION,
+        SESSION_KIND_UNRESOLVED,
     )
 
 
@@ -1732,7 +1803,7 @@ def _prior_set_matches_import_cutoff_prefix(
             session = sessions.get(session_id)
             if (
                 session is None
-                or _session_record_kind(session) != DERIVATION_SESSION_KIND
+                or _session_record_kind(session) != SESSION_KIND_DERIVATION
             ):
                 return False
     for observation in prefix:
