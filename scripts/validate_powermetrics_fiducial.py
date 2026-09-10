@@ -1306,6 +1306,7 @@ class _CaptureLedgerLifecycle:
         t1_bindings: Mapping[str, Any],
         session_id: str | None = None,
         slot: str | None = None,
+        derivation_only: bool = False,
         require_committed_pin: bool = True,
     ) -> None:
         if (session_id is None) != (slot is None):
@@ -1322,6 +1323,7 @@ class _CaptureLedgerLifecycle:
         self.exact_bound_lexeme_s: str | None = None
         self.session_id = session_id
         self.slot = slot
+        self.derivation_only = derivation_only
         self.require_committed_pin = require_committed_pin
         self.claim_id = (
             stable_bracket_claim_id(
@@ -1373,6 +1375,25 @@ class _CaptureLedgerLifecycle:
         # Early warning only. The same binding is checked again after the
         # nonblocking lease is held; only that second check can authorize ARM.
         if self.is_bracket_session:
+            if self.is_derivation_session and not self.derivation_only:
+                # D-102 cl.2, inverted: the active acceptance's level screen
+                # judges only its OWN identity epoch.  A derivation slot exists
+                # because no acceptance judges this machine, so filling one in
+                # ordinary mode would classify the capture against a screen
+                # that does not apply to it -- the exact defect addendum A-1
+                # cured on the recovery finalization path.  This refuses before
+                # the writer lease, so nothing is appended, no custody exists,
+                # and the session is untouched.
+                raise CalibrationLedgerError(
+                    RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY,
+                    context={
+                        "session_id": self.session_id,
+                        "slot": self.slot,
+                        "session_kind": str(
+                            self.session_shape["session_kind"]
+                        ),
+                    },
+                )
             self._validate_slot()
         try:
             _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
@@ -1906,6 +1927,7 @@ def main(argv: list[str] | None = None) -> int:
         t1_bindings=planned_t1,
         session_id=args.session_id if bracket_mode else None,
         slot=args.slot if bracket_mode else None,
+        derivation_only=args.derivation_only,
     )
     try:
         if bracket_mode and args.slot == "post":

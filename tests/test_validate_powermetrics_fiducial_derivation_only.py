@@ -616,6 +616,108 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         ]
         self.assertEqual(stale, ["os_build"])
 
+    def test_ordinary_mode_refuses_a_derivation_kind_slot_and_appends_nothing(
+        self,
+    ) -> None:
+        """Kills the `_CaptureLedgerLifecycle.begin()` derivation guard.
+
+        The dangerous direction is not only "derivation-only fills a bracket
+        slot"; it is also "the ORDINARY writer fills a derivation slot".  A
+        derivation slot exists because no issued acceptance judges this
+        machine, so the ordinary path would classify the capture against r6's
+        level screen `0.032898493715362` -- D-102 cl.2 inverted, and the same
+        defect addendum A-1 cured on the recovery finalization path.
+
+        The epoch here deliberately MATCHES the acceptance, because that is the
+        only state in which the ordinary writer clears its own epoch preflight
+        and actually reaches the slot.  The counterfactual is this identical
+        invocation with `--derivation-only` removed; delete the guard and the
+        capture runs and is screened by r6.  The ledger must be byte-identical
+        after the refusal: the guard sits before the writer lease.
+        """
+
+        self._rekey_acceptance()
+        epoch, t1 = self._epoch(_acceptance_epoch()["os_build"])
+        declared = derivation_session_slots(2)
+        ledger, pin, session_id, custody = self._session(
+            "ordinary-into-derivation",
+            slots=declared,
+            session_kind=SESSION_KIND_DERIVATION,
+            epoch=epoch,
+            t1=t1,
+        )
+        before = ledger.read_bytes()
+        payload = self._refusal(
+            self._writer(
+                ledger=ledger,
+                pin=pin,
+                session_id=session_id,
+                slot=declared[0],
+                custody=custody[declared[0]],
+                epoch=epoch,
+                derivation_only=False,
+            )
+        )
+        self.assertEqual(
+            payload["code"],
+            RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY.value,
+        )
+        self.assertEqual(payload["context"]["session_kind"], "derivation")
+        self.assertEqual(payload["context"]["slot"], declared[0])
+        # Nothing appended, no custody, session untouched.
+        self.assertEqual(ledger.read_bytes(), before)
+        self.assertFalse(custody[declared[0]].exists())
+
+    def test_ordinary_mode_still_fills_a_bracket_kind_slot_unchanged(
+        self,
+    ) -> None:
+        """The guard is kind-scoped, not a blanket ordinary-path refusal.
+
+        Same ordinary invocation at a BRACKET-kind slot on the epoch the
+        acceptance binds still captures and finalizes `valid`.  Widen the
+        guard to every session and this goes red.
+        """
+
+        self._rekey_acceptance()
+        epoch, t1 = self._epoch(_acceptance_epoch()["os_build"])
+        ledger, pin, session_id, custody = self._session(
+            "ordinary-into-bracket",
+            slots=BRACKET_SESSION_SLOTS,
+            session_kind=None,
+            epoch=epoch,
+            t1=t1,
+        )
+        completed = self._writer(
+            ledger=ledger,
+            pin=pin,
+            session_id=session_id,
+            slot="pre",
+            custody=custody["pre"],
+            epoch=epoch,
+            derivation_only=False,
+        )
+        self.assertEqual(
+            completed.returncode, 0, completed.stdout + completed.stderr
+        )
+        rows = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        finalization = next(
+            row
+            for row in rows
+            if row.get("schema_version") == BRACKET_SESSION_SCHEMA
+            and row.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+        )
+        self.assertEqual(finalization["disposition"], "valid")
+        evidence = json.loads(
+            (custody["pre"] / "instrument_evidence.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertNotIn("derivation_only", evidence)
+        self.assertNotIn("screen_basis", evidence)
+
     @unittest.skip(
         "UNCOVERED CLAUSE, seat S1: the TRUE branch of "
         "exceeds_prior_level_screen needs a capture whose bound exceeds r6's "

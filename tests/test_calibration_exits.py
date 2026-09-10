@@ -1220,6 +1220,11 @@ WITNESS_CASES = (
         "_state_writer_protocol",
         "writer-derivation-standalone",
     ),
+    WitnessCase(
+        RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY,
+        "_state_derivation_kind_writer",
+        "writer-derivation-session",
+    ),
     WitnessCase(RefusalCode.RESERVED_SLOT_MISMATCH, "_state_reserved_mismatch", "validate-slot"),
     WitnessCase(RefusalCode.DISPLAY_ARM_FAILED, "_state_display_abort", "writer-display-failure"),
     WitnessCase(RefusalCode.SAMPLER_NEVER_READY, "_state_sampler_abort", "writer-sampler-failure"),
@@ -4463,6 +4468,49 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "identity_path": identity_path,
         }
 
+    def _state_derivation_kind_writer(self) -> dict:
+        """One DERIVATION-kind session on the epoch the acceptance binds.
+
+        The epoch deliberately MATCHES the active artifact, because that is the
+        only state in which the ordinary writer gets past its own epoch
+        preflight and reaches the slot -- which is exactly the reachable defect:
+        an operator who opened a derivation session by mistake and ran the
+        ordinary tool at it would have the capture judged by a screen that does
+        not apply to a derivation row.
+        """
+
+        epoch, t1 = self._actual_writer_bindings()
+        session_id = "session-derivation-kind"
+        slots = ledger_module.derivation_session_slots(2)
+        plan = self._open_session(
+            session_id,
+            epoch=epoch,
+            t1=t1,
+            session_kind=ledger_module.SESSION_KIND_DERIVATION,
+            slots=slots,
+        )
+        custody = (
+            self.repo
+            / "runs"
+            / session_id
+            / "instrument_validation"
+            / f"{session_id}-{slots[0]}"
+        )
+        identity_path = self.repo / "writer-fixtures" / f"{session_id}-identity.json"
+        identity_path.parent.mkdir(parents=True, exist_ok=True)
+        identity_path.write_text(json.dumps(epoch) + "\n", encoding="utf-8")
+        return {
+            "plan": plan,
+            "session_id": session_id,
+            "slot": slots[0],
+            "attempt_id": f"{session_id}-{slots[0]}",
+            "custody_locator": str(custody),
+            "output_root": custody.parent,
+            "epoch": epoch,
+            "t1": t1,
+            "identity_path": identity_path,
+        }
+
     def _writer_capture_args(self, state: dict) -> list[str]:
         return [
             "--allow-live",
@@ -4955,6 +5003,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         *,
         epoch: dict | None = None,
         t1: dict | None = None,
+        session_kind: str | None = None,
+        slots: tuple[str, ...] = ("pre", "post"),
     ) -> Path:
         epoch = epoch or self.epoch
         t1 = t1 or self.t1
@@ -4984,11 +5034,16 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     "identity_epoch": epoch,
                     "t1_bindings": t1,
                 }
-                for slot in ("pre", "post")
+                for slot in slots
             },
             head_pin_path=self.pin,
             require_committed_pin=False,
             repo_root=self.repo,
+            **(
+                {}
+                if session_kind is None
+                else {"session_kind": session_kind, "declared_slots": slots}
+            ),
         )
         return plan
 
@@ -5300,7 +5355,13 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     writer_args = ["--output", str(state["output"])]
                 elif case.observer == "writer-power":
                     writer_args = ["--allow-live"]
-                elif case.observer.startswith("writer-derivation-"):
+                elif case.observer in {
+                    "writer-derivation-epoch",
+                    "writer-derivation-standalone",
+                }:
+                    # An EXACT set, not a startswith prefix: the sibling
+                    # observer writer-derivation-session must NOT be captured
+                    # here, because it runs the ordinary tuple deliberately.
                     # Both derivation-only preflight refusals fire before any
                     # ledger, sampler, or hardware work, so the executed
                     # witness needs only the epoch the artifact itself binds
@@ -5329,6 +5390,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                         "--identity-epoch-json-for-test",
                         str(identity),
                     ]
+                elif case.observer == "writer-derivation-session":
+                    # The ORDINARY writer tuple -- no --derivation-only -- run
+                    # at a declared derivation-kind slot.  The refusal lands
+                    # before the writer lease, so the sampler never starts.
+                    writer_args = self._writer_capture_args(state)
                 elif case.observer == "writer-display-failure":
                     writer_args = [
                         *self._writer_capture_args(state),
@@ -5346,7 +5412,10 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     ]
                 else:
                     writer_args = []
-                if case.observer == "writer-display-failure":
+                if case.observer in {
+                    "writer-display-failure",
+                    "writer-derivation-session",
+                }:
                     writer_env = self._writer_env(state, mode="normal")
                 elif case.observer == "writer-sampler-failure":
                     writer_env = self._writer_env(state, mode="never-stubborn")

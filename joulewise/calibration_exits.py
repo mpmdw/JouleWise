@@ -97,6 +97,9 @@ class RefusalCode(str, Enum):
     DERIVATION_ONLY_SESSION_KIND_REQUIRED = (
         "calibration_derivation_only_session_kind_required"
     )
+    DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY = (
+        "calibration_derivation_session_requires_derivation_only"
+    )
     DISPLAY_ARM_FAILED = "calibration_display_arm_failed"
     SAMPLER_NEVER_READY = "calibration_sampler_never_ready"
     ROLLOVER_GATE_TIMEOUT = "pulse_calibration_rollover_gate_timeout"
@@ -257,6 +260,7 @@ _DESCRIPTIONS: Mapping[RefusalCode, str] = MappingProxyType(
         RefusalCode.POWER_POLICY_REQUIRED: "power policy is a required binding",
         RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED: "derivation-only capture requires an identity epoch the active acceptance does not bind",
         RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED: "derivation-only capture requires a declared derivation-kind session slot",
+        RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY: "a derivation-kind session slot is capturable only in derivation-only mode",
         RefusalCode.DISPLAY_ARM_FAILED: "display sleep arm failed after the bracket claim",
         RefusalCode.SAMPLER_NEVER_READY: "powermetrics sampler never became ready",
         RefusalCode.ROLLOVER_GATE_TIMEOUT: "powermetrics rollover gate timed out",
@@ -272,6 +276,7 @@ _ABANDON = {
     RefusalCode.INTENT_TARGET_MALFORMED,
 }
 _ABORT = {
+    RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY,
     RefusalCode.LEDGER_BRACKET_SESSION_OPEN,
     RefusalCode.CUSTODY_PARTIAL,
     RefusalCode.RESERVATION_IDENTITY_CONFLICT,
@@ -358,6 +363,7 @@ _WRITER_COMPONENT = {
     RefusalCode.POWER_POLICY_REQUIRED,
     RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED,
     RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED,
+    RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY,
     RefusalCode.DISPLAY_ARM_FAILED,
     RefusalCode.SAMPLER_NEVER_READY,
     RefusalCode.ROLLOVER_GATE_TIMEOUT,
