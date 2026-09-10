@@ -58,6 +58,24 @@ def _load_generator():
 GEN = _load_generator()
 
 
+def _census_clean_temporary_directory() -> tempfile.TemporaryDirectory:
+    """A temp directory whose whole path is free of `codex`, `claude`, `t3`.
+
+    mkdtemp's random component hits one of those substrings every few hundred
+    runs (`tmp4ew_t3eu` is a real example), and the generator then refuses to
+    emit — correctly, since the night's own agent census would match the path.
+    Retrying keeps that correct refusal from reading as a flaky test.
+    """
+
+    for _attempt in range(64):
+        directory = tempfile.TemporaryDirectory()
+        resolved = str(Path(directory.name).resolve()).lower()
+        if not any(bad in resolved for bad in GEN.CENSUS_SUBSTRINGS):
+            return directory
+        directory.cleanup()
+    raise AssertionError("no census-clean temporary directory available")
+
+
 def _git(directory: Path, *arguments: str) -> str:
     result = subprocess.run(
         ("git", "-C", str(directory), *arguments),
@@ -202,7 +220,7 @@ def _exec_arguments(wrapper: str) -> list[str]:
 @unittest.skipUnless(shutil.which("git") and Path("/usr/bin/jq").exists(), "git and jq required")
 class DerivationNightWrapperTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.directory = tempfile.TemporaryDirectory()
+        self.directory = _census_clean_temporary_directory()
         self.addCleanup(self.directory.cleanup)
         self.fixture = WrapperFixture(Path(self.directory.name))
 

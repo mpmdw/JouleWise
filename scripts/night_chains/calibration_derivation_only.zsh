@@ -4,7 +4,9 @@
 # then ONE derivation-kind ledger session of $SLOT_COUNT declared slots, then
 # one derivation-only capture per slot at a 600 s START-TO-START cadence.
 # A slot the window cannot reach is recorded unused by the session abort
-# (reason window_exhausted), never compressed, retried, or replaced.
+# (reason window_exhausted), never compressed, retried, or replaced. A slot
+# whose capture finalizes with a non-valid disposition (writer exit 1) is
+# recorded and the night continues; only a writer refusal stops it.
 #
 # NO probe ladder, NO measurement pack, NO Git, NO claim output. Nothing here
 # arms a plan; the governed night driver invokes it only after registration,
@@ -193,7 +195,14 @@ for (( index = 1; index <= SLOT_COUNT; index++ )); do
         exit 0
     fi
     log_event "slot_start slot=$slot"
-    "$PY" "$REPO/scripts/validate_powermetrics_fiducial.py" \
+    # The writer exits 1 when the capture's disposition is not "valid" and
+    # exits 0 when it is; the ledger row is FINALIZED either way. An
+    # ordinary-invalid slot is a legitimate outcome the pre-registration
+    # handles by exclusion, and derivation slots are independent — none is an
+    # endpoint the others depend on — so one must never stop the night. Run the
+    # writer as an `if` condition so `set -e` cannot exit here, and dispatch on
+    # the status explicitly.
+    if "$PY" "$REPO/scripts/validate_powermetrics_fiducial.py" \
         --allow-live \
         --derivation-only \
         --ledger "$CALIBRATION_LEDGER" \
@@ -202,8 +211,24 @@ for (( index = 1; index <= SLOT_COUNT; index++ )); do
         --slot "$slot" \
         --attempt-id "${SESSION_ID}-${slot}" \
         --output-root "$RUNS_ROOT/instrument_validation" \
-        --power-policy ac_high_power
-    log_event "slot_end slot=$slot"
+        --power-policy ac_high_power; then
+        writer_rc=0
+    else
+        writer_rc=$?
+    fi
+    if (( writer_rc == 0 )); then
+        log_event "slot_end slot=$slot disposition=valid"
+    elif (( writer_rc == 1 )); then
+        # Row finalized, disposition not valid: the session stays open and the
+        # next declared slot runs on the unchanged start-to-start cadence.
+        log_event "slot_end slot=$slot disposition=non-valid"
+    else
+        # Anything else is a refusal (emit_refusal exits 2) or a crash: the row
+        # is not finalized, so stop with the session OPEN for desk recovery
+        # rather than continuing over an unrecorded slot.
+        log_event "slot_refused slot=$slot rc=$writer_rc"
+        exit $writer_rc
+    fi
     # Anchor the cadence to the actual start: never compress a later slot to
     # catch up on a long capture.
     next_start=$(( slot_start + SLOT_CADENCE_S ))
@@ -211,6 +236,11 @@ done
 
 # Finalizing the last declared slot closes the session and emits its terminal
 # pin candidate; the desk reviews and commits it before the next night opens.
-# Any failure above stops the chain under set -e with the session still open;
-# recovery is seat S2's desk tool, never a retry inside the window.
+# A capture has exactly three outcomes: writer status 0 (disposition valid) and
+# status 1 (disposition not valid) both FINALIZE the row and the night carries
+# on to the next declared slot; any other status is a refusal or a crash, which
+# stops the chain with the session still open. Every other failure above — a
+# refused readiness check, a refused reservation — also stops the chain under
+# set -e with the session open. Recovery is seat S2's desk tool in every case,
+# never a retry inside the window.
 log_event "derivation_night_complete slots=$SLOT_COUNT"

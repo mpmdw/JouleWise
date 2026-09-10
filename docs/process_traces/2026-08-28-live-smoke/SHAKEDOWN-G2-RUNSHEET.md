@@ -1702,7 +1702,7 @@ explicit `--slot-count-ruling` reference (which must be one line of
 ordinary reference characters, since it is written into the wrapper).
 
 The emitted bytes, rendered here from placeholder coordinates and the
-live digest of the tracked chain (`d6d23bff48d410144e74c19307dde79aebdd3a4fbf6e8eea97f34217ef470a65`):
+live digest of the tracked chain (`a4440bbe40fceb6cddce9d04c7eabfdf4ca58e6dc0c53e90f977517173637186`):
 
 ```zsh
 #!/bin/zsh
@@ -1787,7 +1787,7 @@ observed_plan_id="$(/usr/bin/jq -er '.plan_id' "$PLAN" 2>/dev/null)" || route_re
 # the capturing chain's bytes move: the coverage is transitive and needs
 # no second file.  (The night root also carries an advisory
 # <wrapper>.chain-source.sha256 for hand checks; nothing trusts it.)
-[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = 'd6d23bff48d410144e74c19307dde79aebdd3a4fbf6e8eea97f34217ef470a65' ] || route_refuse 'tracked derivation chain bytes do not match the arm-time digest'
+[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = 'a4440bbe40fceb6cddce9d04c7eabfdf4ca58e6dc0c53e90f977517173637186' ] || route_refuse 'tracked derivation chain bytes do not match the arm-time digest'
 
 # exec, never source: the chain derives REPO from its own $0 with
 #   cd "${0:A:h:h:h}"

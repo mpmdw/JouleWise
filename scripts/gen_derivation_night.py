@@ -97,6 +97,14 @@ CHAIN_ANCHORS = {
     "slot_count_default": 'SLOT_COUNT="${SLOT_COUNT:-12}"',
     "integer_guard": '    if [[ "$_value" != <-> ]]; then',
     "forward_argv": '    "$@" \\',
+    # The night survives an ordinary-invalid capture and stops only on a
+    # refusal; the wrapper's window arithmetic assumes every declared slot is
+    # attempted, so this dispatch is part of the contract it depends on.
+    "writer_status_dispatch": "    if (( writer_rc == 0 )); then",
+    "non_valid_continues": (
+        '        log_event "slot_end slot=$slot disposition=non-valid"'
+    ),
+    "refusal_stops": "        exit $writer_rc",
     "window_exhausted_guard": (
         "    if (( next_start + SLOT_CAPTURE_BUDGET_S > WINDOW_END_EPOCH_S )); then"
     ),

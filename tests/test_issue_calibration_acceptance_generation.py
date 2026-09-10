@@ -333,7 +333,7 @@ elif name == "python3":
     if "validate_powermetrics_fiducial.py" in args[0]:
         slot = args[args.index("--slot") + 1]
         if slot == os.environ.get("FAIL_SLOT"):
-            sys.exit(7)
+            sys.exit(int(os.environ.get("FAIL_SLOT_RC") or 7))
         clock.write_text(str(now + int(os.environ["FAKE_CAPTURE_S"])))
     elif "recover_calibration_ledger.py" in args[0]:
         if "readiness" in args and os.environ.get("FAIL_READINESS"):
@@ -349,6 +349,7 @@ else:
     def run_chain(
         self, *, end: int = 10000, slots: str | None = None, fail: str = "",
         capture: int = 480, absent_input: str = "", fail_readiness: bool = False,
+        fail_rc: int = 7,
         knobs: dict[str, str] | None = None, argv: list[str] | None = None,
     ) -> tuple[subprocess.CompletedProcess, list[dict], list[str]]:
         with tempfile.TemporaryDirectory() as directory:
@@ -373,6 +374,7 @@ else:
                 # or escape the fake clock instead of being silently intercepted.
                 "PATH": "/bin:/usr/bin",
                 "FAKE_ROOT": str(root), "FAIL_SLOT": fail, "FAKE_CAPTURE_S": str(capture),
+                "FAIL_SLOT_RC": str(fail_rc),
                 "FAIL_READINESS": "1" if fail_readiness else "",
                 "PY": str(root / "python3"), "SLEEP": str(root / "sleep"),
                 "DATE": str(root / "date"),
@@ -442,8 +444,8 @@ else:
             "chain_start session=fixture-session window=fixture-window slots=2"
             " settle_s=600 slot_cadence_s=600 slot_capture_budget_s=480",
             "settle_complete settle_s=600",
-            "slot_start slot=d01", "slot_end slot=d01",
-            "slot_start slot=d02", "slot_end slot=d02",
+            "slot_start slot=d01", "slot_end slot=d01 disposition=valid",
+            "slot_start slot=d02", "slot_end slot=d02 disposition=valid",
             "derivation_night_complete slots=2",
         ])
 
@@ -488,7 +490,7 @@ else:
         self.assertIn("abort-session", python[-1]["args"])
         self.assertNotIn("d03", str(python))
         self.assertEqual(log[-3:], [
-            "slot_end slot=d02",
+            "slot_end slot=d02 disposition=valid",
             "slot_unused slot=d03 reason=window_exhausted",
             "session_abort reason=window_exhausted",
         ])
@@ -541,9 +543,9 @@ else:
         result, calls, log = self.run_chain(fail="d02")
         self.assertEqual(result.returncode, 7)
         self.assertNotIn("d03", str(calls))
-        # A failed capture stops the chain; it never aborts or retries in-window.
+        # A refused capture stops the chain; it never aborts or retries in-window.
         self.assertNotIn("abort-session", str(calls))
-        self.assertEqual(log[-1], "slot_start slot=d02")
+        self.assertEqual(log[-1], "slot_refused slot=d02 rc=7")
 
     def test_invalid_slot_count_refuses_before_settle_or_reservation(self) -> None:
         for slots in ("0", "-1", "text"):
@@ -552,6 +554,61 @@ else:
                 self.assertEqual(result.returncode, 64, result.stderr)
                 self.assertEqual(calls, [])
                 self.assertEqual(log, [])
+
+    def test_a_non_valid_disposition_does_not_stop_the_night(self) -> None:
+        """The writer exits 1 when a capture's disposition is not "valid", and
+        the ledger row IS finalized on that path
+        (scripts/validate_powermetrics_fiducial.py, `return 0 if disposition ==
+        "valid" else 1`).
+
+        Under `set -euo pipefail` that status would kill a twelve-slot night at
+        the first ordinary-invalid slot — a legitimate outcome the
+        pre-registration handles by exclusion — leaving the session OPEN and
+        d04..d12 uncaptured. Derivation slots are independent (no endpoint
+        role), so the night must carry on.
+        """
+
+        result, calls, log = self.run_chain(fail="d03", fail_rc=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        captures = [
+            call for call in calls
+            if call["name"] == "python3"
+            and "validate_powermetrics_fiducial.py" in call["args"][0]
+        ]
+        self.assertEqual(
+            [call["args"][call["args"].index("--slot") + 1] for call in captures],
+            [f"d{index:02d}" for index in range(1, 13)],
+        )
+        self.assertIn("slot_end slot=d03 disposition=non-valid", log)
+        self.assertIn("slot_end slot=d04 disposition=valid", log)
+        self.assertEqual(log[-1], "derivation_night_complete slots=12")
+        # The session stays open for the next slot; nothing aborts or retries.
+        self.assertNotIn("abort-session", str(calls))
+        self.assertEqual(len([c for c in captures if c["args"][c["args"].index("--slot") + 1] == "d03"]), 1)
+
+    def test_a_writer_refusal_stops_the_night_with_the_session_open(self) -> None:
+        """Any status other than 0 or 1 is a refusal (emit_refusal exits 2) or a
+        crash: the row is NOT finalized, so continuing would run the night over
+        an unrecorded slot.
+
+        The chain stops, logs the status, and leaves the session open for the
+        desk's recovery tool — it never aborts or retries inside the window.
+        """
+
+        result, calls, log = self.run_chain(fail="d03", fail_rc=2)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        captures = [
+            call for call in calls
+            if call["name"] == "python3"
+            and "validate_powermetrics_fiducial.py" in call["args"][0]
+        ]
+        self.assertEqual(
+            [call["args"][call["args"].index("--slot") + 1] for call in captures],
+            ["d01", "d02", "d03"],
+        )
+        self.assertEqual(log[-1], "slot_refused slot=d03 rc=2")
+        self.assertNotIn("abort-session", str(calls))
+        self.assertNotIn("derivation_night_complete", str(log))
 
     def test_chain_source_carries_no_pack_probe_or_git_step(self) -> None:
         source = CHAIN.read_text(encoding="utf-8")
