@@ -213,13 +213,15 @@ PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE = "import_plus_live"
 _PRIOR_PREFIX_MODES = frozenset(
     {PRIOR_PREFIX_MODE_IMPORT_ONLY, PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE}
 )
-# Registered bracket-screen derivation rules (ruling 46 §R-b V7).  Only the
-# rule every issued generation was actually derived under is implemented here:
-# the quantized corpus range IS the operative screen.  The D-125 envelope rule
-# a successor may be derived under is Ed's open item and its
-# ``successor_screen_exceeds_budget_ceiling`` refusal is not implemented in
-# this module, so an unimplemented rule name refuses here rather than silently
-# degrading to the rule below.
+# Registered bracket-screen derivation rules (ruling 46 §R-b V7).  Two are
+# implemented: the rule every issued generation was derived under (the
+# quantized corpus range IS the operative screen) and the D-125 floored
+# envelope rule the 25G83 successor is pre-registered under (below).  The
+# strict screen-below-ceiling relation that is D-125's
+# ``successor_screen_exceeds_budget_ceiling`` refusal lives in
+# ``_registered_generation_row_is_complete``; the issuer refuses by that name
+# before emitting.  Any rule name outside the registered set refuses here
+# rather than silently degrading to either rule.
 SCREEN_RULE_RANGE_EQUALS_SCREEN = "range_equals_screen"
 # The D-125 envelope rule the 25G83 corpus is PRE-REGISTERED to be derived
 # under: the screen is the quantized corpus range, floored at the genesis
