@@ -1210,6 +1210,16 @@ WITNESS_CASES = (
     WitnessCase(RefusalCode.OUTPUT_REQUIRES_REDERIVE, "_state_writer_protocol", "writer-output"),
     WitnessCase(RefusalCode.QUIET_MAC_AUTH_REQUIRED, "_state_writer_protocol", "writer-quiet"),
     WitnessCase(RefusalCode.POWER_POLICY_REQUIRED, "_state_writer_protocol", "writer-power"),
+    WitnessCase(
+        RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED,
+        "_state_writer_protocol",
+        "writer-derivation-epoch",
+    ),
+    WitnessCase(
+        RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED,
+        "_state_writer_protocol",
+        "writer-derivation-standalone",
+    ),
     WitnessCase(RefusalCode.RESERVED_SLOT_MISMATCH, "_state_reserved_mismatch", "validate-slot"),
     WitnessCase(RefusalCode.DISPLAY_ARM_FAILED, "_state_display_abort", "writer-display-failure"),
     WitnessCase(RefusalCode.SAMPLER_NEVER_READY, "_state_sampler_abort", "writer-sampler-failure"),
@@ -5290,6 +5300,35 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     writer_args = ["--output", str(state["output"])]
                 elif case.observer == "writer-power":
                     writer_args = ["--allow-live"]
+                elif case.observer.startswith("writer-derivation-"):
+                    # Both derivation-only preflight refusals fire before any
+                    # ledger, sampler, or hardware work, so the executed
+                    # witness needs only the epoch the artifact itself binds
+                    # (matching -> the mode is a bypass) or one field of it
+                    # perturbed (differing -> the mode needs a session slot).
+                    acceptance = json.loads(
+                        (
+                            self.repo
+                            / "configs"
+                            / "calibration"
+                            / "calibration_acceptance_d079_v2_n17_r6.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    epoch = dict(acceptance["identity_epoch"])
+                    if case.observer == "writer-derivation-standalone":
+                        epoch["os_build"] = f"not-{epoch['os_build']}"
+                    identity = self.repo / f"{case.observer}-identity.json"
+                    identity.write_text(
+                        json.dumps(epoch) + "\n", encoding="utf-8"
+                    )
+                    writer_args = [
+                        "--allow-live",
+                        "--power-policy",
+                        epoch["power_policy"],
+                        "--derivation-only",
+                        "--identity-epoch-json-for-test",
+                        str(identity),
+                    ]
                 elif case.observer == "writer-display-failure":
                     writer_args = [
                         *self._writer_capture_args(state),
@@ -5690,6 +5729,22 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                             RefusalCode.WRITER_BRACKET_ARGUMENTS,
                             RefusalCode.QUIET_MAC_AUTH_REQUIRED,
                             RefusalCode.POWER_POLICY_REQUIRED,
+                            # The registered correction for both
+                            # derivation-only refusals is the ORDINARY writer
+                            # tuple: on a matching epoch the operator drops
+                            # --derivation-only and captures normally, and
+                            # without a derivation-kind slot the ordinary
+                            # bracket slot is the one that was actually
+                            # reserved.  Both registry rows name
+                            # writer_capture_valid_slot_finalized as their
+                            # corrected success, which is exactly what
+                            # _execute_valid_writer executes below.  The
+                            # derivation-side correction -- opening a
+                            # derivation-kind session and filling its declared
+                            # slot -- is exercised end to end in
+                            # tests/test_validate_powermetrics_fiducial_derivation_only.py.
+                            RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED,
+                            RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED,
                         },
                     )
                     self._execute_valid_writer(case.code, state)
