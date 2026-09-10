@@ -436,9 +436,116 @@ def _derive_preflight_systematic_screen_s(
     return comparator
 
 
+def _classify_capture(
+    *,
+    evidence_status: str,
+    bound_lexeme: str | None,
+    preflight_systematic_screen_s: Decimal | None,
+    screen_basis: Mapping[str, Any] | None,
+) -> tuple[str, bool | None]:
+    """Return one capture's ledger disposition and its screen diagnostic.
+
+    The two outputs are computed here TOGETHER and deliberately from disjoint
+    inputs, because ruling 46 V2 turns on their independence:
+
+    * the disposition may consult `preflight_systematic_screen_s`, which is the
+      level screen of the acceptance that judges THIS identity epoch.  In
+      derivation-only mode no such acceptance exists, the caller passes None,
+      and the disposition collapses to `valid` or `ordinary-invalid`.
+    * `exceeds_prior_level_screen` reports whether the bound exceeded the
+      screen of the PRIOR epoch's acceptance.  It is a DIAGNOSTIC that feeds
+      the screen-challenge gate, and it must never reach the disposition:
+      excluding a valid capture of the new epoch because it exceeds the old
+      epoch's threshold would fit the new screen to the old one.
+
+    Returns `(disposition, None)` when there is no screen basis, i.e. on the
+    ordinary path, where the diagnostic is not recorded at all.
+    """
+
+    exceeds_prior_level_screen = (
+        None
+        if screen_basis is None
+        else bool(
+            isinstance(bound_lexeme, str)
+            and Decimal(bound_lexeme)
+            > Decimal(screen_basis["preflight_level_screen_s"])
+        )
+    )
+    disposition = "ordinary-invalid"
+    if evidence_status == "valid":
+        disposition = (
+            "systematic-invalid"
+            if preflight_systematic_screen_s is not None
+            and isinstance(bound_lexeme, str)
+            and Decimal(bound_lexeme) > preflight_systematic_screen_s
+            else "valid"
+        )
+    return disposition, exceeds_prior_level_screen
+
+
+def _exact_bound_lexeme_s(payload: Mapping[str, Any]) -> str | None:
+    """The `b_fiducial_s` lexeme exactly as it serializes into the evidence."""
+
+    value = json.loads(
+        json.dumps(payload, sort_keys=True),
+        parse_float=str,
+        parse_int=str,
+    ).get("b_fiducial_s")
+    return value if isinstance(value, str) else None
+
+
+def _derivation_only_screen_basis(
+    *,
+    acceptance_path: Path | None = None,
+) -> tuple[Decimal, dict[str, Any]]:
+    """Authenticate the active acceptance WITHOUT its identity-epoch equality.
+
+    A derivation-only capture exists precisely because no issued acceptance
+    binds the machine's current identity epoch, so the epoch comparison that
+    the ordinary path makes cannot be the gate here.  Everything else the
+    ordinary path authenticates still is: the artifact's bytes, its issued
+    role, the frozen protocol digest, and the estimator-code digests.  The
+    returned basis is the provenance block recorded in the hashed evidence, so
+    a later reader can see exactly which artifact's screen this capture was
+    NOT judged by, and the epoch that artifact does bind.
+    """
+
+    path = (
+        DEFAULT_ACCEPTANCE_BOUND_PATH
+        if acceptance_path is None
+        else Path(acceptance_path)
+    )
+    level_screen_s = _derive_preflight_systematic_screen_s(
+        None, acceptance_path=path
+    )
+    artifact = load_calibration_acceptance_bound(path)
+    if artifact is None:
+        raise _AcceptancePreflightError("acceptance_artifact_unauthenticated")
+    epoch = artifact.get("identity_epoch")
+    acceptance_id = artifact.get("acceptance_id")
+    if (
+        not isinstance(epoch, Mapping)
+        or not isinstance(acceptance_id, str)
+        or not acceptance_id
+    ):
+        raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
+    return level_screen_s, {
+        "acceptance_id": acceptance_id,
+        "artifact_sha256": sha256_path(path),
+        "preflight_level_screen_s": str(level_screen_s),
+        "epoch": dict(epoch),
+    }
+
+
 # Recovery's resume-finalize path imports this historical public symbol.  It
-# remains available as an authenticated derivation, never as a copied scalar;
-# the live writer below independently derives and epoch-checks its local value.
+# remains available as an authenticated derivation, never as a copied scalar.
+# The live writer below independently derives its own local value on BOTH
+# paths, and epoch-checks it on the ordinary one.  Derivation-only mode
+# (`_derivation_only_screen_basis` above) skips exactly one thing -- the epoch
+# EQUALITY -- because ruling 46 A1 exists for the case where no issued
+# acceptance binds this machine's epoch; bytes, issued role, protocol digest
+# and estimator-code digests are still authenticated there, and that mode
+# refuses outright when the epoch turns out to match.
 try:
     PREFLIGHT_SYSTEMATIC_SCREEN_S = _derive_preflight_systematic_screen_s()
 except _AcceptancePreflightError:
@@ -1263,6 +1370,7 @@ class _CaptureLedgerLifecycle:
         t1_bindings: Mapping[str, Any],
         session_id: str | None = None,
         slot: str | None = None,
+        derivation_only: bool = False,
         require_committed_pin: bool = True,
     ) -> None:
         if (session_id is None) != (slot is None):
@@ -1279,6 +1387,7 @@ class _CaptureLedgerLifecycle:
         self.exact_bound_lexeme_s: str | None = None
         self.session_id = session_id
         self.slot = slot
+        self.derivation_only = derivation_only
         self.require_committed_pin = require_committed_pin
         self.claim_id = (
             stable_bracket_claim_id(
@@ -1330,6 +1439,37 @@ class _CaptureLedgerLifecycle:
         # Early warning only. The same binding is checked again after the
         # nonblocking lease is held; only that second check can authorize ARM.
         if self.is_bracket_session:
+            if self.is_derivation_session and not self.derivation_only:
+                # D-102 cl.2, inverted: an acceptance's level screen judges
+                # only its OWN identity epoch, so a derivation row must never
+                # be classified against it -- the defect addendum A-1 cured on
+                # the recovery finalization path.
+                #
+                # What this guard actually catches is the MATCHING-epoch case:
+                # a chain, runbook, or operator that opens a derivation session
+                # and then loses the --derivation-only flag on one slot, while
+                # the machine's epoch still equals the active acceptance's.
+                # That capture would otherwise sail through every preflight and
+                # be screened by an acceptance that does not govern it.  It also
+                # covers every future derivation session opened once a
+                # successor has issued for the epoch in force.
+                #
+                # The CROSS-epoch case never reaches here and does not need to:
+                # main's ordinary epoch preflight already refuses
+                # FROZEN_PROTOCOL_INVALID before the lifecycle is constructed.
+                #
+                # This refuses before the writer lease, so nothing is appended,
+                # no custody exists, and the session is untouched.
+                raise CalibrationLedgerError(
+                    RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY,
+                    context={
+                        "session_id": self.session_id,
+                        "slot": self.slot,
+                        "session_kind": str(
+                            self.session_shape["session_kind"]
+                        ),
+                    },
+                )
             self._validate_slot()
         try:
             _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
@@ -1628,6 +1768,15 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="operator-recorded power policy identity (e.g. 'ac_high_power'); required",
     )
+    parser.add_argument(
+        "--derivation-only",
+        action="store_true",
+        help=(
+            "capture to BUILD a future acceptance for an identity epoch no "
+            "issued acceptance binds; requires --allow-live and a declared "
+            "derivation-kind session slot, and licenses no measurement"
+        ),
+    )
     args = parser.parse_args(argv)
     _configure_writer_crash_authorization(
         args.test_writer_crash_authorization,
@@ -1643,6 +1792,33 @@ def main(argv: list[str] | None = None) -> int:
     if bracket_mode and (args.rederive_from is not None or args.output is not None):
         return emit_refusal(
             RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
+            stream=sys.stderr,
+        )
+    if args.derivation_only and (
+        args.rederive_from is not None or args.output is not None
+    ):
+        # Re-derivation replays bytes that already exist; derivation-only is a
+        # live capture parameter and can never describe that replay.  This
+        # refusal must precede the --rederive-from branch below, which returns
+        # success on its own.
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
+            context={
+                "detail": "--derivation-only applies only to live capture",
+                # The registry code is the ordinary "these parameters apply
+                # only to live capture" family, so name the flags actually
+                # passed; a reader must not go hunting for a --rederive-from
+                # that was never on the command line.
+                "conflicting_flags": sorted(
+                    flag
+                    for flag, present in (
+                        ("--derivation-only", args.derivation_only),
+                        ("--rederive-from", args.rederive_from is not None),
+                        ("--output", args.output is not None),
+                    )
+                    if present
+                ),
+            },
             stream=sys.stderr,
         )
     if not verify_frozen_protocol():
@@ -1736,16 +1912,76 @@ def main(argv: list[str] | None = None) -> int:
         "estimator_revision": RESIDUAL_REGION_METHOD,
         "pulse_protocol_id": PROTOCOL_ID,
     }
-    try:
-        preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
-            planned_epoch
+    preflight_systematic_screen_s: Decimal | None
+    screen_basis: dict[str, Any] | None = None
+    if args.derivation_only:
+        try:
+            _level_screen_s, basis = _derivation_only_screen_basis()
+        except _AcceptancePreflightError as exc:
+            return emit_refusal(
+                RefusalCode.FROZEN_PROTOCOL_INVALID,
+                context={"reason": exc.reason, **exc.context},
+                stream=sys.stderr,
+            )
+        # The stale-field list is the whole justification for this mode.  It is
+        # computed here rather than raised by the authenticator because an
+        # EMPTY list is the refusal: when the machine's epoch equals the one
+        # the active acceptance binds, an ordinary capture is possible and
+        # derivation-only would be a bypass of the screen that judges it.
+        stale_fields = sorted(
+            field
+            for field, expected in basis["epoch"].items()
+            if planned_epoch.get(field) != expected
         )
-    except _AcceptancePreflightError as exc:
-        return emit_refusal(
-            RefusalCode.FROZEN_PROTOCOL_INVALID,
-            context={"reason": exc.reason, **exc.context},
-            stream=sys.stderr,
-        )
+        if not stale_fields:
+            return emit_refusal(
+                RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED,
+                context={"acceptance_id": basis["acceptance_id"]},
+                stream=sys.stderr,
+            )
+        if not bracket_mode:
+            return emit_refusal(
+                RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED,
+                context={
+                    "detail": (
+                        "--derivation-only requires --session-id, --slot, and "
+                        "--attempt-id of a declared derivation-kind session"
+                    )
+                },
+                stream=sys.stderr,
+            )
+        try:
+            declared_shape = declared_session_shape(
+                args.ledger, session_id=args.session_id
+            )
+        except CalibrationLedgerError as exc:
+            return emit_refusal(
+                exc.code or RefusalCode.LEDGER_MALFORMED,
+                context=dict(exc.context) | {"detail": str(exc)},
+                stream=sys.stderr,
+            )
+        if declared_shape["session_kind"] != SESSION_KIND_DERIVATION:
+            return emit_refusal(
+                RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED,
+                context={"session_kind": str(declared_shape["session_kind"])},
+                stream=sys.stderr,
+            )
+        # No acceptance judges this epoch, so no level screen applies.  The
+        # disposition below collapses to valid or ordinary-invalid; whether the
+        # bound exceeded the PRIOR epoch's screen is recorded as a diagnostic.
+        preflight_systematic_screen_s = None
+        screen_basis = basis
+    else:
+        try:
+            preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
+                planned_epoch
+            )
+        except _AcceptancePreflightError as exc:
+            return emit_refusal(
+                RefusalCode.FROZEN_PROTOCOL_INVALID,
+                context={"reason": exc.reason, **exc.context},
+                stream=sys.stderr,
+            )
 
     import mlx.core as mx  # noqa: PLC0415
 
@@ -1782,6 +2018,7 @@ def main(argv: list[str] | None = None) -> int:
         t1_bindings=planned_t1,
         session_id=args.session_id if bracket_mode else None,
         slot=args.slot if bracket_mode else None,
+        derivation_only=args.derivation_only,
     )
     try:
         if bracket_mode and args.slot == "post":
@@ -2203,6 +2440,23 @@ def main(argv: list[str] | None = None) -> int:
         evidence_payload["reasons"] = sorted(
             set(evidence_payload.get("reasons", [])) | {"clock_anchor_unresolved"}
         )
+    # One classification for this capture, computed before any artifact is
+    # written so the diagnostic can be recorded inside the HASHED evidence.
+    # Adding sibling keys below cannot change the b_fiducial_s lexeme, so the
+    # disposition this returns is the one the ledger receives further down.
+    bound_lexeme = _exact_bound_lexeme_s(evidence_payload)
+    disposition, exceeds_prior_level_screen = _classify_capture(
+        evidence_status=evidence_payload["status"],
+        bound_lexeme=bound_lexeme,
+        preflight_systematic_screen_s=preflight_systematic_screen_s,
+        screen_basis=screen_basis,
+    )
+    if screen_basis is not None:
+        evidence_payload["derivation_only"] = True
+        evidence_payload["screen_basis"] = screen_basis
+        evidence_payload["exceeds_prior_level_screen"] = (
+            exceeds_prior_level_screen
+        )
     _write_text_artifact(
         out_dir / "instrument_evidence.json",
         json.dumps(evidence_payload, indent=2, sort_keys=True) + "\n",
@@ -2223,29 +2477,19 @@ def main(argv: list[str] | None = None) -> int:
         }
         | {"raw/powermetrics.plist": sha256_path(capture_path)},
     }
+    if screen_basis is not None:
+        manifest["derivation_only"] = True
+        manifest["screen_basis"] = screen_basis
+        manifest["exceeds_prior_level_screen"] = evidence_payload[
+            "exceeds_prior_level_screen"
+        ]
     _write_text_artifact(
         out_dir / "manifest.json",
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         WriterStage.DURING_MANIFEST_ARTIFACT,
     )
     _writer_stage(WriterStage.ARTIFACTS_COMPLETE_BEFORE_FINALIZATION)
-    serialized_evidence = json.loads(
-        json.dumps(evidence_payload, sort_keys=True),
-        parse_float=str,
-        parse_int=str,
-    )
-    bound_lexeme = serialized_evidence.get("b_fiducial_s")
-    ledger_lifecycle.exact_bound_lexeme_s = (
-        bound_lexeme if isinstance(bound_lexeme, str) else None
-    )
-    disposition = "ordinary-invalid"
-    if evidence_payload["status"] == "valid":
-        disposition = (
-            "systematic-invalid"
-            if isinstance(bound_lexeme, str)
-            and Decimal(bound_lexeme) > preflight_systematic_screen_s
-            else "valid"
-        )
+    ledger_lifecycle.exact_bound_lexeme_s = bound_lexeme
     try:
         _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(
             disposition,
