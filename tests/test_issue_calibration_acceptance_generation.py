@@ -349,7 +349,7 @@ else:
     def run_chain(
         self, *, end: int = 10000, slots: str | None = None, fail: str = "",
         capture: int = 480, absent_input: str = "", fail_readiness: bool = False,
-        knobs: dict[str, str] | None = None,
+        knobs: dict[str, str] | None = None, argv: list[str] | None = None,
     ) -> tuple[subprocess.CompletedProcess, list[dict], list[str]]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -391,7 +391,7 @@ else:
                 env["SLOT_COUNT"] = slots
             env.update(knobs or {})
             result = subprocess.run(
-                [shutil.which("zsh"), str(CHAIN)], env=env,
+                [shutil.which("zsh"), str(CHAIN), *(argv or [])], env=env,
                 capture_output=True, text=True, timeout=60,
             )
             calls_path = root / "calls"
@@ -555,9 +555,13 @@ else:
 
     def test_chain_source_carries_no_pack_probe_or_git_step(self) -> None:
         source = CHAIN.read_text(encoding="utf-8")
+        # S1/S2 landed at this HEAD, so the SKELETON banner is gone; what must
+        # never come back is a banner claiming the file is unpinnable, and what
+        # must stay is the statement of what the plan actually pins.
+        self.assertNotIn("# SKELETON:", source)
         self.assertIn(
-            "# SKELETON: pending S1/S2 flag landing; not to be pinned in a plan"
-            " until the integration replay\n",
+            "# pin this file in its plan: it pins the wrapper emitted by\n"
+            "# scripts/gen_derivation_night.py,",
             source,
         )
         self.assertIn("set -euo pipefail\n", source)
@@ -571,21 +575,65 @@ else:
         self.assertEqual(code.count("\nsettle\n"), 1)
         self.assertTrue(os.access(CHAIN, os.X_OK))
 
-    def test_chain_header_pins_its_hand_written_and_unlanded_flag_warnings(self) -> None:
+    def test_chain_header_pins_its_hand_written_and_landed_flag_surface(self) -> None:
         source = CHAIN.read_text(encoding="utf-8")
-        # Deleting either line loses a warning a future reader needs: that this
-        # file is not regenerated from a runbook section, and that the writer
-        # rejects every dNN slot name until seat S2 lands the declared list.
+        # Deleting either line loses a fact a future reader needs: that this
+        # file is not regenerated from a runbook section, and that the writer's
+        # --derivation-only surface it calls has landed and where to re-read it.
         self.assertIn(
             "# This file is HAND-WRITTEN and is NOT a generated region of\n"
             "# scripts/gen_g2_phase_d.py;",
             source,
         )
         self.assertIn(
-            '#   validate_powermetrics_fiducial.py      --slot dNN — today the writer\'s --slot\n'
-            '#   is choices=("pre","post") and REJECTS every d01..dNN name;',
+            "#   validate_powermetrics_fiducial.py      --derivation-only (:1771), which\n"
+            "#     requires --session-id, --slot and --attempt-id of a declared\n"
+            "#     derivation-kind session (:1946);",
             source,
         )
+        # The claim the header makes must still be true of the writer's CLI.
+        writer = (ROOT / "scripts/validate_powermetrics_fiducial.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"--derivation-only",', writer)
+        self.assertIn(
+            '        "--slot",\n'
+            '        help="exact predeclared slot name to capture, from the'
+            " session's list\",\n",
+            writer,
+        )
+
+    def test_chain_forwards_its_argv_verbatim_into_the_reservation(self) -> None:
+        """The wrapper's per-slot bindings reach the reservation only through "$@".
+
+        Dropping the forwarding line makes the reservation refuse
+        declared_slot_flag_count_mismatch mid-night
+        (scripts/reserve_calibration_window_bracket.py:167-186), so the chain
+        must pass through every argument it was given, in order, unaltered.
+        """
+
+        bindings = [
+            flag
+            for index in range(1, 13)
+            for flag in (
+                "--slot-attempt-id",
+                f"fixture-session-d{index:02d}",
+                "--slot-custody-locator",
+                f"/tmp/runs/instrument_validation/fixture-session-d{index:02d}",
+            )
+        ]
+        _result, calls, _log = self.run_chain(slots="1", argv=bindings)
+        reservation = next(
+            call
+            for call in calls
+            if call["name"] == "python3"
+            and "reserve_calibration_window_bracket.py" in call["args"][0]
+        )
+        arguments = reservation["args"]
+        start = arguments.index("--slot-attempt-id")
+        self.assertEqual(arguments[start : start + len(bindings)], bindings)
+        # Forwarded verbatim means nothing follows them but --execute.
+        self.assertEqual(arguments[start + len(bindings) :], ["--execute"])
 
     def test_chain_readiness_call_puts_globals_before_the_subcommand_and_binds_the_night_ledger(self) -> None:
         """recover_calibration_ledger.py declares --ledger/--head-pin on its top-level parser; placed
