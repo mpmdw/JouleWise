@@ -1212,6 +1212,25 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             + ", ".join(sorted(unresolved))
             + "; not issued (pre-registration, Prospective use)"
         )
+    # The catalog has exactly two entries, so `epoch_id` is a two-way choice --
+    # and a two-way choice made with `else` silently LABELS anything it does not
+    # recognise.  A row captured under a third identity epoch (a further OS
+    # update mid-campaign, or a corrupted row) would enter the prior set wearing
+    # the predecessor's catalog id, and every downstream check would agree with
+    # the lie.  Refuse instead, before the labelling happens.
+    foreign_epoch = [
+        observation.attempt_id
+        for observation in snapshot.observations
+        if observation.content_id is not None
+        and dict(observation.identity_epoch) not in (identity_epoch, predecessor_epoch)
+    ]
+    if foreign_epoch:
+        raise PrepareRefusal(
+            "prior set: attempt "
+            + ", ".join(sorted(foreign_epoch))
+            + " carries an identity epoch that is neither the target's nor the "
+            "predecessor's; not issued"
+        )
     prior_observations = [
         {
             "content_id": observation.content_id,

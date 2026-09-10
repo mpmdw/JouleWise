@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from typing import Sequence
+from typing import Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
@@ -117,6 +117,7 @@ def build_derivation_ledger(
     second_session: tuple[str, Sequence[Slot]] | None = None,
     fill_slots: int | None = None,
     abort_reason: str | None = None,
+    second_session_epoch: Mapping[str, object] | None = None,
 ) -> dict[str, Path]:
     """Create a Git-committed ledger holding one or two closed sessions.
 
@@ -144,7 +145,8 @@ def build_derivation_ledger(
     # A bracket-kind session's slot list is fixed at ("pre", "post"); only a
     # derivation session declares an arbitrary ordered list.
     _write_session(
-        ledger, runs, pin, session_id, slots, session_kind, fill_slots, abort_reason
+        ledger, runs, pin, session_id, slots, session_kind, fill_slots, abort_reason,
+        TARGET_EPOCH,
     )
     if second_session is not None:
         _write_session(
@@ -152,6 +154,7 @@ def build_derivation_ledger(
             SESSION_KIND_DERIVATION,
             None,
             None,
+            second_session_epoch or TARGET_EPOCH,
         )
     snapshot = load_calibration_ledger_snapshot(
         ledger, pin, require_committed_pin=False, verify_custody=False,
@@ -182,6 +185,7 @@ def _write_session(
     session_kind: str,
     fill_slots: int | None = None,
     abort_reason: str | None = None,
+    epoch: Mapping[str, object] | None = None,
 ) -> None:
     # A session opens only at head-equals-pin, so a fixture writing a SECOND
     # session advances the working pin to the physical head first, exactly as
@@ -219,7 +223,7 @@ def _write_session(
             name: {
                 "attempt_id": f"{session_id}-{name}",
                 "custody_locator": str(runs / "instrument_validation" / f"{session_id}-{name}"),
-                "identity_epoch": TARGET_EPOCH,
+                "identity_epoch": epoch or TARGET_EPOCH,
                 "t1_bindings": T1_BINDINGS,
             }
             for name in declared
@@ -246,7 +250,7 @@ def _write_session(
             disposition=slot.disposition,
             custody_locator=str(custody),
             artifact_sha256=artifact_hashes(custody),
-            identity_epoch=TARGET_EPOCH,
+            identity_epoch=epoch or TARGET_EPOCH,
             t1_bindings=T1_BINDINGS,
             capture_wall_time_s="99.0",
             exact_bound_lexeme_s=slot.b_fiducial_s,
