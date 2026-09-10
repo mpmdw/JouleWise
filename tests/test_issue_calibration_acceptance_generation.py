@@ -292,7 +292,10 @@ elif name == "python3":
         if slot == os.environ.get("FAIL_SLOT"):
             sys.exit(7)
         clock.write_text(str(now + int(os.environ["FAKE_CAPTURE_S"])))
-    elif not any(tool in args[0] for tool in ("reserve_calibration_window_bracket.py", "recover_calibration_ledger.py")):
+    elif "recover_calibration_ledger.py" in args[0]:
+        if "readiness" in args and os.environ.get("FAIL_READINESS"):
+            sys.exit(3)
+    elif "reserve_calibration_window_bracket.py" not in args[0]:
         sys.exit(99)
 else:
     sys.exit(98)
@@ -302,7 +305,8 @@ else:
 
     def run_chain(
         self, *, end: int = 10000, slots: str | None = None, fail: str = "",
-        capture: int = 480, absent_input: str = "",
+        capture: int = 480, absent_input: str = "", fail_readiness: bool = False,
+        knobs: dict[str, str] | None = None,
     ) -> tuple[subprocess.CompletedProcess, list[dict], list[str]]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -326,6 +330,7 @@ else:
                 # or escape the fake clock instead of being silently intercepted.
                 "PATH": "/bin:/usr/bin",
                 "FAKE_ROOT": str(root), "FAIL_SLOT": fail, "FAKE_CAPTURE_S": str(capture),
+                "FAIL_READINESS": "1" if fail_readiness else "",
                 "PY": str(root / "python3"), "SLEEP": str(root / "sleep"),
                 "DATE": str(root / "date"),
                 "SESSION_ID": "fixture-session", "WINDOW_ID": "fixture-window",
@@ -341,6 +346,7 @@ else:
             })
             if slots is not None:
                 env["SLOT_COUNT"] = slots
+            env.update(knobs or {})
             result = subprocess.run(
                 [shutil.which("zsh"), str(CHAIN)], env=env,
                 capture_output=True, text=True, timeout=60,
@@ -361,20 +367,24 @@ else:
         result, calls, _log = self.run_chain()
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 13)
-        self.assertIn("--session-kind", python[0]["args"])
-        self.assertIn("derivation", python[0]["args"])
-        self.assertEqual(python[0]["args"][python[0]["args"].index("--slot-count") + 1], "12")
-        self.assertEqual([call["time"] for call in python[1:]], list(range(600, 7800, 600)))
+        self.assertEqual(len(python), 14)
+        # G2-a order: pre-reserve readiness, then the reservation, then the ONE
+        # settle, then the captures.
+        self.assertIn("recover_calibration_ledger.py", calls[0]["args"][0])
+        self.assertEqual(calls[0]["args"][calls[0]["args"].index("--phase") + 1], "pre-reserve")
+        self.assertIn("readiness", calls[0]["args"])
+        self.assertIn("reserve_calibration_window_bracket.py", calls[1]["args"][0])
+        self.assertIn("--session-kind", python[1]["args"])
+        self.assertIn("derivation", python[1]["args"])
+        self.assertEqual(python[1]["args"][python[1]["args"].index("--slot-count") + 1], "12")
+        self.assertEqual([call["time"] for call in python[2:]], list(range(600, 7800, 600)))
         # The ONE settle: a single 600 s sleep, and the reservation is the last
-        # machine action BEFORE it (pinned G2-a order). Every later sleep only
-        # fills the start-to-start cadence.
+        # machine action BEFORE it. Every later sleep only fills the cadence.
         sleeps = [call for call in calls if call["name"] == "sleep"]
         self.assertEqual(sleeps[0], {"name": "sleep", "args": ["600"], "time": 0})
-        self.assertIn("reserve_calibration_window_bracket.py", calls[0]["args"][0])
-        self.assertLess(calls.index(python[0]), calls.index(sleeps[0]))
+        self.assertLess(calls.index(python[1]), calls.index(sleeps[0]))
         self.assertEqual([call["args"][0] for call in sleeps[1:]], ["120"] * 11)
-        for index, call in enumerate(python[1:], 1):
+        for index, call in enumerate(python[2:], 1):
             self.assertIn("--derivation-only", call["args"])
             self.assertIn("--allow-live", call["args"])
             self.assertIn(f"d{index:02d}", call["args"])
@@ -401,7 +411,28 @@ else:
                 self.assertEqual(result.returncode, 66, result.stderr)
                 self.assertIn("derivation_chain_input_missing: ", result.stderr)
                 self.assertIn(absent, result.stderr)
-                # No reservation, no settle, no window time spent.
+                # No readiness, no reservation, no settle, no window time spent.
+                self.assertEqual(calls, [])
+                self.assertEqual(log, [])
+
+    def test_unready_ledger_refuses_before_any_reservation(self) -> None:
+        result, calls, log = self.run_chain(fail_readiness=True)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        # Exactly the readiness call: nothing was reserved, nothing settled.
+        self.assertEqual(len(calls), 1)
+        self.assertIn("recover_calibration_ledger.py", calls[0]["args"][0])
+        self.assertIn("readiness", calls[0]["args"])
+        self.assertEqual(log, [])
+
+    def test_zero_settle_or_cadence_refuses_before_readiness_or_settle(self) -> None:
+        # A zero settle would collect with the operator's activity still in the
+        # thermal state; a zero cadence would collapse the start-to-start
+        # spacing the pre-registration declares. Both refuse as declarations.
+        for knob in ("SETTLE_S", "SLOT_CADENCE_S"):
+            with self.subTest(knob=knob):
+                result, calls, log = self.run_chain(knobs={knob: "0"})
+                self.assertEqual(result.returncode, 64, result.stderr)
+                self.assertIn("must be positive", result.stderr)
                 self.assertEqual(calls, [])
                 self.assertEqual(log, [])
 
@@ -409,7 +440,7 @@ else:
         result, calls, log = self.run_chain(end=1800)
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 4)  # open, d01, d02, abort
+        self.assertEqual(len(python), 5)  # readiness, open, d01, d02, abort
         self.assertEqual(python[-1]["args"][-2:], ["--reason", "window_exhausted"])
         self.assertIn("abort-session", python[-1]["args"])
         self.assertNotIn("d03", str(python))
@@ -426,7 +457,7 @@ else:
         result, calls, log = self.run_chain(end=1500)
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 3)  # open, d01, abort
+        self.assertEqual(len(python), 4)  # readiness, open, d01, abort
         captures = [call for call in python if "validate_powermetrics_fiducial.py" in call["args"][0]]
         self.assertEqual([call["args"][call["args"].index("--slot") + 1] for call in captures], ["d01"])
         self.assertIn("slot_unused slot=d02 reason=window_exhausted", log)
@@ -446,14 +477,14 @@ else:
         self.assertEqual(
             [call["args"][call["args"].index("--slot") + 1] for call in captures], ["d01"]
         )
-        self.assertEqual(len(python), 3)  # open, d01, abort
+        self.assertEqual(len(python), 4)  # readiness, open, d01, abort
         self.assertIn("slot_unused slot=d02 reason=window_exhausted", log)
 
     def test_first_slot_that_cannot_finish_aborts_with_no_capture(self) -> None:
         result, calls, log = self.run_chain(end=1000)
         self.assertEqual(result.returncode, 0, result.stderr)
         python = [call for call in calls if call["name"] == "python3"]
-        self.assertEqual(len(python), 2)  # open, abort
+        self.assertEqual(len(python), 3)  # readiness, open, abort
         self.assertNotIn("validate_powermetrics_fiducial.py", str(python))
         self.assertEqual(log[-2:], [
             "slot_unused slot=d01 reason=window_exhausted",
@@ -463,7 +494,7 @@ else:
     def test_slot_count_override_and_writer_error_stop(self) -> None:
         result, calls, _log = self.run_chain(slots="2")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len([c for c in calls if c["name"] == "python3"]), 3)
+        self.assertEqual(len([c for c in calls if c["name"] == "python3"]), 4)
         result, calls, log = self.run_chain(fail="d02")
         self.assertEqual(result.returncode, 7)
         self.assertNotIn("d03", str(calls))
@@ -496,6 +527,22 @@ else:
                 self.assertIsNone(re.search(forbidden, code), forbidden)
         self.assertEqual(code.count("\nsettle\n"), 1)
         self.assertTrue(os.access(CHAIN, os.X_OK))
+
+    def test_chain_header_pins_its_hand_written_and_unlanded_flag_warnings(self) -> None:
+        source = CHAIN.read_text(encoding="utf-8")
+        # Deleting either line loses a warning a future reader needs: that this
+        # file is not regenerated from a runbook section, and that the writer
+        # rejects every dNN slot name until seat S2 lands the declared list.
+        self.assertIn(
+            "# This file is HAND-WRITTEN and is NOT a generated region of\n"
+            "# scripts/gen_g2_phase_d.py;",
+            source,
+        )
+        self.assertIn(
+            '#   validate_powermetrics_fiducial.py      --slot dNN — today the writer\'s --slot\n'
+            '#   is choices=("pre","post") and REJECTS every d01..dNN name;',
+            source,
+        )
 
 
 if __name__ == "__main__":

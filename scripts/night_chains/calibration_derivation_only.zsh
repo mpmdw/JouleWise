@@ -120,11 +120,23 @@ preflight_inputs() {
 }
 
 # Order follows the pinned G2-a chain (SHAKEDOWN-G2-RUNSHEET.md:509-536):
-# input preflight and session reservation FIRST, then chain_start, then the ONE
-# settle, then the captures. Reserving after the settle would make the
-# reservation the last machine action before slot d01 and the pre-registration's
-# "one 600 s settle after the last operator action" literally false.
+# input preflight, pre-reserve readiness, and the session reservation FIRST,
+# then chain_start, then the ONE settle, then the captures. Reserving after the
+# settle would make the reservation the last machine action before slot d01 and
+# the pre-registration's "one 600 s settle after the last operator action"
+# literally false.
 preflight_inputs
+
+# G2-a parity (runsheet L509-512): the early-warning readiness check runs before
+# the reservation, so an unready ledger refuses while nothing has been written
+# and no window time has been spent. It never authorizes ARM.
+"$PY" "$REPO/scripts/recover_calibration_ledger.py" \
+    --ledger "$CALIBRATION_LEDGER" \
+    --head-pin "$LEDGER_HEAD_PIN" \
+    readiness \
+    --phase pre-reserve \
+    --session-id "$SESSION_ID" \
+    --plan "$PLAN"
 
 "$PY" "$REPO/scripts/reserve_calibration_window_bracket.py" \
     --ledger "$CALIBRATION_LEDGER" \
