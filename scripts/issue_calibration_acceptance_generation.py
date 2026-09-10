@@ -38,7 +38,11 @@ named on the command line. The PRIOR-SET PREFIX is the run of ledger rows at or
 below the cutoff, which the candidate must account for exactly. The QUANTILE
 PROOF is the record showing that the Student-t quantile for this corpus's
 realized degrees of freedom was computed correctly, checked two independent
-ways, before any threshold derived from it was written down.
+ways, before any threshold derived from it was written down. The quantiles
+themselves are computed in 80-digit decimal, but the two-draw PREDICTIONS the
+operatives rest on are then evaluated in BINARY64 and recorded as the shortest
+decimal that reads back as the same double -- r6's sealed rule string, kept
+verbatim so this generation's arithmetic is the predecessor's arithmetic.
 
 Decision ids appear in the artifact and in refusals: D-102 is the acceptance
 artifact's own contract (how a generation is derived and what may judge it);
@@ -68,6 +72,7 @@ import importlib
 import json
 import math
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any, Iterable, Mapping, Sequence
@@ -284,6 +289,21 @@ def check(args: argparse.Namespace) -> int:
 
     observed = observe_machine()
     mismatches = mismatched_fields(expected, observed)
+    preregistration_lines: list[str] = []
+    if args.preregistration is not None:
+        try:
+            text = Path(args.preregistration).read_text(encoding="utf-8")
+            _, registered_powermetrics = preregistration_epoch_pins(text)
+        except (OSError, PrepareRefusal) as error:
+            preregistration_lines.append(f"pre-registration: unusable ({error})")
+        else:
+            agrees = observed.get("powermetrics_sha256") == registered_powermetrics
+            preregistration_lines.append(
+                f"pre-registered powermetrics sha256 {registered_powermetrics}: "
+                + ("match" if agrees else "MISMATCH — the registration is void")
+            )
+            if not agrees:
+                errors.append("pre-registration: powermetrics sha256 differs")
     print("Desk epoch watch (identity comparison only; no capture authorization)")
     print(f"ACTIVE acceptance: {ACTIVE_ACCEPTANCE_ID}")
     print(f"{'field':<22} {'expected':<64} {'observed':<64} status")
@@ -296,6 +316,10 @@ def check(args: argparse.Namespace) -> int:
         print(error)
     if mismatches:
         print("mismatched fields: " + ", ".join(mismatches))
+    # Appended only when --preregistration is given, so the watch's own output
+    # stays byte-identical without it.
+    for line in preregistration_lines:
+        print(line)
     # The epoch-watch output above is byte-identical whether or not a
     # registration was named; the dry run only ever APPENDS.
     # An empty `--session-ids` value names no session, so it is not a request
@@ -321,11 +345,12 @@ def check(args: argparse.Namespace) -> int:
 # which is their ONE home: the issuer that emits a row and the validator that
 # admits it must not carry two copies of the same number.
 #
-# r6's operative level screen; the screen-challenge diagnostic counts retained
-# members above it (two or more halts issuance for Ed).
-R6_PREFLIGHT_LEVEL_SCREEN_S = Decimal("0.032898493715362")
-# r6 maximum + r6 range, per addendum A-4 (the Decimal sum of
-# 0.03289849371536248 and 0.00972358928879385): the second recorded diagnostic.
+# The predecessor's maximum plus its range: the second recorded diagnostic, a
+# RULED literal (CG46 addendum A-4 corrected the last digits), so it is stated
+# here rather than derived -- and then checked at run time against the
+# predecessor's own statistics, so the literal cannot outlive the artifact it
+# describes.  The level-screen threshold is NOT restated: it is read from the
+# authenticated predecessor, which is its one home.
 R6_MAXIMUM_PLUS_RANGE_S = Decimal("0.04262208300415633")
 SCREEN_CHALLENGE_MEMBER_LIMIT = 2
 # D-126 cl.2's SUCCESSOR_MINIMUM_CORPUS_SIZE, a corpus-SIZE floor (addendum A-2).
@@ -336,6 +361,9 @@ PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
 # The one alternative floor the pre-registration and CG46 A-2 name, and the only
 # value `--ed-ruling` licenses.
 RULED_ALTERNATIVE_CORPUS_SIZE = 17
+# The pre-registered schedule: three agent-free nights of twelve declared slots.
+PREREGISTERED_NIGHT_COUNT = 3
+PREREGISTERED_SLOTS_PER_NIGHT = 12
 # What the emitted bytes authorize, said in words rather than as a boolean.
 CANDIDATE_LICENCE = (
     "These bytes license nothing: no measurement window, no claim, no "
@@ -749,6 +777,35 @@ def envelope_ceiling(predecessor_ceiling: Decimal, own_q99: Decimal) -> Decimal:
     return max(predecessor_ceiling, own_q99)
 
 
+# The pre-registration states the two machine facts a change to which VOIDS the
+# registration.  They are parsed out of the file the caller names, by strict
+# patterns, so the campaign's own text is the authority rather than a constant
+# restated here.  Exactly one match each: absent or ambiguous refuses.
+_PREREGISTRATION_OS_BUILD = re.compile(r"os_build:\s*([A-Za-z0-9._-]+)")
+_PREREGISTRATION_POWERMETRICS = re.compile(
+    r"/usr/bin/powermetrics sha256 in force is\s+([0-9a-f]{64})"
+)
+
+
+def preregistration_epoch_pins(text: str) -> tuple[str, str]:
+    """The `os_build` and `powermetrics` sha256 the campaign is registered under."""
+
+    pins: list[str] = []
+    for label, pattern in (
+        ("os_build", _PREREGISTRATION_OS_BUILD),
+        ("powermetrics sha256", _PREREGISTRATION_POWERMETRICS),
+    ):
+        found = set(pattern.findall(text))
+        if len(found) != 1:
+            raise PrepareRefusal(
+                f"pre-registration: {label} is "
+                + ("absent" if not found else f"ambiguous ({len(found)} values)")
+                + "; the registration's machine identity cannot be established"
+            )
+        pins.append(found.pop())
+    return pins[0], pins[1]
+
+
 def rederivation_triggers(corpus_doubling_trigger: str) -> set[str]:
     """The trigger set the production validator demands for a given row.
 
@@ -942,7 +999,9 @@ def _registration_observations(
 
 
 def _select_members(
-    observations: Iterable[LedgerObservation], repo_root: Path,
+    observations: Iterable[LedgerObservation],
+    repo_root: Path,
+    level_screen_threshold: Decimal,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[dict[str, Any]]]:
     """Split the registration's VALID rows into members and named exclusions.
 
@@ -990,7 +1049,7 @@ def _select_members(
                 "member_id": observation.attempt_id,
                 "b_fiducial_s": lexeme,
                 "exceeds_prior_level_screen": Decimal(lexeme)
-                > R6_PREFLIGHT_LEVEL_SCREEN_S,
+                > level_screen_threshold,
             }
         )
     return members, excluded, comparisons
@@ -1067,9 +1126,21 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             )
     preregistration = Path(args.preregistration)
     try:
-        preregistration_sha256 = hashlib.sha256(preregistration.read_bytes()).hexdigest()
+        preregistration_bytes = preregistration.read_bytes()
     except OSError as error:
         raise PrepareRefusal(f"pre-registration unreadable: {error}") from error
+    preregistration_sha256 = hashlib.sha256(preregistration_bytes).hexdigest()
+    # B-3: the arm materials carry the digest of the text the campaign was armed
+    # under.  Without this pin the tool would derive against whatever the file
+    # says TODAY, which is exactly the edit a pre-registration exists to forbid.
+    if preregistration_sha256 != args.preregistration_sha256:
+        raise PrepareRefusal(
+            f"pre-registration sha256 {preregistration_sha256} does not match the "
+            f"pinned {args.preregistration_sha256}; not issued"
+        )
+    registered_os_build, registered_powermetrics = preregistration_epoch_pins(
+        preregistration_bytes.decode("utf-8", errors="replace")
+    )
 
     snapshot = load_calibration_ledger_snapshot(
         args.ledger,
@@ -1084,6 +1155,26 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     if snapshot.refusal_reasons:
         raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
     predecessor = _authenticated_predecessor(Path(args.predecessor_acceptance))
+    predecessor_statistics = predecessor["decimal_derivation"]["source_statistics"]
+    level_screen_threshold = Decimal(
+        predecessor["decimal_derivation"]["ratified_operatives"][
+            "preflight_level_screen_s"
+        ]
+    )
+    # The A-4 literal describes THIS predecessor's corpus; if it ever stops
+    # doing so, the diagnostic it feeds is meaningless and the run refuses
+    # rather than reporting against a number from another generation.
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        recomputed = Decimal(predecessor_statistics["maximum_s"]) + Decimal(
+            predecessor_statistics["range_s"]
+        )
+    if recomputed != R6_MAXIMUM_PLUS_RANGE_S:
+        raise PrepareRefusal(
+            f"predecessor maximum plus range {recomputed} does not equal the "
+            f"ruled diagnostic {R6_MAXIMUM_PLUS_RANGE_S} (CG46 addendum A-4); "
+            "not issued"
+        )
 
     observations = _registration_observations(snapshot, session_ids)
     # The TARGET epoch is the registration's own, read from its rows before any
@@ -1094,7 +1185,46 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     for observation in observations:
         if dict(observation.identity_epoch) != target_epoch:
             raise PrepareRefusal("registration: rows disagree on the identity epoch")
-    members, excluded, comparisons = _select_members(observations, Path(args.repo_root))
+    # B-2: the corpus is bound to the pre-registered SHAPE -- three nights of
+    # twelve declared slots -- because a corpus assembled from a different
+    # schedule is a different experiment, whatever its statistics say.
+    if len(session_ids) != PREREGISTERED_NIGHT_COUNT and not args.nights_ruling:
+        raise PrepareRefusal(
+            f"registration names {len(session_ids)} sessions, not the "
+            f"pre-registered {PREREGISTERED_NIGHT_COUNT}; --nights-ruling must "
+            "name a written ruling to depart"
+        )
+    if not args.slot_count_ruling:
+        for session_id in session_ids:
+            declared = len(snapshot.bracket_session_by_id[session_id].declared_slots)
+            if declared != PREREGISTERED_SLOTS_PER_NIGHT:
+                raise PrepareRefusal(
+                    f"session {session_id} declared {declared} slots, not the "
+                    f"pre-registered {PREREGISTERED_SLOTS_PER_NIGHT}; "
+                    "--slot-count-ruling must name a written ruling to depart"
+                )
+    # B-1: a change to either machine fact VOIDS the registration, so the rows
+    # this corpus is built from must carry the identity the campaign was
+    # registered under -- read from the text, not from a constant here.
+    observed_powermetrics = {
+        observation.t1_bindings.get("powermetrics_sha256")
+        for observation in observations
+    }
+    if target_epoch.get("os_build") != registered_os_build:
+        raise PrepareRefusal(
+            f"registration os_build {target_epoch.get('os_build')!r} is not the "
+            f"pre-registered {registered_os_build!r}; the registration is void"
+        )
+    if observed_powermetrics != {registered_powermetrics}:
+        raise PrepareRefusal(
+            "registration powermetrics sha256 "
+            + ", ".join(sorted(str(item) for item in observed_powermetrics))
+            + f" is not the pre-registered {registered_powermetrics}; the "
+            "registration is void"
+        )
+    members, excluded, comparisons = _select_members(
+        observations, Path(args.repo_root), level_screen_threshold
+    )
     n = len(members)
     # Addendum A-7: a valid row carrying the TARGET epoch that belongs to no
     # session of this registration is not silently left out of the corpus --
@@ -1125,7 +1255,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     if len(challenged) >= SCREEN_CHALLENGE_MEMBER_LIMIT:
         raise PrepareRefusal(
             f"screen challenge: {len(challenged)} retained members exceed "
-            f"{R6_PREFLIGHT_LEVEL_SCREEN_S}; not issued, Ed rules in writing"
+            f"{level_screen_threshold}; not issued, Ed rules in writing"
         )
 
     degrees_of_freedom = n - 1
@@ -1364,7 +1494,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "screen_floor_bound": floor_bound,
             "screen_rule": screen_rule,
             "screen_challenge_member_count": len(challenged),
-            "screen_challenge_threshold_s": str(R6_PREFLIGHT_LEVEL_SCREEN_S),
+            "screen_challenge_threshold_s": str(level_screen_threshold),
             "new_maximum_exceeds_prior_maximum_plus_range": (
                 Decimal(statistics["maximum_s"]) > R6_MAXIMUM_PLUS_RANGE_S
             ),
@@ -1466,9 +1596,9 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
 def derivation_sha256(payload: Mapping[str, Any]) -> str:
     """The PRODUCTION recipe: canonical sha256 of the artifact minus this key.
 
-    `calibration_bracketing._valid_acceptance_bound` computes exactly this and
-    compares (`:660`, `:764`), so a curated digest of a chosen subset could
-    never authenticate however sensible the subset.  The curated seal that IS
+    `calibration_bracketing._valid_acceptance_bound` builds the same `core`
+    mapping and compares it through `_canonical_sha256`, so a curated digest of
+    a chosen subset could never authenticate however sensible the subset.  The curated seal that IS
     useful -- stable under prose and label edits, moving on every derivation
     input -- is `derivation_input_sha256` below, emitted alongside it.
     """
@@ -1544,6 +1674,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="the ACTIVE issued acceptance artifact whose epoch is compared",
     )
     watch.add_argument(
+        "--preregistration", type=Path, default=None,
+        help=(
+            "compare the machine's observed powermetrics sha256 against the one "
+            "this pre-registration is registered under; omitted, the watch "
+            "output is unchanged"
+        ),
+    )
+    watch.add_argument(
         "--session-ids", action="append", default=[],
         help=(
             "a derivation-kind ledger session to dry-run (repeatable); reports "
@@ -1608,6 +1746,27 @@ def build_parser() -> argparse.ArgumentParser:
             f"how many members the retained corpus must hold: "
             f"{SUCCESSOR_MINIMUM_CORPUS_SIZE} (the ratified floor) or "
             f"{RULED_ALTERNATIVE_CORPUS_SIZE} with --ed-ruling; no other value"
+        ),
+    )
+    prepare.add_argument(
+        "--preregistration-sha256", required=True,
+        help=(
+            "the sha256 of the pre-registration text the campaign was ARMED "
+            "under; the run refuses if the file has changed since"
+        ),
+    )
+    prepare.add_argument(
+        "--nights-ruling", default=None,
+        help=(
+            "reference to a written ruling departing from the pre-registered "
+            f"{PREREGISTERED_NIGHT_COUNT} capture nights"
+        ),
+    )
+    prepare.add_argument(
+        "--slot-count-ruling", default=None,
+        help=(
+            "reference to a written ruling departing from the pre-registered "
+            f"{PREREGISTERED_SLOTS_PER_NIGHT} declared slots per night"
         ),
     )
     prepare.add_argument(

@@ -9,7 +9,7 @@ real ledger, and no capture.
 from __future__ import annotations
 
 import argparse
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -41,6 +41,7 @@ from joulewise.calibration_ledger import (
     SESSION_KIND_BRACKET,
     load_calibration_ledger_snapshot,
 )
+import tests.fixtures.epoch_bootstrap.build as build_module
 from tests.fixtures.epoch_bootstrap.build import (
     TARGET_EPOCH,
     Slot,
@@ -62,6 +63,7 @@ R6 = (
     / "calibration_acceptance_d079_v2_n17_r6.json"
 )
 SESSION = "derivation-night-1"
+PREREGISTRATION_SHA256 = hashlib.sha256(PREREGISTRATION.read_bytes()).hexdigest()
 
 
 def parse_watch_table(output: str) -> dict[str, tuple[str, str, str]]:
@@ -673,8 +675,16 @@ class PrepareCandidateTest(unittest.TestCase):
             "--preregistration", str(PREREGISTRATION),
             "--predecessor-acceptance", str(R6),
             "--registration-session-id", SESSION,
+            "--preregistration-sha256", PREREGISTRATION_SHA256,
             "--out", str(self.out),
         ]
+        # Every fixture but the shape tests is ONE session of N slots, so the
+        # two shape rulings are supplied here; the shape refusals get their own
+        # tests, which omit them.
+        if "--nights-ruling" not in extra:
+            argv += ["--nights-ruling", "fixture: single-session shape"]
+        if "--slot-count-ruling" not in extra:
+            argv += ["--slot-count-ruling", "fixture: N-slot shape"]
         if not omit_d125:
             argv += ["--d125-ruling", D125_REFERENCE]
         stream = io.StringIO()
@@ -1742,6 +1752,192 @@ class PrepareCandidateTest(unittest.TestCase):
         labels = {row["epoch_id"] for row in
                   self.payload()["prior_observation_set"]["observations"]}
         self.assertTrue(labels.issubset(set(catalog)))
+
+
+    # ---- fix round 6 ----------------------------------------------------
+
+    # B-1: the machine facts a change to which VOIDS the registration
+
+    def test_the_preregistration_epoch_pins_are_parsed_from_the_text(self) -> None:
+        os_build, powermetrics = issuer.preregistration_epoch_pins(
+            PREREGISTRATION.read_text(encoding="utf-8")
+        )
+        self.assertEqual(os_build, "25G83")
+        self.assertEqual(
+            powermetrics,
+            "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+        )
+
+    def test_an_absent_or_ambiguous_epoch_pin_refuses(self) -> None:
+        """Absent and ambiguous are both failures; neither may be guessed past."""
+
+        with self.assertRaises(issuer.PrepareRefusal) as absent:
+            issuer.preregistration_epoch_pins("no pins here")
+        self.assertIn("absent", absent.exception.reason)
+        doubled = (
+            "os_build: 25G83\nos_build: 25H01\n"
+            "/usr/bin/powermetrics sha256 in force is " + "a" * 64
+        )
+        with self.assertRaises(issuer.PrepareRefusal) as ambiguous:
+            issuer.preregistration_epoch_pins(doubled)
+        self.assertIn("ambiguous", ambiguous.exception.reason)
+
+    def test_a_registration_under_another_os_build_is_void(self) -> None:
+        other = dict(TARGET_EPOCH)
+        other["os_build"] = "25H01"
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            # The registered session itself was captured under a later build:
+            # the machine moved on mid-campaign, which voids the registration.
+            fixture = build_derivation_ledger(
+                Path(tmp) / "osbuild", rows, session_epoch=other,
+            )
+            code = self.run_issuer(fixture)
+        self.assert_refused(code, "is not the pre-registered '25G83'")
+
+    def test_a_registration_under_another_powermetrics_binary_is_void(self) -> None:
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        rotated = dict(build_module.T1_BINDINGS)
+        rotated["powermetrics_sha256"] = "c" * 64
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "rotated", rows, t1_bindings=rotated,
+            )
+            code = self.run_issuer(fixture)
+        self.assert_refused(code, "is not the pre-registered b762e5bf")
+
+    def test_check_compares_the_preregistered_binary_only_when_asked(self) -> None:
+        """Byte-identical without `--preregistration`; one line with it."""
+
+        def run(*extra: str) -> str:
+            stream = io.StringIO()
+            args = issuer.build_parser().parse_args(
+                ["check", "--ledger", str(self.wide["ledger"]),
+                 "--head-pin", str(self.wide["pin"]),
+                 "--acceptance", str(R6), *extra]
+            )
+            with redirect_stdout(stream):
+                issuer.check(args)
+            return stream.getvalue()
+
+        baseline = run()
+        self.assertNotIn("pre-registered powermetrics", baseline)
+        with_pin = run("--preregistration", str(PREREGISTRATION))
+        self.assertTrue(with_pin.startswith(baseline))
+        self.assertIn(
+            "pre-registered powermetrics sha256 "
+            "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
+            with_pin,
+        )
+
+    # B-2: the corpus is bound to the pre-registered shape
+
+    def test_a_registration_of_other_than_three_nights_refuses(self) -> None:
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "onenight", rows)
+            code = self.run_issuer(fixture, "--nights-ruling", "")
+        self.assert_refused(code, "registration names 1 sessions, not the pre-registered 3")
+
+    def test_a_night_declaring_other_than_twelve_slots_refuses(self) -> None:
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "slots", rows)
+            code = self.run_issuer(fixture, "--slot-count-ruling", "")
+        self.assert_refused(
+            code, "declared 20 slots, not the pre-registered 12"
+        )
+
+    def test_the_pre_registered_shape_needs_no_ruling(self) -> None:
+        """Three nights of twelve slots emit with neither departure flag."""
+
+        nights = [
+            ("derivation-night-1", [Slot(v) for v in _grid(12, "0.0200", "0.0009")]),
+            ("derivation-night-2", [Slot(v) for v in _grid(12, "0.0212", "0.0009")]),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "shape", nights[0][1], second_session=nights[1],
+            )
+            argv = [
+                "prepare-candidate",
+                "--ledger", str(fixture["ledger"]), "--head-pin", str(fixture["pin"]),
+                "--repo-root", str(fixture["root"]),
+                "--preregistration", str(PREREGISTRATION),
+                "--preregistration-sha256", PREREGISTRATION_SHA256,
+                "--predecessor-acceptance", str(R6),
+                "--registration-session-id", "derivation-night-1",
+                "--registration-session-id", "derivation-night-2",
+                "--d125-ruling", D125_REFERENCE,
+                "--out", str(self.out),
+            ]
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                code = issuer.main(argv)
+            self.printed = stream.getvalue()
+        # Two nights, so the night-count fence fires and the SLOT fence does not:
+        # both sessions declare exactly 12, with no --slot-count-ruling given.
+        self.assert_refused(code, "registration names 2 sessions")
+        self.assertNotIn("declared", self.printed)
+
+    # B-3: the pre-registration text is pinned
+
+    def test_a_changed_preregistration_refuses(self) -> None:
+        self.assert_refused(
+            self.run_issuer(self.wide, "--preregistration-sha256", "d" * 64),
+            "does not match the pinned",
+        )
+
+    def test_the_preregistration_pin_is_required(self) -> None:
+        argv = ["prepare-candidate", "--preregistration", str(PREREGISTRATION),
+                "--out", str(self.out)]
+        with self.assertRaises(SystemExit):
+            with redirect_stderr(io.StringIO()):
+                issuer.build_parser().parse_args(argv)
+
+    # the level screen is read, not restated
+
+    def test_the_level_screen_threshold_comes_from_the_predecessor(self) -> None:
+        self.assertEqual(self.run_issuer(self.wide), 0)
+        outcomes = self.payload()["derivation_notes"]["rule_outcomes"]
+        self.assertEqual(
+            outcomes["screen_challenge_threshold_s"],
+            json.loads(R6.read_text())["decimal_derivation"]["ratified_operatives"][
+                "preflight_level_screen_s"
+            ],
+        )
+        self.assertFalse(
+            hasattr(issuer, "R6_PREFLIGHT_LEVEL_SCREEN_S"),
+            "the level screen must have one home: the predecessor artifact",
+        )
+
+    def test_the_a4_diagnostic_is_checked_against_the_predecessor(self) -> None:
+        """The ruled literal must still describe the predecessor's own corpus."""
+
+        statistics = json.loads(R6.read_text())["decimal_derivation"][
+            "source_statistics"
+        ]
+        with localcontext() as context:
+            context.prec = issuer.DECIMAL_WORK_PRECISION
+            recomputed = Decimal(statistics["maximum_s"]) + Decimal(
+                statistics["range_s"]
+            )
+        self.assertEqual(recomputed, issuer.R6_MAXIMUM_PLUS_RANGE_S)
+        with mock.patch.object(
+            issuer, "R6_MAXIMUM_PLUS_RANGE_S", Decimal("0.0426220830041564")
+        ):
+            code = self.run_issuer(self.wide)
+        self.assert_refused(code, "does not equal the ruled diagnostic")
+
+    def test_the_docstring_states_the_binary64_prediction_step(self) -> None:
+        text = " ".join((issuer.__doc__ or "").split())
+        self.assertIn("evaluated in BINARY64", text)
+        self.assertIn("shortest decimal that reads back as the same double", text)
+
+    def test_the_derivation_digest_docstring_names_symbols_not_line_numbers(self) -> None:
+        doc = issuer.derivation_sha256.__doc__ or ""
+        self.assertIn("_canonical_sha256", doc)
+        self.assertNotRegex(doc, r"`:\d+`")
 
 
 if __name__ == "__main__":
