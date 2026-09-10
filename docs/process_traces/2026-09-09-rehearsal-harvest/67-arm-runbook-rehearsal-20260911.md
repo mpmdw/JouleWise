@@ -471,3 +471,7 @@ this detached checkout at drafting time.
 
 H = `57ddad20226c6921d81a87b9d78e61950c14a74f` (main; the NIGHT_HANDBACK rewrite commit). Consolidated notice: Gmail message
 `1a086f4174733bfb`, thread `1a0800cdb282c3f1`, sent 09:15 PDT 2026-09-09 (after H, before any move). Use these in step 0.
+
+## Addendum 2 (2026-09-09 ~17:05 PDT, consistency sweep 106 F5/F6)
+
+Item 1 (cold_start.json / COURIER_DEADLINE_S) is CLOSED (derivation 70 + capture 104); nothing in this runbook depends on it. Chronology labels in this file and in synthesis 65 ("~09:20", "~09:35") were the lead's clock estimates written before the containing commit 57ddad20 (09:15:04 PDT committer time); treat committer times as authoritative.

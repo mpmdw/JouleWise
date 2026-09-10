@@ -3327,9 +3327,21 @@
         {
           "evidence": null,
           "kind": "event",
-          "required": "Cold gate or Ed rules whether the merged gate cure requires a second REHEARSAL_STUB night through the installed LaunchAgent before any DIAGNOSTIC_NO_PACK plan (21i acceptance item 6 was MET conditional on the cure landing; items 1/4/5 remain open)",
+          "required": "rehearsal-20260911 (REHEARSAL_STUB, agents installed 2026-09-10 03:00–06:30 PDT, t0 2026-09-11 02:56 PDT) fired and harvested: receipt not refused (item 6) and the pre-night 07:00 dead-man stand-down observed with nothing written into night/ (item 5); a night_refused_agent_present receipt closes item 5 only",
           "scope": "start",
           "state": "pending",
+          "strength": "hard",
+          "target": "REHEARSAL-20260911-HARVESTED"
+        },
+        {
+          "evidence": {
+            "label": "Cold gate 61 + Opus refuter 62 → magistrate synthesis 65: second REHEARSAL_STUB night REQUIRED, combined with acceptance item 5 (plan rehearsal-20260911)",
+            "path": "docs/process_traces/2026-09-09-rehearsal-harvest/65-magistrate-synthesis-second-stub-night.md"
+          },
+          "kind": "event",
+          "required": "Cold gate or Ed rules whether the merged gate cure requires a second REHEARSAL_STUB night through the installed LaunchAgent before any DIAGNOSTIC_NO_PACK plan (21i acceptance item 6 was MET conditional on the cure landing; items 1/4/5 remain open)",
+          "scope": "start",
+          "state": "satisfied",
           "strength": "hard",
           "target": "SECOND-STUB-NIGHT-RULING"
         },
@@ -3413,7 +3425,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises).",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {

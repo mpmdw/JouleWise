@@ -85,3 +85,7 @@ CLEAN for merge at 0478cc5b: CI green at 016ac5f0 and re-run at the merge head; 
 zero failures; three fix rounds each delta-audited (79 refuted round 1's pin; 82 clean; 92 clean); the escalation trigger honoured
 (consult 87 authored round 3). The seat's identity assertion is recorded as vacuous for timestamps (77 S2); the proof of timestamp
 neutrality is the consumer-side route.
+
+## Addendum (2026-09-09 ~17:05 PDT, consistency sweep 106 F3)
+
+Design question 3 above says the regression "additionally asserts the cadence ratio and clock anchor are unchanged across the sentinel stage"; that was true of rounds 1–2 and was REMOVED by round 3 (016ac5f0, consult 87) as the fix rounds section records. The final regression asserts strict validity, bounded drift and 100 post samples only; timestamp neutrality rests on the consumer-side route.

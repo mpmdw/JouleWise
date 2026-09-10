@@ -803,3 +803,8 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   slack, powermode unchanged; the fixture cure, not the machine state, was the cause). README blurb refreshed (a03ce274). Open desk items:
   consult 99's three T0 refusal tests; CLONE-READINESS-01 agent prep (deferred by design). Ed items unchanged. Next exact action unchanged
   (runbook 67 in the 09-10 03:00–06:30 window).
+- UPDATE 2026-09-09 ~17:05 PDT (consistency sweep 106, Astra high): F1 kernel — SECOND-STUB-NIGHT-RULING satisfied (65), NIGHT-REHEARSAL-01
+  re-blocked on the pending event REHEARSAL-20260911-HARVESTED; F2 RUN_STATE T38e checkpoint added (T38d kept verbatim as history); F3/F4
+  dated addenda to terminal reviews 80/96; F5 item-1 disposition pointers in NIGHT_HANDBACK and runbook 67; F6 chronology labels in this
+  file's earlier UPDATE lines ("~09:20", "~09:35") were lead clock estimates preceding their commits — committer times are authoritative.
+  NEXT EXACT ACTION unchanged: runbook 67 in the 2026-09-10 03:00–06:30 PDT window.
