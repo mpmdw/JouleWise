@@ -26,20 +26,10 @@ from joulewise.calibration_ledger import (
     content_id_from_artifact_hashes,
     probe_custody,
 )
-try:  # pragma: no cover - exercised on whichever side of the seam is present
-    from joulewise.calibration_ledger import (
-        SESSION_KIND_BRACKET,
-        SESSION_KIND_DERIVATION,
-    )
-except ImportError:  # pragma: no cover - pre-seam fallback, delete on merge
-    # TEMPORARY SEAM SHIM.  The ledger owns this vocabulary and exports both
-    # names; this checkout predates that export, so the values are restated
-    # here to keep this module importable until the two branches meet.  The
-    # integration tree REQUIRES the real import: delete this fallback there,
-    # because two sources for one vocabulary is exactly the drift the import
-    # exists to prevent.
-    SESSION_KIND_BRACKET = "bracket"
-    SESSION_KIND_DERIVATION = "derivation"
+from joulewise.calibration_ledger import (
+    SESSION_KIND_BRACKET,
+    SESSION_KIND_DERIVATION,
+)
 from joulewise.powermetrics_fiducial import (
     CAPTURE_TIME_FIELD,
     MAX_AGE_S,
