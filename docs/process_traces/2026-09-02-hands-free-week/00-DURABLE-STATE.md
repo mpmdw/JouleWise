@@ -814,3 +814,17 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `sleep 0` / `powermode 0`; a caffeinate LaunchAgent was tried and removed because T-0 authoring refuses any stray caffeinate. The
   STOP switch held the watchdog during this bookkeeping and is lifted at hand-back. Interactive sessions must be closed before the
   09-10 install window (agent census). NEXT EXACT ACTION unchanged: runbook 67 in the 2026-09-10 03:00–06:30 PDT window.
+- UPDATE 2026-09-09 ~21:05 PDT (headless activation `7ce7af2a`, pid 18817, attempt 10, launched 20:52:18 PDT after the STOP switch lifted):
+  launch email Gmail `1a08975838bc2df0` on thread `1a0800cdb282c3f1` reported all five pending notices (launch_failure 18:21; usage_exhausted
+  18:28/18:48/19:23; clock_uncertain 20:37) and CONFIRMED Ed's two 09-09 replies (13:10 and 13:59 PDT: near weekly limit, checkpoint durably,
+  dispatch Astra, confirm receipt); notice.ack written. FACT: the three usage exits were the Claude WEEKLY bucket (`seven_day_overage_included`
+  utilization 1.00, status rejected, overage org-disabled; attempt-9 stream), which resets at epoch 1789081200 = 16:00 PDT 2026-09-10 — AFTER
+  the 03:00–06:30 install window. Magistrate decision (Ed informed, can override by reply): hold Claude spend for runbook 67; no Astra dispatch
+  from this activation. BLOCKER FOR THE ARM: two interactive `claude` sessions are alive in the canonical checkout (pid 16371 ttys001 20:13 PDT,
+  pid 17047 ttys000 20:19 PDT, each with a codex mcp-server child); the runbook-67 step-0 census refuses them and this session must not signal
+  them — Ed asked to close both before 03:00. Machine: AC, battery 99 %, AC profile sleep 0 / powermode 0; only `com.joulewise.magistrate`
+  loaded; no plan directory; standdown.request absent. Keepalive: a 9-minute own Monitor (emits on standdown/STOP/new plan/foreign-session
+  change; exits at 03:00 PDT) holds this activation resident because `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` is unset (600 s ceiling → relaunch
+  churn + a launch email per relaunch, 21b). NEXT EXACT ACTION unchanged: at 03:00 PDT 2026-09-10 stop the monitor, run runbook 67 Block A →
+  step 3b → Block B → record (step 8) with H = `57ddad20`, notice `1a086f4174733bfb`; if the census still shows the foreign sessions, wait
+  (re-census) until 06:30 and, if the window is missed, author a NEW plan + NEW notice (never reuse); never install after 07:00.
