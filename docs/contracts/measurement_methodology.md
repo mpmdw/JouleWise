@@ -70,9 +70,9 @@ There is no skip disposition in a fixed-n campaign. A lightweight post-run
 display/screensaver/HID observation makes within-member transitions visible.
 Each admission attempt records its start and end times as clock readings
 (seconds since the Unix epoch, stored as binary64 floating-point numbers).
-Strict reduction (the consumer path that re-validates every admission
-input; frozen consumers never re-run it) then makes two containment
-checks; when either fails, or when the attempt's telemetry file is absent,
+Strict reduction (the consumer path that re-validates admission evidence;
+historical replay paths keep their older validation rules instead) then
+makes two containment checks; when either fails, or when the attempt's telemetry file is absent,
 empty or unparsable, the attempt refuses with
 `environment_admission_missing`. First, a duration check: the admitted
 baseline's duration, which the sampler produces by summing its per-sample
@@ -91,10 +91,11 @@ difference of stored clock readings, or a clock reading reconstructed from
 a sampler record against one stored directly), so they can differ by a
 few representable steps while describing the same instant. A binary64
 epoch value near 1.789e9 has representable steps 0.238 μs apart, and four
-steps are 0.954 μs, inside the allowance. The allowance never credits
-unobserved time: a baseline longer than the attempt by 10 μs, or a
-capture endpoint 10 μs outside the attempt, refuses, as does an endpoint
-one sample interval (100 ms) outside it.
+steps are 0.954 μs, inside the allowance. The allowance is sized for
+rounding, not for unobserved time, and it cannot hold a sample: a
+baseline longer than the attempt by 10 μs, or a capture endpoint 10 μs
+outside the attempt, refuses, as does an endpoint one sample interval
+(100 ms) outside it.
 
 The sidecar is deliberately separate from `BenchmarkConfig`. Direct
 `joulewise run` without a sidecar retains legacy flag-only/non-enforcing
@@ -309,58 +310,60 @@ Per decisions D-005 and D-014:
 
 - Each repetition is an independent run bundle; an experiment manifest
   groups members and records the executed order.
-- Between live repetitions, cooldown v2 holds until the retained evidence has
-  both a complete 30-second wall-clock span and at least
-  `coverage_fraction * sustained_window_s` of captured coverage
-  (`coverage_fraction = 0.8` by default, so 24 s of the 30 s window), and
-  the overlap-weighted mean of the readings' idle power (each retained
-  reading's mean power weighted by its overlap, both built below) satisfies
-  the one-sided rule
-  `rolling_mean <= reference * (1 + tolerance)` (10% by the production
-  policy), while thermal pressure is Nominal. A below-reference mean
-  therefore counts as recovery. The evidence is a series of idle probes,
-  each a capture of `subwindow_s` seconds (5 s by the production policy).
-  Every probe becomes a reading with three clock readings (seconds since
-  the Unix epoch as binary64 numbers): its capture start, taken just before
-  the probe began; its evidence end, taken when the probe returned; and its
-  evidence start, the evidence end minus the probe's reported capture
-  duration, but never earlier than the capture start (a probe that reports
-  a zero or negative duration is credited its whole capture interval; one
-  that reports a non-numeric duration is credited nothing). The window
-  cutoff is the current time minus 30 s. A reading is retained while its
-  evidence end is later than the cutoff. A retained reading's clipped start
-  is the later of its evidence start and the cutoff, and its overlap is its
-  evidence end minus its clipped start, or zero if that is negative.
+- Between live repetitions, cooldown v2 collects a series of idle probes,
+  each requesting a capture of `subwindow_s` seconds (5 s by the production
+  policy), and releases only when the evidence built from them passes the
+  tests below. Every probe becomes a reading with three clock readings
+  (seconds since the Unix epoch as binary64 numbers): its capture start,
+  taken just before the probe began; its evidence end, taken when the probe
+  returned; and its evidence start, the evidence end minus the probe's
+  reported capture duration, but never earlier than the capture start (a
+  probe that reports a zero, negative or non-numeric duration is credited
+  its whole capture interval; one that reports NaN, the floating-point
+  "not a number" value, is credited nothing). The window cutoff is the
+  current time minus the policy's window length, `sustained_window_s`
+  (30 s in production). A reading is retained while its evidence end is
+  later than the cutoff. A retained reading's clipped start is the later of
+  its evidence start and the cutoff, and its overlap is its evidence end
+  minus its clipped start, or zero if that difference is negative or NaN.
   Coverage is the sum of the overlaps. Span is the current time minus the
   earliest capture start among readings with positive overlap, that start
-  itself clipped to the cutoff. Span and coverage are tested with a small
-  allowance for floating-point rounding, never for unobserved time. One
-  representable step of a binary64 epoch value (one unit in the last
-  place, ULP) is 0.238 μs at epoch 1.789e9. The span test allows 1 μs.
-  The coverage test allows the larger of 1 μs and a summed rounding term
-  that adds, for every retained reading with positive overlap, one ULP of
-  its evidence end plus one ULP of its clipped start (0.477 μs per
-  reading), plus one ULP of the coverage sum itself (4e-15 s at 24 s). The
-  term is an upper bound on the rounding carried by the clock readings that
-  formed the sum (each endpoint can be off by half a step; the code charges
-  a whole step per endpoint), so it grows with the number of retained
-  readings: 2.86 μs for
-  six readings and at most 3.34 μs for the seven that can overlap a 30 s
-  window when each probe lasts at least its 5 s production length. At that
-  policy a six-reading coverage deficit of 13 ULP (3.1 μs) refuses, and a
-  10 μs deficit refuses under any policy that retains at most 20 readings.
-  A shorter `subwindow_s` retains more readings and widens the term in
-  proportion (40 readings of 0.75 s: 19 μs); for the production 30-second
-  window even the schema's smallest 1 ms probe length caps the term near
-  14 ms, below one 100 ms sample. Reaching a full sample would need about
-  210,000 retained readings (for example a 210 s window with 1 ms probes),
-  which no real probe cadence produces, so in practice a missing sample
-  refuses. An optional
-  calibrated absolute ceiling is an additional upper cap and never an OR
-  escape. The wait has a 5-minute cap; the cap is evaluated before release
-  on every iteration, so recovery criteria first met at or after the
-  deadline remain a `cap_hit` (with the late criteria
-  recorded in the trace) and are recorded in the following repetition's
+  itself clipped to the cutoff. The rolling mean is the sum of each retained
+  reading's mean idle power times its overlap, divided by coverage; the
+  reference is the selected reference baseline's mean idle power. Cooldown
+  v2 releases when span covers the whole window, coverage reaches
+  `coverage_fraction * sustained_window_s` (`coverage_fraction = 0.8` by
+  default, so 24 s of the 30 s production window), the one-sided rule
+  `rolling_mean <= reference * (1 + tolerance)` holds (`tolerance` is 0.10
+  in production, so a below-reference mean counts as recovery), and thermal
+  pressure is Nominal (a policy may disable the thermal requirement;
+  production does not). An optional calibrated absolute ceiling is an
+  additional upper cap on the power rule and never an OR escape. Span and
+  coverage are tested with a small allowance sized for floating-point
+  rounding, not for unobserved time. One representable step of a binary64
+  epoch value (one unit in the last place, ULP) is 0.238 μs at epoch
+  1.789e9. The span test allows 1 μs. The coverage test allows the larger
+  of 1 μs and a summed rounding term that adds, for every retained reading
+  with positive overlap, one ULP of its evidence end plus one ULP of its
+  clipped start (0.477 μs per reading), plus one ULP of the coverage sum
+  itself (4e-15 s at 24 s). The term is an upper bound on the rounding
+  carried by the clock readings that formed the sum (each endpoint can be
+  off by half a step; the code charges a whole step per endpoint), so it
+  grows with the number of retained readings: 2.86 μs for six readings and
+  3.34 μs for the seven that overlap a 30 s window when each probe actually
+  lasts its 5 s production length. At that policy a six-reading coverage
+  deficit of 13 ULP (3.1 μs) refuses, and a 10 μs deficit refuses under
+  any policy that retains at most 20 readings. A shorter `subwindow_s` can
+  retain more readings and widen the term in proportion (40 readings of
+  0.75 s: 19 μs); if probes actually last at least 1 ms, a 30 s window
+  retains at most 30,001 readings, keeping the term near 14 ms, below one
+  100 ms sample. At this epoch a 100 ms allowance would need about 210,000
+  retained readings with positive overlap (for example about 210 s of 1 ms
+  probes); the gate has no explicit reading-count cap. The wait is capped
+  by the policy's `cap_s` (5 minutes in production); the cap is evaluated
+  before release on every iteration, so recovery criteria first met at or
+  after the deadline remain a `cap_hit` (with the late criteria recorded
+  in the trace) and are recorded in the following repetition's
   measurement quality.
 - The preceding baseline is eligible as a cooldown reference only when
   `idle_window_suspect == false`, all critical environment probes passed, and
