@@ -34,6 +34,9 @@ from joulewise.calibration_ledger import (  # noqa: E402
 
 WATCH_FIELDS = ("os_build", "hardware_model", "powermetrics_sha256", "mlx_version")
 POWERMETRICS_PATH = Path("/usr/bin/powermetrics")
+# Absolute, like every other governed invocation: a PATH-resolved probe could
+# report an identity this machine does not have.
+SYSCTL_PATH = Path("/usr/sbin/sysctl")
 
 
 def observe_machine() -> dict[str, str | None]:
@@ -42,7 +45,7 @@ def observe_machine() -> dict[str, str | None]:
     for field, key in (("os_build", "kern.osversion"), ("hardware_model", "hw.model")):
         try:
             observed[field] = subprocess.run(
-                ["sysctl", "-n", key], check=True, capture_output=True,
+                [str(SYSCTL_PATH), "-n", key], check=True, capture_output=True,
                 text=True, timeout=10,
             ).stdout.strip() or None
         except (OSError, subprocess.SubprocessError):
@@ -83,6 +86,7 @@ def check(args: argparse.Namespace) -> int:
     if (
         acceptance is None or acceptance.get("artifact_role") != "issued"
         or acceptance.get("acceptance_id") != ACTIVE_ACCEPTANCE_ID
+        or not isinstance(acceptance.get("identity_epoch"), Mapping)
     ):
         errors.append("acceptance: invalid or not ACTIVE issued acceptance")
     else:
