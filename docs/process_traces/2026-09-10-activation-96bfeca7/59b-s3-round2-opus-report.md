@@ -515,3 +515,109 @@ python3 scripts/gen_state.py --check       rc=0
 `tests.test_calibration_bracketing` is now 80 tests (28 in `GenerationKeyedIssuanceValidationTests`).
 The byte-identical sweep over all six artifacts under `configs/calibration/` and the genesis fixture
 passes unchanged — the field rename and the two `None` values moved no issued byte.
+
+---
+
+# Fix round 3 (delta re-audit 73, execution lens: S1, S2, S3 — all should_fix, no blockers)
+
+Applied on top of `f40e748b`; diff uncommitted, same two files. The seam shim is untouched, as
+instructed — the integration tree deletes it.
+
+The delta upheld the behaviour (16 cuts, 14 killed, no blockers) and **confirmed the round-2 dead-term
+claim by re-insertion** — putting `if predecessor is None: return False` back at HEAD changed nothing.
+Its sting is in the tail: that deadness was load-bearing on `registered is None`, a term nothing pinned
+(S2). The refuter's own summary of the situation is the right one, and S2 closes both at once.
+
+## S1 — the `max` was pinned in one direction only
+
+Every envelope test in round 2 used own Q99 `0.008` against a predecessor at or above `0.0085`, so the
+predecessor always won the max and `max(predecessor, prediction)` → `predecessor` survived the whole
+module. Ruling 69 probe 3's fourth row — "own Q99 dominates" — had no test.
+
+Added `test_envelope_ceiling_equals_own_q99_when_own_q99_dominates`, both halves, artifact and row
+moved together with the excess retuned and the screen at `0.006000`:
+
+- predecessor `0.0085`, own Q99 `0.009000`, ceiling `0.009000` → **ADMIT** (own Q99 won the max)
+- predecessor `0.0085`, own Q99 `0.009000`, ceiling `0.0085` → **REFUSE** (a budget ceiling below this
+  corpus's own 99 % two-draw prediction, which the cut would have licensed whenever a predecessor is
+  present)
+
+No production change: the relation was already correct, only unpinned.
+
+## S2 — the `registered is None` disjunct is now pinned
+
+It is reached only when BOTH sides are `None`: an unparseable or non-string `predecessor_ceiling_s`
+AND an unresolvable `predecessor_acceptance_id`. `None != None` is False, so without the disjunct the
+row is admitted **as a genesis** — the lineage fence switched off by two independent defects at once.
+
+Added `test_malformed_ceiling_with_an_unresolvable_predecessor_refuses`: `predecessor_ceiling_s = 0`
+with `predecessor_acceptance_id = "no-such-generation"`, ceiling == own Q99 == `0.009000`. No
+production change.
+
+## S3 — the lineage fields are now jointly present or jointly absent
+
+The one real hole of the three. `predecessor_acceptance_id` was consulted ONLY inside the
+`predecessor_lexeme is not None` branch, so a row that NAMED a predecessor and NULLED its ceiling took
+the genesis arm and was admitted — laundering the exact violation
+`test_envelope_ceiling_that_fell_below_its_predecessor_refuses` catches when the row is honest. No live
+exposure (both registered rows name no predecessor and set `None`), so this is a future-issuance hole.
+
+Production change, in `_registered_generation_row_is_complete`:
+
+```python
+if predecessor_lexeme is None and (
+    generation.get("predecessor_acceptance_id") is not None
+):
+    return False
+```
+
+The docstring now states the pairing in one sentence. The converse direction — a non-None ceiling with
+no resolvable predecessor row — already refused and is kept.
+
+`test_lineage_fields_are_jointly_present_or_jointly_absent` covers four inputs: the nulled-ceiling
+launder REFUSES; the same lineage stated honestly (ceiling `0.0095` = max(0.0095, 0.009)) ADMITS; a
+ceiling with no id named REFUSES; a genesis row naming nothing ADMITS.
+
+**The guard also caught a defect in my own round-2 test fixture.** `_envelope_case` set
+`predecessor_acceptance_id` unconditionally, including on genesis cases — so two round-2 tests were
+constructing exactly the mismatched pair S3 forbids and passing anyway. The helper now pops the id when
+there is no predecessor, which is what the two registered rows look like. Worth noting because it is
+the same failure mode as S3 itself: an unpaired field nobody was reading.
+
+## Atomic sweep — all round-2 clauses plus the three new terms
+
+28 cuts, **28/28 KILLED**. No survivors, no anchor misses, no `NO-TESTS-RAN`. Every cut deletes or
+negates exactly ONE boolean term. The harness now parses `Ran N` from the runner and treats `N < 1` as
+its own verdict (a test that never ran is not a kill), and asserts restoration by SHA-256 rather than by
+string compare:
+
+```
+restored_sha256: 51ae8ad43ae3c61aca6326029c9af7afa79040c9a5a3d8b1a86ee83a3a7c38cf
+restored_matches: True
+```
+
+The three new cuts:
+
+| Atomic cut (one term) | Naming test | rc | Ran |
+|---|---|---|---|
+| `max(predecessor, prediction)` → `predecessor` (S1) | `test_envelope_ceiling_equals_own_q99_when_own_q99_dominates` | 1 | 1 |
+| `registered is None or` dropped from the read-back (S2) | `test_malformed_ceiling_with_an_unresolvable_predecessor_refuses` | 1 | 1 |
+| joint-presence guard deleted (S3) | `test_lineage_fields_are_jointly_present_or_jointly_absent` | 1 | 1 |
+
+The 25 round-2 cuts all still kill, each `Ran 1`, unchanged.
+
+## Test rcs (verbatim, rc captured in `RC`)
+
+```
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_calibration_bracketing tests.test_calibration_ledger
+FIXROUND3_RC=0 :: Ran 155 tests in 3.381s  OK (skipped=2)
+
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_calibration_live_three_window \
+    tests.test_paper_first_use_ledger tests.test_floor_mint_pinsets_schema tests.test_docs_freshness
+focused_rest_rc=0 :: Ran 66 tests in 4.282s  OK (skipped=3)
+```
+
+`tests.test_calibration_bracketing` is now 83 tests (31 in `GenerationKeyedIssuanceValidationTests`).
+The byte-identical sweep over all six artifacts under `configs/calibration/` and the genesis fixture
+passes unchanged; the only production change this round is one refusal on a field pairing that no
+registered row uses.
