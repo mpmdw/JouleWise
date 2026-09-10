@@ -828,7 +828,7 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   churn + a launch email per relaunch, 21b). NEXT EXACT ACTION unchanged: at 03:00 PDT 2026-09-10 stop the monitor, run runbook 67 Block A →
   step 3b → Block B → record (step 8) with H = `57ddad20`, notice `1a086f4174733bfb`; if the census still shows the foreign sessions, wait
   (re-census) until 06:30 and, if the window is missed, author a NEW plan + NEW notice (never reuse); never install after 07:00.
-- UPDATE 2026-09-10 ~04:30 PDT (interactive magistrate, records 115–122): PR #313 MERGED at `@@MERGE@@` (GitHub-issue directive channel; prompt
+- UPDATE 2026-09-10 ~04:10 PDT (interactive magistrate, records 115–122): PR #313 MERGED at `4681e522` (GitHub-issue directive channel; prompt
   line 24; effective at the next relaunch after the canonical fast-forward, STEP0_OK recorded in 122). D-180 ratified by Ed (record 121; four
   lanes, decided ≠ done; remote control blocked on G2-a). Ed: KILL — both interactive sessions terminated by this magistrate after this push so
   the resident activation can arm rehearsal-20260911 in the 09-10 window. NEXT EXACT ACTION: runbook 67 in the 09-10 03:00–06:30 PDT window;
