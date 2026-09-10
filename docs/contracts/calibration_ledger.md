@@ -99,8 +99,8 @@ why skipping at one site only is a defect rather than a partial fix.
 Derivation rows are also a permanent obligation: once the successor issues,
 its prior set must keep equalling the ledger prefix at its cutoff, so every
 derivation row must stay in the ledger carrying the attempt ID, content ID,
-classification disposition, and epoch that the prefix matcher compares, for as
-long as that acceptance is consumed. The custody manifest is therefore pinned
+classification disposition, epoch, and session ID that the prefix matcher
+compares, for as long as that acceptance is consumed. The custody manifest is therefore pinned
 and backed up before the issuance transaction. The successor acceptance judges
 only ordinary captures taken after it. D-102 clause 2 stands unchanged: a
 trigger observation is judged under the PRIOR artifact, never under a
@@ -148,10 +148,12 @@ marker directly, and prospective trigger subtraction uses
 `CalibrationLedgerSnapshot.post_cutoff_live_observations()`. At consumption,
 the acceptance artifact's prior set must exactly equal the observation prefix
 at the cutoff the artifact itself declares in `ledger_cutoff`, member for
-member, by attempt ID, content ID, classification disposition, and identity
-epoch. A content ID is the
-canonical hash derived from an observation's manifest and instrument-evidence
-byte hashes, so it names the same observation from any custody path.
+member. A prior-set row carries four per-row bindings — attempt ID, content
+ID, classification disposition, and identity epoch — and a generation
+registered `import_only` refuses a row carrying any fifth key. A content ID is
+the canonical hash derived from an observation's manifest and
+instrument-evidence byte hashes, so it names the same observation from any
+custody path.
 
 Which rows that prefix may contain is a per-generation registration, not a
 global rule (ruled 2026-09-10, not yet landed; see [Derivation sessions for a
@@ -164,6 +166,20 @@ live observations carrying content IDs, including the finalized slots of a
 session that an abort closed. A pending attempt, or an `abandoned` one
 (classified `unresolved`), refuses in either mode, as does any omission,
 addition, duplicate, or mismatched binding.
+
+A generation registered `import_plus_live` carries a FIFTH per-row binding,
+`session_id`, compared against the ledger row's `bracket_session_id`; the
+session it names must be derivation-kind. The reason is that a registration
+has to be ledger-bound rather than self-asserted. The purity and completeness
+checks below both range over "rows of this registration", and without this
+binding the artifact would be the only thing saying which rows those are: it
+could name a convenient subset, or disown a row the ledger recorded, and the
+check would be judging the artifact against the artifact's own claim. Binding
+each row to the ledger's recorded session is what keeps D-102 clause 2's rule
+— nothing judges itself — true of registration membership as well as of
+thresholds. Generations registered `import_only` keep the exact four-key row
+shape and refuse when a `session_id` key appears, so no historical generation
+changes. (Ruled 2026-09-10, not yet landed; seats S3 and S4 install it.)
 
 Two EXPECTED numbers are registered per generation for the same reason:
 `prior_observation_count` and `cutoff_sequence` (the genesis generation
@@ -358,15 +374,17 @@ Issued-artifact authentication is conjunctive and fail-closed:
    and the evaluator rechecks the snapshot's baseline fields against the
    artifact. A later committed live extension is permitted by D-109 R1.4; it
    does not change the historical issuance cutoff.
-4. `prior_observation_set` must equal the complete observation prefix through
-   the cutoff registered for that generation, member for member by attempt ID,
-   path-independent content ID, classification disposition, and identity
-   epoch. A generation registered `import_only` refuses every non-import row;
-   one registered `import_plus_live` admits only the finalized live rows
-   described above. Any omission, addition, duplicate, unresolved attempt, or
-   epoch outside the generation's registered catalog refuses. A generation
-   deriving a corpus from live rows must also pass the purity and completeness
-   checks of the corpus-membership fence.
+4. `prior_observation_set` must equal the complete observation prefix
+   through the artifact's declared `ledger_cutoff`, member for member by
+   attempt ID, path-independent content ID, classification disposition, and
+   identity epoch, plus, for a generation registered `import_plus_live`, the
+   row's `session_id` against the ledger row's `bracket_session_id`. A
+   generation registered `import_only` refuses every non-import row; one
+   registered `import_plus_live` admits only the finalized live rows
+   described above. Any omission, addition, duplicate, unresolved attempt,
+   or epoch outside the generation's registered catalog refuses. A
+   generation deriving a corpus from live rows must also pass the purity and
+   completeness checks of the corpus-membership fence.
 
 The artifact's stored `issuance.claim_eligible=true` is necessary but not
 sufficient. The evaluation result reports effective `claim_eligible=true`
