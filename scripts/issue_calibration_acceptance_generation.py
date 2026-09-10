@@ -1,9 +1,35 @@
 #!/usr/bin/env python3
-"""Inspect the active calibration epoch at the desk; never authorize capture.
+"""Desk tools for the D-079 calibration epoch: watch it, and prepare a candidate.
 
-The prospective issuer is reserved for S4. This read-only watch authenticates
-the active issued artifact and ledger before comparing machine identity. It
-does not evaluate a trigger observation or change the D-102 prior-artifact rule.
+Neither subcommand authorizes a capture, issues anything, or writes into
+`configs/calibration/`.
+
+`check` is READ-ONLY. It authenticates the ACTIVE issued acceptance artifact and
+the ledger, then prints how the machine's identity today compares with the epoch
+that artifact binds; it does not evaluate a trigger observation and does not
+change the D-102 prior-artifact rule. Given `--session-ids`, it additionally
+prints a REGISTRATION DRY RUN: for each named ledger session, its kind, whether
+it is terminal, its declared slots, how many rows are `valid`, how many are
+excluded and by which mechanism, and whether the prior-set prefix holds a
+pending or unresolved row. The dry run reports no measured value of any kind,
+because the pre-registration forbids examining one before the registration's
+last session is terminal.
+
+`prepare-candidate` WRITES EXACTLY ONE FILE, to the path the caller names with
+`--out`; there is no default destination, so this tool cannot write into
+`configs/calibration/` by omission. That file is a CANDIDATE, marked
+`candidate_not_issued: true`, which the production acceptance loader refuses:
+issuing is the D-138 transaction's act, after the cold science gate, not this
+tool's. The command derives the successor acceptance from the ledger --
+selecting corpus members by the registration, computing the Decimal statistics
+and the D-125 envelope operatives -- and REFUSES, printing its reason and
+writing nothing, when: any registration session is not yet terminal; the
+`--d125-ruling` reference is absent; the retained corpus is below the required
+size (19, or 17 with `--ed-ruling`); a prior-set row is pending or unresolved;
+a valid same-epoch observation lies outside the registration; a member's stored
+bytes disagree with its ledger row; the realized degrees of freedom fail the
+quantile proof; the bracket screen is not strictly below the budget ceiling; or
+two or more retained members exceed the predecessor's level screen.
 """
 
 from __future__ import annotations
@@ -100,6 +126,101 @@ def mismatched_fields(
     )
 
 
+def registration_dry_run(
+    snapshot: Any, session_ids: Sequence[str]
+) -> tuple[int, list[str]]:
+    """Report whether a registration WOULD be admissible, naming no value.
+
+    CG46 V5 defines `check` as the desk epoch watch AND a registration dry run.
+    Blindness binds here exactly as it binds `prepare-candidate`: this reports
+    kinds, states, slot counts and exclusion mechanisms, and never a bound, a
+    screen, a statistic or a member's value -- so it is safe to run between
+    capture nights, which is the only time it is useful.
+    """
+
+    lines = ["", "Registration dry run (no measured value is reported)"]
+    blockers: list[str] = []
+    by_id = snapshot.bracket_session_by_id
+    for session_id in session_ids:
+        session = by_id.get(session_id)
+        if session is None:
+            blockers.append(f"session {session_id} is not in the ledger")
+            lines.append(f"{session_id}: ABSENT")
+            continue
+        terminal = session.state in TERMINAL_SESSION_STATES
+        if session.session_kind != SESSION_KIND_DERIVATION:
+            blockers.append(
+                f"session {session_id} is kind {session.session_kind!r}, not derivation"
+            )
+        if not terminal:
+            blockers.append(f"session {session_id} is {session.state!r}, not terminal")
+        rows = [
+            observation
+            for observation in snapshot.observations
+            if observation.bracket_session_id == session_id
+        ]
+        valid = [
+            observation
+            for observation in rows
+            if observation.classification_disposition == "valid"
+        ]
+        excluded: dict[str, int] = {}
+        # Exclusion mechanisms are read ONLY when the session is terminal: the
+        # bundle read is harmless, but keeping the whole branch behind the
+        # terminal gate means no path can leak a value before the gate opens.
+        if terminal:
+            for observation in valid:
+                try:
+                    evidence, _ = _read_member_evidence(observation)
+                except PrepareRefusal as refusal:
+                    blockers.append(refusal.reason)
+                    continue
+                resolved, detail = anchor_v3_replay_outcome(evidence)
+                if not resolved:
+                    excluded[detail or "unknown"] = excluded.get(detail or "unknown", 0) + 1
+                    if detail not in REGISTERED_CORPUS_EXCLUSION_REASONS:
+                        blockers.append(
+                            f"session {session_id}: unregistered exclusion "
+                            f"mechanism {detail!r}"
+                        )
+        lines.append(
+            f"{session_id}: kind={session.session_kind} state={session.state} "
+            f"terminal={'yes' if terminal else 'NO'} "
+            f"declared_slots={len(session.declared_slots)} "
+            f"rows={len(rows)} valid={len(valid)} "
+            f"excluded={excluded or 'none'}"
+        )
+    unresolved = [
+        observation.attempt_id
+        for observation in snapshot.observations
+        if observation.content_id is None
+        or observation.classification_disposition not in PRIOR_SET_DISPOSITIONS
+    ]
+    lines.append(
+        "prefix pending or unresolved rows: "
+        + (", ".join(sorted(unresolved)) if unresolved else "none")
+    )
+    if unresolved:
+        blockers.append("prior set holds pending or unresolved attempts")
+    retained = sum(
+        1
+        for observation in snapshot.observations
+        if observation.bracket_session_id in set(session_ids)
+        and observation.classification_disposition == "valid"
+    )
+    lines.append(
+        "registration would be admissible for prepare-candidate: "
+        + ("YES" if not blockers else "NO")
+    )
+    for blocker in blockers:
+        lines.append(f"  blocker: {blocker}")
+    # `retained` is a COUNT of rows, never a value; it is printed only once the
+    # registration is admissible, i.e. once blindness has lapsed.
+    if not blockers:
+        lines.append(f"  retained valid rows in the registration: {retained}")
+    return (0 if not blockers else 3), lines
+
+
 def check(args: argparse.Namespace) -> int:
     errors: list[str] = []
     expected: dict[str, Any] = {}
@@ -145,7 +266,17 @@ def check(args: argparse.Namespace) -> int:
         print(error)
     if mismatches:
         print("mismatched fields: " + ", ".join(mismatches))
-    return 3 if errors or mismatches else 0
+    # The epoch-watch output above is byte-identical whether or not a
+    # registration was named; the dry run only ever APPENDS.
+    dry_run_code = 0
+    # An empty `--session-ids` value names no session, so it is not a request
+    # for a dry run; it must leave the watch output byte-identical.
+    named = [session_id for session_id in args.session_ids if session_id]
+    if named:
+        dry_run_code, lines = registration_dry_run(snapshot, named)
+        for line in lines:
+            print(line)
+    return 3 if errors or mismatches else dry_run_code
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +299,9 @@ SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 # The dispositions an ISSUED artifact's prior set may carry (the validator's
 # `allowed_prior_dispositions` for role `issued`).
 PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
+# The one alternative floor the pre-registration and CG46 A-2 name, and the only
+# value `--ed-ruling` licenses.
+RULED_ALTERNATIVE_CORPUS_SIZE = 17
 PRESENTATION_QUANTUM_S = Decimal("0.000000000000000001")
 DECIMAL_WORK_PRECISION = 80
 # The screen rule this generation is DERIVED under is a property of the RULE,
@@ -181,8 +315,13 @@ DECIMAL_WORK_PRECISION = 80
 # n = 19 floor has a range just BELOW 0.010818 and takes the floor arm.
 # 100 significant digits of pi, used only by the Student-t quantile's Beta
 # normalizer for ODD degrees of freedom (Gamma(1/2) = sqrt(pi) cancels for even
-# df and does not for odd).  Checked in the tests against Decimal's own
-# reconstruction so a mistyped digit cannot travel.
+# df and does not for odd).  The digits beyond `DECIMAL_WORK_PRECISION` are
+# INERT, not spare accuracy: Decimal rounds this literal into the working
+# context the first time it takes part in an operation, so 80 of them are used
+# and the rest are guard digits that keep the constant correct if the working
+# precision is ever raised.  They are kept for that reason and for none other.
+# The proof route computes pi by Machin's formula instead of reading this
+# constant, so a mistyped digit here surfaces as a quantile-proof failure.
 _PI = Decimal(
     "3.14159265358979323846264338327950288419716939937510"
     "58209749445923078164062862089986280348253421170680"
@@ -499,19 +638,76 @@ def build_quantile_proof(degrees_of_freedom: int) -> dict[str, Any]:
             "closed form, inverted by bisection; pi by Machin's formula"
         ),
         "precision": DECIMAL_WORK_PRECISION,
+        "bounds_origin": (
+            "issuer-declared bounds, recorded here in the candidate: the "
+            "pre-registration requires a proof for the realized df and states "
+            "no numeric bound, so these two are the issuer's, chosen because "
+            "each is tighter than the 20 published digits the artifact records "
+            "and looser than the realized agreement; ratifying them in the "
+            "pre-registration or the D-138 transaction record is the "
+            "magistrate's edit, not this tool's"
+        ),
     }
 
 
 def two_draw_prediction_lexeme(quantile: Decimal, sample_sd_lexeme: str) -> str:
-    """r6's rule verbatim: binary64 product recorded as its shortest repr."""
+    """r6's rule verbatim: the binary64 product's shortest round-tripping decimal.
+
+    Python's `repr` of a float IS that shortest round-tripping decimal; the
+    sealed rule string states the property, and this docstring must not drift
+    from it.
+    """
 
     return repr(float(quantile) * float(sample_sd_lexeme) * math.sqrt(2))
+
+
+def _repo_relative_custody(custody_locator: str, attempt_id: str, repo_root: Path) -> str:
+    """The member's evidence directory as r6 stores it: relative to the repo.
+
+    Both consumers join it back with `repo_root / member["source_directory"]`
+    (`tests/verify_calibration_acceptance_corpus.py`,
+    `scripts/reissue_calibration_acceptance.py`), and `pathlib` DISCARDS the
+    root when the right operand is absolute -- so an absolute path here would
+    verify on this machine and on no other, silently.
+    """
+
+    try:
+        return Path(custody_locator).resolve().relative_to(Path(repo_root).resolve()).as_posix()
+    except ValueError as error:
+        raise PrepareRefusal(
+            f"member {attempt_id}: custody {custody_locator} lies outside the "
+            "repository, so no repo-relative source_directory exists"
+        ) from error
 
 
 def _plain(value: Decimal) -> str:
     """A Decimal in plain notation; `str` would give "1E-15" for a quantum."""
 
     return format(value, "f")
+
+
+def envelope_screen(quantized_range: Decimal, floor: Decimal) -> Decimal:
+    """D-125's screen arm: `S = max(quantized range, floor)`.
+
+    A pure function so BOTH operands can be exercised: with the real corpus the
+    floor arm is the norm, and a collapse to either operand alone is a screen
+    that either falls below the D-125 floor or ignores the corpus entirely.
+    """
+
+    return max(quantized_range, floor)
+
+
+def envelope_ceiling(predecessor_ceiling: Decimal, own_q99: Decimal) -> Decimal:
+    """D-125 cl.2's ceiling arm: `C = max(predecessor ceiling, own Q99)`.
+
+    Pure for the same reason, and here it is the only way to exercise the
+    predecessor arm at all: r6's ceiling (0.010164834757777545) sits below the
+    0.010818 screen floor, so through the CLI the predecessor can never win the
+    max without failing strict `S < C` first.  A successor generation's
+    predecessor will not have that property.
+    """
+
+    return max(predecessor_ceiling, own_q99)
 
 
 def rederivation_triggers(corpus_doubling_trigger: str) -> set[str]:
@@ -650,6 +846,37 @@ def _authenticated_predecessor(path: Path) -> Mapping[str, Any]:
     return acceptance
 
 
+# A ledger session is TERMINAL when no further slot can be filled: its last
+# declared slot finalized, or an explicit abort closed it.  While a session is
+# open the corpus is still being captured, and the pre-registration forbids
+# examining any member value, screen or statistic until every session of the
+# registration is terminal.
+TERMINAL_SESSION_STATES = frozenset({"finalized", "aborted"})
+
+
+def refuse_open_registration(snapshot: Any, session_ids: Sequence[str]) -> None:
+    """BLINDNESS: refuse while any registration session is still open.
+
+    This runs BEFORE the generic ledger-refusal check and before any row is
+    read, because an open derivation session is exactly the mid-campaign state
+    every snapshot consumer tolerates as the physical/pin gap (CG46 A7) -- so
+    without this gate the tool would happily compute and PRINT the corpus size,
+    the screen and the ceiling between capture nights, and the remaining nights
+    could no longer honestly be said to have run "regardless of interim values".
+    Reporting the open session by name also beats the ledger's opaque
+    `calibration_ledger_bracket_session_open`, which is why it precedes it.
+    """
+
+    for session_id in session_ids:
+        session = snapshot.bracket_session_by_id.get(session_id)
+        if session is not None and session.state not in TERMINAL_SESSION_STATES:
+            raise PrepareRefusal(
+                f"registration: session {session_id} is {session.state!r}, not "
+                "terminal; nothing is computed or reported before every session "
+                "of the registration is terminal (pre-registration, Blindness)"
+            )
+
+
 def _registration_observations(
     snapshot: Any, session_ids: Sequence[str]
 ) -> tuple[LedgerObservation, ...]:
@@ -676,7 +903,7 @@ def _registration_observations(
 
 
 def _select_members(
-    observations: Iterable[LedgerObservation],
+    observations: Iterable[LedgerObservation], repo_root: Path,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[dict[str, Any]]]:
     """Split the registration's VALID rows into members and named exclusions.
 
@@ -714,7 +941,10 @@ def _select_members(
                 "match the ledger row's exact bound lexeme"
             )
         members.append({**entry, "b_fiducial_s": lexeme,
-                        "source_directory": observation.custody_locator,
+                        "source_directory": _repo_relative_custody(
+                            observation.custody_locator, observation.attempt_id,
+                            repo_root,
+                        ),
                         "content_id": observation.content_id})
         comparisons.append(
             {
@@ -778,13 +1008,24 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     if not args.d125_ruling:
         raise PrepareRefusal("d125_ruling reference absent; refusing to emit (ruling 46 V7)")
     minimum = args.minimum_corpus_size
-    if minimum != SUCCESSOR_MINIMUM_CORPUS_SIZE and not args.ed_ruling:
-        raise PrepareRefusal(
-            f"corpus-size floor departure to {minimum} requires --ed-ruling "
-            f"(D-126 cl.2 SUCCESSOR_MINIMUM_CORPUS_SIZE = {SUCCESSOR_MINIMUM_CORPUS_SIZE})"
-        )
-    if minimum > SUCCESSOR_MINIMUM_CORPUS_SIZE:
-        raise PrepareRefusal("--minimum-corpus-size may not exceed the ratified floor")
+    # The pre-registration names exactly ONE alternative floor, and CG46 A-2
+    # names the same one: "Ed may instead rule in writing that n = 17 is
+    # acceptable".  A ruling reference is therefore not a licence to pick any
+    # number -- it licenses 17 and nothing else, or an n = 3 corpus would issue
+    # behind a one-word string.
+    if minimum != SUCCESSOR_MINIMUM_CORPUS_SIZE:
+        if minimum != RULED_ALTERNATIVE_CORPUS_SIZE:
+            raise PrepareRefusal(
+                f"--minimum-corpus-size {minimum} is not a ruled floor: the only "
+                f"values are {SUCCESSOR_MINIMUM_CORPUS_SIZE} (default) and "
+                f"{RULED_ALTERNATIVE_CORPUS_SIZE} with --ed-ruling "
+                "(pre-registration Stopping; CG46 addendum A-2)"
+            )
+        if not args.ed_ruling:
+            raise PrepareRefusal(
+                f"corpus-size floor departure to {minimum} requires --ed-ruling "
+                f"(D-126 cl.2 SUCCESSOR_MINIMUM_CORPUS_SIZE = {SUCCESSOR_MINIMUM_CORPUS_SIZE})"
+            )
     preregistration = Path(args.preregistration)
     try:
         preregistration_sha256 = hashlib.sha256(preregistration.read_bytes()).hexdigest()
@@ -799,11 +1040,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         mode="read_replay",
         repo_root=Path(args.repo_root),
     )
+    session_ids = tuple(args.registration_session_id)
+    refuse_open_registration(snapshot, session_ids)
     if snapshot.refusal_reasons:
         raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
     predecessor = _authenticated_predecessor(Path(args.predecessor_acceptance))
 
-    session_ids = tuple(args.registration_session_id)
     observations = _registration_observations(snapshot, session_ids)
     # The TARGET epoch is the registration's own, read from its rows before any
     # value is looked at, and it must be unanimous.
@@ -813,7 +1055,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     for observation in observations:
         if dict(observation.identity_epoch) != target_epoch:
             raise PrepareRefusal("registration: rows disagree on the identity epoch")
-    members, excluded, comparisons = _select_members(observations)
+    members, excluded, comparisons = _select_members(observations, Path(args.repo_root))
     n = len(members)
     # Addendum A-7: a valid row carrying the TARGET epoch that belongs to no
     # session of this registration is not silently left out of the corpus --
@@ -865,13 +1107,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     quantized_range = Decimal(statistics["range_s"]).quantize(
         BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
     )
-    screen = max(quantized_range, D125_SCREEN_FLOOR_S)
+    screen = envelope_screen(quantized_range, D125_SCREEN_FLOOR_S)
     floor_bound = screen != quantized_range
     # The NAME is the pre-registered rule, not the arm of the `max` that won.
     screen_rule = SCREEN_RULE_FLOORED_RANGE_ENVELOPE
     predecessor_operatives = predecessor["decimal_derivation"]["ratified_operatives"]
     predecessor_ceiling = Decimal(predecessor_operatives["maximum_budgetable_drift_s"])
-    ceiling = max(predecessor_ceiling, Decimal(prediction_99))
+    ceiling = envelope_ceiling(predecessor_ceiling, Decimal(prediction_99))
     # D-125 / D-126 cl.3: the screen must sit STRICTLY below the ceiling, and
     # the refusal is never cured by lowering the screen (the floor binds it).
     if not screen < ceiling:
@@ -915,6 +1157,22 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     if len(epoch_catalog) != 2:
         raise PrepareRefusal("epoch catalog: the target id collides with the predecessor's")
 
+    # The pre-registration says a pending or unresolved attempt in the prefix
+    # REFUSES issuance.  Dropping it instead would present a prior set that
+    # silently disagrees with the ledger it claims to be the complete history
+    # of, and hand the transaction an opaque validator refusal later.
+    unresolved = [
+        observation.attempt_id
+        for observation in snapshot.observations
+        if observation.content_id is None
+        or observation.classification_disposition not in PRIOR_SET_DISPOSITIONS
+    ]
+    if unresolved:
+        raise PrepareRefusal(
+            "prior set holds pending or unresolved attempts: "
+            + ", ".join(sorted(unresolved))
+            + "; not issued (pre-registration, Prospective use)"
+        )
     prior_observations = [
         {
             "content_id": observation.content_id,
@@ -1025,6 +1283,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "predecessor": {
             "acceptance_id": predecessor["acceptance_id"],
             "relative_path": str(Path(args.predecessor_acceptance)),
+            # Restated so the note identifies the predecessor by its BYTES, not
+            # by a path that means nothing on another checkout.
+            "file_sha256": hashlib.sha256(
+                Path(args.predecessor_acceptance).read_bytes()
+            ).hexdigest(),
+            "derivation_sha256": predecessor.get("derivation_sha256"),
             "maximum_budgetable_drift_s": str(predecessor_ceiling),
             "relationship": (
                 "envelope predecessor under D-125 cl.2: the successor ceiling is "
@@ -1095,8 +1359,13 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         },
         "derivation_corpus": {
             "selection": (
-                "every valid observation of the registration's derivation-kind "
-                "sessions whose anchor-v3 replay from primary bytes resolves"
+                "every observation of the registration's derivation-kind "
+                "sessions whose ledger disposition is valid and whose stored "
+                "anchor-v3 record, read from primary evidence bytes "
+                "authenticated against its ledger row, reports a RESOLVED "
+                "clock anchor; the member value is that bundle's own "
+                "b_fiducial_s lexeme, cross-checked against the row's exact "
+                "bound lexeme, and no value is re-derived here"
             ),
             "n": n,
             "members": member_table,
@@ -1192,6 +1461,13 @@ def build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER_PATH)
     watch.add_argument("--head-pin", type=Path, default=DEFAULT_HEAD_PIN_PATH)
     watch.add_argument("--acceptance", type=Path, default=DEFAULT_ACCEPTANCE_BOUND_PATH)
+    watch.add_argument(
+        "--session-ids", action="append", default=[],
+        help=(
+            "a derivation-kind ledger session to dry-run (repeatable); reports "
+            "kinds, states and counts only, never a measured value"
+        ),
+    )
     prepare = commands.add_parser(
         "prepare-candidate",
         help="derive a NOT-ISSUED successor acceptance candidate from the ledger",

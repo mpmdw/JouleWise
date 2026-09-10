@@ -36,7 +36,10 @@ from joulewise.calibration_bracketing import (
     load_calibration_acceptance_bound,
 )
 from joulewise.calibration_bracketing import _canonical_sha256
-from joulewise.calibration_ledger import SESSION_KIND_BRACKET
+from joulewise.calibration_ledger import (
+    SESSION_KIND_BRACKET,
+    load_calibration_ledger_snapshot,
+)
 from tests.fixtures.epoch_bootstrap.build import (
     Slot,
     build_derivation_ledger,
@@ -1205,6 +1208,259 @@ class PrepareCandidateTest(unittest.TestCase):
             json.loads(R6.read_text())["decimal_derivation"][
                 "two_draw_prediction_derivation"
             ]["rule"],
+        )
+
+
+    # ---- fix round 2 ----------------------------------------------------
+
+    VALUE_LEXEME_FRAGMENTS = ("0.02", "0.03", "0.011", "0.010818", "corpus n")
+
+    def assert_no_measured_value_leaked(self, text: str) -> None:
+        """No member value, screen, ceiling or corpus count anywhere in output."""
+
+        for fragment in self.VALUE_LEXEME_FRAGMENTS:
+            self.assertNotIn(fragment, text)
+
+    # 93 SF-1 blindness
+
+    def test_an_open_registration_session_refuses_before_anything_is_computed(self) -> None:
+        """`refuse_open_registration` gates every read of the corpus."""
+
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "open", rows, fill_slots=6)
+            code = self.run_issuer(fixture)
+        self.assert_refused(code, "is 'open', not terminal")
+        self.assertIn("Blindness", self.printed)
+        self.assert_no_measured_value_leaked(self.printed)
+
+    def test_the_blindness_gate_is_isolated_from_the_ledger_refusal(self) -> None:
+        """The gate is a clause of its own, not a by-product of the snapshot.
+
+        The CLI path also carries `calibration_ledger_bracket_session_open`, so
+        this exercises the clause directly against a snapshot that has NO
+        refusal reason at all — the state the desk is in once the pin has been
+        advanced between nights.
+        """
+
+        session = SimpleNamespace(
+            session_id="s1", session_kind="derivation", state="open",
+            declared_slots=("d01",),
+        )
+        snapshot = SimpleNamespace(
+            bracket_session_by_id={"s1": session}, refusal_reasons=(),
+        )
+        with self.assertRaises(issuer.PrepareRefusal) as caught:
+            issuer.refuse_open_registration(snapshot, ("s1",))
+        self.assertIn("not terminal", caught.exception.reason)
+        for state in issuer.TERMINAL_SESSION_STATES:
+            with self.subTest(state=state):
+                session.state = state
+                issuer.refuse_open_registration(snapshot, ("s1",))
+
+    # 93 SF-2 the only ruled departure is 17
+
+    def test_only_seventeen_is_a_ruled_alternative_floor(self) -> None:
+        """A ruling reference licenses n = 17, not any number the caller likes."""
+
+        self.assert_refused(
+            self.run_issuer(self.wide, "--minimum-corpus-size", "3", "--ed-ruling", "Ed"),
+            "is not a ruled floor",
+        )
+        self.assert_refused(
+            self.run_issuer(self.wide, "--minimum-corpus-size", "18", "--ed-ruling", "Ed"),
+            "is not a ruled floor",
+        )
+        self.assert_refused(
+            self.run_issuer(self.wide, "--minimum-corpus-size", "20", "--ed-ruling", "Ed"),
+            "is not a ruled floor",
+        )
+
+    # 93 SF-4 pending or unresolved prefix rows
+
+    def test_an_unresolved_prefix_row_refuses(self) -> None:
+        """The pre-registration says refuse, not drop."""
+
+        values = _grid(20, "0.0200", "0.0006")
+        rows = [Slot(v) for v in values]
+        rows[4] = Slot(values[4], disposition="abandoned")
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "unresolved", rows)
+            code = self.run_issuer(fixture)
+        self.assert_refused(code, "pending or unresolved attempts")
+
+    # 91 + 93 SF-3 repo-relative member paths
+
+    def test_member_source_directory_is_repo_relative_and_re_resolves(self) -> None:
+        """Both consumers do `repo_root / member["source_directory"]`."""
+
+        self.assertEqual(self.run_issuer(self.wide), 0)
+        payload = self.payload()
+        root = Path(self.wide["root"]).resolve()
+        for member in payload["derivation_corpus"]["members"]:
+            directory = member["source_directory"]
+            self.assertFalse(Path(directory).is_absolute(), directory)
+            resolved = (root / directory).resolve()
+            self.assertTrue(resolved.is_dir(), resolved)
+            self.assertEqual(resolved.name, member["member_id"])
+        # r6's own members are stored the same way.
+        self.assertFalse(
+            Path(
+                json.loads(R6.read_text())["derivation_corpus"]["members"][0][
+                    "source_directory"
+                ]
+            ).is_absolute()
+        )
+
+    def test_custody_outside_the_repository_refuses(self) -> None:
+        with self.assertRaises(issuer.PrepareRefusal):
+            issuer._repo_relative_custody("/tmp/elsewhere/x", "a01", Path("/var/empty"))
+
+    # 91 DF-1 the ceiling arithmetic, both operands, no CLI
+
+    def test_the_ceiling_takes_whichever_operand_is_larger(self) -> None:
+        """`max(predecessor, Q99)` — a collapse to EITHER operand must fail.
+
+        The real predecessor (r6) has a ceiling below the screen floor, so the
+        predecessor arm can never win through the CLI; these synthetic pairs
+        exercise it directly.
+        """
+
+        cases = (
+            ("predecessor wins", Decimal("0.02"), Decimal("0.014"), Decimal("0.02")),
+            ("own Q99 wins", Decimal("0.0101"), Decimal("0.014"), Decimal("0.014")),
+            ("equal", Decimal("0.014"), Decimal("0.014"), Decimal("0.014")),
+        )
+        for label, predecessor, own, expected in cases:
+            with self.subTest(case=label):
+                self.assertEqual(issuer.envelope_ceiling(predecessor, own), expected)
+        self.assertEqual(
+            issuer.envelope_screen(Decimal("0.0114"), Decimal("0.010818")),
+            Decimal("0.0114"),
+        )
+        self.assertEqual(
+            issuer.envelope_screen(Decimal("0.0100"), Decimal("0.010818")),
+            Decimal("0.010818"),
+        )
+
+    # 93 SF-6 the registration dry run inside `check`
+
+    def dry_run_output(self, fixture: dict[str, Path], *session_ids: str) -> tuple[int, str]:
+        snapshot = load_calibration_ledger_snapshot(
+            fixture["ledger"], fixture["pin"], require_committed_pin=True,
+            verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+        )
+        code, lines = issuer.registration_dry_run(snapshot, list(session_ids))
+        return code, "\n".join(lines)
+
+    def test_the_dry_run_reports_a_terminal_registration_as_admissible(self) -> None:
+        code, text = self.dry_run_output(self.wide, SESSION)
+        self.assertEqual(code, 0)
+        self.assertIn("kind=derivation", text)
+        self.assertIn("terminal=yes", text)
+        self.assertIn("declared_slots=20", text)
+        self.assertIn("valid=20", text)
+        self.assertIn("admissible for prepare-candidate: YES", text)
+
+    def test_the_dry_run_reports_no_measured_value(self) -> None:
+        """Blindness binds the dry run too — it is run BETWEEN nights."""
+
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "dryopen", rows, fill_slots=6)
+            code, text = self.dry_run_output(fixture, SESSION)
+        self.assertEqual(code, 3)
+        self.assertIn("terminal=NO", text)
+        self.assertIn("admissible for prepare-candidate: NO", text)
+        self.assert_no_measured_value_leaked(text)
+
+    def test_the_dry_run_names_exclusion_mechanisms_and_unresolved_rows(self) -> None:
+        values = _grid(19, "0.0200", "0.0006")
+        rows = [Slot(v) for v in values]
+        rows.append(Slot("0.0260", unresolved_detail="affine_clock_fit_empty"))
+        rows[2] = Slot(values[2], disposition="abandoned")
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "dryexcl", rows)
+            code, text = self.dry_run_output(fixture, SESSION)
+        self.assertEqual(code, 3)
+        self.assertIn("affine_clock_fit_empty", text)
+        self.assertIn("prefix pending or unresolved rows: derivation-night-1-d03", text)
+        self.assertIn("admissible for prepare-candidate: NO", text)
+
+    def test_check_output_is_unchanged_when_no_registration_is_named(self) -> None:
+        """`--session-ids` only ever APPENDS to the epoch watch."""
+
+        def run(*extra: str) -> str:
+            stream = io.StringIO()
+            args = issuer.build_parser().parse_args(
+                ["check", "--ledger", str(self.wide["ledger"]),
+                 "--head-pin", str(self.wide["pin"]),
+                 "--acceptance", str(R6), *extra]
+            )
+            with redirect_stdout(stream):
+                issuer.check(args)
+            return stream.getvalue()
+
+        baseline = run()
+        self.assertEqual(baseline, run("--session-ids", ""))
+        self.assertNotIn("Registration dry run", baseline)
+        with_registration = run("--session-ids", SESSION)
+        self.assertTrue(with_registration.startswith(baseline))
+        self.assertIn("Registration dry run", with_registration)
+
+    # 93 SF-7 the tool describes itself truthfully
+
+    def test_the_module_docstring_describes_both_subcommands_truthfully(self) -> None:
+        """First-use test: every claim in the help text is checkable here."""
+
+        text = issuer.__doc__ or ""
+        self.assertNotIn("reserved for S4", text)
+        self.assertIn("`check` is READ-ONLY", text)
+        self.assertIn("WRITES EXACTLY ONE FILE", text)
+        self.assertIn("no default destination", text)
+        self.assertIn("candidate_not_issued", text)
+        self.assertIn("D-138 transaction", text)
+        for reason in ("terminal", "--d125-ruling", "--ed-ruling", "pending or unresolved",
+                       "outside the registration", "quantile proof", "budget ceiling"):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, text)
+        parser = issuer.build_parser()
+        self.assertIn("WRITES EXACTLY ONE FILE", parser.format_help())
+
+    # 93 wording: the selection string says what the code does
+
+    def test_the_selection_string_describes_a_read_not_a_re_derivation(self) -> None:
+        self.run_issuer(self.wide)
+        selection = self.payload()["derivation_corpus"]["selection"]
+        self.assertIn("stored anchor-v3 record", selection)
+        self.assertIn("authenticated against its ledger row", selection)
+        self.assertIn("no value is re-derived here", selection)
+
+    # 91 nits
+
+    def test_the_predecessor_note_identifies_it_by_bytes(self) -> None:
+        self.run_issuer(self.wide)
+        note = self.payload()["derivation_notes"]["predecessor"]
+        self.assertEqual(
+            note["file_sha256"], hashlib.sha256(R6.read_bytes()).hexdigest()
+        )
+        self.assertEqual(
+            note["derivation_sha256"], json.loads(R6.read_text())["derivation_sha256"]
+        )
+
+    # 93 SF-5 the proof bounds say whose they are
+
+    def test_the_quantile_proof_records_where_its_bounds_came_from(self) -> None:
+        self.run_issuer(self.wide)
+        proof = self.payload()["decimal_derivation"]["quantile_proof"]
+        self.assertIn("issuer-declared bounds", proof["bounds_origin"])
+        self.assertIn("states no numeric bound", proof["bounds_origin"])
+        # It is inside the seal, so the bounds cannot be edited quietly.
+        mutated = json.loads(json.dumps(self.payload()))
+        mutated["decimal_derivation"]["quantile_proof"]["bounds_origin"] = "whatever"
+        self.assertNotEqual(
+            issuer.derivation_input_sha256(mutated),
+            self.payload()["derivation_input_sha256"],
         )
 
 

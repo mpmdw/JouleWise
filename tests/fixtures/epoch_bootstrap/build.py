@@ -114,6 +114,7 @@ def build_derivation_ledger(
     session_id: str = SESSION_ID,
     session_kind: str = SESSION_KIND_DERIVATION,
     second_session: tuple[str, Sequence[Slot]] | None = None,
+    fill_slots: int | None = None,
 ) -> dict[str, Path]:
     """Create a Git-committed ledger holding one or two closed sessions.
 
@@ -140,11 +141,12 @@ def build_derivation_ledger(
     _commit(root, "genesis pin")
     # A bracket-kind session's slot list is fixed at ("pre", "post"); only a
     # derivation session declares an arbitrary ordered list.
-    _write_session(ledger, runs, pin, session_id, slots, session_kind)
+    _write_session(ledger, runs, pin, session_id, slots, session_kind, fill_slots)
     if second_session is not None:
         _write_session(
             ledger, runs, pin, second_session[0], second_session[1],
             SESSION_KIND_DERIVATION,
+            None,
         )
     snapshot = load_calibration_ledger_snapshot(
         ledger, pin, require_committed_pin=False, verify_custody=False,
@@ -173,6 +175,7 @@ def _write_session(
     session_id: str,
     slots: Sequence[Slot],
     session_kind: str,
+    fill_slots: int | None = None,
 ) -> None:
     # A session opens only at head-equals-pin, so a fixture writing a SECOND
     # session advances the working pin to the physical head first, exactly as
@@ -220,7 +223,10 @@ def _write_session(
         head_pin_path=pin,
         require_committed_pin=False,
     )
-    for name, slot in zip(declared, slots, strict=True):
+    # `fill_slots` stops short of the last declared slot, which leaves the
+    # session OPEN -- a registration mid-campaign, the blindness counterfactual.
+    filled = declared if fill_slots is None else declared[:fill_slots]
+    for name, slot in zip(filled, slots[: len(filled)], strict=True):
         attempt_id = f"{session_id}-{name}"
         custody = runs / "instrument_validation" / attempt_id
         _write_bundle(custody, attempt_id, slot)
