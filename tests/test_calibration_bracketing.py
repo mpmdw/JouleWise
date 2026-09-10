@@ -3595,7 +3595,12 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         row["operatives"] = operatives
         row["prediction_99_two_draw_s"] = q99
         row["predecessor_ceiling_s"] = predecessor
-        row["predecessor_acceptance_id"] = self._PREDECESSOR_FIXTURE_ID
+        # Jointly present or jointly absent: a genesis case names no
+        # predecessor at all, which is what the two registered rows look like.
+        if predecessor is None:
+            row.pop("predecessor_acceptance_id", None)
+        else:
+            row["predecessor_acceptance_id"] = self._PREDECESSOR_FIXTURE_ID
         tuned = copy.deepcopy(artifact)
         tuned["decimal_derivation"]["ratified_operatives"].update(operatives)
         tuned["decimal_derivation"]["source_statistics"][
@@ -3709,6 +3714,85 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             acceptance_id, unnamed
         ):
             self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_envelope_ceiling_equals_own_q99_when_own_q99_dominates(self) -> None:
+        # Ruling 69 probe 3's fourth row, and the OTHER direction of the max:
+        # here the corpus's own Q99 is the larger input, so the ceiling must
+        # follow it, not the predecessor.  Without this case the relation could
+        # be written `ceiling == predecessor` and nothing would notice.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0085", q99="0.009000", ceiling="0.009000"
+        )
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The same lineage with the ceiling pinned to the predecessor instead:
+        # a budget ceiling BELOW this corpus's own 99 % two-draw prediction.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0085", q99="0.009000", ceiling="0.0085"
+        )
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_malformed_ceiling_with_an_unresolvable_predecessor_refuses(self) -> None:
+        # Both sides of the read-back comparison are `None` here: the lexeme is
+        # present but unparseable, and the named predecessor row does not
+        # exist.  Without the `registered is None` disjunct the comparison
+        # `None != None` is False and the row is admitted AS A GENESIS -- the
+        # lineage fence switched off by two independent defects at once.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.009", q99="0.009000", ceiling="0.009000"
+        )
+        broken = dict(row)
+        broken["predecessor_ceiling_s"] = 0
+        broken["predecessor_acceptance_id"] = "no-such-generation"
+        with _registered_generation(acceptance_id, broken):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_lineage_fields_are_jointly_present_or_jointly_absent(self) -> None:
+        # A named predecessor with a nulled ceiling used to take the genesis
+        # arm, laundering the very violation the envelope relation refuses when
+        # the row is honest: the predecessor's ceiling is 0.0095 and this row
+        # would budget 0.009.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.009000", ceiling="0.009000"
+        )
+        nulled = dict(row)
+        nulled["predecessor_ceiling_s"] = None
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, nulled
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # Same row, honest: the ceiling must be max(0.0095, 0.009) = 0.0095.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.009000", ceiling="0.0095"
+        )
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The converse direction, already refused and kept: a ceiling with no
+        # predecessor named at all.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.009000", ceiling="0.0095"
+        )
+        unnamed = dict(row)
+        unnamed.pop("predecessor_acceptance_id")
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, unnamed
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # And a genesis row that names nothing still admits.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.009000", ceiling="0.009000"
+        )
+        genesis = dict(row)
+        genesis.pop("predecessor_acceptance_id", None)
+        with _registered_generation(acceptance_id, genesis):
+            self.assertTrue(_valid_acceptance_bound(artifact))
 
     def test_generation_row_refuses_a_screen_at_or_above_its_ceiling(self) -> None:
         # D-102 cl.3 spends `max(observed_drift_s, bracket_screen_s)` against

@@ -355,6 +355,10 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     Only the exact equation refuses both, and only if the row states the
     predecessor's ceiling, which is why ``predecessor_ceiling_s`` exists and is
     checked against the predecessor's own registered row rather than trusted.
+    The two lineage fields are jointly present or jointly absent: a row that
+    names ``predecessor_acceptance_id`` while nulling ``predecessor_ceiling_s``
+    would take the no-predecessor arm and switch the lineage fence off by
+    emptying a field, so it refuses.
 
     The operative screen must additionally sit strictly BELOW that ceiling, in
     every case: D-102 cl.3 spends the allowance
@@ -380,6 +384,15 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
     # BEFORE `_decimal` -- is a broken row and refuses.
     predecessor_lexeme = generation["predecessor_ceiling_s"]
     predecessor: Decimal | None = None
+    # The two lineage fields are JOINTLY present or JOINTLY absent.  Naming a
+    # predecessor while nulling its ceiling would otherwise take the genesis
+    # arm below and launder exactly the violation the envelope relation exists
+    # to refuse: a ceiling that fell below the predecessor's, with the fence
+    # switched off by emptying one field rather than by being satisfied.
+    if predecessor_lexeme is None and (
+        generation.get("predecessor_acceptance_id") is not None
+    ):
+        return False
     if predecessor_lexeme is not None:
         predecessor = _decimal(predecessor_lexeme)
         # The predecessor's ceiling is READ BACK from the predecessor's own
