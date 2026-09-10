@@ -1,0 +1,15 @@
+76:**Ruling: (a) — merge now, with conditions.** Row 9 is satisfied by recording the exact rc=1 tail verbatim plus the root-cause
+81:1. **Row 9's purpose is regression detection on the integration tree, and that purpose was served.** The replay ran 5636 tests
+105:- C1. Row 9 quotes the tail verbatim, including `WORKERS SUMMARY shards=4 modules=221 tests=5636 failures=4 errors=0 skipped=108
+108:- C2. Row 9 states the independence argument in one line: `git diff --stat 83ab38ed..5d13d0e6 -- joulewise scripts tests` =
+145:  be re-run on the integration tree, not the branch — row 9's own wording).
+202:   or the failing shard's index is ambiguous from the tail; the row-9 record must quote it verbatim and must not gloss it as
+219:- **Q1:** (a) — merge #308 now; row 9 records the verbatim rc=1 tail + names + P4 + this ruling, the diffstat independence line,
+44-coldgate-charge-replay-verdict.md
+44-coldgate-packet-P1-P6-posthoc.sha256
+44-coldgate-packet.sha256
+44-coldgate-ruling-replay-verdict.md
+56-coldgate-charge-309-replay-door.md
+56-coldgate-judge-session.log
+56-coldgate-ruling-309-replay-door.md
+57-coldgate-opus-refuter-309-replay-door.md
