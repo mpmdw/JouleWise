@@ -3,14 +3,14 @@
 Shape follows 21h; runbook [67](67-arm-runbook-rehearsal-20260911.md) executed by headless
 activation `7ce7af2a-8eb6-470e-bf56-70f714977293` (magistrate.lock pid 18817, supervisor 18814, watchdog attempt 10,
 launched 2026-09-09 20:52:18 PDT). Record written 2026-09-10 04:11:44 PDT (epoch 1789038704). Evidence directory:
-[115-arm-evidence/](115-arm-evidence/). Facts below carry artifact pointers; nothing here is an expected value presented
+[123-arm-evidence/](123-arm-evidence/). Facts below carry artifact pointers; nothing here is an expected value presented
 as an observation.
 
 ## Pins and authority
 
 | Pin | Value | Evidence |
 |---|---|---|
-| Plan / class | `rehearsal-20260911` / `REHEARSAL_STUB` | `115-arm-evidence/arm-night_plan.json` (byte copy, sha256 `a7447608c7c7dc0a3d2a3f6ab56489bd509c9206e8574746c1cf01d113c887bc`, identical to `/Users/edr/night-custody/rehearsal-20260911/night_plan.json` by `cmp`) |
+| Plan / class | `rehearsal-20260911` / `REHEARSAL_STUB` | `123-arm-evidence/arm-night_plan.json` (byte copy, sha256 `a7447608c7c7dc0a3d2a3f6ab56489bd509c9206e8574746c1cf01d113c887bc`, identical to `/Users/edr/night-custody/rehearsal-20260911/night_plan.json` by `cmp`) |
 | H = repo_head = measurement_head | `57ddad20226c6921d81a87b9d78e61950c14a74f` | Block A `validated pins:` line; `git rev-parse HEAD` in the checkout = H |
 | Frozen triple | (`rehearsal-20260911`, `/private/tmp/joulewise-rehearsal-20260911-checkout`, `57ddad20226c6921d81a87b9d78e61950c14a74f`) | `arm-blockB-output.txt` line `validated pins:` |
 | Custody root | `/Users/edr/night-custody/rehearsal-20260911` | `moved .../night_plan.json` line |
@@ -25,7 +25,7 @@ as an observation.
 - 03:00:10 — window opened; own watch reported two FOREIGN interactive `claude` sessions (pid 16371 ttys001, pid 17047 ttys000,
   each with a codex mcp-server child; both in `/Users/edr/code/JouleWise`). Not signalled (runbook step 0). Ed emailed
   (`1a08ac33d58248e0`) with the 06:05 last-start cutoff.
-- 04:09:04 — watch reported `FOREIGN_CLEAR` (both sessions gone; who closed them is not observable from here).
+- 04:09:04 — watch reported `FOREIGN_CLEAR` (both sessions gone). Per the concurrent interactive magistrate's records 121/122 and checkpoint T38g (pushed to main at `cc171556` ~04:10 PDT), Ed — remote and unable to close them — said KILL, and that magistrate terminated pids 16371 and 17047 (itself included) after landing PR #313 (directive channel) and D-180. Numbering note: this record was first written as 115 and renumbered to 123 because the interactive session had concurrently used 115–122 in this directory.
 - 04:09:42 — Block A attempt 1 FAILED at `preconditions.py` before any checkout, plan or custody write: the pgrep census
   output included this activation's own multi-line keepalive Monitor shell (its command text contains the word `claude`),
   and the parser's `int(line.split()[0])` raised `ValueError: invalid literal ... 'while'` — the census failed closed on an
@@ -53,8 +53,8 @@ as an observation.
   (`com.joulewise.night` calendar `{Hour: 2, Minute: 56}`, `com.joulewise.night.deadman` `{Hour: 7, Minute: 0}`, both
   WorkingDirectory = the checkout, ProgramArguments `run`/`dead-man --plan <custody plan>`, RunAtLoad false);
   `post-install night/ baseline: []` (empty directory, inventory taken 04:10:58).
-- 04:11:44 — this record; installed plists copied to `115-arm-evidence/com.joulewise.night*.plist`, rendered twins under
-  `115-arm-evidence/render/`.
+- 04:11:44 — this record; installed plists copied to `123-arm-evidence/com.joulewise.night*.plist`, rendered twins under
+  `123-arm-evidence/render/`.
 
 **A green stub says nothing about the capture-timeout seam.** This night is REHEARSAL_STUB with no pack and no
 measurement; acceptance items 5/6 and the dead-man/`night/` literal-absence check are judged at harvest per runbook 67

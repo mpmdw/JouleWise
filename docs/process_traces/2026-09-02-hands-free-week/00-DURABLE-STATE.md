@@ -834,7 +834,7 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `/private/tmp/joulewise-rehearsal-20260911-checkout` at H = `57ddad20`; frozen triple (`rehearsal-20260911`, that checkout, H);
   custody `/Users/edr/night-custody/rehearsal-20260911` with `night/` EMPTY at install; agents `com.joulewise.night` (02:56) and
   `com.joulewise.night.deadman` (07:00) loaded; powermode 0 on both profiles, AC attached (battery 80 %, not charging — observed),
-  timer 3.3× slack (recorded, not gated). Arm record 115 + evidence dir. NEXT EXACT ACTION: nothing until the 07:00 PDT 09-10 dead-man
+  timer 3.3× slack (recorded, not gated). Arm record 123 + evidence dir 123-arm-evidence (renumbered from 115: the interactive magistrate used 115–122 concurrently; T38g at cc171556). NEXT EXACT ACTION: nothing until the 07:00 PDT 09-10 dead-man
   firing (expect the stand-down line in `night.log`, nothing in `night/`); t0 2026-09-11 02:56 PDT; harvest after 03:16 PDT 09-11 and
-  outside the 02:45–03:30 belt per record 115 §Harvest pointer; do not move the checkout; never re-arm this plan on the same signature.
+  outside the 02:45–03:30 belt per record 123 §Harvest pointer; do not move the checkout; never re-arm this plan on the same signature.
   Claude weekly limit resets 16:00 PDT 09-10 — desk work waits for it. This activation exits now with no own background work.
