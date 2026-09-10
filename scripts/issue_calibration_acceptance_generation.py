@@ -950,6 +950,32 @@ def _authenticated_predecessor(path: Path) -> Mapping[str, Any]:
 TERMINAL_SESSION_STATES = frozenset({"finalized", "aborted"})
 
 
+def refuse_repeated_sessions(session_ids: Sequence[str]) -> None:
+    """A registration naming the same night twice is MALFORMED.
+
+    It is also how the three-nights fence would be walked past if that fence
+    counted flag repetitions: `--registration-session-id A` given three times
+    looks like three nights.  The repetition is refused on its own terms rather
+    than quietly deduplicated, because the caller who typed it meant something
+    the ledger cannot supply -- and the fence counts DISTINCT ids as well, so
+    neither check depends on the other having run.
+    """
+
+    repeated = sorted(
+        {
+            session_id
+            for session_id in session_ids
+            if list(session_ids).count(session_id) > 1
+        }
+    )
+    if repeated:
+        raise PrepareRefusal(
+            "registration names a session more than once: "
+            + ", ".join(repeated)
+            + "; not issued"
+        )
+
+
 def refuse_open_registration(snapshot: Any, session_ids: Sequence[str]) -> None:
     """BLINDNESS: refuse while any registration session is still open.
 
@@ -1151,6 +1177,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         repo_root=Path(args.repo_root),
     )
     session_ids = tuple(args.registration_session_id)
+    refuse_repeated_sessions(session_ids)
     refuse_open_registration(snapshot, session_ids)
     if snapshot.refusal_reasons:
         raise PrepareRefusal("ledger: " + ", ".join(snapshot.refusal_reasons))
@@ -1188,9 +1215,10 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     # B-2: the corpus is bound to the pre-registered SHAPE -- three nights of
     # twelve declared slots -- because a corpus assembled from a different
     # schedule is a different experiment, whatever its statistics say.
-    if len(session_ids) != PREREGISTERED_NIGHT_COUNT and not args.nights_ruling:
+    distinct_nights = len(set(session_ids))
+    if distinct_nights != PREREGISTERED_NIGHT_COUNT and not args.nights_ruling:
         raise PrepareRefusal(
-            f"registration names {len(session_ids)} sessions, not the "
+            f"registration names {distinct_nights} sessions, not the "
             f"pre-registered {PREREGISTERED_NIGHT_COUNT}; --nights-ruling must "
             "name a written ruling to depart"
         )
