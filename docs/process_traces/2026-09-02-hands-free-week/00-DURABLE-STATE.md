@@ -928,3 +928,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   ledger row). Magistrate diff gate (row 7) over all nine production files DONE (110). Terminal review 109 RUNNING. Runbook 99 revised for the
   wrapper (108). Integration = 819a9c40 (+ S7 final b2636d6c + comment fix). NEXT: S7 r3 + S4 r5 → merge → replay 4 → PR with the twelve-row
   ledger → merge → clone at H + venv → `check` → NIGHT_HANDBACK derivation night 1. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~16:30 PDT (headless activation `96bfeca7`): lane ACCEPTANCE-EPOCH-25G83-01 at the PR gate. Final wave landed (S4 r5–r6 arm-gate
+  fences: pre-registration os_build + sampler digest parsed and enforced, 3 nights × 12 slots unless a written ruling, `--preregistration-sha256`;
+  S7 r3–r4: chain survives a non-valid slot and stops only on a refusal, slot ceiling, inputs parsed at arm time; S3 r6: envelope corpus floor 17,
+  A-5 counterfactual; S1 r3; S6 r6 + magistrate fix 6c91dd2c restoring cold gate 46 V7 wording with a dated addendum transcribing ruling 69 A1).
+  Terminal review 109 MERGEABLE AFTER FIXES → fixed; ruled-not-installed sweep 45/54 installed (isolation rule now a tracked lane); seam audit clean;
+  magistrate diff gate 110 (row 7) + row 12 (118) read in full; row 10 (117) should_fix → fixed. PR head moves once more (S6 docs + S4 r7 distinct
+  sessions); replay 6 at that head = row 9 (replay 5 at 1e15a3a5 running as an early signal). Main = cfe3aa49 + this line (trace records 55–118
+  merged; kernel lanes 182–184 registered). Runbook 99 revision 3 (record 115). NEXT: replay 6 green → PR from `feat/2026-09-10-epoch-integration`
+  with the twelve-row ledger → CI → merge → clone at H + venv → `check --preregistration` → NIGHT_HANDBACK derivation night 1. rehearsal-20260911
+  ARMED and untouched; exit on the 02:31 request.
