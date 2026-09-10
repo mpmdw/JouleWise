@@ -1,0 +1,10 @@
+# PR #312 replay — integration tree 6e0bbf67 (tests commit + merge of main afaeffef), alone in-process (four shards concurrent), started 17:22:46 PDT 2026-09-09; timer probe 3.28× at start
+
+SHARD SUMMARY index=1/4 modules=34 tests=545 failures=0 errors=0 skipped=30 result=PASS
+SHARD SUMMARY index=2/4 modules=54 tests=1208 failures=0 errors=0 skipped=53 result=PASS
+SHARD SUMMARY index=3/4 modules=66 tests=1988 failures=0 errors=0 skipped=9 result=PASS
+SHARD SUMMARY index=4/4 modules=67 tests=1912 failures=0 errors=0 skipped=16 result=PASS
+WORKERS SUMMARY shards=4 modules=221 tests=5653 failures=0 errors=0 skipped=108 failed_shards=none result=PASS
+rc=0
+
+failures=0 errors=0 (5653 tests). Race test PASS under shards=4 (ruling 56 ADDENDUM-2, fourth observation).
