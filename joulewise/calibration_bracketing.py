@@ -231,7 +231,28 @@ _PRIOR_PREFIX_MODES = frozenset(
 # this module, so an unimplemented rule name refuses here rather than silently
 # degrading to the rule below.
 SCREEN_RULE_RANGE_EQUALS_SCREEN = "range_equals_screen"
-_REGISTERED_SCREEN_RULES = frozenset({SCREEN_RULE_RANGE_EQUALS_SCREEN})
+# The D-125 envelope rule the 25G83 corpus is PRE-REGISTERED to be derived
+# under: the screen is the quantized corpus range, floored at the genesis
+# screen.  The name describes the DERIVATION RULE, not which side of the max
+# happened to win: a generation derived under the envelope registers this name
+# whether the range exceeded the floor or the floor bound the screen, because
+# the rule is what was fixed before the captures, and the outcome is not.
+SCREEN_RULE_FLOORED_RANGE_ENVELOPE = "floored_range_envelope_screen"
+_REGISTERED_SCREEN_RULES = frozenset(
+    {SCREEN_RULE_RANGE_EQUALS_SCREEN, SCREEN_RULE_FLOORED_RANGE_ENVELOPE}
+)
+# D-125 cl.2's genesis screen floor: the screen of the n=19 corpus, which every
+# envelope lineage inherits as a lower bound so a screen can never fall below
+# the one the instrument was first characterised against.  ONE home: the issuer
+# imports this constant rather than restating the digits.
+D125_SCREEN_FLOOR_S = Decimal("0.010818")
+BRACKET_SCREEN_QUANTUM_S = Decimal("0.000001")
+PREFLIGHT_LEVEL_SCREEN_QUANTUM_S = Decimal("0.000000000000001")
+# A generation derived under the envelope must cite the D-125 ruling that
+# authorised it; the pre-registration makes issuance refuse while the reference
+# is absent.  It is NOT unconditionally required: the six issued rows predate
+# the envelope and carry none.
+_D125_RULING_REQUIRED_SCREEN_RULES = frozenset({SCREEN_RULE_FLOORED_RANGE_ENVELOPE})
 # Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
 # Today's only registered class is `affine_clock_fit_empty`: the anchor-v3
 # replay found NO feasible affine wall-versus-monotonic clock fit for that
@@ -451,6 +472,11 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
         and len(set(catalog_ids)) == len(catalog_ids)
         and generation["prior_prefix_mode"] in _PRIOR_PREFIX_MODES
         and generation["screen_rule"] in _REGISTERED_SCREEN_RULES
+        and (
+            generation["screen_rule"] not in _D125_RULING_REQUIRED_SCREEN_RULES
+            or isinstance(generation.get("d125_ruling"), str)
+            and bool(generation.get("d125_ruling"))
+        )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
         and len(set(session_ids)) == len(session_ids)
@@ -1017,20 +1043,29 @@ def _valid_acceptance_bound(value: Any) -> bool:
     screen = Decimal(operative_values["bracket_screen_s"])
     maximum = Decimal(operative_values["maximum_budgetable_drift_s"])
     excess = Decimal(operative_values["max_budgetable_excess_s"])
-    # The bracket screen's derivation rule is generation-keyed.  Every issued
-    # generation to date was derived under `range_equals_screen`: the corpus
-    # range quantized to 1e-6 s IS the screen.  A generation registering any
-    # other rule refuses here until that rule is implemented, so a successor
-    # derived under a D-125 envelope cannot pass by defaulting to this one.
-    if generation["screen_rule"] != SCREEN_RULE_RANGE_EQUALS_SCREEN:
+    # The bracket screen's derivation rule is generation-keyed.  The six issued
+    # generations were derived under `range_equals_screen`: the corpus range
+    # quantized to 1e-6 s IS the screen.  A generation derived under the D-125
+    # envelope floors that range at the genesis screen, so the two rules agree
+    # whenever the range exceeds the floor and disagree only when the floor
+    # binds -- which is exactly when the difference matters, because an
+    # envelope generation whose range fell short would otherwise register a
+    # screen below the one the instrument was first characterised against.
+    # An unregistered rule name still refuses rather than defaulting to either.
+    quantized_range = (max(values) - min(values)).quantize(
+        BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
+    )
+    screen_rule = generation["screen_rule"]
+    if screen_rule == SCREEN_RULE_RANGE_EQUALS_SCREEN:
+        screen_matches_rule = quantized_range == screen
+    elif screen_rule == SCREEN_RULE_FLOORED_RANGE_ENVELOPE:
+        screen_matches_rule = max(quantized_range, D125_SCREEN_FLOOR_S) == screen
+    else:
         return False
     return (
-        (max(values) - min(values)).quantize(
-            Decimal("0.000001"), rounding=ROUND_HALF_EVEN
-        )
-        == screen
+        screen_matches_rule
         and max(values).quantize(
-            Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
+            PREFLIGHT_LEVEL_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
         )
         == Decimal(operative_values["preflight_level_screen_s"])
         and screen + excess == maximum
