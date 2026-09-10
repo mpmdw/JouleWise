@@ -165,15 +165,35 @@ passes no screen either, and the recovery path's
 `slot == "pre"` auto-abort does not apply, since a derivation session closes
 only on its last declared slot or an explicit abort.
 
-The screen-to-kind check runs in both directions, and either disagreement
-refuses `systematic_screen_kind_mismatch`. Finalization compares one fact —
-whether a level screen was supplied — against the session's kind. A
+The screen-to-kind check runs in both directions at finalization, comparing
+one fact — whether a level screen was supplied — against the session's kind. A
 derivation-kind slot finalized WITH a screen refuses, because the retired
 epoch's threshold must not judge a new-epoch capture. A bracket-kind slot
 finalized with NO screen refuses as well, because an ordinary capture that
 skipped the comparison would be recorded `valid` without ever having been
 tested against the screen it is owed; omitting the screen is not a route
-around it. The refusal names the session kind it saw.
+around it.
+
+Either disagreement raises the ledger's existing refusal code
+`calibration_reservation_input_invalid`
+(`RefusalCode.RESERVATION_INPUT_INVALID`, "bracket session reservation is
+malformed"), carrying the context fields `reason:
+systematic_screen_kind_mismatch` and the `session_kind` it saw.
+`systematic_screen_kind_mismatch` is that context REASON — the string saying
+which malformed reservation this is — and not a refusal code of its own: a
+reader grepping the code registry for it will not find it, and a caller
+matching on codes matches `calibration_reservation_input_invalid` and then
+reads the reason.
+
+The writer-side half of the same rule IS a code:
+`calibration_derivation_session_requires_derivation_only`
+(`RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY`, "a
+derivation-kind session slot is capturable only in derivation-only mode")
+refuses an ordinary capture aimed at a derivation-kind slot before the writer
+takes its lease, so nothing is appended, no custody directory exists, and the
+session is untouched. The two halves close the fence from both sides: the
+writer refuses the wrong MODE against the slot, the ledger refuses the wrong
+SCREEN presence against the kind at finalization.
 
 The recovery tool authenticates the acceptance artifact before it reads the
 ledger at all. The prior epoch's acceptance is unauthenticatable when its
