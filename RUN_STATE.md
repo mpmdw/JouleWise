@@ -5216,6 +5216,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - CONTINUE — A152 `D165-RELABEL-01`: Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.
 - CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
 - CONTINUE — A154 `PAPER-K`: Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.
+- CONTINUE — A175 `GATE-SENSIBILITY-SWEEP-01`: Before consuming the first real G2-a numbers, audit every numeric acceptance gate on the claim path for physical sensibility and remove microscopic tolerances that have no physical justification (Ed: 'make sure all barriers are sensible').
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
