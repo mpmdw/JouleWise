@@ -881,4 +881,10 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   derivation-kind session skipped at all three validator sites; `calibration_bracketing.DERIVATION_SESSION_KIND == calibration_ledger.SESSION_KIND_DERIVATION`;
   a canonical-checkout run of tests/verify_calibration_acceptance_corpus.py before any transaction. Ed's four written-yes items (08:39 email) still open;
   no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~11:20 PDT (headless activation `96bfeca7`): Claude 5-hour session limit fired ~09:46 (reset 11:10), terminating the
+  Opus pairing on cold gate 69, seat S6 round 3 and the S2 execution refuter (record 72); relaunched 11:19. State: S5 FINAL and merged into
+  `feat/2026-09-10-epoch-integration` (with S6 39e813ff); S6 round 3 (contract encoding + three refusals) running; S2 1e43d1cc contract refuter 71
+  MERGEABLE AFTER FIXES, execution refuter running; S3 93799321 awaits cold gate 69's cure (predecessor_ceiling_s; ceiling == max(predecessor, own
+  Q99) or own Q99 at genesis; strict screen<ceiling) after its Opus pairing, plus the seam fixes (import S2's SESSION_KIND constants; fail-closed
+  on a missing session). Ed's four written-yes items still open; no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
 
