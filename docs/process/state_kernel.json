@@ -2936,6 +2936,35 @@
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five. Cited site at the time of the audit: the /usr/bin/powermetrics literal at powermetrics_fiducial.py:1502; re-derive before work. The audit says most of the cost is deciding where the pin lives and how it is refreshed, not the code - so the design question is the work.",
       "stop_card": null
     },
+    "ISOLATION-RULE-DOCTRINE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/69-coldgate-packet-s3-envelope-clause/10-coldgate-fable-ruling.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ISOLATION-RULE-DOCTRINE-01/acceptance",
+          "label": "ISOLATION-RULE-DOCTRINE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The adversarial-review skill carries the isolation rule and operand-collapse cuts verbatim from packet 69 (10 + 11) and record 88; a council-log entry records the adoption date and Ed's veto outcome; the magistrate never wrote doctrine itself (rule 11)."
+      },
+      "authority": {
+        "label": "Cold-gate ruling 69 + addendum 11; record 88",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/69-coldgate-packet-s3-envelope-clause/10-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Install cold-gate ruling 69 Q2 (the isolation rule, as amended by its Opus addendum A5: a fix-round delta re-audit re-cuts every clause the diff adds or changes plus every clause downstream of a moved fence, one term at a time, one selected test per cut, Ran N >= 1 parsed, bytes hash-restored) together with the operand-collapse cut shape (record 88: collapse every max/min/selector to each operand) into the adversarial-review skill doctrine and the council log, after Ed's veto window on ruling 69 closes.",
+      "id": "ISOLATION-RULE-DOCTRINE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 182,
+      "status": "queued",
+      "status_note": "2026-09-10: registered by activation 96bfeca7 because the ruled-not-installed sweep found the adopted rule installed nowhere with no tracked obligation; blocked on Ed's veto window (email 2026-09-10), then a lieutenant seat installs it.",
+      "stop_card": null
+    },
     "L10-A-G2B-CONTRACT-PREFIX-01": {
       "acceptance": {
         "evidence": [
@@ -5198,6 +5227,35 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-13 of the ruled-not-installed sweep (status C, cure RUNBOOK). Compounds with TRANSACTION-RULED-ARTIFACTS-01: two separate rulings point at the same absent section 11 step.",
       "stop_card": null
     },
+    "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/113-terminal-review-triage-final-wave.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01/acceptance",
+          "label": "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "session-refusal on a window_exhausted-aborted derivation session prints that reason with a defect-shaped test and a killed cut; the runbook's harvest section cites it."
+      },
+      "authority": {
+        "label": "Seam audit (record 113, N-4)",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/113-terminal-review-triage-final-wave.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Map the derivation night's abort reason window_exhausted in scripts/recover_calibration_ledger.py's session-refusal path (_AUTOMATIC_ABORT_REFUSALS names three reasons; a window-exhausted abort surfaces as SESSION_NOT_OPEN instead of its reason), so a desk operator reading the session sees the reason the chain wrote.",
+      "id": "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 184,
+      "status": "queued",
+      "status_note": "2026-09-10: registered by activation 96bfeca7 from the S1-S5-S7 seam audit; inert today (runbook 99 does not route through the subcommand).",
+      "stop_card": null
+    },
     "REGISTRY-ID-NAMING-01": {
       "acceptance": {
         "evidence": [
@@ -6704,6 +6762,35 @@
       "rank": 163,
       "status": "queued",
       "status_note": "2026-09-08: READY; 99dt recommends shared authority; ratio.validate_metric_unit_and_ratio now exists and S3 consumes it; remaining manifest/verdict integration is the follow-up.",
+      "stop_card": null
+    },
+    "V2-SURFACE-GUARD-REKEY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/97-integration-red-root-cause-opus.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V2-SURFACE-GUARD-REKEY-01/acceptance",
+          "label": "V2-SURFACE-GUARD-REKEY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The guard's entries are keyed by (file, function, ordinal) with a line-shift-immunity test mirroring test_custody_mode_inventory; the ruling that authorised the re-keying is cited; no read-capable IO site is newly exempted."
+      },
+      "authority": {
+        "label": "Root-cause record 97 (cluster B)",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/97-integration-red-root-cause-opus.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Re-key tests.test_authentication_io::test_marked_v2_surface_has_no_direct_readable_io from absolute line pins to (file, function, ordinal) like the custody census, so an insertion above ~line 2900 of joulewise/calibration_ledger.py no longer re-reds the guard (eight pins shifted +121 by ACCEPTANCE-EPOCH-25G83-01, record 97); a guard design change needs a cold-gate ruling first.",
+      "id": "V2-SURFACE-GUARD-REKEY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 183,
+      "status": "queued",
+      "status_note": "2026-09-10: registered by activation 96bfeca7; ruling required before the change (rule 11: a guard's keying is process design).",
       "stop_card": null
     },
     "V4-TRANSACTION-01": {
