@@ -918,3 +918,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   Open rulings for Ed (veto window): screen-rule name (82), pre-registration screen rule as CG46 default (80), isolation rule + operand-collapse
   cuts (69/88); v2 surface guard re-keying (97) needs a ruling. Ed's four written-yes items still open; no directive issues. rehearsal-20260911
   ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~15:30 PDT (headless activation `96bfeca7`): SEAT S7 ADDED (derivation-night wrapper generator `scripts/gen_derivation_night.py`,
+  records 101/102/103–106): scout 101 proved the driver passes a chain only four variables and no argv, so the night pins a generated wrapper
+  that exports the thirteen chain variables as literals, verifies the tracked chain's sha256 in-wrapper, and execs it with the 24 per-slot
+  bindings; refuters 104/105 + delta 106 cured (literal digest, window-fit refusal, `--verify` tripwire); round 3 RUNNING for the lead's diff-gate
+  defect (record 110: the writer exits 1 on a non-valid capture and the chain's `set -e` would end a twelve-slot night on one ordinary-invalid slot —
+  the chain must continue on rc 0/1 and stop only on a refusal). S4 round 5 RUNNING (third-epoch rows refuse). Replay 2 at aea38b1a: ONE failure
+  (a guard forbids the floor digits in comments) fixed at the bench; replay 3 at d9612e68 RUNNING (early signal; replay 4 at the final head is the
+  ledger row). Magistrate diff gate (row 7) over all nine production files DONE (110). Terminal review 109 RUNNING. Runbook 99 revised for the
+  wrapper (108). Integration = 819a9c40 (+ S7 final b2636d6c + comment fix). NEXT: S7 r3 + S4 r5 → merge → replay 4 → PR with the twelve-row
+  ledger → merge → clone at H + venv → `check` → NIGHT_HANDBACK derivation night 1. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
