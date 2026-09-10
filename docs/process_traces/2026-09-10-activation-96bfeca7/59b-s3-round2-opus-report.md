@@ -754,3 +754,98 @@ tests.test_calibration_live_three_window tests.test_paper_first_use_ledger \
 The byte-identical sweep over all six artifacts under `configs/calibration/` and the genesis fixture
 passes unchanged: no issued row's `screen_rule`, screen, or level screen moved, and the new rule is
 registered for no registered generation.
+
+---
+
+# Fix round 5 — the envelope rule's RANGE branch (delta 83 F1)
+
+Applied on top of `030ceb5f`; diff uncommitted, same two files. Production change is the
+parenthesization nit only; the fence itself was already correct and merely untested.
+
+## F1 — the branch the pre-registration expects to be common was untested
+
+Every round-4 envelope test drove `_floored_envelope_case`, whose corpus range is fixed at `0.006000`,
+always BELOW the floor. So `max(quantized_range, D125_SCREEN_FLOOR_S)` collapsed to
+`D125_SCREEN_FLOOR_S` with all 88 tests green — a screen understated by 0.014182 s against its own
+corpus would have been admitted, which is precisely the defect the envelope rule was registered to bar.
+
+New `_range_bound_envelope_case` widens the member values to `0.020 / 0.032 / 0.045`, a quantized range
+of `0.025000` that exceeds the floor, and — per the delta's recipe — **recomputes
+`decimal_derivation.source_statistics` from those members** (min, max, range, mean, sample SD, and the
+min/max member ids) plus the level screen, because the validator derives all of them from the member
+table itself. A fixture that edits only the operatives refuses for an unrelated reason and proves
+nothing.
+
+| Case | Test | Verdict |
+|---|---|---|
+| range `0.025000` wins the max; screen = the range | `test_envelope_screen_is_the_range_once_the_range_exceeds_the_floor` | ADMIT |
+| identical fixture, `bracket_screen_s` pinned at the floor `0.010818` | `test_envelope_screen_understated_at_the_floor_refuses` | REFUSE |
+
+The two cases share one fixture and one set of recomputed statistics and differ ONLY in
+`bracket_screen_s`, which is what makes the refusal attributable to the screen term rather than to any
+completeness failure — the admit control is the proof, and it is asserted in the same round.
+
+## Nit — parenthesization
+
+`A or (B and C)` is now explicit in the `d125_ruling` clause. No semantic change (Python already bound
+it that way). Its four inversion cuts were re-anchored and re-run: all still kill.
+
+## Sweep-method defect, and what it found
+
+**Recorded as instructed, because the finding generalises.** My 32/32 harness missed the C10 survivor
+because its standard cut set was *operators and constants* — negate a comparison, change a literal,
+delete a term — and never *collapse an n-ary function to one operand*. A `max`/`min` whose arguments are
+never both exercised is invisible to operator cuts: every comparison still runs, every constant is
+still correct, and the term is still there.
+
+**Operand-collapse cuts are now part of the standard set: for every `max`/`min` in a changed clause,
+cut it to EACH operand separately.** Applied here, three such cuts exist in this seat's diff, and the
+method immediately found a **second survivor of the same class that four rounds of review had not**:
+
+- `max(predecessor, prediction)` → `prediction` (the ceiling relation collapsed to
+  `ceiling == own Q99`) survived, because the only test with the predecessor winning the max and a
+  correct ceiling is the ADMIT half of `test_lineage_fields_are_jointly_present_or_jointly_absent`,
+  which the round-3 cut had not been pointed at. Re-pointed; it kills. No production change — the
+  relation was right, the pin was not.
+
+That is two survivors of one class in one diff, both found only by this cut shape. If the adversarial-
+review doctrine takes one thing from this seat, it should be this: an isolation rule stated over
+*terms* is not enough, because `max(a, b)` is one term with two independent behaviours.
+
+## Atomic sweep — whole, one term (or one operand) per cut
+
+35 cuts, **35/35 KILLED**, no survivors, no anchor misses, no `NO-TESTS-RAN`; every cut `Ran 1`.
+`restored_sha256: bd4d8293c03ab139be2db603be364e8ae5de595a928388fa5987c955432c845b`,
+`restored_matches: True`. `PYTHONDONTWRITEBYTECODE=1` throughout.
+
+The three new operand-collapse cuts:
+
+| Operand collapse | Naming test | rc | Ran |
+|---|---|---|---|
+| envelope screen `max(range, floor)` → `floor` (the C10 survivor) | `test_envelope_screen_understated_at_the_floor_refuses` | 1 | 1 |
+| envelope screen `max(range, floor)` → `range` | `test_floored_envelope_screen_rule_admits_a_floor_bound_generation` | 1 | 1 |
+| ceiling `max(predecessor, prediction)` → `prediction` (found this round) | `test_lineage_fields_are_jointly_present_or_jointly_absent` | 1 | 1 |
+
+The round-3 cut `max(predecessor, prediction)` → `predecessor` remains in the set and still kills
+against `test_envelope_ceiling_equals_own_q99_when_own_q99_dominates`, so both operands of both maxes
+are now pinned in both directions.
+
+## Test rcs (verbatim, rc captured in `RC`)
+
+```
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_calibration_bracketing \
+    tests.test_calibration_ledger tests.test_docs_freshness
+FIXROUND5_RC=0 :: Ran 193 tests in 5.498s  OK (skipped=2)
+
+byte-identical artifact sweep, alone      :: Ran 1 test  OK
+```
+
+`tests.test_calibration_bracketing` is now 90 tests (38 in `GenerationKeyedIssuanceValidationTests`).
+
+## Still open on the S4 side (delta 83 F2, not mine to fix)
+
+`scripts/issue_calibration_acceptance_generation.py:678-693` emits `epoch_catalog_ids` and
+`registration_session_ids` as Python **lists**; this module requires **tuples** (deliberately — the row
+is meant to be immutable and hashable). S4's row will refuse until it emits tuples, and the refusal is
+silent: `_registered_generation_row_is_complete` returns one boolean, so the reason is not distinguished
+from any other completeness failure. Recommend S4 emit tuples so the emitted row is the registered row.
