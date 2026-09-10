@@ -22,6 +22,8 @@ from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     ACCEPTANCE_IDENTITY_FIELDS,
     D079_EPOCH_CATALOG_ID,
+    D125_SCREEN_FLOOR_S,
+    SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
     SESSION_KIND_BRACKET,
     SESSION_KIND_DERIVATION,
     SESSION_KIND_UNRESOLVED,
@@ -3792,6 +3794,113 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         genesis = dict(row)
         genesis.pop("predecessor_acceptance_id", None)
         with _registered_generation(acceptance_id, genesis):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def _floored_envelope_case(
+        self,
+        *,
+        screen: str = "0.010818",
+        screen_rule: str = SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+        d125_ruling: object = "D-125 cl.2 envelope ruling",
+    ):
+        """A generation derived under the pre-registered D-125 envelope.
+
+        Its corpus range (0.006000) is BELOW the genesis screen floor, so the
+        floor binds and the screen is 0.010818 rather than the range.  The
+        lineage is real: r6's registered ceiling, named by r6's own id.  Own
+        Q99 0.012000 wins the ceiling max, which keeps the screen strictly
+        below the ceiling and leaves a real budgetable excess.
+        """
+
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        ceiling = "0.012000"
+        excess = str(Decimal(ceiling) - Decimal(screen))
+        operatives = {
+            **generation["operatives"],
+            "bracket_screen_s": screen,
+            "max_budgetable_excess_s": excess,
+            "maximum_budgetable_drift_s": ceiling,
+        }
+        row = dict(generation)
+        row["operatives"] = operatives
+        row["screen_rule"] = screen_rule
+        row["prediction_99_two_draw_s"] = ceiling
+        row["predecessor_ceiling_s"] = _D102_GENERATION_DERIVATIONS[
+            ANCHOR_V3_R6_ACCEPTANCE_ID
+        ]["operatives"]["maximum_budgetable_drift_s"]
+        row["predecessor_acceptance_id"] = ANCHOR_V3_R6_ACCEPTANCE_ID
+        if d125_ruling is not None:
+            row["d125_ruling"] = d125_ruling
+        tuned = copy.deepcopy(artifact)
+        derivation = tuned["decimal_derivation"]
+        derivation["ratified_operatives"].update(operatives)
+        derivation["rounding"]["operative_bracket_screen"]["value_s"] = screen
+        derivation["source_statistics"]["prediction_99_two_draw_s"] = ceiling
+        return acceptance_id, row, _reseal(tuned)
+
+    def test_floored_envelope_screen_rule_admits_a_floor_bound_generation(
+        self,
+    ) -> None:
+        # The route the pre-registration names: a corpus whose range came in
+        # below the genesis screen floor.  Under the envelope the screen is the
+        # floor, so it can never fall below the value the instrument was first
+        # characterised against.
+        acceptance_id, row, artifact = self._floored_envelope_case()
+        self.assertEqual(
+            Decimal(row["operatives"]["bracket_screen_s"]), D125_SCREEN_FLOOR_S
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_envelope_generation_that_ignored_the_floor_refuses(self) -> None:
+        # The same generation with the screen set to its quantized range
+        # (0.006000), which is what the range-equals-screen rule would give and
+        # what the envelope forbids while the floor is higher.
+        acceptance_id, row, artifact = self._floored_envelope_case(
+            screen="0.006000"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_floor_bound_screen_refuses_under_the_range_equals_screen_rule(
+        self,
+    ) -> None:
+        # And the converse: a row that registers the OLD rule name cannot carry
+        # a floored screen.  The two rules agree whenever the range exceeds the
+        # floor and disagree exactly here, so the name has to be honest.
+        acceptance_id, row, artifact = self._floored_envelope_case(
+            screen_rule=SCREEN_RULE_RANGE_EQUALS_SCREEN
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_envelope_generation_requires_a_non_empty_d125_ruling(self) -> None:
+        # The pre-registration: issuance refuses while the D-125 reference is
+        # absent.  It is conditional on the rule, not unconditional -- the six
+        # issued rows predate the envelope and carry none.
+        for ruling in (None, "", 0, ["D-125"]):
+            with self.subTest(d125_ruling=repr(ruling)):
+                acceptance_id, row, artifact = self._floored_envelope_case(
+                    d125_ruling=None
+                )
+                if ruling is not None:
+                    row["d125_ruling"] = ruling
+                self.assertEqual("d125_ruling" in row, ruling is not None)
+                with _registered_generation(acceptance_id, row):
+                    self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_range_equals_screen_rows_need_no_d125_ruling(self) -> None:
+        # The six issued generations carry no `d125_ruling` and must keep
+        # validating; the key is required only of envelope rows.
+        for acceptance_id, generation in _D102_GENERATION_DERIVATIONS.items():
+            with self.subTest(acceptance_id=acceptance_id):
+                self.assertNotIn("d125_ruling", generation)
+                self.assertEqual(
+                    generation["screen_rule"], SCREEN_RULE_RANGE_EQUALS_SCREEN
+                )
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertNotIn("d125_ruling", generation)
             self.assertTrue(_valid_acceptance_bound(artifact))
 
     def test_generation_row_refuses_a_screen_at_or_above_its_ceiling(self) -> None:
