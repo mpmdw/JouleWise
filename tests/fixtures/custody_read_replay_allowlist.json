@@ -63,6 +63,13 @@
     "reason": "Retained-corpus CLI main -> extract_cells -> AuthenticatedConsumptionSession -> snapshot and bracket candidate discovery; derives extraction reports without mint, ledger append, binding publication, or analysis-manifest finalization."
   },
   {
+    "file": "scripts/issue_calibration_acceptance_generation.py",
+    "function": "check",
+    "ordinal": 1,
+    "line": 96,
+    "reason": "Read-only desk epoch watch replays the existing ledger snapshot to compare identity fields and print a table; it never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest, and the only other subcommand returns 64 unimplemented."
+  },
+  {
     "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
     "ordinal": 1,
