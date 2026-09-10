@@ -2067,5 +2067,47 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assertNotRegex(doc, r"`:\d+`")
 
 
+    # ---- fix round 7 ----------------------------------------------------
+
+    def test_a_repeated_registration_session_refuses(self) -> None:
+        """Three flags naming one night are not three nights.
+
+        The three-nights fence counted flag REPETITIONS, so repeating one id
+        satisfied it while the ledger held a single session.  The repetition is
+        refused on its own terms — a registration naming the same night twice is
+        malformed whatever the count fence would have said.
+        """
+
+        code = self.run_issuer(
+            self.wide,
+            "--registration-session-id", SESSION,
+            "--registration-session-id", SESSION,
+            "--nights-ruling", "",
+        )
+        self.assert_refused(
+            code, f"registration names a session more than once: {SESSION}"
+        )
+
+    def test_the_night_count_fence_counts_distinct_sessions(self) -> None:
+        """With the repetition refusal disabled, the count still sees ONE night.
+
+        The two checks must not depend on each other having run, or deleting
+        either would silently restore the other's defect.  Disabling the
+        repetition refusal is the only way to reach the count fence with
+        duplicates, so it is disabled here — and the fence catches them.
+        """
+
+        with mock.patch.object(
+            issuer, "refuse_repeated_sessions", lambda session_ids: None
+        ):
+            code = self.run_issuer(
+                self.wide,
+                "--registration-session-id", SESSION,
+                "--registration-session-id", SESSION,
+                "--nights-ruling", "",
+            )
+        self.assert_refused(code, "registration names 1 sessions, not the pre-registered 3")
+
+
 if __name__ == "__main__":
     unittest.main()
