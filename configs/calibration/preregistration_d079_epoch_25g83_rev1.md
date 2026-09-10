@@ -91,9 +91,37 @@ is fixed here first.
 Why three nights of twelve slots, stated before capture: at the historical
 valid rate 30/38 and r6's replay-retention ratio 17/19, two nights of 12 slots
 project 24 × (30/38) × (17/19) = 16.95 retained observations, below the
-required 19; three nights project 25.4. The schedule fits a 210 min window
-with margin: one 600 s settle + 11 × 600 s cadence + one ~8 min capture is
-128 min.
+required 19; three nights project 25.4.
+
+Three different durations govern one night, and confusing them is how a night
+opens a session it cannot finish, so all three are stated here.
+
+- **Programmed span — 7680 s (128 min).** What the capture chain actually
+  runs: one 600 s settle after the last operator action, then eleven 600 s
+  start-to-start slot gaps, then one 480 s capture budget for the twelfth
+  slot. 600 + 11 × 600 + 480 = 7680.
+- **Generator minimum — 7980 s (133 min).** The night wrapper generator
+  `scripts/gen_derivation_night.py` refuses to emit a wrapper unless the
+  plan's `window_max_s` is at least the programmed span plus a 300 s
+  pre-settle allowance (7680 + 300 = 7980). The allowance exists because the
+  settle clock starts at the chain's own start, and a window that held only
+  the programmed span exactly would abort its last slot
+  `window_exhausted` on any start-up delay.
+- **Recommended `window_max_s` — 9000 s (150 min).** The value these nights
+  are armed with: it clears the 7980 s minimum by 1020 s, absorbing a slow
+  capture or a late start without touching the schedule. The generator
+  separately refuses when `t0 + window_max_s + 300 s` (a courier allowance
+  for the night's own closing work) is not before the next local 07:00.
+
+`window_max_s` is the plan field naming the window's length in seconds; the
+window ENDS at `t0 + window_max_s`, and the chain will not start a slot it
+cannot finish inside that end.
+
+The figure 210 min, which earlier drafts attached to the window, is not a
+window at all: it is the install span 03:00–06:30 — the operator-facing block
+of the clock inside which a night is scheduled. A 150 min window fits inside
+a 210 min install span with an hour to spare; the two numbers measure
+different things and neither is derived from the other.
 
 ## Registration text
 
@@ -163,7 +191,17 @@ range, 0.04262208300415633 (the Decimal sum of 0.03289849371536248 and 0.0097235
 membership.
 
 Analysis. Decimal statistics exactly as r6: minimum, maximum, range, mean, sample SD; t(0.975, n-1) and t(0.995, n-1)
-two-draw predictions (both terms defined in the glossary above). The three-night schedule admits retained n from 19
+two-draw predictions (both terms defined in the glossary above). The two-draw predictions are the one step that leaves
+exact decimal arithmetic, and Q99 is the number that sets the successor's budget ceiling C, so the arithmetic is declared
+here, before the corpus exists, in the issuer's own sealed words (the string TWO_DRAW_PREDICTION_RULE, quoted verbatim
+because it is hashed into the derivation and a paraphrase would change the digest of an otherwise identical derivation):
+"prediction_p_two_draw_s = t(p, n-1) * sample_sd_presentation_s * sqrt(2), evaluated in binary64 and recorded as its
+shortest round-tripping decimal". Binary64 is the IEEE 754 double-precision binary floating-point format (Python's
+float), which carries about 15 to 17 significant decimal digits. The shortest round-tripping decimal is the shortest
+decimal string that reads back as exactly that same binary64 value and no other, which is what Python's repr of a float
+returns. So the two quantiles and the sample SD are converted to binary64, multiplied there, and the product is recorded
+as that shortest string: no rounding choice is left to be made after the values are seen.
+The three-night schedule admits retained n from 19
 (the required floor) to 36 (all declared slots retained), so the degrees of freedom n-1 run from 18 to 35 — or from 16
 if Ed's written n = 17 ruling is exercised; the quantile implementation's proof for the REALIZED df is computed and
 recorded before issuance, and no corpus issues on a df whose quantile is not proven in that record.
@@ -193,7 +231,14 @@ passes both checks therefore cannot be wrong in any digit the artifact prints. T
 are recorded when the corpus closes; they are not predicted here.
 The full D-125 envelope governs both operatives: bracket screen
 S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling C = max(predecessor ceiling,
-new Q99). The generation records the predecessor ceiling and an explicit d125_ruling
+new Q99). The successor's generation row registers that S rule under the NAME
+floored_range_envelope_screen, and the validator recomputes screen == max(quantized range, 0.010818) under it. The name
+records the RULE fixed here before capture, not the branch the data took: the row carries this name whichever arm of the
+max wins. Naming it by the realized branch would make the registered rule a function of the data, which is what a
+pre-registration exists to prevent, and it would misfile the ordinary case, since a corpus at the n = 19 size floor has a
+range just below 0.010818 and takes the floor arm. (The six issued generations register the other name,
+range_equals_screen: screen == quantized range, with no floor. An unregistered name refuses rather than defaulting to
+either rule.) The generation records the predecessor ceiling and an explicit d125_ruling
 reference; issuance refuses while that reference is absent, and refuses successor_screen_exceeds_budget_ceiling when
 S >= C. Maximum budgetable drift = C; maximum budgetable excess = C - S, with no silent clamp at zero.
 
@@ -213,6 +258,23 @@ attempt in that prefix refuses issuance. D-102 clause 2 is preserved: a trigger 
 artifact, never incorporated into a threshold that judges itself. Nothing in this registration licenses a measurement
 window or weakens a physics or evidence refusal.
 ```
+
+## Known conditions (recorded, not rules)
+
+**Display state at t0 is not constrained by the night gate.** The gate
+(`joulewise/night_gate.py`, condition C3) requires the screensaver's
+`idleTime` preference to read exactly `0` — meaning the screensaver never
+engages, refusal reason `night_refused_hid_idle` — and for the display it only
+requires that `pmset -g` yield a parseable `displaysleep` setting, recording
+that value as evidence without demanding any particular one; it never probes
+whether a panel is awake, dimmed, or asleep when the window opens, and the
+derivation chain deliberately omits the writer flag
+`--sleep-display-before-capture` that the G2-a chain passes, because no
+operator is present to schedule a display action. These captures may therefore
+differ systematically in display state from the G2-a corpus the resulting
+acceptance will judge. That is recorded here as a known condition of this
+corpus, not a rule: it edits no membership, moves no threshold, and licenses
+no re-capture.
 
 ## Fields filled at commit
 

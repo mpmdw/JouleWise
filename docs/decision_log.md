@@ -6652,15 +6652,16 @@ departs from a ratified floor.
   compressed or replaced.
 - **V7 — the successor's screen and ceiling.** The FULL D-125 envelope governs
   both: `S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818)` AND
-  `C = max(inherited ceiling, new Q99)`, where the inherited ceiling is the
-  predecessor generation's `maximum_budgetable_drift_s` and Q99 is the new
+  `C = max(predecessor ceiling, new Q99)`, where the predecessor ceiling is
+  the predecessor generation's `maximum_budgetable_drift_s`, carried on the
+  successor's generation row as `predecessor_ceiling_s`, and Q99 is the new
   corpus's 99 % two-draw prediction. The C half is not optional: r6's own
   ceiling `0.010164834757777545` is BELOW the `0.010818` screen floor, so a
   successor derived under an S-only rule would trip D-126 clause 3's ratified
   `successor_screen_exceeds_budget_ceiling` refusal (screen ≥ ceiling) and the
   stored identity `screen + excess = maximum` would demand a negative excess.
   Cap is `C − S` with no silent clamp, per D-126 clause 3. The generation row
-  carries the inherited ceiling and an explicit `d125_ruling` reference, and
+  carries the predecessor ceiling and an explicit `d125_ruling` reference, and
   the issuer refuses to emit while that reference is absent, so the successor
   cannot settle D-125 implicitly. The preflight level screen is the new
   corpus maximum quantized to 1e-15 s, matching r6's stored precision.

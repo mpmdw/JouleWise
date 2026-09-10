@@ -16,13 +16,21 @@ every consumer.
 
 ## Derivation sessions for a new identity epoch
 
-Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); NOT
-YET LANDED.** Seats S1-S4 install the writer mode, the derivation-kind ledger
-session, the generation-keyed validator, and the issuer. Until those seats
-land, no code implements this section or the generation-keyed clauses under
-[Historical import](#historical-import): the shipped ledger has `bracket`-kind
-sessions only, and the shipped validator enforces the import-only prefix fence
-for every generation.
+Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); Ed
+veto window open; LANDED in code.** Both facts hold at once: the mechanism
+below is implemented and running, and Ed may still veto or amend the rules it
+implements. This section and the generation-keyed clauses under [Historical
+import](#historical-import) name shipped behaviour, not a plan. The code
+sites, by symbol: `SESSION_KIND_DERIVATION` in
+`joulewise/calibration_ledger.py` is the session kind a derivation session's
+open receipt carries; `_is_derivation_kind_observation` in
+`joulewise/calibration_bracketing.py` is the predicate that keeps those rows
+out of every claim-bearing use; `prior_prefix_mode` is the key on the
+registered generation row that selects which prefix fence that generation is
+validated under; `scripts/validate_powermetrics_fiducial.py` takes
+`--derivation-only` for the writer mode; and
+`scripts/issue_calibration_acceptance_generation.py` is the issuer that
+derives a successor acceptance candidate from a derivation corpus.
 
 **Terms.** An **identity epoch** is the six-field vector {`os_build`,
 `hardware_model`, `power_policy`, `sampling_interval_ms`,
@@ -126,6 +134,36 @@ trigger observation is judged under the PRIOR artifact, never under a
 threshold that incorporates that observation. Nothing in this section licenses
 a measurement window or weakens a physics or evidence refusal (D-161).
 
+**The issuer refuses a candidate whose registration does not match the machine
+or the file.** Three fences are installed in the issuer,
+`scripts/issue_calibration_acceptance_generation.py`, on its
+`prepare-candidate` subcommand, so a mismatch stops the run before any corpus
+statistic is computed rather than being caught in review afterwards.
+
+- **Epoch match.** `prepare-candidate` refuses when the pre-registration's
+  recorded `/usr/bin/powermetrics` SHA-256, or its recorded `os_build`,
+  differs from the target identity epoch the registration declares. A machine
+  that has moved off the declared epoch since the text was written would
+  otherwise contribute rows to a corpus the registration never governed.
+- **Registration shape.** It refuses when the registration is not exactly
+  three sessions of twelve declared slots — the shape the pre-registration
+  fixes before capture — unless a written ruling names the departure. A
+  campaign that quietly ran a fourth night, or nights of a different slot
+  count, is a different experiment from the pre-registered one, and the
+  corpus size alone cannot reveal the substitution.
+- **File identity.** It refuses when the SHA-256 of the pre-registration file
+  it was handed differs from the digest the caller passes as
+  `--preregistration-sha256`, so the authority the candidate cites is the
+  text the caller meant, byte for byte, rather than whatever now sits at that
+  path.
+
+`[flag names to confirm at merge]` — these three fences land on the issuer
+seat's branch as this contract is written, and are described here by
+subcommand and flag name rather than by location. The subcommand name
+`prepare-candidate` and the flag `--preregistration-sha256` used above are to
+be checked against the merged issuer, and corrected here if the merged names
+differ.
+
 ## Historical import
 
 Historical import is the one genesis-only exception that registers already
@@ -175,8 +213,11 @@ instrument-evidence byte hashes, so it names the same observation from any
 custody path.
 
 Which rows that prefix may contain is a per-generation registration, not a
-global rule (ruled 2026-09-10, not yet landed; see [Derivation sessions for a
-new identity epoch](#derivation-sessions-for-a-new-identity-epoch)). A
+global rule (ruled 2026-09-10, Ed veto window open; landed as the
+`prior_prefix_mode` key that `_prior_set_matches_import_cutoff_prefix` in
+`joulewise/calibration_bracketing.py` reads off the registered generation row;
+see [Derivation sessions for a new identity
+epoch](#derivation-sessions-for-a-new-identity-epoch)). A
 generation registered `prior_prefix_mode: import_only` keeps the genesis fence
 exactly as written above — any live row in its prefix refuses — and that is
 how generations r3 through r6 keep validating byte-identically. Only a
@@ -198,7 +239,16 @@ each row to the ledger's recorded session is what keeps D-102 clause 2's rule
 — nothing judges itself — true of registration membership as well as of
 thresholds. Generations registered `import_only` keep the exact four-key row
 shape and refuse when a `session_id` key appears, so no historical generation
-changes. (Ruled 2026-09-10, not yet landed; seats S3 and S4 install it.)
+changes. (Ruled 2026-09-10, Ed veto window open; landed. On the validator
+side, `_prior_set_matches_import_cutoff_prefix` in
+`joulewise/calibration_bracketing.py` appends the row's `session_id` to the
+four expected bindings only when the mode is `import_plus_live`, compares it
+against the ledger observation's `bracket_session_id`, and separately requires
+every id in the row's `registration_session_ids` to resolve to a session whose
+kind is `SESSION_KIND_DERIVATION`. On the issuer side,
+`scripts/issue_calibration_acceptance_generation.py` writes
+`prior_prefix_mode: import_plus_live` and `registration_session_ids` onto the
+generation row it emits.)
 
 Two EXPECTED numbers are registered per generation for the same reason:
 `prior_observation_count` and `cutoff_sequence` (the genesis generation
@@ -210,6 +260,33 @@ its observation count; a prefix that also holds a session's open and closing
 receipts breaks that arithmetic, so neither number may be recomputed from a
 literal. The generation likewise registers the epoch identifiers it permits
 (`epoch_catalog_ids`) rather than relying on the single literal `d079_epoch`.
+
+The generation also registers, under `screen_rule`, the NAME of the rule its
+bracket screen was derived under. Two names are registered.
+`range_equals_screen` is the rule the six issued generations were derived
+under: the bracket screen IS the corpus range quantized to 0.000001 s under
+ROUND_HALF_EVEN (ties go to the even final digit).
+`floored_range_envelope_screen` is the D-125 envelope rule: that same
+quantized range raised to a floor, so the check is
+`screen == max(quantized range, floor)`, where the floor is
+`D125_SCREEN_FLOOR_S` = 0.010818 s, the screen of the n = 19 genesis corpus.
+The floor exists so no later lineage can characterise the instrument against
+a looser screen than the first one it was characterised against.
+`_registered_generation_row_is_complete` and the operative recomputation in
+`joulewise/calibration_bracketing.py` both dispatch on the registered name,
+and an unregistered name refuses rather than defaulting to either rule.
+
+The name describes the PRE-REGISTERED RULE, never the branch the data took: a
+generation derived under the envelope registers
+`floored_range_envelope_screen` whether the range exceeded the floor or the
+floor bound the screen. Naming it by the realized branch would make the
+registered rule a function of the data, which is exactly what registering a
+rule before capture exists to prevent — and it would misfile the ordinary
+case, because a corpus at the n = 19 size floor has a range just BELOW
+0.010818 s and takes the floor arm. A generation registered
+`floored_range_envelope_screen` must additionally carry the `d125_ruling`
+reference that authorised the envelope; the six issued rows predate the
+envelope, carry no such reference, and are unaffected.
 
 For `import_plus_live` two further checks apply, and together they are the
 corpus-membership fence. Purity: every corpus member's ledger row carries the

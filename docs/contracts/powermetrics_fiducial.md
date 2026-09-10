@@ -92,16 +92,23 @@ none may be restated as an empirically proved universal instrument property.
 
 ## Derivation-only capture for a new identity epoch
 
-Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); NOT
-YET LANDED.** Seat S1 installs `--derivation-only` against seat S2's
+Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); Ed
+veto window open; LANDED in code.** Both hold at once: the mode is
+implemented and running, and Ed may still veto or amend the rules it
+implements. `--derivation-only` is a registered argument of the writer
+`scripts/validate_powermetrics_fiducial.py`, and it runs against the
 **derivation-kind** session interface — a ledger session whose open receipt
-carries `session_kind: "derivation"`, marking it as existing to BUILD a
+carries `session_kind: "derivation"` (the constant `SESSION_KIND_DERIVATION`
+in `joulewise/calibration_ledger.py`), marking it as existing to BUILD a
 future acceptance rather than to bracket a claim window with a capture before
 it and a capture after it (an ordinary bracket session records no
 `session_kind` at all; that absence IS the bracket kind, per
 [the ledger contract](calibration_ledger.md#derivation-sessions-for-a-new-identity-epoch)).
-No shipped writer accepts the flag, and no
-shipped ledger offers the slot it requires.
+The pairing is enforced in both directions by the writer's refusal codes in
+`joulewise/calibration_exits.py`: a derivation-kind slot captured without the
+flag refuses `calibration_derivation_session_requires_derivation_only`, and
+the flag used without such a slot refuses
+`calibration_derivation_only_session_kind_required`.
 
 The writer's `--derivation-only` mode exists for one situation. The machine's
 **identity epoch** — the six-field vector the issued acceptance binds: OS
@@ -250,7 +257,8 @@ calibration remains usable only for explicitly non-claim-bearing probe or
 exploratory reduction, and that allowance covers ordinary captures alone.
 
 A row from a derivation-kind session (cold gate 46 and its dated addendum 11,
-2026-09-10; NOT YET LANDED; see [Derivation-only capture for a new identity
+2026-09-10; Ed veto window open; landed — the enforcing predicate is named
+further down this paragraph; see [Derivation-only capture for a new identity
 epoch](#derivation-only-capture-for-a-new-identity-epoch)) licenses NOTHING
 at reduce time even when its disposition is `valid`: no measurement window,
 no probe or exploratory reduction, and no bracket endpoint — not before and
@@ -330,7 +338,9 @@ metadata scalar alone. An invalid or malformed reference is
 
 Passing every check in that list is necessary, never sufficient. A
 derivation-only artifact (cold gate 46 and its dated addendum 11, 2026-09-10;
-NOT YET LANDED) satisfies all of them on a bundle from its own epoch — its
+Ed veto window open; landed — written by
+`scripts/validate_powermetrics_fiducial.py` under `--derivation-only`)
+satisfies all of them on a bundle from its own epoch — its
 `status` is `valid`, its binding fields are complete, its bytes authenticate
 against `artifact_sha256` — and still licenses nothing, because the bar it
 fails is ledger-side membership, described under the claim-bearing bracket
