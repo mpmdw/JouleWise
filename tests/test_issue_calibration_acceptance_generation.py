@@ -1031,11 +1031,17 @@ class PrepareCandidateTest(unittest.TestCase):
         issued = json.loads(json.dumps(payload))
         del issued["candidate_not_issued"]
         issued["artifact_role"] = "issued"
+        # The whole `issuance` block is a candidate LABEL, `licence` included:
+        # the transaction rewrites it rather than editing fields, so the
+        # candidate's "these bytes license nothing" sentence cannot survive into
+        # an issued artifact and contradict it.
+        self.assertIn("licence", payload["issuance"])
         issued["issuance"] = {
             "status": "issued",
             "claim_eligible": True,
             "reason": payload["issuance"]["reason"],
         }
+        self.assertNotIn("licence", issued["issuance"])
         issued["backfill_candidate"]["status"] = "issued"
         issued["backfill_candidate"]["production_issuance_blocked"] = False
         issued["derivation_sha256"] = issuer.derivation_sha256(issued)
@@ -1462,6 +1468,41 @@ class PrepareCandidateTest(unittest.TestCase):
             issuer.derivation_input_sha256(mutated),
             self.payload()["derivation_input_sha256"],
         )
+
+
+    # ---- fix round 3 ----------------------------------------------------
+
+    def test_the_candidate_states_its_licence_in_words(self) -> None:
+        """SF-8: a reader can act on the label without decoding a boolean.
+
+        The sentence sits inside the sealed artifact, so `derivation_sha256`
+        covers it and it cannot be edited away silently.  It is a
+        candidate-LABEL field: the D-138 transaction rewrites the whole
+        `issuance` block when it issues (see
+        `test_only_the_candidate_label_stops_the_candidate_authenticating`),
+        and that test still ADMITS the artifact with this key present.
+        """
+
+        self.assertEqual(self.run_issuer(self.wide), 0)
+        payload = self.payload()
+        self.assertEqual(
+            payload["issuance"]["licence"],
+            "These bytes license nothing: no measurement window, no claim, no "
+            "threshold. No tool may load them as authority; the production "
+            "loader refuses them by artifact_role.",
+        )
+        # Sealed: inside `derivation_sha256`, outside `derivation_input_sha256`
+        # (prose is deliberately outside the input seal).
+        mutated = json.loads(json.dumps(payload))
+        mutated["issuance"]["licence"] = "these bytes license everything"
+        core = {k: v for k, v in mutated.items() if k != "derivation_sha256"}
+        self.assertNotEqual(payload["derivation_sha256"], _canonical_sha256(core))
+        self.assertEqual(
+            issuer.derivation_input_sha256(mutated),
+            payload["derivation_input_sha256"],
+        )
+        # It says what the loader does, and the loader does it.
+        self.assertIsNone(load_calibration_acceptance_bound(self.out))
 
 
 if __name__ == "__main__":

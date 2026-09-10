@@ -302,6 +302,12 @@ PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
 # The one alternative floor the pre-registration and CG46 A-2 name, and the only
 # value `--ed-ruling` licenses.
 RULED_ALTERNATIVE_CORPUS_SIZE = 17
+# What the emitted bytes authorize, said in words rather than as a boolean.
+CANDIDATE_LICENCE = (
+    "These bytes license nothing: no measurement window, no claim, no "
+    "threshold. No tool may load them as authority; the production loader "
+    "refuses them by artifact_role."
+)
 PRESENTATION_QUANTUM_S = Decimal("0.000000000000000001")
 DECIMAL_WORK_PRECISION = 80
 # The screen rule this generation is DERIVED under is a property of the RULE,
@@ -1337,6 +1343,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
                 "prepare-candidate; issuance is the D-138 transaction's, after the "
                 "cold science gate"
             ),
+            # A reader must be able to act on the label without knowing which
+            # boolean means what.  `licence` is a CANDIDATE-LABEL field: the
+            # D-138 transaction rewrites the whole `issuance` block when it
+            # issues, so this sentence cannot survive into an issued artifact
+            # and quietly contradict it.
+            "licence": CANDIDATE_LICENCE,
         },
         "ledger_cutoff": cutoff,
         "identity_epoch": identity_epoch,
