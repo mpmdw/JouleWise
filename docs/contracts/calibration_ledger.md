@@ -14,7 +14,15 @@ over the physical ledger head, the actual last receipt. Claim evaluation
 requires their exact agreement and one immutable snapshot threaded through
 every consumer.
 
-## Derivation sessions and epoch bootstrap
+## Derivation sessions for a new identity epoch
+
+Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); NOT
+YET LANDED.** Seats S1-S4 install the writer mode, the derivation-kind ledger
+session, the generation-keyed validator, and the issuer. Until those seats
+land, no code implements this section or the generation-keyed clauses under
+[Historical import](#historical-import): the shipped ledger has `bracket`-kind
+sessions only, and the shipped validator enforces the import-only prefix fence
+for every generation.
 
 **Terms.** An **identity epoch** is the six-field vector {`os_build`,
 `hardware_model`, `power_policy`, `sampling_interval_ms`,
@@ -40,8 +48,8 @@ for instance — the issued acceptance goes stale by design, and every threshold
 that exists belongs to the retired epoch. A new acceptance needs a corpus of
 new-epoch observations, yet those observations have to be captured before any
 acceptance of their own epoch exists to judge them. Derivation sessions are
-how the ledger records that bootstrap corpus without letting any of it license
-a measurement.
+how the ledger records that new-epoch corpus without letting any of it
+license a measurement.
 
 **Why one session, not repeated standalone reservations.** A standalone
 reservation refuses `RESERVATION_HEAD_MISMATCH` unless the physical head
@@ -76,8 +84,8 @@ committed pin. Claim evaluation requires their exact agreement, so every claim
 consumer refuses for the duration of the derivation night. That refusal is the
 design, not a fault to be worked around.
 
-**Bootstrap observations are non-claim-bearing, and never bracket endpoints.**
-A derivation row carries no claim authority until an issued successor names it
+**Derivation rows are non-claim-bearing, and never bracket endpoints.** A
+derivation row carries no claim authority until an issued successor names it
 in that successor's prior set and corpus. Even then it only derives
 thresholds: it can never serve as a bracket endpoint, before or after
 issuance. Two sites enforce this and must move together. Candidate discovery
@@ -87,24 +95,25 @@ that are either standalone or in a finalized session. A caller's supplied
 candidate set must equal that universe exactly or evaluation refuses
 `calibration_ledger_off_ledger_artifact`; this anti-withholding equality is
 what stops a caller narrowing the universe to a favourable subset, and it is
-why skipping at one site only is a defect rather than a partial fix. Bootstrap
-rows are also permanent obligations: once the successor issues, its prior set
-must keep equalling the ledger prefix at its cutoff, so every bootstrap row
-must remain present and authenticable for as long as that acceptance is
-consumed. The custody manifest is therefore pinned and backed up before the
-issuance transaction. The successor acceptance judges only ordinary captures
-taken after it. D-102 clause 2 stands unchanged: a trigger observation is
-judged under the PRIOR artifact, never under a threshold that incorporates
-that observation. Nothing in this section licenses a measurement window or
-weakens a physics or evidence refusal (D-161).
+why skipping at one site only is a defect rather than a partial fix.
+Derivation rows are also a permanent obligation: once the successor issues,
+its prior set must keep equalling the ledger prefix at its cutoff, so every
+derivation row must stay in the ledger carrying the attempt ID, content ID,
+classification disposition, and epoch that the prefix matcher compares, for as
+long as that acceptance is consumed. The custody manifest is therefore pinned
+and backed up before the issuance transaction. The successor acceptance judges
+only ordinary captures taken after it. D-102 clause 2 stands unchanged: a
+trigger observation is judged under the PRIOR artifact, never under a
+threshold that incorporates that observation. Nothing in this section licenses
+a measurement window or weakens a physics or evidence refusal (D-161).
 
 ## Historical import
 
 Historical import is the one genesis-only exception that registers already
 captured, hash-authenticated observations. It is not a second writer or an
-ordinary capture route. New-epoch bootstrap uses the live derivation sessions
-described above, not another historical import. Version 1 has the following
-fixed decisions.
+ordinary capture route. A new identity epoch is served instead by the live
+derivation sessions described above, never by a second historical import.
+Version 1 has the following fixed decisions.
 
 1. **Ordering:** members are ordered by ascending `attempt_id`, then ascending
    `content_id`. Attempt IDs are required to be unique; the content-ID
@@ -138,25 +147,29 @@ observation or bracket endpoint. Production candidate discovery checks the
 marker directly, and prospective trigger subtraction uses
 `CalibrationLedgerSnapshot.post_cutoff_live_observations()`. At consumption,
 the acceptance artifact's prior set must exactly equal the observation prefix
-at its generation-registered cutoff, member for member, by attempt ID, content
-ID, classification disposition, and identity epoch. A content ID is the
+at the cutoff the artifact itself declares in `ledger_cutoff`, member for
+member, by attempt ID, content ID, classification disposition, and identity
+epoch. A content ID is the
 canonical hash derived from an observation's manifest and instrument-evidence
 byte hashes, so it names the same observation from any custody path.
 
 Which rows that prefix may contain is a per-generation registration, not a
-global rule. A generation registered `prior_prefix_mode: import_only` keeps
-the genesis fence exactly as written above — any live row in its prefix
-refuses — and that is how generations r3 through r6 keep validating
-byte-identically. Only a generation registered
-`prior_prefix_mode: import_plus_live` may hold finalized live observations
-carrying content IDs, including the finalized slots of a session that an abort
-closed. A pending attempt, or an `abandoned` one (classified `unresolved`),
-refuses in either mode, as does any omission, addition, duplicate, or
-mismatched binding.
+global rule (ruled 2026-09-10, not yet landed; see [Derivation sessions for a
+new identity epoch](#derivation-sessions-for-a-new-identity-epoch)). A
+generation registered `prior_prefix_mode: import_only` keeps the genesis fence
+exactly as written above — any live row in its prefix refuses — and that is
+how generations r3 through r6 keep validating byte-identically. Only a
+generation registered `prior_prefix_mode: import_plus_live` may hold finalized
+live observations carrying content IDs, including the finalized slots of a
+session that an abort closed. A pending attempt, or an `abandoned` one
+(classified `unresolved`), refuses in either mode, as does any omission,
+addition, duplicate, or mismatched binding.
 
-Two counts are registered per generation for the same reason:
+Two EXPECTED numbers are registered per generation for the same reason:
 `prior_observation_count` and `cutoff_sequence` (the genesis generation
-registers 38 and 76). An all-import prefix holds exactly two receipts per
+registers 38 and 76). The cutoff itself is always the one the artifact
+declares in `ledger_cutoff`; the registered numbers are what that declaration
+must agree with. An all-import prefix holds exactly two receipts per
 observation, a reservation and a finalization, so its cutoff sequence is twice
 its observation count; a prefix that also holds a session's open and closing
 receipts breaks that arithmetic, so neither number may be recomputed from a
@@ -368,12 +381,12 @@ systematic-invalid, and 6 ordinary-invalid. The threshold-producing
 `4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02`.
 That 76-row prefix, the r6 artifact, and every historical generation keep
 validating byte-identically under their own registered rules. A prospective
-successor advances its cutoff to the authenticated head after the last
-bootstrap row, because every corpus member's content ID must lie inside the
+successor declares a `ledger_cutoff` at the authenticated head after its last
+derivation row, because every corpus member's content ID must lie inside the
 prior set and the prior set stops at the cutoff; it therefore names the
 complete history through that cutoff, not only the retained corpus. Until
-that successor issues, bootstrap rows supply no claim authority; after it
-issues they still cannot become bracket endpoints.
+that successor issues, its derivation rows supply no claim authority; after
+it issues they still cannot become bracket endpoints.
 
 ### Bootstrap CLI
 

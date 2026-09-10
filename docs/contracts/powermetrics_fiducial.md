@@ -92,6 +92,11 @@ none may be restated as an empirically proved universal instrument property.
 
 ## Derivation-only capture for a new identity epoch
 
+Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); NOT
+YET LANDED.** Seat S1 installs `--derivation-only` against seat S2's
+derivation-kind session interface; no shipped writer accepts the flag, and no
+shipped ledger offers the slot it requires.
+
 The writer's `--derivation-only` mode exists for one situation. The machine's
 **identity epoch** — the six-field vector the issued acceptance binds: OS
 build, hardware model, power policy, sampling interval, estimator revision,
@@ -109,13 +114,15 @@ ordinary capture is possible, so derivation-only would be a way around
 ordinary judgment. It also refuses without a derivation-kind session slot; a
 standalone attempt and a bracket-kind slot are both rejected. Sessions, slots,
 and the derivation kind are defined in
-[the ledger contract](calibration_ledger.md#derivation-sessions-and-epoch-bootstrap).
+[the ledger contract](calibration_ledger.md#derivation-sessions-for-a-new-identity-epoch).
 
 Provenance is recorded in hashed bytes, not in prose. Both
 `instrument_evidence.json` and `manifest.json` carry `derivation_only: true`
 and a `screen_basis` object naming the prior acceptance's ID, its file
-SHA-256, its `preflight_level_screen_s`, and its epoch, so every bootstrap row
-states for itself which artifact it was captured under.
+SHA-256, its `preflight_level_screen_s` — the **level screen**, that
+acceptance's corpus maximum, the threshold one observation's bound is judged
+against — and its epoch, so every derivation row states for itself which
+artifact it was captured under.
 
 The prior artifact's level screen is not applied to the capture. The writer
 sets `preflight_systematic_screen_s = None` and skips the comparison, so the
@@ -129,7 +136,9 @@ evidence as a diagnostic. It feeds the pre-registered screen-challenge rule,
 which halts issuance for a written ruling instead of editing corpus
 membership. Every finalization path carries this classification rule,
 including recovery finalization after a crash: for a derivation-kind session
-the recovery path passes no screen either.
+the recovery path passes no screen either, and the recovery path's
+`slot == "pre"` auto-abort does not apply, since a derivation session closes
+only on its last declared slot or an explicit abort.
 
 Every physics and evidence gate stays fail-closed. The `DIAGNOSTIC_NO_PACK`
 night class still requires a registration path and marks only condition C2,

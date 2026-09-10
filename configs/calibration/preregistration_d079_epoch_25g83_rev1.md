@@ -46,6 +46,16 @@ is fixed here first.
 - **Prior set** — the acceptance's list of every ledger observation through
   its cutoff receipt. **Corpus** — the subset of the prior set whose values
   the statistics are computed from. **Retained n** is the corpus size.
+- **Anchor-v3 replay** — re-deriving a capture's fiducial bound from its
+  primary evidence bytes with the anchor-v3 estimator. A capture whose
+  clock-anchor feasibility model admits no feasible affine fit does not
+  resolve (`affine_clock_fit_empty`) and cannot be a corpus member.
+- **`b_fiducial_s`** — the capture's fiducial bound in seconds: the value a
+  corpus member contributes to the statistics.
+- **`DIAGNOSTIC_NO_PACK`** — the night receipt class for a night that runs no
+  measurement pack. It requires a registration path and marks only the pack
+  ARM condition (C2) not-applicable; the transaction-authorization,
+  quiet-census, boot/clock, and no-retry conditions must still pass.
 - **Level screen** — an acceptance's corpus maximum, the preflight threshold a
   capture's bound is compared against. **Bracket screen (S)** — its corpus
   range. **Budget ceiling (C)** — its maximum budgetable drift. **Q99** — the
@@ -117,13 +127,22 @@ range, 0.04262208300415633 (the Decimal sum of 0.03289849371536248 and 0.0097235
 membership.
 
 Analysis. Decimal statistics exactly as r6: minimum, maximum, range, mean, sample SD; t(0.975, n-1) and t(0.995, n-1)
-two-draw predictions with the quantile implementation proven for both df 18 and df 19. The full D-125 envelope governs
-both operatives: bracket screen S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling
-C = max(inherited ceiling, new Q99). The generation records the inherited ceiling and an explicit d125_ruling
+two-draw predictions. The three-night schedule admits retained n from 19 (the required floor) to 36 (all declared
+slots retained), so the degrees of freedom n-1 run from 18 to 35; the quantile implementation's proof for the REALIZED
+df is computed and recorded before issuance, and no corpus issues on a df whose quantile is not proven in that record.
+The full D-125 envelope governs both operatives: bracket screen
+S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling C = max(inherited ceiling,
+new Q99). The generation records the inherited ceiling and an explicit d125_ruling
 reference; issuance refuses while that reference is absent, and refuses successor_screen_exceeds_budget_ceiling when
-S >= C. Maximum budgetable drift = C; maximum budgetable excess = C - S, with no silent clamp at zero. Preflight level
-screen = the new corpus maximum quantized to 1e-15 s. Per-night distribution, order, exclusions, and clock residual
-margins are reported as diagnostics that authorize no trimming.
+S >= C. Maximum budgetable drift = C; maximum budgetable excess = C - S, with no silent clamp at zero.
+
+Halt on S >= C. If the new Q99 is at or below the 0.010818 screen floor, the inherited ceiling 0.010164834757777545
+cannot rescue C > S and D-126 clause 3's successor_screen_exceeds_budget_ceiling refusal fires: the corpus is not
+issued, and Ed rules in writing before any further capture, exactly as for the screen challenge. The refusal is never
+cured by lowering S.
+
+Preflight level screen = the new corpus maximum quantized to 1e-15 s. Per-night distribution, order, exclusions, and
+clock residual margins are reported as diagnostics that authorize no trimming.
 
 Prospective use. The resulting acceptance judges only subsequent ordinary captures. Bootstrap observations are corpus
 members and never bracket endpoints, before or after issuance. No G2-a, floor, or claim output is an input to this
