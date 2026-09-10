@@ -347,12 +347,12 @@ DECIMAL_WORK_PRECISION = 80
 # The screen rule this generation is DERIVED under is a property of the RULE,
 # not of which arm of the `max` happened to win: every generation derived under
 # the pre-registration's D-125 envelope
-# `S = max(range quantized 1e-6 ROUND_HALF_EVEN, 0.010818)` registers
+# `S = max(range quantized 1e-6 ROUND_HALF_EVEN, D125_SCREEN_FLOOR_S)` registers
 # `SCREEN_RULE_FLOORED_RANGE_ENVELOPE`, whether the range or the floor won.
 # Naming the rule by the realized branch would make the registered rule a
 # function of the data, which is exactly what a pre-registration forbids -- and
 # it would put the ordinary case in the wrong bucket, because a corpus at the
-# n = 19 floor has a range just BELOW 0.010818 and takes the floor arm.
+# n = 19 floor has a range just BELOW D125_SCREEN_FLOOR_S and takes the floor arm.
 # 100 significant digits of pi, used only by the Student-t quantile's Beta
 # normalizer for ODD degrees of freedom (Gamma(1/2) = sqrt(pi) cancels for even
 # df and does not for odd).  The digits beyond `DECIMAL_WORK_PRECISION` are
@@ -741,7 +741,7 @@ def envelope_ceiling(predecessor_ceiling: Decimal, own_q99: Decimal) -> Decimal:
 
     Pure for the same reason, and here it is the only way to exercise the
     predecessor arm at all: r6's ceiling (0.010164834757777545) sits below the
-    0.010818 screen floor, so through the CLI the predecessor can never win the
+    D125_SCREEN_FLOOR_S screen floor, so through the CLI the predecessor can never win the
     max without failing strict `S < C` first.  A successor generation's
     predecessor will not have that property.
     """
