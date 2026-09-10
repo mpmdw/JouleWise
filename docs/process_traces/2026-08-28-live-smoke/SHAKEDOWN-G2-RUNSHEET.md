@@ -1653,10 +1653,17 @@ custody directory the plan calls `custody_root`):
    it is run in, and bakes that digest — plus the frozen calibration
    plan's, the identity epoch's and the T1 bindings' — into the wrapper
    as literals.
-4. **Re-emit and assert byte equality** at arm time: emit a second copy
-   to a scratch path and require identical bytes.  Emission is
-   deterministic, so any difference means an input drifted — the chain,
-   the frozen plan, or the plan's own coordinates.
+4. **Re-derive and assert byte equality** at arm time, with `--verify`
+   (same command as step 3 plus `--verify`).  It writes nothing: it
+   renders the wrapper again from the same inputs and compares it, and
+   its sidecar, byte-for-byte with the installed file, printing
+   `VERIFIED <path> sha256=…` and exiting 0 when they match.  Emission
+   is deterministic, so a difference means an input drifted — the
+   chain, the frozen plan, or the plan's own coordinates — and the
+   refusal prints both digests.  (Do not try to emit a second copy to a
+   scratch path: the generator refuses any output path other than the
+   plan's `chain_path`, so that the plan and the artifact cannot
+   disagree.)
 5. **`/bin/zsh -n`** the emitted wrapper (a syntax check that runs
    nothing), then install the plan.  From here the plan pins the
    wrapper's digest and the wrapper pins the chain's, so the plan's
@@ -1673,15 +1680,26 @@ custody directory the plan calls `custody_root`):
 /bin/zsh -n "$NIGHT_ROOT/chain.zsh"
 ```
 
+Two different budgets of 300 s appear below; they are unrelated and
+happen to share a number.  The **pre-settle allowance** is the time the
+chain spends before its settle even begins — checking its inputs,
+running the pre-reserve readiness check and opening the ledger session
+— plus the driver's own work before it starts the chain at all; the
+window has to hold it on top of the programmed span.  The **courier
+allowance** is a separate 300 s the driver adds AFTER the window ends,
+before the dead-man (the next local 07:00, the hour at which the night
+must be over whatever else is true).
+
 The generator refuses, before writing anything, when: the plan is not an
 exact `DIAGNOSTIC_NO_PACK` v2 plan; `window_max_s` cannot hold the
 programmed span (settle + (slots − 1) × cadence + one capture budget =
 7680 s for twelve slots) plus the 300 s pre-settle allowance;
-`t0 + window_max_s + 300 s` is not before the next local 07:00 (the
-dead-man); any emitted literal contains `codex`, `claude` or `t3`, which
-the night's own 30-second agent census would match and kill the night
-for; or the slot count is not the pre-registered twelve without an
-explicit `--slot-count-ruling` reference.
+`t0 + window_max_s + 300 s` (the courier allowance) is not before the next
+local 07:00; any emitted literal contains `codex`, `claude` or `t3`,
+which the night's own 30-second agent census would match and kill the
+night for; or the slot count is not the pre-registered twelve without an
+explicit `--slot-count-ruling` reference (which must be one line of
+ordinary reference characters, since it is written into the wrapper).
 
 The emitted bytes, rendered here from placeholder coordinates and the
 live digest of the tracked chain (`d6d23bff48d410144e74c19307dde79aebdd3a4fbf6e8eea97f34217ef470a65`):
@@ -1713,7 +1731,7 @@ esac
 [ "$MEASUREMENT_ROOT" = '/private/tmp/joulewise-derivation-20260912-checkout' ] || route_refuse 'measurement_root does not match the wrapper'
 [ "$MEASUREMENT_HEAD" = '0000000000000000000000000000000000000000' ] || route_refuse 'measurement_head does not match the wrapper'
 export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1
-observed_head="$(git -C "$MEASUREMENT_ROOT" rev-parse --verify HEAD 2>/dev/null)" || route_refuse 'checkout HEAD cannot be read'
+observed_head="$(/usr/bin/git -C "$MEASUREMENT_ROOT" rev-parse --verify HEAD 2>/dev/null)" || route_refuse 'checkout HEAD cannot be read'
 [ "$observed_head" = "$MEASUREMENT_HEAD" ] || route_refuse 'checkout HEAD does not equal measurement_head'
 export MEASUREMENT_CHECKOUT="$MEASUREMENT_ROOT"
 export REPO="$MEASUREMENT_ROOT"
@@ -1753,7 +1771,10 @@ sha256_of() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}'; }
 [ -f "$T1_BINDINGS_JSON" ] || route_refuse 't1 bindings json is missing'
 # Re-derive the frozen plan's identity from its bytes, as the G2-a bracket
 # does (gen_g2_phase_d.py:250-252), and refuse a swapped plan file.
-observed_plan_id="$(/usr/bin/jq -er '.plan_id' "$PLAN")"
+# Both jq calls are guarded: an unguarded assignment dies under set -e
+# with an empty stderr, which is the one thing this block must not do.
+/usr/bin/jq -e . "$PLAN" >/dev/null 2>&1 || route_refuse 'frozen plan is not valid JSON'
+observed_plan_id="$(/usr/bin/jq -er '.plan_id' "$PLAN" 2>/dev/null)" || route_refuse 'frozen plan has no plan_id'
 [ "$observed_plan_id" = "$PLAN_ID" ] || route_refuse 'frozen plan id does not equal the arm-time literal'
 [ "$(sha256_of "$PLAN")" = "$PLAN_SHA256" ] || route_refuse 'frozen plan bytes do not equal the arm-time digest'
 # The identity epoch and T1 bindings are copied VERBATIM into every

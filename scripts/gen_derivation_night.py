@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 
 
@@ -142,6 +143,24 @@ def _census_clean(field: str, value: str) -> str:
     return value
 
 
+# A ruling reference is prose the operator types, and it is interpolated into
+# the emitted wrapper's header.  Anything outside this class could open a
+# comment and start a live line: a pasted multi-line reference does it by
+# accident, and `zsh -n` accepts the result.
+RULING_REFERENCE_CHARACTERS = re.compile(r"[A-Za-z0-9._:/#@ -]+")
+
+
+def _validated_ruling(value: str | None) -> str:
+    if not value:
+        raise GenerationRefusal("a slot-count ruling reference is required")
+    if RULING_REFERENCE_CHARACTERS.fullmatch(value) is None:
+        raise GenerationRefusal(
+            "slot-count ruling reference must be one line of "
+            f"[A-Za-z0-9._:/#@ -]: {value!r}"
+        )
+    return _census_clean("slot-count ruling reference", value)
+
+
 def _next_deadman_epoch(t0_epoch_s: float) -> float:
     """Mirror ``scripts/run_night.py:947-955``: the next local 07:00 after t0."""
 
@@ -233,7 +252,7 @@ def render_wrapper(spec: WrapperSpec) -> str:
             f"# DEPARTURE FROM THE PRE-REGISTRATION: this night declares "
             f"{spec.slot_count} slots,",
             f"# not the pre-registered {PRE_REGISTERED_SLOT_COUNT}. Authorising "
-            f"ruling: {spec.slot_count_ruling}.",
+            f"ruling: {_quote(_validated_ruling(spec.slot_count_ruling))}.",
         ]
     )
     lines = [
@@ -269,7 +288,8 @@ def render_wrapper(spec: WrapperSpec) -> str:
         f"[ \"$MEASUREMENT_HEAD\" = {_quote(spec.measurement_head)} ] || "
         "route_refuse 'measurement_head does not match the wrapper'",
         "export GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1",
-        "observed_head=\"$(git -C \"$MEASUREMENT_ROOT\" rev-parse --verify HEAD 2>/dev/null)\" || "
+        "observed_head=\"$(/usr/bin/git -C \"$MEASUREMENT_ROOT\" "
+        "rev-parse --verify HEAD 2>/dev/null)\" || "
         "route_refuse 'checkout HEAD cannot be read'",
         "[ \"$observed_head\" = \"$MEASUREMENT_HEAD\" ] || "
         "route_refuse 'checkout HEAD does not equal measurement_head'",
@@ -297,7 +317,12 @@ def render_wrapper(spec: WrapperSpec) -> str:
             "[ -f \"$T1_BINDINGS_JSON\" ] || route_refuse 't1 bindings json is missing'",
             "# Re-derive the frozen plan's identity from its bytes, as the G2-a bracket",
             "# does (gen_g2_phase_d.py:250-252), and refuse a swapped plan file.",
-            "observed_plan_id=\"$(/usr/bin/jq -er '.plan_id' \"$PLAN\")\"",
+            "# Both jq calls are guarded: an unguarded assignment dies under set -e",
+            "# with an empty stderr, which is the one thing this block must not do.",
+            '/usr/bin/jq -e . "$PLAN" >/dev/null 2>&1 || '
+            "route_refuse 'frozen plan is not valid JSON'",
+            "observed_plan_id=\"$(/usr/bin/jq -er '.plan_id' \"$PLAN\" 2>/dev/null)\" || "
+            "route_refuse 'frozen plan has no plan_id'",
             '[ "$observed_plan_id" = "$PLAN_ID" ] || '
             "route_refuse 'frozen plan id does not equal the arm-time literal'",
             '[ "$(sha256_of "$PLAN")" = "$PLAN_SHA256" ] || '
@@ -398,12 +423,14 @@ def build_spec(args: argparse.Namespace) -> tuple[WrapperSpec, Path, bytes]:
             f"{PRE_REGISTERED_SLOT_COUNT}; pass --allow-slot-count with "
             "--slot-count-ruling <ref> to override"
         )
-    if slot_count != PRE_REGISTERED_SLOT_COUNT and not args.slot_count_ruling:
-        raise GenerationRefusal(
-            "--allow-slot-count requires --slot-count-ruling <ref>: departing "
-            f"from the pre-registered {PRE_REGISTERED_SLOT_COUNT} slots needs a "
-            "named authority, and the reference is written into the wrapper"
-        )
+    if slot_count != PRE_REGISTERED_SLOT_COUNT:
+        if not args.slot_count_ruling:
+            raise GenerationRefusal(
+                "--allow-slot-count requires --slot-count-ruling <ref>: departing "
+                f"from the pre-registered {PRE_REGISTERED_SLOT_COUNT} slots needs "
+                "a named authority, and the reference is written into the wrapper"
+            )
+        _validated_ruling(args.slot_count_ruling)
     if slot_count < 1:
         raise GenerationRefusal("slot count must be positive")
 
@@ -596,10 +623,17 @@ def render_region(chain_bytes: bytes) -> str:
         "   it is run in, and bakes that digest — plus the frozen calibration\n"
         "   plan's, the identity epoch's and the T1 bindings' — into the wrapper\n"
         "   as literals.\n"
-        "4. **Re-emit and assert byte equality** at arm time: emit a second copy\n"
-        "   to a scratch path and require identical bytes.  Emission is\n"
-        "   deterministic, so any difference means an input drifted — the chain,\n"
-        "   the frozen plan, or the plan's own coordinates.\n"
+        "4. **Re-derive and assert byte equality** at arm time, with `--verify`\n"
+        "   (same command as step 3 plus `--verify`).  It writes nothing: it\n"
+        "   renders the wrapper again from the same inputs and compares it, and\n"
+        "   its sidecar, byte-for-byte with the installed file, printing\n"
+        "   `VERIFIED <path> sha256=…` and exiting 0 when they match.  Emission\n"
+        "   is deterministic, so a difference means an input drifted — the\n"
+        "   chain, the frozen plan, or the plan's own coordinates — and the\n"
+        "   refusal prints both digests.  (Do not try to emit a second copy to a\n"
+        "   scratch path: the generator refuses any output path other than the\n"
+        "   plan's `chain_path`, so that the plan and the artifact cannot\n"
+        "   disagree.)\n"
         "5. **`/bin/zsh -n`** the emitted wrapper (a syntax check that runs\n"
         "   nothing), then install the plan.  From here the plan pins the\n"
         "   wrapper's digest and the wrapper pins the chain's, so the plan's\n"
@@ -616,16 +650,28 @@ def render_region(chain_bytes: bytes) -> str:
         '/bin/zsh -n "$NIGHT_ROOT/chain.zsh"\n'
         "```\n"
         "\n"
+        "Two different budgets of 300 s appear below; they are unrelated and\n"
+        "happen to share a number.  The **pre-settle allowance** is the time the\n"
+        "chain spends before its settle even begins — checking its inputs,\n"
+        "running the pre-reserve readiness check and opening the ledger session\n"
+        "— plus the driver's own work before it starts the chain at all; the\n"
+        "window has to hold it on top of the programmed span.  The **courier\n"
+        "allowance** is a separate 300 s the driver adds AFTER the window ends,\n"
+        "before the dead-man (the next local 07:00, the hour at which the night\n"
+        "must be over whatever else is true).\n"
+        "\n"
         "The generator refuses, before writing anything, when: the plan is not an\n"
         "exact `DIAGNOSTIC_NO_PACK` v2 plan; `window_max_s` cannot hold the\n"
         "programmed span (settle + (slots − 1) × cadence + one capture budget =\n"
         f"{programmed_span_s(PRE_REGISTERED_SLOT_COUNT)} s for twelve slots) plus "
         f"the {PRE_SETTLE_ALLOWANCE_S} s pre-settle allowance;\n"
-        "`t0 + window_max_s + 300 s` is not before the next local 07:00 (the\n"
-        "dead-man); any emitted literal contains `codex`, `claude` or `t3`, which\n"
-        "the night's own 30-second agent census would match and kill the night\n"
-        "for; or the slot count is not the pre-registered twelve without an\n"
-        "explicit `--slot-count-ruling` reference.\n"
+        f"`t0 + window_max_s + {COURIER_DEADLINE_S} s` (the courier allowance) is "
+        "not before the next\n"
+        "local 07:00; any emitted literal contains `codex`, `claude` or `t3`,\n"
+        "which the night's own 30-second agent census would match and kill the\n"
+        "night for; or the slot count is not the pre-registered twelve without an\n"
+        "explicit `--slot-count-ruling` reference (which must be one line of\n"
+        "ordinary reference characters, since it is written into the wrapper).\n"
         "\n"
         "The emitted bytes, rendered here from placeholder coordinates and the\n"
         f"live digest of the tracked chain (`{spec.chain_sha256}`):\n"
@@ -646,6 +692,26 @@ def replace_region(runsheet: str, generated: str) -> str:
     if end < len(runsheet) and runsheet[end] == "\n":
         end += 1
     return runsheet[:start] + generated + runsheet[end:]
+
+
+def verify(spec: WrapperSpec, out_path: Path) -> tuple[bool, str, str]:
+    """Re-derive the wrapper and compare it with the installed bytes.
+
+    Writes nothing.  Returns (identical, expected_digest, installed_digest);
+    the installed digest is the empty string when the file is absent.
+    """
+
+    expected = render_wrapper(spec).encode("utf-8")
+    installed = out_path.read_bytes() if out_path.is_file() else b""
+    expected_digest = hashlib.sha256(expected).hexdigest()
+    installed_digest = hashlib.sha256(installed).hexdigest() if installed else ""
+    if expected != installed:
+        return False, expected_digest, installed_digest
+    sidecar_path = out_path.with_name(f"{out_path.name}.sha256")
+    sidecar = sidecar_path.read_text(encoding="utf-8") if sidecar_path.is_file() else ""
+    if sidecar != _sidecar_text(expected_digest, out_path.name):
+        return False, expected_digest, installed_digest
+    return True, expected_digest, installed_digest
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -677,6 +743,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--out", help="default: the plan's chain_path")
     parser.add_argument(
+        "--verify",
+        action="store_true",
+        help=(
+            "emit mode: write nothing; re-derive the wrapper from the same "
+            "inputs and compare it byte-for-byte with the installed file at the "
+            "plan's chain_path (and that file's sidecar)"
+        ),
+    )
+    parser.add_argument(
         "--check", action="store_true", help="region mode: refuse instead of updating"
     )
     return parser
@@ -704,6 +779,19 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             spec, out_path, chain_bytes = build_spec(args)
+            if args.verify:
+                identical, expected_digest, installed_digest = verify(spec, out_path)
+                if not identical:
+                    print(
+                        "FAIL wrapper bytes differ from re-derivation: "
+                        f"re-derived sha256={expected_digest} "
+                        f"installed sha256={installed_digest or '<absent>'} "
+                        f"at {out_path}",
+                        file=sys.stderr,
+                    )
+                    return 3
+                print(f"VERIFIED {out_path} sha256={expected_digest}")
+                return 0
             digest = emit(spec, out_path, chain_bytes=chain_bytes)
         except GenerationRefusal as error:
             print(f"FAIL {error}", file=sys.stderr)

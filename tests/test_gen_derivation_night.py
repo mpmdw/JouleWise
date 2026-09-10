@@ -157,18 +157,24 @@ class WrapperFixture:
             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
 
-    def run_wrapper(self) -> subprocess.CompletedProcess:
+    def run_wrapper(self, **overrides: str | None) -> subprocess.CompletedProcess:
         """Launch exactly as ``run_night._run_chain_once`` would."""
 
+        env = {
+            "PATH": "/usr/bin:/bin",
+            "NIGHT_PLAN_ID": "derivation-20260912",
+            "MEASUREMENT_ROOT": str(self.measurement_root),
+            "MEASUREMENT_HEAD": self.head,
+            "PY": f"{self.measurement_root}/.venv/bin/python",
+        }
+        for key, value in overrides.items():
+            if value is None:
+                env.pop(key, None)
+            else:
+                env[key] = value
         return subprocess.run(
             ["/bin/zsh", str(self.out)],
-            env={
-                "PATH": "/usr/bin:/bin",
-                "NIGHT_PLAN_ID": "derivation-20260912",
-                "MEASUREMENT_ROOT": str(self.measurement_root),
-                "MEASUREMENT_HEAD": self.head,
-                "PY": f"{self.measurement_root}/.venv/bin/python",
-            },
+            env=env,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -688,6 +694,164 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertIn("DEPARTURE FROM THE PRE-REGISTRATION", header)
         self.assertIn("cold-gate-46-addendum-9", header)
 
+    # --- fix round 2 ------------------------------------------------------
+
+    def test_verify_mode_compares_the_installed_wrapper_without_writing(self) -> None:
+        """D-1: arm step 4 has to be executable, and it is the tripwire step.
+
+        The generator refuses any --out but the plan's chain_path, so "emit a
+        second copy to a scratch path" could not be run at all; --verify
+        re-derives in memory and compares.
+        """
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        installed = self.fixture.out.read_bytes()
+        good = self.fixture.emit("--verify")
+        self.assertEqual(good.returncode, 0, good.stderr)
+        self.assertIn("VERIFIED", good.stdout)
+        self.assertIn(hashlib.sha256(installed).hexdigest(), good.stdout)
+        # It wrote nothing: the installed bytes and mtime are untouched.
+        self.assertEqual(self.fixture.out.read_bytes(), installed)
+        # An input drifted: the chain the night would run was edited.
+        chain = self.fixture.clone_chain()
+        chain.write_text(chain.read_text() + "\n# drift\n")
+        drifted = self.fixture.emit("--verify")
+        self.assertEqual(drifted.returncode, 3, drifted.stdout)
+        self.assertIn("FAIL wrapper bytes differ from re-derivation", drifted.stderr)
+        self.assertIn(hashlib.sha256(installed).hexdigest(), drifted.stderr)
+        self.assertEqual(self.fixture.out.read_bytes(), installed)
+        # Isolate the byte comparison: make the sidecar agree with the
+        # RE-DERIVED digest, so only comparing the wrapper's own bytes can
+        # still catch the drift.
+        rederived = re.search(r"re-derived sha256=([0-9a-f]{64})", drifted.stderr)
+        assert rederived is not None, drifted.stderr
+        Path(str(self.fixture.out) + ".sha256").write_text(
+            f"{rederived.group(1)}  {self.fixture.out.name}\n"
+        )
+        still = self.fixture.emit("--verify")
+        self.assertEqual(still.returncode, 3, still.stdout)
+        self.assertIn("FAIL wrapper bytes differ from re-derivation", still.stderr)
+
+    def test_verify_mode_catches_a_tampered_sidecar(self) -> None:
+        """The sidecar is what the driver checks the wrapper against."""
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        sidecar = Path(str(self.fixture.out) + ".sha256")
+        sidecar.write_text(f"{'0' * 64}  chain.zsh\n")
+        result = self.fixture.emit("--verify")
+        self.assertEqual(result.returncode, 3, result.stdout)
+        self.assertIn("FAIL wrapper bytes differ from re-derivation", result.stderr)
+
+    def test_a_frozen_plan_without_a_plan_id_refuses_with_a_reason(self) -> None:
+        """D-2: the last unguarded refusal — rc 1 with an EMPTY stderr.
+
+        Under `set -e` an unguarded command substitution kills the wrapper with
+        no message, which is indistinguishable from a crash in the driver's log.
+        """
+
+        for payload, reason in (
+            (b'{ not json\n', "frozen plan is not valid JSON"),
+            (b'{"other": 1}\n', "frozen plan has no plan_id"),
+        ):
+            with self.subTest(reason=reason):
+                self.assertEqual(self.fixture.emit().returncode, 0)
+                self.fixture.frozen_plan.write_bytes(payload)
+                result = self.fixture.run_wrapper()
+                self.fixture.frozen_plan.write_text(
+                    json.dumps({"plan_id": "cal-derivation-20260912"}) + "\n"
+                )
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(result.stderr.strip(), f"FAIL {reason}")
+                self.assertEqual(self.fixture.calls(), [])
+
+    def test_a_ruling_reference_that_could_inject_code_refuses(self) -> None:
+        """D-3: the ruling is interpolated into the header ABOVE all wrapper code.
+
+        A newline ends the comment and starts a live line, and `zsh -n` — the
+        documented arm check — accepts the result; a pasted multi-line reference
+        does it by accident.
+        """
+
+        for ruling in (
+            "ok\nexport SLOT_COUNT=99\n# rest",
+            "ruling-$(touch /tmp/should-not-exist)",
+            "ruling'; export SLOT_COUNT=99; '",
+            "",
+        ):
+            with self.subTest(ruling=ruling):
+                result = self.fixture.emit(
+                    "--slot-count", "6", "--allow-slot-count",
+                    "--slot-count-ruling", ruling,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("ruling", result.stderr)
+                self.assertFalse(self.fixture.out.exists())
+
+    def test_every_routing_refusal_names_its_reason(self) -> None:
+        """Nit (a): ten refusal paths had no test asserting their reason.
+
+        Each is a precondition an unattended night can actually hit, and the
+        stderr line is the whole forensic record.
+        """
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        clone = self.fixture.measurement_root
+        cases = (
+            ("measurement_root is required", {"MEASUREMENT_ROOT": None}, None),
+            ("measurement_root must be an absolute path", {"MEASUREMENT_ROOT": "relative/path"}, None),
+            ("measurement_root contains control characters", {"MEASUREMENT_ROOT": "/tmp/a\nb"}, None),
+            ("measurement_head must be a full 40-character lowercase SHA-1", {"MEASUREMENT_HEAD": "abc"}, None),
+            ("night plan id does not match the wrapper", {"NIGHT_PLAN_ID": "another-night"}, None),
+            ("measurement_root does not match the wrapper", {"MEASUREMENT_ROOT": "/tmp"}, None),
+            ("measurement_head does not match the wrapper", {"MEASUREMENT_HEAD": "b" * 40}, None),
+            ("checkout HEAD cannot be read", {}, "unrepo"),
+            ("checkout HEAD does not equal measurement_head", {}, "recommit"),
+            ("measurement venv Python is missing or not executable", {}, "unvenv"),
+            ("frozen plan id does not equal the arm-time literal", {}, "swap_plan_id"),
+        )
+        for reason, overrides, mutation in cases:
+            with self.subTest(reason=reason):
+                restore = None
+                if mutation == "unrepo":
+                    (clone / ".git").rename(clone / "git-aside")
+                    restore = lambda: (clone / "git-aside").rename(clone / ".git")
+                elif mutation == "recommit":
+                    (clone / "later.txt").write_text("x\n")
+                    _git(clone, "add", "-A")
+                    _git(clone, "-c", "user.email=s@e.invalid", "-c", "user.name=s",
+                         "commit", "-q", "-m", "later")
+                    restore = lambda: _git(clone, "reset", "-q", "--hard", self.fixture.head)
+                elif mutation == "unvenv":
+                    self.fixture.fake_python.chmod(0o644)
+                    restore = lambda: self.fixture.fake_python.chmod(0o755)
+                elif mutation == "swap_plan_id":
+                    self.fixture.frozen_plan.write_text(json.dumps({"plan_id": "other"}) + "\n")
+                    restore = lambda: self.fixture.frozen_plan.write_text(
+                        json.dumps({"plan_id": "cal-derivation-20260912"}) + "\n"
+                    )
+                try:
+                    result = self.fixture.run_wrapper(**overrides)
+                finally:
+                    if restore is not None:
+                        restore()
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(result.stderr.strip(), f"FAIL {reason}")
+                self.assertEqual(self.fixture.calls(), [])
+
+    def test_the_wrapper_calls_every_external_command_by_absolute_path(self) -> None:
+        """Nit (c): the driver hands the chain os.environ.copy(), PATH included."""
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        code = "\n".join(
+            line for line in self.fixture.out.read_text().splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        wrapper = self.fixture.out.read_text()
+        for command in ("git", "jq", "shasum", "awk", "zsh"):
+            with self.subTest(command=command):
+                self.assertNotIn(f" {command} ", code)
+        self.assertIn('/usr/bin/git -C "$MEASUREMENT_ROOT"', wrapper)
+
 
 class GeneratedRegionTests(unittest.TestCase):
     def test_the_runsheet_region_matches_the_generator(self) -> None:
@@ -721,7 +885,12 @@ class GeneratedRegionTests(unittest.TestCase):
             "ADVISORY ONLY",
             "### Arm order",
             "status --porcelain",
-            "Re-emit and assert byte equality",
+            "Re-derive and assert byte equality",
+            "--verify",
+            # The two 300 s budgets must be told apart before either is used.
+            "The **pre-settle allowance** is the time the",
+            "The **courier",
+            "they are unrelated and",
             "digests the tracked chain **from the clone**",
         ):
             with self.subTest(phrase=phrase):
