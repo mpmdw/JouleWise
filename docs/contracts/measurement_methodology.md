@@ -72,9 +72,11 @@ Each admission attempt records its start and end times as clock readings
 (seconds since the Unix epoch, stored as binary64 floating-point numbers).
 Strict reduction (the consumer path that re-validates admission evidence;
 historical replay paths keep their older validation rules instead) then
-makes two containment checks; when either fails, or when the attempt's telemetry file is absent,
-empty or unparsable, the attempt refuses with
-`environment_admission_missing`. First, a duration check: the admitted
+makes two containment checks; when either fails, or when the attempt's
+telemetry file is absent or empty, the attempt refuses with
+`environment_admission_missing` (a file that is present but not valid
+JSON Lines fails earlier, in the authenticated read, with the read's own
+reason). First, a duration check: the admitted
 baseline's duration, which the sampler produces by summing its per-sample
 elapsed intervals, must be positive and must not exceed the attempt's span,
 which is the stored end time minus the stored start time, by more than
