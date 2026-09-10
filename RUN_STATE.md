@@ -5192,7 +5192,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-09). Latest report: [T38d — 2026-09-09: rehearsal harvest, stub-chain finding and post-completion cleanup](docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-10). Latest report: [T38d — 2026-09-09: rehearsal harvest, stub-chain finding and post-completion cleanup](docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md).
 
 ### [ED-EXTERNAL]
 

@@ -223,6 +223,7 @@ be re-derived by a future agent gets an entry here.
 | D-177 | Omit empirical Window C characterization; narrow the claim precondition and disclose uncharacterized phase attribution | adopted (magistrate synthesis, 2026-09-08) |
 | D-178 | Claim-side v2 copy-only deterministic widening, exact numeral custody and verdict-resolution join | adopted |
 | D-179 | REPORTED PHASE ENERGY — fixed ordered 50-member mean; 20 independent units (10 repeats + 10 ABBA blocks), stratified t9 interval plus recorded kind bounds; attribution floor beside; runtime-observed ratio of totals; both Qwen3 v5 registrations before frozen specs; closed typed refusals through D-173 custody; X5 remains RETIRED_FALLBACK; normative home `docs/contracts/paper_reported_energy.md` | adjudicated (magistrate synthesis, 2026-09-08; S2 fix rulings installed; production issuance unregistered) |
+| D-180 | ARM RECOVERABILITY AND STEERABILITY — install spans recur within a day; pre-authorized retry class for non-physics arm aborts (idle interactive session, stale notice hash, uncertain tick, transport) without a cold gate; idle interactive sessions not foreign at the arm-time census of stub nights (plan span unchanged); remote control between windows; lanes INSTALL-WINDOWS-MULTI-01 / ARM-RETRY-CLASS-01 / ARM-CENSUS-IDLE-INTERACTIVE-01 / REMOTE-CONTROL-BETWEEN-WINDOWS-01 | ratified by Ed (2026-09-10; decided ≠ done, each clause lands under gates) |
 
 ---
 
@@ -11448,3 +11449,48 @@ The registration/kernel increment is in `docs/contracts/paper_reported_energy.md
 and `tests/test_paper_reported_energy.py`. Production custody replay remains
 unregistered and non-issuing; lead final verification and source-order evidence
 are still required. Revisit only through a new ruling before a future freeze.
+
+## D-180: Arm recoverability and steerability (Ed, 2026-09-10)
+
+**Status:** ratified by Ed, 2026-09-10 ~03:30 PDT, verbatim in
+`docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md`
+("1, yes to all 3" to the three proposals quoted there; "4. yeah get that working so
+inbetween windows you can relaunch and be accessible"). Recorded by the interactive
+magistrate; nothing below is installed in code or runbooks by this entry — each clause
+names its implementation lane, and until that lane lands the prior rule stands
+(decided ≠ done). Forcing problem: on 2026-09-10 the resident activation could not arm
+rehearsal-20260911 because two idle interactive Claude sessions were alive at the
+arm-time census, and the only documented recovery was a new plan for the next night.
+
+1. **Install windows recur within a day.** The install span for a stub or real night
+   is no longer a single 03:00–06:30 block; the schedule may name several bounded
+   install spans per day, each with the same "never install after the span closes"
+   dead-man rule. Lane `INSTALL-WINDOWS-MULTI-01` lands the constants and the
+   runbook/plan-writer changes; the ruled 2026-09-10 03:00–06:30 window stands for
+   rehearsal-20260911.
+2. **Pre-authorized retry class for non-physics arm aborts.** An arm abort whose
+   recorded cause is one of: an idle interactive agent session in the arm-time census;
+   a stale or mismatched notice hash; a watchdog CLOCK_UNCERTAIN or NETWORK_UNCERTAIN
+   tick; or a transport failure, may be retried in the same or the next install span
+   without a cold gate, with a refreshed notice email (new notice, same plan class,
+   Ed's NO still overrides). Physics and evidence refusals — a non-empty census inside
+   the plan span, any capture, clock, custody or ledger guard, any receipt refusal —
+   stay fail-closed and keep the cold-gate path. Lane `ARM-RETRY-CLASS-01` writes the
+   clause into NIGHT_HANDBACK and the runbook template.
+3. **Idle interactive sessions are not foreign at the arm-time census of stub
+   nights.** For REHEARSAL_STUB plans only, the runbook step-3b foreign-agent check may
+   classify an interactive `claude`/T3 session as not foreign when it has no child test,
+   measurement, or capture process. The plan span is unchanged: any agent process from
+   t0 − 25 min until the chain exits refuses the night, so a session left open through
+   t0 still refuses it. Lane `ARM-CENSUS-IDLE-INTERACTIVE-01`.
+4. **Remote control between windows.** Ed wants the magistrate reachable live between
+   plan spans. Lane `REMOTE-CONTROL-BETWEEN-WINDOWS-01`: test whether `claude
+   --remote-control` starts under a pty wrapper from launchd, design how a relaunched
+   magistrate can run remote-controllable between spans and exit before every span,
+   and land it under the gates; until then the GitHub-issue directive channel (PR #313)
+   is the steering path and email plus the pushed repository are the observation path.
+
+Standing direction recorded with the rulings: Ed accepts the loss of live
+observability for the issue channel ("KILL as long as you can keep experimenting and
+have all the tools to keep running windows until you have a paper"), and the target is
+a minimum viable paper ("i just want a minimum viable paper already").

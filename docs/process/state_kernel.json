@@ -9,6 +9,35 @@
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
   "tasks": {
+    "ARM-CENSUS-IDLE-INTERACTIVE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ARM-CENSUS-IDLE-INTERACTIVE-01/acceptance",
+          "label": "ARM-CENSUS-IDLE-INTERACTIVE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Runbook step-3b preconditions classify an interactive session as not foreign only when its process tree holds no test, measurement, or capture child; REHEARSAL_STUB only; plan-span refusal night_refused_agent_present untouched and pinned by a counterfactual test; refuters on the classifier."
+      },
+      "authority": {
+        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "For REHEARSAL_STUB plans, classify idle interactive claude/T3 sessions as not foreign at the arm-time census (D-180 cl.3); plan-span census unchanged.",
+      "id": "ARM-CENSUS-IDLE-INTERACTIVE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 173,
+      "status": "queued",
+      "status_note": "2026-09-10: ruled by Ed (D-180 cl.3); a session left open through t0 still refuses the night. Sequenced after G2-a instrument validation (Ed 2026-09-10 ~03:45: remote direction of experiments is the goal once the instrument is validated).",
+      "stop_card": null
+    },
     "ARM-PACKET-01": {
       "acceptance": {
         "evidence": [
@@ -47,6 +76,35 @@
       "rank": 75,
       "status": "blocked",
       "status_note": "DEPENDENCY RETARGETED 2026-09-03 to V5-TRANSACTION-01, on the magistrate's ruling. This row's hard-start dependency named V4-TRANSACTION-01, which the same batch retired by supersession: D-164 rules that the _v4 family is never collected, and D-167 installs V5-TRANSACTION-01 as the live successor. Left as it was, this row would have been blocked forever on a shelved predecessor and its packet would have been authored against a family that will never be measured. The sequencing intent is unchanged and is what carries over - the arm packet is authored only AFTER the reviewed head and its executed end-to-end T-0 pass exist - but it is now the _v5 head, not the _v4 one. The B-7 ordering from the sitting B-21 authority still binds. Prior note follows. Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
+      "stop_card": null
+    },
+    "ARM-RETRY-CLASS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ARM-RETRY-CLASS-01/acceptance",
+          "label": "ARM-RETRY-CLASS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "NIGHT_HANDBACK and the arm runbook template carry the enumerated retry class (idle interactive session at arm-time census, stale/mismatched notice hash, CLOCK_UNCERTAIN/NETWORK_UNCERTAIN tick, transport failure) with the refreshed-notice rule and the explicit list of refusals that stay on the cold-gate path; a test pins the enumeration."
+      },
+      "authority": {
+        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Install D-180 cl.2's pre-authorized retry class for non-physics arm aborts into NIGHT_HANDBACK and the runbook template.",
+      "id": "ARM-RETRY-CLASS-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 172,
+      "status": "queued",
+      "status_note": "2026-09-10: ruled by Ed (D-180 cl.2); docs + test lane. Sequenced after G2-a instrument validation (Ed 2026-09-10 ~03:45: remote direction of experiments is the goal once the instrument is validated).",
       "stop_card": null
     },
     "AUD-FOLLOWUPS": {
@@ -2677,6 +2735,35 @@
       "status_note": "H2; Trace 47 C8 (canonical worktree): static finding; _custody_state exists/is_dir on tracked iCloud fixture locators has no budget. No live hang was reproduced.",
       "stop_card": null
     },
+    "INSTALL-WINDOWS-MULTI-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/INSTALL-WINDOWS-MULTI-01/acceptance",
+          "label": "INSTALL-WINDOWS-MULTI-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Plan writer, runbook template and watchdog constants accept a list of install spans, each with the never-install-after-close dead-man rule; tests pin the span list and the dead-man per span; NIGHT_HANDBACK notice text names every span. Lands under the twelve-row gate."
+      },
+      "authority": {
+        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Let the night schedule name several bounded install spans per day (D-180 cl.1) instead of the single 03:00–06:30 block.",
+      "id": "INSTALL-WINDOWS-MULTI-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 171,
+      "status": "queued",
+      "status_note": "2026-09-10: ruled by Ed (D-180 cl.1); until landed the ruled 03:00–06:30 window stands. Sequenced after G2-a instrument validation (Ed 2026-09-10 ~03:45: remote direction of experiments is the goal once the instrument is validated).",
+      "stop_card": null
+    },
     "INSTRUMENT-PATH-PIN-01": {
       "acceptance": {
         "evidence": [
@@ -5048,6 +5135,45 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-11 of the ruled-not-installed sweep (status C, cure CODE; does not gate the mint but writes the mint's estimator pin).",
       "stop_card": null
     },
+    "REMOTE-CONTROL-BETWEEN-WINDOWS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REMOTE-CONTROL-BETWEEN-WINDOWS-01/acceptance",
+          "label": "REMOTE-CONTROL-BETWEEN-WINDOWS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Evidence that claude --remote-control starts under a pty wrapper from launchd and that Ed can attach from the phone app; a design ruling on how the watchdog launches a remote-controllable magistrate between spans and how it exits before t0 - 25 min; landed under the gates with the plan-span census counterfactual pinned."
+      },
+      "authority": {
+        "label": "D-180 (Ed, 2026-09-10): arm recoverability and steerability",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "a real diagnostic window has validated the instrument end to end (Ed 2026-09-10: remote direction of experiments is the goal once the instrument is validated as useful)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "G2A-FIRST-WINDOW-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Make the relaunched magistrate reachable live between plan spans via claude --remote-control (D-180 cl.4), exiting before every span.",
+      "id": "REMOTE-CONTROL-BETWEEN-WINDOWS-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 174,
+      "status": "blocked",
+      "status_note": "2026-09-10: Ed: 'yeah get that working so inbetween windows you can relaunch and be accessible'; first step is the queued pty-wrapper test between windows, never during an armed window. Ed 2026-09-10 ~03:45: 'once the instrument is validated as useful, it's very important you're able to run experiments and for me to direct the experiments remotely… That is the goal.' Sequence: G2-a real window validates the instrument first; then this lane is p1 as the science-throughput multiplier.",
+      "stop_card": null
+    },
     "RENDERER-V5-SUCCESSOR-01": {
       "acceptance": {
         "evidence": [
@@ -7392,5 +7518,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-09"
+  "updated": "2026-09-10"
 }
