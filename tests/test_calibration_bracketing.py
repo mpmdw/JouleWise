@@ -22,7 +22,10 @@ from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     ACCEPTANCE_IDENTITY_FIELDS,
     D079_EPOCH_CATALOG_ID,
+    BRACKET_SCREEN_QUANTUM_S,
     D125_SCREEN_FLOOR_S,
+    ENVELOPE_MINIMUM_CORPUS_N,
+    PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
     SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
     SESSION_KIND_BRACKET,
     SESSION_KIND_DERIVATION,
@@ -2353,6 +2356,117 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         return replace(snapshot, bracket_sessions=(session,)), registered, row
 
+    def test_derivation_row_excluded_consistently_at_all_three_sites(self) -> None:
+        """COUNTERFACTUAL (CG46 addendum A-5): production call sites
+        discover_calibration_candidates, evaluate_calibration_bracket
+        (registered_valid), calibration_bracket_for_bundles (registered_valid
+        count).
+
+        The row is `valid`, same-epoch and inside the endpoint horizon, so the
+        existing session rule cannot bar it; only its session KIND can.  The
+        three sites enumerate one universe and compare it exactly, so a skip
+        present at some sites and missing at one is not a partial fix but a
+        different defect: every claim window on the machine refuses.  The
+        bracket-kind admit control shows the row is otherwise fully eligible.
+        """
+
+        snapshot, registered, row = self._derivation_night_snapshot()
+        bracket_snapshot = replace(
+            snapshot,
+            bracket_sessions=(
+                SimpleNamespace(
+                    session_id=snapshot.bracket_sessions[0].session_id,
+                    state="finalized",
+                    session_kind=SESSION_KIND_BRACKET,
+                ),
+            ),
+        )
+        by_attempt = {c.attempt_id: c for c in registered}
+        by_attempt[row.attempt_id] = replace(
+            registered[0],
+            attempt_id=row.attempt_id,
+            content_id=row.content_id,
+            ledger_receipt_digest=row.receipt_digest,
+        )
+        discover = patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=lambda observation, *, mode: by_attempt[
+                observation.attempt_id
+            ],
+        )
+
+        def bundles(active_snapshot, candidates):
+            reader = SimpleNamespace(
+                measured_window=lambda: SimpleNamespace(start_s=100.0, end_s=110.0),
+                metadata=lambda: {
+                    "instrument_calibration": {"bindings": self.bindings}
+                },
+            )
+            with (
+                patch(
+                    "joulewise.calibration_bracketing.BundleReader",
+                    return_value=reader,
+                ),
+                patch(
+                    "joulewise.calibration_bracketing."
+                    "discover_calibration_candidates",
+                    side_effect=lambda source, *, mode: tuple(candidates),
+                ),
+                patch(
+                    "joulewise.calibration_bracketing."
+                    "load_calibration_acceptance_bound",
+                    return_value=_current_estimator_acceptance_fixture(),
+                ),
+            ):
+                return calibration_bracket_for_bundles(
+                    Path("/caller-root"),
+                    [Path("/caller-root/window-member")],
+                    self.policy,
+                    ledger_snapshot=active_snapshot,
+                    _allow_unissued_fixture=True,
+                )
+
+        def evaluate(active_snapshot, candidates):
+            return _evaluate_with_unissued_acceptance(
+                list(candidates),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=active_snapshot,
+                _allow_unissued_fixture=True,
+            )
+
+        # Site 1: discovery does not offer the derivation row.
+        with discover:
+            derivation_candidates = discover_calibration_candidates(snapshot)
+        self.assertNotIn(
+            row.attempt_id,
+            [candidate.attempt_id for candidate in derivation_candidates],
+        )
+        # Site 2: the registered universe does not contain it -- supplying the
+        # two ordinary endpoints alone satisfies the exact equality.
+        _result, reasons = evaluate(snapshot, registered)
+        self.assertNotIn("calibration_ledger_off_ledger_artifact", reasons)
+        # Site 3: the count does not include it.
+        _bundle_result, bundle_reasons = bundles(snapshot, registered)
+        self.assertNotIn("calibration_ledger_custody_invalid", bundle_reasons)
+
+        # ADMIT CONTROL: the same row under a BRACKET-kind session is offered,
+        # contained and counted at all three sites.
+        with discover:
+            bracket_candidates = discover_calibration_candidates(bracket_snapshot)
+        self.assertIn(
+            row.attempt_id,
+            [candidate.attempt_id for candidate in bracket_candidates],
+        )
+        _result, bracket_reasons = evaluate(bracket_snapshot, registered)
+        self.assertIn("calibration_ledger_off_ledger_artifact", bracket_reasons)
+        _bundle_result, bracket_bundle_reasons = bundles(
+            bracket_snapshot, registered
+        )
+        self.assertIn("calibration_ledger_custody_invalid", bracket_bundle_reasons)
+
     def test_derivation_night_row_never_becomes_a_claim_endpoint(self) -> None:
         # D-102 cl.2: a derivation-only capture is taken UNDER the prior
         # artifact to build the next one.  Once the successor issues, the row
@@ -2948,7 +3062,9 @@ def _two_epoch_import_only_generation() -> tuple[str, dict, dict]:
     return acceptance_id, generation, _reseal(artifact)
 
 
-def _live_prefix_generation() -> tuple[str, dict, dict]:
+def _live_prefix_generation(
+    member_values: list[str] | None = None,
+) -> tuple[str, dict, dict]:
     """A synthetic `import_plus_live` generation, registered only in a test.
 
     Shape of the real successor: the 38 imported genesis rows keep the OLD
@@ -2990,11 +3106,15 @@ def _live_prefix_generation() -> tuple[str, dict, dict]:
             },
         }
 
-    member_values = ["0.020000000000000000", "0.024000000000000000",
-                     "0.026000000000000000"]
+    if member_values is None:
+        member_values = [
+            "0.020000000000000000",
+            "0.024000000000000000",
+            "0.026000000000000000",
+        ]
     members: list[dict] = []
     for index, value in enumerate(member_values):
-        token = f"20260912T00000{index}-live"
+        token = f"20260912T{index:06d}-live"
         built = _live_row(token, "valid", _LIVE_SESSION_ID)
         prior["observations"].append(built["row"])
         members.append(
@@ -3008,15 +3128,15 @@ def _live_prefix_generation() -> tuple[str, dict, dict]:
                 ],
             }
         )
-    excluded = _live_row("20260912T000009-live", "valid", _LIVE_SESSION_ID)
+    excluded = _live_row("20260913T000001-live", "valid", _LIVE_SESSION_ID)
     prior["observations"].append(excluded["row"])
     prior["observations"].append(
-        _live_row("20260912T000010-live", "ordinary-invalid", _LIVE_SESSION_ID)["row"]
+        _live_row("20260913T000002-live", "ordinary-invalid", _LIVE_SESSION_ID)["row"]
     )
     artifact["derivation_notes"] = {
         "excluded_members": [
             {
-                "member_id": "20260912T000009-live",
+                "member_id": "20260913T000001-live",
                 "manifest_sha256": excluded["hashes"]["manifest.json"],
                 "instrument_evidence_sha256": excluded["hashes"][
                     "instrument_evidence.json"
@@ -3271,6 +3391,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             self.assertFalse(_valid_acceptance_bound(_reseal(drifted)))
 
     def test_corpus_purity_refuses_a_member_row_from_another_epoch(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (purity)."""
+
         acceptance_id, generation, artifact = _two_epoch_import_only_generation()
         member_id = artifact["derivation_corpus"]["members"][0]["member_id"]
         contaminated = copy.deepcopy(artifact)
@@ -3304,6 +3427,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def test_completeness_refuses_an_unaccounted_valid_registration_row(
         self,
     ) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
         acceptance_id, generation, artifact = _live_prefix_generation()
         withheld = copy.deepcopy(artifact)
         withheld["derivation_notes"]["excluded_members"] = []
@@ -3311,6 +3437,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             self.assertFalse(_valid_acceptance_bound(_reseal(withheld)))
 
     def test_completeness_refuses_an_unregistered_exclusion_reason(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
         acceptance_id, generation, artifact = _live_prefix_generation()
         outcome_shaped = copy.deepcopy(artifact)
         outcome_shaped["derivation_notes"]["excluded_members"][0]["reason"] = (
@@ -3320,6 +3449,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             self.assertFalse(_valid_acceptance_bound(_reseal(outcome_shaped)))
 
     def test_completeness_refuses_an_exclusion_that_names_no_prior_row(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
         acceptance_id, generation, artifact = _live_prefix_generation()
         phantom = copy.deepcopy(artifact)
         phantom["derivation_notes"]["excluded_members"][0]["manifest_sha256"] = (
@@ -3331,6 +3463,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
     def test_valid_same_epoch_row_outside_the_registration_refuses_issuance(
         self,
     ) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
         acceptance_id, generation, artifact = _live_prefix_generation()
         foreign = copy.deepcopy(artifact)
         member_ids = {
@@ -3537,6 +3672,10 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         )
 
     def test_registration_must_name_derivation_kind_sessions(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._prior_set_matches_import_cutoff_prefix
+        (registration kind)."""
+
         # F1.  The registration is a claim about WHY those captures exist.  A
         # bracket-kind session's rows were taken to measure something, under an
         # acceptance that already judged them; treating them as pre-registered
@@ -3796,34 +3935,51 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         with _registered_generation(acceptance_id, genesis):
             self.assertTrue(_valid_acceptance_bound(artifact))
 
-    def _floored_envelope_case(
+    @staticmethod
+    def _envelope_member_values(count: int, step: str) -> list[str]:
+        """`count` distinct ascending member bounds spaced by `step`."""
+
+        base = Decimal("0.020000000000000000")
+        return [str(base + Decimal(step) * index) for index in range(count)]
+
+    def _envelope_fixture(
         self,
         *,
-        screen: str = "0.010818",
+        screen: str,
+        ceiling: str,
+        member_values: list[str],
         screen_rule: str = SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
         d125_ruling: object = "D-125 cl.2 envelope ruling",
     ):
         """A generation derived under the pre-registered D-125 envelope.
 
-        Its corpus range (0.006000) is BELOW the genesis screen floor, so the
-        floor binds and the screen is 0.010818 rather than the range.  The
-        lineage is real: r6's registered ceiling, named by r6's own id.  Own
-        Q99 0.012000 wins the ceiling max, which keeps the screen strictly
-        below the ceiling and leaves a real budgetable excess.
+        The artifact's `source_statistics` and its preflight level screen are
+        RECOMPUTED from the member table, because the validator derives both
+        from that table itself; a fixture that edits only the operatives
+        refuses for an unrelated reason and proves nothing about the screen.
         """
 
-        acceptance_id, generation, artifact = _live_prefix_generation()
-        ceiling = "0.012000"
-        excess = str(Decimal(ceiling) - Decimal(screen))
+        acceptance_id, generation, artifact = _live_prefix_generation(member_values)
+        values = [Decimal(value) for value in member_values]
+        quantized_range = (max(values) - min(values)).quantize(
+            BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
+        )
+        level_screen = str(
+            max(values).quantize(
+                PREFLIGHT_LEVEL_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
+            )
+        )
         operatives = {
             **generation["operatives"],
             "bracket_screen_s": screen,
-            "max_budgetable_excess_s": excess,
+            "preflight_level_screen_s": level_screen,
+            "max_budgetable_excess_s": str(Decimal(ceiling) - Decimal(screen)),
             "maximum_budgetable_drift_s": ceiling,
         }
         row = dict(generation)
         row["operatives"] = operatives
         row["screen_rule"] = screen_rule
+        row["corpus_n"] = len(member_values)
         row["prediction_99_two_draw_s"] = ceiling
         row["predecessor_ceiling_s"] = _D102_GENERATION_DERIVATIONS[
             ANCHOR_V3_R6_ACCEPTANCE_ID
@@ -3832,64 +3988,9 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         if d125_ruling is not None:
             row["d125_ruling"] = d125_ruling
         tuned = copy.deepcopy(artifact)
-        derivation = tuned["decimal_derivation"]
-        derivation["ratified_operatives"].update(operatives)
-        derivation["rounding"]["operative_bracket_screen"]["value_s"] = screen
-        derivation["source_statistics"]["prediction_99_two_draw_s"] = ceiling
-        return acceptance_id, row, _reseal(tuned)
-
-    def _range_bound_envelope_case(self, *, screen: str):
-        """An envelope generation whose corpus range EXCEEDS the floor.
-
-        This is the branch the pre-registration expects to be the common one:
-        `S = max(range, 0.010818)` with the range winning.  The member values
-        are widened so the quantized range is 0.025000, and the artifact's
-        `source_statistics` are RECOMPUTED from them -- the validator derives
-        min/max/range/mean/SD from the member table itself, so a fixture that
-        only edits the operatives refuses for an unrelated reason and proves
-        nothing about the screen term.
-        """
-
-        acceptance_id, generation, artifact = _live_prefix_generation()
-        member_values = [
-            "0.020000000000000000",
-            "0.032000000000000000",
-            "0.045000000000000000",
-        ]
-        members = copy.deepcopy(artifact["derivation_corpus"]["members"])
-        for member, value in zip(members, member_values):
-            member["b_fiducial_s"] = value
-        values = [Decimal(value) for value in member_values]
-        quantized_range = (max(values) - min(values)).quantize(
-            Decimal("0.000001"), rounding=ROUND_HALF_EVEN
-        )
-        self.assertGreater(quantized_range, D125_SCREEN_FLOOR_S)
-        ceiling = "0.030000"
-        excess = str(Decimal(ceiling) - Decimal(screen))
-        operatives = {
-            **generation["operatives"],
-            "bracket_screen_s": screen,
-            "preflight_level_screen_s": str(
-                max(values).quantize(
-                    Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
-                )
-            ),
-            "max_budgetable_excess_s": excess,
-            "maximum_budgetable_drift_s": ceiling,
-        }
-        row = dict(generation)
-        row["operatives"] = operatives
-        row["screen_rule"] = SCREEN_RULE_FLOORED_RANGE_ENVELOPE
-        row["prediction_99_two_draw_s"] = ceiling
-        row["predecessor_ceiling_s"] = _D102_GENERATION_DERIVATIONS[
-            ANCHOR_V3_R6_ACCEPTANCE_ID
-        ]["operatives"]["maximum_budgetable_drift_s"]
-        row["predecessor_acceptance_id"] = ANCHOR_V3_R6_ACCEPTANCE_ID
-        row["d125_ruling"] = "D-125 cl.2 envelope ruling"
-        tuned = copy.deepcopy(artifact)
-        tuned["derivation_corpus"]["members"] = members
-        statistics = _decimal_statistics_for(values)
+        members = tuned["derivation_corpus"]["members"]
         member_ids = [member["member_id"] for member in members]
+        statistics = _decimal_statistics_for(values)
         statistics.update(
             {
                 "minimum_member_id": member_ids[values.index(min(values))],
@@ -3902,10 +4003,77 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
         derivation["source_statistics"] = statistics
         derivation["ratified_operatives"].update(operatives)
         derivation["rounding"]["operative_bracket_screen"]["value_s"] = screen
-        derivation["rounding"]["preflight_level_screen"]["value_s"] = operatives[
-            "preflight_level_screen_s"
-        ]
+        derivation["rounding"]["preflight_level_screen"]["value_s"] = level_screen
         return acceptance_id, row, _reseal(tuned), str(quantized_range)
+
+    def _floored_envelope_case(
+        self,
+        *,
+        screen: str = "0.010818",
+        screen_rule: str = SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+        d125_ruling: object = "D-125 cl.2 envelope ruling",
+        member_count: int = 17,
+    ):
+        """An envelope generation whose range is BELOW the genesis floor.
+
+        17 members spaced 0.0001 s apart give a quantized range of 0.0016,
+        under the 0.010818 floor, so the floor binds and the screen is the
+        floor rather than the range.  The lineage is real: r6's registered
+        ceiling, named by r6's own id; own Q99 0.012000 wins the ceiling max,
+        keeping the screen strictly below the ceiling.
+        """
+
+        acceptance_id, row, artifact, quantized_range = self._envelope_fixture(
+            screen=screen,
+            ceiling="0.012000",
+            member_values=self._envelope_member_values(
+                member_count, "0.000100000000000000"
+            ),
+            screen_rule=screen_rule,
+            d125_ruling=d125_ruling,
+        )
+        self.assertLess(Decimal(quantized_range), D125_SCREEN_FLOOR_S)
+        return acceptance_id, row, artifact
+
+    def _range_bound_envelope_case(self, *, screen: str):
+        """An envelope generation whose corpus range EXCEEDS the floor.
+
+        This is the branch the pre-registration expects to be the common one:
+        `S = max(range, 0.010818)` with the range winning.  17 members spaced
+        0.0015625 s apart give a quantized range of 0.025000.
+        """
+
+        acceptance_id, row, artifact, quantized_range = self._envelope_fixture(
+            screen=screen,
+            ceiling="0.030000",
+            member_values=self._envelope_member_values(
+                17, "0.001562500000000000"
+            ),
+        )
+        self.assertGreater(Decimal(quantized_range), D125_SCREEN_FLOOR_S)
+        return acceptance_id, row, artifact, quantized_range
+
+    def test_envelope_generation_below_the_ruled_corpus_size_floor_refuses(
+        self,
+    ) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._registered_generation_row_is_complete
+        (envelope corpus-size floor).
+
+        D-126 cl.2 ratified n >= 19; cold gate 46 addendum A-2 records n = 17
+        as the only departure ever ruled.  Below 17 the df = n-1 tail the 99 %
+        two-draw prediction rests on stops supporting the ceiling derived from
+        it, so the row refuses rather than issuing a number it cannot carry.
+        """
+
+        for count, admitted in ((16, False), (17, True), (19, True)):
+            with self.subTest(corpus_n=count):
+                acceptance_id, row, artifact = self._floored_envelope_case(
+                    member_count=count
+                )
+                self.assertEqual(row["corpus_n"], count)
+                with _registered_generation(acceptance_id, row):
+                    self.assertEqual(_valid_acceptance_bound(artifact), admitted)
 
     def test_envelope_screen_is_the_range_once_the_range_exceeds_the_floor(
         self,
@@ -3952,11 +4120,19 @@ class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
             self.assertTrue(_valid_acceptance_bound(artifact))
 
     def test_envelope_generation_that_ignored_the_floor_refuses(self) -> None:
-        # The same generation with the screen set to its quantized range
-        # (0.006000), which is what the range-equals-screen rule would give and
-        # what the envelope forbids while the floor is higher.
+        # The same generation with the screen set to its own quantized range,
+        # which is what the range-equals-screen rule would give and what the
+        # envelope forbids while the floor is higher.
         acceptance_id, row, artifact = self._floored_envelope_case(
-            screen="0.006000"
+            screen="0.001600"
+        )
+        # Tie the screen to the fixture, so the case cannot silently stop being
+        # "the screen equals the range" when the member table changes.
+        self.assertEqual(
+            Decimal(
+                artifact["decimal_derivation"]["source_statistics"]["range_s"]
+            ).quantize(BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN),
+            Decimal(row["operatives"]["bracket_screen_s"]),
         )
         with _registered_generation(acceptance_id, row):
             self.assertFalse(_valid_acceptance_bound(artifact))
