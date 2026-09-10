@@ -1622,8 +1622,8 @@ chain itself.  The reason: the night driver hands the file it launches
 exactly four variables (`NIGHT_PLAN_ID`, `MEASUREMENT_ROOT`,
 `MEASUREMENT_HEAD`, `PY`) and no command-line arguments, while the
 tracked chain `scripts/night_chains/calibration_derivation_only.zsh`
-needs thirteen more variables and twenty-four per-slot binding
-arguments.  The wrapper supplies both, then `exec`s the chain.
+needs thirteen more variables and 24 per-slot binding flag/value pairs
+(48 argv words).  The wrapper supplies both, then `exec`s the chain.
 
 ### The three emitted files
 
@@ -1642,12 +1642,34 @@ custody directory the plan calls `custody_root`):
    run, at the commit `H` the plan names as `measurement_head`, and
    record `git -C <CLONE> status --porcelain`; it must be empty, because
    nothing downstream detects uncommitted edits outside the chain itself.
-2. **Author the night plan**, naming `t0_epoch_s`, `window_max_s`,
-   `custody_root`, `measurement_root`, `measurement_head` = `H`,
-   `chain_path` = `<NIGHT_ROOT>/chain.zsh`, and `chain_sha256_path` =
-   that path plus `.sha256`.  The plan must exist first: the generator
-   reads all of those from it, and refuses if `chain_path` is anything
-   else.
+2. **Author the night plan** in the shape below — the key set is exact,
+   and `NightPlan.from_mapping` refuses a plan with any key missing or
+   any key extra.  The plan must exist before step 3: the generator
+   reads `t0_epoch_s`, `window_max_s`, `custody_root`,
+   `measurement_root`, `measurement_head` and `chain_path` from it, and
+   refuses if `chain_path` is not the wrapper it is about to write.
+
+```json
+{
+  "schema": "joulewise.night_plan.v2",
+  "schema_version": 2,
+  "plan_id": "derivation-20260912",
+  "receipt_class": "DIAGNOSTIC_NO_PACK",
+  "t0_epoch_s": 1789206960,
+  "window_max_s": 9000,
+  "authored_epoch_s": 1789199760,
+  "repo_head": "<40-hex commit of this repository at arm time>",
+  "measurement_root": "/private/tmp/joulewise-derivation-20260912-checkout",
+  "measurement_head": "<40-hex commit H the clone is cut at>",
+  "chain_path": "/Users/edr/night-custody/derivation-20260912/chain.zsh",
+  "chain_sha256_path": "/Users/edr/night-custody/derivation-20260912/chain.zsh.sha256",
+  "custody_root": "/Users/edr/night-custody/derivation-20260912",
+  "registration_path": "<repo-relative path of the committed pre-registration>"
+}
+```
+
+   The angle-bracket values are the ones the arm fills in; every other
+   value above is what this night's coordinates imply.
 3. **Generate the wrapper** with the command below.  The generator
    digests the tracked chain **from the clone**, never from the checkout
    it is run in, and bakes that digest — plus the frozen calibration
@@ -1702,7 +1724,7 @@ explicit `--slot-count-ruling` reference (which must be one line of
 ordinary reference characters, since it is written into the wrapper).
 
 The emitted bytes, rendered here from placeholder coordinates and the
-live digest of the tracked chain (`a4440bbe40fceb6cddce9d04c7eabfdf4ca58e6dc0c53e90f977517173637186`):
+live digest of the tracked chain (`b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf`):
 
 ```zsh
 #!/bin/zsh
@@ -1712,7 +1734,8 @@ live digest of the tracked chain (`a4440bbe40fceb6cddce9d04c7eabfdf4ca58e6dc0c53
 # The driver supplies NIGHT_PLAN_ID, MEASUREMENT_ROOT, MEASUREMENT_HEAD and
 # PY and no argv (scripts/run_night.py:430-444).  This wrapper supplies the
 # thirteen chain variables as literals frozen with the plan, verifies the
-# tracked chain's bytes, and execs it with the per-slot bindings as argv.
+# tracked chain's bytes, and execs it with the per-slot bindings as argv:
+# 24 flag/value pairs, 48 argv words.
 set -euo pipefail
 
 route_refuse() { printf 'FAIL %s\n' "$1" >&2; exit 1; }
@@ -1787,7 +1810,7 @@ observed_plan_id="$(/usr/bin/jq -er '.plan_id' "$PLAN" 2>/dev/null)" || route_re
 # the capturing chain's bytes move: the coverage is transitive and needs
 # no second file.  (The night root also carries an advisory
 # <wrapper>.chain-source.sha256 for hand checks; nothing trusts it.)
-[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = 'a4440bbe40fceb6cddce9d04c7eabfdf4ca58e6dc0c53e90f977517173637186' ] || route_refuse 'tracked derivation chain bytes do not match the arm-time digest'
+[ "$(sha256_of "$REPO/scripts/night_chains/calibration_derivation_only.zsh")" = 'b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf' ] || route_refuse 'tracked derivation chain bytes do not match the arm-time digest'
 
 # exec, never source: the chain derives REPO from its own $0 with
 #   cd "${0:A:h:h:h}"

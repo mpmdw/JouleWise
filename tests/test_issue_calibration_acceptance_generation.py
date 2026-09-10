@@ -473,7 +473,10 @@ else:
         # A zero settle would collect with the operator's activity still in the
         # thermal state; a zero cadence would collapse the start-to-start
         # spacing the pre-registration declares. Both refuse as declarations.
-        for knob in ("SETTLE_S", "SLOT_CADENCE_S"):
+        # SLOT_CAPTURE_BUDGET_S belongs in the same guard: at 0 the window
+        # admission check (start + budget > end) is vacuous, so a slot could
+        # start one second before the agent-free end and capture past it.
+        for knob in ("SETTLE_S", "SLOT_CADENCE_S", "SLOT_CAPTURE_BUDGET_S"):
             with self.subTest(knob=knob):
                 result, calls, log = self.run_chain(knobs={knob: "0"})
                 self.assertEqual(result.returncode, 64, result.stderr)
@@ -642,23 +645,42 @@ else:
             "# scripts/gen_g2_phase_d.py;",
             source,
         )
-        self.assertIn(
-            "#   validate_powermetrics_fiducial.py      --derivation-only (:1771), which\n"
-            "#     requires --session-id, --slot and --attempt-id of a declared\n"
-            "#     derivation-kind session (:1946);",
-            source,
+        # The header cites by anchor text, so the test asserts the CLAIM, not a
+        # line number: every quoted anchor must still exist in the file it names,
+        # and the refusal it promises must still be reachable.  Line numbers
+        # rotted twice in this seat's own history; anchors cannot.
+        self.assertNotRegex(
+            source, r"(reserve_calibration_window_bracket|validate_powermetrics_fiducial)\.py:\d"
         )
-        # The claim the header makes must still be true of the writer's CLI.
+        self.assertIn("# LANDED SURFACE. Cited by ANCHOR TEXT", source)
         writer = (ROOT / "scripts/validate_powermetrics_fiducial.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"--derivation-only",', writer)
-        self.assertIn(
-            '        "--slot",\n'
-            '        help="exact predeclared slot name to capture, from the'
-            " session's list\",\n",
-            writer,
+        reserve = (ROOT / "scripts/reserve_calibration_window_bracket.py").read_text(
+            encoding="utf-8"
         )
+        for anchor, target, name in (
+            ('"--slot-attempt-id",', reserve, "reserve"),
+            ('"--slot-custody-locator",', reserve, "reserve"),
+            ('"reason": "declared_slot_flag_count_mismatch",', reserve, "reserve"),
+            ('"--derivation-only",', writer, "writer"),
+            ('"--derivation-only requires --session-id, --slot, and "', writer, "writer"),
+            (
+                'help="exact predeclared slot name to capture, from the'
+                " session's list\",",
+                writer,
+                "writer",
+            ),
+        ):
+            with self.subTest(anchor=anchor):
+                # Quoted in the header …
+                self.assertIn(anchor, source)
+                # … and still present in the file the header names.
+                self.assertIn(anchor, target, name)
+        # The claim behind the anchors: the chain's own flags are accepted by the
+        # reservation's parser, and the mismatch refusal is reachable from it.
+        self.assertIn("action=\"append\"", reserve)
+        self.assertIn("--power-policy ac_high_power", source)
 
     def test_chain_forwards_its_argv_verbatim_into_the_reservation(self) -> None:
         """The wrapper's per-slot bindings reach the reservation only through "$@".
