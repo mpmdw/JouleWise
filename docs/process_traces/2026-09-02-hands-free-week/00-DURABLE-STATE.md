@@ -851,4 +851,10 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `feat/2026-09-10-g2a-handback-20260912`. In flight: execution + contract refuters, full replay at 8da99190, root cause of the local-only controller test failure.
   NEXT EXACT ACTION: this activation closes the sweep gauntlet and merges; the 09-11 activation runs checklist 13 (harvest → accept 5/6 → uninstall stub → handback+inventory
   commit H → fresh clone at H → runbook 68 → email-then-arm before 06:05 → exit). RUN_STATE T38h.
+- UPDATE 2026-09-10 ~07:55 PDT (headless activation `96bfeca7`): PR #314 (GATE-SENSIBILITY-SWEEP-01) MERGED at `0d4bb4fb` under the twelve-row gate;
+  row 9 discharged by waiver (cold gate 35 + Opus addendum 11; one pre-existing local-only fixture failure, CI green). 07:00 dead-man observed (record 30);
+  item 5 ruled MET by cold gate 31 with harvest predicate P1–P4 (checklist 13 §3a). Main also carries the kernel lanes (NIGHT-STREAM-PATHS-01,
+  FIXTURE-SENTINEL-CONTROLLER-01, GATE-R2-COVERAGE-ULP-01) and the G2-a arm materials 11/12/13. rehearsal-20260911 ARMED and untouched; this
+  activation exits on the 02:31 request. NEXT EXACT ACTION: the 09-11 activation runs checklist 13 end to end (harvest before 07:00 → H → clone at H →
+  runbook 68 → email-then-arm before 06:05 for t0 2026-09-12 02:56, WINDOW_MAX_S 13500). RUN_STATE T38i.
 
