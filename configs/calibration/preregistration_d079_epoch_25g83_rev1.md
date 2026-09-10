@@ -72,7 +72,7 @@ with margin: one 600 s settle + 11 × 600 s cadence + one ~8 min capture is
 ## Registration text
 
 ```text
-STATUS: proposed default adopted by cold gate 46; Ed veto window open; V3 requires Ed's affirmative acknowledgment
+STATUS: proposed default adopted by cold gate 46, Ed veto window open; V3 requires Ed's affirmative acknowledgment
 
 Pre-registration: D-079 acceptance corpus for identity epoch 25G83 (rev 1, authored 2026-09-[DD], before any capture).
 
@@ -128,7 +128,7 @@ membership.
 
 Analysis. Decimal statistics exactly as r6: minimum, maximum, range, mean, sample SD; t(0.975, n-1) and t(0.995, n-1)
 two-draw predictions. The three-night schedule admits retained n from 19 (the required floor) to 36 (all declared
-slots retained), so the degrees of freedom n-1 run from 18 to 35; the quantile implementation's proof for the REALIZED
+slots retained), so the degrees of freedom n-1 run from 18 to 35 — or from 16 if Ed's written n = 17 ruling is exercised; the quantile implementation's proof for the REALIZED
 df is computed and recorded before issuance, and no corpus issues on a df whose quantile is not proven in that record.
 The full D-125 envelope governs both operatives: bracket screen
 S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling C = max(inherited ceiling,
@@ -136,17 +136,17 @@ new Q99). The generation records the inherited ceiling and an explicit d125_ruli
 reference; issuance refuses while that reference is absent, and refuses successor_screen_exceeds_budget_ceiling when
 S >= C. Maximum budgetable drift = C; maximum budgetable excess = C - S, with no silent clamp at zero.
 
-Halt on S >= C. If the new Q99 is at or below the 0.010818 screen floor, the inherited ceiling 0.010164834757777545
-cannot rescue C > S and D-126 clause 3's successor_screen_exceeds_budget_ceiling refusal fires: the corpus is not
-issued, and Ed rules in writing before any further capture, exactly as for the screen challenge. The refusal is never
-cured by lowering S.
+Halt on S >= C. If S >= C on any route, D-126 clause 3's successor_screen_exceeds_budget_ceiling refusal fires: the
+corpus is not issued, and Ed rules in writing before any further capture, exactly as for the screen challenge. The
+refusal is never cured by lowering S. The route to watch: if the new Q99 is at or below the 0.010818 screen floor, the
+inherited ceiling 0.010164834757777545 cannot rescue C > S, because S is never below the floor.
 
 Preflight level screen = the new corpus maximum quantized to 1e-15 s. Per-night distribution, order, exclusions, and
 clock residual margins are reported as diagnostics that authorize no trimming.
 
-Prospective use. The resulting acceptance judges only subsequent ordinary captures. Bootstrap observations are corpus
+Prospective use. The resulting acceptance judges only subsequent ordinary captures. Derivation observations are corpus
 members and never bracket endpoints, before or after issuance. No G2-a, floor, or claim output is an input to this
-derivation. The successor's ledger_cutoff is the authenticated head after the last bootstrap row; its prior set is the
+derivation. The successor's ledger_cutoff is the authenticated head after the last derivation row; its prior set is the
 complete history through it, including finalized observations of abort-closed sessions, and a pending or unresolved
 attempt in that prefix refuses issuance. D-102 clause 2 is preserved: a trigger observation is judged under the PRIOR
 artifact, never incorporated into a threshold that judges itself. Nothing in this registration licenses a measurement
