@@ -39,6 +39,7 @@ from tests.owned_process_runner import (
     OwnedPublicProcessRunner,
     assert_no_owned_process_group_survivors,
 )
+import scripts.validate_powermetrics_fiducial as validation_script
 from tests.test_calibration_exits import _install_fake_writer_dependencies
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -268,15 +269,12 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         cls.tmp.cleanup()
 
     # ---- private-repo acceptance custody ---------------------------------
-    def _rekey_acceptance(self, *, maximum_s: str | None = None) -> dict:
+    def _rekey_acceptance(self) -> dict:
         """Re-key the copied acceptance to THIS synthetic repo's bytes.
 
         The copied estimator sources are this checkout's, not the issued
         artifact's, so the artifact must re-authenticate against them or the
-        writer refuses every capture.  `maximum_s` additionally rewrites the
-        corpus maximum that the level screen is quantized from, which is how a
-        test drives a real capture ABOVE the prior epoch's screen without
-        touching the physical bound.  Test custody only: the re-keyed bytes
+        writer refuses every capture.  Test custody only: the re-keyed bytes
         never leave the temporary repository and are never issued.
         """
 
@@ -293,11 +291,6 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
                 "estimator_code_sha256"
             ]
         }
-        if maximum_s is not None:
-            derivation = acceptance["decimal_derivation"]
-            derivation["source_statistics"]["maximum_s"] = maximum_s
-            derivation["rounding"]["preflight_level_screen"]["value_s"] = maximum_s
-            derivation["ratified_operatives"]["preflight_level_screen_s"] = maximum_s
         core = {
             key: value
             for key, value in acceptance.items()
@@ -718,86 +711,103 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         self.assertNotIn("derivation_only", evidence)
         self.assertNotIn("screen_basis", evidence)
 
-    @unittest.skip(
-        "UNCOVERED CLAUSE, seat S1: the TRUE branch of "
-        "exceeds_prior_level_screen needs a capture whose bound exceeds r6's "
-        "level screen 0.032898493715362. The fixture sampler's bound is "
-        "~9.3e-05 s (it tracks sampling_interval_ms x --time-scale-for-test), "
-        "so reaching the screen needs a time scale ~0.35, i.e. a ~17 min "
-        "capture. Lowering the screen instead is blocked: "
-        "_valid_acceptance_bound (calibration_bracketing.py:676-687) requires "
-        "max(member values) to quantize to preflight_level_screen_s and "
-        "range to equal bracket_screen_s, so the level screen cannot be "
-        "rewritten without rewriting all 17 member values and both t-quantile "
-        "predictions. Candidate cures, both outside this seat's WRITE_SCOPE: "
-        "(a) a generated synthetic ISSUED acceptance fixture from seat S4's "
-        "issuer, with a small corpus whose statistics are internally "
-        "consistent; (b) a fixture-sampler knob that widens the trace "
-        "interval without widening wall time. A test-only --acceptance-path "
-        "override is REJECTED: it would let a caller pick an artifact of a "
-        "different epoch and so bypass DERIVATION_ONLY_EPOCH_UNCHANGED."
-    )
-    def test_a_bound_above_the_prior_level_screen_is_recorded_but_still_valid(
+class CaptureClassificationTests(unittest.TestCase):
+    """`_classify_capture` at the function level, no capture, no CLI.
+
+    Ruling 46 V2's "diagnostic, never a refusal" cannot be proven end to end:
+    the fixture sampler's bound is ~9.3e-05 s (it tracks
+    sampling_interval_ms x --time-scale-for-test), r6's level screen is
+    0.032898493715362, and closing that factor of ~354 needs a ~17 minute
+    capture.  Lowering the screen instead is blocked because
+    `_valid_acceptance_bound` (joulewise/calibration_bracketing.py:676-687)
+    requires max(member values) to quantize to preflight_level_screen_s.  The
+    bound and the screen basis are therefore INJECTED here, into the smallest
+    production function that computes both outputs, so the TRUE branch is a
+    real assertion against real production code rather than a skipped test.
+    """
+
+    SCREEN_BASIS = {
+        "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+        "artifact_sha256": "a" * 64,
+        "preflight_level_screen_s": "0.032898493715362",
+        "epoch": {"os_build": "25F84"},
+    }
+
+    def test_bound_above_the_prior_screen_is_diagnosed_but_stays_valid(
         self,
     ) -> None:
-        """Kills the DIAGNOSTIC-only reading of `exceeds_prior_level_screen`.
+        """Kills the fold of the diagnostic into the disposition.
 
-        V2: `systematic-invalid` means "exceeds the level screen of THIS
-        epoch's acceptance", and none exists for 25G83.  The counterfactual is
-        an acceptance whose corpus maximum -- and therefore whose level screen
-        -- is below any real capture's bound.  Route the comparison back into
-        the disposition and this row becomes `systematic-invalid`.
+        This is the counterfactual the CLI cannot reach: a derivation-only
+        capture whose bound EXCEEDS the prior epoch's level screen.  No
+        acceptance judges this epoch, so `preflight_systematic_screen_s` is
+        None and the disposition must stay `valid`; the excess is recorded and
+        goes to the screen-challenge gate, which halts issuance for Ed rather
+        than editing corpus membership.  Route the diagnostic back into the
+        disposition and this row becomes `systematic-invalid`.
         """
 
-        acceptance = self._rekey_acceptance(maximum_s="0.000000000000001")
-        epoch, t1 = self._epoch("25G83")
-        declared = derivation_session_slots(2)
-        ledger, pin, session_id, custody = self._session(
-            "derivation-exceeds",
-            slots=declared,
-            session_kind=SESSION_KIND_DERIVATION,
-            epoch=epoch,
-            t1=t1,
+        disposition, exceeds = validation_script._classify_capture(
+            evidence_status="valid",
+            bound_lexeme="0.040000000000000",
+            preflight_systematic_screen_s=None,
+            screen_basis=self.SCREEN_BASIS,
         )
-        completed = self._writer(
-            ledger=ledger,
-            pin=pin,
-            session_id=session_id,
-            slot=declared[0],
-            custody=custody[declared[0]],
-            epoch=epoch,
+        self.assertEqual(disposition, "valid")
+        self.assertIs(exceeds, True)
+
+    def test_bound_below_the_prior_screen_is_valid_and_not_diagnosed(
+        self,
+    ) -> None:
+        """The FALSE branch, at the same seam as the TRUE one."""
+
+        disposition, exceeds = validation_script._classify_capture(
+            evidence_status="valid",
+            bound_lexeme="0.000092981887817",
+            preflight_systematic_screen_s=None,
+            screen_basis=self.SCREEN_BASIS,
         )
-        self.assertEqual(
-            completed.returncode, 0, completed.stdout + completed.stderr
+        self.assertEqual(disposition, "valid")
+        self.assertIs(exceeds, False)
+
+    def test_an_invalid_derivation_capture_is_ordinary_invalid_never_systematic(
+        self,
+    ) -> None:
+        """No `systematic-invalid` disposition exists for this epoch (V2)."""
+
+        disposition, exceeds = validation_script._classify_capture(
+            evidence_status="invalid",
+            bound_lexeme="0.040000000000000",
+            preflight_systematic_screen_s=None,
+            screen_basis=self.SCREEN_BASIS,
         )
-        out_dir = custody[declared[0]]
-        evidence = json.loads(
-            (out_dir / "instrument_evidence.json").read_text(encoding="utf-8")
+        self.assertEqual(disposition, "ordinary-invalid")
+        self.assertIs(exceeds, True)
+
+    def test_the_ordinary_path_still_screens_and_records_no_diagnostic(
+        self,
+    ) -> None:
+        """The other side of the same seam: with an acceptance that DOES judge
+        this epoch, the level screen still produces `systematic-invalid`, and
+        no diagnostic is computed at all."""
+
+        screen = Decimal(self.SCREEN_BASIS["preflight_level_screen_s"])
+        over, exceeds_over = validation_script._classify_capture(
+            evidence_status="valid",
+            bound_lexeme="0.040000000000000",
+            preflight_systematic_screen_s=screen,
+            screen_basis=None,
         )
-        manifest = json.loads(
-            (out_dir / "manifest.json").read_text(encoding="utf-8")
+        self.assertEqual(over, "systematic-invalid")
+        self.assertIsNone(exceeds_over)
+        under, exceeds_under = validation_script._classify_capture(
+            evidence_status="valid",
+            bound_lexeme="0.000092981887817",
+            preflight_systematic_screen_s=screen,
+            screen_basis=None,
         )
-        self.assertIs(evidence["exceeds_prior_level_screen"], True)
-        self.assertIs(manifest["exceeds_prior_level_screen"], True)
-        self.assertGreater(
-            Decimal(str(evidence["b_fiducial_s"])),
-            Decimal(
-                acceptance["decimal_derivation"]["ratified_operatives"][
-                    "preflight_level_screen_s"
-                ]
-            ),
-        )
-        rows = [
-            json.loads(line)
-            for line in ledger.read_text(encoding="utf-8").splitlines()
-        ]
-        finalization = next(
-            row
-            for row in rows
-            if row.get("schema_version") == BRACKET_SESSION_SCHEMA
-            and row.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
-        )
-        self.assertEqual(finalization["disposition"], "valid")
+        self.assertEqual(under, "valid")
+        self.assertIsNone(exceeds_under)
 
 
 if __name__ == "__main__":
