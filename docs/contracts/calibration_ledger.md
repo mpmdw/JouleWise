@@ -157,12 +157,13 @@ statistic is computed rather than being caught in review afterwards.
   text the caller meant, byte for byte, rather than whatever now sits at that
   path.
 
-`[flag names to confirm at merge]` — these three fences land on the issuer
-seat's branch as this contract is written, and are described here by
-subcommand and flag name rather than by location. The subcommand name
-`prepare-candidate` and the flag `--preregistration-sha256` used above are to
-be checked against the merged issuer, and corrected here if the merged names
-differ.
+These three fences are installed on the issuer's `prepare-candidate`
+subcommand, whose flags are `--preregistration` (the file), `--preregistration-sha256`
+(its pinned digest), `--registration-session-id` (repeated, one per night), and the
+two written-ruling escapes `--nights-ruling` and `--slot-count-ruling`; the
+`check` subcommand's optional `--preregistration` compares the machine's
+sampler-binary digest against the pre-registered one and leaves the watch
+output byte-identical when the flag is absent.
 
 ## Historical import
 
