@@ -26,6 +26,20 @@ from joulewise.calibration_ledger import (
     content_id_from_artifact_hashes,
     probe_custody,
 )
+try:  # pragma: no cover - exercised on whichever side of the seam is present
+    from joulewise.calibration_ledger import (
+        SESSION_KIND_BRACKET,
+        SESSION_KIND_DERIVATION,
+    )
+except ImportError:  # pragma: no cover - pre-seam fallback, delete on merge
+    # TEMPORARY SEAM SHIM.  The ledger owns this vocabulary and exports both
+    # names; this checkout predates that export, so the values are restated
+    # here to keep this module importable until the two branches meet.  The
+    # integration tree REQUIRES the real import: delete this fallback there,
+    # because two sources for one vocabulary is exactly the drift the import
+    # exists to prevent.
+    SESSION_KIND_BRACKET = "bracket"
+    SESSION_KIND_DERIVATION = "derivation"
 from joulewise.powermetrics_fiducial import (
     CAPTURE_TIME_FIELD,
     MAX_AGE_S,
@@ -185,12 +199,78 @@ ESTIMATOR_CODE_PATHS = (
     "joulewise/reduce.py",
 )
 ACCEPTANCE_IDENTITY_FIELDS = IDENTITY_EPOCH_FIELDS
+# The identity-epoch generation vocabulary.  A registered generation names the
+# epoch ids its prior-observation-set catalog may carry; the TARGET epoch is
+# the catalog entry whose six-field vector equals the artifact's own
+# ``identity_epoch``, and is resolved from the artifact rather than registered,
+# so a catalog can never disagree with the identity it claims to bind.
+D079_EPOCH_CATALOG_ID = "d079_epoch"
+# Ledger session kinds (ruling 46 §R-a A7) are stamped on the session's open
+# receipt by the ledger writer and imported above from the ledger, which owns
+# the vocabulary.  A `bracket` session reserves the endpoints of one claim
+# window; a `derivation` session reserves a night of derivation-only captures
+# that build a future acceptance and license no measurement.  A session record
+# that carries no kind at all predates the field and reads as `bracket`; a row
+# whose session cannot be resolved at all reads as neither and is barred.
+SESSION_KIND_UNRESOLVED = "unresolved-session"
+# Prior-set prefix modes (ruling 46 §R-b V6).  ``import_only`` is the genesis
+# fence every issued generation to date was derived under: every ledger row at
+# or below the cutoff is a historical import.  ``import_plus_live`` is reserved
+# for a generation whose corpus was captured live on this machine, whose prefix
+# therefore holds finalized live rows as well.
+PRIOR_PREFIX_MODE_IMPORT_ONLY = "import_only"
+PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE = "import_plus_live"
+_PRIOR_PREFIX_MODES = frozenset(
+    {PRIOR_PREFIX_MODE_IMPORT_ONLY, PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE}
+)
+# Registered bracket-screen derivation rules (ruling 46 §R-b V7).  Only the
+# rule every issued generation was actually derived under is implemented here:
+# the quantized corpus range IS the operative screen.  The D-125 envelope rule
+# a successor may be derived under is Ed's open item and its
+# ``successor_screen_exceeds_budget_ceiling`` refusal is not implemented in
+# this module, so an unimplemented rule name refuses here rather than silently
+# degrading to the rule below.
+SCREEN_RULE_RANGE_EQUALS_SCREEN = "range_equals_screen"
+_REGISTERED_SCREEN_RULES = frozenset({SCREEN_RULE_RANGE_EQUALS_SCREEN})
+# Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
+# Today's only registered class is `affine_clock_fit_empty`: the anchor-v3
+# replay found NO feasible affine wall-versus-monotonic clock fit for that
+# capture, so no bound can be derived from it at all.  The exclusion turns on
+# that replay outcome, never on the value the capture produced.  It is the
+# class recorded at r6 `derivation_notes.excluded_predecessor_members`.
+REGISTERED_CORPUS_EXCLUSION_REASONS = frozenset({"affine_clock_fit_empty"})
+# Terminal dispositions a LIVE row may carry inside an `import_plus_live`
+# cutoff prefix.  `abandoned` is deliberately absent: it maps to the
+# `unresolved` classification, which is not an observation.
+_LIVE_PREFIX_ADMITTED_DISPOSITIONS = frozenset(
+    {"valid", "systematic-invalid", "ordinary-invalid"}
+)
+# The keys every registered generation row must carry, so that a future row
+# that forgets one refuses instead of falling back to a literal.
+_GENERATION_ROW_REQUIRED_KEYS = frozenset(
+    {
+        "corpus_n",
+        "corpus_doubling_trigger",
+        "prediction_95_two_draw_s",
+        "prediction_99_two_draw_s",
+        "operatives",
+        "epoch_catalog_ids",
+        "prior_prefix_mode",
+        "prior_observation_count",
+        "cutoff_sequence",
+        "screen_rule",
+        "predecessor_ceiling_s",
+        "registration_session_ids",
+    }
+)
 # The D-102 derivation is corpus-indexed, not global: corpus size, the two
-# two-draw prediction pins, the ratified operative comparators, and the
-# corpus-doubling trigger vocabulary are all functions of the member table a
-# generation was derived from.  Retaining them per generation is what keeps the
-# predecessor generations authenticating byte-identically after the live
-# default moves.
+# two-draw prediction pins, the ratified operative comparators, the
+# corpus-doubling trigger vocabulary, the epoch catalog the prior set may name,
+# the prior-set size and cutoff sequence, the prefix mode, the screen rule, the
+# ceiling a successor inherits, and the ledger sessions of the registration are
+# all functions of the member table a generation was derived from.  Retaining
+# them per generation is what keeps the predecessor generations authenticating
+# byte-identically after the live default moves.
 _D102_N19_DERIVATION: dict[str, Any] = {
     "corpus_n": 19,
     "corpus_doubling_trigger": "corpus_doubles_from_19_to_38",
@@ -202,6 +282,21 @@ _D102_N19_DERIVATION: dict[str, Any] = {
         "max_budgetable_excess_s": "0.001275166090593858",
         "maximum_budgetable_drift_s": "0.012093166090593858",
     },
+    "epoch_catalog_ids": (D079_EPOCH_CATALOG_ID,),
+    "prior_prefix_mode": PRIOR_PREFIX_MODE_IMPORT_ONLY,
+    "prior_observation_count": 38,
+    "cutoff_sequence": 76,
+    "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
+    # The ceiling of the generation this one was derived FROM under D-125's
+    # envelope rule, or None when there is no such predecessor.  None here is
+    # the truthful registration: the n=19 corpus is the genesis, derived from
+    # no predecessor at all, so its ceiling is simply its own 99 % two-draw
+    # prediction.  A generation that DOES inherit also names the predecessor's
+    # registered row in `predecessor_acceptance_id`, and this number is checked
+    # against that row rather than trusted.
+    "predecessor_ceiling_s": None,
+    # Import-only generations have no live capture registration.
+    "registration_session_ids": (),
 }
 _D102_N17_DERIVATION: dict[str, Any] = {
     "corpus_n": 17,
@@ -214,6 +309,18 @@ _D102_N17_DERIVATION: dict[str, Any] = {
         "max_budgetable_excess_s": "0.000440834757777545",
         "maximum_budgetable_drift_s": "0.010164834757777545",
     },
+    "epoch_catalog_ids": (D079_EPOCH_CATALOG_ID,),
+    "prior_prefix_mode": PRIOR_PREFIX_MODE_IMPORT_ONLY,
+    "prior_observation_count": 38,
+    "cutoff_sequence": 76,
+    "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
+    # None, not the n=19 ceiling.  The anchor-v3 r-series is a RE-DERIVATION of
+    # the same captures under changed estimator bytes (D-145), not a D-125
+    # envelope successor of the n=19 generation: its ceiling is its own Q99 and
+    # sits BELOW n=19's, which registering n=19 as its predecessor would
+    # correctly refuse.
+    "predecessor_ceiling_s": None,
+    "registration_session_ids": (),
 }
 _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     PREDECESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
@@ -227,6 +334,134 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     # r6 is the science-neutral capture-presentation reissue of r5.
     ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
+
+
+def _registered_generation_row_is_complete(generation: Any) -> bool:
+    """Whether a registered generation row carries every fence it must.
+
+    The validator reads its epoch catalog, prior-set size, cutoff sequence,
+    prefix mode and screen rule from this row instead of from literals, so a
+    row that omits or malforms one of them must refuse rather than let the
+    corresponding check evaporate.
+
+    The row's CEILING IN FORCE (``operatives.maximum_budgetable_drift_s``, the
+    largest drift this generation will ever budget) is not an independent fact:
+    D-125 cl.2 fixes it exactly.  A generation derived from no predecessor
+    takes its own 99 % two-draw prediction; a generation derived from one under
+    the envelope rule takes ``max(predecessor ceiling, own Q99)``, so the
+    ceiling of a lineage can never FALL.  An inequality cannot transcribe that:
+    ``ceiling >= own Q99`` admits both a successor whose ceiling dropped below
+    its predecessor's and one whose ceiling was invented above both inputs.
+    Only the exact equation refuses both, and only if the row states the
+    predecessor's ceiling, which is why ``predecessor_ceiling_s`` exists and is
+    checked against the predecessor's own registered row rather than trusted.
+    The two lineage fields are jointly present or jointly absent: a row that
+    names ``predecessor_acceptance_id`` while nulling ``predecessor_ceiling_s``
+    would take the no-predecessor arm and switch the lineage fence off by
+    emptying a field, so it refuses.
+
+    The operative screen must additionally sit strictly BELOW that ceiling, in
+    every case: D-102 cl.3 spends the allowance
+    ``max(observed_drift_s, bracket_screen_s)`` against it, and
+    ``screen + excess == maximum`` at the bottom of ``_valid_acceptance_bound``
+    would otherwise demand a zero or negative budgetable excess.  That is the
+    shape of D-125's ``successor_screen_exceeds_budget_ceiling`` refusal.
+    """
+
+    if not isinstance(generation, Mapping):
+        return False
+    if not _GENERATION_ROW_REQUIRED_KEYS.issubset(set(generation)):
+        return False
+    catalog_ids = generation["epoch_catalog_ids"]
+    session_ids = generation["registration_session_ids"]
+    counts = (generation["prior_observation_count"], generation["cutoff_sequence"])
+    operatives = generation["operatives"]
+    if not isinstance(operatives, Mapping):
+        return False
+    # ABSENT and MALFORMED are different: `None` is a generation with no
+    # predecessor, while a present value that will not parse as a Decimal --
+    # including a non-string such as `0`, which is why the `is None` test comes
+    # BEFORE `_decimal` -- is a broken row and refuses.
+    predecessor_lexeme = generation["predecessor_ceiling_s"]
+    predecessor: Decimal | None = None
+    # The two lineage fields are JOINTLY present or JOINTLY absent.  Naming a
+    # predecessor while nulling its ceiling would otherwise take the genesis
+    # arm below and launder exactly the violation the envelope relation exists
+    # to refuse: a ceiling that fell below the predecessor's, with the fence
+    # switched off by emptying one field rather than by being satisfied.
+    if predecessor_lexeme is None and (
+        generation.get("predecessor_acceptance_id") is not None
+    ):
+        return False
+    if predecessor_lexeme is not None:
+        predecessor = _decimal(predecessor_lexeme)
+        # The predecessor's ceiling is READ BACK from the predecessor's own
+        # registered row, so a lineage cannot be rebased by editing one number
+        # in the successor's row -- and a present value that will not parse
+        # dies here too, because it is `None` and no registered Decimal equals
+        # `None`.  One term, one job: an unparseable predecessor is not silently
+        # promoted to an absent one.
+        predecessor_row = _D102_GENERATION_DERIVATIONS.get(
+            generation.get("predecessor_acceptance_id")
+        )
+        predecessor_operatives = (
+            predecessor_row.get("operatives")
+            if isinstance(predecessor_row, Mapping)
+            else None
+        )
+        registered = (
+            _decimal(predecessor_operatives.get("maximum_budgetable_drift_s"))
+            if isinstance(predecessor_operatives, Mapping)
+            else None
+        )
+        if registered is None or registered != predecessor:
+            return False
+    drift = _decimal(operatives.get("maximum_budgetable_drift_s"))
+    prediction = _decimal(generation["prediction_99_two_draw_s"])
+    screen = _decimal(operatives.get("bracket_screen_s"))
+    if (
+        drift is None
+        or prediction is None
+        or screen is None
+        or drift
+        != (prediction if predecessor is None else max(predecessor, prediction))
+        or not screen < drift
+    ):
+        return False
+    if not all(
+        isinstance(count, int) and not isinstance(count, bool) and count > 0
+        for count in counts
+    ):
+        return False
+    # The cutoff sequence is TWO ledger rows per observation (a reservation and
+    # a finalization).  That relation is exact for a prefix built only from the
+    # genesis import, and it is deliberately NOT imposed on a live prefix, whose
+    # sessions add open and abort control rows the observation count does not
+    # predict.
+    if (
+        generation["prior_prefix_mode"] == PRIOR_PREFIX_MODE_IMPORT_ONLY
+        and generation["cutoff_sequence"]
+        != 2 * generation["prior_observation_count"]
+    ):
+        return False
+    return (
+        isinstance(catalog_ids, tuple)
+        and bool(catalog_ids)
+        and all(isinstance(item, str) and item for item in catalog_ids)
+        and len(set(catalog_ids)) == len(catalog_ids)
+        and generation["prior_prefix_mode"] in _PRIOR_PREFIX_MODES
+        and generation["screen_rule"] in _REGISTERED_SCREEN_RULES
+        and isinstance(session_ids, tuple)
+        and all(isinstance(item, str) and item for item in session_ids)
+        and len(set(session_ids)) == len(session_ids)
+        and (
+            bool(session_ids)
+            is (
+                generation["prior_prefix_mode"]
+                == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE
+            )
+        )
+    )
 
 
 def acceptance_generation_operatives(
@@ -474,10 +709,38 @@ def _valid_acceptance_bound(value: Any) -> bool:
     # identity, never by the live default, so every registered generation keeps
     # validating against the member table it was actually derived from.
     generation = _D102_GENERATION_DERIVATIONS.get(value.get("acceptance_id"))
-    if generation is None:
+    if generation is None or not _registered_generation_row_is_complete(generation):
         return False
     expected_n = generation["corpus_n"]
     operative_values = generation["operatives"]
+    prefix_mode = generation["prior_prefix_mode"]
+    registered_epoch_catalog_ids = set(generation["epoch_catalog_ids"])
+    # The TARGET epoch is the catalog entry that equals the artifact's own
+    # identity: exactly one, or the artifact does not unambiguously bind the
+    # epoch it claims.  A generation whose corpus was captured after an epoch
+    # change carries the predecessor's epoch in the catalog too, so the target
+    # can no longer be the single literal `d079_epoch` it was through r6.
+    epoch_catalog = prior.get("epoch_catalog") if isinstance(prior, Mapping) else None
+    target_epoch_ids = (
+        [
+            epoch_id
+            for epoch_id, epoch in epoch_catalog.items()
+            if epoch == identity
+        ]
+        if isinstance(epoch_catalog, Mapping)
+        else []
+    )
+    # A live-prefix generation declares which ledger session each prior-set row
+    # came from, so the registration the completeness check ranges over is
+    # ledger-bound rather than asserted.
+    expected_observation_keys = {
+        "content_id",
+        "epoch_id",
+        "disposition",
+        "attempt_id",
+    }
+    if prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE:
+        expected_observation_keys = expected_observation_keys | {"session_id"}
     if (
         not role_valid
         or value.get("acceptance_id") not in allowed_acceptance_ids
@@ -520,8 +783,8 @@ def _valid_acceptance_bound(value: Any) -> bool:
             "ledger_schema": cutoff.get("ledger_schema"),
         }
         or not isinstance(prior.get("epoch_catalog"), Mapping)
-        or set(prior["epoch_catalog"]) != {"d079_epoch"}
-        or prior["epoch_catalog"].get("d079_epoch") != identity
+        or set(prior["epoch_catalog"]) != registered_epoch_catalog_ids
+        or len(target_epoch_ids) != 1
         or not isinstance(prior.get("observations"), list)
         or not isinstance(derivation, Mapping)
         or derivation.get("numeric_semantics") != "decimal_source_lexemes"
@@ -554,23 +817,31 @@ def _valid_acceptance_bound(value: Any) -> bool:
     if len(set(member_ids)) != expected_n or member_ids != sorted(member_ids):
         return False
 
+    target_epoch_id = target_epoch_ids[0]
     prior_ids: list[str] = []
     prior_attempt_ids: list[str] = []
     prior_member_ids: set[str] = set()
+    prior_row_by_content_id: dict[str, Mapping[str, Any]] = {}
     for observation in prior["observations"]:
         if (
             not isinstance(observation, Mapping)
-            or set(observation)
-            != {"content_id", "epoch_id", "disposition", "attempt_id"}
+            or set(observation) != expected_observation_keys
             or not _valid_sha256(observation.get("content_id"))
-            or observation.get("epoch_id") != "d079_epoch"
+            or observation.get("epoch_id") not in registered_epoch_catalog_ids
             or observation.get("disposition") not in allowed_prior_dispositions
             or not isinstance(observation.get("attempt_id"), str)
             or not observation.get("attempt_id")
+            or "session_id" in expected_observation_keys
+            and not (
+                observation.get("session_id") is None
+                or isinstance(observation.get("session_id"), str)
+                and observation["session_id"]
+            )
         ):
             return False
         prior_ids.append(observation["content_id"])
         prior_attempt_ids.append(observation["attempt_id"])
+        prior_row_by_content_id[observation["content_id"]] = observation
         if observation["attempt_id"] in member_ids:
             prior_member_ids.add(observation["attempt_id"])
     if (
@@ -587,9 +858,14 @@ def _valid_acceptance_bound(value: Any) -> bool:
             )
             for disposition in sorted(allowed_prior_dispositions)
         }
+        # Prior-set size and cutoff sequence are registered per generation, not
+        # literal: every generation issued to date was derived from the 38-row
+        # genesis import at ledger sequence 76, and a successor derived from a
+        # longer ledger must register its own pair rather than move a literal
+        # every predecessor still validates against.
         if (
-            len(prior["observations"]) != 38
-            or cutoff["sequence"] != 2 * len(prior["observations"])
+            len(prior["observations"]) != generation["prior_observation_count"]
+            or cutoff["sequence"] != generation["cutoff_sequence"]
             or backfill.get("candidate_inventory") != disposition_counts
         ):
             return False
@@ -606,6 +882,73 @@ def _valid_acceptance_bound(value: Any) -> bool:
     }
     if None in member_content_ids or not member_content_ids.issubset(set(prior_ids)):
         return False
+    # PURITY.  Every corpus member's own prior-set row must carry the epoch the
+    # artifact binds.  Without this a member captured under the PREVIOUS epoch
+    # could be averaged into the screens that judge the new one, which is the
+    # cross-epoch contamination the per-row epoch id exists to prevent.
+    for content_id in member_content_ids:
+        member_row = prior_row_by_content_id.get(content_id)
+        if member_row is None or member_row["epoch_id"] != target_epoch_id:
+            return False
+    # COMPLETENESS.  A generation whose corpus was captured live must account
+    # for every valid observation of its own registration: each one is either a
+    # member or a named, mechanism-based exclusion.  Selecting members by
+    # outcome after the values are known would fit the new screens to the old
+    # ones, and nothing else in the artifact would show it.
+    if prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE:
+        registration_session_ids = set(generation["registration_session_ids"])
+        registration_valid_ids: set[str] = set()
+        for observation in prior["observations"]:
+            if (
+                observation["disposition"] != "valid"
+                or observation["epoch_id"] != target_epoch_id
+            ):
+                continue
+            # A valid same-epoch row from OUTSIDE this registration refuses
+            # issuance rather than being silently absorbed into the corpus:
+            # its capture conditions were never pre-registered.
+            if observation.get("session_id") not in registration_session_ids:
+                return False
+            registration_valid_ids.add(observation["content_id"])
+        notes = value.get("derivation_notes")
+        excluded = notes.get("excluded_members") if isinstance(notes, Mapping) else None
+        if not isinstance(excluded, list):
+            return False
+        excluded_content_ids: set[str] = set()
+        for entry in excluded:
+            if (
+                not isinstance(entry, Mapping)
+                or set(entry)
+                != {
+                    "member_id",
+                    "manifest_sha256",
+                    "instrument_evidence_sha256",
+                    "reason",
+                }
+                or not isinstance(entry.get("member_id"), str)
+                or not entry["member_id"]
+                or not _valid_sha256(entry.get("manifest_sha256"))
+                or not _valid_sha256(entry.get("instrument_evidence_sha256"))
+                or entry.get("reason") not in REGISTERED_CORPUS_EXCLUSION_REASONS
+            ):
+                return False
+            # The exclusion entry carries no content id, so it is matched into
+            # the prior set by the id derived from its two artifact hashes.
+            excluded_content_id = content_id_from_artifact_hashes(
+                {
+                    "manifest.json": entry["manifest_sha256"],
+                    "instrument_evidence.json": entry["instrument_evidence_sha256"],
+                }
+            )
+            if excluded_content_id is None:
+                return False
+            excluded_content_ids.add(excluded_content_id)
+        if (
+            len(excluded_content_ids) != len(excluded)
+            or member_content_ids & excluded_content_ids
+            or member_content_ids | excluded_content_ids != registration_valid_ids
+        ):
+            return False
 
     statistics = derivation.get("source_statistics")
     rounding = derivation.get("rounding")
@@ -674,6 +1017,13 @@ def _valid_acceptance_bound(value: Any) -> bool:
     screen = Decimal(operative_values["bracket_screen_s"])
     maximum = Decimal(operative_values["maximum_budgetable_drift_s"])
     excess = Decimal(operative_values["max_budgetable_excess_s"])
+    # The bracket screen's derivation rule is generation-keyed.  Every issued
+    # generation to date was derived under `range_equals_screen`: the corpus
+    # range quantized to 1e-6 s IS the screen.  A generation registering any
+    # other rule refuses here until that rule is implemented, so a successor
+    # derived under a D-125 envelope cannot pass by defaulting to this one.
+    if generation["screen_rule"] != SCREEN_RULE_RANGE_EQUALS_SCREEN:
+        return False
     return (
         (max(values) - min(values)).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_EVEN
@@ -1293,6 +1643,71 @@ def _candidate_from_observation(
     )
 
 
+def _session_record_kind(session: Any) -> str:
+    """Read one session record's kind, defaulting to ``bracket``.
+
+    The kind is stamped on the session's open receipt.  This reader is
+    deliberately defensive: a ledger written before that field existed carries
+    no kind at all, and the only safe reading of a missing kind is the ordinary
+    bracket session every historical row belongs to.
+    """
+
+    kind = getattr(session, "session_kind", None)
+    return kind if isinstance(kind, str) and kind else SESSION_KIND_BRACKET
+
+
+def _observation_session_kind(
+    observation: Any,
+    ledger_snapshot: CalibrationLedgerSnapshot,
+) -> str:
+    """Resolve one ledger ROW's session kind.
+
+    A row belonging to no session, or to a session the ledger holds without a
+    kind, is ``bracket`` -- that is every row written before derivation kinds
+    existed.  A row naming a session the snapshot CANNOT resolve is neither:
+    it returns ``SESSION_KIND_UNRESOLVED`` and is barred from the endpoint
+    universe.
+    """
+
+    kind = getattr(observation, "session_kind", None)
+    if isinstance(kind, str) and kind:
+        return kind
+    session_id = getattr(observation, "bracket_session_id", None)
+    if not isinstance(session_id, str) or not session_id:
+        return SESSION_KIND_BRACKET
+    session = ledger_snapshot.bracket_session_by_id.get(session_id)
+    if session is None:
+        # FAIL CLOSED.  A row that names a session the snapshot does not hold
+        # is not a bracket endpoint by default; nothing here can tell whether
+        # the missing session was a derivation night, so the row is barred from
+        # the endpoint universe rather than admitted into it.
+        return SESSION_KIND_UNRESOLVED
+    return _session_record_kind(session)
+
+
+def _is_derivation_kind_observation(
+    observation: Any,
+    ledger_snapshot: CalibrationLedgerSnapshot,
+) -> bool:
+    """Whether a row was captured to DERIVE a future acceptance.
+
+    A derivation-only capture is taken under a deliberately stale acceptance
+    to build the successor's corpus; it is never evidence that a claim window
+    was bracketed.  After the successor issues, such a row is same-epoch and
+    inside the endpoint horizon, so without this predicate a corpus member
+    would end up judging itself (D-102 cl.2).
+
+    A row whose session cannot be resolved is barred for the same reason: it
+    may be a derivation row, and admitting it on that doubt is the fail-open
+    reading.
+    """
+
+    return _observation_session_kind(observation, ledger_snapshot) in (
+        SESSION_KIND_DERIVATION,
+        SESSION_KIND_UNRESOLVED,
+    )
+
+
 def _capture_pipeline_refusal_for_observation(
     observation: LedgerObservation,
 ) -> str | None:
@@ -1335,6 +1750,15 @@ def discover_calibration_candidates(
             or observation.is_historical_import
             or observation.bracket_session_id is not None
             and observation.bracket_session_id not in finalized_session_ids
+            # Derivation-only rows are skipped, never returned as a discovery
+            # failure: they are ordinary valid observations that simply cannot
+            # bracket a claim window.  A `return None` here would empty the
+            # whole enumeration (the `return ()` on a `None` candidate at the
+            # bottom of this loop), and this skip must stay
+            # symmetric with the `registered_valid` universe below or the
+            # anti-withholding equality every caller satisfies exactly would
+            # break on a night that captured any of them.
+            or _is_derivation_kind_observation(observation, ledger_snapshot)
         ):
             continue
         if _capture_pipeline_refusal_for_observation(observation) is not None:
@@ -1350,7 +1774,18 @@ def _prior_set_matches_import_cutoff_prefix(
     artifact: Mapping[str, Any],
     ledger_snapshot: CalibrationLedgerSnapshot,
 ) -> bool:
-    """Bind issuance prior-set data to the import-marked cutoff prefix."""
+    """Bind issuance prior-set data to the cutoff prefix its generation allows.
+
+    The prefix rule is generation-keyed (ruling 46 §R-b V6).  Under
+    ``import_only`` — every generation issued to date — a single live row at or
+    below the cutoff refuses, which is what makes the genesis import the sole
+    provenance of those corpora.  Under ``import_plus_live`` the prefix may
+    also hold live rows that reached a terminal disposition and carry a content
+    id, including the finalized slots of a session closed by abort; a pending
+    row (no content id) or an ``abandoned`` row (classification ``unresolved``)
+    still refuses, because neither is an observation anything may be derived
+    from.
+    """
 
     cutoff = artifact["ledger_cutoff"]
     prefix = tuple(
@@ -1363,8 +1798,37 @@ def _prior_set_matches_import_cutoff_prefix(
     # prefix rows, must satisfy the exact marker-bound comparison below.
     if not prefix and artifact.get("artifact_role") == "schema_fixture_unissued":
         return True
-    if any(not observation.is_historical_import for observation in prefix):
+    generation = _D102_GENERATION_DERIVATIONS.get(artifact.get("acceptance_id"))
+    if generation is None or not _registered_generation_row_is_complete(generation):
         return False
+    prefix_mode = generation["prior_prefix_mode"]
+    live_prefix_allowed = prefix_mode == PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE
+    if live_prefix_allowed:
+        # `registration_session_ids` must name DERIVATION-kind sessions, and the
+        # ledger is what says so.  Without this, a registration could point at
+        # ordinary claim-window bracket sessions, and the completeness check
+        # would then treat captures taken to MEASURE something as if they had
+        # been pre-registered to derive the successor's screens.  A session the
+        # ledger does not hold, or one whose kind is missing (read as
+        # `bracket`), refuses.
+        sessions = ledger_snapshot.bracket_session_by_id
+        for session_id in generation["registration_session_ids"]:
+            session = sessions.get(session_id)
+            if (
+                session is None
+                or _session_record_kind(session) != SESSION_KIND_DERIVATION
+            ):
+                return False
+    for observation in prefix:
+        if observation.is_historical_import:
+            continue
+        if (
+            not live_prefix_allowed
+            or observation.content_id is None
+            or observation.classification_disposition
+            not in _LIVE_PREFIX_ADMITTED_DISPOSITIONS
+        ):
+            return False
     catalog = artifact["prior_observation_set"]["epoch_catalog"]
     expected = {
         (
@@ -1373,9 +1837,10 @@ def _prior_set_matches_import_cutoff_prefix(
             row["disposition"],
             row["epoch_id"],
         )
+        + ((row.get("session_id"),) if live_prefix_allowed else ())
         for row in artifact["prior_observation_set"]["observations"]
     }
-    observed: set[tuple[str, str, str, str]] = set()
+    observed: set[tuple[Any, ...]] = set()
     for observation in prefix:
         epoch_ids = [
             epoch_id
@@ -1390,6 +1855,14 @@ def _prior_set_matches_import_cutoff_prefix(
                 observation.content_id,
                 observation.classification_disposition,
                 epoch_ids[0],
+            )
+            # A live-prefix artifact must also declare, per row, the ledger
+            # session it came from; that is what makes the registration the
+            # completeness check ranges over ledger-bound rather than asserted.
+            + (
+                (observation.bracket_session_id,)
+                if live_prefix_allowed
+                else ()
             )
         )
     return observed == expected and len(observed) == len(prefix)
@@ -1609,6 +2082,11 @@ def evaluate_calibration_bracket(
             observation.bracket_session_id is None
             or observation.bracket_session_id in finalized_session_ids
         )
+        # The same derivation-kind skip as `discover_calibration_candidates`.
+        # Both sites move together: dropping it here alone would put a row in
+        # the registered universe that discovery never offers, and the exact
+        # equality below would refuse every claim window on the machine.
+        and not _is_derivation_kind_observation(observation, ledger_snapshot)
     }
     supplied_valid = {
         (
@@ -2114,6 +2592,12 @@ def calibration_bracket_for_bundles(
                     for session in ledger_snapshot.bracket_sessions
                 )
             )
+            # Third site of the same universe: this count is compared to the
+            # discovery enumeration directly above, so a derivation row left in
+            # here would make every window on the machine refuse
+            # `calibration_ledger_custody_invalid` for as long as the row is on
+            # the ledger, which is forever.
+            and not _is_derivation_kind_observation(observation, ledger_snapshot)
             for observation in ledger_snapshot.observations
         )
         if ledger_snapshot.valid and len(candidates) != registered_valid:
