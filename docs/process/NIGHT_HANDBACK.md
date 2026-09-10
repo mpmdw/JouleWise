@@ -133,8 +133,9 @@ and the plan root before any real plan, and then sends the stage-1 plan
 email to Ed before any `DIAGNOSTIC_NO_PACK` plan is armed. Accept only
 `night_refused_agent_present` as a receipt refusal; cure any other cause
 before re-arming; never re-arm the same plan on the same signature twice.
-Item 1, the `cold_start.json` deadline derivation, remains desk work
-separate from this night.
+Item 1, the `cold_start.json` deadline derivation, was desk work
+separate from this night and is CLOSED as of 2026-09-09 ~17:00 PDT (derivation 70,
+fresh capture 104: median 5158 ms, deadline 300 s).
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's
 `measurement_head`; never install the two night agents from the

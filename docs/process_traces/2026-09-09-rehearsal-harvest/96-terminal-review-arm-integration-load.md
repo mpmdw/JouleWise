@@ -81,3 +81,7 @@ both clean); root cause of the Linux CI failure established by consult 99 before
 merge head; full-suite replay alone rc 0 with zero failures twice (5649 at 0661d1d2, 5650 at 0290311a). Not proven: live machine readiness
 (synthetic observations by design, per 99gn); the seat's burner-run evidence was never produced — the four-shard replays are the evidence
 of record.
+
+## Addendum (2026-09-09 ~17:05 PDT, consistency sweep 106 F4)
+
+Counts at the final content head 9dbacb40: 184 → 188 test methods (four added: the two integration refusal/skew tests, the launch-window subprocess test, and round 2's ArmReadinessIntegrationClockPortabilityTests); tests/fixtures/arm_clock.py is 37 lines after N-1/N-2. The prune section's "three added tests" and "30-line fixture" describe 6881709d.
