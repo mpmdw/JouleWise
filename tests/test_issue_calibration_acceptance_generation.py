@@ -544,6 +544,21 @@ else:
             source,
         )
 
+    def test_chain_readiness_call_puts_globals_before_the_subcommand_and_binds_the_night_ledger(self) -> None:
+        """recover_calibration_ledger.py declares --ledger/--head-pin on its top-level parser; placed
+        after `readiness` the real CLI exits 2 (delta re-audit 68 D-9). Dropping them silently retargets
+        the check at DEFAULT_LEDGER_PATH instead of the night's ledger (D-10). The stubbed harness cannot
+        see argparse, so the invocation shape is pinned in the source."""
+        source = CHAIN.read_text(encoding="utf-8")
+        self.assertIn(
+            '"$PY" "$REPO/scripts/recover_calibration_ledger.py" \\\n'
+            '    --ledger "$CALIBRATION_LEDGER" \\\n'
+            '    --head-pin "$LEDGER_HEAD_PIN" \\\n'
+            '    readiness \\\n'
+            '    --phase pre-reserve',
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
