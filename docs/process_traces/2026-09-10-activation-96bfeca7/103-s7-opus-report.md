@@ -430,3 +430,131 @@ bakes in is the reviewed one.
   `out_dir = output_root / attempt_id` in bracket mode, which is byte-identical
   to the locator the wrapper declares — no mid-night mismatch. The clean-tree
   requirement is now also written into the region's arm order as step 1.
+
+---
+
+# Fix round 2 (2026-09-10, on top of 2d43c985)
+
+Delta 106 read first. It upheld all eight round-1 cures (16/16 cuts killed) and
+left three residuals — two of them introduced by round 1 — plus three nits.
+All six are fixed; each has a defect-shaped test and a mutation cut.
+
+## D-1 — `--verify`, so the documented arm step 4 is executable
+
+Round 1's arm order said "emit a second copy to a scratch path and require
+identical bytes", which the generator refuses (`--out` must equal the plan's
+`chain_path`) — the tripwire step that turns B-1's baked digest into a
+*detection* could not be run at all.
+
+`--verify` (with the same emit-mode inputs) **writes nothing**: it re-renders the
+wrapper from those inputs and compares it byte-for-byte with the installed file
+at the plan's `chain_path`, and compares the sidecar with `_sidecar_text` of the
+re-derived digest. Match → `VERIFIED <path> sha256=…`, rc 0. Mismatch → rc 3 and
+`FAIL wrapper bytes differ from re-derivation: re-derived sha256=… installed
+sha256=… at <path>`. Region step 4 now prescribes it, and says explicitly why the
+scratch-path route does not exist (the plan and the artifact must not be able to
+disagree).
+
+Tests: `test_verify_mode_compares_the_installed_wrapper_without_writing` (verify
+passes on a fresh emission and leaves the bytes untouched; then the clone's chain
+is edited → rc 3 with both digests; **then the sidecar is rewritten to agree with
+the re-derived digest and verify must still refuse** — that last step is what
+isolates the wrapper-byte comparison, and it is why cut S1 kills the test) and
+`test_verify_mode_catches_a_tampered_sidecar`.
+
+## D-2 — the last silent refusal is gone
+
+The unguarded `observed_plan_id="$(jq -er '.plan_id' "$PLAN")"` died under
+`set -e` with rc 1 and an empty stderr (missing `plan_id`) or rc 5 with a raw jq
+parse error (corrupt plan) — the F4 defect surviving under a comment that claimed
+it could not. Now:
+
+```
+/usr/bin/jq -e . "$PLAN" >/dev/null 2>&1 || route_refuse 'frozen plan is not valid JSON'
+observed_plan_id="$(/usr/bin/jq -er '.plan_id' "$PLAN" 2>/dev/null)" || route_refuse 'frozen plan has no plan_id'
+```
+
+with a comment stating why the guard exists. Test:
+`test_a_frozen_plan_without_a_plan_id_refuses_with_a_reason` drives both inputs
+(`{ not json` and `{"other": 1}`) through a live wrapper and asserts
+`stderr.strip() == "FAIL <reason>"` exactly, rc 1, `calls == []`.
+
+## D-3 — the ruling reference is validated and escaped
+
+`--slot-count-ruling` was interpolated raw into the header **above all wrapper
+code**; a newline injected a live line and `zsh -n` (arm step 5) accepted it.
+Now `_validated_ruling` refuses anything that is not a single line of
+`[A-Za-z0-9._:/#@ -]+`, runs it through `_census_clean`, and the header emits it
+through `_quote` (the same escaping path as every other literal, which itself
+refuses embedded quotes and control characters). Validation runs at generation
+time, before anything is written. Test:
+`test_a_ruling_reference_that_could_inject_code_refuses` over four values —
+newline injection, `$(…)`, a quote-breakout, and empty — each rc 2 with no file
+written.
+
+## Nits
+
+**(a)** `test_every_routing_refusal_names_its_reason` parametrises eleven refusal
+paths the delta listed as unasserted (`measurement_root` unset / relative /
+control characters, bad `MEASUREMENT_HEAD`, wrong plan id, wrong root, wrong
+head, unreadable git HEAD, HEAD ≠ `measurement_head`, non-executable venv Python,
+wrong frozen plan id) by mutating the environment or the fixture clone, and
+asserts exact `FAIL <reason>` stderr, rc 1 and `calls == []` for each.
+
+**(b)** The region now separates the two 300 s budgets before either is used: the
+**pre-settle allowance** (chain preflight + readiness + reservation, plus the
+driver's pre-launch work, which the window must hold on top of the programmed
+span) and the **courier allowance** (added after the window ends, before the
+dead-man). The refusal paragraph names each. Pinned by the region test.
+
+**(c)** `git` is now `/usr/bin/git`, so every external command in the wrapper is
+absolute — the driver hands the chain `os.environ.copy()`, PATH included. Test:
+`test_the_wrapper_calls_every_external_command_by_absolute_path` checks the
+non-comment lines only.
+
+## Fix-round-2 cut table
+
+| # | Cut | Test | Result |
+|---|---|---|---|
+| S1 | `verify`: wrapper-byte comparison → `if False:` | `test_verify_mode_compares_the_installed_wrapper_without_writing` | Ran 1, FAILED (1), restored |
+| S2 | `verify`: sidecar comparison → `if False:` | `test_verify_mode_catches_a_tampered_sidecar` | Ran 1, FAILED (1), restored |
+| S3 | restore the unguarded `jq` assignment | `test_a_frozen_plan_without_a_plan_id_refuses_with_a_reason` | Ran 1, FAILED (2 subtests), restored |
+| S4 | ruling character class → `if False:` | `test_a_ruling_reference_that_could_inject_code_refuses` | Ran 1, FAILED (4 subtests), restored |
+| S5 | garble one refusal reason (venv Python) | `test_every_routing_refusal_names_its_reason` | Ran 1, FAILED (1), restored |
+| S6 | `/usr/bin/git` → `git` | `test_the_wrapper_calls_every_external_command_by_absolute_path` | Ran 1, FAILED (1), restored |
+| S7 | delete the two-budget gloss from the region | `test_the_region_documents_the_third_file_and_the_arm_order` | Ran 1, FAILED (1), restored |
+
+7/7 killed. S1 initially SURVIVED (rc 0): the drift it induced was caught by the
+sidecar branch rather than the byte comparison, so the test was not isolating the
+line it was meant to pin. The test was strengthened (rewrite the sidecar to agree
+with the re-derived digest, then require the refusal to persist) and the cut then
+killed it — recorded because a surviving cut is the only honest way to find a
+test that passes for the wrong reason.
+
+## Fix-round-2 runs and footprint
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_gen_derivation_night tests.test_issue_calibration_acceptance_generation \
+    tests.test_run_night tests.test_docs_freshness
+Ran 239 tests in 79.358s
+OK                                                SUITE_RC=0
+
+compileall_rc=0
+PASS generated derivation-night wrapper region matches        d_rc=0
+PASS generated Phase D matches pinned runbook bytes           g2_rc=0
+
+$ git status --short
+ M docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md
+ M scripts/gen_derivation_night.py
+ M tests/test_gen_derivation_night.py
+```
+
+`scripts/night_chains/calibration_derivation_only.zsh` and
+`tests/test_issue_calibration_acceptance_generation.py` are untouched by this
+round, so the chain digest the wrapper bakes in is still the reviewed one
+(`d6d23bff…70a65`).
+
+**Delta 106's N-3 is now closed, not accepted:** every external command in the
+emitted wrapper is absolute. Nothing else in 106 was left open; its remaining
+observations were the three D-items and two nits, all fixed above.
