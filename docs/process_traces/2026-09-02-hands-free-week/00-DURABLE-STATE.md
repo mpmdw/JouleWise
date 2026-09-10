@@ -808,3 +808,9 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   dated addenda to terminal reviews 80/96; F5 item-1 disposition pointers in NIGHT_HANDBACK and runbook 67; F6 chronology labels in this
   file's earlier UPDATE lines ("~09:20", "~09:35") were lead clock estimates preceding their commits — committer times are authoritative.
   NEXT EXACT ACTION unchanged: runbook 67 in the 2026-09-10 03:00–06:30 PDT window.
+- UPDATE 2026-09-09 ~20:50 PDT (interactive magistrate, record 114): PR #312 MERGED at `7e294284` (T0 clock refusal coverage; tests only;
+  gates: refuters 110/111, terminal review 112, replay 113 rc 0, CI green). After T38e the headless activations exited three times with
+  `usage_exhausted` (18:28/18:48/19:23 PDT) and the unplugged laptop idle-slept (watchdog CLOCK_UNCERTAIN 20:37). Now on AC with
+  `sleep 0` / `powermode 0`; a caffeinate LaunchAgent was tried and removed because T-0 authoring refuses any stray caffeinate. The
+  STOP switch held the watchdog during this bookkeeping and is lifted at hand-back. Interactive sessions must be closed before the
+  09-10 install window (agent census). NEXT EXACT ACTION unchanged: runbook 67 in the 2026-09-10 03:00–06:30 PDT window.
