@@ -474,8 +474,10 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
         and generation["screen_rule"] in _REGISTERED_SCREEN_RULES
         and (
             generation["screen_rule"] not in _D125_RULING_REQUIRED_SCREEN_RULES
-            or isinstance(generation.get("d125_ruling"), str)
-            and bool(generation.get("d125_ruling"))
+            or (
+                isinstance(generation.get("d125_ruling"), str)
+                and bool(generation.get("d125_ruling"))
+            )
         )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
