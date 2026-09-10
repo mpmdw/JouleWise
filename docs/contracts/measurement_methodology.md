@@ -70,7 +70,10 @@ There is no skip disposition in a fixed-n campaign. A lightweight post-run
 display/screensaver/HID observation makes within-member transitions visible.
 Each admission attempt records its start and end times as clock readings
 (seconds since the Unix epoch, stored as binary64 floating-point numbers).
-Strict reduction then makes two containment checks, both refusing with
+Strict reduction (the consumer path that re-validates every admission
+input; frozen consumers never re-run it) then makes two containment
+checks; when either fails, or when the attempt's telemetry file is absent,
+empty or unparsable, the attempt refuses with
 `environment_admission_missing`. First, a duration check: the admitted
 baseline's duration, which the sampler produces by summing its per-sample
 elapsed intervals, must be positive and must not exceed the attempt's span,
@@ -79,8 +82,9 @@ which is the stored end time minus the stored start time, by more than
 carry an endpoint timestamp and an elapsed interval; the capture interval
 runs from the earliest (timestamp minus elapsed) to the latest timestamp,
 and it must start no more than 1 μs before the attempt's start time and
-end no more than 1 μs after the attempt's end time. A record without a
-finite timestamp and a positive elapsed interval refuses outright. The
+end no more than 1 μs after the attempt's end time. A record whose
+timestamp is not a finite number, or whose elapsed interval is not a
+positive integer count of nanoseconds, makes the attempt refuse. The
 1 μs allowance exists because the compared numbers were formed on
 different arithmetic paths (a sum of sampler intervals against a
 difference of stored clock readings, or a clock reading reconstructed from
@@ -309,7 +313,9 @@ Per decisions D-005 and D-014:
   both a complete 30-second wall-clock span and at least
   `coverage_fraction * sustained_window_s` of captured coverage
   (`coverage_fraction = 0.8` by default, so 24 s of the 30 s window), and
-  its duration-weighted idle-power mean satisfies the one-sided rule
+  the overlap-weighted mean of the readings' idle power (each retained
+  reading's mean power weighted by its overlap, both built below) satisfies
+  the one-sided rule
   `rolling_mean <= reference * (1 + tolerance)` (10% by the production
   policy), while thermal pressure is Nominal. A below-reference mean
   therefore counts as recovery. The evidence is a series of idle probes,
@@ -319,7 +325,8 @@ Per decisions D-005 and D-014:
   the probe began; its evidence end, taken when the probe returned; and its
   evidence start, the evidence end minus the probe's reported capture
   duration, but never earlier than the capture start (a probe that reports
-  no positive duration is credited its whole capture interval). The window
+  a zero or negative duration is credited its whole capture interval; one
+  that reports a non-numeric duration is credited nothing). The window
   cutoff is the current time minus 30 s. A reading is retained while its
   evidence end is later than the cutoff. A retained reading's clipped start
   is the later of its evidence start and the cutoff, and its overlap is its
@@ -334,16 +341,21 @@ Per decisions D-005 and D-014:
   that adds, for every retained reading with positive overlap, one ULP of
   its evidence end plus one ULP of its clipped start (0.477 μs per
   reading), plus one ULP of the coverage sum itself (4e-15 s at 24 s). The
-  term is the worst case of the rounding in the subtractions that formed
-  the sum, so it grows with the number of retained readings: 2.86 μs for
+  term is an upper bound on the rounding carried by the clock readings that
+  formed the sum (each endpoint can be off by half a step; the code charges
+  a whole step per endpoint), so it grows with the number of retained
+  readings: 2.86 μs for
   six readings and at most 3.34 μs for the seven that can overlap a 30 s
   window when each probe lasts at least its 5 s production length. At that
   policy a six-reading coverage deficit of 13 ULP (3.1 μs) refuses, and a
   10 μs deficit refuses under any policy that retains at most 20 readings.
   A shorter `subwindow_s` retains more readings and widens the term in
-  proportion (40 readings of 0.75 s: 19 μs), but even the schema's
-  smallest probe length of 1 ms caps the term near 14 ms, below one 100 ms
-  sample, so a missing sample refuses under every policy. An optional
+  proportion (40 readings of 0.75 s: 19 μs); for the production 30-second
+  window even the schema's smallest 1 ms probe length caps the term near
+  14 ms, below one 100 ms sample. Reaching a full sample would need about
+  210,000 retained readings (for example a 210 s window with 1 ms probes),
+  which no real probe cadence produces, so in practice a missing sample
+  refuses. An optional
   calibrated absolute ceiling is an additional upper cap and never an OR
   escape. The wait has a 5-minute cap; the cap is evaluated before release
   on every iteration, so recovery criteria first met at or after the
