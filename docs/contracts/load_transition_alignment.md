@@ -36,7 +36,8 @@ idle→load the target is `power >= threshold`; for load→idle it is
 `power <= threshold`.
 
 Let `a_i = S_i,start - M_i` and `b_i = S_i,end - M_i`. The frozen artifact
-arithmetic is:
+arithmetic is implemented by forming the endpoint offsets `a_i`, `b_i`
+first and then taking their midpoint:
 
 ```text
 offset_i                 = (a_i + b_i) / 2

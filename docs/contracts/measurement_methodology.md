@@ -68,6 +68,9 @@ failure either aborts (production) or records the exploratory-only,
 unwaivable `environment_admission_failed` claim barrier (`on_fail: flag`).
 There is no skip disposition in a fixed-n campaign. A lightweight post-run
 display/screensaver/HID observation makes within-member transitions visible.
+Numerical containment of each positive-duration baseline and its capture
+within the admission attempt allows at most 1 μs of epoch-representation
+discrepancy and never credits unobserved time.
 
 The sidecar is deliberately separate from `BenchmarkConfig`. Direct
 `joulewise run` without a sidecar retains legacy flag-only/non-enforcing
@@ -289,7 +292,10 @@ Per decisions D-005 and D-014:
   mean satisfies the one-sided rule
   `rolling_mean <= reference * (1 + tolerance)` (10% by the production
   policy), while thermal pressure is Nominal. A below-reference mean therefore
-  counts as recovery. An optional calibrated absolute ceiling is an
+  counts as recovery. Numerical completion allows 1 μs for span and, for
+  coverage, the greater of 1 μs and the summed endpoint ULPs of positive
+  overlap contributions plus one coverage-sum ULP; neither credits
+  unobserved time. An optional calibrated absolute ceiling is an
   additional upper cap and never an OR escape. The wait has a 5-minute cap;
   the cap is evaluated before release on every iteration, so recovery criteria
   first met at or after the deadline remain a `cap_hit` (with the late criteria

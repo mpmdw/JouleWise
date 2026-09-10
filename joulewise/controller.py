@@ -2516,6 +2516,7 @@ def cooldown_gate(
         readings = [reading for reading in readings if reading[2] > cutoff]
         weighted_sum = 0.0
         coverage_s = 0.0
+        coverage_rounding_s = 0.0
         retained_start_s: float | None = None
         for capture_start, evidence_start, evidence_end, value in readings:
             clipped_start = max(evidence_start, cutoff)
@@ -2523,6 +2524,9 @@ def cooldown_gate(
             weighted_sum += overlap_s * value
             coverage_s += overlap_s
             if overlap_s > 0.0:
+                coverage_rounding_s += (
+                    math.ulp(evidence_end) + math.ulp(clipped_start)
+                )
                 retained_capture_start = max(capture_start, cutoff)
                 retained_start_s = (
                     retained_capture_start
@@ -2552,8 +2556,11 @@ def cooldown_gate(
         required_coverage_s = (
             selected.coverage_fraction * selected.sustained_window_s
         )
-        span_complete = window_span_s + 1e-9 >= selected.sustained_window_s
-        coverage_complete = coverage_s + 1e-9 >= required_coverage_s
+        span_complete = window_span_s + 1e-6 >= selected.sustained_window_s
+        coverage_slack_s = max(
+            1e-6, coverage_rounding_s + math.ulp(coverage_s)
+        )
+        coverage_complete = coverage_s + coverage_slack_s >= required_coverage_s
         window_complete = span_complete and coverage_complete
         power_recovered = (
             rolling_mean is not None and rolling_mean <= effective_upper_w
