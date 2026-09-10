@@ -25,15 +25,23 @@ from unittest import mock
 
 from scripts import issue_calibration_acceptance_generation as issuer
 
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import math
 
 from joulewise.calibration_bracketing import (
+    _D102_GENERATION_DERIVATIONS,
+    ISSUED_ACCEPTANCE_REGISTRY,
     _registered_generation_row_is_complete,
+    _valid_acceptance_bound,
     load_calibration_acceptance_bound,
 )
+from joulewise.calibration_bracketing import _canonical_sha256
 from joulewise.calibration_ledger import SESSION_KIND_BRACKET
-from tests.fixtures.epoch_bootstrap.build import Slot, build_derivation_ledger
+from tests.fixtures.epoch_bootstrap.build import (
+    Slot,
+    build_derivation_ledger,
+    tamper_member_bundle,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -698,19 +706,13 @@ class PrepareCandidateTest(unittest.TestCase):
         self.assertEqual(payload["ledger_cutoff"]["sequence"], 82)
         self.assertEqual(len(payload["prior_observation_set"]["epoch_catalog"]), 2)
         self.assertEqual(len(payload["prior_observation_set"]["observations"]), 20)
-        self.assertEqual(payload["prospective_rederivation"]["triggers"],
-                         json.loads(R6.read_text())["prospective_rederivation"]["triggers"])
+        self.assertEqual(
+            set(payload["prospective_rederivation"]["triggers"]),
+            issuer.rederivation_triggers(
+                payload["registered_generation_row"]["corpus_doubling_trigger"]
+            ),
+        )
         self.assertEqual(len(payload["derivation_sha256"]), 64)
-
-    def test_derivation_digest_moves_with_an_operative_lexeme(self) -> None:
-        """`derivation_sha256` seals the decimal lexemes and rounding rules."""
-
-        self.assertEqual(self.run_issuer(self.wide), 0)
-        payload = self.payload()
-        baseline = payload["derivation_sha256"]
-        self.assertEqual(issuer.derivation_sha256(payload), baseline)
-        payload["decimal_derivation"]["ratified_operatives"]["bracket_screen_s"] = "0.011401"
-        self.assertNotEqual(issuer.derivation_sha256(payload), baseline)
 
     # ---- the corpus-size floor (addendum A-2) ---------------------------
 
@@ -921,50 +923,289 @@ class PrepareCandidateTest(unittest.TestCase):
 
     # ---- the candidate is not authority ---------------------------------
 
-    def test_emitted_candidate_is_refused_by_the_production_loader(self) -> None:
-        """`load_calibration_acceptance_bound` never authenticates a candidate."""
-
-        self.run_issuer(self.wide)
-        self.assertIsNone(load_calibration_acceptance_bound(self.out))
-
-    def test_emitted_row_satisfies_the_registered_row_validator(self) -> None:
-        """The row S3's table would carry passes `_registered_generation_row_is_complete`."""
-
-        self.run_issuer(self.wide)
-        row = dict(self.payload()["registered_generation_row"])
-        # JSON carries lists; S3's registry carries tuples.  Transport only.
-        row["epoch_catalog_ids"] = tuple(row["epoch_catalog_ids"])
-        row["registration_session_ids"] = tuple(row["registration_session_ids"])
-        self.assertTrue(_registered_generation_row_is_complete(row))
-
     def test_emitted_row_refuses_when_its_predecessor_ceiling_is_rebased(self) -> None:
         """The row's lineage fence is live, not decorative."""
 
         self.run_issuer(self.wide)
-        row = dict(self.payload()["registered_generation_row"])
-        row["epoch_catalog_ids"] = tuple(row["epoch_catalog_ids"])
-        row["registration_session_ids"] = tuple(row["registration_session_ids"])
+        row = self.registry_row()
         row["predecessor_ceiling_s"] = "0.0095"
         self.assertFalse(_registered_generation_row_is_complete(row))
 
-    # ---- the screen-rule seam (reported to S3) --------------------------
+    # ---- the screen rule, now registered by S3 --------------------------
 
-    def test_floor_bound_screen_names_an_unregistered_rule(self) -> None:
-        """SEAM: the floor branch is honest and S3 has registered no name."""
+    def registry_row(self) -> dict:
+        """The emitted row in the exact shape the registration will take.
 
-        self.assertEqual(self.run_issuer(self.floored), 0)
-        payload = self.payload()
-        outcomes = payload["derivation_notes"]["rule_outcomes"]
-        self.assertIs(outcomes["screen_floor_bound"], True)
-        self.assertEqual(
-            payload["registered_generation_row"]["screen_rule"],
-            issuer.SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+        `generation_row_for_registry` is the ONE home for the list-to-tuple
+        conversion, and it lives on the EMITTING side: S3's fences are
+        `isinstance(..., tuple)`, JSON has no tuple, and a row handed over
+        unconverted is refused silently.  The transaction seat that writes
+        `_D102_GENERATION_DERIVATIONS` calls this function; it does not
+        re-derive the conversion.
+        """
+
+        return issuer.generation_row_for_registry(
+            self.payload()["registered_generation_row"]
         )
-        self.assertIs(outcomes["screen_rule_registered_in_validator"], False)
-        row = dict(payload["registered_generation_row"])
-        row["epoch_catalog_ids"] = tuple(row["epoch_catalog_ids"])
-        row["registration_session_ids"] = tuple(row["registration_session_ids"])
-        self.assertFalse(_registered_generation_row_is_complete(row))
+
+    def assert_row_admitted(self, fixture: dict[str, Path]) -> dict:
+        self.assertEqual(self.run_issuer(fixture), 0)
+        row = self.registry_row()
+        self.assertEqual(row["screen_rule"], issuer.SCREEN_RULE_FLOORED_RANGE_ENVELOPE)
+        self.assertEqual(row["d125_ruling"], D125_REFERENCE)
+        self.assertEqual(
+            row["predecessor_acceptance_id"], "d079_calibration_acceptance_v2_n17_r6"
+        )
+        self.assertEqual(
+            row["predecessor_ceiling_s"],
+            _D102_GENERATION_DERIVATIONS["d079_calibration_acceptance_v2_n17_r6"][
+                "operatives"
+            ]["maximum_budgetable_drift_s"],
+        )
+        self.assertIsInstance(row["epoch_catalog_ids"], tuple)
+        self.assertIsInstance(row["registration_session_ids"], tuple)
+        self.assertTrue(_registered_generation_row_is_complete(row))
+        return row
+
+    def test_range_bound_corpus_row_is_admitted_alongside_r6(self) -> None:
+        """The envelope row S3 now registers, range arm."""
+
+        row = self.assert_row_admitted(self.wide)
+        outcomes = self.payload()["derivation_notes"]["rule_outcomes"]
+        self.assertIs(outcomes["screen_floor_bound"], False)
+        self.assertEqual(row["operatives"]["bracket_screen_s"], outcomes["quantized_range_s"])
+
+    def test_floor_bound_corpus_row_is_admitted_alongside_r6(self) -> None:
+        """The same rule name, floor arm — the n = 19 norm, not the exotic case."""
+
+        row = self.assert_row_admitted(self.floored)
+        outcomes = self.payload()["derivation_notes"]["rule_outcomes"]
+        self.assertIs(outcomes["screen_floor_bound"], True)
+        self.assertEqual(row["operatives"]["bracket_screen_s"], "0.010818")
+
+    def test_no_stale_seam_flag_or_warning_is_emitted(self) -> None:
+        """The screen rule is registered now; the old warning must be gone."""
+
+        self.run_issuer(self.wide)
+        self.assertNotIn("SEAM", self.printed)
+        self.assertNotIn(
+            "screen_rule_registered_in_validator",
+            json.dumps(self.payload()),
+        )
+
+    # ---- B1: the triggers are derived, never copied ---------------------
+
+    def test_emitted_triggers_are_derived_from_the_emitted_row(self) -> None:
+        """`prospective_rederivation.triggers` matches what the validator demands."""
+
+        self.run_issuer(self.wide)
+        payload = self.payload()
+        row = payload["registered_generation_row"]
+        self.assertEqual(row["corpus_doubling_trigger"], "corpus_doubles_from_20_to_40")
+        self.assertEqual(
+            set(payload["prospective_rederivation"]["triggers"]),
+            issuer.rederivation_triggers(row["corpus_doubling_trigger"]),
+        )
+        # The predecessor's own trigger names the predecessor's corpus and must
+        # NOT survive the copy that used to make this artifact unauthenticatable.
+        self.assertNotIn(
+            "corpus_doubles_from_17_to_34",
+            payload["prospective_rederivation"]["triggers"],
+        )
+
+    def test_only_the_candidate_label_stops_the_candidate_authenticating(self) -> None:
+        """The refusal REASON is `candidate_not_issued`, and nothing else.
+
+        Flipping the three label fields (and registering the row and the id, as
+        the D-138 transaction will) makes the production validator ADMIT the
+        artifact.  Any other shape defect — a copied trigger, a wrong digest
+        recipe, a missing block — shows up here as a still-refusing artifact.
+        """
+
+        self.run_issuer(self.wide)
+        payload = self.payload()
+        self.assertIsNone(load_calibration_acceptance_bound(self.out))
+        issued = json.loads(json.dumps(payload))
+        del issued["candidate_not_issued"]
+        issued["artifact_role"] = "issued"
+        issued["issuance"] = {
+            "status": "issued",
+            "claim_eligible": True,
+            "reason": payload["issuance"]["reason"],
+        }
+        issued["backfill_candidate"]["status"] = "issued"
+        issued["backfill_candidate"]["production_issuance_blocked"] = False
+        issued["derivation_sha256"] = issuer.derivation_sha256(issued)
+        acceptance_id = issued["acceptance_id"]
+        row = issuer.generation_row_for_registry(issued["registered_generation_row"])
+        with mock.patch.dict(_D102_GENERATION_DERIVATIONS, {acceptance_id: row}), \
+                mock.patch.dict(
+                    ISSUED_ACCEPTANCE_REGISTRY,
+                    {acceptance_id: {"path": self.out, "relative_path": str(self.out),
+                                     "file_sha256": "0" * 64}},
+                ):
+            self.assertTrue(_valid_acceptance_bound(issued))
+
+    # ---- B3: the realized df is proven before issuance ------------------
+
+    def test_realized_df_carries_a_two_route_quantile_proof(self) -> None:
+        """A df nobody pinned in a test still issues only with its own proof."""
+
+        rows = [Slot(v) for v in _grid(22, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "df21", rows)
+            self.assertEqual(self.run_issuer(fixture), 0)
+        proof = self.payload()["decimal_derivation"]["quantile_proof"]
+        self.assertEqual(proof["degrees_of_freedom"], 21)
+        self.assertEqual(proof["probabilities"], ["0.975", "0.995"])
+        self.assertEqual(proof["precision"], issuer.DECIMAL_WORK_PRECISION)
+        for probability in ("0.975", "0.995"):
+            self.assertGreaterEqual(
+                proof["closed_form_agreement_digits"][probability],
+                issuer.QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS,
+            )
+            self.assertLess(
+                Decimal(proof["forward_residuals"][probability]),
+                issuer.QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL,
+            )
+        # df 21 is not in the set any test pins, which is the point.
+        self.assertEqual(proof["quantiles"]["0.995"], "2.83135955802305001688")
+
+    def test_a_disagreeing_independent_route_refuses(self) -> None:
+        """`quantile_proof_failed`: no corpus issues on an unproven df."""
+
+        def wrong(probability: str, degrees_of_freedom: int) -> Decimal:
+            return issuer.student_t_quantile(probability, degrees_of_freedom) + 1
+        with mock.patch.object(issuer, "student_t_quantile_closed_form", wrong):
+            code = self.run_issuer(self.wide)
+        self.assert_refused(code, "quantile_proof_failed")
+
+    def test_a_failing_forward_check_refuses(self) -> None:
+        """The other half of the proof is a fence too, not a printed number."""
+
+        with mock.patch.object(
+            issuer, "QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL", Decimal(0)
+        ):
+            code = self.run_issuer(self.wide)
+        self.assert_refused(code, "quantile_proof_failed")
+
+    def test_the_closed_form_route_reproduces_r6_and_both_parities(self) -> None:
+        """The independent route is independently right, not merely agreeing."""
+
+        cases = {
+            (16, "0.995"): "2.92078162242509999197",
+            (18, "0.995"): "2.87844047273860811781",
+            (19, "0.975"): "2.09302405440830976918",
+        }
+        for (df, probability), expected in cases.items():
+            with self.subTest(df=df, p=probability):
+                value = issuer.student_t_quantile_closed_form(probability, df)
+                self.assertEqual(
+                    str(+value.quantize(Decimal(1).scaleb(-20))), expected
+                )
+
+    # ---- SF1: the custody-hash clause -----------------------------------
+
+    def test_a_manifest_edited_after_finalization_refuses(self) -> None:
+        """`_read_member_evidence` authenticates bundle bytes against the row."""
+
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(Path(tmp) / "tampered", rows)
+            tamper_member_bundle(fixture, "derivation-night-1-d06", "manifest.json")
+            code = self.run_issuer(fixture)
+        self.assert_refused(
+            code, "manifest.json does not match the ledger row"
+        )
+
+    # ---- SF2: addendum A-7 ----------------------------------------------
+
+    def test_a_valid_same_epoch_row_outside_the_registration_refuses(self) -> None:
+        """A-7: it is neither absorbed nor ignored; issuance stops."""
+
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "foreign", rows,
+                second_session=("derivation-night-foreign", [Slot("0.0260")]),
+            )
+            code = self.run_issuer(fixture)
+        self.assert_refused(code, "valid same-epoch observations outside this registration")
+
+    # ---- SF3: what the input seal covers --------------------------------
+
+    def test_the_input_seal_covers_every_derivation_input(self) -> None:
+        """Rewriting any input moves `derivation_input_sha256`."""
+
+        self.run_issuer(self.wide)
+        payload = self.payload()
+        baseline = payload["derivation_input_sha256"]
+        self.assertEqual(issuer.derivation_input_sha256(payload), baseline)
+        rewrites = {
+            "identity epoch": lambda p: p["identity_epoch"].__setitem__("os_build", "26A1"),
+            "ledger cutoff": lambda p: p["ledger_cutoff"].__setitem__("head_digest", "9" * 64),
+            "predecessor id": lambda p: p["registered_generation_row"].__setitem__(
+                "predecessor_acceptance_id", "d079_calibration_acceptance_v2_n19"
+            ),
+            "quantile proof": lambda p: p["decimal_derivation"]["quantile_proof"].__setitem__(
+                "degrees_of_freedom", 99
+            ),
+            "member lexeme": lambda p: p["derivation_corpus"]["members"][0].__setitem__(
+                "b_fiducial_s", "0.0201"
+            ),
+            "operative screen": lambda p: p["decimal_derivation"]["ratified_operatives"]
+            .__setitem__("bracket_screen_s", "0.011401"),
+        }
+        for label, rewrite in rewrites.items():
+            with self.subTest(input=label):
+                mutated = json.loads(json.dumps(payload))
+                rewrite(mutated)
+                self.assertNotEqual(issuer.derivation_input_sha256(mutated), baseline)
+        # Prose and the candidate label stay OUT, deliberately.
+        unchanged = json.loads(json.dumps(payload))
+        unchanged["derivation_notes"]["generation"] = "different prose"
+        self.assertEqual(issuer.derivation_input_sha256(unchanged), baseline)
+
+    def test_the_artifact_digest_uses_the_production_recipe(self) -> None:
+        """`derivation_sha256` is what `_valid_acceptance_bound` recomputes."""
+
+        self.run_issuer(self.wide)
+        payload = self.payload()
+        core = {k: v for k, v in payload.items() if k != "derivation_sha256"}
+        self.assertEqual(payload["derivation_sha256"], _canonical_sha256(core))
+
+    # ---- nits -----------------------------------------------------------
+
+    def test_the_default_acceptance_id_names_the_realized_epoch(self) -> None:
+        self.run_issuer(self.wide)
+        self.assertEqual(
+            self.payload()["acceptance_id"],
+            "d079_calibration_acceptance_v2_n20_25g83_r1",
+        )
+        self.assertEqual(
+            issuer.default_acceptance_id(19, {"os_build": "26A2"}),
+            "d079_calibration_acceptance_v2_n19_26a2_r1",
+        )
+
+    def test_the_quantile_pins_its_own_precision(self) -> None:
+        """Accuracy must not follow the caller's ambient Decimal context."""
+
+        with localcontext() as context:
+            context.prec = 15
+            value = issuer.student_t_quantile("0.995", 19)
+        self.assertEqual(
+            str(+value.quantize(Decimal(1).scaleb(-20))), "2.86093460646497919208"
+        )
+
+    def test_the_two_draw_rule_string_matches_r6(self) -> None:
+        """The rule string is sealed, so a paraphrase would move the digest."""
+
+        self.assertEqual(
+            issuer.TWO_DRAW_PREDICTION_RULE,
+            json.loads(R6.read_text())["decimal_derivation"][
+                "two_draw_prediction_derivation"
+            ]["rule"],
+        )
 
 
 if __name__ == "__main__":

@@ -113,8 +113,15 @@ def build_derivation_ledger(
     *,
     session_id: str = SESSION_ID,
     session_kind: str = SESSION_KIND_DERIVATION,
+    second_session: tuple[str, Sequence[Slot]] | None = None,
 ) -> dict[str, Path]:
-    """Create a Git-committed ledger holding one closed derivation session."""
+    """Create a Git-committed ledger holding one or two closed sessions.
+
+    ``second_session`` writes a further derivation session into the SAME ledger
+    without naming it in the registration, which is the addendum A-7
+    counterfactual: valid, target-epoch rows that belong to no registered
+    session.
+    """
 
     root.mkdir(parents=True, exist_ok=True)
     init_git_fixture(root, "-q")
@@ -133,6 +140,59 @@ def build_derivation_ledger(
     _commit(root, "genesis pin")
     # A bracket-kind session's slot list is fixed at ("pre", "post"); only a
     # derivation session declares an arbitrary ordered list.
+    _write_session(ledger, runs, pin, session_id, slots, session_kind)
+    if second_session is not None:
+        _write_session(
+            ledger, runs, pin, second_session[0], second_session[1],
+            SESSION_KIND_DERIVATION,
+        )
+    snapshot = load_calibration_ledger_snapshot(
+        ledger, pin, require_committed_pin=False, verify_custody=False,
+        mode="read_replay", repo_root=root,
+    )
+    pin.write_text(
+        json.dumps(
+            {
+                "sequence": snapshot.head_sequence,
+                "head_digest": snapshot.head_digest,
+                "ledger_schema": LEDGER_SCHEMA,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _commit(root, "terminal pin")
+    return {"root": root, "ledger": ledger, "pin": pin, "runs": runs}
+
+
+def _write_session(
+    ledger: Path,
+    runs: Path,
+    pin: Path,
+    session_id: str,
+    slots: Sequence[Slot],
+    session_kind: str,
+) -> None:
+    # A session opens only at head-equals-pin, so a fixture writing a SECOND
+    # session advances the working pin to the physical head first, exactly as
+    # the desk does between two derivation nights.
+    snapshot = load_calibration_ledger_snapshot(
+        ledger, pin, require_committed_pin=False, verify_custody=False,
+        mode="read_replay", repo_root=ledger.parent.parent,
+    )
+    pin.write_text(
+        json.dumps(
+            {
+                "sequence": snapshot.head_sequence,
+                "head_digest": snapshot.head_digest,
+                "ledger_schema": LEDGER_SCHEMA,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     declared = (
         derivation_session_slots(len(slots))
         if session_kind == SESSION_KIND_DERIVATION
@@ -179,24 +239,19 @@ def build_derivation_ledger(
             capture_wall_time_s="99.0",
             exact_bound_lexeme_s=slot.b_fiducial_s,
         )
-    snapshot = load_calibration_ledger_snapshot(
-        ledger, pin, require_committed_pin=False, verify_custody=False,
-        mode="read_replay", repo_root=root,
-    )
-    pin.write_text(
-        json.dumps(
-            {
-                "sequence": snapshot.head_sequence,
-                "head_digest": snapshot.head_digest,
-                "ledger_schema": LEDGER_SCHEMA,
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    _commit(root, "terminal pin")
-    return {"root": root, "ledger": ledger, "pin": pin, "runs": runs}
+
+
+def tamper_member_bundle(fixture: dict[str, Path], attempt_id: str, name: str) -> None:
+    """Rewrite one member's primary bytes AFTER finalization, and re-commit.
+
+    The ledger row's `artifact_sha256` was written at finalization, so this is
+    the post-finalization edit the custody-hash clause exists to catch.
+    """
+
+    target = fixture["runs"] / "instrument_validation" / attempt_id / name
+    target.write_text(target.read_text(encoding="utf-8").replace("}", ', "tampered": 1}', 1),
+                      encoding="utf-8")
+    _commit(fixture["root"], "tamper")
 
 
 def _commit(root: Path, message: str) -> None:

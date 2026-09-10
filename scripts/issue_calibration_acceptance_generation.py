@@ -9,7 +9,7 @@ does not evaluate a trigger observation or change the D-102 prior-artifact rule.
 from __future__ import annotations
 
 import argparse
-from decimal import Decimal, ROUND_HALF_EVEN, localcontext
+from decimal import Decimal, ROUND_HALF_EVEN, getcontext, localcontext
 import hashlib
 import importlib
 import json
@@ -26,12 +26,18 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACTIVE_ACCEPTANCE_ID,
     ACCEPTANCE_BOUND_SCHEMA,
+    BRACKET_SCREEN_QUANTUM_S,
+    D125_SCREEN_FLOOR_S,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
+    PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
+    PROTOCOL_ID,
     REGISTERED_CORPUS_EXCLUSION_REASONS,
-    SCREEN_RULE_RANGE_EQUALS_SCREEN,
+    SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
     load_calibration_acceptance_bound,
+    protocol_sha256,
 )
+from joulewise.calibration_bracketing import _canonical_sha256  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
@@ -145,13 +151,11 @@ def check(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # prepare-candidate (ruling 46 R-a A3 / R-b V5 / V7; addendum A-2, A-3, A-4, A-7)
 # ---------------------------------------------------------------------------
-# The pre-registration's operative rules, transcribed as constants so a reader
-# can check each against `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`
-# by string match.  None of them is inferred from data.
+# The pre-registration's operative rules.  The screen floor, the two quanta and
+# the screen-rule NAME are imported from `joulewise.calibration_bracketing`,
+# which is their ONE home: the issuer that emits a row and the validator that
+# admits it must not carry two copies of the same number.
 #
-# `D125_SCREEN_FLOOR_S` is the genesis screen floor of D-125 cl.2: the bracket
-# screen never falls below the n=19 corpus range.
-D125_SCREEN_FLOOR_S = Decimal("0.010818")
 # r6's operative level screen; the screen-challenge diagnostic counts retained
 # members above it (two or more halts issuance for Ed).
 R6_PREFLIGHT_LEVEL_SCREEN_S = Decimal("0.032898493715362")
@@ -161,19 +165,20 @@ R6_MAXIMUM_PLUS_RANGE_S = Decimal("0.04262208300415633")
 SCREEN_CHALLENGE_MEMBER_LIMIT = 2
 # D-126 cl.2's SUCCESSOR_MINIMUM_CORPUS_SIZE, a corpus-SIZE floor (addendum A-2).
 SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
-BRACKET_SCREEN_QUANTUM_S = Decimal("0.000001")
-PREFLIGHT_LEVEL_SCREEN_QUANTUM_S = Decimal("0.000000000000001")
+# The dispositions an ISSUED artifact's prior set may carry (the validator's
+# `allowed_prior_dispositions` for role `issued`).
+PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
 PRESENTATION_QUANTUM_S = Decimal("0.000000000000000001")
 DECIMAL_WORK_PRECISION = 80
-# The screen rule this generation was DERIVED under.  The pre-registration's
-# rule is the D-125 envelope `S = max(range quantized 1e-6 ROUND_HALF_EVEN,
-# 0.010818)`.  When the quantized range wins the max, the realized derivation
-# is byte-for-byte the `range_equals_screen` rule seat S3 has registered, and
-# the row registers that name.  When the FLOOR wins, the realized derivation is
-# a different rule, seat S3 registers no name for it, and honesty requires the
-# new name below even though `_registered_generation_row_is_complete` refuses it
-# today -- see the seam note in the S4 report.
-SCREEN_RULE_FLOORED_RANGE_ENVELOPE = "floored_range_envelope_screen"
+# The screen rule this generation is DERIVED under is a property of the RULE,
+# not of which arm of the `max` happened to win: every generation derived under
+# the pre-registration's D-125 envelope
+# `S = max(range quantized 1e-6 ROUND_HALF_EVEN, 0.010818)` registers
+# `SCREEN_RULE_FLOORED_RANGE_ENVELOPE`, whether the range or the floor won.
+# Naming the rule by the realized branch would make the registered rule a
+# function of the data, which is exactly what a pre-registration forbids -- and
+# it would put the ordinary case in the wrong bucket, because a corpus at the
+# n = 19 floor has a range just BELOW 0.010818 and takes the floor arm.
 # 100 significant digits of pi, used only by the Student-t quantile's Beta
 # normalizer for ODD degrees of freedom (Gamma(1/2) = sqrt(pi) cancels for even
 # df and does not for odd).  Checked in the tests against Decimal's own
@@ -187,10 +192,19 @@ QUANTILE_METHOD = (
     "bisection in 80-digit decimal; exact for both even and odd degrees of "
     "freedom"
 )
+# Copied verbatim from r6's artifact: this string sits inside the sealed
+# derivation set, so a paraphrase would change the digest of an identical
+# derivation.
 TWO_DRAW_PREDICTION_RULE = (
     "prediction_p_two_draw_s = t(p, n-1) * sample_sd_presentation_s * sqrt(2), "
-    "evaluated in binary64 and recorded as its shortest repr"
+    "evaluated in binary64 and recorded as its shortest round-tripping decimal"
 )
+# The pre-registration (`~:131-134`) forbids issuing on a df whose quantile is
+# not PROVEN in the artifact's own record.  Two independent bounds, both
+# checked for the realized df before anything is written.
+QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS = 30
+QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL = Decimal(1).scaleb(-30)
+QUANTILE_PROOF_PROBABILITIES = ("0.975", "0.995")
 
 
 def _half_integer_gamma(twice_argument: int) -> tuple[Decimal, int]:
@@ -300,21 +314,255 @@ def student_t_quantile(probability: str, degrees_of_freedom: int) -> Decimal:
 
     if degrees_of_freedom < 1:
         raise ValueError("degrees of freedom must be at least 1")
-    target = Decimal(1) - Decimal(probability)
-    low, high = Decimal(0), Decimal(100)
-    for _ in range(300):
-        middle = (low + high) / 2
-        if student_t_survival(middle, degrees_of_freedom) > target:
-            low = middle
-        else:
-            high = middle
-    return (low + high) / 2
+    # The accuracy of a claim-bearing quantile must not follow whatever Decimal
+    # context the CALLER happens to be in: a bare call at the interpreter
+    # default (prec 28) silently loses the last digits.  Pin it here.
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        target = Decimal(1) - Decimal(probability)
+        low, high = Decimal(0), Decimal(100)
+        for _ in range(300):
+            middle = (low + high) / 2
+            if student_t_survival(middle, degrees_of_freedom) > target:
+                low = middle
+            else:
+                high = middle
+        return +((low + high) / 2)
+
+
+def _decimal_arctan(x: Decimal) -> Decimal:
+    """arctan(x) by Euler's series, which converges for every real x.
+
+    Euler's form `sum_n (2^2n (n!)^2 / (2n+1)!) * x^(2n+1) / (1+x^2)^(n+1)` is
+    used instead of the Gregory series precisely because it does not diverge
+    for |x| > 1, and the quantile bisection walks t over (0, 100).
+    """
+
+    # Euler's terms decay like (x^2/(1+x^2))^n, which crawls for large |x|
+    # (at x = 22 the ratio is 0.998).  Reflect into |x| <= 1 first, where the
+    # ratio is at most 1/2, so the series is fast for every argument the
+    # quantile bisection produces.  `_machin_pi` only ever asks for arctan(1/5)
+    # and arctan(1/239), so this branch cannot recurse into it.
+    if x < 0:
+        return -_decimal_arctan(-x)
+    if x > 1:
+        return _machin_pi() / 2 - _decimal_arctan(1 / x)
+    x_squared = x * x
+    denominator = 1 + x_squared
+    term = x / denominator
+    total = term
+    tolerance = Decimal(1).scaleb(-(DECIMAL_WORK_PRECISION + 10))
+    for n in range(1, 4000):
+        term *= Decimal(2 * n) * x_squared / (Decimal(2 * n + 1) * denominator)
+        total += term
+        if abs(term) < tolerance:
+            return total
+    raise ArithmeticError("arctan series did not converge")
+
+
+_MACHIN_PI_BY_PRECISION: dict[int, Decimal] = {}
+
+
+def _machin_pi() -> Decimal:
+    """pi = 16 arctan(1/5) - 4 arctan(1/239), computed, never transcribed.
+
+    The proof route must share NOTHING with the quantile route, and the
+    quantile's Beta normalizer uses the transcribed `_PI`.  Computing pi here
+    means a mistyped digit in that constant shows up as a proof failure.
+    """
+
+    precision = getcontext().prec
+    cached = _MACHIN_PI_BY_PRECISION.get(precision)
+    if cached is None:
+        cached = 16 * _decimal_arctan(Decimal(1) / 5) - 4 * _decimal_arctan(
+            Decimal(1) / 239
+        )
+        _MACHIN_PI_BY_PRECISION[precision] = cached
+    return cached
+
+
+def student_t_absolute_cdf_closed_form(t: Decimal, degrees_of_freedom: int) -> Decimal:
+    """P(|T| <= t) by the exact Abramowitz & Stegun finite forms.
+
+    26.7.3 (odd df) and 26.7.4 (even df) are FINITE sums, exact for every
+    integer df, and they share no code with the incomplete-beta continued
+    fraction that `student_t_quantile` inverts.  `theta = arctan(t / sqrt(df))`,
+    so `cos^2(theta) = df / (df + t^2)` and `sin(theta) = t / sqrt(df + t^2)`
+    are algebraic; only the odd-df `theta` term needs a transcendental.
+    """
+
+    df = degrees_of_freedom
+    df_decimal = Decimal(df)
+    cos_squared = df_decimal / (df_decimal + t * t)
+    cos_theta = cos_squared.sqrt()
+    sin_theta = t / (df_decimal + t * t).sqrt()
+    if df % 2 == 0:
+        # 26.7.4: sin(theta) * [1 + (1/2)cos^2 + (1*3)/(2*4) cos^4 + ...]
+        total = Decimal(1)
+        coefficient = Decimal(1)
+        power = Decimal(1)
+        for k in range(1, df // 2):
+            coefficient *= Decimal(2 * k - 1) / Decimal(2 * k)
+            power *= cos_squared
+            total += coefficient * power
+        return sin_theta * total
+    theta = _decimal_arctan(t / df_decimal.sqrt())
+    if df == 1:
+        return 2 * theta / _machin_pi()
+    # 26.7.3: (2/pi) * [theta + sin(theta) * (cos + (2/3)cos^3 + ...)]
+    coefficient = Decimal(1)
+    power = cos_theta
+    inner = power
+    for k in range(1, (df - 1) // 2):
+        coefficient *= Decimal(2 * k) / Decimal(2 * k + 1)
+        power *= cos_squared
+        inner += coefficient * power
+    return 2 * (theta + sin_theta * inner) / _machin_pi()
+
+
+def student_t_quantile_closed_form(probability: str, degrees_of_freedom: int) -> Decimal:
+    """The same quantile, inverted from the A&S closed form instead."""
+
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        target = 2 * Decimal(probability) - 1
+        low, high = Decimal(0), Decimal(100)
+        for _ in range(300):
+            middle = (low + high) / 2
+            if student_t_absolute_cdf_closed_form(middle, degrees_of_freedom) < target:
+                low = middle
+            else:
+                high = middle
+        return +((low + high) / 2)
+
+
+def _agreement_digits(left: Decimal, right: Decimal) -> int:
+    """Significant decimal digits on which two positive values agree."""
+
+    if left == right:
+        return DECIMAL_WORK_PRECISION
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
+        relative = abs(left - right) / abs(left)
+        return int(-relative.log10())
+
+
+def build_quantile_proof(degrees_of_freedom: int) -> dict[str, Any]:
+    """Prove the REALIZED df's quantiles two ways, or refuse (pre-registration).
+
+    (i) forward check: the survival function evaluated AT the returned quantile
+    reproduces `1 - p`; (ii) independent route: the A&S closed form, inverted by
+    its own bisection, agrees with the continued-fraction quantile.  Neither
+    check can pass on a quantile the other route would not produce.
+    """
+
+    quantiles: dict[str, str] = {}
+    residuals: dict[str, str] = {}
+    agreement: dict[str, int] = {}
+    for probability in QUANTILE_PROOF_PROBABILITIES:
+        value = student_t_quantile(probability, degrees_of_freedom)
+        with localcontext() as context:
+            context.prec = DECIMAL_WORK_PRECISION
+            residual = abs(
+                student_t_survival(value, degrees_of_freedom)
+                - (Decimal(1) - Decimal(probability))
+            )
+        independent = student_t_quantile_closed_form(probability, degrees_of_freedom)
+        digits = _agreement_digits(value, independent)
+        if residual > QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL:
+            raise PrepareRefusal(
+                f"quantile_proof_failed: df {degrees_of_freedom} p {probability} "
+                f"forward residual {residual} exceeds "
+                f"{QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL}"
+            )
+        if digits < QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS:
+            raise PrepareRefusal(
+                f"quantile_proof_failed: df {degrees_of_freedom} p {probability} "
+                f"closed-form agreement {digits} digits is below "
+                f"{QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS}"
+            )
+        quantiles[probability] = str(
+            +value.quantize(Decimal(1).scaleb(-20), rounding=ROUND_HALF_EVEN)
+        )
+        residuals[probability] = f"{residual:.3E}"
+        agreement[probability] = digits
+    return {
+        "degrees_of_freedom": degrees_of_freedom,
+        "probabilities": list(QUANTILE_PROOF_PROBABILITIES),
+        "quantiles": quantiles,
+        "forward_residuals": residuals,
+        "forward_residual_bound": str(QUANTILE_PROOF_MAXIMUM_FORWARD_RESIDUAL),
+        "closed_form_agreement_digits": agreement,
+        "closed_form_agreement_bound": QUANTILE_PROOF_MINIMUM_AGREEMENT_DIGITS,
+        "closed_form_method": (
+            "Abramowitz & Stegun 26.7.3 (odd df) / 26.7.4 (even df) finite "
+            "closed form, inverted by bisection; pi by Machin's formula"
+        ),
+        "precision": DECIMAL_WORK_PRECISION,
+    }
 
 
 def two_draw_prediction_lexeme(quantile: Decimal, sample_sd_lexeme: str) -> str:
     """r6's rule verbatim: binary64 product recorded as its shortest repr."""
 
     return repr(float(quantile) * float(sample_sd_lexeme) * math.sqrt(2))
+
+
+def _plain(value: Decimal) -> str:
+    """A Decimal in plain notation; `str` would give "1E-15" for a quantum."""
+
+    return format(value, "f")
+
+
+def rederivation_triggers(corpus_doubling_trigger: str) -> set[str]:
+    """The trigger set the production validator demands for a given row.
+
+    One home for the rule, so the artifact's list and the validator's expected
+    set cannot drift: `calibration_bracketing._valid_acceptance_bound` builds
+    the same five names around the registered row's own
+    `corpus_doubling_trigger`.
+    """
+
+    return {
+        "identity_field_change",
+        "protocol_or_estimator_byte_change",
+        "new_valid_same_identity_capture_expands_observed_range",
+        corpus_doubling_trigger,
+        "new_systematic_failure_challenges_preflight_screen",
+    }
+
+
+def default_acceptance_id(corpus_n: int, identity_epoch: Mapping[str, Any]) -> str:
+    """Name the artifact after the corpus and the REALIZED epoch.
+
+    Interpolating the corpus size while hardcoding the OS build would mislabel
+    every run under any other epoch, which is the one fact the artifact exists
+    to bind.
+    """
+
+    os_build = identity_epoch.get("os_build")
+    if not isinstance(os_build, str) or not os_build:
+        raise PrepareRefusal("identity epoch carries no os_build to name the artifact")
+    return f"d079_calibration_acceptance_v2_n{corpus_n}_{os_build.lower()}_r1"
+
+
+# The generation-row fields the registry stores as TUPLES.  JSON has no tuple,
+# so the emitted artifact serialises them as arrays; anything that hands the row
+# to `_registered_generation_row_is_complete` -- the future registration in
+# `_D102_GENERATION_DERIVATIONS`, and the tests -- must convert first, or S3's
+# `isinstance(..., tuple)` fences refuse the row silently.  This function is
+# that conversion's ONE home, on the emitting side, so the transaction seat
+# inherits it instead of reinventing it.
+GENERATION_ROW_TUPLE_FIELDS = ("epoch_catalog_ids", "registration_session_ids")
+
+
+def generation_row_for_registry(row: Mapping[str, Any]) -> dict[str, Any]:
+    """The emitted row in the exact shape `_D102_GENERATION_DERIVATIONS` takes."""
+
+    converted = dict(row)
+    for field in GENERATION_ROW_TUPLE_FIELDS:
+        converted[field] = tuple(converted[field])
+    return converted
 
 
 class PrepareRefusal(Exception):
@@ -521,11 +769,6 @@ def prepare_candidate(args: argparse.Namespace) -> int:
     print(f"candidate written (NOT ISSUED): {out}")
     print(f"corpus n: {payload['derivation_corpus']['n']}")
     print(f"screen_rule: {payload['registered_generation_row']['screen_rule']}")
-    if not payload["derivation_notes"]["rule_outcomes"]["screen_rule_registered_in_validator"]:
-        print(
-            "SEAM: this screen rule is not in the validator's registered set; "
-            "seat S3 must register it before any issuance"
-        )
     return 0
 
 
@@ -562,8 +805,35 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
 
     session_ids = tuple(args.registration_session_id)
     observations = _registration_observations(snapshot, session_ids)
+    # The TARGET epoch is the registration's own, read from its rows before any
+    # value is looked at, and it must be unanimous.
+    if not observations:
+        raise PrepareRefusal("registration: its sessions hold no observations")
+    target_epoch = dict(observations[0].identity_epoch)
+    for observation in observations:
+        if dict(observation.identity_epoch) != target_epoch:
+            raise PrepareRefusal("registration: rows disagree on the identity epoch")
     members, excluded, comparisons = _select_members(observations)
     n = len(members)
+    # Addendum A-7: a valid row carrying the TARGET epoch that belongs to no
+    # session of this registration is not silently left out of the corpus --
+    # issuance refuses, because absorbing it would enlarge the corpus past the
+    # pre-registration and ignoring it would hide a capture the successor's own
+    # epoch produced.  Either way it is Ed's call, not the issuer's.
+    registration = set(session_ids)
+    foreign = [
+        observation.attempt_id
+        for observation in snapshot.observations
+        if observation.classification_disposition == "valid"
+        and observation.bracket_session_id not in registration
+        and dict(observation.identity_epoch) == target_epoch
+    ]
+    if foreign:
+        raise PrepareRefusal(
+            "valid same-epoch observations outside this registration: "
+            + ", ".join(sorted(foreign))
+            + "; not issued (ruling 46 addendum A-7)"
+        )
     if n < minimum:
         raise PrepareRefusal(
             f"retained corpus n = {n} is below the required floor {minimum}; not issued"
@@ -580,6 +850,12 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     degrees_of_freedom = n - 1
     with localcontext() as context:
         context.prec = DECIMAL_WORK_PRECISION
+    # The pre-registration refuses to issue on a df whose quantile is not
+    # proven in the artifact's own record, so the proof is computed BEFORE the
+    # predictions that depend on it, and its failure is a refusal.
+    quantile_proof = build_quantile_proof(degrees_of_freedom)
+    with localcontext() as context:
+        context.prec = DECIMAL_WORK_PRECISION
         t975 = student_t_quantile("0.975", degrees_of_freedom)
         t995 = student_t_quantile("0.995", degrees_of_freedom)
     sample_sd_lexeme = statistics["sample_sd_presentation_s"]["value"]
@@ -591,10 +867,8 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     )
     screen = max(quantized_range, D125_SCREEN_FLOOR_S)
     floor_bound = screen != quantized_range
-    screen_rule = (
-        SCREEN_RULE_FLOORED_RANGE_ENVELOPE if floor_bound
-        else SCREEN_RULE_RANGE_EQUALS_SCREEN
-    )
+    # The NAME is the pre-registered rule, not the arm of the `max` that won.
+    screen_rule = SCREEN_RULE_FLOORED_RANGE_ENVELOPE
     predecessor_operatives = predecessor["decimal_derivation"]["ratified_operatives"]
     predecessor_ceiling = Decimal(predecessor_operatives["maximum_budgetable_drift_s"])
     ceiling = max(predecessor_ceiling, Decimal(prediction_99))
@@ -616,10 +890,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "maximum_budgetable_drift_s": str(ceiling),
     }
 
-    identity_epoch = dict(members and observations[0].identity_epoch or {})
-    for observation in observations:
-        if dict(observation.identity_epoch) != identity_epoch:
-            raise PrepareRefusal("registration: rows disagree on the identity epoch")
+    identity_epoch = target_epoch
     predecessor_epoch = dict(predecessor["identity_epoch"])
     if predecessor_epoch == identity_epoch:
         raise PrepareRefusal(
@@ -659,12 +930,23 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         for observation in snapshot.observations
         if observation.content_id is not None
     ]
+    # The production validator recomputes this inventory over the WHOLE prior
+    # set, one entry per admissible disposition INCLUDING the zeros, and
+    # compares for equality; a count over the registration alone, or with the
+    # empty dispositions omitted, refuses.
+    inventory = {
+        disposition: sum(
+            row["disposition"] == disposition for row in prior_observations
+        )
+        for disposition in sorted(PRIOR_SET_DISPOSITIONS)
+    }
     cutoff = {
         "sequence": snapshot.head_sequence,
         "head_digest": snapshot.head_digest,
         "ledger_schema": snapshot.ledger_schema,
         "role": "issued_acceptance_baseline",
     }
+    # The validator demands `member_ids == sorted(member_ids)`.
     member_table = [
         {
             "member_id": member["member_id"],
@@ -673,7 +955,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "manifest_sha256": member["manifest_sha256"],
             "instrument_evidence_sha256": member["instrument_evidence_sha256"],
         }
-        for member in members
+        for member in sorted(members, key=lambda item: item["member_id"])
     ]
     generation_row = {
         "corpus_n": n,
@@ -702,15 +984,18 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "mode": "ROUND_HALF_EVEN",
             "operative_bracket_screen": {
                 "source": "decimal_derivation.source_statistics.range_s",
-                "quantum_s": str(BRACKET_SCREEN_QUANTUM_S),
+                # Plain decimal notation, not Decimal's scientific `str`:
+                # the validator compares these against literal strings, and
+                # `str(Decimal("0.000000000000001"))` is "1E-15".
+                "quantum_s": _plain(BRACKET_SCREEN_QUANTUM_S),
                 "value_s": operatives["bracket_screen_s"],
                 "numeric_role": "operative_comparator",
-                "floor_s": str(D125_SCREEN_FLOOR_S),
+                "floor_s": _plain(D125_SCREEN_FLOOR_S),
                 "floor_bound": floor_bound,
             },
             "preflight_level_screen": {
                 "source": "decimal_derivation.source_statistics.maximum_s",
-                "quantum_s": str(PREFLIGHT_LEVEL_SCREEN_QUANTUM_S),
+                "quantum_s": _plain(PREFLIGHT_LEVEL_SCREEN_QUANTUM_S),
                 "value_s": operatives["preflight_level_screen_s"],
                 "numeric_role": "operative_comparator",
             },
@@ -722,6 +1007,7 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "t_995_quantile": str(+t995.quantize(Decimal(1).scaleb(-20), rounding=ROUND_HALF_EVEN)),
             "quantile_method": QUANTILE_METHOD,
         },
+        "quantile_proof": quantile_proof,
         "ratified_operatives": {
             **operatives,
             "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
@@ -755,9 +1041,6 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "quantized_range_s": str(quantized_range),
             "screen_floor_bound": floor_bound,
             "screen_rule": screen_rule,
-            "screen_rule_registered_in_validator": (
-                screen_rule == SCREEN_RULE_RANGE_EQUALS_SCREEN
-            ),
             "screen_challenge_member_count": len(challenged),
             "screen_challenge_threshold_s": str(R6_PREFLIGHT_LEVEL_SCREEN_S),
             "new_maximum_exceeds_prior_maximum_plus_range": (
@@ -772,8 +1055,11 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
     }
     payload: dict[str, Any] = {
         "schema_version": ACCEPTANCE_BOUND_SCHEMA,
-        "acceptance_id": args.acceptance_id or f"d079_calibration_acceptance_v2_n{n}_25g83_r1",
-        "decision_ids": ["D-079", "D-102", "D-125", "D-126"],
+        "acceptance_id": args.acceptance_id or default_acceptance_id(n, identity_epoch),
+        # The production validator demands exactly this pair; the D-079,
+        # D-125 and D-126 provenance travels in `derivation_notes` and in the
+        # row's `d125_ruling`, where it is machine-checked rather than decorative.
+        "decision_ids": ["D-102", "D-109"],
         # NOT an issued artifact: the exact-byte production loader authenticates
         # `artifact_role` and a registry pin, so these bytes can never be loaded
         # as authority.  The flag says so in words as well.
@@ -793,8 +1079,15 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "prospective_rederivation": {
             "calendar_expiry": None,
             "trigger_observation_rule": "judge_under_prior_artifact_never_self_fit",
-            "triggers": list(predecessor["prospective_rederivation"]["triggers"]),
-            "protocol_sha256": predecessor["prospective_rederivation"]["protocol_sha256"],
+            # DERIVED from this generation's own row, never copied: the
+            # corpus-doubling trigger is corpus-indexed, and a copied one names
+            # the predecessor's corpus while the row names this one -- which the
+            # production validator refuses on set equality, and which is a
+            # self-contradictory scientific record besides.
+            "triggers": sorted(
+                rederivation_triggers(generation_row["corpus_doubling_trigger"])
+            ),
+            "protocol_sha256": protocol_sha256(PROTOCOL_ID),
             "estimator_code_sha256": {
                 path: hashlib.sha256((REPO_ROOT / path).read_bytes()).hexdigest()
                 for path in ESTIMATOR_CODE_PATHS
@@ -818,24 +1111,61 @@ def _prepare_candidate(args: argparse.Namespace) -> dict[str, Any]:
             "observations": prior_observations,
         },
         "decimal_derivation": decimal_derivation,
+        "backfill_candidate": {
+            "status": "candidate_not_issued",
+            "candidate_inventory": inventory,
+            "production_issuance_blocked": True,
+            "required_verification": (
+                "pending: cold science gate over exclusions, per-night "
+                "diagnostics, the screen-challenge outcome and the D-125 default"
+            ),
+        },
         "derivation_notes": derivation_notes,
         "registered_generation_row": generation_row,
     }
+    # Order matters: the input seal is part of the artifact, so it must be
+    # present before the whole-artifact digest closes over it.
+    payload["derivation_input_sha256"] = derivation_input_sha256(payload)
     payload["derivation_sha256"] = derivation_sha256(payload)
     return payload
 
 
 def derivation_sha256(payload: Mapping[str, Any]) -> str:
-    """Digest the decimal lexemes and the rounding rules, nothing else.
+    """The PRODUCTION recipe: canonical sha256 of the artifact minus this key.
 
-    Prose, paths and the candidate label are deliberately OUT: two preparations
-    of the same corpus under the same rules must digest equal, and an edit to
-    any operative lexeme or any rounding rule must not.
+    `calibration_bracketing._valid_acceptance_bound` computes exactly this and
+    compares (`:660`, `:764`), so a curated digest of a chosen subset could
+    never authenticate however sensible the subset.  The curated seal that IS
+    useful -- stable under prose and label edits, moving on every derivation
+    input -- is `derivation_input_sha256` below, emitted alongside it.
+    """
+
+    core = {key: item for key, item in payload.items() if key != "derivation_sha256"}
+    return _canonical_sha256(core)
+
+
+def derivation_input_sha256(payload: Mapping[str, Any]) -> str:
+    """Digest every INPUT the derivation depends on, and nothing else.
+
+    Prose, file paths and the candidate label stay out, so two preparations of
+    the same corpus under the same rules digest equal.  Everything the
+    derivation actually consumed stays IN -- the member lexemes, the statistics,
+    the rounding rules, the quantile proof, the identity epoch, the ledger
+    cutoff, the predecessor's identity and ceiling, and the D-125 reference --
+    because the point of the digest is that a replay from different inputs
+    cannot present itself as the same derivation.
     """
 
     derivation = payload["decimal_derivation"]
+    row = payload["registered_generation_row"]
     sealed = {
         "acceptance_id": payload["acceptance_id"],
+        "identity_epoch": payload["identity_epoch"],
+        "ledger_cutoff": {
+            "sequence": payload["ledger_cutoff"]["sequence"],
+            "head_digest": payload["ledger_cutoff"]["head_digest"],
+            "ledger_schema": payload["ledger_cutoff"]["ledger_schema"],
+        },
         "corpus_member_values": [
             [member["member_id"], member["b_fiducial_s"]]
             for member in payload["derivation_corpus"]["members"]
@@ -843,10 +1173,12 @@ def derivation_sha256(payload: Mapping[str, Any]) -> str:
         "source_statistics": derivation["source_statistics"],
         "rounding": derivation["rounding"],
         "two_draw_prediction_derivation": derivation["two_draw_prediction_derivation"],
+        "quantile_proof": derivation["quantile_proof"],
         "ratified_operatives": derivation["ratified_operatives"],
-        "screen_rule": payload["registered_generation_row"]["screen_rule"],
-        "predecessor_ceiling_s": payload["registered_generation_row"]["predecessor_ceiling_s"],
-        "d125_ruling": payload["registered_generation_row"]["d125_ruling"],
+        "screen_rule": row["screen_rule"],
+        "predecessor_acceptance_id": row["predecessor_acceptance_id"],
+        "predecessor_ceiling_s": row["predecessor_ceiling_s"],
+        "d125_ruling": row["d125_ruling"],
     }
     return hashlib.sha256(
         json.dumps(sealed, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
