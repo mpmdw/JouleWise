@@ -90,6 +90,26 @@ none may be restated as an empirically proved universal instrument property.
   sustained mixed-load regime; until that variant is validated, T3 remains an
   explicit limitation.
 
+The writer's `--derivation-only` mode captures observations solely to derive a
+future acceptance. It authenticates the active issued artifact's exact bytes,
+protocol digest, and estimator-code digest, but **requires the live identity
+epoch to differ** from that artifact's six-field epoch (OS build, hardware
+model, power policy, sampling interval, estimator revision, pulse protocol).
+A matching epoch refuses, as does use without a derivation-kind session slot
+(one ordered reserved attempt; see [the ledger contract](calibration_ledger.md#derivation-sessions-and-epoch-bootstrap)).
+Both hashed `instrument_evidence.json` and `manifest.json` record
+`derivation_only: true` and `screen_basis` containing the prior acceptance ID,
+artifact SHA-256, `preflight_level_screen_s`, and epoch. The prior artifact's
+level screen and whether the bound exceeds it are diagnostic only: the active
+comparison is disabled (`preflight_systematic_screen_s = None`), and every
+finalization path, including recovery, records only `valid` or
+`ordinary-invalid`, never `systematic-invalid`. All physics and evidence gates
+remain fail-closed. The existing `DIAGNOSTIC_NO_PACK` class requires a
+registration and exempts only C2; C1 and C3–C5 still apply. This mode licenses
+nothing: no G2-a window, floor, claim, or bracket endpoint, even after a
+successor names the observations. D-102 clause 2's PRIOR-artifact judgment of
+trigger observations is unchanged; no observation judges itself.
+
 ## V2/v3 capture-time freshness and authentication
 
 Every v2/v3 `instrument_evidence.json` records

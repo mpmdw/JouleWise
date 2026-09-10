@@ -8,15 +8,54 @@ or an authority that rewrites both Git and the complete ledger history.
 
 Live capture remains reservation-first: a `reservation` receipt with
 `disposition=pending` precedes hardware state, and exactly one `finalization`
-receipt closes that attempt. The repository-committed head pin is independent
-authority over the physical ledger head. Claim evaluation requires their exact
+receipt closes that attempt. The repository-committed **head pin**, a file
+naming the trusted receipt count and last digest, is independent authority
+over the physical ledger head (the actual last receipt). Claim evaluation requires their exact
 agreement and one immutable snapshot threaded through every consumer.
+
+## Derivation sessions and epoch bootstrap
+
+An **identity epoch** is the six-field vector {os_build, hardware_model,
+power_policy, sampling_interval_ms, estimator_revision, pulse_protocol_id}.
+An **acceptance** is the issued artifact whose calibration statistics govern
+measurement admission; a **generation** is one registered version of it.
+Its **prior set** (`prior_observation_set`) lists every ledger observation
+through its cutoff receipt. Its **corpus** (`derivation_corpus`) is the subset
+used to compute those statistics. **Derivation-only** means capture to build
+a future acceptance, never to license a measurement.
+
+A **session** is a ledger capability reserving several attempts at once while
+the committed head pin stays fixed. A **slot** is one declared, ordered place
+for an attempt in that session. An ordinary `bracket`-kind session reserves
+the `pre` and `post` endpoints around a measured window. A `derivation`-kind
+session reserves N declared slots for one registered derivation night. It
+opens only at head-equals-pin, fills unused slots in declared order, and
+permits no foreign extension or second open session. Derivation-only capture
+requires a derivation-kind slot; standalone and bracket-kind use refuse.
+The last declared slot's finalization closes the session. If the window ends
+first, `abort_calibration_session` with reason `window_exhausted` closes it;
+already finalized slots remain observations and unused slots are not replaced.
+The night never commits Git. The terminal pin candidate is reviewed and
+committed at the desk before the next session opens. Claim consumers continue
+to refuse during the uncommitted derivation extension.
+
+Bootstrap observations of the new epoch remain non-claim-bearing until an
+issued successor names them in its prior set and eligible corpus. Even then,
+they serve only to derive prospective acceptance: they are **never bracket
+endpoints**, including after issuance. Both candidate discovery and the
+registered-valid endpoint universe skip derivation-kind sessions, while their
+evidence remains in permanent authenticated ledger custody. The successor
+judges only subsequent ordinary captures. D-102 clause 2 still judges a trigger
+observation under the PRIOR artifact, never under a threshold incorporating
+that observation. Nothing here licenses G2-a or weakens a physics or evidence
+refusal (D-161).
 
 ## Historical import
 
 Historical import is the one genesis-only exception that registers already
 captured, hash-authenticated observations. It is not a second writer or an
-ordinary capture route. Version 1 has the following fixed decisions.
+ordinary capture route. New-epoch bootstrap uses the live derivation sessions
+above, not another historical import. Version 1 has the following fixed decisions.
 
 1. **Ordering:** members are ordered by ascending `attempt_id`, then ascending
    `content_id`. Attempt IDs are required to be unique; the content-ID
@@ -49,10 +88,31 @@ Consumers must not treat an import-marked finalization as a fresh post-cutoff
 observation or bracket endpoint. Production candidate discovery checks the
 marker directly, and prospective trigger subtraction uses
 `CalibrationLedgerSnapshot.post_cutoff_live_observations()`. At consumption,
-the acceptance artifact's `prior_observation_set` must exactly equal the
-import-marked ledger prefix at its cutoff (attempt ID, content ID,
-classification disposition, and epoch); any omission, addition, or live row in
-that prefix refuses.
+the acceptance artifact's prior set must exactly equal the observation prefix
+at its generation-registered cutoff (attempt ID, content ID, classification
+disposition, and epoch). A content ID is the canonical hash derived from the
+manifest and instrument-evidence byte hashes, independent of custody path.
+The registered `prior_prefix_mode: import_only` keeps the import-only fence
+for historical generations, including r3–r6; any live row there refuses.
+Only a generation registered `prior_prefix_mode: import_plus_live` may include
+finalized live observations with content IDs, including finalized slots of
+abort-closed sessions. Pending or `abandoned` (classified `unresolved`)
+attempts refuse; omission, addition, duplicate, or mismatched binding also
+refuses. The generation registers its epoch catalog, prior-observation count
+and cutoff sequence; a mixed prefix does not use the historical two-receipts-
+per-observation shortcut.
+
+For `import_plus_live`, every corpus member must carry the target epoch and
+belong to a session of this registration. Every valid target-epoch prior-set
+observation of that registration must be a member or have a registered
+mechanism exclusion in `derivation_notes.excluded_members`; a valid
+same-epoch observation outside the registration refuses issuance rather than
+being absorbed. The currently registered replay exclusion is
+`affine_clock_fit_empty` (no feasible affine clock fit). Exclusion entries
+carry `member_id`, `manifest_sha256`, and `instrument_evidence_sha256`; prior
+rows are matched by the content ID derived from those two hashes. The r6
+analogue is `excluded_predecessor_members`; its bytes and historical validation
+rules do not change. Membership is never trimmed by observed bound values.
 
 ### Ruled disposition table
 
@@ -190,7 +250,7 @@ pin, preserving D-109 R1.4's anti-rollback boundary.
 
 ## Issued D-079 acceptance artifact
 
-The acceptance consumer recognizes two exact-byte roles. The retained genesis
+The historical genesis issuance below records two exact-byte roles. The retained genesis
 test fixture uses schema
 `joulewise.calibration_acceptance_bound.v2.fixture.v1`, role
 `schema_fixture_unissued`, and file SHA-256
@@ -200,8 +260,10 @@ refuses it. The deterministic issued document uses schema
 `joulewise.calibration_acceptance_bound.v2`, role `issued`, and exact emitted
 file SHA-256
 `316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985`.
-No other role, schema, or file bytes are accepted, even when its internal
-whole-core digest is self-consistent.
+For this historical generation no other role, schema, or file bytes are
+accepted, even when its internal whole-core digest is self-consistent.
+Later issued generations authenticate against their own registered byte pins
+and derivation rules; registering a successor never rewrites a historical pin.
 
 Issued-artifact authentication is conjunctive and fail-closed:
 
@@ -216,15 +278,18 @@ Issued-artifact authentication is conjunctive and fail-closed:
    and the evaluator rechecks the snapshot's baseline fields against the
    artifact. A later committed live extension is permitted by D-109 R1.4; it
    does not change the historical issuance cutoff.
-4. `prior_observation_set` must equal the complete import-marked observation
+4. `prior_observation_set` must equal the complete generation-registered observation
    prefix through the cutoff, member for member by attempt ID, path-independent
-   content ID, classification disposition, and identity epoch. Any omission,
-   addition, duplicate, non-import row, or epoch divergence refuses.
+   content ID, classification disposition, and identity epoch. `import_only`
+   refuses non-import rows; `import_plus_live` admits only the finalized live
+   extension described above. Any omission, addition, duplicate, unresolved
+   attempt, or epoch-catalog mismatch refuses. Corpus purity and registration
+   completeness are additional requirements for the prospective generation.
 
 The artifact's stored `issuance.claim_eligible=true` is necessary but not
 sufficient. The evaluation result reports effective `claim_eligible=true`
 only after all four checks pass and a non-genesis ledger head is present.
-Before that point it reports false. The issued D-079 state is sequence 76 at
+Before that point it reports false. The historical genesis-issued D-079 state is sequence 76 at
 head
 `08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`,
 with 38 import-marked, content-distinct observations: 30 valid, 2
@@ -232,6 +297,12 @@ systematic-invalid, and 6 ordinary-invalid. The threshold-producing
 `derivation_corpus` remains n=19. The issued whole-core
 `derivation_sha256` is
 `4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02`.
+That 76-row prefix, the r6 artifact and every historical generation remain
+byte-identical. A prospective successor advances its cutoff to the
+authenticated head after the last bootstrap row and names the complete
+history through that cutoff, not just the retained corpus. Until issuance,
+bootstrap rows supply no claim authority; after issuance they still cannot
+become bracket endpoints.
 
 ### Bootstrap CLI
 

@@ -6510,6 +6510,111 @@ the D-100 repair (shared write surfaces).
 Revisit when: CAL-BRACKET-D079-01's delta audit reports, or any
 re-derivation trigger fires.
 
+### Addendum 2026-09-10 — new-epoch derivation bootstrap (cold gate 46, amended)
+
+Authority: cold gate 46 §R-a through §R-e, as amended by addendum 11
+A-1–A-8 and its paired contract refutation 12. Custodied on branch
+`bookkeeping/2026-09-10-activation-96bfeca7` under
+`docs/process_traces/2026-09-10-activation-96bfeca7/46-coldgate-packet-epoch-bootstrap/`:
+`10-coldgate-fable-ruling.md`, `11-ruling-addendum-opus-amendments.md`,
+and `12-opus-pairing-refuter-on-ruling-46.md`.
+
+**MECHANISM — adopted by cold gate 46, Ed veto window open.** Adopted
+under rule 11; Ed may veto. The move from OS build 25F84 to 25G83 leaves
+the issued r6 acceptance stale by design. Derivation-only means capture
+to build a future acceptance, never to license a measurement. The writer
+authenticates the active issued artifact's bytes, protocol and estimator-code
+digests, requires the live six-field identity epoch to differ, and records
+`derivation_only: true` plus the prior artifact's `screen_basis` in the hashed
+evidence and manifest. Its prior level-screen comparison is diagnostic only;
+all finalization paths, including recovery, use `valid` or `ordinary-invalid`,
+never `systematic-invalid`. Physics and evidence refusals remain fail-closed
+under D-161.
+
+Each derivation night is one `derivation`-kind session (a ledger reservation
+for several attempts) with N declared slots (ordered reserved attempts).
+It opens at head-equals-pin: the actual last receipt agrees with the committed
+head pin's count and digest. Slots fill in declared order; no standalone
+derivation capture, bracket-kind use, foreign extension, or second open
+session is admitted. The last slot finalizes the session, or an explicit
+abort with reason `window_exhausted` closes it while preserving finalized
+observations. The night never commits Git; the desk reviews and commits the
+terminal pin candidate before the next night opens.
+
+Generation-keyed prospective issuance preserves the historical `import_only`
+fence and permits `import_plus_live` only for a registered successor. Its
+prior set (all observations through its cutoff) includes the complete
+authenticated bootstrap history; its corpus (the statistical subset) is
+target-epoch pure and registration-complete. Every valid target-epoch row
+of this registration is included or has a registered mechanism exclusion in
+`derivation_notes.excluded_members`; a valid same-epoch row outside the
+registration refuses issuance. Exclusions match prior rows by content ID
+derived from `manifest_sha256` and `instrument_evidence_sha256`, alongside
+`member_id`; the historical r6 key remains `excluded_predecessor_members`.
+Pending or unresolved attempts refuse. Both discovery and the registered-valid
+endpoint universe skip derivation-kind sessions; permanent custody still
+authenticates their evidence. Bootstrap rows are non-claim-bearing until a
+successor names them and are never bracket endpoints, even after issuance.
+The successor judges only subsequent ordinary captures. D-102 clause 2's
+rule remains: a trigger observation is judged under the PRIOR artifact,
+never incorporated into a threshold that judges itself.
+
+The r6 bytes, 76-row ledger prefix, and every historical generation remain
+unchanged. Successor issuance waits for corpus closure, raw replay, the cold
+science gate, and the single D-138 atomic transaction. No G2-a window is
+licensed. The desk epoch-watch tool is part of the mechanism; wiring it into
+the magistrate's step-0 cadence is **proposed**, requiring Ed's ruling.
+
+**SCIENTIFIC DEFAULTS — adopted by cold gate 46, Ed veto window open.**
+These remain **proposed default, Ed veto window open** until the first
+capture's arm; re-label them **ratified** only on Ed's reply. Ed may veto or
+amend by reply or directive. **V3 additionally requires Ed's affirmative
+written acknowledgment before the first capture's arm; silence is not consent
+for V3.**
+
+- **V3:** THREE agent-free nights on distinct calendar days, each with 12
+  declared slots. Retained n ≥ 19 is REQUIRED: D-126 clause 2's
+  `SUCCESSOR_MINIMUM_CORPUS_SIZE = 19` is a corpus-size floor, not the
+  0.010818 s screen floor. Ed may instead rule n = 17 acceptable in writing;
+  nothing issues below 19 without that ruling. All three nights run their
+  declared slots regardless of interim values; fewer than 19 retained after
+  night three means not issued, with the shortfall recorded. No top-ups,
+  retries, early stops, or outcome-driven extra nights. No person or agent
+  examines member values, screens, or statistics before the third session
+  is terminal and its pin candidate is emitted.
+- **V4:** one 600 s settle after the last operator action, then 600 s
+  start-to-start slot cadence; thermal state is checked per capture. Slots
+  lost to `window_exhausted` are recorded unused, never compressed or replaced.
+- **V7:** the full D-125 envelope governs both bracket screen S and budget
+  ceiling C: `S = max(quantized new range, 0.010818)` AND
+  `C = max(inherited ceiling, new Q99)`, where Q99 is the new 99% two-draw
+  prediction. Range quantization is 1e-6 s, ROUND_HALF_EVEN. The generation
+  carries the inherited ceiling and an explicit `d125_ruling` reference;
+  the issuer refuses without the reference and refuses
+  `successor_screen_exceeds_budget_ceiling` when S ≥ C. The cap is C − S,
+  never a silent clamp; the preflight level screen is the new maximum
+  quantized to 1e-15 s.
+- **Screen challenge:** two or more retained members exceeding the r6 level
+  screen `0.032898493715362` means not issued; Ed rules in writing before
+  further capture. The second recorded diagnostic is whether the new maximum
+  exceeds `0.04262208300415633`, the Decimal sum of r6's exact maximum
+  `0.03289849371536248` and exact range `0.00972358928879385`.
+  Neither diagnostic edits membership.
+- **Exclusions:** only predeclared, outcome-independent mechanisms: anchor-v3
+  replay refusal `affine_clock_fit_empty`; a protocol gate failure (plateau,
+  SNR, 59-pulse detection, spurious plateau, edge coverage), recorded as
+  `ordinary-invalid`; or a recorded operator/system interruption. Every
+  exclusion has a named mechanism and retains its ledger row; no exclusion
+  depends on `b_fiducial_s`. A powermetrics-binary or MLX-version change voids
+  the registration; an estimator-code rotation also voids derivation captures.
+  Scientific defaults are fixed before data, never selected after seeing it.
+
+The proposed pre-registration is
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`; bracketed
+fields are filled at commit before capture. Daytime substitution for a night
+and macOS auto-update deferral remain Ed's decisions; neither is authorized
+by this addendum.
+
 ## D-103: C3 structural cold-gate synthesis — WAL attestation ordering, two named aggregation policies (cold instance overruled on B2 with recorded dissent), reader-tolerant/writer-strict path discipline
 
 - Date: 2026-08-01
