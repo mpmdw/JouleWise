@@ -1,0 +1,9 @@
+WRITE_SCOPE: ["tests/test_arm_readiness_evidence_t0.py"]
+SESSION_MODE: delegated
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+# Seat — three deterministic T-0 clock refusal tests proposed by root-cause consult 99 (gpt-6-astra, medium, genre implementation)
+
+Worktree: this one (branch fix/2026-09-09-t0-clock-refusal-tests off main). Authority: docs/process_traces/2026-09-09-rehearsal-harvest/99-rootcause-arm-load-ci-astra-report.md §Regression proposals (the three methods for `ArmReadinessEvidenceT0Tests`: `test_insufficient_positive_capture_history_refuses` (now_monotonic_ns=500_000_000_000 → 'clock-reference command capture fields are invalid or stale'), `test_r0_raw_anchor_ahead_of_author_raw_refuses` (R0 anchor raw = now+1 → 'T-0 RAW anchor span is below 600000000000 ns'), `test_capture_finish_ahead_of_ordinary_now_refuses` (capture finished_monotonic_ns = now+1 → 'clock-reference command capture is not a live T-0 artifact')), and delta 101 §3 in the same directory (which says the helpers `_assert_clock_refusal` and `_replace_r0` exist at lines ~1165/1199 and that existing coverage is partial).
+Do: add the three tests exactly as proposed, adapting only what the helpers' real signatures require (quote them); each must FAIL if its refusal string is changed (show a one-line mutation check of the detail string for one of them) and PASS as written. Do not touch production, fixtures or other test modules. Acceptance: `PYTHONDONTWRITEBYTECODE=1 R7F_CORPUS_ROOT=/Users/edr/code/JouleWise JOULEWISE_BACKUP_ROOTS= python3 -m unittest tests.test_arm_readiness_evidence_t0` to a log with rc; `git diff --check`; no commit. Header < 8192 bytes; genre implementation (verdict.implementation/acceptance); body = what each test pins (which production guard, quoted path:line) and the test tail with rc.
