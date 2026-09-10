@@ -50,3 +50,9 @@ way to get live steering between spans, and I would run it after this night."
 > Because it occurs to me that once the instrument is validated as useful, it's very important you're able to run experiments and for me to direct the experiments remotely. That way, I don't have to be at the machine, and we can do plenty of science. That is the goal.
 
 Installed as: the four D-180 lanes stay queued (not shelved); REMOTE-CONTROL-BETWEEN-WINDOWS-01 depends on G2A-FIRST-WINDOW-01 and becomes p1 once a real window has validated the instrument; the next exact action after tonight's harvest is G2-a, not another rehearsal.
+
+## Ed's gate-sensibility directive (verbatim, ~04:20 PDT)
+
+> also make sure there are no silly gates on accepting numbers, like make sure all barriers are sensible, recall that time where you wanted a tolerance of like 1e-15 sensitivity or something ridiculously microscopic comapred to the measurement, be sensible about insturment rigor requirements
+
+Installed as kernel lane `GATE-SENSIBILITY-SWEEP-01` (p1, before any G2-a number is consumed): enumerate every numeric gate on the claim path with its value and physical justification against the ~1 J attribution limit and ~5 J claim bar; physics/evidence refusals stay fail-closed (D-161), every other tolerance is re-set to a physically motivated value with a defect-shaped test.

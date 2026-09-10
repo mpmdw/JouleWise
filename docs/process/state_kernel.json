@@ -2629,6 +2629,35 @@
       "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
+    "GATE-SENSIBILITY-SWEEP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GATE-SENSIBILITY-SWEEP-01/acceptance",
+          "label": "GATE-SENSIBILITY-SWEEP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A table of every numeric gate, tolerance, threshold and refusal between capture and a reported number (admission, floors, clock skew/drift, timing anchors, custody freshness, sample counts), each with its current value, the physical quantity it protects, and its ratio to the ~1 J attribution limit and ~5 J claim bar; every gate is either justified by physics or evidence (kept, D-161 fail-closed classes) or re-set to a physically motivated tolerance with a defect-shaped test; no microscopic tolerance survives without a written physical reason. Reviewed by an execution refuter and a physics-lens refuter; lands before any G2-a number is consumed."
+      },
+      "authority": {
+        "label": "Ed 2026-09-10 ~04:20 PDT: no silly gates on accepting numbers",
+        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Before consuming the first real G2-a numbers, audit every numeric acceptance gate on the claim path for physical sensibility and remove microscopic tolerances that have no physical justification (Ed: 'make sure all barriers are sensible').",
+      "id": "GATE-SENSIBILITY-SWEEP-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 175,
+      "status": "queued",
+      "status_note": "2026-09-10: Ed, verbatim: 'make sure there are no silly gates on accepting numbers, like make sure all barriers are sensible, recall that time where you wanted a tolerance of like 1e-15 sensitivity or something ridiculously microscopic compared to the measurement, be sensible about instrument rigor requirements.' Physics/evidence refusals stay (D-161); everything else gets a tolerance sized to the instrument.",
+      "stop_card": null
+    },
     "GENERATOR-CORE-01": {
       "acceptance": {
         "evidence": [
