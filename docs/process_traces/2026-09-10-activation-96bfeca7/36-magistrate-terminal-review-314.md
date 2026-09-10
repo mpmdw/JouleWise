@@ -50,15 +50,27 @@ No new module, no new gate, no decision-log edit. The branch merges cleanly onto
 | 6 | Opus counter-review on the near-final head: record 21 (at 8da99190; production bytes identical to beb808bc) and Opus pairing 25 on the cold ruling — `df09d6c2` |
 | 7 | This record §Design-level questions |
 | 8 | This record §Overbuild |
-| 9 | Replay record 34 at beb808bc (5668 tests, 1 known local-only failure, rc 1) — `581b9380`; disposition per cold gate 35 (pending at this write; filled below) |
+| 9 | Replay record 34 at beb808bc (5668 tests, 1 known local-only failure, rc 1) — `581b9380`; DISCHARGED BY WAIVER, cold gate 35 (W1–W8) — `b62733e5` |
 | 10 | Fresh-eyes final-head review 29 (Astra high) at 92c3e15a → one clause → round 6 `beb808bc`; the magistrate re-read the round-6 clause against code — `f5bde6da` |
 | 11 | CI at beb808bc: 18 checks pass; `gate-ledger` awaits the PR body (to be re-run after the ledger is posted) |
 | 12 | `beb808bc` — this review |
 
 ## Row-9 disposition
 
-(filled after cold gate 35)
+Row 9: WAIVED, not passed — the unpiped single-process replay at beb808bc ran 5668 tests, rc=1, with exactly one failure,
+`test_controller.HappyPathTests.test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce`, a pre-existing sleeping-fixture
+timeout that fails identically on main 078a13a4 on this host and is unreachable from the PR's only controller hunks (all inside
+`cooldown_gate`); waiver named and conditioned by cold gate 35 (W1–W8), CI green at beb808bc, cure lane FIXTURE-SENTINEL-CONTROLLER-01
+registered, addendum owed when it lands. (Sentence verbatim from ruling 35 Q2.) Packet correction carried: the packet's "disjoint from
+the PR's code changes" was false at file level — `joulewise/controller.py` IS on the failing path and IS changed; independence holds at
+hunk level (three hunks at :2516/:2523/:2552 inside `cooldown_gate`, one caller at :3072, never reached by the single-run test), and
+the capture/salvage/strict-validation code that emits the two reasons is byte-identical to main. W7 (no further row-9 waiver for this
+test name on any PR until the cure lands) is carried as a condition of THIS waiver; whether it binds future PRs as a standing rule is
+for the cold gate or Ed, not the resident magistrate.
 
 ## Verdict
 
-(filled after cold gate 35)
+MERGE PR #314 at head `beb808bc` exactly (35 W1), after the Opus pairing refuter on ruling 35 returns without a blocker and the
+`gate-ledger` check passes on the posted twelve-row ledger. Post-merge: CI on main at the merge commit; then the 09-11 activation
+cuts the G2-a clone at H, which descends from this merge (checklist 13 §5–6). GATE-SENSIBILITY-SWEEP-01 closes when the B1 (D-165
+provenance band) disposition is recorded by a cold gate; R2 rides D-138 (GATE-R2-COVERAGE-ULP-01).
