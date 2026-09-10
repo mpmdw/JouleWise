@@ -12,20 +12,29 @@ head is green and the lane's PR is merged.** Sections marked
 `[UNVERIFIED: …]` are facts this seat could not establish from the sources it
 was given; they are open questions for the operator, not instructions.
 
-**Changelog — revision 2 (2026-09-10, writer seat), one line: revised against
-seat S7's landed wrapper generator `scripts/gen_derivation_night.py` and its
-generated runsheet region, which CLOSE the §1.1 `[UNVERIFIED]` on how the night
-driver supplies the chain's environment (answer: it does not, by design — a
-generated wrapper carries it), now deleted.** What that forced: §1.1 restates
-`chain_path` as the emitted wrapper and adds the mechanism (§1.1a) and the
-five-step arm order with the generator's real flags (§1.1b); §1.2 adds the
-generator's window-fit refusal and separates the pre-settle allowance from the
-courier allowance; §5 gains the generation-time and launch-time refusal tables
-and rewrites the old exit-1 row; §0.8 adds the clean-tree precondition and one
-NEW `[UNVERIFIED]` on identity-epoch / T1-bindings provenance; §7 and §8 are
-updated. The three other `[UNVERIFIED]` blocks — the live `check` output
-strings (§0.3), the 06:05 last-start cutoff (§1.3) and the complete night-gate
-refusal list (§5) — are still true and are kept verbatim.
+**Changelog — revision 3 (2026-09-10, writer seat), one line: revised against
+the lane's INTEGRATION head, which moved three things this runbook operates —
+the capture chain now DISPATCHES on the writer's exact status (a non-valid
+capture no longer ends the night), the issuer now enforces the pre-registration
+and the campaign's declared shape at `prepare-candidate`, and the wrapper
+generator now PARSES the two desk-produced JSON inputs instead of only hashing
+them.** What that forced: §0.3 gains the `check --preregistration` desk step
+and the warning that its return code cannot report the result; §0.5 gains the
+pinned pre-registration digest that `prepare-candidate` later demands; §1.1a
+gains the generator's anchor-text citation discipline; §1.1b step 3 gains the
+input validation and the ledger's slot-count ceiling; §1.2's worked example
+gains the **Δ** term between `t0` and the chain's actual start, which the
+previous example silently idealised to zero (seam finding N-3); §2.1, §2.4 and
+§5 carry the three-way dispatch, in which `slot_refused` ends the night with
+the session OPEN and the operator's answer is desk recovery, never a retry;
+§4.1 and §4.2 carry the issuer's exact flag set and the two written-ruling
+escapes; §6 gains clause 11; §7 and §8 are updated. Revision 2 (same day)
+closed the §1.1 `[UNVERIFIED]` on how the night driver supplies the chain's
+environment — it does not, by design; a generated wrapper carries it. The four
+`[UNVERIFIED]` blocks — the live `check` output strings (§0.3), the
+identity-epoch / T1-bindings producer (§0.8), the 06:05 last-start cutoff
+(§1.3) and the complete night-gate refusal list (§5) — are still true and are
+kept verbatim.
 
 Audience: the operator is the **next magistrate activation** — the Claude
 session that a relaunch prompt starts, holding the frozen triple and the
@@ -190,6 +199,41 @@ row must read expected `25F84`, observed `25G83`, status `MISMATCH`.
 seat ran no live command; the field names and the rc-3 rule are read from
 code, the values are not.]`
 
+**Then run `check` a second time with `--preregistration`, and read the line it
+appends.** The pre-registration names the `/usr/bin/powermetrics` SHA-256 the
+campaign is registered under —
+`b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5` — and says
+in terms that a change to it voids the registration. The sampler binary is the
+instrument: a different binary is a different measuring device, and a corpus
+half-captured on each is two corpora. `check --preregistration` is the desk step
+that reads that literal out of the registration text and compares it against the
+binary hashed on this machine right now:
+
+```zsh
+cd "$MEASUREMENT_ROOT"
+.venv/bin/python scripts/issue_calibration_acceptance_generation.py check \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md
+echo "check --preregistration rc=$?"
+```
+
+Without the flag the watch output is byte-identical to the table above; with it,
+exactly one line is APPENDED after the table, and nothing else changes:
+
+```
+pre-registered powermetrics sha256 b762e5bf…30c5: match
+```
+
+or, when they differ, `…: MISMATCH — the registration is void`.
+
+**The return code cannot tell you which.** `check` returns 3 when any watched
+field mismatches OR any error was recorded, and the `os_build` mismatch of §0.3
+already forces 3 for this entire lane; a sampler mismatch only adds one more
+error to a code that was 3 already. So the expected result here is still rc 3,
+and rc 3 is not the check — the printed line is. Record that line verbatim in
+the arm materials for every night. `MISMATCH` is a stop that voids the
+registration: no night may be armed under it, and a mismatch discovered after
+captures exist is a matter for Ed's written ruling, not a re-arm.
+
 ### 0.4 Ledger authenticated and head-equals-pin
 
 The same `check` invocation loads the ledger snapshot with
@@ -216,6 +260,26 @@ plans, three session IDs, three `t0`s), so only the tracked chain's digest can
 fill it. That digest is also the literal each night's wrapper compares against
 before it `exec`s (§1.1a step 4), which is what makes the registered value and
 the value in force at capture the same number.
+
+**Pin the pre-registration's own digest into the arm materials.** Once the file
+is committed inside H with those five fields filled, hash the committed bytes
+in the measurement clone and carry the value in every night's arm record:
+
+```zsh
+shasum -a 256 "$MEASUREMENT_ROOT/configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+```
+
+The clean-tree check of §0.8 is what makes this the committed bytes rather than
+a working-copy edit. The digest is not decoration: `prepare-candidate` takes it
+as the required `--preregistration-sha256` and refuses —
+`pre-registration sha256 <observed> does not match the pinned <given>; not
+issued` — if the file's bytes moved between the arm and issuance (§4.2). A
+pre-registration exists to fix the rules BEFORE the data; this pin is what makes
+"before" checkable by someone reading the artifacts months later, because
+without it the tool would derive against whatever the file says on the day it
+runs, which is exactly the edit the document exists to forbid. Record it once,
+at night 1's arm, and re-record the same value at nights 2 and 3 — a change
+between nights is a stop, not a new pin.
 
 **V3 requires Ed's affirmative written acknowledgment before the first
 capture's arm — silence is not consent for V3.** V3 is the night count, the
@@ -416,6 +480,24 @@ file's SHA-256 in `shasum` output form — the digest, two spaces, a name:
 | `<NIGHT_ROOT>/chain.zsh.sha256` | The wrapper's sidecar. The plan's `chain_sha256_path` must be this exact path; the driver refuses the night unless the wrapper's bytes still hash to it. |
 | `<NIGHT_ROOT>/chain.zsh.chain-source.sha256` | **Advisory only** — the tracked chain's digest, named by its repository-relative path so an operator can run `shasum -a 256 -c` on it by hand from the clone. **Advisory** means nothing reads it at launch: the wrapper carries the same digest as a literal in its own bytes, so deleting or rewriting this file changes nothing about what the night will accept. |
 
+**How the generator cites the chain, and why the operator should care.** Every
+reference `gen_derivation_night.py` makes into the tracked chain is an **anchor
+text** — one exact line of the chain, quoted in full and held in the
+generator's `CHAIN_ANCHORS` table — and never a line number. Examples of the
+anchors it holds: `cd "${0:A:h:h:h}"`, `SETTLE_S="${SETTLE_S:-600}"`,
+`SLOT_CAPTURE_BUDGET_S="${SLOT_CAPTURE_BUDGET_S:-480}"`, and
+`    if (( writer_rc == 0 )); then`. `tests/test_gen_derivation_night.py`
+resolves every anchor against the chain's current bytes, so a chain edit that
+moves or rewrites a cited line fails a test rather than shipping a false
+citation into a night's artifact. Two of those anchors are the chain's
+**writer-status dispatch** — its branch on the exact status number a capture
+returns, built in full at §2.4 — because the wrapper's window arithmetic
+assumes every declared slot is attempted. "A non-valid capture does not stop
+the night" is therefore part of the contract the generator depends on, and is
+pinned as such rather than left to a reader's assumption. When this runbook and
+the code disagree, grep the quoted line: it is the citation that is guaranteed
+to still exist.
+
 ### 1.1b Arm order: five steps, each depending on the one before
 
 1. **Cut the clone at H** (§0.2) and record `git -C "$MEASUREMENT_ROOT" status
@@ -455,6 +537,41 @@ file's SHA-256 in `shasum` output form — the digest, two spaces, a name:
    generator happens to execute in. `--evidence-root-id` has no derivable
    default; state its literal value and the record that registers it in the arm
    record alongside `--session-id`.
+
+   **The generator PARSES the two desk-produced JSON inputs; it does not only
+   hash them.** Hashing pins WHICH file the night will use. Parsing is what
+   tells the operator, at the desk and before any window exists, that the file
+   can do its job at all. `identity_epoch.json` must be a JSON object whose keys
+   are EXACTLY the six `IDENTITY_EPOCH_FIELDS`, with every value present and
+   scalar — a non-empty string, or a number, because `sampling_interval_ms` is
+   an integer in every issued acceptance — and whose `power_policy` is exactly
+   `ac_high_power`. The three refusals name what is wrong: `identity epoch json
+   keys are not exactly the six IDENTITY_EPOCH_FIELDS (missing=[…],
+   extra=[…])`, `identity epoch json fields are empty or not scalar: […]`, and
+   `identity epoch power_policy is '<x>', but the chain captures with
+   --power-policy ac_high_power; the writer would refuse at d01 with the settle
+   already spent`. `t1_bindings.json` must parse as a JSON object, and nothing
+   more is asserted about its fields, because the ledger — not this tool — owns
+   that block's shape.
+
+   That last message states the forcing problem for all three. The chain
+   hardcodes `--power-policy ac_high_power` on every capture, and the writer
+   compares its measured bindings against the reserved slot's identity epoch,
+   whose contents are copied verbatim from this very file. So an epoch naming a
+   different policy used to fail at `d01`: after the driver's gate work, after
+   the reservation, after 600 s of settle, with the session already open and
+   eleven further slots that would fail the same way. The same JSON handed to
+   the generator at the desk now costs a re-written file and no window time.
+   **Learn it at the desk, not at d01** is the whole of the design.
+
+   **The ledger's ceiling on declared slots.** A `--slot-count` above
+   `MAX_DECLARED_SESSION_SLOTS` (99, `joulewise/calibration_ledger.py:76`) is
+   refused here — `slot count <n> exceeds the ledger's
+   MAX_DECLARED_SESSION_SLOTS (99); the reservation would refuse it after the
+   settle` — for the same reason: the reservation would otherwise refuse it
+   INSIDE the window, after the settle, with the night spent. Twelve is the only
+   value these nights use; the ceiling matters solely as the reason a large
+   number fails at the desk instead of at 03:10.
 4. **Re-derive and assert byte equality** — the arm-time **tripwire**, meaning
    a check that writes nothing and whose only job is to fail loudly if an input
    drifted between generation and arming. Same command as step 3 plus
@@ -553,6 +670,15 @@ which pushes every later slot later and is the realistic way a night loses its
 last slot to `window_exhausted`. A `--allow-slot-count` departure recomputes
 this floor from the new slot count rather than bypassing it.
 
+Those are the registration's three durations, and it states all three together
+precisely because confusing them is how a night opens a session it cannot
+finish: **programmed span 7680 s (128 min)**, **generator minimum 7980 s
+(133 min)**, **armed `window_max_s` 9000 s (150 min)**. A fourth number,
+210 min, belongs to none of them — it is the install span 03:00–06:30 of §1.3,
+an operator-facing block of the clock, and a 150 min window sits inside it with
+an hour to spare. The two measure different things and neither is derived from
+the other.
+
 **The dead-man check.** The rule is `t0 + window_max_s + 300 < the next 07:00`,
 where 300 s is the **courier allowance** and 07:00 is the dead-man minute. Two
 different 300 s budgets appear in this section; they are unrelated and happen
@@ -582,15 +708,71 @@ strict. All four epoch↔local conversions above were verified with
 `TZ=America/Los_Angeles date -r <epoch>` in this drafting session.)
 
 The chain's own end boundary follows: `WINDOW_END_EPOCH_S = t0 + WINDOW_MAX_S`
-= `1789215960` in the example. Check the last slot is admitted rather than
-skipped — the chain refuses to START a slot whose 480 s budget would cross the
-end:
+= `1789215960` in the example. Check that the last slot is admitted rather than
+skipped — the chain refuses to START a slot whose 480 s budget would cross that
+end.
+
+**The schedule does not begin at `t0`, so name the gap before doing the
+arithmetic.** Call it **Δ**: the elapsed time between the plan's `t0` and the
+moment the chain's settle actually begins. Three things happen inside Δ, in
+this order, and none is instantaneous:
+
+1. **The driver's gate work.** The night gate evaluates its conditions,
+   authenticates the plan and the registration, verifies the wrapper's bytes
+   against its sidecar, and only then launches the wrapper.
+2. **The chain preflight.** The wrapper's own checks (one `git rev-parse`, the
+   three input digests, one `shasum` of the tracked chain — all sub-second on
+   this hardware), then the chain's input preflight and its `--phase
+   pre-reserve` readiness check.
+3. **The session reservation.** The ledger call that opens the
+   `derivation`-kind session and declares all twelve slots. The chain logs
+   `chain_start` only after this returns; the settle begins immediately after.
+
+Items 2 and 3 plus the driver's launch are exactly what the generator's 300 s
+pre-settle allowance is a floor for; item 1 is the driver's own work. Every
+time in the programmed schedule is therefore `t0 + Δ + <programmed offset>`:
 
 ```
-d12 start  = t0 + 600 + 11 × 600 = t0 + 7200 = 1789214160  (04:56:00 PDT)
-d12 budget end = t0 + 7680       =             1789214640  (05:04:00 PDT)
-05:04:00 ≤ window end 05:26:00                             ✓ d12 is admitted
+d01 start      = t0 + Δ + 600
+d12 start      = t0 + Δ + 600 + 11 × 600 = t0 + Δ + 7200
+d12 budget end = t0 + Δ + 7680
 ```
+
+and the admission test the chain actually runs — it refuses the slot when
+`slot_start + 480 > WINDOW_END_EPOCH_S` — collapses to one inequality in Δ:
+
+```
+t0 + Δ + 7680  ≤  t0 + 9000
+          Δ    ≤  1320 s   (22 min)
+```
+
+**That is what the 1320 s allocated above buys: 22 minutes of Δ before `d12` is
+dropped.** The generator's mandatory 300 s covers only the part of Δ it can
+reason about; the remaining 1020 s is the operator's headroom, and the second
+margin item eats it from the other end — a capture that overruns 600 s pushes
+every later slot later, which is arithmetically the same as a larger Δ.
+
+Worked at Δ = 0 — the idealisation, labelled as one — and then at the largest Δ
+that still admits `d12`, using the same example coordinates:
+
+```
+Δ = 0 s      d12 start      = t0 + 7200 = 1789214160  (04:56:00 PDT)
+             d12 budget end = t0 + 7680 = 1789214640  (05:04:00 PDT)
+             05:04:00 ≤ window end 05:26:00        ✓ admitted, 22 min unused
+
+Δ = 1320 s   d12 budget end = t0 + 9000 = 1789215960  (05:26:00 PDT)
+             05:26:00 ≤ window end 05:26:00        ✓ admitted, nothing left
+
+Δ = 1321 s   d12 budget end = t0 + 9001 = 1789215961  (05:26:01 PDT)
+             05:26:01 >  window end 05:26:00        ✗ d12 recorded unused
+```
+
+Δ cannot be measured at the desk — it is whatever the machine takes that night —
+so the operator's rule is the one those three lines state: a night whose chain
+starts more than 22 minutes after `t0` loses `d12`, and
+`slot_unused slot=d12 reason=window_exhausted` in the chain log is the evidence
+that it did. The realized Δ of a finished night is readable at the harvest: the
+`chain_start` line's timestamp in `derivation-chain.log` minus `t0` (§2.1).
 
 If your chosen `<t0>` fails either check, move `<t0>` earlier. Never raise
 `window_max_s` past the strict maximum and never move the dead-man.
@@ -669,7 +851,7 @@ is clear. An early chain exit alone does not authorize early resumption, and
 | `<NIGHT_ROOT>/night.log` | The driver's own log: the prior morning's dead-man stand-down line, then this night's gate verdict line. |
 | `<NIGHT_ROOT>/night/result.json` | The verdict, the chain's exit code, and where the receipt or refusal is. Read this first; it directs the rest. |
 | `<NIGHT_ROOT>/night/receipt.json` or `refusal.json` | The C1–C5 condition rows, or the refusal reason and detail. C2 is `NOT_APPLICABLE`/`no_pack_by_design` for this class. |
-| `<WINDOW_CUSTODY_ROOT>/operator_logs/derivation-chain.log` | The chain's own lifecycle: `session_open kind=derivation slots=12`, `chain_start`, `settle_complete`, twelve `slot_start`/`slot_end` pairs, `derivation_night_complete slots=12` — or `slot_unused … reason=window_exhausted` and `session_abort`. |
+| `<WINDOW_CUSTODY_ROOT>/operator_logs/derivation-chain.log` | The chain's own lifecycle: `session_open kind=derivation slots=12`, `chain_start` (its timestamp minus `t0` is the night's realized Δ, §1.2), `settle_complete`, then twelve `slot_start` lines each answered by exactly one of `slot_end … disposition=valid`, `slot_end … disposition=non-valid` (a normal record, §2.4) or `slot_refused slot=dNN rc=<n>` (the night stopped here, session OPEN), and finally `derivation_night_complete slots=12` — or `slot_unused … reason=window_exhausted` followed by `session_abort`. |
 | `<NIGHT_ROOT>/night/chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`, `chain.stderr.log` | Launchd lineage, actual chain termination, and the production census the driver takes at launch and every 30 s. |
 | `<NIGHT_ROOT>/night/courier.sent`, `courier.json`, `courier.heartbeat` | Send time and message ID; verify the email separately in Ed's inbox. |
 | launchd `.out`/`.err` for both labels | Present or absent, complete bytes, sizes, nanosecond mtimes — compare against the arm-time baseline. |
@@ -724,7 +906,59 @@ Whether a capture's bound exceeded r6's level screen `0.032898493715362` IS
 recorded in the hashed evidence as a diagnostic — recorded, not read. Leave it
 until §4.
 
-### 2.4 The abort / `window_exhausted` case
+### 2.4 The writer-status dispatch: how a slot ends, and how a night ends early
+
+Every capture hands the chain a status number, and the chain **dispatches** on
+it — meaning it branches on the exact value rather than treating "non-zero" as
+a single outcome. The three branches are not interchangeable, and the harvest
+reads a different thing for each:
+
+| Writer status | The ledger row | Chain log line | What the night does |
+|---|---|---|---|
+| `0` | finalized, disposition `valid` | `slot_end slot=dNN disposition=valid` | Continues to the next declared slot on the unchanged start-to-start cadence. |
+| `1` | **finalized**, disposition not `valid` | `slot_end slot=dNN disposition=non-valid` | **Continues, identically.** This is a normal record, not a failure. |
+| `≥ 2` | **not finalized** | `slot_refused slot=dNN rc=<status>` | **Stops the night, leaving the session OPEN.** The chain exits with the writer's own status. |
+
+**Why a non-valid capture does not end the night.** The writer exits 1 when the
+capture's disposition is not `valid` and 0 when it is, and the ledger row is
+FINALIZED either way. An ordinary-invalid capture is a legitimate outcome the
+pre-registration already handles, by named-mechanism exclusion at issuance —
+and derivation slots are INDEPENDENT of one another: none is an endpoint that
+another depends on, unlike a bracket session's two ends. So one non-valid
+capture must never cost the captures after it. The chain runs the writer as an
+`if` condition for exactly this reason, so that `set -e` cannot exit on status 1
+before the dispatch is reached. **Expect `disposition=non-valid` lines in a
+healthy night's log** — the pre-registration's own projection assumes a valid
+rate near 30/38 — and record their count without reading a value.
+
+**Why a refusal does end it.** Status 2 is the writer's refusal exit
+(`emit_refusal`); anything above it is a crash. In both cases the row is NOT
+finalized, so continuing would write later slots into a session whose declared
+list has a hole nothing accounts for. The chain stops instead — and
+deliberately does NOT call `abort-session`. It leaves the session OPEN so that
+what this night amounts to is decided at the desk by a person reading the
+refusal, rather than by the chain's own guess at 3 a.m.
+
+**Operator action on `slot_refused` — desk recovery, never a retry.** *Desk
+recovery* means the S2 recovery tool run by the operator, at the desk, after
+the night is over, against the measurement clone: never inside the window, and
+never as a re-arm of the same night.
+
+```zsh
+cd "$MEASUREMENT_ROOT"
+.venv/bin/python scripts/recover_calibration_ledger.py \
+  --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
+  abort-session --session-id "<SESSION_ID>" --plan "<PLAN>" \
+  --reason "<the named reason this night actually stopped>"
+```
+
+Read the refusal in `chain.stderr.log` and name THAT as the reason. Do not
+reach for `window_exhausted`: that is the window's reason and belongs to the
+chain's own abort path below. Until the session is closed the ledger head does
+not settle, so §3 item 4 bites — the next night cannot open at head-equals-pin,
+and a refused night blocks its successor until the desk clears it.
+
+**The other early end: `window_exhausted`.**
 
 If the chain could not reach every slot it logs `slot_unused slot=dNN
 reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
@@ -738,9 +972,11 @@ values; a night that lost slots to the window simply contributed fewer members,
 and the shortfall (if any) is resolved at §4, in the open, under Ed's written
 ruling. Do not add a fourth night to make the numbers work.
 
-A chain that failed mid-night stops under `set -e` with the session still OPEN.
-Recovery is seat S2's desk tool run at the desk, never a retry inside the
-window.
+Everything else that can fail mid-night — a refused readiness check, a refused
+reservation, a `slot_refused` dispatch — stops the chain with the session still
+OPEN, either under `set -e` or by the dispatch's own `exit`. The answer is the
+same in every case: desk recovery with the named reason, above. Never a retry
+inside the window.
 
 ---
 
@@ -787,6 +1023,7 @@ not generous.
 ```zsh
 cd "$MEASUREMENT_ROOT"
 .venv/bin/python scripts/issue_calibration_acceptance_generation.py check \
+  --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
   --session-ids "<S1>" --session-ids "<S2>" --session-ids "<S3>"
 echo "rc=$?"
 ```
@@ -796,12 +1033,18 @@ rc 5 prints its blockers: a non-terminal session, or pending/unresolved rows in
 the prior-set prefix. Clear the named blocker at the desk — do not capture more
 to make it go away.
 
+Carry `--preregistration` here too, and read its appended line (§0.3): it must
+still say `match` on the sampler digest. The dry run's return code is what the
+command returns when sessions are named, so the sampler comparison is again
+reported only in the printed line, never in the code.
+
 ### 4.2 Prepare the candidate
 
 ```zsh
 cd "$MEASUREMENT_ROOT"
 .venv/bin/python scripts/issue_calibration_acceptance_generation.py prepare-candidate \
   --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md \
+  --preregistration-sha256 "<the digest pinned at night 1's arm, §0.5>" \
   --registration-session-id "<S1>" \
   --registration-session-id "<S2>" \
   --registration-session-id "<S3>" \
@@ -810,11 +1053,54 @@ cd "$MEASUREMENT_ROOT"
 echo "rc=$?"
 ```
 
+That is the exact flag set for an ordinary campaign: nothing else is required,
+and every remaining flag is an escape or an override discussed below.
+
+**The four fences this command applies, and what each one refuses.** Each was a
+promise the pre-registration made that no code read until the arm gate closed
+it; they are the reason the flag set is what it is.
+
+1. **The document itself.** `--preregistration-sha256` is argparse-required.
+   The tool hashes the file it was handed and refuses `pre-registration sha256
+   <observed> does not match the pinned <given>; not issued` on any difference,
+   so a candidate can only ever attest to the text the campaign was armed under.
+2. **The night count.** Exactly three `--registration-session-id` values, or
+   the run refuses `registration names <n> sessions, not the pre-registered 3`.
+3. **The slots per night.** Every named session must have DECLARED twelve
+   slots — declared, not filled, so a night that lost slots to the window still
+   passes — or the run refuses `session <id> declared <n> slots, not the
+   pre-registered 12`. Twelve declared × three nights is the n ≤ 36 ceiling the
+   registration's admissible degrees-of-freedom range is derived from, which is
+   why a differently-shaped corpus is a different experiment whatever its
+   statistics say.
+4. **The machine.** The `os_build` carried by the registration's rows must equal
+   the one parsed out of the pre-registration text, and every member row's T1
+   `powermetrics_sha256` must equal the sampler digest that text names;
+   otherwise `the registration is void`. This is where the registration's "a
+   change to either voids this registration" stops being decorative.
+
+**The two written-ruling escapes.** A *written-ruling escape* is a flag that
+permits departure from one pre-registered number, and only by naming the
+written ruling that authorised it — the departure is then recorded in the
+artifact rather than being invisible. Fences 2 and 3 have one each:
+`--nights-ruling` for a session count other than three, `--slot-count-ruling`
+for a session that declared other than twelve slots. Both take a reference to
+Ed's or a cold gate's written ruling. **When they apply: only after that ruling
+exists, and never to make a shortfall issue.** A campaign that came up short
+does not acquire a fourth night and then name a ruling for it; the shortfall is
+resolved in the open, under §2.4's no-top-up rule and §4.2's corpus floor. The
+generator has the matching pair at the other end of the campaign
+(`--allow-slot-count` with `--slot-count-ruling`, §1.1b), and the corpus floor
+has its own (`--minimum-corpus-size 17` with `--ed-ruling`).
+
 `--out` is **required and has no default**, deliberately: writing into
 `configs/calibration/` is the D-138 transaction's act, never this tool's, so
 the destination must be named and must be outside `configs/`. `--d125-ruling`
 is deliberately NOT `required=True` in argparse, so that its absence produces
 the ruled refusal with its reason rather than a usage error.
+`--predecessor-acceptance` defaults to the ACTIVE issued acceptance and should
+be left alone; it is the artifact the ceiling and the level screen are read
+from (below).
 
 The command writes exactly one file, marked `candidate_not_issued: true`,
 which the production acceptance loader refuses to load. It licenses nothing.
@@ -830,13 +1116,21 @@ Corpus size: `--minimum-corpus-size` defaults to 19
 only with `--ed-ruling` naming Ed's written ruling
 (`RULED_ALTERNATIVE_CORPUS_SIZE = 17`). Nothing issues below 19 without it.
 
-**Screen challenge.** If two or more retained members exceed
-`0.032898493715362` (r6's preflight level screen, `R6_PREFLIGHT_LEVEL_SCREEN_S`
-at script line 326), the corpus is **not issued** and Ed rules in writing before
-any further capture. A second diagnostic is recorded but edits no membership:
-whether the new maximum exceeds r6's maximum plus r6's range,
-`0.04262208300415633` (the Decimal sum of `0.03289849371536248` and
-`0.00972358928879385`).
+**Screen challenge.** If two or more retained members exceed r6's preflight
+level screen `0.032898493715362`, the corpus is **not issued** and Ed rules in
+writing before any further capture. That threshold is no longer a literal in
+the issuer: it is read at run time from the authenticated predecessor
+acceptance, at `decimal_derivation.ratified_operatives.preflight_level_screen_s`
+— the artifact is the number's one home, so the issuer cannot drift from the
+generation it is judging against.
+
+A second diagnostic is recorded but edits no membership: whether the new maximum
+exceeds r6's maximum plus r6's range, `0.04262208300415633` (the Decimal sum of
+`0.03289849371536248` and `0.00972358928879385`). That one IS a ruled literal in
+the issuer, because a ruling fixed its last digits — and it is checked at run
+time against the predecessor's own `source_statistics`, refusing `predecessor
+maximum plus range <x> does not equal the ruled diagnostic <y>` if the literal
+ever stops describing the artifact it was derived from.
 
 ### 4.3 The cold science gate packet
 
@@ -864,6 +1158,16 @@ primary artifacts only:
 6. The two screen-challenge diagnostics of §4.2 and the S-vs-C comparison.
 7. The per-night distribution, order, exclusions and clock-residual margins —
    reported as diagnostics that authorize no trimming.
+8. The pre-registration's own **known conditions** — recorded facts about the
+   corpus that are not rules and edit no membership. One matters to a reader of
+   the resulting acceptance: the night gate does not constrain the display's
+   state at `t0` (it requires the screensaver's `idleTime` to read exactly `0`
+   and merely records `pmset -g`'s `displaysleep` value), and the derivation
+   chain omits the `--sleep-display-before-capture` flag the G2-a chain passes,
+   because no operator is present to schedule a display action. These captures
+   may therefore differ systematically in display state from the G2-a corpus
+   the resulting acceptance will judge. It travels with the packet so the gate
+   rules with it in view; it licenses no re-capture and moves no threshold.
 
 ### 4.4 The D-138 transaction — named, and out of scope here
 
@@ -924,12 +1228,15 @@ Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
 
 | Signal | Meaning | Operator action |
 |---|---|---|
-| exit 64 | A knob (`SLOT_COUNT`, `SETTLE_S`, `SLOT_CADENCE_S`, `SLOT_CAPTURE_BUDGET_S`, `WINDOW_END_EPOCH_S`) was not a non-negative integer string, or a positivity check failed. Refused before the settle, the reservation and any operator-log write. | The environment or plan is malformed. No window time was spent and no partial night exists. Fix at the desk; author a fresh plan for a later night. |
+| exit 64 | A knob (`SLOT_COUNT`, `SETTLE_S`, `SLOT_CADENCE_S`, `SLOT_CAPTURE_BUDGET_S`, `WINDOW_END_EPOCH_S`) was not a non-negative integer string, or failed the positivity check — which now covers `SLOT_CAPTURE_BUDGET_S` as well as `SLOT_COUNT`, `SLOT_CADENCE_S` and `SETTLE_S`. Refused before the settle, the reservation and any operator-log write. | The environment or plan is malformed. No window time was spent and no partial night exists. Fix at the desk; author a fresh plan for a later night. **Why the budget is in the positivity guard:** at `SLOT_CAPTURE_BUDGET_S=0` the window test `slot_start + budget > WINDOW_END_EPOCH_S` becomes vacuous, so a slot could start one second before the agent-free window ends and capture straight past it. |
 | exit 66 `derivation_chain_input_missing: <path>` | One of `PLAN`, `IDENTITY_EPOCH_JSON`, `T1_BINDINGS_JSON`, `CALIBRATION_LEDGER`, `LEDGER_HEAD_PIN` was absent. | The clone is incomplete or a path in the plan is wrong. Re-verify §0.2 and §0.4 before authoring the next night. |
 | exit 1 | **Ambiguous — read `chain.stderr.log` to disambiguate.** With a `FAIL <reason>` line it is a wrapper refusal (table above). Without one it is the tracked chain's own `:?required` guard, meaning the chain ran without the wrapper's environment. | Both are pre-window failures costing no window time. Resolve per the matching row above before re-arming. |
 | `readiness --phase pre-reserve` non-zero | The ledger was not ready; nothing was written and no window time was spent. It never authorizes ARM even when it passes. | Desk-repair the ledger; do not re-arm the same night on the same signature. |
-| `slot_unused … reason=window_exhausted` + `session_abort` + exit 0 | The window could not finish a slot's 480 s budget. Slots are recorded unused, never compressed or retried. | Record the count. No top-up, no fourth night (§2.4). |
-| Non-zero exit mid-night, session left OPEN | A capture or ledger call failed under `set -e`. | Desk recovery with `recover_calibration_ledger.py`; never retry inside the window. |
+| `slot_end slot=dNN disposition=non-valid`, night continues | **Not a failure.** The writer exited 1: the row is finalized with a disposition other than `valid`, and the next declared slot runs on the unchanged cadence (§2.4). | Record the count of such slots. Do nothing else, and read no value. Exclusion is decided at issuance, by named mechanism. |
+| `slot_refused slot=dNN rc=2` + chain exits 2, session left OPEN | The writer REFUSED this capture (`emit_refusal` exits 2). The row is **not** finalized, so the chain stops rather than continuing over an unrecorded slot — and deliberately does not abort the session. | Read the refusal in `chain.stderr.log`, then **desk recovery**: `recover_calibration_ledger.py … abort-session --session-id <id> --plan <plan> --reason <the named reason>` (§2.4). Never a retry inside the window. Until the session is closed the next night cannot open at head-equals-pin. |
+| `slot_refused slot=dNN rc=<n≥3>` + chain exits with that status, session left OPEN | The writer crashed rather than refusing. Same dispatch branch, same unfinalized row. | Same desk recovery, and account for the crash before any further night is armed: a crash is a defect, not an outcome. |
+| `slot_unused … reason=window_exhausted` + `session_abort` + exit 0 | The window could not finish a slot's 480 s budget. Slots are recorded unused, never compressed or retried. Δ larger than 1320 s is the usual cause (§1.2). | Record the count. No top-up, no fourth night (§2.4). |
+| Any other non-zero exit, with a `session_open` line already in the chain log | A ledger call failed under `set -e` after the session was opened. | Treat exactly as `slot_refused`: read the log, then desk recovery with a named reason. A `session_open` line with no `session_abort` and no terminal slot means the session is still open, whatever the exit code was. |
 
 Writer refusals (`scripts/validate_powermetrics_fiducial.py`, codes in
 `joulewise/calibration_exits.py:96–101`):
@@ -951,6 +1258,7 @@ Issuer return codes (`scripts/issue_calibration_acceptance_generation.py`):
 | `check --session-ids …` | 0 | Registration would be admissible. | Proceed to §4.2. Expected only after night 3 is terminal. |
 | `check --session-ids …` | 5 | Inadmissible; each blocker is printed. | Expected after nights 1 and 2. Clear the named blocker at the desk; never capture more to clear it. |
 | `prepare-candidate` | 3 | `REFUSED: <reason>` and nothing written — a non-terminal session, absent `--d125-ruling`, corpus below the minimum, a pending/unresolved prior-set row, a valid same-epoch observation outside the registration, a member whose stored bytes disagree with its ledger row, a failed quantile proof, `S >= C`, or two or more retained members over the level screen. | Read the reason literally. Several of these are science stops requiring Ed's written ruling (§4.2), not defects to fix. |
+| `prepare-candidate` | 3 | The arm-gate fences of §4.2, same `REFUSED:` shape: `pre-registration sha256 … does not match the pinned …; not issued`; `registration names <n> sessions, not the pre-registered 3`; `session <id> declared <n> slots, not the pre-registered 12`; `registration os_build … is not the pre-registered …; the registration is void`; `registration powermetrics sha256 … is not the pre-registered …; the registration is void`; `predecessor maximum plus range … does not equal the ruled diagnostic …`. | None of these is fixed by re-running with different flags. The first three are answered by naming the correct file and sessions, or by a written-ruling escape that already exists (§4.2) — never by inventing one. The two `void` refusals mean the campaign was captured on a machine the registration does not describe: stop, and take it to Ed in writing. |
 | `prepare-candidate` | 0 | One candidate file written, `candidate_not_issued: true`. | It licenses nothing. Go to §4.3. |
 
 Night-gate refusals to expect in `result.json`/`refusal.json` (names from
@@ -988,6 +1296,14 @@ implementation.]`
    this derivation.
 10. **This draft itself authorizes nothing** until the lane is merged, the
     replay is green, and a magistrate ruling adopts it.
+11. **No departure from three nights, or from twelve declared slots a night.**
+    Nothing here authorises one. Both tools refuse a departure that is not
+    accompanied by the written ruling they each require — the generator's
+    `--allow-slot-count` with `--slot-count-ruling` at the arm (§1.1b), the
+    issuer's `--nights-ruling` and `--slot-count-ruling` at issuance (§4.2) —
+    and this runbook does not supply, imply or stand in for such a ruling. The
+    flags exist so that a ruled departure is RECORDED in the artifact, not so
+    that a campaign can reshape itself around what the nights produced.
 
 ---
 
@@ -999,17 +1315,24 @@ files read in the bookkeeping worktree.
 | Fact | Source |
 |---|---|
 | Chain order, `SLOT_COUNT=12`, `SETTLE_S=600`, `SLOT_CADENCE_S=600`, `SLOT_CAPTURE_BUDGET_S=480`, exits 64/66, `window_exhausted` abort, required env | `JouleWise-wt-epoch-integration` `scripts/night_chains/calibration_derivation_only.zsh` |
+| The three-way writer-status dispatch (0 → `disposition=valid` continue; 1 → row finalized `disposition=non-valid`, continue; ≥ 2 → `slot_refused slot=dNN rc=<n>`, exit with the session OPEN and no abort), the writer run as an `if` condition so `set -e` cannot pre-empt it, and the positivity guard covering `SLOT_CAPTURE_BUDGET_S` | same file at the INTEGRATION head, the slot loop and the pre-settle guards |
+| `chain_start` logged AFTER the reservation and immediately before the settle — the fact that makes Δ measurable at harvest | same file |
 | Chain's own SKELETON / unlanded-surface banner | same file, header comment |
 | Chain env fixture (the exact 13 required variables) | `JouleWise-wt-epoch-integration` `tests/test_issue_calibration_acceptance_generation.py:304–345` |
 | Writer flags `--allow-live --derivation-only --session-id --slot --attempt-id --power-policy`; all-or-none bracket triple | `JouleWise-wt-s1-writer-derivation` `scripts/validate_powermetrics_fiducial.py:1750–1790`, `:1789` |
 | The three derivation refusal codes | `JouleWise-wt-s1-writer-derivation` `joulewise/calibration_exits.py:96–101`; raised at `validate_powermetrics_fiducial.py:1464,1938,1944,1965` |
 | `check` semantics, rc 3, dry-run fields, `DRY_RUN_INADMISSIBLE_EXIT = 5` | `JouleWise-wt-s4-issuer-prepare` `scripts/issue_calibration_acceptance_generation.py:160,225–243,254–312` |
 | `prepare-candidate` flags, `--out` required and defaultless, `--d125-ruling` not argparse-required, rc 3 on refusal | same file, `:1034–1041`, `:1534–1614` |
-| `SUCCESSOR_MINIMUM_CORPUS_SIZE = 19`, `RULED_ALTERNATIVE_CORPUS_SIZE = 17`, `R6_PREFLIGHT_LEVEL_SCREEN_S = 0.032898493715362` | same file, `:326,332,338` |
+| `SUCCESSOR_MINIMUM_CORPUS_SIZE = 19`, `RULED_ALTERNATIVE_CORPUS_SIZE = 17` | same file, `:357,363` at the integration head |
+| `check --preregistration` (optional; parses the registered `powermetrics` digest, APPENDS one comparison line, adds an error rather than changing rc); `prepare-candidate --preregistration-sha256` required, `PREREGISTERED_NIGHT_COUNT = 3` and `PREREGISTERED_SLOTS_PER_NIGHT = 12` with `--nights-ruling` / `--slot-count-ruling` escapes; the `os_build` and sampler-digest void refusals; the level screen read from the authenticated predecessor's `ratified_operatives.preflight_level_screen_s`; `R6_MAXIMUM_PLUS_RANGE_S` re-checked against the predecessor's `source_statistics` | `JouleWise-wt-epoch-integration` HEAD `scripts/issue_calibration_acceptance_generation.py` (`preregistration_epoch_pins`, `_authenticated_predecessor`, and the `prepare-candidate` body and parser); these are the three arm-gate blockers report 109 recorded as unenforced, now enforced |
 | Three nights × 12 slots, retained n ≥ 19, 16.95/25.4 projections, 128 min schedule, blindness, screen challenge, D-125 envelope, halt on `S >= C`, `0.04262208300415633`, `0.010818`, predecessor ceiling `0.010164834757777545` | `JouleWise-wt-s6-docs-prereg` `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` |
 | Fences `[02:45,03:30)` / `[07:00,07:01)`, plan span from `t0 − 25 min`, stand-down ladder −25/−16/−15, 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, `measurement_root`/`measurement_head` install rule | `docs/process/MAGISTRATE_WATCHDOG.md:31,42,46–60,77,329` (bookkeeping worktree) |
 | Handback's role, courier reading order, campaign/chain process checks | `docs/process/NIGHT_HANDBACK.md:1–40` (bookkeeping worktree) |
 | v2 plan required keys, `night_plan_overruns_deadman`, `registration_path` | `JouleWise-wt-epoch-integration` `joulewise/night_gate.py:38,88–110,112–127,195–276` |
+| Generation-time parsing of the two JSON inputs (six exact `IDENTITY_EPOCH_FIELDS`, scalar non-empty values, `power_policy == ac_high_power`; T1 bindings parsed as an object only), `MAX_DECLARED_SESSION_SLOTS = 99` as a desk-time ceiling, and the `CHAIN_ANCHORS` anchor-text discipline | `JouleWise-wt-epoch-integration` HEAD `scripts/gen_derivation_night.py` (`_validated_identity_epoch`, `_validated_json_object`, `CHAIN_ANCHORS`, and the slot-count and window checks in `build_spec`), with `MAX_DECLARED_SESSION_SLOTS` from `joulewise/calibration_ledger.py:76` |
+| Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the S7 execution refuter's independent derivation (report 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
+| The three durations reconciled — programmed span 7680 s (128 min), generator minimum 7980 s (133 min), armed `window_max_s` 9000 s (150 min) — and the note that 210 min is the install span, not a window | `JouleWise-wt-epoch-integration` HEAD `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Why three nights of twelve slots" |
+| Display state at `t0` is unconstrained by the night gate, recorded as a known condition and not a rule | same file, §"Known conditions (recorded, not rules)" |
 | Runbook shape, install span 03:00–06:30, never 07:xx, `t0+window_max_s+300 < 07:00`, strict-maximum arithmetic, Block A/B/record-and-exit structure | `12-arm-runbook-68-g2a-20260912.md` and `11-night-handback-draft-g2a-20260912.md` at `JouleWise-wt-epoch-integration` HEAD |
 | Supersession banner shape and the "read the newest activation records" instruction | `13-activation-checklist-2026-09-11.md` at the same head |
 | Integration replay RED at `51565cee` | [98-integration-replay-red.md](98-integration-replay-red.md) in this trace directory |
@@ -1072,6 +1395,12 @@ means. A term is listed only if it does technical work.
 | T1 bindings | §0.3 | The toolchain-identity block a finalization receipt records, including the MLX version in force. |
 | frozen triple | §1.5 | `(plan id, measurement root, H)`, repeated verbatim in the next relaunch prompt so the successor harvests the right night. |
 | terminal (session) | §2.2 | The session's last declared slot is final, or the session was aborted. |
+| dispatch (writer-status) | §2.4 | The chain branching on the capture's EXACT status number rather than on "non-zero": 0 valid and 1 non-valid both finalize the row and continue the night; 2 or more is a refusal or crash that stops it with the session open. |
+| desk recovery | §2.4 | Closing an open session with `recover_calibration_ledger.py … abort-session --reason <named>`, run by the operator at the desk after the night is over — never inside the window and never as a re-arm. |
+| written-ruling escape | §4.2 | A flag that permits departure from one pre-registered number, and only by naming the written ruling that authorised it, so the departure is recorded in the artifact: `--nights-ruling`, `--slot-count-ruling`, `--allow-slot-count`, `--ed-ruling`. |
+| Δ (delta) | §1.2 | The elapsed time from the plan's `t0` to the moment the chain's settle begins: driver gate work + chain preflight + session reservation. `d12` is admitted only while Δ ≤ 1320 s. |
+| known condition | §4.3 | A recorded fact about how the corpus was captured that is deliberately not a rule — it edits no membership, moves no threshold, and licenses no re-capture. |
+| anchor text | §1.1a | One exact line of the chain, quoted in full as a citation instead of a line number, and resolved against the chain's current bytes by a test. |
 | `window_exhausted` | §2.4 | The abort reason recorded when the window cannot finish a slot's capture budget. |
 | prior set / corpus / retained n | §Terms | Every ledger observation through the cutoff; the subset whose values are computed from; the corpus size. |
 | Q99 / two-draw prediction | §4.2 | `t(0.995, n−1) × sample SD × √2`: how far apart two fresh draws fall at that confidence. |
