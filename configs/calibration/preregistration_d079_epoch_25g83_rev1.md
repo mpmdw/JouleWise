@@ -59,7 +59,7 @@ is fixed here first.
 - **Level screen** — an acceptance's corpus maximum, the preflight threshold a
   capture's bound is compared against. **Bracket screen (S)** — its corpus
   range. **Budget ceiling (C)** — its maximum budgetable drift. **Q99** — the
-  99 % two-draw prediction computed from a corpus. **Inherited ceiling** — the
+  99 % two-draw prediction computed from a corpus. **Predecessor ceiling** — the
   predecessor generation's budget ceiling.
 
 Why three nights of twelve slots, stated before capture: at the historical
@@ -131,15 +131,15 @@ two-draw predictions. The three-night schedule admits retained n from 19 (the re
 slots retained), so the degrees of freedom n-1 run from 18 to 35 — or from 16 if Ed's written n = 17 ruling is exercised; the quantile implementation's proof for the REALIZED
 df is computed and recorded before issuance, and no corpus issues on a df whose quantile is not proven in that record.
 The full D-125 envelope governs both operatives: bracket screen
-S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling C = max(inherited ceiling,
-new Q99). The generation records the inherited ceiling and an explicit d125_ruling
+S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling C = max(predecessor ceiling,
+new Q99). The generation records the predecessor ceiling and an explicit d125_ruling
 reference; issuance refuses while that reference is absent, and refuses successor_screen_exceeds_budget_ceiling when
 S >= C. Maximum budgetable drift = C; maximum budgetable excess = C - S, with no silent clamp at zero.
 
 Halt on S >= C. If S >= C on any route, D-126 clause 3's successor_screen_exceeds_budget_ceiling refusal fires: the
 corpus is not issued, and Ed rules in writing before any further capture, exactly as for the screen challenge. The
 refusal is never cured by lowering S. The route to watch: if the new Q99 is at or below the 0.010818 screen floor, the
-inherited ceiling 0.010164834757777545 cannot rescue C > S, because S is never below the floor.
+predecessor ceiling 0.010164834757777545 cannot rescue C > S, because S is never below the floor.
 
 Preflight level screen = the new corpus maximum quantized to 1e-15 s. Per-night distribution, order, exclusions, and
 clock residual margins are reported as diagnostics that authorize no trimming.
