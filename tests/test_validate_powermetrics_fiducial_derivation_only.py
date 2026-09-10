@@ -110,7 +110,9 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
     def test_matching_identity_epoch_refuses_because_derivation_only_would_bypass_the_screen(
         self,
     ) -> None:
-        """Kills `main`'s empty-stale-field refusal.
+        """REFUSE: production call site validate_powermetrics_fiducial.main
+        (the derivation-only branch's empty-stale-field clause,
+        `if not stale_fields`).
 
         A matching epoch means the active acceptance DOES judge this machine,
         so an ordinary capture is possible and derivation-only would be a way
@@ -144,7 +146,8 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
     def test_standalone_derivation_only_refuses_without_a_declared_session_slot(
         self,
     ) -> None:
-        """Kills `main`'s `if not bracket_mode` derivation refusal.
+        """REFUSE: production call site validate_powermetrics_fiducial.main
+        (the derivation-only branch's standalone clause, `if not bracket_mode`).
 
         A7 rules a derivation night to be ONE registered session; a standalone
         reservation cannot extend past the committed pin, so a standalone
@@ -485,7 +488,9 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
 
     # ---- tests ------------------------------------------------------------
     def test_bracket_kind_session_refuses_a_derivation_only_capture(self) -> None:
-        """Kills `main`'s `session_kind != SESSION_KIND_DERIVATION` clause.
+        """REFUSE: production call site validate_powermetrics_fiducial.main
+        (the derivation-only branch's declared-kind clause,
+        `declared_shape["session_kind"] != SESSION_KIND_DERIVATION`).
 
         The counterfactual is a session whose open receipt declares NO kind --
         the historical two-slot bracket shape, which reads back as kind
@@ -612,7 +617,9 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
     def test_ordinary_mode_refuses_a_derivation_kind_slot_and_appends_nothing(
         self,
     ) -> None:
-        """Kills the `_CaptureLedgerLifecycle.begin()` derivation guard.
+        """REFUSE: production call site
+        validate_powermetrics_fiducial._CaptureLedgerLifecycle.begin
+        (the derivation-kind guard, before the writer lease).
 
         The dangerous direction is not only "derivation-only fills a bracket
         slot"; it is also "the ORDINARY writer fills a derivation slot".  A
@@ -718,9 +725,10 @@ class CaptureClassificationTests(unittest.TestCase):
     the fixture sampler's bound is ~9.3e-05 s (it tracks
     sampling_interval_ms x --time-scale-for-test), r6's level screen is
     0.032898493715362, and closing that factor of ~354 needs a ~17 minute
-    capture.  Lowering the screen instead is blocked because
-    `_valid_acceptance_bound` (joulewise/calibration_bracketing.py:676-687)
-    requires max(member values) to quantize to preflight_level_screen_s.  The
+    capture.  Lowering the screen instead is blocked by the level-screen clause
+    of `joulewise.calibration_bracketing._valid_acceptance_bound`, which
+    requires max(member values) quantized to 1e-15 to equal
+    `preflight_level_screen_s`.  The
     bound and the screen basis are therefore INJECTED here, into the smallest
     production function that computes both outputs, so the TRUE branch is a
     real assertion against real production code rather than a skipped test.
