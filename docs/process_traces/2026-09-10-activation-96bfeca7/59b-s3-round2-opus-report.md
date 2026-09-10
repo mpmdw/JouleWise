@@ -621,3 +621,136 @@ focused_rest_rc=0 :: Ran 66 tests in 4.282s  OK (skipped=3)
 The byte-identical sweep over all six artifacts under `configs/calibration/` and the genesis fixture
 passes unchanged; the only production change this round is one refusal on a field pairing that no
 registered row uses.
+
+---
+
+# Fix round 4 (seam) — the D-125 envelope screen rule and `d125_ruling`
+
+Applied on top of `57d0044d` (round 3's delta, record 77, was CLEAN); diff uncommitted, same two files.
+Authority: cold gate 46 addendum A-2 and the pre-registration
+(`configs/calibration/preregistration_d079_epoch_25g83_rev1.md` on
+`origin/feat/2026-09-10-epoch-s6-docs-prereg`, the "full D-125 envelope governs both operatives"
+clause). Seat S4 read at `f31884d7`.
+
+## What S4 must import (exact names, from `joulewise.calibration_bracketing`)
+
+```python
+from joulewise.calibration_bracketing import (
+    D125_SCREEN_FLOOR_S,                    # Decimal("0.010818")
+    SCREEN_RULE_FLOORED_RANGE_ENVELOPE,     # "floored_range_envelope_screen"
+    SCREEN_RULE_RANGE_EQUALS_SCREEN,        # "range_equals_screen" (already exported)
+    BRACKET_SCREEN_QUANTUM_S,               # Decimal("0.000001")
+    PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,       # Decimal("0.000000000000001")
+)
+```
+
+S4 currently restates `SCREEN_RULE_FLOORED_RANGE_ENVELOPE` at its `:176` and defines
+`BRACKET_SCREEN_QUANTUM_S` / `PREFLIGHT_LEVEL_SCREEN_QUANTUM_S` at `:164-165`; it already references
+`D125_SCREEN_FLOOR_S` at `:591`. All five now have one home here. The floor digits `0.010818` appear
+exactly once in this module.
+
+## 1. The envelope rule is registered and checked
+
+`_REGISTERED_SCREEN_RULES` now holds two names. At the `_valid_acceptance_bound` site the dispatch is
+explicit, and an unregistered name still falls through to `return False` rather than defaulting to
+either branch:
+
+```python
+quantized_range = (max(values) - min(values)).quantize(
+    BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
+)
+if screen_rule == SCREEN_RULE_RANGE_EQUALS_SCREEN:
+    screen_matches_rule = quantized_range == screen
+elif screen_rule == SCREEN_RULE_FLOORED_RANGE_ENVELOPE:
+    screen_matches_rule = max(quantized_range, D125_SCREEN_FLOOR_S) == screen
+else:
+    return False
+```
+
+The level-screen term and `screen + excess == maximum` stay universal and untouched, as does
+`range_equals_screen` for the six issued rows.
+
+**One thing S4 must change, and it is a real disagreement, not a naming preference.** S4's `:593-596`
+selects the rule name from which side of the max won:
+
+```python
+floor_bound = screen != quantized_range
+screen_rule = (SCREEN_RULE_FLOORED_RANGE_ENVELOPE if floor_bound
+               else SCREEN_RULE_RANGE_EQUALS_SCREEN)
+```
+
+`screen_rule` names the DERIVATION RULE the generation was pre-registered under, not the branch the
+data happened to take. A corpus derived under the envelope registers
+`floored_range_envelope_screen` whether or not the floor bound it — the rule was fixed before the
+captures, and the outcome was not. Selecting the name from the outcome makes the row's own account of
+its derivation a function of the data, which is the same class of defect as choosing corpus membership
+after seeing the values. The validator accepts both branches under the envelope name
+(`max(range, floor) == screen` is satisfied when the range wins too), so S4 can register the envelope
+name unconditionally with no other change. S4's `rule_outcomes.screen_rule_registered_in_validator`
+flag and the seam note in its report are now stale: both names are registered.
+
+## 2. `d125_ruling` — conditionally required
+
+A non-empty string on every row whose `screen_rule` is `floored_range_envelope_screen`; absent or
+`None` on `range_equals_screen` rows stays valid. Implemented as a conditional clause inside
+`_registered_generation_row_is_complete`, deliberately NOT added to
+`_GENERATION_ROW_REQUIRED_KEYS` — the six issued rows carry no such key and adding it unconditionally
+would refuse all of them.
+
+## Tests
+
+`_floored_envelope_case` builds the route the pre-registration names: corpus range `0.006000`, BELOW
+the floor, so the floor binds and the screen is `0.010818`; a real lineage (r6's registered ceiling
+`0.010164834757777545`, named by r6's own id); own Q99 `0.012000` wins the ceiling max, keeping the
+screen strictly below the ceiling with `excess = 0.001182` so `screen + excess == maximum` holds; the
+level screen is unchanged and consistent. Artifact and row move together throughout.
+
+| Case | Test | Verdict |
+|---|---|---|
+| envelope row, floor-bound screen `0.010818` | `test_floored_envelope_screen_rule_admits_a_floor_bound_generation` | ADMIT |
+| same row with screen = quantized range `0.006000` (floor ignored) | `test_envelope_generation_that_ignored_the_floor_refuses` | REFUSE |
+| same floored screen registered under `range_equals_screen` | `test_floor_bound_screen_refuses_under_the_range_equals_screen_rule` | REFUSE |
+| envelope row with `d125_ruling` missing, `""`, `0`, or a list | `test_envelope_generation_requires_a_non_empty_d125_ruling` | 4 × REFUSE |
+| every registered row carries no `d125_ruling` and still validates | `test_range_equals_screen_rows_need_no_d125_ruling` | ADMIT |
+
+## Atomic sweep — whole, one term per cut
+
+32 cuts, **32/32 KILLED**, no survivors, no anchor misses, no `NO-TESTS-RAN`; every cut `Ran 1`.
+Restoration hash-verified: `restored_sha256: f30e62ed0e9df76be2ff1aee46dc14929c0d1a44107fa2bf21c3bdb375983946`,
+`restored_matches: True`. `PYTHONDONTWRITEBYTECODE=1` throughout.
+
+| Atomic cut (one term) | Naming test | rc | Ran |
+|---|---|---|---|
+| `D125_SCREEN_FLOOR_S` `0.010818` → `0.009000` | `test_floored_envelope_screen_rule_admits_a_floor_bound_generation` | 1 | 1 |
+| envelope branch `max(...)` → `min(...)` | `test_envelope_generation_that_ignored_the_floor_refuses` | 1 | 1 |
+| range branch `quantized_range == screen` → `max(quantized_range, D125_SCREEN_FLOOR_S) == screen` | `test_floor_bound_screen_refuses_under_the_range_equals_screen_rule` | 1 | 1 |
+| conditional `d125_ruling` clause deleted | `test_envelope_generation_requires_a_non_empty_d125_ruling` | 1 | 1 |
+| dispatch `else: return False` → falls back to the range comparison | `test_unimplemented_screen_rule_refuses_instead_of_falling_back` | 1 | 1 |
+
+The 28 round-3 cuts all still kill. Two harness repairs were needed and are worth recording, because
+both are the isolation rule biting on my own work:
+
+1. The old "screen-rule dispatch" cut came back **ANCHOR-MISS** — restructuring the site into an
+   if/elif/else moved its anchor text. Re-cut against the new `else: return False`, which is the term
+   that actually carries "an unregistered name refuses rather than defaulting".
+2. My first attempt at a rule-name cut (`== SCREEN_RULE_RANGE_EQUALS_SCREEN` →
+   `in _REGISTERED_SCREEN_RULES`) **SURVIVED**: it sends the envelope name down the range branch,
+   which the floor-bound test does not exercise. The cut that isolates "the two rules are not the same
+   semantics" is the one above — making the RANGE branch floor its comparison — and it kills.
+
+## Test rcs (verbatim, rc captured in `RC`)
+
+```
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_calibration_bracketing \
+    tests.test_calibration_ledger tests.test_docs_freshness
+FIXROUND4_RC=0 :: Ran 191 tests in 4.192s  OK (skipped=2)
+
+byte-identical artifact sweep, alone      :: Ran 1 test  OK
+tests.test_calibration_live_three_window tests.test_paper_first_use_ledger \
+    tests.test_floor_mint_pinsets_schema  :: rest_rc=0 :: Ran 35 tests  OK (skipped=3)
+```
+
+`tests.test_calibration_bracketing` is now 88 tests (36 in `GenerationKeyedIssuanceValidationTests`).
+The byte-identical sweep over all six artifacts under `configs/calibration/` and the genesis fixture
+passes unchanged: no issued row's `screen_rule`, screen, or level screen moved, and the new rule is
+registered for no registered generation.
