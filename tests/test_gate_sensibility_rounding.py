@@ -13,17 +13,11 @@ import unittest
 from unittest.mock import patch
 
 from joulewise import environment_admission
-from joulewise.bundle_read import TracePoint, Window
 from joulewise.clock import FakeClock
 from joulewise.controller import cooldown_gate
 from joulewise.load_transition_alignment import (
     build_alignment_artifact,
     validate_alignment_artifact,
-)
-from joulewise.reduce import (
-    _anchor_coverage_ok,
-    _anchor_shift_envelope,
-    _derive_anchor_context,
 )
 from joulewise.schemas import BenchmarkConfig, IdleBaseline, TelemetryBackend
 
@@ -115,19 +109,16 @@ class AdmissionRoundingTests(unittest.TestCase):
                 self.assertEqual(self._refusals(capture_shift_s=shift_s),
                                  ("environment_admission_missing",))
 
+    def test_r1_refuses_capture_outside_attempt_by_ten_microseconds(self):
+        """Binds the endpoint allowance from above: 10 us is forty epoch ULPs, ten times the
+        1 us representation allowance, at EITHER capture edge (refuter 18 finding R1: widening
+        only the two endpoint comparisons to 1 ms survived every other test)."""
+        for shift_s in (-1e-5, 1e-5):
+            with self.subTest(shift_s=shift_s):
+                self.assertEqual(self._refusals(capture_shift_s=shift_s),
+                                 ("environment_admission_missing",))
 
-class AnchorCoverageRoundingTests(unittest.TestCase):
-    def _contributions(self, edge, deficit_s):
-        window = Window(EPOCH_S - 1.0, 1789000000.0001)
-        bound_s = 0.009724
-        start_s = math.fsum((window.start_s, -bound_s))
-        end_s = math.fsum((window.end_s, bound_s))
-        if edge == "left":
-            start_s += deficit_s
-        else:
-            end_s -= deficit_s
-        curve = [TracePoint(end_s, 10.0, start_s, end_s)]
-        return [(curve, [window])], bound_s
+
 
 class CooldownRoundingTests(unittest.TestCase):
     def _run(self, *, span_deficit_s=0.0, coverage_deficit_s=0.0,
