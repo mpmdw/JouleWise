@@ -7,3 +7,11 @@
 - **Cluster C (3):** `test_custody_mode_inventory` — uncensused row `('scripts/issue_calibration_acceptance_generation.py', 'check', 1)` (S5 omission); S4's `prepare-candidate` and the dry run will need rows too.
 
 Why the early replay was right: the seats' focused sets and refuters never run the relocation/authoring modules or the surface guard; only the whole suite sees cross-module invariants. Fixes land on the integration branch (the lane's PR is cut from integration); the seat branches are not rewritten. Root-cause seat (Opus) → report 97; then a fresh sharded replay at the fixed head (with S4 + S6 round 5 merged) for the PR ledger.
+
+## Addendum 14:10 — root cause 97: all three clusters test/fixture-side, zero production change; integration now aea38b1a
+
+- A: nested id recovered by hand (`_parse` drops the child's `failed_ids`): `DerivationSessionSlotTests.test_production_ledger_fixture_parses_and_reserializes_byte_identically` — `FileNotFoundError` on `tests/fixtures/d117_v2_production/issued/calibration_observation_ledger.jsonl`: the RECOVERY_LEDGER_TEST deriver re-synthesizes a MINIMAL fixture repository (not a relocation) that did not copy that fixture; fix = one entry in `_copy_primary` (tests/test_arm_readiness_evidence_author.py:146-151); nested re-run 92/0/0.
+- B: not 8 new IO sites — the same 8 already in `CLASSIFIED_NON_AUTHENTICATION_READS`, shifted +121 lines (no read-capable IO added on the branch; verified by grepping the diff); line pins updated only. Residual (needs a ruling, not a seat): the guard pins absolute lines and re-reds on any insertion above ~:2900 — re-key on (file, function, ordinal) like the custody census.
+- C: one census row for `check` (read_replay); bench added `_prepare_candidate` ordinal 1 (:1074) and refreshed `check` to :268 after merging S4 final — `test_custody_mode_inventory test_issue_calibration_acceptance_generation test_authentication_io test_docs_freshness` → Ran 150 OK rc 0.
+- Seat verification of the eight modules in one process: `Ran 253 … OK (skipped=1)` VERIFY_RC=0. Also recommended: surface `failed_ids` in `EvidenceAuthoringError` (small; queued for the PR or a follow-up lane).
+- Integration head aea38b1a = 51565cee + fixes + S4 FINAL 4832dc75 + S6 round 5 23f797be + census rows. Fresh sharded replay launched at aea38b1a in `JouleWise-wt-replay-2` → record 100.
