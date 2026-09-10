@@ -1,5 +1,7 @@
 # Activation checklist — 2026-09-11, proposed G2-a arm for 09-12
 
+> Budget note (magistrate, 2026-09-10 ~05:30 PDT): WINDOW_MAX_S raised from the packet's 12,600 s to **13,500 s** to absorb the idle_seconds 30→75 change (record 09; ~+21 min over 24 members). Arithmetic: t0 1789206960 (02:56 PDT) + 13500 = 1789220460 (06:41) ; + 300 s courier = 1789220760 (06:46) < 07:00; strict maximum 14,339.
+
 PROPOSED (magistrate ruling due after rehearsal acceptance). Preparation
 only; this is not a harvest, acceptance or arm record.
 
@@ -271,7 +273,7 @@ Send the consolidated notice **after H and stub retirement, before plan
 publication**. Record the actual accepted Gmail message/thread IDs/time and
 NO-channel limitation in staging and the arm record. Close item 4 here.
 The notice includes all pins and the first real date, 09-12 02:56 PDT /
-09:56 UTC, 12,600-second budget, 06:31 courier deadline and 02:31 exit
+09:56 UTC, 13,500-second budget, 06:46 courier deadline and 02:31 exit
 boundary; launch requires no Ed hand unless he replies NO. No invented
 24-hour or fixed minimum notice delay applies.
 
@@ -296,7 +298,7 @@ The durable pointer and next relaunch prompt must retain exactly
 Exit with no own background tasks, preferably by 06:30 on 09-11 and
 absolutely before **02:31 on 09-12**. Do not wait resident for acquisition.
 The next harvest cannot start at 03:30 just because the fixed belt ends:
-the new plan's closed completion boundary is 06:31, and missing delivery
+the new plan's closed completion boundary is 06:46, and missing delivery
 or running/indeterminate recorded processes can extend the hold.
 
 ## What can go wrong and what to do

@@ -1,5 +1,7 @@
 PROPOSED (magistrate ruling due after rehearsal acceptance)
 
+> Budget note (magistrate, 2026-09-10 ~05:30 PDT): WINDOW_MAX_S raised from the packet's 12,600 s to **13,500 s** to absorb the idle_seconds 30→75 change (record 09; ~+21 min over 24 members). Arithmetic: t0 1789206960 (02:56 PDT) + 13500 = 1789220460 (06:41) ; + 300 s courier = 1789220760 (06:46) < 07:00; strict maximum 14,339.
+
 # G2-a night handback replacement — 2026-09-12
 
 Paste the four sections below into `docs/process/NIGHT_HANDBACK.md` after
@@ -13,9 +15,9 @@ not courier text. This draft is not an arm record.
 
 Plan `d117-g2a-prefill-probe-20260912`, class `DIAGNOSTIC_NO_PACK`, is planned
 for 2026-09-12 at 02:56:00 PDT (`t0`, epoch 1789206960; 09:56:00 UTC), with
-a 12,600-second window. The measurement allocation ends at 06:26 PDT.
-The courier deadline is `t0 + 12600 + 300`, epoch 1789219860, 06:31 PDT
-that morning, 29 minutes before the 07:00 dead-man. This notice describes
+a 13,500-second window. The measurement allocation ends at 06:41 PDT.
+The courier deadline is `t0 + 13500 + 300`, epoch 1789220760, 06:46 PDT
+that morning, 14 minutes before the 07:00 dead-man. This notice describes
 the planned night; the arm record establishes whether installation happened.
 
 This is the first real G2-a window: the unchanged full chain, including
@@ -61,7 +63,7 @@ notice interval. Record the accepted send and the available NO channel.
 The arming activation exits after recording the arm. Its absolute exit
 boundary is 2026-09-12 02:31:00 PDT, epoch 1789205460 (`t0 - 25 minutes`).
 The watchdog's 02:45–03:30 belt does not reopen this longer window: the
-plan span remains protected through the closed 06:31 completion boundary,
+plan span remains protected through the closed 06:46 completion boundary,
 and later if delivery or recorded process termination is unresolved.
 All agents must be gone for launch and acquisition. Power, clock and
 machine readings taken at arm are observations; capture-time gates remain
