@@ -770,3 +770,179 @@ $ git status --short
 ```
 
 No git state changed, no commit, nothing outside the two files touched.
+
+---
+
+# Fix round 4 (seat S4, on top of `410229f1`)
+
+All seven delta-96 items. **10 cuts, one term each, all KILLED**; suite
+`Ran 211 tests … OK (skipped=1)`, rc 0; `compileall` rc 0. No git state changed.
+
+## E-1 — the dry run's `filled` count comes from the session record
+
+`registration_dry_run` reports `declared={len(session.declared_slots)}` and
+`filled={len(session.finalized_slots)}` — the LENGTH of each mapping, never the
+slot objects. Published observations were the wrong source: an open session
+publishes none, so a 6-of-20 registration reported no progress at all.
+`test_the_dry_run_counts_filled_slots_on_an_open_session` parses the line with
+the template regex and asserts `declared=20 filled=6 terminal=no`, plus the
+no-leak predicate. Cut E1 swaps the count back to published rows and dies.
+
+## E-2 — the `"aborted"` arm is witnessed, not assumed
+
+`test_an_aborted_session_is_terminal` builds a 24-slot session, fills 20 and
+closes it with `abort_bracket_session(reason="window_exhausted")` — the
+pre-registration's planned early close. It asserts against the **literal** state
+name rather than iterating `TERMINAL_SESSION_STATES`, so removing `"aborted"`
+from the set fails here instead of quietly agreeing with itself (which is what
+round 2's `for state in TERMINAL_SESSION_STATES` subtest did). It also runs
+`prepare-candidate` on that fixture and gets a 20-member corpus, so the blindness
+gate is shown to PASS an aborted registration rather than merely to exist. New
+fixture parameter `abort_reason`. Cut E2 removes the arm and dies.
+
+## E-3 — `bounds_origin` is now true against S6's pre-registration
+
+S6's round-5 text states both bounds (`:174`, `:179`, `:185`: "residual at most
+1e-30", "at least 30 significant decimal digits", "the ISSUER'S DECLARED
+bounds"). The old sentence claimed the pre-registration "states no numeric
+bound" — false, and pinned by `assertIn`, so it would have travelled. It now
+reads "issuer-declared bounds, stated in the pre-registration's quantile-proof
+clause and recorded here in the candidate", names both numbers, and the test pins
+the new wording plus `1e-30` and `30 significant digits`.
+
+## E-4 — `check`'s exit code answers the question asked
+
+With `--session-ids`, the exit code is the dry-run verdict alone: **0**
+admissible, **`DRY_RUN_INADMISSIBLE_EXIT = 5`** otherwise, distinct from the
+epoch watch's 3 so a caller can tell "the machine has drifted" from "the
+registration is not ready". The epoch-watch table still prints in full above it.
+The reasoning is in the code: a drifted epoch is *why* a new corpus is being
+captured, so it must not mask the registration question. Without `--session-ids`
+the old rc semantics and bytes are unchanged (round 2's test still passes). Two
+CLI-boundary tests: admissible registration on a mismatched epoch → rc 0 with
+`MISMATCH` still on stdout; open registration → rc 5, asserted `!= 3`.
+
+## E-5 — the `if terminal:` gate is now load-bearing and pinned
+
+With E-1 the exclusion loop iterates `session.finalized_slots.values()`, which is
+**non-empty for an open session too** — so removing the gate really does open
+bundles mid-campaign, and the gate stopped being decorative.
+`test_no_bundle_is_opened_for_an_open_session` replaces `_read_member_evidence`
+with one that raises, so any path reaching a member's primary bytes for an open
+session fails. Cut E5 (`if terminal:` → `if True:`) dies. This is the item round 2
+could only argue for in prose; it is now a test.
+
+## E-6 — every flag documents itself; the docstring passes the first-use test
+
+Help strings on all eleven flags across both subcommands (`--ledger`,
+`--head-pin`, `--repo-root`, `--acceptance`, `--session-ids`,
+`--preregistration`, `--predecessor-acceptance`, `--registration-session-id`,
+`--d125-ruling`, `--ed-ruling`, `--minimum-corpus-size`, `--epoch-catalog-id`,
+`--acceptance-id`, `--out`), and on the `check` subcommand itself.
+`test_every_flag_carries_a_help_string` walks the parser tree and asserts each
+non-`-h` action has one, so a new flag cannot land undocumented.
+
+The docstring now builds each term of art before it does any work: OPERATIVES
+("the three numbers the acceptance actually governs measurement with"), BRACKET
+SCREEN ("the drift below which a measurement window passes without spending any
+of its error budget"), BUDGET CEILING ("the largest drift the generation will
+ever budget for"), LEVEL SCREEN ("the absolute bound above which a single capture
+is refused before a window opens"), PRIOR-SET PREFIX ("the run of ledger rows at
+or below the cutoff"), QUANTILE PROOF ("checked two independent ways, before any
+threshold derived from it was written down"), TRIGGER OBSERVATION ("a later
+capture whose result would oblige the generation to be re-derived"), COLD SCIENCE
+GATE ("the fresh-eyes review of the exclusions and the per-night diagnostics that
+no one involved in the capture may sit on"), D-138 transaction ("the single
+reviewed commit that swaps the live acceptance and every pin that names it"), and
+one clause each for D-102, D-109, D-125, D-126.
+`test_the_docstring_glosses_every_term_of_art_at_first_use` checks the term, the
+gloss, and that the gloss arrives at or before the term's first use — it collapses
+line wrapping first, since wrapping is not meaning.
+
+## E-7 — the dry run trimmed to a fixed template
+
+```
+                                              <- blank
+Registration dry run (counts and states only; no measured value)
+<id>: kind=<kind> state=<state> terminal=<yes|no> declared=<int> filled=<int> excluded=<none|mech:count,...>
+<id>: absent
+prefix pending or unresolved rows: <int>
+registration admissible for prepare-candidate: <yes|no>
+  blocker: <reason>
+```
+
+`rows=`, `valid=` and the retained-count line are gone (not in the
+pre-registration's list), and the prefix pending/unresolved rows are a **COUNT**
+— naming attempt ids invites reading them, and the count is all a desk decision
+needs. `test_every_dry_run_line_matches_the_fixed_template` matches line 2
+against a regex in which only integers and enum words vary, and pins lines 0, 1,
+3, 4, 5 and the blocker shape exactly.
+
+## Cut table (fix round 4)
+
+Baseline = restored = `a5af6f15f18b50565331e664ff87c939f756ae01afeeddca59a65385e4d0e9b4`;
+one term per cut, `Ran 1 test` parsed, sha256-asserted after each,
+`PYTHONDONTWRITEBYTECODE=1`. Harness `/tmp/s4_mutate5.py`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| E1 | `filled={len(session.finalized_slots)}` → count of published rows | `test_the_dry_run_counts_filled_slots_on_an_open_session` | Ran 1 | KILLED |
+| E2 | `TERMINAL_SESSION_STATES` drops `"aborted"` | `test_an_aborted_session_is_terminal` | Ran 1 | KILLED |
+| E3 | `bounds_origin` drops "stated in the pre-registration's quantile-proof clause" | `test_the_quantile_proof_records_where_its_bounds_came_from` | Ran 1 | KILLED |
+| E4 | `return dry_run_code` → `3 if errors or mismatches else dry_run_code` | `test_check_returns_the_registration_verdict_when_one_is_named` | Ran 1 | KILLED |
+| E4b | `DRY_RUN_INADMISSIBLE_EXIT = 5` → `3` | `test_check_returns_a_distinct_code_for_an_inadmissible_registration` | Ran 1 | KILLED |
+| E5 | `if terminal:` → `if True:` around the bundle reads | `test_no_bundle_is_opened_for_an_open_session` | Ran 1 | KILLED |
+| E6 | `--out`'s `help=` → an unused kwarg | `test_every_flag_carries_a_help_string` | Ran 1 | KILLED |
+| E6b | delete the LEVEL SCREEN gloss | `test_the_docstring_glosses_every_term_of_art_at_first_use` | Ran 1 | KILLED |
+| E7 | prefix line gains free-form text after the count | `test_every_dry_run_line_matches_the_fixed_template` | Ran 1 | KILLED |
+| E7b | `_excluded_summary` → `str(dict)` | same | Ran 1 | KILLED |
+
+## Runner tails
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation \
+    tests.test_calibration_bracketing tests.test_docs_freshness
+----------------------------------------------------------------------
+Ran 211 tests in 68.208s
+
+OK (skipped=1)
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts joulewise
+COMPILEALL_RC=0
+```
+
+`tests.test_issue_calibration_acceptance_generation` alone: `Ran 90 tests` OK.
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/fixtures/epoch_bootstrap/build.py
+ M tests/test_issue_calibration_acceptance_generation.py
+
+$ git diff --stat
+ scripts/issue_calibration_acceptance_generation.py | 278 ++++++++++++++-------
+ tests/fixtures/epoch_bootstrap/build.py            |  13 +-
+ ...test_issue_calibration_acceptance_generation.py | 222 ++++++++++++++--
+ 3 files changed, 411 insertions(+), 102 deletions(-)
+```
+
+## Decisions
+
+1. **Exit 5, not 3, for an inadmissible registration.** A distinct code lets the
+   caller separate epoch drift from registration readiness; the test asserts
+   `!= 3` so a future collapse is caught.
+2. **Dry-run output is now lower-case `yes`/`no` and `absent`** for uniformity
+   with the template regex; round 2's `YES`/`NO`/`terminal=NO` assertions were
+   updated accordingly.
+3. **`valid=` and the retained-count line were dropped**, not merely renamed:
+   E-7's list is exhaustive, and every count that is not needed for a desk
+   decision is one more thing to be tempted by mid-campaign.
+4. **Whitespace is normalised before prose matching** in both docstring tests —
+   argparse rewraps the help text, and a term split across two lines is still the
+   term.
+5. **E-5 became a real fence only because of E-1.** Iterating
+   `session.finalized_slots` rather than published observations is what makes the
+   gate load-bearing; the two items are one change, and I would not claim the
+   gate is pinned without E-1 in place.
