@@ -69,7 +69,9 @@ from joulewise.calibration_bracketing import (  # noqa: E402
 from joulewise.calibration_ledger import (  # noqa: E402
     BRACKET_SESSION_OPEN_EVENT,
     BRACKET_SESSION_SCHEMA,
-    BRACKET_SESSION_SLOTS,
+    SESSION_KIND_DERIVATION,
+    declared_session_shape,
+    is_declared_slot_name,
     DEFAULT_LEDGER_PATH,
     DEFAULT_HEAD_PIN_PATH,
     CalibrationLedgerError,
@@ -812,7 +814,7 @@ def authenticate_calibration_writer_launch_lineage(
             "launch_binding_mismatch",
             "calibration --output-root must end in instrument_validation",
         )
-    if session_id is None or slot not in BRACKET_SESSION_SLOTS or attempt_id is None:
+    if session_id is None or not is_declared_slot_name(slot) or attempt_id is None:
         _raise_calibration_launch_lineage(
             "launch_binding_mismatch",
             "marker-bearing calibration requires an exact bracket session and slot",
@@ -1212,14 +1214,9 @@ def _validate_reserved_bracket_slot(
         verify_custody=True, mode="issuing",
     )
     session = snapshot.bracket_session_by_id.get(session_id)
-    finalized_slots = set(session.finalized_slots) if session is not None else set()
-    expected_slot = (
-        "pre"
-        if not finalized_slots
-        else "post"
-        if finalized_slots == {"pre"}
-        else None
-    )
+    # The session's own open receipt declares the ordered slot list; the next
+    # slot is simply the one after every slot already finalized.
+    expected_slot = session.next_slot if session is not None else None
     open_receipt = next(
         (
             receipt
@@ -1240,7 +1237,7 @@ def _validate_reserved_bracket_slot(
         not snapshot.is_governed_open_bracket_extension
         or session is None
         or session.state != "open"
-        or slot not in BRACKET_SESSION_SLOTS
+        or slot not in session.declared_slots
         or slot != expected_slot
         or session.slot_attempt_ids.get(slot) != attempt_id
         or not isinstance(reserved, Mapping)
@@ -1295,10 +1292,32 @@ class _CaptureLedgerLifecycle:
         self.writer_lease = CalibrationWriterLease(self.ledger_path)
         self.begun = False
         self.closed = False
+        self._session_shape: Mapping[str, Any] | None = None
 
     @property
     def is_bracket_session(self) -> bool:
         return self.session_id is not None
+
+    @property
+    def session_shape(self) -> Mapping[str, Any]:
+        """The declared kind and ordered slot list of this writer's session."""
+
+        assert self.session_id is not None
+        if self._session_shape is None:
+            self._session_shape = declared_session_shape(
+                self.ledger_path, session_id=self.session_id
+            )
+        return self._session_shape
+
+    @property
+    def is_terminal_slot(self) -> bool:
+        """Whether finalizing this slot closes the session by itself."""
+
+        return bool(self.slot == self.session_shape["declared_slots"][-1])
+
+    @property
+    def is_derivation_session(self) -> bool:
+        return self.session_shape["session_kind"] == SESSION_KIND_DERIVATION
 
     def begin(self) -> None:
         """Reserve ordinarily, or authenticate a previously reserved slot."""
@@ -1476,7 +1495,17 @@ class _CaptureLedgerLifecycle:
                     ),
                 )
                 _writer_stage(WriterStage.FINALIZATION_RETURNED_BEFORE_CLOSED)
-                if self.slot == "pre" and disposition != "valid":
+                terminal_slot = self.is_terminal_slot
+                # The bracket contract closes the window the moment its opening
+                # endpoint fails, because an unbracketed capture licenses
+                # nothing.  A derivation session has no endpoint role: it runs
+                # its declared slots and closes on the last one or an abort.
+                aborted = (
+                    not self.is_derivation_session
+                    and not terminal_slot
+                    and disposition != "valid"
+                )
+                if aborted:
                     receipt = abort_bracket_session(
                         self.ledger_path,
                         session_id=self.session_id,
@@ -1487,18 +1516,18 @@ class _CaptureLedgerLifecycle:
                     )
                 self.closed = True
                 _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
-                if self.slot == "post":
+                if terminal_slot:
                     _writer_stage(
                         WriterStage.AFTER_POST_FINALIZATION_BEFORE_TERMINAL_PIN
                     )
                 head_pin = (
                     None
-                    if self.slot == "pre" and disposition == "valid"
+                    if not terminal_slot and not aborted
                     else terminal_head_pin_for_session(
                         self.ledger_path, session_id=self.session_id
                     )
                 )
-                if self.slot == "post":
+                if terminal_slot:
                     _writer_stage(WriterStage.AFTER_TERMINAL_PIN_BEFORE_OUTPUT)
                 return receipt, head_pin
             receipt = finalize_attempt_receipt(
@@ -1584,12 +1613,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pulse-count", type=int, default=PULSE_COUNT)
     parser.add_argument(
         "--session-id",
-        help="predeclared two-slot bracket session id (requires --slot and --attempt-id)",
+        help="predeclared ledger session id (requires --slot and --attempt-id)",
     )
     parser.add_argument(
         "--slot",
-        choices=BRACKET_SESSION_SLOTS,
-        help="exact predeclared bracket slot to capture",
+        help="exact predeclared slot name to capture, from the session's list",
     )
     parser.add_argument(
         "--attempt-id",
