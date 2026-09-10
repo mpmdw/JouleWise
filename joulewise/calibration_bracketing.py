@@ -245,6 +245,15 @@ PREFLIGHT_LEVEL_SCREEN_QUANTUM_S = Decimal("0.000000000000001")
 # is absent.  It is NOT unconditionally required: the six issued rows predate
 # the envelope and carry none.
 _D125_RULING_REQUIRED_SCREEN_RULES = frozenset({SCREEN_RULE_FLOORED_RANGE_ENVELOPE})
+# D-126 cl.2's corpus-SIZE floor, as amended by cold gate 46 addendum A-2.  The
+# ratified floor is 19; the ONLY departure below it that has ever been ruled is
+# the n=17 anchor-v3 arc, so 17 is the hard bound a row may not go under.  This
+# guards the df = n-1 tail: at n=17 the 99 % two-draw prediction already rests
+# on df=16, and below that the Student-t quantile grows fast enough that a
+# ceiling derived from it stops meaning what the artifact says it means.  The
+# floor applies to ENVELOPE generations, which are the ones still to be issued;
+# the six already-issued rows carry n=17 or n=19 and are unaffected either way.
+ENVELOPE_MINIMUM_CORPUS_N = 17
 # Mechanism-named, outcome-independent corpus exclusions (ruling 46 §R-a A6).
 # Today's only registered class is `affine_clock_fit_empty`: the anchor-v3
 # replay found NO feasible affine wall-versus-monotonic clock fit for that
@@ -470,6 +479,10 @@ def _registered_generation_row_is_complete(generation: Any) -> bool:
                 isinstance(generation.get("d125_ruling"), str)
                 and bool(generation.get("d125_ruling"))
             )
+        )
+        and (
+            generation["screen_rule"] != SCREEN_RULE_FLOORED_RANGE_ENVELOPE
+            or generation["corpus_n"] >= ENVELOPE_MINIMUM_CORPUS_N
         )
         and isinstance(session_ids, tuple)
         and all(isinstance(item, str) and item for item in session_ids)
