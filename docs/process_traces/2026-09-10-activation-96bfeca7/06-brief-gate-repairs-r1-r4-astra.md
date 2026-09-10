@@ -1,0 +1,32 @@
+SESSION_MODE: delegated
+WRITE_SCOPE: ["joulewise/environment_admission.py", "joulewise/reduce.py", "joulewise/controller.py", "joulewise/load_transition_alignment.py", "tests/test_environment_admission.py", "tests/test_reduce.py", "tests/test_controller.py", "tests/test_load_transition_alignment.py", "tests/test_gate_sensibility_rounding.py", "docs/contracts/measurement_methodology.md", "docs/contracts/run_bundle_layout.md", "docs/contracts/load_transition_alignment.md"]
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+
+# GATE-SENSIBILITY-SWEEP-01 repairs R1–R4: replace sub-ULP timing slack with a bounded epoch-representation allowance (gpt-6-astra, high, genre implementation)
+
+Worktree: this one, branch `feat/2026-09-10-gate-sensibility-sweep` at `ee25c47f`+ (clean). Authority: Ed 2026-09-10 ~04:20 ("no silly gates on accepting numbers … be sensible about instrument rigor requirements", record 121 of `docs/process_traces/2026-09-09-rehearsal-harvest/`), kernel lane GATE-SENSIBILITY-SWEEP-01. The design comes from the seat-A inventory `docs/process_traces/2026-09-10-activation-96bfeca7/02a-gate-inventory-capture-side-astra-report.md` §B (R1–R4) — read that section first and implement it as specified; deviate only where the code you find contradicts the report, and say so in the report.
+
+The physical fact behind all four: controller timestamps are epoch binary64 seconds; at epoch ≈1.789e9 one representable step (ULP) is 0.238 μs, so a `1e-9` or `1e-12` second slack between two values that were rounded on DIFFERENT arithmetic paths is below the resolution of the number itself and refuses valid data by rounding luck. The repaired allowance is an arithmetic-representation allowance (1 μs = four contemporary roundings, precedent `joulewise/uncertainty_evidence.py:45–59`), never a cadence-sized or energy-sized relaxation: a missing 100 ms sample must still refuse everywhere.
+
+## Changes (exact sites verified by the lead at this head)
+
+R1 `joulewise/environment_admission.py:175–188`: add module constant `ADMISSION_TIME_ROUNDING_S = 1e-6` with a one-line comment ("covers four contemporary epoch-binary64 roundings; not missing samples") next to `MAX_ADMISSION_GAP_S`; replace the three `1e-9` literals (duration containment, capture start, capture end) with it.
+
+R2 `joulewise/reduce.py:1962–1990` `_anchor_coverage_ok`: both edges use the same endpoint arithmetic as the preceding tail gate at ~:1888 — `required_start_s = math.fsum((window.start_s, -bound_s))`, `required_end_s = math.fsum((window.end_s, bound_s))`, refuse only if `trace_start_s > required_start_s + math.ulp(required_start_s)` or `trace_end_s < required_end_s - math.ulp(required_end_s)`. Read the existing tail gate first and keep the two consistent.
+
+R3 `joulewise/controller.py:2540–2558` cooldown completion: `span_complete = window_span_s + 1e-6 >= selected.sustained_window_s`; accumulate `coverage_rounding_s += math.ulp(evidence_end) + math.ulp(clipped_start)` for each positive overlap contribution; `coverage_slack_s = max(1e-6, coverage_rounding_s + math.ulp(coverage_s))`; `coverage_complete = coverage_s + coverage_slack_s >= required_coverage_s`. The 300 s `cap_hit` semantics and the 30 s / 80 % / power / thermal conjuncts are untouched.
+
+R4 `joulewise/load_transition_alignment.py:393–395`: `offset_s = (support_start_offset_s + support_end_offset_s) / 2.0` so producer and validator (:715) share one arithmetic path; keep the validator's `1e-12` (it is now an honest identity check).
+
+## Tests (defect-shaped; both counterfactuals per repair; new file `tests/test_gate_sensibility_rounding.py`, or extend the four existing module tests where a fixture already exists — your call, say which)
+
+For each of R1–R4: (a) the ADMIT counterfactual — an input that the OLD predicate refused only through epoch rounding and the NEW predicate admits (seat A gives concrete numbers: R1 start 1789000000.0, interval sum 30.00000001, stored end float(start+duration); R2 window.end 1789000000.0001, B 0.009724, tail one ULP below the required endpoint; R3 span 29.99999976158142 s and six 4 s contributions with inward endpoint rounding; R4 eight transitions with epoch-sized markers and response support marker+0.1..+0.2); (b) the REFUSE counterfactual — R1 baseline exceeding the attempt by 10 μs and a capture endpoint outside by one sample interval (0.1 s) still refuse; R2 a tail two representable steps below the endpoint and a whole missing sample still fail; R3 a 10 μs deficit still fails and a first recovery at ≥300 s is still `cap_hit`; R4 an emitted `offset_s` mutated by 1 μs with unchanged support endpoints still fails validation. Each test asserts the physical reason in its name or docstring. Mutation check: temporarily revert each repair locally and confirm the ADMIT test fails (report the observation; leave the code repaired).
+
+## Contract sentences (one each; no new gate, no decision-log edit)
+
+`docs/contracts/measurement_methodology.md` environment-admission paragraph and the complete-span/80 %-coverage sentence near line 285: numerical containment/completion allows at most the stated epoch-representation allowance (1 μs; coverage additionally the summed endpoint ULPs) and never credits unobserved time. `docs/contracts/run_bundle_layout.md` edge-coverage-under-every-admissible-shift sentence: endpoint coverage uses the same one-ULP arithmetic allowance at both edges; no extrapolation of a missing interval. `docs/contracts/load_transition_alignment.md`: the implementation forms the endpoint offsets a, b first and then their midpoint. If any pinset / fidelity / docs-freshness test pins the exact bytes or line numbers of those documents, STOP with NEEDS_SCOPE naming the pin file rather than editing it.
+
+## Verification
+
+`python3 -m unittest tests.test_environment_admission tests.test_reduce tests.test_controller tests.test_load_transition_alignment tests.test_gate_sensibility_rounding tests.test_docs_freshness -v 2>&1 | tail -30` (gate on the process rc, never on a pipeline), then `python3 scripts/gen_state.py --check`. Do not run the full suite (the lead replays it). No git commit; leave the diff in the worktree. Report claude-codex-report/v1, genre implementation, header < 8192 bytes: changed paths, per-repair admit/refuse test names, the mutation-revert observations, anything you found that contradicts seat A, and any NEEDS_SCOPE/NEEDS_RULING.
