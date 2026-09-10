@@ -946,3 +946,247 @@ $ git diff --stat
    `session.finalized_slots` rather than published observations is what makes the
    gate load-bearing; the two items are one change, and I would not claim the
    gate is pinned without E-1 in place.
+
+---
+
+# Fix round 5 (seat S4, on top of `4832dc75`)
+
+One item: the lead's diff-gate finding (record 110). Nothing else touched.
+
+## The defect
+
+`prior_observations` labelled every prior-set row with
+
+```python
+target_catalog_id if dict(observation.identity_epoch) == identity_epoch
+else predecessor_catalog_id
+```
+
+The catalog has exactly two entries, so labelling is a two-way choice — and a
+two-way choice made with `else` silently LABELS anything it does not recognise.
+A row captured under a **third** identity epoch (a further OS update mid-campaign,
+or a corrupted row) would enter the prior set wearing the predecessor's catalog
+id, and every downstream check would then agree with the lie: the catalog would
+hold two honest entries, the row would name one of them, and the epoch it was
+actually captured under would have vanished from the record.
+
+## The fix
+
+A guard immediately before the labelling (`:1221`): any snapshot observation
+with a content id whose identity epoch matches **neither** the target's nor the
+predecessor's refuses, naming the attempt ids:
+
+```
+prior set: attempt <id> carries an identity epoch that is neither the target's
+nor the predecessor's; not issued
+```
+
+The two-entry catalog is unchanged — the guard is what lets it stay exactly two
+entries and stay honest, rather than growing an entry to accommodate whatever
+turns up.
+
+## Tests
+
+`test_a_third_identity_epoch_in_the_prefix_refuses` builds a second, unregistered
+derivation session under epoch `25H01` (new fixture parameter
+`second_session_epoch`) and asserts the exact reason. The counterfactual is
+**isolating by construction**: that row is `valid` and has a content id, so the
+addendum A-7 scan cannot see it (A-7 only ranges over TARGET-epoch rows) and the
+pending/unresolved scan cannot see it either — only the epoch guard can refuse it.
+
+`test_the_epoch_catalog_stays_exactly_two_entries` asserts the catalog holds
+exactly the target's and the predecessor's epochs and that every prior-set row's
+`epoch_id` is one of the catalog's keys, so no row is labelled by default.
+
+## Cut table (fix round 5)
+
+Baseline = restored = `65ffe7e239b26e4108fbadf2ec8d3361a5576398b809c03d93107ef0f18178c3`;
+`Ran 1 test` parsed per cut, sha256-asserted after each,
+`PYTHONDONTWRITEBYTECODE=1`. Harness `/tmp/s4_mutate6.py`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| J1 | `if foreign_epoch:` → `if False:` | `test_a_third_identity_epoch_in_the_prefix_refuses` | Ran 1 test | KILLED |
+| J1b | the epoch comparison `not in (identity_epoch, predecessor_epoch)` → `False` | same | Ran 1 test | KILLED |
+
+J1b is the operand cut: with the comparison gone the list is empty and the
+refusal never forms, so the guard's condition is under test and not only its
+`if`.
+
+## Runner tail
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation
+----------------------------------------------------------------------
+Ran 92 tests in 110.600s
+
+OK
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts joulewise
+COMPILEALL_RC=0
+```
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/fixtures/epoch_bootstrap/build.py
+ M tests/test_issue_calibration_acceptance_generation.py
+```
+
+No git state changed, no commit, nothing outside scope touched.
+
+---
+
+# Fix round 6 (seat S4, on top of `9c998a9d`)
+
+Terminal review 109's B-1, B-2, B-3 and the "two homes" / binary64 / line-pin
+items. **10 cuts, one term each, all KILLED**; suite `Ran 227 tests … OK
+(skipped=1)`, rc 0; `compileall` rc 0. No git state changed.
+
+## B-1 — the machine facts that VOID the registration now have an enforcer
+
+The pre-registration names two: the `os_build` in its Epoch clause and the
+`/usr/bin/powermetrics` sha256 "in force", and says a change to either voids the
+registration. Nothing read them.
+
+`preregistration_epoch_pins(text)` parses both out of the **file the caller
+names**, by strict patterns, so the campaign's own text is the authority rather
+than a constant restated in the issuer. Exactly one match each: **absent and
+ambiguous both refuse** — a document that names two `os_build` values cannot be
+guessed past. `prepare-candidate` then refuses when the registration's target
+epoch `os_build` differs, or when the registration's rows do not unanimously
+carry the pre-registered `powermetrics_sha256` (read from their T1 bindings).
+
+`check` gained an optional `--preregistration`: given one, it appends a single
+line comparing the machine's **observed** binary digest against the
+pre-registered one and marks the watch failed on a mismatch. Without the flag the
+watch output is byte-identical, asserted by prefix comparison.
+
+The fixture's `T1_BINDINGS` now carries the real pre-registered digest — with a
+placeholder it would have exercised the void-registration path on every test.
+
+## B-2 — the corpus is bound to the pre-registered SHAPE
+
+Exactly **three** `--registration-session-id` values unless `--nights-ruling`
+names a written ruling; every registration session must declare exactly **12**
+slots (read from the session record's `declared_slots`) unless
+`--slot-count-ruling`. A corpus assembled from a different schedule is a
+different experiment, whatever its statistics say.
+
+The shared test runner supplies both departure flags, because every earlier
+fixture is one session of N slots; the two shape tests omit them. One test builds
+the genuine shape — two sessions of exactly 12 declared slots — and shows the
+NIGHT fence firing while the SLOT fence stays silent, so the two are not one
+fence wearing two names.
+
+## B-3 — the pre-registration text is pinned
+
+`--preregistration-sha256` is now **required**, and a file whose digest differs
+refuses. Without it the tool would derive against whatever the document says
+today, which is the one edit a pre-registration exists to forbid. The arm
+materials will carry the digest.
+
+## Two homes closed, and a literal that now checks itself
+
+`R6_PREFLIGHT_LEVEL_SCREEN_S` is **deleted**. The screen-challenge threshold is
+read from the authenticated predecessor's
+`ratified_operatives.preflight_level_screen_s` and threaded into `_select_members`
+and the refusal message. A test asserts the emitted
+`screen_challenge_threshold_s` equals r6's own value **and that the module no
+longer has the attribute at all**, so the second home cannot quietly return.
+
+`R6_MAXIMUM_PLUS_RANGE_S` stays as the CG46 A-4 ruled literal — it is a ruling,
+not a derivation — but the run now recomputes the predecessor's `maximum_s +
+range_s` in Decimal and **refuses** if the literal no longer describes that
+corpus. A ruled constant that has outlived the artifact it describes is worse
+than a derived one.
+
+## Prose
+
+`derivation_sha256`'s docstring cites `_canonical_sha256` and the `core` mapping
+by name instead of `(:660, :764)`; a test asserts no `` `:NNN` `` line pin remains
+in it. The module docstring now states that the quantiles are computed in
+80-digit decimal but the two-draw **predictions** are evaluated in **binary64**
+and recorded as the shortest decimal that reads back as the same double — r6's
+sealed rule string, kept verbatim so this generation's arithmetic is the
+predecessor's arithmetic. (The pre-registration edit is S6's.)
+
+## Cut table (fix round 6)
+
+Baseline = restored = `ebf0e919d70e6761899b4730dfad29e6c94971d837c9851fc412882c2f3c6cba`;
+one term per cut, `Ran 1 test` parsed, sha256-asserted after each,
+`PYTHONDONTWRITEBYTECODE=1`. Harness `/tmp/s4_mutate7.py`.
+
+| cut | term | test | runner | result |
+|---|---|---|---|---|
+| K1 | `if target_epoch.get("os_build") != registered_os_build:` → `if False:` | `test_a_registration_under_another_os_build_is_void` | Ran 1 | KILLED |
+| K2 | `if observed_powermetrics != {registered_powermetrics}:` → `if False:` | `test_a_registration_under_another_powermetrics_binary_is_void` | Ran 1 | KILLED |
+| K3 | `if len(found) != 1:` → `if False:` | `test_an_absent_or_ambiguous_epoch_pin_refuses` | Ran 1 | KILLED |
+| K4 | `if args.preregistration is not None:` → `if True:` | `test_check_compares_the_preregistered_binary_only_when_asked` | Ran 1 | KILLED |
+| K5 | the night-count fence → `if False:` | `test_a_registration_of_other_than_three_nights_refuses` | Ran 1 | KILLED |
+| K6 | `if declared != PREREGISTERED_SLOTS_PER_NIGHT:` → `if False:` | `test_a_night_declaring_other_than_twelve_slots_refuses` | Ran 1 | KILLED |
+| K7 | `if preregistration_sha256 != args.preregistration_sha256:` → `if False:` | `test_a_changed_preregistration_refuses` | Ran 1 | KILLED |
+| K8 | level screen read from the predecessor → a restated literal | `test_the_level_screen_threshold_comes_from_the_predecessor` | Ran 1 | KILLED |
+| K9 | `if recomputed != R6_MAXIMUM_PLUS_RANGE_S:` → `if False:` | `test_the_a4_diagnostic_is_checked_against_the_predecessor` | Ran 1 | KILLED |
+| K10 | docstring drops "evaluated in BINARY64" | `test_the_docstring_states_the_binary64_prediction_step` | Ran 1 | KILLED |
+
+K4 is the inverse-direction cut: forcing the comparison ON breaks the
+byte-identical-without-the-flag property, which is the half a "does it fire"
+test would miss.
+
+## Runner tails
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_issue_calibration_acceptance_generation \
+    tests.test_calibration_bracketing tests.test_docs_freshness
+----------------------------------------------------------------------
+Ran 227 tests in 199.357s
+
+OK (skipped=1)
+SUITE_RC=0
+
+$ python3 -m compileall -q scripts joulewise
+COMPILEALL_RC=0
+```
+
+`tests.test_issue_calibration_acceptance_generation` alone: `Ran 106 tests` OK.
+
+```
+$ git status --short
+ M scripts/issue_calibration_acceptance_generation.py
+ M tests/fixtures/epoch_bootstrap/build.py
+ M tests/test_issue_calibration_acceptance_generation.py
+
+$ git diff --stat
+ scripts/issue_calibration_acceptance_generation.py | 189 ++++++++++++++++++--
+ tests/fixtures/epoch_bootstrap/build.py            |  17 +-
+ ...test_issue_calibration_acceptance_generation.py | 198 ++++++++++++++++++++-
+ 3 files changed, 384 insertions(+), 20 deletions(-)
+```
+
+## Decisions
+
+1. **The pins are PARSED, not restated.** Copying the two values into the issuer
+   would have created the third home this round exists to close, and would let
+   the code and the campaign document disagree silently. The cost is a regex
+   contract with S6's text — so absent and ambiguous both refuse loudly rather
+   than defaulting.
+2. **`--preregistration-sha256` is required, `--preregistration` was already.**
+   Together they mean the tool cannot run against an unpinned document at all.
+3. **The shape rulings are separate flags**, not one `--shape-ruling`: a ruling
+   to run two nights is not a ruling to run nights of a different length, and
+   collapsing them would let one written ruling license both departures.
+4. **The fixture carries the real pre-registered powermetrics digest.** A
+   placeholder would have made every existing test travel the void-registration
+   path, and the round's own fences would have looked like they were passing.
+5. **`R6_MAXIMUM_PLUS_RANGE_S` kept as a literal but checked.** It is a ruled
+   number (A-4 corrected its last digits), so deriving it would discard the
+   ruling; recomputing and comparing keeps the ruling authoritative while making
+   it impossible for it to describe the wrong corpus.
+6. **The `check` comparison marks the watch failed on mismatch** rather than
+   only printing: the binary having rotated is exactly the condition that voids
+   an armed campaign, and a desk watch that reports it as informational would be
+   the wrong shape.

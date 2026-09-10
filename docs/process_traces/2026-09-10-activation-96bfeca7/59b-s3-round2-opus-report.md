@@ -849,3 +849,106 @@ byte-identical artifact sweep, alone      :: Ran 1 test  OK
 is meant to be immutable and hashable). S4's row will refuse until it emits tuples, and the refusal is
 silent: `_registered_generation_row_is_complete` returns one boolean, so the reason is not distinguished
 from any other completeness failure. Recommend S4 emit tuples so the emitted row is the registered row.
+
+---
+
+# Fix round 6 — corpus-size floor, the A-5 three-site counterfactual, call-site naming
+
+Applied on top of `4c43089a`; diff uncommitted, same two files. From terminal review 109 (SF-0) and the
+ruled-not-installed sweep over CG46 §R-d and addendum A-5.
+
+## 1. SF-0 — the corpus-size floor was ruled but never installed in the validator
+
+`SUCCESSOR_MINIMUM_CORPUS_SIZE` lived only in the issuer script; this module checked
+`corpus.n == generation["corpus_n"]` and nothing else, so a registered row could name any size at all
+and the artifact would agree with it. Added to `_registered_generation_row_is_complete`, fail-closed,
+for ENVELOPE rows only:
+
+```python
+and (
+    generation["screen_rule"] != SCREEN_RULE_FLOORED_RANGE_ENVELOPE
+    or generation["corpus_n"] >= ENVELOPE_MINIMUM_CORPUS_N
+)
+```
+
+`ENVELOPE_MINIMUM_CORPUS_N = 17` is the new one home (the issuer may import it). The comment states the
+physical reason rather than the citation alone: the floor guards the `df = n-1` tail the 99 % two-draw
+prediction rests on, and below 17 the Student-t quantile grows fast enough that a ceiling derived from
+it stops meaning what the artifact says it means. D-126 cl.2 ratified 19; CG46 addendum A-2 records
+n=17 as the only departure ever ruled, so 17 is the hard bound. The six issued `range_equals_screen`
+rows (n=17, n=19) are untouched either way.
+
+`test_envelope_generation_below_the_ruled_corpus_size_floor_refuses` drives n=16 REFUSE, n=17 ADMIT,
+n=19 ADMIT over one fixture.
+
+**This forced a fixture generalisation worth noting.** The round-4/5 envelope fixtures had corpus
+n = 3 — they were exercising the screen and ceiling relations on a corpus no real issuance could ever
+have. `_live_prefix_generation` now takes the member table, `_envelope_fixture` recomputes
+`source_statistics` and the preflight level screen from it, and both envelope helpers build 17 real
+members. So the envelope tests now run against a corpus of a size the pre-registration would accept,
+which they did not before.
+
+## 2. Addendum A-5's labelled counterfactual, over all three sites at once
+
+`test_derivation_row_excluded_consistently_at_all_three_sites` (docstring names
+`discover_calibration_candidates`, `evaluate_calibration_bracket (registered_valid)`, and
+`calibration_bracket_for_bundles (registered_valid count)` as the production call sites). The row is
+`valid`, same-epoch and inside the endpoint horizon, so the existing session rule cannot bar it — only
+its session KIND can, which is what makes it A-5's counterfactual rather than a duplicate of the
+existing endpoint rule.
+
+Assertions: discovery does not offer it; supplying only the two ordinary endpoints satisfies the exact
+equality (so the registered universe does not contain it); the bundles count does not include it. Then
+the **admit control**: the identical row under a BRACKET-kind session IS offered by discovery, IS in
+the registered universe (`calibration_ledger_off_ledger_artifact` fires when it is withheld), and IS
+counted (`calibration_ledger_custody_invalid` fires). Without that control the three refusals would be
+consistent with the row being ineligible for some unrelated reason.
+
+All three one-site-only cuts were run and each **KILLED** this single test:
+
+| One-site-only cut | rc | Ran |
+|---|---|---|
+| skip dropped at `discover_calibration_candidates` only | 1 | 1 |
+| skip dropped at the `registered_valid` universe only | 1 | 1 |
+| skip dropped at the `calibration_bracket_for_bundles` count only | 1 | 1 |
+
+That is the point A-5 makes: a skip present at two sites and missing at one is not a partial fix but a
+different defect — every claim window on the machine refuses.
+
+## 3. Call-site naming (no behaviour change)
+
+Six completeness / purity / registration-kind tests now open with
+`REFUSE: production call site calibration_bracketing.<function> (<fence>)`, naming
+`_valid_acceptance_bound` for purity and completeness and
+`_prior_set_matches_import_cutoff_prefix` for the registration kind.
+
+## Atomic sweep — 40 cuts, 40/40 KILLED
+
+No survivors, no anchor misses, no `NO-TESTS-RAN`; every cut `Ran 1`.
+`restored_sha256: 00c64f1a70bb548e95949110fc05201bf5c28377df00544ad0732de17ddd98d8`,
+`restored_matches: True`. `PYTHONDONTWRITEBYTECODE=1` throughout. Five new cuts: the corpus-floor
+clause, its operand collapse (`>= ENVELOPE_MINIMUM_CORPUS_N` → `>= 0`), and the three one-site A-5 cuts.
+
+**One round-4 cut regressed to SURVIVED and had to be repaired — the same lesson as round 5, from the
+other end.** `test_envelope_generation_that_ignored_the_floor_refuses` pinned its screen at the literal
+`0.006000` because that was the old 3-member fixture's range. Widening the corpus to 17 members changed
+the range to `0.001600`, so the test's screen was no longer "the quantized range" and the `max`→`min`
+cut stopped flipping it. The test now sets `0.001600` AND asserts that value equals the artifact's own
+recomputed `range_s` quantized — so the case cannot silently stop being "the screen equals the range"
+the next time the member table moves.
+
+Generalising: a counterfactual that hard-codes a value the fixture derives is one fixture edit away
+from testing nothing, and the sweep is what surfaces it. Tie the counterfactual to the fixture by
+assertion, not by a matching literal.
+
+## Test rcs (verbatim, rc captured in `RC`)
+
+```
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_calibration_bracketing \
+    tests.test_calibration_ledger tests.test_docs_freshness
+FIXROUND6_RC=0 :: Ran 195 tests in 14.721s  OK (skipped=2)
+
+byte-identical artifact sweep, alone      :: Ran 1 test  OK
+```
+
+`tests.test_calibration_bracketing` is now 92 tests (39 in `GenerationKeyedIssuanceValidationTests`).
