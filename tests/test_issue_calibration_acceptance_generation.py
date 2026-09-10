@@ -42,6 +42,7 @@ from joulewise.calibration_ledger import (
     load_calibration_ledger_snapshot,
 )
 from tests.fixtures.epoch_bootstrap.build import (
+    TARGET_EPOCH,
     Slot,
     build_derivation_ledger,
     tamper_member_bundle,
@@ -1697,6 +1698,50 @@ class PrepareCandidateTest(unittest.TestCase):
         for line in lines[6:]:
             self.assertRegex(line, r"^  blocker: .+$")
         self.assert_no_measured_value_leaked(text)
+
+
+    # ---- fix round 5 ----------------------------------------------------
+
+    def test_a_third_identity_epoch_in_the_prefix_refuses(self) -> None:
+        """A row that is neither the target's epoch nor the predecessor's.
+
+        The catalog has exactly two entries, so labelling is a two-way choice;
+        made with `else`, it would stamp a THIRD epoch's row with the
+        predecessor's catalog id and every downstream check would agree with the
+        lie.  The row here is `valid` and has a content id, so neither the
+        addendum A-7 scan (which only sees TARGET-epoch rows) nor the
+        pending/unresolved scan can refuse it — only the epoch guard can.
+        """
+
+        third_epoch = dict(TARGET_EPOCH)
+        third_epoch["os_build"] = "25H01"
+        rows = [Slot(v) for v in _grid(20, "0.0200", "0.0006")]
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = build_derivation_ledger(
+                Path(tmp) / "thirdepoch", rows,
+                second_session=("derivation-night-other", [Slot("0.0260")]),
+                second_session_epoch=third_epoch,
+            )
+            code = self.run_issuer(fixture)
+        self.assert_refused(
+            code,
+            "prior set: attempt derivation-night-other-d01 carries an identity "
+            "epoch that is neither the target's nor the predecessor's; not issued",
+        )
+
+    def test_the_epoch_catalog_stays_exactly_two_entries(self) -> None:
+        """The guard exists so the catalog need not grow to stay honest."""
+
+        self.assertEqual(self.run_issuer(self.wide), 0)
+        catalog = self.payload()["prior_observation_set"]["epoch_catalog"]
+        self.assertEqual(len(catalog), 2)
+        epochs = list(catalog.values())
+        self.assertIn(self.payload()["identity_epoch"], epochs)
+        self.assertIn(json.loads(R6.read_text())["identity_epoch"], epochs)
+        # Every prior-set row is labelled with one of the two, never by default.
+        labels = {row["epoch_id"] for row in
+                  self.payload()["prior_observation_set"]["observations"]}
+        self.assertTrue(labels.issubset(set(catalog)))
 
 
 if __name__ == "__main__":
