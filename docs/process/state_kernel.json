@@ -1128,7 +1128,7 @@
       "priority": "p1_phase_gate",
       "rank": 166,
       "status": "queued",
-      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding).",
+      "status_note": "2026-09-08: READY; Ed-hardware-adjacent, bench-owned clone writes plus Ed sudo/quiet-hardware items; 99co + ~17:05 amendment and 99ey/13. Agent work covers preparation only; no clone cut, arming or pack night is claimed. 2026-09-09: Cut the rehearsal clone only after NIGHT-GATE-STUB-CHAIN-01 merges; otherwise a stub night repeats the night_probe_error signature (21i §The finding). 2026-09-10: production clone provisionally cut at 078a13a4 (record 05: clean tree, lock diff empty, ledger authenticated with custody replay at sequence 76, tokenizer pins match); fresh cut at H on 09-11 per checklist 13 §6.",
       "stop_card": null
     },
     "COLDGATE-HANDOFF-01": {
@@ -2360,6 +2360,36 @@
       "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
+    "FIXTURE-SENTINEL-CONTROLLER-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/19-rootcause-controller-idle-drift-local-astra-report.md",
+          "docs/process_traces/2026-09-10-activation-96bfeca7/19-lead-note-local-controller-failure.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-SENTINEL-CONTROLLER-01/acceptance",
+          "label": "FIXTURE-SENTINEL-CONTROLLER-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fixture uses the bounded --no-sleep policy shared with the campaign-test helper (PR #310, consult 87); defect-shaped regression per report 19 §Remediation (byte-exact promotion, bounded post drift, strict validation clean, timeout reproduces without the cure); third instance of the host-timing fixture class (87, 99, 19) recorded."
+      },
+      "authority": {
+        "label": "Root-cause report 19 + lead note",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/19-rootcause-controller-idle-drift-local-astra-report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cure the controller test fixture that still sleeps through its post-idle capture against a real deadline, so tests.test_controller::test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce stops failing on a loaded local host (CI green at 078a13a4; local failure reproduced at main).",
+      "id": "FIXTURE-SENTINEL-CONTROLLER-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 177,
+      "status": "queued",
+      "status_note": "2026-09-10: registered by activation 96bfeca7; not on the G2-a path; CI is the gate of record for PR #314, whose local replay names this one known local-only failure.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -2487,7 +2517,7 @@
       "priority": "p1_phase_gate",
       "rank": 159,
       "status": "blocked",
-      "status_note": "T38c 2026-09-08: plan draft landed dd27e53b9895ea19704d4280ea292f4cc164af57 (cherry-pick 6b7e2614). NEEDS_RULING remains: PLAN_ID/NIGHT_ROOT/T0/WINDOW_MAX_S only AFTER rehearsal acceptance; dry sample values are not authorized production values. Production clone readiness follows 99co + amendment. Agent lane is preparation only; actual collection requires zero agents.",
+      "status_note": "T38c 2026-09-08: plan draft landed dd27e53b9895ea19704d4280ea292f4cc164af57 (cherry-pick 6b7e2614). NEEDS_RULING remains: PLAN_ID/NIGHT_ROOT/T0/WINDOW_MAX_S only AFTER rehearsal acceptance; dry sample values are not authorized production values. Production clone readiness follows 99co + amendment. Agent lane is preparation only; actual collection requires zero agents. 2026-09-10: no supported short chain (packet 04); proposed inputs PLAN_ID d117-g2a-prefill-probe-20260912, NIGHT_ROOT /Users/edr/night-custody/d117-g2a-prefill-probe-20260912, t0 2026-09-12T02:56:00-07:00, WINDOW_MAX_S 13500, measurement root /Users/edr/JouleWise-measurement-v5-20260911-g2a at H = the handback commit (inventory row inside H); arm materials 11/12/13 on `feat/2026-09-10-g2a-handback-20260912`; Ed emailed 04:50 (1a08b223b02862e9), silence = full chain; ruling due after rehearsal acceptance.",
       "stop_card": null
     },
     "G2A-PREFLIGHT-ARGV-ASSERT-01": {
@@ -2629,6 +2659,46 @@
       "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
+    "GATE-R2-COVERAGE-ULP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/15-lead-note-r2-staged-for-d138.md",
+          "docs/process_traces/2026-09-10-activation-96bfeca7/15-r2-coverage-ulp-staged-for-d138.patch",
+          "docs/process_traces/2026-09-10-activation-96bfeca7/15-r2-tests-staged-for-d138.py.txt",
+          "docs/process_traces/2026-09-10-activation-96bfeca7/24-coldgate-packet-gate-prose/exhibit-E-seat-A-inventory-02a.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GATE-R2-COVERAGE-ULP-01/acceptance",
+          "label": "GATE-R2-COVERAGE-ULP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Patch applied inside the re-freeze, the D-138 pin test updated by the D-079 acceptance reissue, the four tests green, and a delta refuter."
+      },
+      "authority": {
+        "label": "Lead note 15 + seat-A inventory 02a §B R2",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/15-lead-note-r2-staged-for-d138.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-138 governed estimator-input changes and inheritance corollary",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Rides the Phase-2 transaction branch; lands only inside the atomic re-freeze with the D-079 acceptance reissue."
+        }
+      ],
+      "flags": [],
+      "goal": "Land seat-A repair R2: joulewise/reduce.py::_anchor_coverage_ok endpoint coverage using the same one-ULP endpoint arithmetic at both edges as the preceding tail gate, plus the run_bundle_layout.md sentence; staged in docs/process_traces/2026-09-10-activation-96bfeca7/15-r2-coverage-ulp-staged-for-d138.patch with four regressions in docs/process_traces/2026-09-10-activation-96bfeca7/15-r2-tests-staged-for-d138.py.txt.",
+      "id": "GATE-R2-COVERAGE-ULP-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 178,
+      "status": "queued",
+      "status_note": "2026-09-10: STAGED, not landed (reduce.py is a D-138 governed input); a rare near-boundary false refusal until then, not a G2-a blocker.",
+      "stop_card": null
+    },
     "GATE-SENSIBILITY-SWEEP-01": {
       "acceptance": {
         "evidence": [
@@ -2654,8 +2724,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 175,
-      "status": "queued",
-      "status_note": "2026-09-10: Ed, verbatim: 'make sure there are no silly gates on accepting numbers, like make sure all barriers are sensible, recall that time where you wanted a tolerance of like 1e-15 sensitivity or something ridiculously microscopic compared to the measurement, be sensible about instrument rigor requirements.' Physics/evidence refusals stay (D-161); everything else gets a tolerance sized to the instrument.",
+      "status": "active",
+      "status_note": "2026-09-10: Ed, verbatim: 'make sure there are no silly gates on accepting numbers, like make sure all barriers are sensible, recall that time where you wanted a tolerance of like 1e-15 sensitivity or something ridiculously microscopic compared to the measurement, be sensible about instrument rigor requirements.' Physics/evidence refusals stay (D-161); everything else gets a tolerance sized to the instrument. 2026-09-10 (activation 96bfeca7): inventory complete (02a 156 rows / 02b 143 rows; the 1e-15 is a decimal presentation quantum in an identity check and stays); repairs R1/R3/R4 + G2-a idle_seconds 75 on PR #314 (`feat/2026-09-10-gate-sensibility-sweep`, final head beb808bc) through the full gauntlet incl. cold gate 24 on the contract prose; R2 staged (GATE-R2-COVERAGE-ULP-01); B1 (D-165 provenance band, seat B) needs a decision-log correction → cold gate, not G2-a-blocking at G2-a energies; the lane closes when PR #314 merges and the B1 disposition is recorded.",
       "stop_card": null
     },
     "GENERATOR-CORE-01": {
@@ -3541,7 +3611,37 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open.",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open. 2026-09-10 07:00 PDT: pre-night dead-man observed standing down (record 30); item 5 ruled MET by cold gate 31 subject to the harvest predicate P1–P4 (checklist 13 §3a); items 4 and 6 await the 09-11 harvest.",
+      "stop_card": null
+    },
+    "NIGHT-STREAM-PATHS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/31-coldgate-packet-deadman-stream-files/10-coldgate-fable-ruling.md",
+          "docs/process_traces/2026-09-10-activation-96bfeca7/31-coldgate-packet-deadman-stream-files/11-ruling-addendum-opus-amendments.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-STREAM-PATHS-01/acceptance",
+          "label": "NIGHT-STREAM-PATHS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "configs/launchd/com.joulewise.night.plist.template renders @@CUSTODY_ROOT@@/launchd/@@LOG_STEM@@.out and .err (or another path outside night/); scripts/install_night_agent.sh:125 creates that directory as well as night/; tests/test_run_night.py:816–817 amended and a new assertion that neither rendered path starts with <custody_root>/night/; harvest rows updated to preserve the courier transcript from the new location; historical traces untouched; lands under the twelve-row gate; NOT a gate on the 09-11 harvest or the 09-12 arm."
+      },
+      "authority": {
+        "label": "Cold gate 31 ruling 10 + addendum 11",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/31-coldgate-packet-deadman-stream-files/10-coldgate-fable-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Render the night agents' launchd StandardOutPath/StandardErrorPath outside night/ so a pre-night dead-man firing leaves night/ literally empty.",
+      "id": "NIGHT-STREAM-PATHS-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 176,
+      "status": "queued",
+      "status_note": "2026-09-10: ruled by cold gate 31 as a registered follow-up (item 5 MET on the 09-10 07:00 firing under the driver-records reading); until it lands, the item-5 predicate P1–P4 of ruling 10 / checklist 13 §3a is the criterion.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
