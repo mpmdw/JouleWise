@@ -138,6 +138,45 @@ Block B closes 4 before publication/installation. Item 1 was already closed
 by derivation 70/capture 104; a stub cannot re-prove the capture-timeout seam.
 Inbox and remote-branch gaps remain gaps even with a green result.
 
+### 3a. Item 5 — the mechanical predicate (cold gate 31, ruling 10 + addendum 11; RECORDED 2026-09-10 07:30 PDT)
+
+The 07:00 PDT 09-10 dead-man firing was observed by activation 96bfeca7 (record 30): exact stand-down line at
+07:00:02.092; `night/` held exactly `launchd.deadman.out` and `launchd.deadman.err`, both 0 bytes, birth 07:00:01.948.
+Cold gate 31 ruled item 5 MET on that observation, reading "writing anything but a log line" (kernel acceptance text and
+the coldgate-d1 R-7 amendment) as DRIVER records; zero-byte launchd stdio handles at the installer-rendered stream paths
+are the only permitted `night/` entries from a pre-night firing; the kernel dependency row's "nothing written into
+`night/`" is read the same way (addendum 11 A1). Do NOT re-litigate; run the predicate and record the sentence.
+
+Let `R = /Users/edr/night-custody/rehearsal-20260911`, `F = 1789048800`, `T0 = 1789120560`. Take the `lstat` inventory of
+`R/night/` (name, type, size, birth, mtime_ns) STRICTLY BEFORE 07:00 PDT 09-11 (epoch 1789135200) and before any copy.
+Item 5 is MET iff P1–P4 all hold; any failure is NOT MET, recorded with the exact inventory, escalated, never cured locally.
+
+- P1: `R/night.log` has exactly one line matching
+  `^(\S+) dead-man fired before the night's completion epoch 1789121760; standing down$` with ISO timestamp in [F, F+60 s]
+  (observed: `2026-09-10T07:00:02.092553-07:00`).
+- P2: that line precedes the first `night gate verdict=` line (or, on a `night_refused_agent_present` night, the refusal's
+  own log line; item 5 may still close, item 6 stays open), with no other `dead-man` line between them.
+- P3: the set S of `R/night/` entries with `mtime_ns < T0` equals exactly {`launchd.deadman.out`, `launchd.deadman.err`},
+  each a regular file, 0 bytes, birth in [F, F+60 s], mtime_ns equal to 1789048801.948138143 / 1789048801.948226143. A
+  non-zero size = the driver printed or crashed = NOT MET (read the bytes as a finding); any other pre-t0 name (in particular
+  `refusal.json`, `courier.json`, `courier.sent`, `result.json`, `receipt.json`) = NOT MET. If the inventory could only be
+  taken at or after 07:00 on 09-11 and the handles have moved past T0 (a post-completion dead-man firing on a failed-courier
+  night), evaluate P3 on the earliest earlier inventory or, failing that, on P1/P2 plus the absence of any pre-t0 driver
+  record, recording the handles' state as post-t0 (addendum A4).
+- P4: every other `R/night/` entry has `mtime_ns >= T0`; an entry timestamped between F+60 s and T0 is ambiguous: report it.
+
+Sentence to record under NIGHT-REHEARSAL-01 (fill the brackets):
+
+> Item 5 MET on rehearsal-20260911 (cold gate 31, ruling 10 + addendum 11): agents installed 04:10:58 PDT 09-10 with
+> `night/` baseline `[]`; the 07:00:02.092 PDT 09-10 dead-man firing wrote only the stand-down line to `night.log`
+> (completion epoch 1789121760), which precedes the 09-11 `[night gate verdict= | refusal]` line at `[timestamp]`; the only
+> pre-t0 entries of `night/` were launchd's two zero-byte stdio handles `launchd.deadman.out` / `.err` (birth 07:00:01.948,
+> mtime unchanged, 0 bytes), installer-rendered `StandardOutPath` / `StandardErrorPath` targets and not driver records; no
+> `refusal.json`, `courier.json` or `courier.sent` existed before t0. Follow-up NIGHT-STREAM-PATHS-01 registered.
+
+The night's own `launchd.night.out` (expected NON-empty: the courier transcript) and `launchd.night.err` (expected EMPTY;
+non-empty stderr is an item-6 finding) are born at t0 and never enter S. Preserve both byte-exact with sizes and mtime_ns.
+
 ### 4. Uninstall the stub and remove its disposable checkout/plan root
 
 Only after evidence preservation, reviewed acceptance disposition and
