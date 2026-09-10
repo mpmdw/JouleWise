@@ -46,10 +46,30 @@ is fixed here first.
 - **Prior set** — the acceptance's list of every ledger observation through
   its cutoff receipt. **Corpus** — the subset of the prior set whose values
   the statistics are computed from. **Retained n** is the corpus size.
-- **Anchor-v3 replay** — re-deriving a capture's fiducial bound from its
-  primary evidence bytes with the anchor-v3 estimator. A capture whose
-  clock-anchor feasibility model admits no feasible affine fit does not
-  resolve (`affine_clock_fit_empty`) and cannot be a corpus member.
+- **Anchor-v3 replay** — reading a capture's STORED anchor-v3 outcome back
+  out of its primary evidence bytes; not recomputing it. The anchor-v3
+  estimator runs inside the writer at capture time and records its result —
+  the `clock_anchor` record and the fiducial bound — in that capture's
+  `instrument_evidence.json`. Cold gate 46 §R-d settles that for a capture
+  taken fresh under anchor-v3 the stored result IS the derivation
+  (`stored_lexeme_is_member_value: True`), so the issuer authenticates those
+  bytes instead of repeating the fit: both `manifest.json` and
+  `instrument_evidence.json` must hash (SHA-256) to the digests the ledger row
+  recorded before any field is read, and the stored `b_fiducial_s` (the
+  capture's fiducial bound in seconds, next bullet) must equal the row's
+  `exact_bound_lexeme_s`. Any one of the three mismatching refuses. A capture whose
+  stored `clock_anchor` shows the clock-anchor feasibility model admitted no
+  feasible affine fit did not resolve (`affine_clock_fit_empty`) and is
+  excluded, listed with that mechanism; a `clock_anchor` recorded under any
+  method other than anchor-v3 is not an anchor-v3 replay at all and refuses
+  rather than counting as resolved. Where a value IS recomputed from primary
+  bytes is historical and not this registration: the r-series (n = 17)
+  generations SUPERSEDED the scalars their bundles had stored with values
+  re-derived offline from primary bytes under the rate-aware set-membership
+  estimator — which is why `tests/verify_calibration_acceptance_corpus.py`
+  banks `stored_lexeme_is_member_value: False` for those generations, and
+  `True` for a generation whose captures store their own anchor-v3 result, as
+  this registration's do.
 - **`b_fiducial_s`** — the capture's fiducial bound in seconds: the value a
   corpus member contributes to the statistics.
 - **`DIAGNOSTIC_NO_PACK`** — the night receipt class for a night that runs no
@@ -58,8 +78,14 @@ is fixed here first.
   quiet-census, boot/clock, and no-retry conditions must still pass.
 - **Level screen** — an acceptance's corpus maximum, the preflight threshold a
   capture's bound is compared against. **Bracket screen (S)** — its corpus
-  range. **Budget ceiling (C)** — its maximum budgetable drift. **Q99** — the
-  99 % two-draw prediction computed from a corpus. **Predecessor ceiling** — the
+  range. **Budget ceiling (C)** — its maximum budgetable drift. **t(p, df)** — the
+  two-sided Student-t quantile: the multiple of an estimated standard
+  deviation that a t-distributed quantity stays within in absolute value with
+  probability p, when the estimate carries df degrees of freedom (df = n − 1
+  for a corpus of n members). **Two-draw prediction** — t(p, n−1) × sample SD
+  × √2, the half-width that predicts how far apart two fresh draws from the
+  same population fall at confidence p. **Q99** — the two-draw prediction at
+  p = 0.995, computed from a corpus. **Predecessor ceiling** — the
   predecessor generation's budget ceiling.
 
 Why three nights of twelve slots, stated before capture: at the historical
@@ -99,15 +125,19 @@ finalization path including recovery after a crash. No systematic-invalid dispos
 acceptance of this epoch exists. Whether the bound exceeds r6's preflight_level_screen_s 0.032898493715362 is recorded
 in the hashed evidence as a diagnostic only.
 
-Membership. The corpus is every observation of this registration whose ledger disposition is valid and whose anchor-v3
-replay from primary bytes resolves. No observation is excluded on the basis of its b_fiducial_s. Every member carries
-the target epoch and belongs to a session of this registration; a valid same-epoch observation outside this registration
-refuses issuance rather than being absorbed. Valid registered observations excluded by replay are listed in
-derivation_notes.excluded_members with their named mechanism, member_id, manifest_sha256 and instrument_evidence_sha256;
-the prior-set row is matched by the content id derived from those two hashes.
+Membership. The corpus is every observation of this registration whose ledger disposition is valid and whose STORED
+anchor-v3 outcome, read back from hash-authenticated primary bytes, resolves (glossary: Anchor-v3 replay — the issuer
+reads the recorded clock_anchor and authenticates the bytes; it does not re-run the estimator over the trace). No
+observation is excluded on the basis of its b_fiducial_s. Every member carries the target epoch and belongs to a
+session of this registration; a valid same-epoch observation outside this registration refuses issuance rather than
+being absorbed. Valid registered observations whose stored outcome does not resolve are listed in
+derivation_notes.excluded_members with their named mechanism, member_id, manifest_sha256 and
+instrument_evidence_sha256; the prior-set row is matched by the content id derived from those two hashes.
 
-Exclusions (mechanism-named, outcome-independent, decided before capture). An observation is excluded only if (a) the
-estimator's clock-anchor feasibility model refuses it on replay (affine_clock_fit_empty, the r6 exclusion class);
+Exclusions (mechanism-named, outcome-independent, decided before capture). An observation is excluded only if (a) its stored
+anchor-v3 record shows the estimator's clock-anchor feasibility model admitted no feasible affine fit
+(affine_clock_fit_empty, the r6 exclusion class, and the ONLY exclusion mechanism registered at this step: an
+unresolved anchor carrying any other reason refuses issuance instead of quietly excluding the member);
 (b) a protocol gate fails (plateau, SNR, 59-pulse detection, spurious plateau, edge coverage), which the writer records
 as ordinary-invalid; or (c) a recorded operator or system event interrupted the window. Every exclusion is recorded with
 its named mechanism and its ledger row is retained.
@@ -119,7 +149,13 @@ than 19 retained after the third night: not issued, with the shortfall recorded;
 ruling, not this registration's. No top-ups, retries, early stops, or outcome-driven extra nights.
 
 Blindness. No member value, screen, or statistic is examined by any person or agent before the third night's session is
-terminal and its pin candidate is emitted.
+terminal and its pin candidate is emitted. The fence is installed by the issuer, not left to convention. prepare-candidate
+refuses to run while any session named in the registration is not terminal — terminal meaning its last declared slot is
+final or the session was aborted — and names the session it found open, so the statistics cannot be computed early even
+by accident. check's registration dry run, the one route that may be run mid-campaign, reports only the named sessions'
+kinds and states, how many slots are declared and how many are filled, and how many observations are excluded under each
+named mechanism; it reports no member value, no screen, no statistic, and no comparison against one. A mid-campaign look
+can answer whether the campaign is on schedule and cannot answer what the campaign got.
 
 Screen challenge. If two or more retained members exceed 0.032898493715362, the corpus is not issued and Ed rules in
 writing before any further capture. Second diagnostic, recorded: whether the new maximum exceeds r6's maximum plus r6's
@@ -127,9 +163,34 @@ range, 0.04262208300415633 (the Decimal sum of 0.03289849371536248 and 0.0097235
 membership.
 
 Analysis. Decimal statistics exactly as r6: minimum, maximum, range, mean, sample SD; t(0.975, n-1) and t(0.995, n-1)
-two-draw predictions. The three-night schedule admits retained n from 19 (the required floor) to 36 (all declared
-slots retained), so the degrees of freedom n-1 run from 18 to 35 — or from 16 if Ed's written n = 17 ruling is exercised; the quantile implementation's proof for the REALIZED
-df is computed and recorded before issuance, and no corpus issues on a df whose quantile is not proven in that record.
+two-draw predictions (both terms defined in the glossary above). The three-night schedule admits retained n from 19
+(the required floor) to 36 (all declared slots retained), so the degrees of freedom n-1 run from 18 to 35 — or from 16
+if Ed's written n = 17 ruling is exercised; the quantile implementation's proof for the REALIZED df is computed and
+recorded before issuance, and no corpus issues on a df whose quantile is not proven in that record.
+
+Quantile proof, mechanically, so that an authority-side reader can find it. For each of the two probabilities 0.975 and
+0.995, at 80-digit Decimal working precision, the issuer runs two checks on the quantile it returns for the realized df.
+(a) Forward check: the Student-t survival function P(T > t) — computed from the regularized incomplete beta function by
+continued fraction — evaluated AT the returned quantile must reproduce 1 - p, with absolute residual at most 1e-30.
+(b) Independent route: the same quantile is produced a second time by a route sharing no code with (a). That route is the
+exact Abramowitz and Stegun finite closed form for P(|T| <= t) at integer df (26.7.3 for odd df, 26.7.4 for even df),
+inverted by its own bisection over t in (0, 100) — 300 halvings, which resolves t to about 1e-88, far finer than the
+working precision needs — with pi computed independently by Machin's formula rather than taken from a library. The two
+quantiles must agree to at least 30 significant decimal digits. Both routes' evidence is recorded in the candidate's
+quantile_proof block: the quantiles at 20 decimal places, the per-probability forward residuals, the per-probability
+agreement digit counts, both bounds, the closed-form method string, and the working precision. A miss on either check
+refuses quantile_proof_failed and nothing issues, and the proof runs before the predictions are computed, so no corpus
+reaches issuance on an unproven df.
+
+Those two bounds — residual at most 1e-30, agreement at least 30 significant digits — are the ISSUER'S DECLARED bounds,
+not a ratified constant, and they are stated here so the authority-side record carries them rather than only the code and
+its output. Each is chosen conservative against the 20 decimal places at which the artifact publishes a quantile. For a
+quantile of order 2 to 3, agreement to 30 significant digits is agreement to about 29 decimal places, nine more places
+than are printed. The forward residual is a residual in PROBABILITY, not in t: near these quantiles the one-tail density
+is of order 0.05 (p = 0.975) down to 0.01 (p = 0.995) per unit t, so a probability residual of 1e-30 corresponds to an
+error of order 1e-29 to 1e-28 in t, at least eight orders of magnitude below the last published place. A quantile that
+passes both checks therefore cannot be wrong in any digit the artifact prints. The realized residuals and digit counts
+are recorded when the corpus closes; they are not predicted here.
 The full D-125 envelope governs both operatives: bracket screen
 S = max(new range quantized to 1e-6 s ROUND_HALF_EVEN, 0.010818) AND budget ceiling C = max(predecessor ceiling,
 new Q99). The generation records the predecessor ceiling and an explicit d125_ruling
