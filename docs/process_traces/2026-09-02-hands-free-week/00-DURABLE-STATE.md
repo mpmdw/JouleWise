@@ -898,3 +898,13 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   default, record 80; the consult-vs-prereg conflict stays Ed's open V7 item). NEXT: verify S1/S4 at the bench → refuters → integrate →
   sharded replay → PR(s) with twelve-row ledgers → cold science gate before any issuance. Ed's four written-yes items still open; no directive
   issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~13:01 PDT (headless activation `96bfeca7`): ACCEPTANCE-EPOCH-25G83-01 seats — S1 FINAL 36197c5a (writer `--derivation-only`;
+  refuters 87/89, witness 90, rounds 1–2, records 84/86); S2 FINAL 9558152e; S3 FINAL 4c43089a (rounds 1–5, deltas 73/77/83 + bench, record 88 —
+  operand-collapse cuts lesson); S5 FINAL c1655a32; S6 8bdead19 (round 4: diagnostic field named, derivation-kind valid row licenses nothing).
+  Integration `feat/2026-09-10-epoch-integration` = **51565cee** (main + S6 + S5 + S2 + S3 + S1; seam shim deleted; 226 focused tests OK).
+  S4 (issuer `prepare-candidate`) fix round 1 landed 501bde4f/a3ae7bf8 after execution refuter 81 BLOCKED (triggers copied from r6; rule name by
+  outcome; per-df quantile proof missing) — the seat found four further authentication-fatal shape defects (derivation_sha256 recipe, backfill
+  block, decision_ids, quantum lexeme); delta 91 + contract refuter 93 RUNNING. NEXT: S4 verdicts → merge S4 → sharded replay at the integration
+  head (`scripts/shard_tests.py --workers 4`) → PR(s) with twelve-row ledgers → derivation-night runbook → cold science gate before issuance.
+  Screen-rule name judgment (record 82) and the pre-registration screen rule as cold gate 46's adopted default (record 80): Ed veto open.
+  Ed's four written-yes items still open; no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
