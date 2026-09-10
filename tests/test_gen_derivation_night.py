@@ -137,6 +137,9 @@ class WrapperFixture:
     def write_plan(self, **overrides) -> None:
         self.plan_path.write_text(json.dumps(self.plan_mapping(**overrides), indent=2) + "\n")
 
+    def clone_chain(self) -> Path:
+        return self.measurement_root / CHAIN_RELPATH
+
     def emit(self, *extra: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [
@@ -259,10 +262,12 @@ class DerivationNightWrapperTests(unittest.TestCase):
         the night past its agent-free end.
         """
 
-        self.fixture.write_plan(t0_epoch_s=T0_EPOCH_S + 0.75, window_max_s=600)
+        # 8000 s is the shortest round window that still holds the programmed
+        # span; the fractional t0 is what the integer cast has to survive.
+        self.fixture.write_plan(t0_epoch_s=T0_EPOCH_S + 0.75, window_max_s=8000)
         self.assertEqual(self.fixture.emit().returncode, 0)
         exports = _exports(self.fixture.out.read_text())
-        self.assertEqual(exports["WINDOW_END_EPOCH_S"], str(int(T0_EPOCH_S + 0.75 + 600)))
+        self.assertEqual(exports["WINDOW_END_EPOCH_S"], str(int(T0_EPOCH_S + 0.75 + 8000)))
         self.assertRegex(exports["WINDOW_END_EPOCH_S"], r"^[0-9]+$")
 
     def test_the_sidecar_is_the_strict_form_the_driver_accepts(self) -> None:
@@ -390,7 +395,13 @@ class DerivationNightWrapperTests(unittest.TestCase):
         result = self.fixture.emit("--slot-count", "8")
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("not the pre-registered", result.stderr)
-        self.assertEqual(self.fixture.emit("--slot-count", "8", "--allow-slot-count").returncode, 0)
+        self.assertEqual(
+            self.fixture.emit(
+                "--slot-count", "8", "--allow-slot-count",
+                "--slot-count-ruling", "cold-gate-46-addendum-9",
+            ).returncode,
+            0,
+        )
         self.assertEqual(len(_exec_arguments(self.fixture.out.read_text())[3:]), 32)
 
     def test_an_out_path_that_is_not_the_plans_chain_path_refuses(self) -> None:
@@ -480,6 +491,203 @@ class DerivationNightWrapperTests(unittest.TestCase):
         self.assertEqual(parsed.returncode, 0, parsed.stderr)
         self.assertTrue(os.access(self.fixture.out, os.X_OK))
 
+    # --- fix round 1 ------------------------------------------------------
+
+    def test_the_chain_digest_is_a_literal_in_the_wrapper_bytes(self) -> None:
+        """B-1/F1: the plan pins the wrapper, so the chain digest must be IN it.
+
+        With the digest held in a separate sidecar file, editing the chain and
+        rewriting that file left the wrapper byte-identical: the plan-pinned
+        digest did not move, and the arm's re-emit-and-compare step was blind to
+        a changed capturing chain (refuter 104 F1(a), reproduced).
+        """
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        first = self.fixture.out.read_text()
+        chain = self.fixture.clone_chain()
+        self.assertIn(hashlib.sha256(chain.read_bytes()).hexdigest(), first)
+        # Change the chain, re-emit: the wrapper's own bytes must move.
+        chain.write_text(chain.read_text() + "\n# an edit no reviewer saw\n")
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        second = self.fixture.out.read_text()
+        self.assertNotEqual(first, second)
+        self.assertIn(hashlib.sha256(chain.read_bytes()).hexdigest(), second)
+
+    def test_rewriting_the_advisory_sidecar_cannot_move_the_pin(self) -> None:
+        """The refuter's exact attack: edit the chain, rewrite the sidecar, launch.
+
+        Nothing the night reads may live outside the plan-pinned bytes.
+        """
+
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        chain = self.fixture.clone_chain()
+        chain.write_text(chain.read_text() + "\n# injected\n")
+        sidecar = Path(str(self.fixture.out) + ".chain-source.sha256")
+        sidecar.write_text(
+            f"{hashlib.sha256(chain.read_bytes()).hexdigest()}  {CHAIN_RELPATH}\n"
+        )
+        result = self.fixture.run_wrapper()
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("tracked derivation chain bytes do not match", result.stderr)
+        self.assertEqual(self.fixture.calls(), [])
+        # Deleting the advisory file entirely changes nothing: it is not trusted.
+        sidecar.unlink()
+        chain.write_text(chain.read_text().replace("\n# injected\n", ""))
+        self.assertEqual(self.fixture.run_wrapper().returncode, 3)
+
+    def test_the_chain_is_digested_from_the_measurement_clone(self) -> None:
+        """F3: the generator's own checkout is not the checkout the night runs.
+
+        Digesting the generator's copy bakes in bytes the night will never
+        execute — the wrapper then refuses at t0 with the night burned.
+        """
+
+        chain = self.fixture.clone_chain()
+        chain.write_text(chain.read_text() + "\n# only in the clone\n")
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        wrapper = self.fixture.out.read_text()
+        self.assertIn(hashlib.sha256(chain.read_bytes()).hexdigest(), wrapper)
+        self.assertNotIn(hashlib.sha256(CHAIN_PATH.read_bytes()).hexdigest(), wrapper)
+        # And the wrapper it emitted runs against that clone.
+        self.assertEqual(self.fixture.run_wrapper().returncode, 3)
+
+    def test_a_window_too_short_for_the_programmed_span_refuses(self) -> None:
+        """B-2: settle + (N-1) x cadence + budget must fit, or the night aborts.
+
+        A 3600 s window emitted a 12-slot night that would settle, run about
+        five slots and hit window_exhausted — one of the campaign's three
+        nights, partial (refuter 105 B-2, reproduced).
+        """
+
+        self.fixture.write_plan(window_max_s=3600)
+        result = self.fixture.emit()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("window_max_s 3600 < required 7680 + 300 = 7980", result.stderr)
+        self.assertFalse(self.fixture.out.exists())
+        # The exact boundary, both sides.
+        self.fixture.write_plan(window_max_s=7979)
+        self.assertEqual(self.fixture.emit().returncode, 2)
+        self.fixture.write_plan(window_max_s=7980)
+        self.assertEqual(self.fixture.emit().returncode, 0)
+
+    def test_the_span_constants_are_the_chains_own_defaults(self) -> None:
+        """The refusal is only true if these numbers are the chain's numbers."""
+
+        chain = CHAIN_PATH.read_text()
+        for anchor, value in (
+            ("settle_default", GEN.DEFAULT_SETTLE_S),
+            ("cadence_default", GEN.DEFAULT_SLOT_CADENCE_S),
+            ("budget_default", GEN.DEFAULT_SLOT_CAPTURE_BUDGET_S),
+            ("slot_count_default", GEN.PRE_REGISTERED_SLOT_COUNT),
+        ):
+            with self.subTest(anchor=anchor):
+                line = GEN.CHAIN_ANCHORS[anchor]
+                self.assertIn(line, chain)
+                self.assertIn(f":-{value}}}", line)
+        self.assertEqual(GEN.programmed_span_s(12), 7680)
+
+    def test_every_chain_citation_resolves_to_a_real_chain_line(self) -> None:
+        """S-2: line-number citations rotted the moment the header was edited.
+
+        Anchor texts cannot silently point at the wrong line; if one is edited
+        away, this fails instead of shipping a false citation into a night.
+        """
+
+        lines = CHAIN_PATH.read_text().splitlines()
+        for name, anchor in GEN.CHAIN_ANCHORS.items():
+            with self.subTest(anchor=name):
+                self.assertEqual(lines.count(anchor), 1, anchor)
+        source = SCRIPT_PATH.read_text()
+        self.assertNotIn("calibration_derivation_only.zsh:", source)
+        # The two anchors quoted into every night's artifact really are quoted.
+        self.assertEqual(self.fixture.emit().returncode, 0)
+        wrapper = self.fixture.out.read_text()
+        self.assertIn(GEN.CHAIN_ANCHORS["repo_from_argv0"], wrapper)
+        self.assertIn(GEN.CHAIN_ANCHORS["forward_argv"].strip(), wrapper)
+
+    def test_every_in_wrapper_refusal_prints_a_reason(self) -> None:
+        """F4: three refusals exited 1 with an empty stderr.
+
+        The driver redirects the chain's stderr to a file; an empty stream is
+        the whole forensic record of why an unattended night refused.
+        """
+
+        for path, reason in (
+            (self.fixture.frozen_plan, "frozen calibration plan is missing"),
+            (self.fixture.night_root / "identity_epoch.json", "identity epoch json is missing"),
+            (self.fixture.night_root / "t1_bindings.json", "t1 bindings json is missing"),
+        ):
+            with self.subTest(reason=reason):
+                self.assertEqual(self.fixture.emit().returncode, 0)
+                saved = path.read_bytes()
+                path.unlink()
+                result = self.fixture.run_wrapper()
+                path.write_bytes(saved)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(result.stderr.strip(), f"FAIL {reason}")
+                self.assertEqual(self.fixture.calls(), [])
+
+    def test_modified_identity_or_t1_bytes_refuse(self) -> None:
+        """S-1: their contents are copied verbatim into every slot record.
+
+        (reserve_calibration_window_bracket.py reads both and writes their
+        payloads into the declared slots, so a swapped file silently changes
+        what every capture is bound to.)
+        """
+
+        for name, reason in (
+            ("identity_epoch.json", "identity epoch bytes do not equal"),
+            ("t1_bindings.json", "t1 bindings bytes do not equal"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(self.fixture.emit().returncode, 0)
+                path = self.fixture.night_root / name
+                saved = path.read_bytes()
+                path.write_bytes(saved + b'{"swapped": true}\n')
+                result = self.fixture.run_wrapper()
+                path.write_bytes(saved)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(reason, result.stderr)
+                self.assertEqual(self.fixture.calls(), [])
+
+    def test_a_non_diagnostic_receipt_class_refuses(self) -> None:
+        """F5: the old pack-only guard was unreachable behind the schema check.
+
+        It is now an allow-list on receipt_class, which a REHEARSAL_STUB plan
+        reaches: such a night never runs its chain at all, so emitting a
+        wrapper for it is silently pointless.
+        """
+
+        self.fixture.write_plan(receipt_class="REHEARSAL_STUB")
+        result = self.fixture.emit()
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn(
+            "a derivation night is DIAGNOSTIC_NO_PACK; this plan is REHEARSAL_STUB",
+            result.stderr,
+        )
+        self.assertFalse(self.fixture.out.exists())
+
+    def test_departing_from_twelve_slots_requires_a_named_ruling(self) -> None:
+        """F6: an unrecorded escape hatch off the pre-registration.
+
+        The departure must be impossible to make quietly: a ruling reference is
+        required, announced on stderr, and written into the wrapper's header.
+        """
+
+        refused = self.fixture.emit("--slot-count", "6", "--allow-slot-count")
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        self.assertIn("--slot-count-ruling", refused.stderr)
+        self.assertFalse(self.fixture.out.exists())
+        allowed = self.fixture.emit(
+            "--slot-count", "6", "--allow-slot-count",
+            "--slot-count-ruling", "cold-gate-46-addendum-9",
+        )
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+        self.assertIn("DEPARTURE this night declares 6 slots", allowed.stderr)
+        header = self.fixture.out.read_text().split("set -euo pipefail")[0]
+        self.assertIn("DEPARTURE FROM THE PRE-REGISTRATION", header)
+        self.assertIn("cold-gate-46-addendum-9", header)
+
 
 class GeneratedRegionTests(unittest.TestCase):
     def test_the_runsheet_region_matches_the_generator(self) -> None:
@@ -499,6 +707,25 @@ class GeneratedRegionTests(unittest.TestCase):
         self.assertIn(hashlib.sha256(CHAIN_PATH.read_bytes()).hexdigest(), region)
         runsheet = GEN.RUNSHEET_PATH.read_text(encoding="utf-8")
         self.assertIn(region, runsheet)
+
+    def test_the_region_documents_the_third_file_and_the_arm_order(self) -> None:
+        """S-4: the emission has a custody side-effect and a required order.
+
+        Without both, an operator cannot replicate the arm, and cannot tell
+        whether the advisory sidecar in the night root is load-bearing.
+        """
+
+        region = GEN.render_region(CHAIN_PATH.read_bytes())
+        for phrase in (
+            "chain.zsh.chain-source.sha256",
+            "ADVISORY ONLY",
+            "### Arm order",
+            "status --porcelain",
+            "Re-emit and assert byte equality",
+            "digests the tracked chain **from the clone**",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, region)
 
     def test_the_g2a_emitter_still_passes_its_own_check(self) -> None:
         """The new region must not move the G2-a emitter's pinned fence lines."""
