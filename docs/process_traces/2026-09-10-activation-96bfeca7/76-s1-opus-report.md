@@ -533,3 +533,178 @@ still needed no edit.
 The TRUE branch of `exceeds_prior_level_screen` remains the documented
 `@unittest.skip` with its blocker and two candidate cures inline, per the lead's
 instruction. §4 of the seat report is the analysis for the refuter.
+
+---
+
+# Fix round 2
+
+On top of `12f1d1cf`. No git state changed. All five items for this seat are
+done; SF-6 is now a real assertion rather than a registered gap, and the
+mutant the contract refuter found surviving is dead.
+
+## G1. SF-1 — the comment that promised an epoch check on every path
+
+`scripts/validate_powermetrics_fiducial.py:539-548`. The refuter is right that
+the old final clause read as a guarantee and was false in one mode, and that
+`_derivation_only_screen_basis` landing directly above it made the misreading
+likely. Rewritten to say what is true on BOTH paths and to name the single
+thing the new mode skips:
+
+> The live writer below independently derives its own local value on BOTH
+> paths, and epoch-checks it on the ordinary one. Derivation-only mode
+> (`_derivation_only_screen_basis` above) skips exactly one thing — the epoch
+> EQUALITY — because ruling 46 A1 exists for the case where no issued
+> acceptance binds this machine's epoch; bytes, issued role, protocol digest
+> and estimator-code digests are still authenticated there, and that mode
+> refuses outright when the epoch turns out to match.
+
+## G2. SF-6 — the surviving mutant is dead; the skip is GONE
+
+The refuter's diagnosis was exact: the "diagnostic, never a refusal" contract
+was proven only in its vacuous FALSE case, so a mutant folding
+`exceeds_prior_level_screen` into the disposition survived. That is now fixed
+at the seam rather than deferred.
+
+**Refactor (behaviour byte-identical), `:439-484` new `_classify_capture`.** The
+disposition and the diagnostic are now computed TOGETHER in one pure function,
+from deliberately disjoint inputs: the disposition may consult
+`preflight_systematic_screen_s` (the screen of the acceptance that judges THIS
+epoch, `None` in derivation-only mode); the diagnostic reads only
+`screen_basis["preflight_level_screen_s"]` (the PRIOR epoch's screen) and
+returns `None` when there is no basis. A fold now has exactly one place to
+happen and one function-level test watching it.
+
+Supporting extraction `:486-495` `_exact_bound_lexeme_s`, which was previously
+inlined TWICE in `main` (once to compute the diagnostic before the evidence
+write, once to compute the disposition after it). `main` now calls the
+classifier ONCE, before any artifact is written (`:2447-2453`), and reuses both
+results. This deletes the duplicate serialization rather than adding one.
+
+Behaviour identity argument, since this is a refactor on the live capture path:
+the second serialization ran over an `evidence_payload` that had gained only
+`derivation_only` / `screen_basis` / `exceeds_prior_level_screen` as SIBLING
+keys, none of which can change the `b_fiducial_s` lexeme; `status` is finalized
+(including the `clock_anchor_unresolved` override) before either point; nothing
+between the old and new call sites mutates the payload. `tests.test_powermetrics_fiducial`
+is green unedited, which is the ordinary path's own witness.
+
+**The test the refuter asked for** — `CaptureClassificationTests`, function
+level, no CLI, no capture:
+
+- `test_bound_above_the_prior_screen_is_diagnosed_but_stays_valid` — bound
+  `0.040000000000000` against basis `0.032898493715362`,
+  `preflight_systematic_screen_s=None` → asserts `("valid", True)`. This is the
+  counterfactual the CLI cannot reach.
+- `test_bound_below_the_prior_screen_is_valid_and_not_diagnosed` — the FALSE
+  branch at the SAME seam, so both branches are now proven in one place.
+- `test_an_invalid_derivation_capture_is_ordinary_invalid_never_systematic` —
+  V2's "no `systematic-invalid` disposition exists for this epoch", with the
+  diagnostic still `True`, which is the cleanest statement that the two are
+  independent.
+- `test_the_ordinary_path_still_screens_and_records_no_diagnostic` — the other
+  side: with a real screen the ordinary path still yields `systematic-invalid`
+  above it and `valid` below it, and the diagnostic is `None`. This is what
+  stops a "fix" that simply disables the screen everywhere.
+
+**The `@unittest.skip` is removed entirely**, along with the now-dead
+`_rekey_acceptance(maximum_s=…)` harness parameter it existed to serve (item 5).
+The module now has **zero skips**. Why the CLI-level TRUE branch stays
+unreachable is preserved verbatim in `CaptureClassificationTests`' class
+docstring — the ~354x gap between the fixture sampler's ~9.3e-05 s bound and
+r6's `0.032898493715362`, and the `_valid_acceptance_bound:676-687` clause that
+blocks lowering the screen instead — so the reasoning survives where the next
+reader will meet it.
+
+## G3. Nit (87/89) — `--derivation-only --output` sent readers hunting
+
+Kept `WRITER_BRACKET_REDERIVE_CONFLICT`: the family is right ("these parameters
+apply only to live capture"), and the brief forbids a new code. The refusal now
+names the flags ACTUALLY passed (`:1805-1823`), so a reader is never sent
+looking for a `--rederive-from` that was not on the command line:
+
+```json
+"context": {"detail": "--derivation-only applies only to live capture",
+            "conflicting_flags": ["--derivation-only", "--output"]}
+```
+
+## G4. Nit (87) — the guard comment described an unreachable scenario
+
+`:1440-1461`. The old comment justified the guard with the cross-epoch story,
+which `FROZEN_PROTOCOL_INVALID` catches upstream before the lifecycle is even
+constructed. It now states what the guard actually protects — a chain, runbook,
+or operator that opens a derivation session and loses `--derivation-only` on one
+slot while the machine's epoch still equals the active acceptance's, plus every
+future derivation session opened once a successor has issued for the epoch in
+force — and explicitly records that the cross-epoch case is caught upstream, so
+the next reader does not re-derive this and conclude the guard is dead code.
+
+## G5. Cuts
+
+Baseline `scripts/validate_powermetrics_fiducial.py` sha256
+`6e1e8ce0fc26ea8f16d08e36f12e2f595ce8ff41f9d120443f6c4c33c334d15a`; all cuts
+`PYTHONDONTWRITEBYTECODE=1`, single named test, bytes restored, sha256
+re-verified (`restored_sha_ok=True` on every row).
+
+| # | Mutation | Test it must kill | Result |
+|---|---|---|---|
+| M10 | **the refuter's surviving mutant**: fold `exceeds_prior_level_screen` into the disposition | `CaptureClassificationTests::test_bound_above_the_prior_screen_is_diagnosed_but_stays_valid` | `Ran 1 test` / `FAILED (failures=1)` rc 1 |
+| M11 | drop the `preflight_systematic_screen_s is not None` guard, so a derivation capture is compared to the prior screen | same test | `Ran 1 test` / `FAILED (errors=1)` rc 1 |
+| M12 | diagnostic ignores the screen basis (always `False`) | same test | `Ran 1 test` / `FAILED (failures=1)` rc 1 |
+| M13 | same fold, seen from the ordinary path (its level screen stops working) | `CaptureClassificationTests::test_the_ordinary_path_still_screens_and_records_no_diagnostic` | `Ran 1 test` / `FAILED (failures=1)` rc 1 |
+
+M10 is the one that matters: it is the mutant report 89 §5 recorded as
+surviving, and it now fails exactly the test written for it.
+
+## G6. Runs
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_validate_powermetrics_fiducial_derivation_only \
+    tests.test_powermetrics_fiducial tests.test_docs_freshness \
+    > /tmp/fr2focused.log 2>&1; RC=$?
+FOCUSED RC=0
+Ran 118 tests in 123.981s
+OK
+```
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_calibration_exits.RefusalInventoryTests.test_generated_contract_projection_and_runbook_anchors_are_fresh \
+    > /tmp/fr2fresh.log 2>&1; RC2=$?
+FRESHNESS RC=0
+Ran 1 test in 0.001s
+OK
+```
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_validate_powermetrics_fiducial_derivation_only \
+    > /tmp/fr2mod.log 2>&1; RC=$?
+RC=0
+Ran 12 tests in 45.556s
+OK
+```
+
+`OK` with no `skipped` count: the module's only skip is gone.
+
+```
+$ python3 -m compileall -q scripts joulewise
+compileall rc=0
+```
+
+## G7. Footprint and what is NOT mine
+
+```
+$ git status --short
+ M scripts/validate_powermetrics_fiducial.py
+ M tests/test_validate_powermetrics_fiducial_derivation_only.py
+```
+
+SF-3 and SF-5 are S6's docs and were not touched. SF-2 needs no edit (the
+refuter verified the abort witness itself). Nit N-1 from report 89 — that
+`_derivation_only_screen_basis` opens the artifact three times, so the recorded
+`artifact_sha256` is not provably the bytes that were authenticated — was NOT
+addressed: it was not in this round's item list, and the refuter itself scores
+it as over-engineering under D-161. **Flagging it as the one open nit** so the
+lead rules rather than it being lost; the cure is threading the already-read
+bytes out of `_derive_preflight_systematic_screen_s`, roughly 10 lines in this
+seat's scope if wanted.
