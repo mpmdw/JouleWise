@@ -140,13 +140,17 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
             _refuse(epoch != continued_epoch, f"slots.{name}.identity_epoch_not_unanimous")
             _refuse(epoch == artifact["identity_epoch"], "continued_identity_epoch_unchanged")
             retained.append(lexeme)
-    # Apply the same unconditional envelope gate as the loader, independently
-    # of resolution, the retained count, and the statistics verdict.
-    _refuse(not envelope_holds_over_all_valid(all_valid, rule),
-            "unresolved_valid_row_exceeds_envelope: unresolved slots: "
-            + (", ".join(unresolved_valid) or "none (all valid rows resolved)")
-            + "; the desk reports it to Ed for a written ruling")
     statistics = equivalence_statistics(retained, rule)
+    # The ruling's verdict over the RETAINED values comes first, so a FAIL or
+    # an INCONCLUSIVE night still prints its derived record (exit 4 / 5) for
+    # the desk.  Only a night whose retained values PASS while an unresolved
+    # valid bound sits outside the envelope is refused: continuing it
+    # mechanically would let an asserted "unresolved" label remove a failing
+    # bound, so the desk reports it to Ed for a written ruling instead.
+    _refuse(statistics["verdict"] == "pass" and not envelope_holds_over_all_valid(all_valid, rule),
+            "unresolved_valid_row_exceeds_envelope: unresolved slots: "
+            + ", ".join(unresolved_valid)
+            + "; the desk reports it to Ed for a written ruling")
     record = {
         "schema_version": CONTINUATION_SCHEMA,
         "decision_ids": ["D-102"],

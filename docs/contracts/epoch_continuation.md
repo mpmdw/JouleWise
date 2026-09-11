@@ -300,8 +300,10 @@ night is exempt from range expansion; systematic failures trigger even there.
 `--d102-addendum-date`, and `--out`. PASS writes a marked candidate and exits
 0. INCONCLUSIVE prints the derived record and exits 5 without writing a
 candidate. Envelope and integrity refusals exit 3 without writing a candidate.
-Exit 4 remains the statistics FAIL mapping, but every screen violation now
-hits the unconditional envelope refusal before that mapping. Output under any
+Exit 4 is the statistics FAIL mapping and prints the derived record. The
+envelope refusal (exit 3) applies only when the retained values PASS while an
+unresolved valid bound sits outside the envelope: a FAIL or INCONCLUSIVE
+night always reaches the desk with its numbers. Output under any
 resolved `configs/calibration` directory is forbidden. Existing output refuses
 without `--force`. Repeating identical inputs produces identical bytes.
 
