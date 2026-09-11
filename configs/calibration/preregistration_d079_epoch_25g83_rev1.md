@@ -492,8 +492,9 @@ this campaign means every rule is fixed before the data exists. It does not
 mean no one may look. The rule above is fixed here, in writing, before the
 night runs; reading the night's retained values afterwards therefore selects
 nothing, because there is nothing left to select. Revision 1's own reason for
-blindness — "so that nothing can be chosen after seeing values" — is satisfied
-by fixing the rule, which is what this section does.
+blindness — "every rule that could otherwise be chosen after seeing values is
+fixed here first" — is satisfied by fixing the rule, which is what this
+section does.
 
 ## Decisions 2, 3 and 4; timing
 

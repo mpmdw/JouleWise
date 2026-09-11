@@ -6761,12 +6761,18 @@ successor. Ordinary capture and the first real G2-a window proceed on the next
 quiet slot AFTER the addendum lands — the addendum is what licenses them, not
 the PASS. The 25G83 pre-registration stays on file, un-withdrawn, as the
 fallback route. If continuation needs a code change (the epoch-freshness
-refusal in the loader or issuer) it "lands through the normal PR gate as the
-smallest possible change" with its diff reported; a refusal is never worked
-around by hand. Clause 2's rule that a trigger observation is judged under the
-PRIOR artifact and never incorporated into a threshold that judges itself is
-preserved exactly: the equivalence night's values are compared against r6 and
-enter no statistic.
+refusal in the loader or issuer) it "lands it through the normal PR gate as
+the smallest possible change" with its diff reported; a refusal is never
+worked around by hand. What this displaces, named so the record is complete:
+clause 2 above lists "any identity-field change" among the MANDATORY
+prospective re-derivation triggers, and under it the os_build change alone
+would have voided r6 and required a new derivation. Ed's ruling carves out
+the case where a same-envelope night follows the identity change: the trigger
+still fires and the night still runs, but a PASS continues the acceptance
+instead of re-deriving it. Clause 2's other rule — that a trigger observation
+is judged under the PRIOR artifact and never incorporated into a threshold
+that judges itself — is preserved exactly: the equivalence night's values are
+compared against r6 and enter no statistic.
 
 **FAIL route.** The pre-registered three-night derivation proceeds as written
 in the pre-registration, and V3 is then AFFIRMED by this ruling (three nights,

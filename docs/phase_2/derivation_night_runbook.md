@@ -1592,8 +1592,11 @@ inside the window.
 
 ### 2.5 The epoch-equivalence check — the rule, its constants, and the one action each outcome takes
 
-This section is the reason the night ran. Its rule was fixed in writing before
-the night was armed, by the owner's directive issue 316 of 2026-09-10,
+This section is the reason the night ran. The EPOCH-EQUIVALENCE CHECK is one
+comparison: the night's retained values, captured on the new operating-system
+build, are held against the envelope the acceptance in force already carries
+from the old build; if they sit inside it, the build change did not move the
+instrument. Its rule was fixed in writing before the night was armed, by the owner's directive issue 316 of 2026-09-10,
 transcribed as revision 2 of
 `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the dated
 Ed addendum under D-102 in `docs/decision_log.md`. Nothing here is decided at
@@ -1686,7 +1689,7 @@ fixed before the night ran.
 | Outcome | The exact next action, and nothing else |
 |---|---|
 | **INCONCLUSIVE** (`m < 6`) | Arm ONE more equivalence night: back to §1 with a fresh plan id, fresh `t0`, fresh night root, fresh desk inputs and a fresh session id, then harvest it through this same §2 and apply this same rule to it. No top-up of this night, no partial decision, no other action. |
-| **PASS** | Write the dated continuation addendum under D-102 — "epoch continuation on evidence": an identity-field change followed by a same-envelope night CONTINUES the acceptance in force rather than voiding it. The addendum cites this night's session id, the twelve slot outcomes and the m values verbatim, and moves no threshold. If the epoch-freshness refusal in the loader or the issuer blocks continuation, land the SMALLEST change that removes it through the ordinary pull-request gate and report its diff; never work around a refusal by hand. §3 and §4 do not run. |
+| **PASS** | Write the dated continuation addendum under D-102 — "epoch continuation on evidence": an identity-field change followed by a same-envelope night CONTINUES the acceptance in force rather than voiding it. The addendum cites this night's session id, the twelve slot outcomes, the count m, and each of the m retained values as the ledger lexeme (issue 316: "the m values"), all verbatim from the desk tool's record, and moves no threshold. If the epoch-freshness refusal in the loader or the issuer blocks continuation, land the SMALLEST change that removes it through the ordinary pull-request gate and report its diff; never work around a refusal by hand. §3 and §4 do not run. |
 | **FAIL** | The pre-registered three-night derivation proceeds exactly as revision 1 of the pre-registration writes it, with V3 AFFIRMED by the same issue (three nights, twelve slots, retained n ≥ 19, or exactly 17 under a written ruling). THIS night counts as registration night one, so §3 runs for nights two and three and §4 closes the registration. If the issuer's in-code blindness refusal blocks counting this night, report it and propose the minimal change — never run a fourth night to satisfy the guard. |
 
 **A PASS licenses nothing by itself.** What licenses ordinary capture is the
@@ -2005,7 +2008,7 @@ Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
 | `slot_end slot=dNN disposition=non-valid`, night continues | **Not a failure.** The writer exited 1: the row is finalized with a disposition other than `valid`, and the next declared slot runs on the unchanged cadence (§2.4). | Record the count of such slots. Do nothing else, and read no value. Exclusion is decided at issuance, by named mechanism. |
 | `slot_refused slot=dNN rc=2` + chain exits 2, session left OPEN | The writer REFUSED this capture (`emit_refusal` exits 2). The row is **not** finalized, so the chain stops rather than continuing over an unrecorded slot — and deliberately does not abort the session. | Read the refusal in `chain.stderr.log`, then **desk recovery**: `recover_calibration_ledger.py … abort-session --session-id <id> --plan <plan> --reason <the named reason>` (§2.4). Never a retry inside the window. Until the session is closed the next night cannot open at head-equals-pin. |
 | `slot_refused slot=dNN rc=<n≥3>` + chain exits with that status, session left OPEN | The writer crashed rather than refusing. Same dispatch branch, same unfinalized row. | Same desk recovery, and account for the crash before any further night is armed: a crash is a defect, not an outcome. |
-| `slot_unused … reason=window_exhausted` + `session_abort` + exit 0 | The window could not finish a slot's 480 s budget. Slots are recorded unused, never compressed or retried. Δ larger than 1320 s is the usual cause (§1.2). | Record the count. No top-up, no fourth night (§2.4). |
+| `slot_unused … reason=window_exhausted` + `session_abort` + exit 0 | The window could not finish a slot's 480 s budget. Slots are recorded unused, never compressed or retried. Δ larger than 1320 s is the usual cause (§1.2). | Record the count. The session is terminal and §2.5 judges its finalized rows (an equivalence night with fewer than six retained values is INCONCLUSIVE). No top-up, no fourth night (§2.4). |
 | Any other non-zero exit, with a `session_open` line already in the chain log | A ledger call failed under `set -e` after the session was opened. | Treat exactly as `slot_refused`: read the log, then desk recovery with a named reason. A `session_open` line with no `session_abort` and no terminal slot means the session is still open, whatever the exit code was. |
 
 Capture-writer refusals (`scripts/validate_powermetrics_fiducial.py`, codes in
