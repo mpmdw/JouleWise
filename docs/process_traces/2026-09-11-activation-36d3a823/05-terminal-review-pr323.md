@@ -18,4 +18,35 @@
 
 ## Replay tail (row 9) — appended when the run lands
 
-(pending)
+Replay 24 died with activation 36d3a823; replay 25 (activation 4824d78c, nohup pid 99611, `JouleWise-wt-hprime` at 97da620e, `python3 scripts/shard_tests.py --workers 4 --split`, log `/tmp/magistrate-4824d78c/replay-25-hprime-97da620e.log`, 1,161,341 bytes) started 10:53 PDT and finished 11:40:56 PDT; harvested from disk by activation 1944317a at 11:50 PDT. Exact summary lines and tail:
+
+```
+replay-25 start 2026-09-11T10:53:20-0700 head=97da620ef3467cfb980632ef890209b52fe59134
+===== SHARD 1/4 OUTPUT =====
+MODULE START tests.test_2k_amplification
+test_bound_formula_handles_extreme_skew_and_negative_offsets (test_2k_amplification.ClockMathAmplificationTests.test_bound_formula_handles_extreme_skew_and_negative_offsets) ... ok
+test_client_alignment_record_rederives_controller_timestamp_from_raw_node_time (test_2k_amplification.ClockMathAmplificationTests.test_client_alignment_record_rederives_controller_timestamp_from_raw_node_time) ... ok
+...
+----------------------------------------------------------------------
+Ran 8 tests in 0.001s
+
+OK
+MODULE PASS tests.test_workload_sizing tests=8 failures=0 errors=0 skipped=0 seconds=0.002
+SHARD SUMMARY index=4/4 modules=62 tests=1509 failures=0 errors=0 skipped=5 result=PASS
+WORKERS SUMMARY shards=4 modules=232 tests=6036 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+replay-25 rc=0 end 2026-09-11T11:40:56-0700
+```
+
+Summary lines:
+
+```
+replay-25 start 2026-09-11T10:53:20-0700 head=97da620ef3467cfb980632ef890209b52fe59134
+SHARD SUMMARY index=1/4 modules=52 tests=1390 failures=0 errors=0 skipped=50 result=PASS
+SHARD SUMMARY index=2/4 modules=59 tests=1214 failures=0 errors=0 skipped=7 result=PASS
+SHARD SUMMARY index=3/4 modules=59 tests=1923 failures=0 errors=0 skipped=47 result=PASS
+SHARD SUMMARY index=4/4 modules=62 tests=1509 failures=0 errors=0 skipped=5 result=PASS
+WORKERS SUMMARY shards=4 modules=232 tests=6036 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+replay-25 rc=0 end 2026-09-11T11:40:56-0700
+```
+
+**Row 9 result: PASS** — 4 shards, 232 modules, 6036 tests, 0 failures, 0 errors, 109 skipped, rc 0.
