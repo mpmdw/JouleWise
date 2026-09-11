@@ -34,10 +34,11 @@ precisely because at least one field is stale; if none is, this is an ordinary
 night, the ordinary (non-derivation) path applies, and this script refuses
 rather than hand a derivation night inputs it would reject at its first step.
 
-This script never reads or writes the calibration ledger, never touches
+This script never reads or writes the calibration ledger, never WRITES under
 ``configs/calibration``, and never runs ``powermetrics``.  It reads
 ``sysctl``, hashes ``/usr/bin/powermetrics``, imports ``mlx.core``, and reads
-the acceptance artifact — all desk reads.
+the acceptance artifact (by default the active one under
+``configs/calibration``, for the stale-field diagnostic only) — all desk reads.
 """
 
 from __future__ import annotations
