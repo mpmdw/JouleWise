@@ -172,6 +172,10 @@ default ruling and the continuation.
 - **Dead-man** — the second LaunchAgent (a macOS launchd job file), installed
   alongside the night agent, which fires at a fixed local minute and stands the night down if the night's
   completion time has passed without completion.
+- **Driver preflight** — the install-time check that loads the driver module
+  and every project module it imports at module scope under the job's
+  interpreter and PATH and parses the plan, without exercising functions'
+  lazy imports inside `joulewise` or running the chain's input checks.
 - **Tracked chain** — `scripts/night_chains/calibration_derivation_only.zsh`,
   the committed script that actually runs the twelve captures. *Tracked* means
   it is a repository file, byte-identical in every clone at `H`; contrast the
@@ -1239,6 +1243,26 @@ this night's (`DIAGNOSTIC_NO_PACK`, `window_max_s = 9000`, no pack block, and a
 chain re-check is this lane's wrapper `--verify` of §1.1b step 4 rather than
 that runbook's G2-a runsheet render.
 
+At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
+`python3` found through PATH selected macOS Python 3.9.6, which cannot import
+`datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
+(the executable running the driver). The installer flag `--python "$PY"`
+pins that path to the project interpreter defined in §0.2. Install and
+`--render-only` default to `<measurement_root>/.venv/bin/python` when
+`--python` is omitted. Even a stub checkout needs that venv or an absolute
+path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
+(currently 3.11) and whose driver preflight exits 0 from the stub checkout.
+The chain's interpreter remains `<measurement_root>/.venv/bin/python`,
+independently of this driver pin.
+
+Before installation, the **driver preflight** loads the driver module and
+every project module it imports at module scope, under the job's interpreter
+and PATH, and parses the plan. Its JSON `modules` list names the driver and
+those direct module-scope project imports; keep that success line in the arm
+record. It does not exercise functions' lazy imports inside `joulewise` or run
+the night's gates or measurements. The installer refuses a missing interpreter,
+a version below `MIN_PYTHON`, or a failed preflight.
+
 Run it only after the notice is sent and its evidence is written. Everything
 before the `os.replace` is reversible by doing nothing; everything after it is
 an armed night.
@@ -1323,18 +1347,6 @@ plutil -p ~/Library/LaunchAgents/com.joulewise.night.plist
 plutil -p ~/Library/LaunchAgents/com.joulewise.night.deadman.plist
 cmp "$NIGHT_ROOT/night_plan.json" "$STAGE/arm-night_plan.json"
 ```
-
-At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
-`python3` found through PATH selected macOS Python 3.9.6, which cannot import
-`datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
-(the executable running the driver). The **driver preflight** here runs the
-driver's imports under that exact interpreter and the job's environment before
-the job is installed; keep its printed JSON success line in the arm record.
-Install and `--render-only` use `--python "$PY"` above, or default to
-`<measurement_root>/.venv/bin/python` when `--python` is omitted, and refuse a
-missing interpreter, Python below 3.11, or failed imports. Even a stub checkout
-needs that venv or an explicit compatible interpreter. The chain's interpreter
-remains `<measurement_root>/.venv/bin/python`, independently of this driver pin.
 
 Read both `plutil` dumps against four things and record the answers: each
 label's `StartCalendarInterval` (the night's `t0` hour and minute, and the
@@ -2215,6 +2227,7 @@ means. A term is listed only if it does technical work.
 | screen / level screen / bracket screen | §Terms, constants in §2.5, successor operatives in §4.2 | A threshold a value is compared against; corpus maximum; corpus range. |
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |
 | blind / blindness | §Terms, bounded §2.3 | Every rule that could be chosen after seeing values is fixed in writing BEFORE the data exists — "every rule fixed before data", not "no one may look". Nothing is read while a night runs; the equivalence night's retained values are read once its own session is terminal, and on the FAIL route no corpus statistic is computed before the last registration session is terminal. |
+| driver preflight | §Terms, §1.4 | The install-time check of the driver module, its module-scope project imports and the plan under the job's interpreter and PATH; it does not exercise lazy imports inside project functions or the chain's input checks. |
 | dead-man | §Terms | The second LaunchAgent that fires at a fixed local minute and stands the night down if completion has passed. |
 | fence (watchdog sense) | §Terms | A period in which the watchdog refuses to LAUNCH OR ADOPT a magistrate agent session: a plan span, the half-open belt `[02:45:00, 03:30:00)`, or the half-open dead-man minute `[07:00:00, 07:01:00)`. It forbids an agent starting, never a night running — which is why a `t0` of 02:56 is inside the belt and correct. |
 | blindness fence | §Terms, enforced §2.3 item 3 | The code-enforced refusal of `prepare-candidate` while any session named in the registration is not terminal — the FAIL route's fence on computing a corpus statistic early. Not an interval; no clock clears it, and it does not govern the equivalence check, whose rule is fixed before capture instead. |

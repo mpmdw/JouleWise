@@ -434,8 +434,17 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertFalse((self.root / "custody").exists())
         self.assertNotIn("preflight", completed.stdout)
+        # Recovery can reuse install arguments, even if that interpreter is
+        # now missing. Uninstall must still avoid interpreter validation.
+        ignored_python = subprocess.run(
+            [*completed.args, "--python", "/missing/recovery/python"],
+            env=self.environment, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(0, ignored_python.returncode, ignored_python.stderr)
+        self.assertEqual("--python ignored on uninstall\n", ignored_python.stderr)
+        self.assertNotIn("preflight", ignored_python.stdout)
         calls = self.launch_log.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(2, len(calls))
+        self.assertEqual(4, len(calls))
         self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
         self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
 

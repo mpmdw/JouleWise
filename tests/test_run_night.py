@@ -266,6 +266,7 @@ class NightDriverTests(unittest.TestCase):
         self.assertEqual(sys.executable, record["python"])
         self.assertEqual(".".join(map(str, sys.version_info[:3])), record["version"])
         self.assertEqual({
+            "scripts.run_night",
             "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0",
             "joulewise.t0_rehearsal", "joulewise.night_gate",
             "joulewise.measurement_liveness",

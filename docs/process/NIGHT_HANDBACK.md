@@ -41,44 +41,13 @@ have been assigned to later processes.
 
 ## Purpose of this night
 
-Plan `rehearsal-20260911`, class `REHEARSAL_STUB`, is planned for
-2026-09-11 at 02:56:00 PDT (`t0`, epoch 1789120560), with a 900-second
-window. The courier deadline is `t0 + 900 + 300`, epoch 1789121760,
-03:16:00 PDT that morning. The driver runs its built-in stub,
-`sleep 2; echo REHEARSAL`: no pack, no model, no measurement, no sudo.
-This notice describes the planned night; the arm record establishes
-whether installation happened.
-
-This second stub night combines two checks for `NIGHT-REHEARSAL-01`.
-Installing both agents on **2026-09-10 between 03:00 and 06:30 PDT**
-lets the 07:00 dead-man fire that morning (epoch 1789048800), before
-the night, and stand down with one line in `night.log` and nothing
-written into `night/` by that firing. That is acceptance item 5's
-R-7 observation. Installing after that day's 02:56 also keeps the night
-agent from firing a day early. The night then fires at 02:56 on 09-11;
-item 6 is re-satisfied only if its receipt is not refused. An
-agent-present refusal can close item 5 only, not item 6.
-
-`repo_head = measurement_head = H`, where H is **this commit**, the main
-commit that rewrites this handback for this night, descended from the
-cure merge `a52810c9`. The disposable detached checkout at H is
-`/private/tmp/joulewise-rehearsal-20260911-checkout`. Both night agents
-are installed from it. It is used only by this stub and removed with
-the plan root after harvest; it is never reused for a real plan.
-
-The consolidated notice with these pins is sent after commit H and
-before the plan is moved into place. Ed's NO on the notice thread
-stands the night down. The arming activation exits after recording the
-arm. The watchdog's exit boundary is 02:31:00 PDT on 09-11
-(epoch 1789119060, `t0 − 25 minutes`); its relaunch belt is
-02:45–03:30 PDT. Power source, powermode and the timer probe are
-recorded at arm time. Powermode is recorded, not gated, for this stub;
-a green stub says nothing about the capture-timeout seam.
-
-These pins and acceptance conditions come from the
-[magistrate synthesis](../process_traces/2026-09-09-rehearsal-harvest/65-magistrate-synthesis-second-stub-night.md).
-The [arm runbook](../process_traces/2026-09-09-rehearsal-harvest/67-arm-runbook-rehearsal-20260911.md)
-gives the command sequence.
+Nothing is armed. `rehearsal-20260911` is complete as an attempted night:
+the driver crashed before any census and the later dead-man refused; it did
+not run the stub. Harvest, uninstall and retirement are complete, as recorded
+in the dated entry below. There are no active night pins in this handback.
+The next plan is authored under record 13 of
+`docs/process_traces/2026-09-11-activation-58a3bcfc/`; its pins belong to that
+plan's committed handback when it is ready to arm.
 
 ## Executed — rehearsal-20260909 (history)
 
@@ -99,43 +68,48 @@ from the canonical repo. The standing rules below are unchanged. RECORD: harvest
 armed; §Purpose, §Where the results are and §Next lane describe the completed night (this file's history holds no separate
 between-nights template text; whether one should exist is referred to the cold gate, not decided here).
 
+## Executed — rehearsal-20260911 (2026-09-11)
+
+The night did not run. At 02:56 PDT, Python 3.9.6 crashed on the
+`datetime.UTC` import before any census, gate or stub. At 07:00 PDT, the
+dead-man refused `night_refused_agent_present` on an orphaned Claude daemon;
+that refusal is not a night-gate verdict. No `result.json` or `receipt.json`
+was produced. Courier email `1a090c8424231111` reported the failures.
+
+Harvest is complete in
+[record 01](../process_traces/2026-09-11-activation-58a3bcfc/01-rehearsal-20260911-harvest-record.md):
+item 5 MET, item 6 NOT MET. Item 5 rests on the pre-night 2026-09-10 07:00
+dead-man stand-down, not the 09-11 refusal. Both agents were uninstalled FROM
+the stub checkout, and the checkout and plan root were retired in
+[record 02](../process_traces/2026-09-11-activation-58a3bcfc/02-rehearsal-20260911-uninstall-and-retirement.md).
+RECORD: harvest, uninstall and removal for this night are complete; nothing
+is armed. The next plan is authored under record 13 of the same directory;
+this entry assigns it no pins.
+
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/rehearsal-20260911`; records in `night/` —
-  `result.json` (expected verdict `REHEARSAL_ONLY`, `chain_exit_code` 0),
-  `receipt.json` or `refusal.json` as `result.json` directs,
-  `chain.started`, `chain.exited`, `censuses.jsonl`, `courier.sent`,
-  `courier.json`.
-- Driver log: `/Users/edr/night-custody/rehearsal-20260911/night.log`.
-  At harvest, look for the 2026-09-10 07:00 dead-man stand-down line
-  before the 09-11 `night gate verdict=` line.
-- Results branch: `night-results/20260911` on `origin`, if the driver's
-  push succeeded — verify, do not presume.
+The completed night's evidence is preserved under
+`docs/process_traces/2026-09-11-activation-58a3bcfc/01-harvest-evidence/`, with
+its inventory and acceptance disposition in record 01 above. The full custody
+archive is `/Users/edr/night-custody-archive/rehearsal-20260911-harvest-58a3bcfc`.
+Record 01 verifies the dead-man refusal and courier records on
+`night-results/20260911`; the crash traceback is in the harvested evidence.
+There is no pending harvest and no live plan root for this night.
 
-## Next lane for rehearsal-20260911
+## Next lane
 
-The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260911` / `/private/tmp/joulewise-rehearsal-20260911-checkout`
-/ this commit) harvests `result.json`, the receipt or refusal, the courier
-message id and the results-branch evidence, records them under
-`NIGHT-REHEARSAL-01`. Acceptance requires `receipt.json` verdict
-`REHEARSAL_ONLY`, with C5 recording `chain_stub: built_in_stub_by_design`
-and null `chain_sha256` and `expected_chain_sha256`. The log must show
-the pre-night dead-man standing down, with nothing in `night/` from
-that firing. A receipt refusing `night_refused_agent_present` is
-acceptable only for item 5; item 6 still needs a non-refused night.
-The stub's launchd exit status 3 is not a receipt-refusal signal.
+Continue the next plan under record 13 of
+`docs/process_traces/2026-09-11-activation-58a3bcfc/`. Nothing is armed; do not
+re-arm `rehearsal-20260911` or reuse its retired checkout. Item 6 still needs
+a non-refused night after the interpreter cure. Item 1, the `cold_start.json`
+deadline derivation, is CLOSED as of 2026-09-09 (derivation 70, capture 104).
+Rewrite this handback with the next plan's actual pins before arming it.
+Send the stage-1 plan email to Ed before any `DIAGNOSTIC_NO_PACK` plan is
+armed. Accept only `night_refused_agent_present` as a receipt refusal; cure
+any other cause before re-arming, and never re-arm the same plan on the same
+signature twice. The stub's launchd exit status 3 is not a receipt-refusal
+signal.
 
-After preserving the evidence, the magistrate runs
-`scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260911/night_plan.json --hour 2 --minute 56 --uninstall`
-FROM the stub checkout, removes the stub checkout (`git worktree remove`)
-and the plan root before any real plan, and then sends the stage-1 plan
-email to Ed before any `DIAGNOSTIC_NO_PACK` plan is armed. Accept only
-`night_refused_agent_present` as a receipt refusal; cure any other cause
-before re-arming; never re-arm the same plan on the same signature twice.
-Item 1, the `cold_start.json` deadline derivation, was desk work
-separate from this night and is CLOSED as of 2026-09-09 ~17:00 PDT (derivation 70,
-fresh capture 104: median 5158 ms, deadline 300 s).
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's
 `measurement_head`; never install the two night agents from the
@@ -155,18 +129,24 @@ driver checkout HEAD and `measurement_head` against the HEAD of the plan's
 `measurement_root`, while `--uninstall` checks neither pin and no longer
 needs `claude` on PATH or a Python virtual environment (a project-specific
 Python installation).
-Install and `--render-only` default to `<measurement_root>/.venv/bin/python`;
-pass `--python /absolute/path/to/python` to select another Python 3.11+
-interpreter (the executable running the driver). A stub checkout needs that
-venv or an explicit compatible interpreter with the driver's imports available.
+Install and `--render-only DIR` (render the two job files to a directory
+without installing anything) default to `<measurement_root>/.venv/bin/python`;
+pass `--python /absolute/path/to/python` to select the interpreter (the
+executable running the driver). A stub checkout needs that venv or an absolute
+path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
+(currently 3.11) and for which `run_night.py preflight --plan PLAN.json` exits 0
+from the stub checkout under the job's PATH.
 
 At 02:56 PDT on 2026-09-11, the night driver crashed before any gate because
 `python3` found through PATH selected macOS Python 3.9.6, which cannot import
 `datetime.UTC`. A **LaunchAgent** is a macOS launchd job file; each job now names
-an absolute interpreter path. A **driver preflight** here runs the driver's
-imports under that exact interpreter and the job's environment before the job
-is installed. The installer prints its JSON success record for the arm record
-and refuses installation if it fails.
+an absolute interpreter path. A **driver preflight** loads the driver module
+and every project module it imports at module scope, under the job's
+interpreter and PATH, and parses the plan before installation. Its JSON
+`modules` list names the driver and those direct module-scope project imports.
+It does not exercise functions' lazy imports inside `joulewise` or run the
+night's gates or measurements. The installer prints the JSON success record
+for the arm record and refuses installation if preflight fails.
 
 Ordinary daytime work in the dev checkout no longer invalidates an armed night; only
 moving the pinned measurement checkout does. Once authored, every armed

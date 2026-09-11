@@ -1869,7 +1869,9 @@ def main(argv: list[str] | None = None) -> int:
             "preflight": "ok",
             "python": sys.executable,
             "version": ".".join(map(str, sys.version_info[:3])),
-            "modules": [module.__name__ for module in (
+            # The driver and its direct module-scope project imports; this
+            # does not claim to exercise lazy imports inside those modules.
+            "modules": ["scripts.run_night"] + [module.__name__ for module in (
                 readiness, t0_author, t0_rehearsal, night_gate,
                 sys.modules["joulewise.measurement_liveness"],
             )],

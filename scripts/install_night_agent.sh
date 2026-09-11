@@ -26,7 +26,9 @@ while (( $# )); do
     *) usage ;;
   esac
 done
-(( uninstall && python_given )) && usage
+if (( uninstall && python_given )); then
+  print -- "--python ignored on uninstall" >&2
+fi
 [[ -n "$plan" && -n "$hour" && -n "$minute" ]] || usage
 [[ "$hour" == <-> && "$minute" == <-> ]] || usage
 (( hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 )) || usage
