@@ -34,6 +34,8 @@ from scripts import gen_derivation_night as generator
 from scripts import generate_g2a_probe_inputs as probe_inputs
 from scripts import validate_powermetrics_fiducial as validation_script
 from scripts import write_derivation_night_inputs as script
+from tests.fixtures.epoch_bootstrap.build import TARGET_EPOCH
+from tests.fixtures.epoch_continuation.build import registered_continuation
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ACCEPTANCE_PATH = validation_script.DEFAULT_ACCEPTANCE_BOUND_PATH
@@ -93,6 +95,19 @@ def run_main(argv: list[str]) -> tuple[int, str, str]:
 
 
 class WriteDerivationNightInputsTests(unittest.TestCase):
+    def test_continued_epoch_is_an_ordinary_night_and_writes_no_derivation_inputs(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            out = root / "inputs"
+            out.mkdir()
+            with registered_continuation(root), mocked_machine(os_build=TARGET_EPOCH["os_build"]):
+                code, stdout, stderr = run_main(["--out-dir", str(out)])
+            self.assertEqual(code, 2, stderr)
+            self.assertIn("ORDINARY night, not a derivation night", stderr)
+            self.assertEqual(stdout, "")
+            self.assertEqual(list(out.iterdir()), [])
+        self.assertIn("A continued epoch", script.__doc__)
+
     def test_writes_exactly_the_six_scalar_identity_fields_and_the_t1_superset(
         self,
     ) -> None:
@@ -207,7 +222,7 @@ class WriteDerivationNightInputsTests(unittest.TestCase):
         ):
             code, _out, err = run_main(["--out-dir", raw])
             self.assertEqual(code, 2)
-            self.assertIn("no identity field differs", err)
+            self.assertIn("already judges", err)
             self.assertIn("ORDINARY night", err)
             self.assertEqual(sorted(Path(raw).iterdir()), [])
 
@@ -348,4 +363,3 @@ class OneHomeAndAcceptanceBranchTests(unittest.TestCase):
             self.assertIn("could not be read as an issued artifact", stream.getvalue())
             self.assertFalse((root / "identity-epoch.json").exists())
             self.assertFalse((root / "t1-bindings.json").exists())
-

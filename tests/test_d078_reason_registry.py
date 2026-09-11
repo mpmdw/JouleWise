@@ -9,6 +9,7 @@ from pathlib import Path
 from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
 from joulewise.floor_extraction import CELL_REFUSAL_CODES
 from joulewise import idle_admission
+from joulewise.calibration_epoch_continuation import CONTINUATION_INVALID
 from joulewise.powermetrics_fiducial import FIDUCIAL_DIAGNOSTIC_CODES
 
 
@@ -29,6 +30,14 @@ def _d078_registry_text() -> str:
 
 
 class D078ReasonRegistryTests(unittest.TestCase):
+    def test_epoch_continuation_diagnostic_is_registered(self) -> None:
+        amendment = _d078_registry_text()
+        self.assertRegex(
+            amendment,
+            rf"(?m)^\| `{re.escape(CONTINUATION_INVALID)}` \| .+ \|$",
+        )
+        self.assertIn("`calibration_acceptance_bound_stale`", amendment)
+
     def test_d100_non_refusing_disposition_is_exact_dispatch_scoped(self) -> None:
         decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
         marker = (

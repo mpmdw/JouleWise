@@ -33,6 +33,7 @@ the active acceptance artifact's identity epoch.  A derivation night exists
 precisely because at least one field is stale; if none is, this is an ordinary
 night, the ordinary (non-derivation) path applies, and this script refuses
 rather than hand a derivation night inputs it would reject at its first step.
+A continued epoch authenticated by the issued registry is an ordinary night.
 
 This script never reads or writes the calibration ledger, never WRITES under
 ``configs/calibration``, and never runs ``powermetrics``.  It reads
@@ -178,10 +179,10 @@ def _stale_identity_fields(
             ) from exc
         return sorted(str(field) for field in stale)
     raise NightInputsRefusal(
-        "no identity field differs from the acceptance's epoch at "
-        f"{acceptance_path}: this machine still matches the acceptance in "
-        "force, so this is an ORDINARY night, not a derivation night: the "
-        "writer's --derivation-only mode would refuse these inputs at d01 "
+        "this machine's identity epoch is one the acceptance at "
+        f"{acceptance_path} already judges (its own epoch or an authenticated "
+        "continuation), so this is an ORDINARY night, not a derivation night: "
+        "the writer's --derivation-only mode would refuse these inputs at d01 "
         "with the settle already spent. Run the ordinary window path instead"
     )
 
