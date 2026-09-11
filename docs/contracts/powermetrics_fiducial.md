@@ -90,6 +90,142 @@ none may be restated as an empirically proved universal instrument property.
   sustained mixed-load regime; until that variant is validated, T3 remains an
   explicit limitation.
 
+## Derivation-only capture for a new identity epoch
+
+Status: **Ruled by cold gate 46 and its dated addendum 11 (2026-09-10); Ed
+veto window open; LANDED in code.** Both hold at once: the mode is
+implemented and running, and Ed may still veto or amend the rules it
+implements. `--derivation-only` is a registered argument of the writer
+`scripts/validate_powermetrics_fiducial.py`, and it runs against the
+**derivation-kind** session interface — a ledger session whose open receipt
+carries `session_kind: "derivation"` (the constant `SESSION_KIND_DERIVATION`
+in `joulewise/calibration_ledger.py`), marking it as existing to BUILD a
+future acceptance rather than to bracket a claim window with a capture before
+it and a capture after it (an ordinary bracket session records no
+`session_kind` at all; that absence IS the bracket kind, per
+[the ledger contract](calibration_ledger.md#derivation-sessions-for-a-new-identity-epoch)).
+The pairing is enforced in both directions by the writer's refusal codes in
+`joulewise/calibration_exits.py`: a derivation-kind slot captured without the
+flag refuses `calibration_derivation_session_requires_derivation_only`, and
+the flag used without such a slot refuses
+`calibration_derivation_only_session_kind_required`.
+
+The writer's `--derivation-only` mode exists for one situation. The machine's
+**identity epoch** — the six-field vector the issued acceptance binds: OS
+build, hardware model, power policy, sampling interval, estimator revision,
+and pulse protocol — has changed, so that acceptance is stale by design and an
+ordinary capture refuses before touching hardware. New-epoch observations must
+nevertheless be captured before any acceptance of that epoch can be derived
+from them. A derivation-only capture is that observation: taken to build a
+future acceptance, never to license a measurement.
+
+What the mode still authenticates is unchanged: the active issued artifact's
+exact bytes, its pulse-protocol digest, and its estimator-code digest. What it
+inverts is one test. It REQUIRES the live identity epoch to differ from the
+artifact's epoch, and refuses when they match — a matching epoch means an
+ordinary capture is possible, so derivation-only would be a way around
+ordinary judgment. It also refuses without a derivation-kind session slot; a
+standalone attempt and a bracket-kind slot are both rejected. Sessions, slots,
+and the derivation kind are defined in
+[the ledger contract](calibration_ledger.md#derivation-sessions-for-a-new-identity-epoch).
+
+Provenance is recorded in hashed bytes, not in prose. Both
+`instrument_evidence.json` and `manifest.json` carry the same three fields,
+and both are written before either is hashed: `manifest.json` records the
+SHA-256 of `instrument_evidence.json`, and the ledger row's content ID is the
+hash of that byte pair. Editing any of the three fields after the fact
+therefore breaks a recorded digest:
+
+- `derivation_only`, the boolean `true`, marking the capture as taken in this
+  mode;
+- `screen_basis`, an object with exactly four keys — `acceptance_id`, the
+  prior acceptance's ID; `artifact_sha256`, that artifact file's SHA-256;
+  `preflight_level_screen_s`, its **level screen**, meaning that acceptance's
+  corpus maximum, the threshold one observation's bound is judged against;
+  and `epoch`, the six-field identity vector that artifact binds — so every
+  derivation row states for itself which artifact it was captured under;
+- `exceeds_prior_level_screen`, a boolean: `true` when this capture's own
+  `b_fiducial_s` is strictly greater than the `preflight_level_screen_s`
+  recorded in `screen_basis`, `false` otherwise.
+
+The prior artifact's level screen is not applied to the capture. The writer
+sets `preflight_systematic_screen_s = None` and skips the comparison, so the
+row's **disposition** — the ledger's one-word verdict on a capture, one of
+`valid`, `ordinary-invalid`, or `systematic-invalid` — can only be `valid` or
+`ordinary-invalid` here. The `systematic-invalid` disposition means "exceeds
+the level screen of this epoch's acceptance", and no acceptance of this epoch
+exists yet, so it cannot arise.
+
+`exceeds_prior_level_screen` is a diagnostic and only a diagnostic. It is
+never a refusal, and it never changes the disposition: the row is classified
+exactly as it would be if the field were absent, which is why `valid` and
+`ordinary-invalid` remain the only two outcomes whatever its value.
+Excluding an otherwise valid new-epoch capture because its bound exceeds the
+RETIRED epoch's threshold would fit the new screen to the old one, which is
+the fit this mode exists to prevent. The field's one consumer is the
+pre-registered screen-challenge rule, which on a `true` value halts issuance
+for a written ruling instead of editing corpus membership.
+
+Every finalization path carries this classification rule, including recovery
+finalization after a crash: for a derivation-kind session the recovery path
+passes no screen either, and the recovery path's
+`slot == "pre"` auto-abort does not apply, since a derivation session closes
+only on its last declared slot or an explicit abort.
+
+The screen-to-kind check runs in both directions at finalization, comparing
+one fact — whether a level screen was supplied — against the session's kind. A
+derivation-kind slot finalized WITH a screen refuses, because the retired
+epoch's threshold must not judge a new-epoch capture. A bracket-kind slot
+finalized with NO screen refuses as well, because an ordinary capture that
+skipped the comparison would be recorded `valid` without ever having been
+tested against the screen it is owed; omitting the screen is not a route
+around it.
+
+Either disagreement raises the ledger's existing refusal code
+`calibration_reservation_input_invalid`
+(`RefusalCode.RESERVATION_INPUT_INVALID`, "bracket session reservation is
+malformed"), carrying the context fields `reason:
+systematic_screen_kind_mismatch` and the `session_kind` it saw.
+`systematic_screen_kind_mismatch` is that context REASON — the string saying
+which malformed reservation this is — and not a refusal code of its own: a
+reader grepping the code registry for it will not find it, and a caller
+matching on codes matches `calibration_reservation_input_invalid` and then
+reads the reason.
+
+The writer-side half of the same rule IS a code:
+`calibration_derivation_session_requires_derivation_only`
+(`RefusalCode.DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY`, "a
+derivation-kind session slot is capturable only in derivation-only mode")
+refuses an ordinary capture aimed at a derivation-kind slot before the writer
+takes its lease, so nothing is appended, no custody directory exists, and the
+session is untouched. The two halves close the fence from both sides: the
+writer refuses the wrong MODE against the slot, the ledger refuses the wrong
+SCREEN presence against the kind at finalization.
+
+The recovery tool authenticates the acceptance artifact before it reads the
+ledger at all. The prior epoch's acceptance is unauthenticatable when its
+bytes are missing or do not match the pinned SHA-256, so no
+`preflight_level_screen_s` can be derived from it. In that state the tool
+returns `FROZEN_PROTOCOL_INVALID` (reason `acceptance_artifact_underivable`)
+before opening the ledger path — including on a derivation resume-finalize,
+which will not consult that screen anyway. The ordering is deliberate: an
+unreadable or tampered artifact is diagnosed as the artifact fault it is,
+never surfacing later as a ledger fault, and the operator sees the same
+refusal the desk already knows from ordinary recovery.
+
+Every physics and evidence gate stays fail-closed. The `DIAGNOSTIC_NO_PACK`
+night class still requires a registration path and marks only condition C2,
+the verified pack ARM ceremony, `NOT_APPLICABLE` (`no_pack_by_design`), since
+such a night arms no measurement pack; C1 (purpose-bound transaction
+authorization), C3 (quiet-machine census), C4 (boot and clock validity), and
+C5 (the no-retry bound) must all still pass.
+
+The mode licenses nothing. No measurement window — G2-a or any other — no
+floor, no claim, and no bracket endpoint, before or after a successor
+acceptance names these observations. D-102 clause 2 is unchanged: a trigger
+observation is judged under the PRIOR artifact, never under a threshold that
+incorporates it, so no observation judges itself.
+
 ## V2/v3 capture-time freshness and authentication
 
 Every v2/v3 `instrument_evidence.json` records
@@ -118,7 +254,26 @@ refuses as `instrument_calibration_mismatch` when
 `abs(B_pre - B_post)` exceeds the registered
 `calibration_bracket_max_drift_s` (production: 0.010 s). A single valid
 calibration remains usable only for explicitly non-claim-bearing probe or
-exploratory reduction.
+exploratory reduction, and that allowance covers ordinary captures alone.
+
+A row from a derivation-kind session (cold gate 46 and its dated addendum 11,
+2026-09-10; Ed veto window open; landed — the enforcing predicate is named
+further down this paragraph; see [Derivation-only capture for a new identity
+epoch](#derivation-only-capture-for-a-new-identity-epoch)) licenses NOTHING
+at reduce time even when its disposition is `valid`: no measurement window,
+no probe or exploratory reduction, and no bracket endpoint — not before and
+not after a successor acceptance names it. It is a corpus member for a future
+acceptance and nothing else. The enforcement is ledger-side, never the
+artifact's `derivation_only` field, which is provenance for a reader:
+`_is_derivation_kind_observation` in `joulewise/calibration_bracketing.py`
+returns true for any observation whose session kind is `derivation`, and also
+for any observation whose session cannot be resolved, since admitting a row
+on that doubt would be the fail-open reading. Candidate discovery skips every
+row the predicate accepts, and the same predicate removes it from the
+**endpoint universe** — the set of ledger rows a bracket endpoint may be
+drawn from, which a caller's supplied candidate set must equal EXACTLY or
+evaluation refuses `calibration_ledger_off_ledger_artifact`, so no caller can
+narrow the universe to a favourable subset (cold gate 46 addendum A-5).
 
 ## Window license
 
@@ -180,6 +335,16 @@ artifact bindings. `B_fiducial` is NEVER trusted from the self-asserted
 metadata scalar alone. An invalid or malformed reference is
 `clock_anchor_unresolved` at reduce time - never a silent fallback to
 `B_bundle` alone.
+
+Passing every check in that list is necessary, never sufficient. A
+derivation-only artifact (cold gate 46 and its dated addendum 11, 2026-09-10;
+Ed veto window open; landed — written by
+`scripts/validate_powermetrics_fiducial.py` under `--derivation-only`)
+satisfies all of them on a bundle from its own epoch — its
+`status` is `valid`, its binding fields are complete, its bytes authenticate
+against `artifact_sha256` — and still licenses nothing, because the bar it
+fails is ledger-side membership, described under the claim-bearing bracket
+above, not artifact shape.
 
 Hash verification is not by itself calibration verification. Reducer
 consumption re-parses the hash-verified raw plist, re-derives its

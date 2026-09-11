@@ -24,11 +24,15 @@ from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     GOVERNED_ARTIFACTS,
     LEDGER_SCHEMA,
+    SESSION_KIND_DERIVATION,
     T1_FIELDS,
     append_bracket_session_receipt,
     artifact_hashes,
     claim_bracket_session_slot,
+    derivation_session_slots,
     finalize_bracket_session_slot,
+    load_calibration_ledger_snapshot,
+    terminal_head_pin_for_session,
 )
 import scripts.validate_powermetrics_fiducial as fiducial_validator
 from scripts.validate_powermetrics_fiducial import WriterStage
@@ -1057,6 +1061,294 @@ print(json.dumps(output, sort_keys=True))
             for stage in stages
         }
         self.assertEqual(witnessed, expected)
+
+    def test_twelve_slot_derivation_session_survives_a_kill_and_aborts_at_slot_k(
+        self,
+    ) -> None:
+        """A derivation night is ONE session of 12 declared slots.
+
+        The bracket case above assumes exactly two slots and closes on `post`.
+        A derivation session declares `d01..d12`, keeps the committed pin still
+        across all of them, and -- when the window ends before the list does --
+        closes by `abort_calibration_session(reason="window_exhausted")`, which
+        keeps every slot already finalized as an observation and emits the one
+        terminal pin candidate the desk reviews.  This case kills the writer
+        between the durable intent and its committed target on slot d05, then
+        recovers from fresh processes exactly as the two-slot cases do.
+        """
+
+        declared = derivation_session_slots(12)
+        _root, ledger, pin, plan, session_id, _custody = self._case(
+            "derivation-twelve", reserved=False
+        )
+        runs_root = ledger.parent / "runs"
+        custody = {
+            slot: runs_root / "instrument_validation" / f"{session_id}-{slot}"
+            for slot in declared
+        }
+        append_bracket_session_receipt(
+            ledger,
+            session_id=session_id,
+            window_id=f"window-{session_id}",
+            plan_id="plan-derivation-twelve",
+            plan_sha256=hashlib.sha256(plan.read_bytes()).hexdigest(),
+            evidence_root_id=f"evidence-{session_id}",
+            runs_root=runs_root,
+            slots={
+                slot: {
+                    "attempt_id": f"{session_id}-{slot}",
+                    "custody_locator": str(custody[slot]),
+                    "identity_epoch": self.epoch,
+                    "t1_bindings": self.t1,
+                }
+                for slot in declared
+            },
+            session_kind=SESSION_KIND_DERIVATION,
+            declared_slots=declared,
+            head_pin_path=pin,
+            require_committed_pin=False,
+            repo_root=self.repo,
+        )
+        for slot in declared[:4]:
+            self._complete(custody[slot], f"{session_id}-{slot}")
+            claim_bracket_session_slot(
+                ledger,
+                session_id=session_id,
+                slot=slot,
+                attempt_id=f"{session_id}-{slot}",
+            )
+            finalize_bracket_session_slot(
+                ledger,
+                session_id=session_id,
+                slot=slot,
+                disposition="valid",
+                custody_locator=str(custody[slot]),
+                artifact_sha256=artifact_hashes(custody[slot]),
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                capture_wall_time_s="99.0",
+                exact_bound_lexeme_s="0.025",
+            )
+        # Slot d05 is claimed and then killed between the durable finalization
+        # intent and its committed target, leaving the ledger mid-operation.
+        self._complete(custody["d05"], f"{session_id}-d05")
+        claim_bracket_session_slot(
+            ledger,
+            session_id=session_id,
+            slot="d05",
+            attempt_id=f"{session_id}-d05",
+        )
+        killer = self.repo / "cases" / "derivation-twelve" / "kill_at_intent.py"
+        killer.write_text(
+            "\n".join(
+                [
+                    "import os, signal, sys",
+                    f"sys.path.insert(0, {str(self.repo)!r})",
+                    "from joulewise.calibration_ledger import (",
+                    "    artifact_hashes, finalize_bracket_session_slot,",
+                    ")",
+                    "def boundary(name):",
+                    "    if name == 'intent-fsynced':",
+                    "        os.kill(os.getpid(), signal.SIGKILL)",
+                    "finalize_bracket_session_slot(",
+                    f"    {str(ledger)!r},",
+                    f"    session_id={session_id!r},",
+                    "    slot='d05',",
+                    "    disposition='valid',",
+                    f"    custody_locator={str(custody['d05'])!r},",
+                    f"    artifact_sha256=artifact_hashes({str(custody['d05'])!r}),",
+                    f"    identity_epoch={self.epoch!r},",
+                    f"    t1_bindings={self.t1!r},",
+                    "    capture_wall_time_s='99.0',",
+                    "    exact_bound_lexeme_s='0.025',",
+                    "    _stage_boundary=boundary,",
+                    ")",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        killed = self.runner.start_owned(
+            [sys.executable, str(killer)],
+            cwd=self.repo,
+            env=_fresh_env(),
+            label="derivation-twelve-kill",
+        )
+        killed.communicate(timeout=self.runner.communicate_timeout_s)
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        repaired = self._cli(
+            ledger,
+            pin,
+            "repair",
+            "--engine-identity",
+            "recover_calibration_ledger.resume-finalize",
+            "--attestation-reason",
+            "derivation window ended mid-finalization",
+        )
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        status = self._cli(
+            ledger, pin, "session-status", "--session-id", session_id, "--plan", str(plan)
+        )
+        self.assertEqual(status.returncode, 0, status.stderr)
+        payload = json.loads(status.stdout)
+        self.assertEqual(payload["session_kind"], "derivation")
+        self.assertEqual(payload["declared_slots"], list(declared))
+        self.assertEqual(payload["session_state"], "open")
+        self.assertIn(payload["next_slot"], ("d05", "d06"))
+        finalized_before_abort = [
+            slot
+            for slot, slot_state in payload["slots"].items()
+            if slot_state["finalized"]
+        ]
+        aborted = self._cli(
+            ledger,
+            pin,
+            "abort-session",
+            "--session-id",
+            session_id,
+            "--plan",
+            str(plan),
+            "--reason",
+            "window_exhausted",
+        )
+        self.assertEqual(aborted.returncode, 0, aborted.stderr)
+        abort_payload = json.loads(aborted.stdout)
+        self.assertEqual(abort_payload["terminal_result"], "session_aborted")
+        snapshot = load_calibration_ledger_snapshot(
+            ledger,
+            pin,
+            require_committed_pin=False,
+            verify_custody=False,
+            repo_root=self.repo,
+        )
+        session = snapshot.bracket_session_by_id[session_id]
+        self.assertEqual(session.state, "aborted")
+        self.assertEqual(session.abort_reason, "window_exhausted")
+        self.assertEqual(
+            list(session.finalized_slots), finalized_before_abort
+        )
+        self.assertGreaterEqual(len(session.finalized_slots), 4)
+        self.assertEqual(
+            [
+                observation.bracket_slot
+                for observation in snapshot.observations
+                if observation.bracket_session_id == session_id
+            ],
+            finalized_before_abort,
+        )
+        self.assertEqual(
+            terminal_head_pin_for_session(ledger, session_id=session_id)[
+                "head_digest"
+            ],
+            session.abort_receipt_digest,
+        )
+
+    def test_derivation_resume_finalize_never_uses_the_prior_epoch_screen(
+        self,
+    ) -> None:
+        """A derivation capture is never judged by the OLD epoch's threshold.
+
+        `systematic-invalid` means "the bound exceeds the level screen of the
+        acceptance that judges THIS identity epoch".  A derivation session
+        exists precisely because no acceptance judges this epoch yet, so the
+        recovery finalizer is handed no screen at all and the disposition
+        collapses to valid / ordinary-invalid.  Slot d02's bound here is
+        0.05 s, far above r6's level screen 0.032898493715362 s, and it is
+        still recorded `valid`: excluding it would fit the new screen to the
+        old one.  Production call site:
+        `recover_calibration_ledger.resume-finalize`.
+        """
+
+        declared = derivation_session_slots(3)
+        _root, ledger, pin, plan, session_id, _custody = self._case(
+            "derivation-resume", reserved=False
+        )
+        runs_root = ledger.parent / "runs"
+        custody = {
+            slot: runs_root / "instrument_validation" / f"{session_id}-{slot}"
+            for slot in declared
+        }
+        append_bracket_session_receipt(
+            ledger,
+            session_id=session_id,
+            window_id=f"window-{session_id}",
+            plan_id="plan-derivation-resume",
+            plan_sha256=hashlib.sha256(plan.read_bytes()).hexdigest(),
+            evidence_root_id=f"evidence-{session_id}",
+            runs_root=runs_root,
+            slots={
+                slot: {
+                    "attempt_id": f"{session_id}-{slot}",
+                    "custody_locator": str(custody[slot]),
+                    "identity_epoch": self.epoch,
+                    "t1_bindings": self.t1,
+                }
+                for slot in declared
+            },
+            session_kind=SESSION_KIND_DERIVATION,
+            declared_slots=declared,
+            head_pin_path=pin,
+            require_committed_pin=False,
+            repo_root=self.repo,
+        )
+        # r6's preflight_level_screen_s, the screen of the PRIOR identity
+        # epoch; nothing in a derivation session may consult it.
+        prior_epoch_level_screen_s = 0.032898493715362
+        bounds = {"d01": 0.025, "d02": 0.05, "d03": 0.025}
+        self.assertGreater(bounds["d02"], prior_epoch_level_screen_s)
+        for index, slot in enumerate(declared):
+            self._complete(custody[slot], f"{session_id}-{slot}")
+            evidence_path = custody[slot] / "instrument_evidence.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["b_fiducial_s"] = bounds[slot]
+            evidence_path.write_text(
+                json.dumps(evidence, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            manifest_path = custody[slot] / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["instrument_evidence.json"] = hashlib.sha256(
+                evidence_path.read_bytes()
+            ).hexdigest()
+            manifest_path.write_text(
+                json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            resumed = self._cli(
+                ledger,
+                pin,
+                "resume-finalize",
+                "--session-id",
+                session_id,
+                "--slot",
+                slot,
+                "--plan",
+                str(plan),
+            )
+            self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+            payload = json.loads(resumed.stdout)
+            self.assertEqual(payload["slot"], slot)
+            self.assertEqual(payload["disposition"], "valid")
+            self.assertEqual(payload["terminal_result"], "operation_completed")
+            last = index == len(declared) - 1
+            self.assertEqual(payload["needs_pin_commit"], last)
+            self.assertEqual(payload["head_pin_candidate"] is None, not last)
+        snapshot = load_calibration_ledger_snapshot(
+            ledger,
+            pin,
+            require_committed_pin=False,
+            verify_custody=False,
+            repo_root=self.repo,
+        )
+        session = snapshot.bracket_session_by_id[session_id]
+        self.assertEqual(session.state, "finalized")
+        self.assertEqual(tuple(session.finalized_slots), declared)
+        self.assertEqual(
+            [
+                observation.disposition
+                for observation in snapshot.observations
+                if observation.bracket_session_id == session_id
+            ],
+            ["valid", "valid", "valid"],
+        )
 
     def test_survivor_guard_detects_spinning_descendant(self) -> None:
         process = spawn_spinning_descendant_for_guard_test()

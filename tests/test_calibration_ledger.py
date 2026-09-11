@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from decimal import Decimal
 import io
 import inspect
 import json
@@ -3135,6 +3136,1033 @@ raise SystemExit('crash hook was not reached')
         terminal_receipt = next(reversed(parsed.receipts))
         self.assertEqual(terminal_receipt["actor_type"], "operator")
         self.assertEqual(terminal_receipt["residue_start_offset"], 0)
+
+
+class DerivationSessionSlotTests(unittest.TestCase):
+    """Ordered N-slot ledger sessions (cold-gate ruling 46 §R-a A7, §R-d S2).
+
+    A `bracket` session declares exactly ("pre", "post") and records neither
+    the kind nor the list, so its receipt bytes and every historical receipt
+    are untouched.  A `derivation` session declares its own ordered list.
+    """
+
+    PRODUCTION_LEDGER = (
+        Path(__file__).resolve().parents[1]
+        / "tests"
+        / "fixtures"
+        / "d117_v2_production"
+        / "issued"
+        / "calibration_observation_ledger.jsonl"
+    )
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.ledger = self.root / "ledger.jsonl"
+        self.pin = self.root / "head.json"
+        self.pin.write_text(
+            json.dumps(
+                {
+                    "sequence": 0,
+                    "head_digest": GENESIS_DIGEST,
+                    "ledger_schema": LEDGER_SCHEMA,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.epoch = {
+            "os_build": "25G83",
+            "hardware_model": "Mac15,9",
+            "power_policy": "ac_high_power",
+            "sampling_interval_ms": 100,
+            "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+            "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+        }
+        self.t1 = {field: f"value-{field}" for field in V2_BINDING_FIELDS}
+        self.t1.update(self.epoch)
+        self.plan = self.root / "plan.json"
+        self.plan.write_text(
+            json.dumps({"plan_id": "plan-derivation"}) + "\n", encoding="utf-8"
+        )
+        self.plan_sha256 = hashlib.sha256(self.plan.read_bytes()).hexdigest()
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _custody(self, attempt_id: str) -> Path:
+        path = self.root / "runs" / "instrument_validation" / attempt_id
+        (path / "raw").mkdir(parents=True)
+        (path / "raw" / "powermetrics.plist").write_bytes(
+            b"raw-" + attempt_id.encode()
+        )
+        (path / "events.jsonl").write_text(
+            '{"timestamp_s": 99.0}\n', encoding="utf-8"
+        )
+        (path / "instrument_evidence.json").write_text(
+            json.dumps({"b_fiducial_s": 0.025, "attempt": attempt_id}) + "\n",
+            encoding="utf-8",
+        )
+        (path / "manifest.json").write_text(
+            json.dumps({"attempt": attempt_id}) + "\n", encoding="utf-8"
+        )
+        return path
+
+    def _open(
+        self,
+        *,
+        session_id: str = "derivation-night-1",
+        slot_count: int = 12,
+        session_kind: str = calibration_ledger.SESSION_KIND_DERIVATION,
+        declared: tuple[str, ...] | None = None,
+    ):
+        slots = (
+            calibration_ledger.derivation_session_slots(slot_count)
+            if declared is None
+            else declared
+        )
+        return append_bracket_session_receipt(
+            self.ledger,
+            session_id=session_id,
+            window_id="window-derivation",
+            plan_id="plan-derivation",
+            plan_sha256=self.plan_sha256,
+            evidence_root_id="evidence-derivation",
+            runs_root=self.root / "runs",
+            slots={
+                slot: {
+                    "attempt_id": f"{session_id}-{slot}",
+                    "custody_locator": str(
+                        self.root
+                        / "runs"
+                        / "instrument_validation"
+                        / f"{session_id}-{slot}"
+                    ),
+                    "identity_epoch": self.epoch,
+                    "t1_bindings": self.t1,
+                }
+                for slot in slots
+            },
+            session_kind=session_kind,
+            declared_slots=slots,
+            head_pin_path=self.pin,
+            require_committed_pin=False,
+        )
+
+    def _fill(self, session_id: str, slot: str, disposition: str = "valid"):
+        attempt_id = f"{session_id}-{slot}"
+        custody = self._custody(attempt_id)
+        calibration_ledger.claim_bracket_session_slot(
+            self.ledger,
+            session_id=session_id,
+            slot=slot,
+            attempt_id=attempt_id,
+        )
+        return finalize_bracket_session_slot(
+            self.ledger,
+            session_id=session_id,
+            slot=slot,
+            disposition=disposition,
+            custody_locator=str(custody),
+            artifact_sha256=artifact_hashes(custody),
+            identity_epoch=self.epoch,
+            t1_bindings=self.t1,
+            capture_wall_time_s="99.0",
+            exact_bound_lexeme_s="0.025",
+        )
+
+    def _snapshot(self, *, verify_custody: bool = False):
+        return load_calibration_ledger_snapshot(
+            self.ledger,
+            self.pin,
+            baseline_sequence=0,
+            baseline_digest=GENESIS_DIGEST,
+            require_committed_pin=False,
+            verify_custody=verify_custody,
+        )
+
+    # ---- admit ---------------------------------------------------------
+
+    def test_twelve_slot_derivation_session_fills_in_order_and_pins_at_the_last(
+        self,
+    ) -> None:
+        """ADMIT: the whole declared list runs under one open head pin."""
+
+        declared = calibration_ledger.derivation_session_slots(12)
+        self._open(slot_count=12)
+        for index, slot in enumerate(declared):
+            snapshot = self._snapshot()
+            session = snapshot.bracket_session_by_id["derivation-night-1"]
+            self.assertEqual(session.session_kind, "derivation")
+            self.assertEqual(session.declared_slots, declared)
+            self.assertEqual(session.next_slot, slot)
+            self.assertEqual(session.state, "open")
+            self.assertEqual(len(session.finalized_slots), index)
+            # Every slot before the last leaves the session open, so the
+            # committed pin stays put and no claim consumer may run.
+            self.assertTrue(snapshot.is_governed_open_bracket_extension)
+            with self.assertRaises(CalibrationLedgerError) as terminal:
+                terminal_head_pin_for_session(
+                    self.ledger, session_id="derivation-night-1"
+                )
+            self.assertEqual(
+                terminal.exception.code, RefusalCode.SESSION_NOT_TERMINAL
+            )
+            self._fill("derivation-night-1", slot)
+        snapshot = self._snapshot()
+        session = snapshot.bracket_session_by_id["derivation-night-1"]
+        self.assertEqual(session.state, "finalized")
+        self.assertIsNone(session.next_slot)
+        self.assertEqual(tuple(session.finalized_slots), declared)
+        self.assertEqual(
+            tuple(
+                observation.bracket_slot
+                for observation in snapshot.observations
+                if observation.bracket_session_id == "derivation-night-1"
+            ),
+            declared,
+        )
+        pin = terminal_head_pin_for_session(
+            self.ledger, session_id="derivation-night-1"
+        )
+        self.assertEqual(
+            pin["head_digest"],
+            session.finalized_slots["d12"].receipt_digest,
+        )
+
+    def test_abort_at_slot_k_keeps_k_observations_and_emits_the_terminal_pin(
+        self,
+    ) -> None:
+        """ADMIT: window_exhausted keeps every finalized slot as evidence."""
+
+        declared = calibration_ledger.derivation_session_slots(12)
+        self._open(slot_count=12)
+        for slot in declared[:5]:
+            self._fill("derivation-night-1", slot)
+        abort = abort_bracket_session(
+            self.ledger,
+            session_id="derivation-night-1",
+            reason="window_exhausted",
+        )
+        self.assertEqual(tuple(abort["finalized_slots"]), declared[:5])
+        self.assertEqual(tuple(abort["unused_slots"]), declared[5:])
+        snapshot = self._snapshot()
+        session = snapshot.bracket_session_by_id["derivation-night-1"]
+        self.assertEqual(session.state, "aborted")
+        self.assertEqual(session.abort_reason, "window_exhausted")
+        self.assertEqual(tuple(session.finalized_slots), declared[:5])
+        self.assertEqual(
+            tuple(
+                observation.bracket_slot
+                for observation in snapshot.observations
+                if observation.bracket_session_id == "derivation-night-1"
+            ),
+            declared[:5],
+        )
+        self.assertEqual(
+            terminal_head_pin_for_session(
+                self.ledger, session_id="derivation-night-1"
+            )["head_digest"],
+            abort["receipt_digest"],
+        )
+
+    # ---- refuse --------------------------------------------------------
+
+    def test_out_of_order_claim_and_finalization_refuse_with_the_expected_slot(
+        self,
+    ) -> None:
+        """REFUSE: only declared[len(finalized)] may be claimed or filled."""
+
+        self._open(slot_count=12)
+        self._fill("derivation-night-1", "d01")
+        custody = self._custody("derivation-night-1-d03")
+        with self.assertRaises(CalibrationLedgerError) as claim:
+            calibration_ledger.claim_bracket_session_slot(
+                self.ledger,
+                session_id="derivation-night-1",
+                slot="d03",
+                attempt_id="derivation-night-1-d03",
+            )
+        self.assertEqual(claim.exception.code, RefusalCode.SLOT_ORDER_CONFLICT)
+        self.assertEqual(claim.exception.context["expected_slot"], "d02")
+        with self.assertRaises(CalibrationLedgerError) as final:
+            finalize_bracket_session_slot(
+                self.ledger,
+                session_id="derivation-night-1",
+                slot="d03",
+                disposition="valid",
+                custody_locator=str(custody),
+                artifact_sha256=artifact_hashes(custody),
+                identity_epoch=self.epoch,
+                t1_bindings=self.t1,
+                capture_wall_time_s="99.0",
+                exact_bound_lexeme_s="0.025",
+            )
+        self.assertEqual(final.exception.code, RefusalCode.SLOT_ORDER_CONFLICT)
+        self.assertEqual(final.exception.context["expected_slot"], "d02")
+
+    def test_second_open_session_refuses_while_one_derivation_session_is_open(
+        self,
+    ) -> None:
+        """REFUSE: two nights are two sessions, separated by a desk pin."""
+
+        self._open(slot_count=12)
+        self._fill("derivation-night-1", "d01")
+        with self.assertRaises(CalibrationLedgerError) as second:
+            self._open(session_id="derivation-night-2", slot_count=12)
+        self.assertEqual(
+            second.exception.code, RefusalCode.RESERVATION_HEAD_MISMATCH
+        )
+
+    def test_undeclared_slot_name_is_refused_by_the_session_assembler(
+        self,
+    ) -> None:
+        """REFUSE: a receipt naming a slot the open row never declared."""
+
+        self._open(slot_count=3)
+        rows = [
+            json.loads(line)
+            for line in self.ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        open_receipt = next(
+            row
+            for row in rows
+            if row.get("event")
+            == calibration_ledger.BRACKET_SESSION_OPEN_EVENT
+        )
+        forged = calibration_ledger._new_bracket_session_record(
+            sequence=len(rows) + 1,
+            predecessor_digest=rows[-1]["receipt_digest"],
+            event=calibration_ledger.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+            session_identity=open_receipt,
+            fields={
+                "slot": "d09",
+                "attempt_id": "derivation-night-1-d09",
+                "claim_id": calibration_ledger.stable_bracket_claim_id(
+                    session_id="derivation-night-1",
+                    slot="d09",
+                    attempt_id="derivation-night-1-d09",
+                ),
+            },
+        )
+        # The forged row is perfectly well shaped: only the session's own
+        # declared list can tell that d09 was never reserved.
+        self.assertTrue(
+            calibration_ledger._valid_session_receipt_shape(forged)
+        )
+        business = [
+            row
+            for row in rows
+            if row.get("schema_version")
+            != calibration_ledger.CONTROL_SCHEMA
+        ]
+        _sessions, _observations, clean = (
+            calibration_ledger._bracket_sessions_and_observations(business)
+        )
+        self.assertNotIn("calibration_ledger_bracket_session_conflict", clean)
+        _sessions, _observations, reasons = (
+            calibration_ledger._bracket_sessions_and_observations(
+                [*business, forged]
+            )
+        )
+        self.assertIn("calibration_ledger_bracket_session_conflict", reasons)
+
+    def test_out_of_order_declared_claim_is_refused_by_the_session_assembler(
+        self,
+    ) -> None:
+        """REFUSE: a hand-edited claim that takes a later slot's turn.
+
+        ``claim_bracket_session_slot`` refuses this with SLOT_ORDER_CONFLICT
+        before a byte is written, which SHADOWS the assembler: rows that never
+        pass through the writer reach the reader anyway (a corrupted or
+        hand-edited file), so the reader's own recomputation of
+        ``declared[len(finals)]`` needs its own witness.
+        """
+
+        self._open(slot_count=3)
+        rows = [
+            json.loads(line)
+            for line in self.ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        open_receipt = next(
+            row
+            for row in rows
+            if row.get("event")
+            == calibration_ledger.BRACKET_SESSION_OPEN_EVENT
+        )
+        business = [
+            row
+            for row in rows
+            if row.get("schema_version")
+            != calibration_ledger.CONTROL_SCHEMA
+        ]
+
+        def forged_claim(slot: str) -> dict:
+            attempt_id = f"derivation-night-1-{slot}"
+            return calibration_ledger._new_bracket_session_record(
+                sequence=len(rows) + 1,
+                predecessor_digest=rows[-1]["receipt_digest"],
+                event=calibration_ledger.BRACKET_SESSION_SLOT_CLAIM_EVENT,
+                session_identity=open_receipt,
+                fields={
+                    "slot": slot,
+                    "attempt_id": attempt_id,
+                    "claim_id": calibration_ledger.stable_bracket_claim_id(
+                        session_id="derivation-night-1",
+                        slot=slot,
+                        attempt_id=attempt_id,
+                    ),
+                },
+            )
+
+        # Nothing is finalized, so d01 is the only slot whose turn it is.
+        in_turn = forged_claim("d01")
+        out_of_turn = forged_claim("d02")
+        for forged in (in_turn, out_of_turn):
+            # Both name a DECLARED slot, carry its reserved attempt id, and
+            # are perfectly well shaped.  Only the turn differs.
+            self.assertTrue(
+                calibration_ledger._valid_session_receipt_shape(forged)
+            )
+            self.assertIn(forged["slot"], open_receipt["slots"])
+        _sessions, _observations, in_turn_reasons = (
+            calibration_ledger._bracket_sessions_and_observations(
+                [*business, in_turn]
+            )
+        )
+        self.assertNotIn(
+            "calibration_ledger_bracket_session_conflict", in_turn_reasons
+        )
+        _sessions, _observations, reasons = (
+            calibration_ledger._bracket_sessions_and_observations(
+                [*business, out_of_turn]
+            )
+        )
+        self.assertIn("calibration_ledger_bracket_session_conflict", reasons)
+
+    def test_out_of_order_declared_finalization_is_refused_by_the_assembler(
+        self,
+    ) -> None:
+        """REFUSE: a hand-edited finalization that takes a later slot's turn.
+
+        Same shadowing as the claim branch: ``finalize_bracket_session_slot``
+        refuses out-of-turn slots at the writer, so the reader's recomputation
+        of the expected slot is witnessed here with rows built directly.
+        """
+
+        self._open(slot_count=3)
+        rows = [
+            json.loads(line)
+            for line in self.ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        open_receipt = next(
+            row
+            for row in rows
+            if row.get("event")
+            == calibration_ledger.BRACKET_SESSION_OPEN_EVENT
+        )
+        business = [
+            row
+            for row in rows
+            if row.get("schema_version")
+            != calibration_ledger.CONTROL_SCHEMA
+        ]
+
+        def forged_finalization(slot: str) -> dict:
+            attempt_id = f"derivation-night-1-{slot}"
+            custody = self._custody(attempt_id)
+            artifacts = artifact_hashes(custody)
+            reserved = open_receipt["slots"][slot]
+            return calibration_ledger._new_bracket_session_record(
+                sequence=len(rows) + 1,
+                predecessor_digest=rows[-1]["receipt_digest"],
+                event=BRACKET_SESSION_FINALIZATION_EVENT,
+                session_identity=open_receipt,
+                fields={
+                    "slot": slot,
+                    "attempt_id": reserved["attempt_id"],
+                    "content_id": content_id_from_artifact_hashes(artifacts),
+                    "artifact_sha256": artifacts,
+                    "identity_epoch": dict(reserved["identity_epoch"]),
+                    "t1_bindings": dict(reserved["t1_bindings"]),
+                    "capture_wall_time_s": "99.0",
+                    "exact_bound_lexeme_s": "0.025",
+                    "disposition": "valid",
+                    "custody_locator": reserved["custody_locator"],
+                },
+            )
+
+        # Nothing is finalized, so d01 is the only slot whose turn it is.
+        in_turn = forged_finalization("d01")
+        out_of_turn = forged_finalization("d02")
+        for forged in (in_turn, out_of_turn):
+            # Each reproduces its own reservation exactly - attempt id,
+            # custody locator, identity epoch and T1 bindings all match - so
+            # every OTHER term of the finalization guard is satisfied.
+            self.assertTrue(
+                calibration_ledger._valid_session_receipt_shape(forged)
+            )
+            self.assertIn(forged["slot"], open_receipt["slots"])
+        _sessions, _observations, in_turn_reasons = (
+            calibration_ledger._bracket_sessions_and_observations(
+                [*business, in_turn]
+            )
+        )
+        self.assertNotIn(
+            "calibration_ledger_bracket_session_conflict", in_turn_reasons
+        )
+        _sessions, _observations, reasons = (
+            calibration_ledger._bracket_sessions_and_observations(
+                [*business, out_of_turn]
+            )
+        )
+        self.assertIn("calibration_ledger_bracket_session_conflict", reasons)
+
+    def test_two_open_sessions_are_not_a_governed_open_bracket_extension(
+        self,
+    ) -> None:
+        """REFUSE: the governed-extension tolerance is EXACTLY one open session.
+
+        A second open session is refused by the WRITER's head-pin check
+        (``test_second_open_session_refuses_while_one_derivation_session_is_open``),
+        so the reader's own "exactly one" tolerance has no witness on the
+        writing path.  Both halves are built here: a hand-edited ledger tail
+        carrying two open sessions, and the assembled snapshot the reader
+        would hold if it did.
+        """
+
+        self._open(slot_count=3)
+        clean = self._snapshot()
+        self.assertEqual(
+            set(clean.refusal_reasons),
+            {
+                "calibration_ledger_bracket_session_open",
+                "calibration_ledger_head_mismatch",
+            },
+        )
+        self.assertTrue(clean.is_governed_open_bracket_extension)
+        first = clean.bracket_session_by_id["derivation-night-1"]
+        self.assertEqual(first.state, "open")
+
+        # Half one: a second open session appended straight to the file, with
+        # its own session id, slots and attempt ids, bypassing the writer.
+        rows = [
+            json.loads(line)
+            for line in self.ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        declared = calibration_ledger.derivation_session_slots(3)
+        forged_open = calibration_ledger._new_bracket_session_record(
+            sequence=len(rows) + 2,
+            predecessor_digest=rows[-1]["receipt_digest"],
+            event=calibration_ledger.BRACKET_SESSION_OPEN_EVENT,
+            session_identity={
+                "session_id": "derivation-night-2",
+                "window_id": "window-derivation-2",
+                "plan_id": "plan-derivation",
+                "plan_sha256": self.plan_sha256,
+                "evidence_root_id": "evidence-derivation",
+                "runs_root": str(self.root / "runs"),
+            },
+            fields={
+                "slots": {
+                    slot: {
+                        "attempt_id": f"derivation-night-2-{slot}",
+                        "custody_locator": str(
+                            self.root
+                            / "runs"
+                            / "instrument_validation"
+                            / f"derivation-night-2-{slot}"
+                        ),
+                        "identity_epoch": dict(self.epoch),
+                        "t1_bindings": dict(self.t1),
+                        "expected_time_role": slot,
+                    }
+                    for slot in declared
+                },
+                "session_kind": calibration_ledger.SESSION_KIND_DERIVATION,
+                "declared_slots": list(declared),
+            },
+        )
+        self.assertTrue(
+            calibration_ledger._valid_session_receipt_shape(forged_open)
+        )
+        # The physical scan pairs every business row with its durable append
+        # intent, so the forgery carries one too - otherwise the second open
+        # is discarded as tail residue and never reaches the assembler.
+        target_core = calibration_ledger._target_core(forged_open)
+        intent = calibration_ledger._new_append_intent(
+            receipts=rows,
+            byte_offset=len(self.ledger.read_bytes()),
+            target_core=target_core,
+            operation_key=calibration_ledger._operation_key_for_core(
+                target_core
+            ),
+        )
+        forged_open = calibration_ledger._new_bracket_session_record(
+            sequence=len(rows) + 2,
+            predecessor_digest=str(intent["receipt_digest"]),
+            event=calibration_ledger.BRACKET_SESSION_OPEN_EVENT,
+            session_identity=forged_open,
+            fields={
+                key: forged_open[key]
+                for key in ("slots", "session_kind", "declared_slots")
+            },
+        )
+        self.ledger.write_bytes(
+            self.ledger.read_bytes()
+            + canonical_json_bytes(intent)
+            + b"\n"
+            + canonical_json_bytes(forged_open)
+            + b"\n"
+        )
+        forged = self._snapshot()
+        self.assertEqual(
+            [
+                session.session_id
+                for session in forged.bracket_sessions
+                if session.state == "open"
+            ],
+            ["derivation-night-1", "derivation-night-2"],
+        )
+        self.assertFalse(forged.is_governed_open_bracket_extension)
+
+        # Half two: the same two-open state assembled directly, so the ONLY
+        # thing that can refuse it is the "exactly one open session" count -
+        # every tail row still belongs to derivation-night-1.
+        second = replace(
+            first,
+            session_id="derivation-night-2",
+            capability_sequence=first.capability_sequence + 2,
+            capability_receipt_digest="1" * 64,
+        )
+        two_open = replace(clean, bracket_sessions=(first, second))
+        self.assertEqual(
+            [session.state for session in two_open.bracket_sessions],
+            ["open", "open"],
+        )
+        self.assertFalse(two_open.is_governed_open_bracket_extension)
+
+    def test_bracket_kind_refuses_any_declared_list_but_pre_post(self) -> None:
+        """REFUSE: the bracket contract's two endpoints are not negotiable."""
+
+        with self.assertRaises(CalibrationLedgerError) as exc:
+            self._open(
+                session_id="bracket-with-extra",
+                session_kind=calibration_ledger.SESSION_KIND_BRACKET,
+                declared=("pre", "mid", "post"),
+            )
+        self.assertEqual(
+            exc.exception.code, RefusalCode.RESERVATION_INPUT_INVALID
+        )
+        self.assertEqual(
+            exc.exception.context["reason"], "bracket_session_slots_fixed"
+        )
+
+    def test_unknown_session_kind_and_out_of_range_slot_count_refuse(
+        self,
+    ) -> None:
+        """REFUSE: only the two registered kinds and 1..99 slots exist."""
+
+        with self.assertRaises(CalibrationLedgerError) as kind:
+            self._open(session_kind="calibration")
+        self.assertEqual(
+            kind.exception.context["reason"], "session_kind_unknown"
+        )
+        for slot_count in (0, 100):
+            with self.assertRaises(CalibrationLedgerError) as count:
+                calibration_ledger.derivation_session_slots(slot_count)
+            self.assertEqual(
+                count.exception.context["reason"], "slot_count_out_of_range"
+            )
+
+    # ---- byte identity -------------------------------------------------
+
+    def test_bracket_open_receipt_records_neither_kind_nor_declared_slots(
+        self,
+    ) -> None:
+        """ADMIT: today's bracket bytes are exactly yesterday's bracket bytes."""
+
+        receipt = self._open(
+            session_id="bracket-session",
+            session_kind=calibration_ledger.SESSION_KIND_BRACKET,
+            declared=calibration_ledger.BRACKET_SESSION_SLOTS,
+        )
+        self.assertNotIn("session_kind", receipt)
+        self.assertNotIn("declared_slots", receipt)
+        self.assertEqual(
+            set(receipt), set(calibration_ledger._SESSION_OPEN_KEYS)
+        )
+        session = self._snapshot().bracket_session_by_id["bracket-session"]
+        self.assertEqual(session.session_kind, "bracket")
+        self.assertEqual(
+            session.declared_slots, calibration_ledger.BRACKET_SESSION_SLOTS
+        )
+        self.assertEqual(session.next_slot, "pre")
+        self.assertEqual(session.terminal_slot, "post")
+
+    def test_an_explicit_bracket_kind_in_an_open_receipt_is_refused(
+        self,
+    ) -> None:
+        """REFUSE: one session shape has exactly one byte representation."""
+
+        receipt = dict(
+            self._open(
+                session_id="bracket-session",
+                session_kind=calibration_ledger.SESSION_KIND_BRACKET,
+                declared=calibration_ledger.BRACKET_SESSION_SLOTS,
+            )
+        )
+        receipt["session_kind"] = "bracket"
+        receipt["declared_slots"] = ["pre", "post"]
+        receipt["receipt_digest"] = calibration_ledger.canonical_sha256(
+            calibration_ledger.receipt_core(receipt)
+        )
+        self.assertFalse(
+            calibration_ledger._valid_session_receipt_shape(receipt)
+        )
+
+    def test_production_ledger_fixture_parses_and_reserializes_byte_identically(
+        self,
+    ) -> None:
+        """ADMIT: the 76-row production prefix is untouched by this change."""
+
+        raw = self.PRODUCTION_LEDGER.read_bytes()
+        receipts, reasons = calibration_ledger._parse_ledger(raw)
+        self.assertEqual(len(receipts), 76)
+        self.assertEqual(reasons, set())
+        self.assertEqual(
+            b"".join(
+                canonical_json_bytes(receipt) + b"\n" for receipt in receipts
+            ),
+            raw,
+        )
+
+    def test_finalized_row_exposes_session_kind_through_bracket_session_by_id(
+        self,
+    ) -> None:
+        """ADMIT: the exact attribute path every downstream consumer reads.
+
+        Seat S3's endpoint barrier resolves a row's kind defensively --
+        `snapshot.bracket_session_by_id[observation.bracket_session_id]
+        .session_kind` -- and treats a MISSING kind as `bracket`, which is
+        correct for history and fail-open for a rename.  This regression pins
+        the path and the two literal values so a rename breaks here first,
+        using a row from a REAL derivation session built through the
+        reservation API rather than a duck-typed stand-in.
+        """
+
+        self.assertEqual(calibration_ledger.SESSION_KIND_BRACKET, "bracket")
+        self.assertEqual(
+            calibration_ledger.SESSION_KIND_DERIVATION, "derivation"
+        )
+        self.assertEqual(
+            calibration_ledger.SESSION_KINDS, ("bracket", "derivation")
+        )
+        self._open(slot_count=2)
+        self._fill("derivation-night-1", "d01")
+        self._fill("derivation-night-1", "d02")
+        snapshot = self._snapshot()
+        rows = [
+            observation
+            for observation in snapshot.observations
+            if observation.bracket_session_id == "derivation-night-1"
+        ]
+        self.assertEqual(len(rows), 2)
+        for observation in rows:
+            session = snapshot.bracket_session_by_id[
+                observation.bracket_session_id
+            ]
+            self.assertEqual(
+                session.session_kind,
+                calibration_ledger.SESSION_KIND_DERIVATION,
+            )
+        # The same path over a bracket session yields the default kind, so a
+        # consumer that reads it never has to special-case history.
+        bracket_root = self.root / "bracket"
+        bracket_root.mkdir()
+        self.ledger = bracket_root / "ledger.jsonl"
+        self.pin = bracket_root / "head.json"
+        self.pin.write_text(
+            json.dumps(
+                {
+                    "sequence": 0,
+                    "head_digest": GENESIS_DIGEST,
+                    "ledger_schema": LEDGER_SCHEMA,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self._open(
+            session_id="bracket-window",
+            session_kind=calibration_ledger.SESSION_KIND_BRACKET,
+            declared=calibration_ledger.BRACKET_SESSION_SLOTS,
+        )
+        self._fill("bracket-window", "pre")
+        self._fill("bracket-window", "post")
+        bracket_snapshot = self._snapshot()
+        bracket_rows = [
+            observation
+            for observation in bracket_snapshot.observations
+            if observation.bracket_session_id == "bracket-window"
+        ]
+        self.assertEqual(len(bracket_rows), 2)
+        self.assertEqual(
+            bracket_snapshot.bracket_session_by_id[
+                "bracket-window"
+            ].session_kind,
+            calibration_ledger.SESSION_KIND_BRACKET,
+        )
+
+    def test_kindless_historical_open_receipt_reads_as_the_bracket_pair(
+        self,
+    ) -> None:
+        """ADMIT: absence of the field IS the bracket default, not a defect."""
+
+        kindless = {"event": "bracket-session-open", "slots": {}}
+        self.assertEqual(
+            calibration_ledger.session_kind_of_open_receipt(kindless), "bracket"
+        )
+        self.assertEqual(
+            calibration_ledger.declared_slots_of_open_receipt(kindless),
+            ("pre", "post"),
+        )
+
+
+    # ---- recovery path (addendum 11, A-1) ------------------------------
+
+    def test_declared_shape_reader_reports_kind_and_ordered_slot_list(
+        self,
+    ) -> None:
+        """ADMIT: a desk tool can learn the slot names before any lease."""
+
+        self._open(slot_count=4)
+        shape = calibration_ledger.declared_session_shape(
+            self.ledger, session_id="derivation-night-1"
+        )
+        self.assertEqual(shape["session_kind"], "derivation")
+        self.assertEqual(
+            list(shape["declared_slots"]), ["d01", "d02", "d03", "d04"]
+        )
+        with self.assertRaises(CalibrationLedgerError) as missing:
+            calibration_ledger.declared_session_shape(
+                self.ledger, session_id="no-such-session"
+            )
+        self.assertEqual(missing.exception.code, RefusalCode.SESSION_NOT_FOUND)
+
+    def test_resume_finalize_refuses_the_prior_epoch_screen_for_a_derivation(
+        self,
+    ) -> None:
+        """REFUSE: production call site recover_calibration_ledger.resume-finalize.
+
+        `systematic-invalid` means "exceeds the level screen of THIS epoch's
+        acceptance"; a derivation session exists precisely because no such
+        acceptance exists.  Handing the prior epoch's screen to the recovery
+        finalizer would judge a new-epoch capture by the old threshold, so the
+        ledger refuses the pairing outright rather than silently applying it.
+        """
+
+        self._open(slot_count=3)
+        self._custody("derivation-night-1-d01")
+        with self.assertRaises(CalibrationLedgerError) as exc:
+            calibration_ledger.resume_finalize_bracket_session(
+                self.ledger,
+                self.pin,
+                session_id="derivation-night-1",
+                slot="d01",
+                plan_path=self.plan,
+                systematic_screen_s=Decimal("0.032898493715362"),
+                require_committed_pin=False,
+                repo_root=self.root,
+            )
+        self.assertEqual(
+            exc.exception.code, RefusalCode.RESERVATION_INPUT_INVALID
+        )
+        self.assertEqual(
+            exc.exception.context["reason"], "systematic_screen_kind_mismatch"
+        )
+        self.assertEqual(exc.exception.context["session_kind"], "derivation")
+
+    def test_recover_cli_refuses_a_slot_outside_the_declared_list(self) -> None:
+        """REFUSE: --slot is a free string, checked against the open receipt."""
+
+        self._open(slot_count=3)
+        stream = io.StringIO()
+        with mock.patch.object(sys, "stdout", stream):
+            code = recovery_cli.main(
+                [
+                    "--ledger",
+                    str(self.ledger),
+                    "--head-pin",
+                    str(self.pin),
+                    "resume-finalize",
+                    "--session-id",
+                    "derivation-night-1",
+                    "--slot",
+                    "post",
+                    "--plan",
+                    str(self.plan),
+                ]
+            )
+        self.assertNotEqual(code, 0)
+        self.assertIn("calibration_reserved_slot_mismatch", stream.getvalue())
+
+    def test_reserve_cli_declares_d01_dnn_and_keeps_the_bracket_flags(
+        self,
+    ) -> None:
+        """ADMIT: --session-kind derivation --slot-count N; bracket unchanged."""
+
+        runs_root = self.root / "runs"
+        epoch_path = self.root / "epoch.json"
+        t1_path = self.root / "t1.json"
+        epoch_path.write_text(json.dumps(self.epoch), encoding="utf-8")
+        t1_path.write_text(json.dumps(self.t1), encoding="utf-8")
+        common = [
+            "--ledger",
+            str(self.ledger),
+            "--head-pin",
+            str(self.pin),
+            "--window-id",
+            "window-derivation",
+            "--plan-id",
+            "plan-derivation",
+            "--plan-sha256",
+            "b" * 64,
+            "--evidence-root-id",
+            "evidence-derivation",
+            "--runs-root",
+            str(runs_root),
+            "--identity-epoch-json",
+            str(epoch_path),
+            "--t1-bindings-json",
+            str(t1_path),
+        ]
+        slot_flags: list[str] = []
+        for slot in calibration_ledger.derivation_session_slots(3):
+            slot_flags += [
+                "--slot-attempt-id",
+                f"night-{slot}",
+                "--slot-custody-locator",
+                str(runs_root / "instrument_validation" / f"night-{slot}"),
+            ]
+        stream = io.StringIO()
+        with mock.patch.object(sys, "stdout", stream):
+            code = bracket_session_cli.main(
+                [
+                    *common,
+                    "--session-id",
+                    "derivation-night-1",
+                    "--session-kind",
+                    "derivation",
+                    "--slot-count",
+                    "3",
+                    *slot_flags,
+                ]
+            )
+        self.assertEqual(code, 0, stream.getvalue())
+        payload = json.loads(stream.getvalue())
+        self.assertEqual(payload["status"], "validated_not_reserved")
+        self.assertEqual(payload["session_kind"], "derivation")
+        self.assertEqual(payload["declared_slots"], ["d01", "d02", "d03"])
+        self.assertEqual(
+            payload["slot_attempt_ids"],
+            {slot: f"night-{slot}" for slot in ("d01", "d02", "d03")},
+        )
+        bracket_stream = io.StringIO()
+        with mock.patch.object(sys, "stdout", bracket_stream):
+            bracket_code = bracket_session_cli.main(
+                [
+                    *common,
+                    "--session-id",
+                    "bracket-window",
+                    "--pre-attempt-id",
+                    "bracket-pre",
+                    "--post-attempt-id",
+                    "bracket-post",
+                    "--pre-custody-locator",
+                    str(runs_root / "instrument_validation" / "bracket-pre"),
+                    "--post-custody-locator",
+                    str(runs_root / "instrument_validation" / "bracket-post"),
+                ]
+            )
+        self.assertEqual(bracket_code, 0, bracket_stream.getvalue())
+        bracket_payload = json.loads(bracket_stream.getvalue())
+        self.assertEqual(bracket_payload["session_kind"], "bracket")
+        self.assertEqual(bracket_payload["declared_slots"], ["pre", "post"])
+
+    def test_reserve_cli_refuses_mixed_bracket_and_derivation_slot_flags(
+        self,
+    ) -> None:
+        """REFUSE: a kind reads its own flags, never the other kind's."""
+
+        epoch_path = self.root / "epoch.json"
+        t1_path = self.root / "t1.json"
+        epoch_path.write_text(json.dumps(self.epoch), encoding="utf-8")
+        t1_path.write_text(json.dumps(self.t1), encoding="utf-8")
+        base = [
+            "--ledger",
+            str(self.ledger),
+            "--head-pin",
+            str(self.pin),
+            "--session-id",
+            "mixed",
+            "--window-id",
+            "window-derivation",
+            "--plan-id",
+            "plan-derivation",
+            "--plan-sha256",
+            "b" * 64,
+            "--evidence-root-id",
+            "evidence-derivation",
+            "--runs-root",
+            str(self.root / "runs"),
+            "--identity-epoch-json",
+            str(epoch_path),
+            "--t1-bindings-json",
+            str(t1_path),
+        ]
+        cases = {
+            "bracket_session_takes_pre_post_flags": [
+                *base,
+                "--pre-attempt-id",
+                "a",
+                "--post-attempt-id",
+                "b",
+                "--pre-custody-locator",
+                "c",
+                "--post-custody-locator",
+                "d",
+                "--slot-count",
+                "3",
+            ],
+            "derivation_session_takes_slot_list_flags": [
+                *base,
+                "--session-kind",
+                "derivation",
+                "--slot-count",
+                "1",
+                "--pre-attempt-id",
+                "a",
+            ],
+            "declared_slot_flag_count_mismatch": [
+                *base,
+                "--session-kind",
+                "derivation",
+                "--slot-count",
+                "3",
+                "--slot-attempt-id",
+                "only-one",
+                "--slot-custody-locator",
+                "only-one",
+            ],
+        }
+        for reason, argv in cases.items():
+            with self.subTest(reason=reason):
+                stream = io.StringIO()
+                with mock.patch.object(sys, "stderr", stream):
+                    code = bracket_session_cli.main(argv)
+                self.assertNotEqual(code, 0)
+                self.assertIn(reason, stream.getvalue())
 
 
 if __name__ == "__main__":

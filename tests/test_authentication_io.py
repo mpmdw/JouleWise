@@ -66,20 +66,20 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     # no file content is read through this descriptor.
     "joulewise/analysis_manifest_v3.py:_write_append_only:4035:os.open",
     # Linux mountinfo describes OS filesystem topology, not project evidence.
-    "joulewise/calibration_ledger.py:_filesystem_type:2862:read_text",
+    "joulewise/calibration_ledger.py:_filesystem_type:2983:read_text",
     # The lock sidecar descriptor is used for inode/lock state, never content.
-    "joulewise/calibration_ledger.py:_open_slot_sidecar:2966:os.open",
+    "joulewise/calibration_ledger.py:_open_slot_sidecar:3087:os.open",
     # O_RDWR descriptor factory for the writer lane; its read-consumers are
     # classified at their own sites (_locked_append writer-exempt;
     # repair/abandon below). This supersedes the earlier "append handle"
     # description, which its callers falsified.
-    "joulewise/calibration_ledger.py:open_append_descriptor:3297:os.open",
+    "joulewise/calibration_ledger.py:open_append_descriptor:3418:os.open",
     # The exclusive genesis staging descriptor receives newly written output.
-    "joulewise/calibration_ledger.py:publish_genesis_payload:3242:os.open",
+    "joulewise/calibration_ledger.py:publish_genesis_payload:3363:os.open",
     # The parent dirfd binds a pathname slot and cannot supply evidence content.
-    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:2914:os.open",
+    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:3035:os.open",
     # The ledger fd is fstat-only here to bind inode identity, not read bytes.
-    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:2928:os.open",
+    "joulewise/calibration_ledger.py:resolve_ledger_lease_identity:3049:os.open",
     # Writer-lease repair scan of possibly-corrupt physical ledger bytes;
     # recovery/operator lane only (callers: governed exit paths
     # resume_finalize_bracket_session/abort_calibration_session,
@@ -87,13 +87,13 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     # scripts/validate_powermetrics_fiducial.py), not reachable from the v2
     # mint evidence-read perimeter. Registration is inapplicable because the
     # bytes' integrity is the thing under repair.
-    "joulewise/calibration_ledger.py:repair_calibration_ledger:3928:os.fdopen",
+    "joulewise/calibration_ledger.py:repair_calibration_ledger:4049:os.fdopen",
     # Writer-lease tail-abandonment scan of possibly-corrupt physical ledger
     # bytes; recovery/operator lane only (caller:
     # scripts/recover_calibration_ledger.py), not reachable from the v2 mint
     # evidence-read perimeter. Registration is inapplicable because the
     # bytes' integrity is the thing under repair.
-    "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:3985:os.fdopen",
+    "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:4106:os.fdopen",
 }
 ISSUED_REDUCE_SHA256 = (
     "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
