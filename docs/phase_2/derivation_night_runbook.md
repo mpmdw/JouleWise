@@ -500,21 +500,27 @@ was written; filling them reopens no scientific rule. The plan's
 `registration_path` is `night_gate.D166_REGISTRATION_PATH`, the D-166 literal
 in `joulewise/night_gate.py`: the fixed repository-relative path
 `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json`.
-The file is the D-117 contrast campaign's (`configs/campaigns/d117_contrast_v5`)
-registration of its dominance criterion, decision D-165, fixed before that
-campaign's data: for every energy component, the ratio of two floors that the
-file names — `corner_widened_unguarded_floor_j` divided by
-`point_unguarded_floor_j` — must be at least the file's `threshold` of 2.0
-(`R == 2.0 passes`) for the campaign's dominance sentence to stand; the file
-is named for D-166 although it carries the D-165 rule. It has nothing to do
-with this calibration night's physics; it is simply the one document the
-night gate is coded to authenticate for this receipt class, through C1, the
-night gate's registration check. A receipt class is the plan's category, and it selects
-which gate checks apply; this night's class is `DIAGNOSTIC_NO_PACK`, a night
-that runs no measurement pack (§1.1 defines it in full). The scientific
-pre-registration is bound to this night by H, the
-measurement commit whose tree contains it and which the plan pins, and by
-the digest recorded below and in §1.5.
+The file belongs to a different experiment. It records the comparison rule
+that decision D-165 fixed for the D-117 contrast campaign
+(`configs/campaigns/d117_contrast_v5`) before that campaign collected data;
+the filename instead names D-166, the decision that set that campaign's
+workload. What the rule says does not matter to this night, which never
+evaluates it. The night gate requires this file for this night's receipt
+class and checks exactly one thing, recorded as gate condition C1: it reads
+the file as UTF-8 text and requires the SHA-256 of that text to equal the
+literal `night_gate.D166_REGISTRATION_SHA256` in the same module. Nothing
+else about the file is read. (Beware one word collision: `registration_path`
+and C1's "registration" are the gate's own names for THIS file, not §Terms'
+**Registration**, the set of ledger sessions a derivation corpus is drawn
+from.) A receipt class is the plan's category, and it selects which gate
+checks apply; this night's is `DIAGNOSTIC_NO_PACK`, the class for a night
+that launches no measurement pack — no campaign's committed bundle of runs,
+pinned in a plan by id, root and digest — because this night takes only the
+twelve calibration captures (§1.1 defines the class in full). The night's
+own scientific pre-registration, the file named at the top of this section,
+is bound to the night separately: by H, the measurement commit whose tree
+contains it and which the plan pins, and by the digest recorded below and in
+§1.5.
 
 `[DD]` is the authoring day of the registration text itself — the registration's
 own §"Fields filled at commit" glosses it exactly so — and the other four are
