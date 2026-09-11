@@ -21,6 +21,8 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # T38j: record 39 blocks G2-a on a successor for the live OS-build epoch.
+    "ACCEPTANCE-EPOCH-25G83-01",
     "POWERMODE-PREFLIGHT-RECORD-01",
     # T38c: six live follow-ups; DONE liveness-docs stays outside the kernel.
     "BRIDGE-BASELINE-ANCHORS-01",
@@ -34,6 +36,14 @@ EXPECTED_IDS = {
     "ARM-CENSUS-IDLE-INTERACTIVE-01",
     "REMOTE-CONTROL-BETWEEN-WINDOWS-01",
     "GATE-SENSIBILITY-SWEEP-01",
+    # Activation 96bfeca7: registered follow-ups; R2 stays on the D-138 branch.
+    "NIGHT-STREAM-PATHS-01",
+    # Activation 96bfeca7, final wave: doctrine install obligation, guard re-keying (ruling first), recover reason mapping.
+    "ISOLATION-RULE-DOCTRINE-01",
+    "V2-SURFACE-GUARD-REKEY-01",
+    "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01",
+    "FIXTURE-SENTINEL-CONTROLLER-01",
+    "GATE-R2-COVERAGE-ULP-01",
 
     # 2026-09-08 D-176 decision 5: isolated pack-bound rehearsal successor.
     "NIGHT-PACK-REHEARSAL-01",
@@ -729,7 +739,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 161)  # T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
+        self.assertEqual(len(self.tasks), 168)  # Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,

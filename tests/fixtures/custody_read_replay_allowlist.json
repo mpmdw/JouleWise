@@ -63,6 +63,20 @@
     "reason": "Retained-corpus CLI main -> extract_cells -> AuthenticatedConsumptionSession -> snapshot and bracket candidate discovery; derives extraction reports without mint, ledger append, binding publication, or analysis-manifest finalization."
   },
   {
+    "file": "scripts/issue_calibration_acceptance_generation.py",
+    "function": "_prepare_candidate",
+    "ordinal": 1,
+    "line": 1074,
+    "reason": "prepare-candidate replays the authenticated ledger snapshot to select registration members and derive a NOT-ISSUED candidate acceptance written only to --out outside configs/calibration; it never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest, and the emitted file is refused by the production loader (candidate_not_issued)."
+  },
+  {
+    "file": "scripts/issue_calibration_acceptance_generation.py",
+    "function": "check",
+    "ordinal": 1,
+    "line": 268,
+    "reason": "Read-only desk epoch watch and blind registration dry run replay the existing ledger snapshot once to compare identity fields, print a table and, with --session-ids, report session kinds/states/slot counts; never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest."
+  },
+  {
     "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
     "ordinal": 1,

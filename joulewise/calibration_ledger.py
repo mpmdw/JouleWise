@@ -64,6 +64,16 @@ BRACKET_SESSION_SLOT_CLAIM_EVENT = "bracket-session-slot-claim"
 BRACKET_SESSION_FINALIZATION_EVENT = "bracket-session-slot-finalization"
 BRACKET_SESSION_ABORT_EVENT = "bracket-session-abort"
 BRACKET_SESSION_SLOTS = ("pre", "post")
+# A session declares an ORDERED slot list at open.  The historical bracket
+# session declares exactly ("pre", "post") and records neither the kind nor the
+# list, so every receipt written before this capability existed keeps its exact
+# bytes and reads back as kind "bracket" over the two-slot list.  A derivation
+# session records both fields explicitly.
+SESSION_KIND_BRACKET = "bracket"
+SESSION_KIND_DERIVATION = "derivation"
+SESSION_KINDS = (SESSION_KIND_BRACKET, SESSION_KIND_DERIVATION)
+DERIVATION_SLOT_PREFIX = "d"
+MAX_DECLARED_SESSION_SLOTS = 99
 CONTROL_SCHEMA = "joulewise.calibration_ledger_control.v1"
 APPEND_INTENT_EVENT = "append-intent"
 ABANDONMENT_EVENT = "abandon-tail"
@@ -480,6 +490,24 @@ class CalibrationBracketSession:
     finalized_slots: Mapping[str, LedgerObservation]
     abort_receipt_digest: str | None = None
     abort_reason: str | None = None
+    session_kind: str = SESSION_KIND_BRACKET
+    declared_slots: tuple[str, ...] = BRACKET_SESSION_SLOTS
+
+    @property
+    def terminal_slot(self) -> str:
+        """The last declared slot; finalizing it closes the session."""
+
+        return self.declared_slots[-1]
+
+    @property
+    def next_slot(self) -> str | None:
+        """The only slot a claim or finalization may name right now."""
+
+        if self.state != "open" or len(self.finalized_slots) >= len(
+            self.declared_slots
+        ):
+            return None
+        return self.declared_slots[len(self.finalized_slots)]
 
 
 @dataclass(frozen=True)
@@ -703,6 +731,7 @@ _SESSION_IDENTITY_KEYS = frozenset(
     }
 )
 _SESSION_OPEN_KEYS = _CHAIN_KEYS | _SESSION_IDENTITY_KEYS | {"slots"}
+_SESSION_OPEN_KEYS_KINDED = _SESSION_OPEN_KEYS | {"session_kind", "declared_slots"}
 _SESSION_SLOT_CLAIM_KEYS = (
     _CHAIN_KEYS | _SESSION_IDENTITY_KEYS | {"slot", "attempt_id", "claim_id"}
 )
@@ -768,6 +797,61 @@ def _valid_session_identity(receipt: Mapping[str, Any]) -> bool:
     )
 
 
+def is_declared_slot_name(value: object) -> bool:
+    """Whether one declared slot name is a usable ledger/custody token."""
+
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and len(value) <= 32
+        and all(char.isalnum() or char in "-_" for char in value)
+    )
+
+
+def derivation_session_slots(slot_count: int) -> tuple[str, ...]:
+    """Return the canonical derivation slot list ``d01 .. dNN``."""
+
+    if (
+        isinstance(slot_count, bool)
+        or not isinstance(slot_count, int)
+        or slot_count < 1
+        or slot_count > MAX_DECLARED_SESSION_SLOTS
+    ):
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "slot_count_out_of_range", "slot_count": slot_count},
+        )
+    return tuple(
+        f"{DERIVATION_SLOT_PREFIX}{index:02d}" for index in range(1, slot_count + 1)
+    )
+
+
+def session_kind_of_open_receipt(receipt: Mapping[str, Any]) -> str:
+    """Read the session kind, defaulting a kindless historical receipt."""
+
+    kind = receipt.get("session_kind")
+    return kind if isinstance(kind, str) and kind else SESSION_KIND_BRACKET
+
+
+def declared_slots_of_open_receipt(receipt: Mapping[str, Any]) -> tuple[str, ...]:
+    """Read the ordered declared slot list, defaulting to the bracket pair."""
+
+    declared = receipt.get("declared_slots")
+    if isinstance(declared, Sequence) and not isinstance(declared, (str, bytes)):
+        return tuple(str(slot) for slot in declared)
+    return BRACKET_SESSION_SLOTS
+
+
+def _valid_declared_slots(declared: object) -> bool:
+    return (
+        isinstance(declared, Sequence)
+        and not isinstance(declared, (str, bytes))
+        and 1 <= len(declared) <= MAX_DECLARED_SESSION_SLOTS
+        and all(is_declared_slot_name(slot) for slot in declared)
+        and len(set(declared)) == len(declared)
+    )
+
+
 def _valid_session_slot_reservation(slot: object, expected_role: str) -> bool:
     if not isinstance(slot, Mapping) or set(slot) != _SESSION_SLOT_KEYS:
         return False
@@ -796,27 +880,53 @@ def _valid_session_receipt_shape(receipt: Mapping[str, Any]) -> bool:
         BRACKET_SESSION_FINALIZATION_EVENT: _SESSION_FINALIZATION_KEYS,
         BRACKET_SESSION_ABORT_EVENT: _SESSION_ABORT_KEYS,
     }.get(event)
+    keys = set(receipt)
+    kinded_open = (
+        event == BRACKET_SESSION_OPEN_EVENT and keys == _SESSION_OPEN_KEYS_KINDED
+    )
     if (
         expected_keys is None
-        or set(receipt) != expected_keys
+        or (keys != expected_keys and not kinded_open)
         or not _valid_chain_fields(receipt, BRACKET_SESSION_SCHEMA)
         or not _valid_session_identity(receipt)
     ):
         return False
     if event == BRACKET_SESSION_OPEN_EVENT:
         slots = receipt.get("slots")
+        if kinded_open:
+            # The kindless historical shape IS the canonical bracket session,
+            # so an explicit "bracket" kind is refused: one session shape has
+            # exactly one byte representation.
+            declared = receipt.get("declared_slots")
+            if (
+                receipt.get("session_kind") != SESSION_KIND_DERIVATION
+                or not _valid_declared_slots(declared)
+            ):
+                return False
+            declared = tuple(declared)
+        else:
+            declared = BRACKET_SESSION_SLOTS
+        if not isinstance(slots, Mapping) or set(slots) != set(declared):
+            return False
+        attempt_ids = [
+            slots[role].get("attempt_id")
+            if isinstance(slots.get(role), Mapping)
+            else None
+            for role in declared
+        ]
         return (
-            isinstance(slots, Mapping)
-            and set(slots) == set(BRACKET_SESSION_SLOTS)
-            and all(
+            all(
                 _valid_session_slot_reservation(slots.get(role), role)
-                for role in BRACKET_SESSION_SLOTS
+                for role in declared
             )
-            and slots["pre"]["attempt_id"] != slots["post"]["attempt_id"]
+            and len(set(attempt_ids)) == len(declared)
         )
     if event == BRACKET_SESSION_SLOT_CLAIM_EVENT:
+        # Declared-list membership needs the session's own open receipt and is
+        # enforced by _bracket_sessions_and_observations, which refuses any
+        # slot the open receipt did not declare.
         return (
-            receipt.get("slot") in BRACKET_SESSION_SLOTS
+            is_declared_slot_name(receipt.get("slot"))
             and isinstance(receipt.get("attempt_id"), str)
             and bool(receipt.get("attempt_id"))
             and isinstance(receipt.get("claim_id"), str)
@@ -831,9 +941,11 @@ def _valid_session_receipt_shape(receipt: Mapping[str, Any]) -> bool:
             and not isinstance(finalized, (str, bytes))
             and isinstance(unused, Sequence)
             and not isinstance(unused, (str, bytes))
-            and all(slot in BRACKET_SESSION_SLOTS for slot in (*finalized, *unused))
+            and all(is_declared_slot_name(slot) for slot in (*finalized, *unused))
             and len(set((*finalized, *unused))) == len(finalized) + len(unused)
-            and set((*finalized, *unused)) == set(BRACKET_SESSION_SLOTS)
+            # The union must equal the session's DECLARED list, which only the
+            # open receipt knows; _bracket_sessions_and_observations refuses an
+            # abort whose two lists do not reproduce it exactly.
             and isinstance(reason, str)
             and bool(reason)
         )
@@ -845,7 +957,7 @@ def _valid_session_receipt_shape(receipt: Mapping[str, Any]) -> bool:
     bound = receipt.get("exact_bound_lexeme_s")
     content_id = receipt.get("content_id")
     if (
-        receipt.get("slot") not in BRACKET_SESSION_SLOTS
+        not is_declared_slot_name(receipt.get("slot"))
         or not isinstance(receipt.get("attempt_id"), str)
         or not receipt.get("attempt_id")
         or disposition not in FINAL_DISPOSITIONS
@@ -1515,13 +1627,16 @@ def _bracket_sessions_and_observations(
         session_id = str(receipt["session_id"])
         if event == BRACKET_SESSION_OPEN_EVENT:
             slots = receipt["slots"]
-            attempt_ids = {str(slots[role]["attempt_id"]) for role in BRACKET_SESSION_SLOTS}
+            declared = declared_slots_of_open_receipt(receipt)
+            attempt_ids = {str(slots[role]["attempt_id"]) for role in declared}
             if session_id in states or attempt_ids & claimed_attempts:
                 reasons.add("calibration_ledger_bracket_session_conflict")
                 continue
             claimed_attempts.update(attempt_ids)
             states[session_id] = {
                 "open": receipt,
+                "declared": declared,
+                "kind": session_kind_of_open_receipt(receipt),
                 "claims": {},
                 "finals": {},
                 "abort": None,
@@ -1537,10 +1652,11 @@ def _bracket_sessions_and_observations(
             continue
         claims = state["claims"]
         finals = state["finals"]
+        declared = state["declared"]
         if event == BRACKET_SESSION_SLOT_CLAIM_EVENT:
             slot = str(receipt["slot"])
             expected_slot = (
-                BRACKET_SESSION_SLOTS[len(finals)] if len(finals) < 2 else None
+                declared[len(finals)] if len(finals) < len(declared) else None
             )
             reserved = open_receipt["slots"].get(slot)
             if (
@@ -1557,7 +1673,9 @@ def _bracket_sessions_and_observations(
             continue
         if event == BRACKET_SESSION_FINALIZATION_EVENT:
             slot = str(receipt["slot"])
-            expected_slot = BRACKET_SESSION_SLOTS[len(finals)] if len(finals) < 2 else None
+            expected_slot = (
+                declared[len(finals)] if len(finals) < len(declared) else None
+            )
             reserved = open_receipt["slots"].get(slot)
             if (
                 state["abort"] is not None
@@ -1574,11 +1692,11 @@ def _bracket_sessions_and_observations(
             finals[slot] = receipt
             continue
         finalized_slots = list(finals)
-        unused_slots = [slot for slot in BRACKET_SESSION_SLOTS if slot not in finals]
+        unused_slots = [slot for slot in declared if slot not in finals]
         if (
             event != BRACKET_SESSION_ABORT_EVENT
             or state["abort"] is not None
-            or len(finals) == 2
+            or len(finals) == len(declared)
             or receipt["finalized_slots"] != finalized_slots
             or receipt["unused_slots"] != unused_slots
         ):
@@ -1594,9 +1712,10 @@ def _bracket_sessions_and_observations(
         open_receipt = state["open"]
         finals = state["finals"]
         abort = state["abort"]
+        declared = state["declared"]
         if abort is not None:
             session_state = "aborted"
-        elif len(finals) == 2:
+        elif len(finals) == len(declared):
             session_state = "finalized"
         else:
             session_state = "open"
@@ -1621,7 +1740,7 @@ def _bracket_sessions_and_observations(
         if session_state in {"finalized", "aborted"}:
             completed_observations.extend(
                 finalized_observations[slot]
-                for slot in BRACKET_SESSION_SLOTS
+                for slot in declared
                 if slot in finalized_observations
             )
         sessions.append(
@@ -1637,7 +1756,7 @@ def _bracket_sessions_and_observations(
                 slot_attempt_ids=MappingProxyType(
                     {
                         slot: str(open_receipt["slots"][slot]["attempt_id"])
-                        for slot in BRACKET_SESSION_SLOTS
+                        for slot in declared
                     }
                 ),
                 state=session_state,
@@ -1646,6 +1765,8 @@ def _bracket_sessions_and_observations(
                     str(abort["receipt_digest"]) if abort is not None else None
                 ),
                 abort_reason=(str(abort["reason"]) if abort is not None else None),
+                session_kind=str(state["kind"]),
+                declared_slots=tuple(declared),
             )
         )
     return sessions, completed_observations, reasons
@@ -4136,9 +4257,36 @@ def validate_bracket_session_reservation_inputs(
     evidence_root_id: str,
     runs_root: Path | str,
     slots: Mapping[str, Mapping[str, Any]],
+    session_kind: str = SESSION_KIND_BRACKET,
+    declared_slots: Sequence[str] | None = None,
 ) -> tuple[Mapping[str, Any], Mapping[str, Mapping[str, Any]]]:
-    """Apply the exact same capability-input validation for dry-run/execute."""
+    """Apply the exact same capability-input validation for dry-run/execute.
 
+    ``declared_slots`` is the ordered slot list this session reserves.  It
+    defaults to the bracket pair, which is the only list a ``bracket``-kind
+    session may declare; the returned slot mapping is in declared order.
+    """
+
+    if session_kind not in SESSION_KINDS:
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "session_kind_unknown", "session_kind": session_kind},
+        )
+    declared = (
+        BRACKET_SESSION_SLOTS
+        if declared_slots is None
+        else tuple(str(slot) for slot in declared_slots)
+    )
+    if not _valid_declared_slots(declared):
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "declared_slots_invalid"},
+        )
+    if session_kind == SESSION_KIND_BRACKET and declared != BRACKET_SESSION_SLOTS:
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVATION_INPUT_INVALID,
+            context={"reason": "bracket_session_slots_fixed"},
+        )
     try:
         normalized_runs_root = normalize_calibration_custody_path(runs_root)
     except CalibrationLedgerError as exc:
@@ -4152,10 +4300,10 @@ def validate_bracket_session_reservation_inputs(
         "runs_root": normalized_runs_root,
     }
     normalized_slots: dict[str, dict[str, Any]] = {}
-    if not isinstance(slots, Mapping) or set(slots) != set(BRACKET_SESSION_SLOTS):
+    if not isinstance(slots, Mapping) or set(slots) != set(declared):
         raise CalibrationLedgerError(RefusalCode.RESERVATION_INPUT_INVALID)
     validation_root = Path(normalized_runs_root) / "instrument_validation"
-    for role in BRACKET_SESSION_SLOTS:
+    for role in declared:
         source = slots.get(role)
         if not isinstance(source, Mapping):
             raise CalibrationLedgerError(
@@ -4182,10 +4330,11 @@ def validate_bracket_session_reservation_inputs(
         }
     if not _valid_session_identity(session_identity) or any(
         not _valid_session_slot_reservation(normalized_slots[role], role)
-        for role in BRACKET_SESSION_SLOTS
+        for role in declared
     ):
         raise CalibrationLedgerError(RefusalCode.RESERVATION_INPUT_INVALID)
-    if normalized_slots["pre"]["attempt_id"] == normalized_slots["post"]["attempt_id"]:
+    proposed_attempt_ids = [normalized_slots[role]["attempt_id"] for role in declared]
+    if len(set(proposed_attempt_ids)) != len(declared):
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
             context={"reason": "slot_attempts_not_distinct"},
@@ -4203,12 +4352,14 @@ def append_bracket_session_receipt(
     evidence_root_id: str,
     runs_root: Path | str,
     slots: Mapping[str, Mapping[str, Any]],
+    session_kind: str = SESSION_KIND_BRACKET,
+    declared_slots: Sequence[str] | None = None,
     head_pin_path: Path = DEFAULT_HEAD_PIN_PATH,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
     _stage_boundary: Any | None = None,
 ) -> Mapping[str, Any]:
-    """Atomically reserve exactly one immutable pre/post bracket capability.
+    """Atomically reserve exactly one immutable ordered-slot capability.
 
     Physical-head equality with the committed pin is checked here, at open,
     and deliberately not checked again while either already-reserved slot is
@@ -4224,6 +4375,16 @@ def append_bracket_session_receipt(
         evidence_root_id=evidence_root_id,
         runs_root=runs_root,
         slots=slots,
+        session_kind=session_kind,
+        declared_slots=declared_slots,
+    )
+    declared = tuple(normalized_slots)
+    # The canonical bracket session records neither field, so its receipt bytes
+    # are exactly what this capability wrote before derivation kinds existed.
+    kind_fields: dict[str, Any] = (
+        {}
+        if session_kind == SESSION_KIND_BRACKET
+        else {"session_kind": session_kind, "declared_slots": list(declared)}
     )
     pin = _authenticated_head_pin(
         Path(head_pin_path),
@@ -4250,7 +4411,7 @@ def append_bracket_session_receipt(
             if receipt.get("schema_version") == RECEIPT_SCHEMA
         }
         proposed_attempts = {
-            normalized_slots[role]["attempt_id"] for role in BRACKET_SESSION_SLOTS
+            normalized_slots[role]["attempt_id"] for role in declared
         }
         if (
             any(session.session_id == session_id for session in sessions)
@@ -4262,7 +4423,7 @@ def append_bracket_session_receipt(
             predecessor_digest=str(predecessor),
             event=BRACKET_SESSION_OPEN_EVENT,
             session_identity=session_identity,
-            fields={"slots": normalized_slots},
+            fields={"slots": normalized_slots, **kind_fields},
         )
 
     expected_core = _target_core(
@@ -4271,7 +4432,7 @@ def append_bracket_session_receipt(
             predecessor_digest=GENESIS_DIGEST,
             event=BRACKET_SESSION_OPEN_EVENT,
             session_identity=session_identity,
-            fields={"slots": normalized_slots},
+            fields={"slots": normalized_slots, **kind_fields},
         )
     )
     operation_key = _operation_key_for_core(expected_core)
@@ -4296,7 +4457,7 @@ def claim_bracket_session_slot(
 ) -> Mapping[str, Any]:
     """Append one deterministic claim while liveness is owned by the lease."""
 
-    if slot not in BRACKET_SESSION_SLOTS:
+    if not is_declared_slot_name(slot):
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
             context={"slot": slot},
@@ -4321,7 +4482,7 @@ def claim_bracket_session_slot(
         )
         if session is None or session.state != "open":
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
-        expected_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
+        expected_slot = session.next_slot
         if slot != expected_slot or session.slot_attempt_ids.get(slot) != attempt_id:
             raise CalibrationLedgerError(
                 RefusalCode.SLOT_ORDER_CONFLICT,
@@ -4402,7 +4563,7 @@ def finalize_bracket_session_slot(
 
     _refuse_custody_override_mint()
 
-    if slot not in BRACKET_SESSION_SLOTS:
+    if not is_declared_slot_name(slot):
         raise CalibrationLedgerError(
             RefusalCode.RESERVATION_INPUT_INVALID,
             context={"slot": slot},
@@ -4427,7 +4588,7 @@ def finalize_bracket_session_slot(
         session = by_id.get(session_id)
         if session is None or session.state != "open":
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
-        expected_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
+        expected_slot = session.next_slot
         if slot != expected_slot or slot in session.finalized_slots:
             raise CalibrationLedgerError(
                 RefusalCode.SLOT_ORDER_CONFLICT,
@@ -4541,7 +4702,9 @@ def abort_bracket_session(
             fields={
                 "finalized_slots": finalized_slots,
                 "unused_slots": [
-                    role for role in BRACKET_SESSION_SLOTS if role not in finalized_slots
+                    role
+                    for role in session.declared_slots
+                    if role not in finalized_slots
                 ],
                 "reason": reason,
             },
@@ -4593,7 +4756,7 @@ def terminal_head_pin_for_session(
     if session is None or session.state == "open":
         raise CalibrationLedgerError(RefusalCode.SESSION_NOT_TERMINAL)
     terminal_digest = (
-        session.finalized_slots["post"].receipt_digest
+        session.finalized_slots[session.terminal_slot].receipt_digest
         if session.state == "finalized"
         else session.abort_receipt_digest
     )
@@ -4630,6 +4793,49 @@ def _pin_relation(snapshot: CalibrationLedgerSnapshot) -> PinRelation:
     ):
         return PinRelation.PHYSICAL_BEHIND
     return PinRelation.DIVERGENT
+
+
+def declared_session_shape(
+    ledger_path: Path,
+    *,
+    session_id: str,
+) -> Mapping[str, Any]:
+    """Read one session's declared kind and ordered slot list from its open row.
+
+    This is deliberately the cheapest authenticated read in the module: it
+    scans the maximal valid chain only, so a desk tool can learn which slot
+    names a session declared -- and whether a level screen applies to it at
+    all -- before any recovery, lease, or custody work happens.
+    """
+
+    try:
+        raw = read_authentication_input(
+            ledger_path,
+            grammar="jsonl",
+            label=f"calibration ledger for bracket session {session_id}",
+        )
+    except OSError as exc:
+        raise CalibrationLedgerError(RefusalCode.PHYSICAL_LEDGER_UNREADABLE) from exc
+    receipts, _reasons = _parse_ledger(raw)
+    open_receipt = next(
+        (
+            receipt
+            for receipt in receipts
+            if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+            and receipt.get("event") == BRACKET_SESSION_OPEN_EVENT
+            and receipt.get("session_id") == session_id
+        ),
+        None,
+    )
+    if open_receipt is None:
+        raise CalibrationLedgerError(RefusalCode.SESSION_NOT_FOUND)
+    return _frozen_mapping(
+        {
+            "session_id": session_id,
+            "session_kind": session_kind_of_open_receipt(open_receipt),
+            "declared_slots": list(declared_slots_of_open_receipt(open_receipt)),
+        }
+    )
 
 
 def _session_open_receipt(
@@ -4873,7 +5079,7 @@ def calibration_session_status(
         )
     open_receipt = _session_open_receipt(snapshot, session_id)
     slots: dict[str, Any] = {}
-    for slot in BRACKET_SESSION_SLOTS:
+    for slot in session.declared_slots:
         reserved = (
             open_receipt.get("slots", {}).get(slot)
             if isinstance(open_receipt, Mapping)
@@ -4891,11 +5097,7 @@ def calibration_session_status(
             "custody_state": _custody_state(locator, mode="read_replay") if locator is not None else None,
             "finalized": slot in session.finalized_slots,
         }
-    next_slot = (
-        BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
-        if session.state == "open" and len(session.finalized_slots) < len(BRACKET_SESSION_SLOTS)
-        else None
-    )
+    next_slot = session.next_slot
     live_writer = writer_lease_is_live(ledger_path)
     actionable: RefusalCode | None = None
     unexpected = set(snapshot.refusal_reasons) - {
@@ -4927,6 +5129,8 @@ def calibration_session_status(
         "status": "session_status",
         "session_id": session.session_id,
         "session_state": session.state,
+        "session_kind": session.session_kind,
+        "declared_slots": list(session.declared_slots),
         "abort_reason": session.abort_reason,
         "plan_id": session.plan_id,
         "plan_sha256": session.plan_sha256,
@@ -5017,8 +5221,8 @@ def calibration_readiness(
             _session_open_receipt(snapshot, str(session_id)) if session is not None else None
         )
         if session is not None and session.state == "open":
-            next_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
-            expected_attempt = session.slot_attempt_ids.get(next_slot)
+            next_slot = session.next_slot
+            expected_attempt = session.slot_attempt_ids.get(str(next_slot))
             reserved = (
                 open_receipt.get("slots", {}).get(next_slot)
                 if isinstance(open_receipt, Mapping)
@@ -5231,11 +5435,18 @@ def resume_finalize_bracket_session(
     session_id: str,
     slot: str,
     plan_path: Path,
-    systematic_screen_s: Decimal,
+    systematic_screen_s: Decimal | None,
     require_committed_pin: bool = True,
     repo_root: Path = REPO_ROOT,
 ) -> Mapping[str, Any]:
-    """Finalize authenticated complete custody from a fresh process."""
+    """Finalize authenticated complete custody from a fresh process.
+
+    ``systematic_screen_s`` is the level screen of the acceptance that judges
+    this epoch.  A ``derivation``-kind session has no such acceptance yet, so
+    its caller passes ``None``, the disposition collapses to ``valid`` or
+    ``ordinary-invalid``, and no early auto-abort applies: the session closes
+    only on its last declared slot or an explicit abort.
+    """
 
     _refuse_custody_override_mint()
 
@@ -5263,7 +5474,19 @@ def resume_finalize_bracket_session(
         )
         if session.state != "open":
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
-        expected_slot = BRACKET_SESSION_SLOTS[len(session.finalized_slots)]
+        derivation = session.session_kind == SESSION_KIND_DERIVATION
+        if derivation != (systematic_screen_s is None):
+            # A derivation session must never be judged by the level screen of
+            # the PRIOR epoch's acceptance, and a bracket session must never be
+            # finalized without one.
+            raise CalibrationLedgerError(
+                RefusalCode.RESERVATION_INPUT_INVALID,
+                context={
+                    "reason": "systematic_screen_kind_mismatch",
+                    "session_kind": session.session_kind,
+                },
+            )
+        expected_slot = session.next_slot
         if slot != expected_slot:
             raise CalibrationLedgerError(
                 RefusalCode.SLOT_ORDER_CONFLICT,
@@ -5337,7 +5560,9 @@ def resume_finalize_bracket_session(
         if status == "valid":
             disposition = (
                 "systematic-invalid"
-                if bound is not None and bound > systematic_screen_s
+                if systematic_screen_s is not None
+                and bound is not None
+                and bound > systematic_screen_s
                 else "valid"
             )
         claim_bracket_session_slot(
@@ -5359,16 +5584,22 @@ def resume_finalize_bracket_session(
             exact_bound_lexeme_s=exact_bound_lexeme_s,
         )
         terminal_result = "operation_completed"
-        if slot == "pre" and disposition != "valid":
+        if not derivation and slot != session.terminal_slot and disposition != "valid":
+            # The bracket contract closes the window as soon as its opening
+            # endpoint fails; a derivation session has no endpoint role and
+            # keeps running its declared slots.
             receipt = abort_bracket_session(
                 ledger_path,
                 session_id=session_id,
                 reason=f"pre_capture_{disposition}",
             )
             terminal_result = "session_aborted"
+        session_still_open = (
+            terminal_result == "operation_completed" and slot != session.terminal_slot
+        )
         candidate = (
             None
-            if slot == "pre" and disposition == "valid"
+            if session_still_open
             else terminal_head_pin_for_session(ledger_path, session_id=session_id)
         )
         return _frozen_mapping(
@@ -5691,6 +5922,15 @@ __all__ = [
     "BRACKET_SESSION_SLOT_CLAIM_EVENT",
     "BRACKET_SESSION_SCHEMA",
     "BRACKET_SESSION_SLOTS",
+    "SESSION_KINDS",
+    "SESSION_KIND_BRACKET",
+    "SESSION_KIND_DERIVATION",
+    "MAX_DECLARED_SESSION_SLOTS",
+    "declared_session_shape",
+    "is_declared_slot_name",
+    "declared_slots_of_open_receipt",
+    "derivation_session_slots",
+    "session_kind_of_open_receipt",
     "CONTENT_ID_ARTIFACTS",
     "CONTROL_SCHEMA",
     "DEFAULT_HEAD_PIN_PATH",

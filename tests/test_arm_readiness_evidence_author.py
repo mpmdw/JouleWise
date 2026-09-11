@@ -143,6 +143,12 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "scripts/mint_floor_artifact_generalized.py",
         "scripts/recover_calibration_ledger.py",
         "tests/test_calibration_ledger.py",
+        # RECOVERY_LEDGER_TEST runs `tests.test_calibration_ledger` as a focused
+        # suite INSIDE this minimal repository, so every file that suite reads
+        # must exist here too.  `DerivationSessionSlotTests.PRODUCTION_LEDGER`
+        # reads the committed 76-row production ledger prefix by a path relative
+        # to the test module, which resolves into this fixture repository.
+        "tests/fixtures/d117_v2_production/issued/calibration_observation_ledger.jsonl",
         "tests/test_calibration_bracketing.py",
         "tests/test_calibration_live_three_window.py",
         "tests/receipt_corpus.py",

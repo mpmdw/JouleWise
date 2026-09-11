@@ -20,6 +20,8 @@ from joulewise.schemas import CampaignPolicy, SchemaError
 ADMISSION_SCHEMA = "joulewise.environment_admission.v1"
 EVALUATION_SCHEMA = "joulewise.environment_evaluation.v1"
 MAX_ADMISSION_GAP_S = 600.0
+# Covers four contemporary epoch-binary64 roundings; not missing samples.
+ADMISSION_TIME_ROUNDING_S = 1e-6
 REGISTERED_POLICY_DIR = (
     Path(__file__).resolve().parents[1] / "configs" / "campaign_policies"
 )
@@ -177,14 +179,14 @@ def current_environment_refusals(
                 or attempt_end_s is None
                 or baseline_duration_s is None
                 or baseline_duration_s <= 0.0
-                or baseline_duration_s > attempt_end_s - attempt_start_s + 1e-9
+                or baseline_duration_s > attempt_end_s - attempt_start_s + ADMISSION_TIME_ROUNDING_S
             ):
                 reasons.add("environment_admission_missing")
                 continue
             capture = _attempt_capture_interval(bundle_path, expected_attempt)
             if capture is None or (
-                capture[0] < attempt_start_s - 1e-9
-                or capture[1] > attempt_end_s + 1e-9
+                capture[0] < attempt_start_s - ADMISSION_TIME_ROUNDING_S
+                or capture[1] > attempt_end_s + ADMISSION_TIME_ROUNDING_S
             ):
                 reasons.add("environment_admission_missing")
 

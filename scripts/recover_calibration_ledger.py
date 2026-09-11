@@ -22,12 +22,14 @@ from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH,
     DEFAULT_LEDGER_PATH,
     LEDGER_SCHEMA,
+    SESSION_KIND_DERIVATION,
     CalibrationLedgerError,
     CalibrationLedgerInspection,
     abort_calibration_session,
     advance_calibration_head_pin,
     abandon_calibration_ledger_tail,
     calibration_readiness,
+    declared_session_shape,
     calibration_session_status,
     canonical_json_bytes,
     inspect_calibration_ledger,
@@ -169,7 +171,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--phase", required=True, choices=("pre-reserve", "pre-slot", "terminal")
     )
     readiness.add_argument("--session-id")
-    readiness.add_argument("--slot", choices=("pre", "post"))
+    readiness.add_argument(
+        "--slot",
+        help="one slot name declared by the session's open receipt",
+    )
     readiness.add_argument("--attempt-id")
     readiness.add_argument("--plan", type=Path)
     status = commands.add_parser(
@@ -188,7 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="authenticate one proposed writer invocation against its reserved slot",
     )
     validate_slot.add_argument("--session-id", required=True)
-    validate_slot.add_argument("--slot", choices=("pre", "post"), required=True)
+    validate_slot.add_argument(
+        "--slot",
+        required=True,
+        help="one slot name declared by the session's open receipt",
+    )
     validate_slot.add_argument("--attempt-id", required=True)
     validate_slot.add_argument("--custody-locator", required=True)
     validate_slot.add_argument("--identity-epoch-json", type=Path, required=True)
@@ -201,7 +210,11 @@ def build_parser() -> argparse.ArgumentParser:
         "resume-finalize", help="finalize complete authenticated capture custody"
     )
     resume.add_argument("--session-id", required=True)
-    resume.add_argument("--slot", choices=("pre", "post"), required=True)
+    resume.add_argument(
+        "--slot",
+        required=True,
+        help="one slot name declared by the session's open receipt",
+    )
     resume.add_argument("--plan", type=Path, required=True)
     abort = commands.add_parser(
         "abort-session", help="abort an open session while preserving custody"
@@ -219,6 +232,27 @@ def build_parser() -> argparse.ArgumentParser:
     advance.add_argument("--attestation-reason", required=True)
     advance.add_argument("--execute", action="store_true")
     return parser
+
+
+def _declared_slot_shape(ledger: Path, session_id: str, slot: str | None) -> Any:
+    """Authenticate one ``--slot`` string against the session's declared list.
+
+    The slot names are no longer a fixed pair, so the tool cannot enumerate
+    them in argparse; it reads the ordered list the session's own open receipt
+    declared and refuses anything outside it.
+    """
+
+    shape = declared_session_shape(ledger, session_id=session_id)
+    if slot is not None and slot not in shape["declared_slots"]:
+        raise CalibrationLedgerError(
+            RefusalCode.RESERVED_SLOT_MISMATCH,
+            context={
+                "reason": "slot_not_declared",
+                "slot": slot,
+                "declared_slots": list(shape["declared_slots"]),
+            },
+        )
+    return shape
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -358,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
                 t1 = json.loads(args.t1_bindings_json.read_bytes())
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise CalibrationLedgerError(RefusalCode.RESERVED_SLOT_MISMATCH) from exc
+            _declared_slot_shape(args.ledger, args.session_id, args.slot)
             _validate_reserved_bracket_slot(
                 args.ledger,
                 args.head_pin,
@@ -411,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
                     require_committed_pin=True,
                     repo_root=REPO_ROOT,
                 )
+            if args.session_id is not None and args.slot is not None:
+                _declared_slot_shape(args.ledger, args.session_id, args.slot)
             result = calibration_readiness(
                 args.ledger,
                 args.head_pin,
@@ -437,6 +474,11 @@ def main(argv: list[str] | None = None) -> int:
                 PREFLIGHT_SYSTEMATIC_SCREEN_S,
             )
 
+            # CH-1 ordering, preserved exactly: an unauthenticatable
+            # acceptance artifact refuses by name BEFORE any ledger path is
+            # touched.  A derivation session does not consult the screen, but
+            # it still refuses here rather than reading the ledger first --
+            # fail-closed, and the same refusal the desk already knows.
             if PREFLIGHT_SYSTEMATIC_SCREEN_S is None:
                 return emit_refusal(
                     RefusalCode.FROZEN_PROTOCOL_INVALID,
@@ -444,13 +486,22 @@ def main(argv: list[str] | None = None) -> int:
                     stream=sys.stdout,
                 )
 
+            shape = _declared_slot_shape(args.ledger, args.session_id, args.slot)
+            derivation = shape["session_kind"] == SESSION_KIND_DERIVATION
+            # A derivation session exists because NO acceptance judges this
+            # identity epoch yet.  Passing the active artifact's level screen
+            # into it would judge a new-epoch capture by the old epoch's
+            # threshold, so the screen is withheld and the disposition
+            # collapses to valid / ordinary-invalid.
+            systematic_screen_s = None if derivation else PREFLIGHT_SYSTEMATIC_SCREEN_S
+
             output = resume_finalize_bracket_session(
                 args.ledger,
                 args.head_pin,
                 session_id=args.session_id,
                 slot=args.slot,
                 plan_path=args.plan,
-                systematic_screen_s=PREFLIGHT_SYSTEMATIC_SCREEN_S,
+                systematic_screen_s=systematic_screen_s,
                 require_committed_pin=True,
                 repo_root=REPO_ROOT,
             )

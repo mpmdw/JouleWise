@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import copy
 import hashlib
 import json
 import math
 from dataclasses import replace
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 import subprocess
 import tempfile
@@ -19,6 +20,16 @@ import zlib
 
 from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
+    ACCEPTANCE_IDENTITY_FIELDS,
+    D079_EPOCH_CATALOG_ID,
+    BRACKET_SCREEN_QUANTUM_S,
+    D125_SCREEN_FLOOR_S,
+    ENVELOPE_MINIMUM_CORPUS_N,
+    PREFLIGHT_LEVEL_SCREEN_QUANTUM_S,
+    SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+    SESSION_KIND_BRACKET,
+    SESSION_KIND_DERIVATION,
+    SESSION_KIND_UNRESOLVED,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
     GENESIS_FIXTURE_ACCEPTANCE_SHA256,
@@ -32,13 +43,22 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R6_ACCEPTANCE_ID,
     ANCHOR_V3_R5_ACCEPTANCE_ID,
+    ISSUED_ACCEPTANCE_REGISTRY,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
+    PREDECESSOR_ACCEPTANCE_ID,
+    PRIOR_PREFIX_MODE_IMPORT_ONLY,
+    PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE,
+    SCREEN_RULE_RANGE_EQUALS_SCREEN,
     SUCCESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
     SUCCESSOR_ACCEPTANCE_ID,
     CalibrationCandidate,
     _canonical_sha256,
+    _D102_GENERATION_DERIVATIONS,
     _acceptance_artifact_sha256,
+    _is_derivation_kind_observation,
+    _observation_session_kind,
+    _prior_set_matches_import_cutoff_prefix,
     _valid_acceptance_bound,
     acceptance_generation_operatives,
     build_calibration_bracket_binding,
@@ -2281,6 +2301,257 @@ class CalibrationBracketingTests(unittest.TestCase):
             ("calibration_ledger_off_ledger_artifact",),
         )
 
+    def _derivation_night_row(self) -> LedgerObservation:
+        """One valid observation captured to DERIVE a future acceptance."""
+
+        hashes = {
+            "manifest.json": hashlib.sha256(b"derivation-manifest").hexdigest(),
+            "instrument_evidence.json": hashlib.sha256(
+                b"derivation-evidence"
+            ).hexdigest(),
+        }
+        return LedgerObservation(
+            sequence=99,
+            receipt_digest=hashlib.sha256(b"derivation-receipt").hexdigest(),
+            attempt_id="20260912T031500-derivation",
+            content_id=content_id_from_artifact_hashes(hashes),
+            artifact_sha256=MappingProxyType(hashes),
+            identity_epoch=MappingProxyType(
+                {
+                    field: self.bindings.get(field)
+                    for field in ACCEPTANCE_IDENTITY_FIELDS
+                }
+            ),
+            t1_bindings=MappingProxyType(
+                {field: self.bindings.get(field) for field in V2_BINDING_FIELDS}
+            ),
+            capture_wall_time_s="105.0",
+            exact_bound_lexeme_s="0.030",
+            disposition="valid",
+            custody_locator="instrument_validation/20260912T031500-derivation",
+            bracket_session_id="session-derivation-night-1",
+            bracket_slot="slot-03",
+        )
+
+    def _derivation_night_snapshot(self):
+        """A finalized derivation-kind session beside an ordinary claim pair.
+
+        The session object is a duck-typed stand-in for seat S2's
+        `session_kind`-bearing record, which is also the shape this module must
+        tolerate from a ledger written before that field existed.
+        """
+
+        candidates = [
+            self.candidate("pre", 99.0, "0.025"),
+            self.candidate("post", 111.0, "0.026"),
+        ]
+        row = self._derivation_night_row()
+        snapshot, registered = _fixture_snapshot(
+            candidates, extra_observations=(row,)
+        )
+        session = SimpleNamespace(
+            session_id="session-derivation-night-1",
+            state="finalized",
+            session_kind=SESSION_KIND_DERIVATION,
+        )
+        return replace(snapshot, bracket_sessions=(session,)), registered, row
+
+    def test_derivation_row_excluded_consistently_at_all_three_sites(self) -> None:
+        """COUNTERFACTUAL (CG46 addendum A-5): production call sites
+        discover_calibration_candidates, evaluate_calibration_bracket
+        (registered_valid), calibration_bracket_for_bundles (registered_valid
+        count).
+
+        The row is `valid`, same-epoch and inside the endpoint horizon, so the
+        existing session rule cannot bar it; only its session KIND can.  The
+        three sites enumerate one universe and compare it exactly, so a skip
+        present at some sites and missing at one is not a partial fix but a
+        different defect: every claim window on the machine refuses.  The
+        bracket-kind admit control shows the row is otherwise fully eligible.
+        """
+
+        snapshot, registered, row = self._derivation_night_snapshot()
+        bracket_snapshot = replace(
+            snapshot,
+            bracket_sessions=(
+                SimpleNamespace(
+                    session_id=snapshot.bracket_sessions[0].session_id,
+                    state="finalized",
+                    session_kind=SESSION_KIND_BRACKET,
+                ),
+            ),
+        )
+        by_attempt = {c.attempt_id: c for c in registered}
+        by_attempt[row.attempt_id] = replace(
+            registered[0],
+            attempt_id=row.attempt_id,
+            content_id=row.content_id,
+            ledger_receipt_digest=row.receipt_digest,
+        )
+        discover = patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=lambda observation, *, mode: by_attempt[
+                observation.attempt_id
+            ],
+        )
+
+        def bundles(active_snapshot, candidates):
+            reader = SimpleNamespace(
+                measured_window=lambda: SimpleNamespace(start_s=100.0, end_s=110.0),
+                metadata=lambda: {
+                    "instrument_calibration": {"bindings": self.bindings}
+                },
+            )
+            with (
+                patch(
+                    "joulewise.calibration_bracketing.BundleReader",
+                    return_value=reader,
+                ),
+                patch(
+                    "joulewise.calibration_bracketing."
+                    "discover_calibration_candidates",
+                    side_effect=lambda source, *, mode: tuple(candidates),
+                ),
+                patch(
+                    "joulewise.calibration_bracketing."
+                    "load_calibration_acceptance_bound",
+                    return_value=_current_estimator_acceptance_fixture(),
+                ),
+            ):
+                return calibration_bracket_for_bundles(
+                    Path("/caller-root"),
+                    [Path("/caller-root/window-member")],
+                    self.policy,
+                    ledger_snapshot=active_snapshot,
+                    _allow_unissued_fixture=True,
+                )
+
+        def evaluate(active_snapshot, candidates):
+            return _evaluate_with_unissued_acceptance(
+                list(candidates),
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=active_snapshot,
+                _allow_unissued_fixture=True,
+            )
+
+        # Site 1: discovery does not offer the derivation row.
+        with discover:
+            derivation_candidates = discover_calibration_candidates(snapshot)
+        self.assertNotIn(
+            row.attempt_id,
+            [candidate.attempt_id for candidate in derivation_candidates],
+        )
+        # Site 2: the registered universe does not contain it -- supplying the
+        # two ordinary endpoints alone satisfies the exact equality.
+        _result, reasons = evaluate(snapshot, registered)
+        self.assertNotIn("calibration_ledger_off_ledger_artifact", reasons)
+        # Site 3: the count does not include it.
+        _bundle_result, bundle_reasons = bundles(snapshot, registered)
+        self.assertNotIn("calibration_ledger_custody_invalid", bundle_reasons)
+
+        # ADMIT CONTROL: the same row under a BRACKET-kind session is offered,
+        # contained and counted at all three sites.
+        with discover:
+            bracket_candidates = discover_calibration_candidates(bracket_snapshot)
+        self.assertIn(
+            row.attempt_id,
+            [candidate.attempt_id for candidate in bracket_candidates],
+        )
+        _result, bracket_reasons = evaluate(bracket_snapshot, registered)
+        self.assertIn("calibration_ledger_off_ledger_artifact", bracket_reasons)
+        _bundle_result, bracket_bundle_reasons = bundles(
+            bracket_snapshot, registered
+        )
+        self.assertIn("calibration_ledger_custody_invalid", bracket_bundle_reasons)
+
+    def test_derivation_night_row_never_becomes_a_claim_endpoint(self) -> None:
+        # D-102 cl.2: a derivation-only capture is taken UNDER the prior
+        # artifact to build the next one.  Once the successor issues, the row
+        # is same-epoch, standalone-shaped and inside the endpoint horizon, so
+        # without this barrier a corpus member would judge itself.
+        snapshot, registered, row = self._derivation_night_snapshot()
+        by_attempt = {
+            candidate.attempt_id: candidate for candidate in registered
+        }
+        derivation_candidate = replace(
+            registered[0],
+            attempt_id=row.attempt_id,
+            content_id=row.content_id,
+            ledger_receipt_digest=row.receipt_digest,
+        )
+        by_attempt[row.attempt_id] = derivation_candidate
+        with patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=lambda observation, *, mode: by_attempt[
+                observation.attempt_id
+            ],
+        ):
+            discovered = discover_calibration_candidates(snapshot)
+        self.assertEqual(
+            [candidate.attempt_id for candidate in discovered],
+            [candidate.attempt_id for candidate in registered],
+        )
+        # A7's mutation counterfactual: the row IS in the registered universe
+        # unless the skip is present at that site too, and the anti-withholding
+        # equality is exact, so a one-sided skip refuses every claim window.
+        result, reasons = _evaluate_with_unissued_acceptance(
+            registered,
+            window_start_s=100.0,
+            window_end_s=110.0,
+            bindings=self.bindings,
+            policy=self.policy,
+            ledger_snapshot=snapshot,
+            _allow_unissued_fixture=True,
+        )
+        self.assertNotIn("calibration_ledger_off_ledger_artifact", reasons)
+        self.assertEqual(result["status"], "passed")
+
+    def test_derivation_night_row_is_skipped_by_the_bundles_universe_count(
+        self,
+    ) -> None:
+        # The third site of the same universe: `calibration_bracket_for_bundles`
+        # compares its own registered-valid COUNT against the discovery
+        # enumeration, so a derivation row left in it refuses every window with
+        # `calibration_ledger_custody_invalid` for as long as it is on the
+        # ledger.
+        snapshot, registered, _row = self._derivation_night_snapshot()
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(start_s=100.0, end_s=110.0),
+            metadata=lambda: {
+                "instrument_calibration": {"bindings": self.bindings}
+            },
+        )
+
+        def discover(source: object, *, mode: str):
+            return tuple(registered) if source is snapshot else ()
+
+        with (
+            patch(
+                "joulewise.calibration_bracketing.BundleReader",
+                return_value=reader,
+            ),
+            patch(
+                "joulewise.calibration_bracketing.discover_calibration_candidates",
+                side_effect=discover,
+            ),
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=_current_estimator_acceptance_fixture(),
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path("/caller-root"),
+                [Path("/caller-root/window-member")],
+                self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertNotIn("calibration_ledger_custody_invalid", reasons)
+        self.assertEqual(result["status"], "passed")
+
     def test_prior_set_subtraction_does_not_treat_known_holdout_as_new(self) -> None:
         # Trigger-subject (negative): the assertion is that NO trigger fires,
         # so the estimator view is pinned hermetically on both sides and the
@@ -2710,3 +2981,1278 @@ class CustodyCandidateProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- Generation-keyed issuance validation (cold-gate ruling 46, seat S3) ----
+#
+# Every fence below used to be a literal inside `_valid_acceptance_bound`: one
+# epoch catalog id, one prior-set size, one cutoff sequence, one prefix rule,
+# one screen rule.  A machine whose identity epoch changes needs a generation
+# derived from a corpus captured under the NEW epoch, on a ledger whose prefix
+# holds live rows and whose catalog names two epochs.  Moving the literals
+# would have re-keyed r3-r6 as well, so they became per-generation registry
+# fields and the checks read the row of the artifact in hand.
+_LEGACY_EPOCH_CATALOG_ID = "d102_legacy_epoch"
+_LIVE_EPOCH_CATALOG_ID = "d102_25g83_epoch"
+_LIVE_SESSION_ID = "session-derivation-night-1"
+_FOREIGN_SESSION_ID = "session-derivation-unregistered"
+
+
+def _decimal_statistics_for(values: list[Decimal]) -> dict[str, object]:
+    """Reproduce the artifact's own Decimal statistics recipe for a fixture."""
+
+    from decimal import ROUND_HALF_EVEN, localcontext
+
+    with localcontext() as context:
+        context.prec = 80
+        mean = sum(values, Decimal(0)) / Decimal(len(values))
+        sample_sd = (
+            sum((item - mean) ** 2 for item in values) / Decimal(len(values) - 1)
+        ).sqrt()
+        quantum = Decimal("0.000000000000000001")
+        return {
+            "minimum_s": str(min(values)),
+            "maximum_s": str(max(values)),
+            "range_s": str(max(values) - min(values)),
+            "mean_presentation_s": {
+                "value": str(mean.quantize(quantum, rounding=ROUND_HALF_EVEN)),
+                "label": "rounded_presentation",
+            },
+            "sample_sd_presentation_s": {
+                "value": str(sample_sd.quantize(quantum, rounding=ROUND_HALF_EVEN)),
+                "label": "rounded_presentation",
+            },
+        }
+
+
+def _reseal(artifact: dict) -> dict:
+    """Re-derive the artifact's self-digest after a fixture edit."""
+
+    artifact["derivation_sha256"] = _canonical_sha256(
+        {key: item for key, item in artifact.items() if key != "derivation_sha256"}
+    )
+    return artifact
+
+
+def _two_epoch_import_only_generation() -> tuple[str, dict, dict]:
+    """A registered import-only generation whose catalog names TWO epochs.
+
+    Purity is member-scoped: it fails only when a CORPUS MEMBER's own prior-set
+    row carries an epoch other than the one the artifact binds.  An import-only
+    generation isolates it, because the completeness check (which would also
+    fire on the same edit for a live generation) does not apply here.
+    """
+
+    acceptance_id = "d079_calibration_acceptance_two_epoch_fixture"
+    artifact = _synthetic_issued_artifact()
+    artifact["acceptance_id"] = acceptance_id
+    prior = artifact["prior_observation_set"]
+    identity = artifact["identity_epoch"]
+    legacy_epoch = dict(identity)
+    legacy_epoch["os_build"] = "24A000-legacy"
+    prior["epoch_catalog"] = {
+        D079_EPOCH_CATALOG_ID: dict(identity),
+        _LEGACY_EPOCH_CATALOG_ID: legacy_epoch,
+    }
+    generation = dict(_D102_GENERATION_DERIVATIONS[PREDECESSOR_ACCEPTANCE_ID])
+    generation["epoch_catalog_ids"] = (
+        D079_EPOCH_CATALOG_ID,
+        _LEGACY_EPOCH_CATALOG_ID,
+    )
+    return acceptance_id, generation, _reseal(artifact)
+
+
+def _live_prefix_generation(
+    member_values: list[str] | None = None,
+) -> tuple[str, dict, dict]:
+    """A synthetic `import_plus_live` generation, registered only in a test.
+
+    Shape of the real successor: the 38 imported genesis rows keep the OLD
+    epoch, the corpus is captured live under the NEW epoch inside one
+    registered derivation session, and one valid same-epoch row of that session
+    is excluded by a named mechanism rather than by its value.
+    """
+
+    acceptance_id = "d079_calibration_acceptance_live_prefix_fixture"
+    artifact = _synthetic_issued_artifact()
+    artifact["acceptance_id"] = acceptance_id
+    prior = artifact["prior_observation_set"]
+    legacy_epoch = dict(artifact["identity_epoch"])
+    live_epoch = dict(legacy_epoch)
+    live_epoch["os_build"] = "25G83"
+    artifact["identity_epoch"] = live_epoch
+    prior["epoch_catalog"] = {
+        D079_EPOCH_CATALOG_ID: legacy_epoch,
+        _LIVE_EPOCH_CATALOG_ID: live_epoch,
+    }
+    for row in prior["observations"]:
+        row["session_id"] = None
+
+    def _live_row(token: str, disposition: str, session_id: str) -> dict:
+        hashes = {
+            "manifest.json": hashlib.sha256(f"{token}-manifest".encode()).hexdigest(),
+            "instrument_evidence.json": hashlib.sha256(
+                f"{token}-evidence".encode()
+            ).hexdigest(),
+        }
+        return {
+            "hashes": hashes,
+            "row": {
+                "content_id": content_id_from_artifact_hashes(hashes),
+                "epoch_id": _LIVE_EPOCH_CATALOG_ID,
+                "disposition": disposition,
+                "attempt_id": token,
+                "session_id": session_id,
+            },
+        }
+
+    if member_values is None:
+        member_values = [
+            "0.020000000000000000",
+            "0.024000000000000000",
+            "0.026000000000000000",
+        ]
+    members: list[dict] = []
+    for index, value in enumerate(member_values):
+        token = f"20260912T{index:06d}-live"
+        built = _live_row(token, "valid", _LIVE_SESSION_ID)
+        prior["observations"].append(built["row"])
+        members.append(
+            {
+                "member_id": token,
+                "source_directory": f"runs_derivation_night_1/{token}",
+                "b_fiducial_s": value,
+                "manifest_sha256": built["hashes"]["manifest.json"],
+                "instrument_evidence_sha256": built["hashes"][
+                    "instrument_evidence.json"
+                ],
+            }
+        )
+    excluded = _live_row("20260913T000001-live", "valid", _LIVE_SESSION_ID)
+    prior["observations"].append(excluded["row"])
+    prior["observations"].append(
+        _live_row("20260913T000002-live", "ordinary-invalid", _LIVE_SESSION_ID)["row"]
+    )
+    artifact["derivation_notes"] = {
+        "excluded_members": [
+            {
+                "member_id": "20260913T000001-live",
+                "manifest_sha256": excluded["hashes"]["manifest.json"],
+                "instrument_evidence_sha256": excluded["hashes"][
+                    "instrument_evidence.json"
+                ],
+                "reason": "affine_clock_fit_empty",
+            }
+        ]
+    }
+    artifact["derivation_corpus"] = {
+        "selection": "every valid observation of the registration",
+        "n": len(members),
+        "members": members,
+    }
+    values = [Decimal(value) for value in member_values]
+    statistics = _decimal_statistics_for(values)
+    statistics.update(
+        {
+            "minimum_member_id": members[0]["member_id"],
+            "maximum_member_id": members[-1]["member_id"],
+            "prediction_95_two_draw_s": "0.007000",
+            "prediction_99_two_draw_s": "0.009000",
+        }
+    )
+    operatives = {
+        "bracket_screen_s": "0.006000",
+        "preflight_level_screen_s": "0.026000000000000",
+        "max_budgetable_excess_s": "0.003000",
+        "maximum_budgetable_drift_s": "0.009000",
+    }
+    artifact["decimal_derivation"] = {
+        "numeric_semantics": "decimal_source_lexemes",
+        "source_statistics": statistics,
+        "rounding": {
+            "mode": "ROUND_HALF_EVEN",
+            "operative_bracket_screen": {
+                "quantum_s": "0.000001",
+                "value_s": operatives["bracket_screen_s"],
+            },
+            "preflight_level_screen": {
+                "quantum_s": "0.000000000000001",
+                "value_s": operatives["preflight_level_screen_s"],
+            },
+        },
+        "ratified_operatives": {
+            **operatives,
+            "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
+            "operative_bound_rule": (
+                "max(pre_b_fiducial_s,post_b_fiducial_s)"
+                "+calibration_drift_allowance_s"
+            ),
+            "embedding_count": 1,
+        },
+    }
+    artifact["prospective_rederivation"]["triggers"] = [
+        "identity_field_change",
+        "protocol_or_estimator_byte_change",
+        "new_valid_same_identity_capture_expands_observed_range",
+        "corpus_doubles_from_3_to_6",
+        "new_systematic_failure_challenges_preflight_screen",
+    ]
+    sequence = 2 * len(prior["observations"])
+    artifact["ledger_cutoff"]["sequence"] = sequence
+    prior["cutoff"] = {
+        key: artifact["ledger_cutoff"][key]
+        for key in ("sequence", "head_digest", "ledger_schema")
+    }
+    inventory: dict[str, int] = {
+        disposition: 0
+        for disposition in ("ordinary-invalid", "systematic-invalid", "valid")
+    }
+    for row in prior["observations"]:
+        inventory[row["disposition"]] += 1
+    artifact["backfill_candidate"]["candidate_inventory"] = inventory
+    generation = {
+        "corpus_n": len(members),
+        "corpus_doubling_trigger": "corpus_doubles_from_3_to_6",
+        "prediction_95_two_draw_s": "0.007000",
+        "prediction_99_two_draw_s": "0.009000",
+        "operatives": operatives,
+        "epoch_catalog_ids": (D079_EPOCH_CATALOG_ID, _LIVE_EPOCH_CATALOG_ID),
+        "prior_prefix_mode": PRIOR_PREFIX_MODE_IMPORT_PLUS_LIVE,
+        "prior_observation_count": len(prior["observations"]),
+        "cutoff_sequence": sequence,
+        "screen_rule": SCREEN_RULE_RANGE_EQUALS_SCREEN,
+        # No predecessor: this fixture's ceiling is simply its own Q99.  The
+        # envelope cases register a predecessor row explicitly.
+        "predecessor_ceiling_s": None,
+        "registration_session_ids": (_LIVE_SESSION_ID,),
+    }
+    return acceptance_id, generation, _reseal(artifact)
+
+
+@contextlib.contextmanager
+def _registered_generation(acceptance_id: str, generation: dict):
+    """Register a fixture generation for the duration of one assertion."""
+
+    with patch.dict(
+        _D102_GENERATION_DERIVATIONS,
+        {acceptance_id: generation},
+        clear=False,
+    ), patch.dict(
+        ISSUED_ACCEPTANCE_REGISTRY,
+        {acceptance_id: {"path": None, "relative_path": "", "file_sha256": ""}},
+        clear=False,
+    ):
+        yield
+
+
+class GenerationKeyedIssuanceValidationTests(unittest.TestCase):
+    """Ruling 46 §R-a A2/A5/A6, §R-b V1/V6/V7, addendum A-3/A-5/A-7."""
+
+    def test_every_issued_generation_and_genesis_fixture_load_byte_identically(
+        self,
+    ) -> None:
+        # The regression the whole seat is fenced by: generalizing the literals
+        # must not re-key one issued byte.  Every artifact under
+        # configs/calibration/ is swept, not just the live default.
+        directory = DEFAULT_ACCEPTANCE_BOUND_PATH.parent
+        issued = sorted(directory.glob("calibration_acceptance_*.json"))
+        self.assertEqual(len(issued), len(ISSUED_ACCEPTANCE_REGISTRY))
+        by_path = {
+            entry["path"]: (acceptance_id, entry)
+            for acceptance_id, entry in ISSUED_ACCEPTANCE_REGISTRY.items()
+        }
+        for path in issued:
+            with self.subTest(artifact=path.name):
+                acceptance_id, entry = by_path[path]
+                raw = path.read_bytes()
+                self.assertEqual(
+                    hashlib.sha256(raw).hexdigest(), entry["file_sha256"]
+                )
+                artifact = load_calibration_acceptance_bound(path)
+                self.assertIsNotNone(artifact)
+                self.assertEqual(artifact["acceptance_id"], acceptance_id)
+                self.assertEqual(artifact, json.loads(raw))
+                self.assertTrue(_valid_acceptance_bound(artifact))
+        fixture = _unissued_acceptance_fixture()
+        self.assertTrue(_valid_acceptance_bound(fixture))
+        self.assertEqual(
+            _acceptance_artifact_sha256(fixture), GENESIS_FIXTURE_ACCEPTANCE_SHA256
+        )
+
+    def test_every_registered_generation_row_carries_the_full_schema(self) -> None:
+        for acceptance_id, generation in _D102_GENERATION_DERIVATIONS.items():
+            with self.subTest(acceptance_id=acceptance_id):
+                self.assertEqual(
+                    generation["epoch_catalog_ids"], (D079_EPOCH_CATALOG_ID,)
+                )
+                self.assertEqual(
+                    generation["prior_prefix_mode"], PRIOR_PREFIX_MODE_IMPORT_ONLY
+                )
+                self.assertEqual(generation["prior_observation_count"], 38)
+                self.assertEqual(generation["cutoff_sequence"], 76)
+                self.assertEqual(
+                    generation["screen_rule"], SCREEN_RULE_RANGE_EQUALS_SCREEN
+                )
+                self.assertEqual(generation["registration_session_ids"], ())
+                # Neither registered generation is a D-125 envelope successor:
+                # the n=19 corpus is the genesis, and the anchor-v3 r-series is
+                # a re-derivation of the same captures under changed estimator
+                # bytes, whose ceiling is its own Q99 and sits BELOW n=19's.
+                self.assertIsNone(generation["predecessor_ceiling_s"])
+                self.assertEqual(
+                    generation["operatives"]["maximum_budgetable_drift_s"],
+                    generation["prediction_99_two_draw_s"],
+                )
+
+    def test_registered_cutoff_sequence_is_read_from_the_row_not_a_literal(
+        self,
+    ) -> None:
+        artifact = load_calibration_acceptance_bound()
+        self.assertTrue(_valid_acceptance_bound(artifact))
+        # Both numbers move together so the row stays internally consistent
+        # (cutoff = 2 x count); only the comparison against the ARTIFACT can
+        # refuse, which is what makes this counterfactual name the right site.
+        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R6_ACCEPTANCE_ID])
+        rekeyed["cutoff_sequence"] = 80
+        rekeyed["prior_observation_count"] = 40
+        with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_generation_row_missing_a_fence_refuses_rather_than_defaulting(
+        self,
+    ) -> None:
+        artifact = load_calibration_acceptance_bound()
+        for dropped in (
+            "epoch_catalog_ids",
+            "prior_prefix_mode",
+            "prior_observation_count",
+            "cutoff_sequence",
+            "screen_rule",
+            "predecessor_ceiling_s",
+            "registration_session_ids",
+        ):
+            with self.subTest(dropped=dropped):
+                partial = {
+                    key: item
+                    for key, item in _D102_GENERATION_DERIVATIONS[
+                        ANCHOR_V3_R6_ACCEPTANCE_ID
+                    ].items()
+                    if key != dropped
+                }
+                with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, partial):
+                    self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_unimplemented_screen_rule_refuses_instead_of_falling_back(self) -> None:
+        # A future generation may be derived under the D-125 envelope rule
+        # (V7, Ed's open item; the ceiling refusal is seat S4's).  Adding that
+        # name to the registry's vocabulary must NOT let an artifact through on
+        # the range-equals-screen comparison it was not derived under, so the
+        # vocabulary is widened here and only the comparison site can refuse.
+        from joulewise import calibration_bracketing as module
+
+        artifact = load_calibration_acceptance_bound()
+        rekeyed = dict(_D102_GENERATION_DERIVATIONS[ANCHOR_V3_R6_ACCEPTANCE_ID])
+        rekeyed["screen_rule"] = "max_range_or_d125_floor"
+        with patch.object(
+            module,
+            "_REGISTERED_SCREEN_RULES",
+            frozenset({SCREEN_RULE_RANGE_EQUALS_SCREEN, "max_range_or_d125_floor"}),
+        ), _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # And the vocabulary fence itself still refuses an unknown name.
+        with _registered_generation(ANCHOR_V3_R6_ACCEPTANCE_ID, rekeyed):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_two_epoch_catalog_admits_and_an_unregistered_catalog_refuses(
+        self,
+    ) -> None:
+        acceptance_id, generation, artifact = _two_epoch_import_only_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+            narrowed = copy.deepcopy(artifact)
+            del narrowed["prior_observation_set"]["epoch_catalog"][
+                _LEGACY_EPOCH_CATALOG_ID
+            ]
+            self.assertFalse(_valid_acceptance_bound(_reseal(narrowed)))
+            widened = copy.deepcopy(artifact)
+            widened["prior_observation_set"]["epoch_catalog"]["unregistered"] = dict(
+                widened["identity_epoch"]
+            )
+            self.assertFalse(_valid_acceptance_bound(_reseal(widened)))
+
+    def test_catalog_that_names_no_entry_equal_to_the_bound_identity_refuses(
+        self,
+    ) -> None:
+        acceptance_id, generation, artifact = _two_epoch_import_only_generation()
+        drifted = copy.deepcopy(artifact)
+        drifted["identity_epoch"] = dict(drifted["identity_epoch"])
+        drifted["identity_epoch"]["os_build"] = "25G83"
+        with _registered_generation(acceptance_id, generation):
+            self.assertFalse(_valid_acceptance_bound(_reseal(drifted)))
+
+    def test_corpus_purity_refuses_a_member_row_from_another_epoch(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (purity)."""
+
+        acceptance_id, generation, artifact = _two_epoch_import_only_generation()
+        member_id = artifact["derivation_corpus"]["members"][0]["member_id"]
+        contaminated = copy.deepcopy(artifact)
+        for row in contaminated["prior_observation_set"]["observations"]:
+            if row["attempt_id"] == member_id:
+                row["epoch_id"] = _LEGACY_EPOCH_CATALOG_ID
+                break
+        else:  # pragma: no cover - fixture guard
+            self.fail("no prior row for the first corpus member")
+        with _registered_generation(acceptance_id, generation):
+            self.assertFalse(_valid_acceptance_bound(_reseal(contaminated)))
+            # Purity is member-scoped, not a blanket single-epoch rule: a
+            # NON-member row of the other epoch is exactly what a two-epoch
+            # catalog exists to carry.
+            non_member = copy.deepcopy(artifact)
+            member_ids = {
+                member["member_id"]
+                for member in non_member["derivation_corpus"]["members"]
+            }
+            for row in non_member["prior_observation_set"]["observations"]:
+                if row["attempt_id"] not in member_ids:
+                    row["epoch_id"] = _LEGACY_EPOCH_CATALOG_ID
+                    break
+            self.assertTrue(_valid_acceptance_bound(_reseal(non_member)))
+
+    def test_live_prefix_generation_admits_with_its_named_exclusion(self) -> None:
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_completeness_refuses_an_unaccounted_valid_registration_row(
+        self,
+    ) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        withheld = copy.deepcopy(artifact)
+        withheld["derivation_notes"]["excluded_members"] = []
+        with _registered_generation(acceptance_id, generation):
+            self.assertFalse(_valid_acceptance_bound(_reseal(withheld)))
+
+    def test_completeness_refuses_an_unregistered_exclusion_reason(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        outcome_shaped = copy.deepcopy(artifact)
+        outcome_shaped["derivation_notes"]["excluded_members"][0]["reason"] = (
+            "b_fiducial_s_above_the_previous_level_screen"
+        )
+        with _registered_generation(acceptance_id, generation):
+            self.assertFalse(_valid_acceptance_bound(_reseal(outcome_shaped)))
+
+    def test_completeness_refuses_an_exclusion_that_names_no_prior_row(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        phantom = copy.deepcopy(artifact)
+        phantom["derivation_notes"]["excluded_members"][0]["manifest_sha256"] = (
+            hashlib.sha256(b"phantom-exclusion").hexdigest()
+        )
+        with _registered_generation(acceptance_id, generation):
+            self.assertFalse(_valid_acceptance_bound(_reseal(phantom)))
+
+    def test_valid_same_epoch_row_outside_the_registration_refuses_issuance(
+        self,
+    ) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._valid_acceptance_bound (completeness)."""
+
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        foreign = copy.deepcopy(artifact)
+        member_ids = {
+            member["member_id"]
+            for member in foreign["derivation_corpus"]["members"]
+        }
+        for row in foreign["prior_observation_set"]["observations"]:
+            if row["attempt_id"] in member_ids:
+                row["session_id"] = _FOREIGN_SESSION_ID
+                break
+        with _registered_generation(acceptance_id, generation):
+            self.assertFalse(_valid_acceptance_bound(_reseal(foreign)))
+
+    def test_completeness_does_not_range_over_the_predecessor_epoch(self) -> None:
+        # The 38 imported rows include 30 valid ones under the OLD epoch, none
+        # of which is a member: completeness must not demand they be excluded.
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        old_epoch_valid = sum(
+            row["disposition"] == "valid"
+            and row["epoch_id"] == D079_EPOCH_CATALOG_ID
+            for row in artifact["prior_observation_set"]["observations"]
+        )
+        self.assertGreater(old_epoch_valid, 0)
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    @staticmethod
+    def _prefix_snapshot(
+        artifact: dict,
+        *,
+        session_kind: str | None = SESSION_KIND_DERIVATION,
+    ) -> CalibrationLedgerSnapshot:
+        """Build the exact cutoff prefix an artifact's prior set declares.
+
+        `session_kind` is the kind the ledger records for every session the
+        prior set names: `None` drops the session records entirely, which is
+        the shape of a registration pointing at sessions the ledger never held.
+        """
+
+        prior = artifact["prior_observation_set"]
+        catalog = prior["epoch_catalog"]
+        observations = tuple(
+            LedgerObservation(
+                sequence=2 * index,
+                receipt_digest=hashlib.sha256(
+                    f"prefix-receipt-{index}".encode()
+                ).hexdigest(),
+                attempt_id=row["attempt_id"],
+                content_id=row["content_id"],
+                artifact_sha256=MappingProxyType({}),
+                identity_epoch=MappingProxyType(dict(catalog[row["epoch_id"]])),
+                t1_bindings=MappingProxyType(
+                    {field: None for field in V2_BINDING_FIELDS}
+                ),
+                capture_wall_time_s="1.0",
+                exact_bound_lexeme_s="0.025",
+                disposition=row["disposition"],
+                custody_locator=f"/prefix/{row['attempt_id']}",
+                observation_kind=(
+                    "live-capture"
+                    if row.get("session_id")
+                    else "historical-import"
+                ),
+                bracket_session_id=row.get("session_id"),
+            )
+            for index, row in enumerate(prior["observations"], start=1)
+        )
+        cutoff = artifact["ledger_cutoff"]
+        session_ids = sorted(
+            {
+                row["session_id"]
+                for row in prior["observations"]
+                if row.get("session_id")
+            }
+        )
+        sessions = (
+            ()
+            if session_kind is None
+            else tuple(
+                SimpleNamespace(
+                    session_id=session_id,
+                    state="finalized",
+                    session_kind=session_kind,
+                )
+                for session_id in session_ids
+            )
+        )
+        return CalibrationLedgerSnapshot(
+            ledger_schema=LEDGER_SCHEMA,
+            ledger_path=Path("prefix-ledger.jsonl"),
+            bracket_sessions=sessions,
+            head_sequence=cutoff["sequence"],
+            head_digest=cutoff["head_digest"],
+            receipts=(),
+            observations=observations,
+            refusal_reasons=(),
+            baseline_sequence=cutoff["sequence"],
+            baseline_digest=cutoff["head_digest"],
+        )
+
+    def test_import_only_prefix_still_refuses_a_single_live_row(self) -> None:
+        # The fence that makes the genesis import the SOLE provenance of every
+        # generation issued to date survives the generalization untouched.
+        acceptance_id, generation, artifact = _two_epoch_import_only_generation()
+        snapshot = self._prefix_snapshot(artifact)
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(
+                _prior_set_matches_import_cutoff_prefix(artifact, snapshot)
+            )
+            contaminated = replace(
+                snapshot,
+                observations=(
+                    replace(
+                        snapshot.observations[0], observation_kind="live-capture"
+                    ),
+                    *snapshot.observations[1:],
+                ),
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(artifact, contaminated)
+            )
+
+    def test_live_prefix_admits_finalized_rows_and_refuses_unresolved_ones(
+        self,
+    ) -> None:
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        snapshot = self._prefix_snapshot(artifact)
+        live = [
+            observation
+            for observation in snapshot.observations
+            if not observation.is_historical_import
+        ]
+        self.assertTrue(live)
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(
+                _prior_set_matches_import_cutoff_prefix(artifact, snapshot)
+            )
+            # A slot that was claimed and never finalized is not an
+            # observation; nothing may be derived from it.
+            abandoned = copy.deepcopy(artifact)
+            for row in abandoned["prior_observation_set"]["observations"]:
+                if row["attempt_id"] == live[0].attempt_id:
+                    row["disposition"] = "unresolved"
+            abandoned_snapshot = replace(
+                snapshot,
+                observations=tuple(
+                    replace(observation, disposition="abandoned")
+                    if observation.attempt_id == live[0].attempt_id
+                    else observation
+                    for observation in snapshot.observations
+                ),
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    _reseal(abandoned), abandoned_snapshot
+                )
+            )
+            # A pending reservation carries no content id.
+            pending_snapshot = replace(
+                snapshot,
+                observations=tuple(
+                    replace(observation, content_id=None)
+                    if observation.attempt_id == live[0].attempt_id
+                    else observation
+                    for observation in snapshot.observations
+                ),
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(artifact, pending_snapshot)
+            )
+
+    def test_live_prefix_binds_every_row_to_the_session_it_declares(self) -> None:
+        # What makes `registration_session_ids` ledger-bound rather than an
+        # assertion the artifact makes about itself.
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        snapshot = self._prefix_snapshot(artifact)
+        live = next(
+            observation
+            for observation in snapshot.observations
+            if not observation.is_historical_import
+        )
+        relabelled = replace(
+            snapshot,
+            observations=tuple(
+                replace(observation, bracket_session_id=_FOREIGN_SESSION_ID)
+                if observation.attempt_id == live.attempt_id
+                else observation
+                for observation in snapshot.observations
+            ),
+        )
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(
+                _prior_set_matches_import_cutoff_prefix(artifact, snapshot)
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(artifact, relabelled)
+            )
+
+    def test_unregistered_generation_never_matches_a_prefix(self) -> None:
+        _acceptance_id, _generation, artifact = _live_prefix_generation()
+        snapshot = self._prefix_snapshot(artifact)
+        self.assertFalse(
+            _prior_set_matches_import_cutoff_prefix(artifact, snapshot)
+        )
+
+    def test_registration_must_name_derivation_kind_sessions(self) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._prior_set_matches_import_cutoff_prefix
+        (registration kind)."""
+
+        # F1.  The registration is a claim about WHY those captures exist.  A
+        # bracket-kind session's rows were taken to measure something, under an
+        # acceptance that already judged them; treating them as pre-registered
+        # derivation captures would let the successor's screens be built from
+        # whatever the machine happened to be doing.
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact,
+                    self._prefix_snapshot(
+                        artifact, session_kind=SESSION_KIND_DERIVATION
+                    ),
+                )
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact, self._prefix_snapshot(artifact, session_kind="bracket")
+                )
+            )
+            # A ledger written before the kind field existed reads as `bracket`
+            # and refuses; so does a registration naming a session the ledger
+            # does not hold at all.
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact, self._prefix_snapshot(artifact, session_kind="")
+                )
+            )
+            self.assertFalse(
+                _prior_set_matches_import_cutoff_prefix(
+                    artifact, self._prefix_snapshot(artifact, session_kind=None)
+                )
+            )
+
+    _PREDECESSOR_FIXTURE_ID = "d079_calibration_acceptance_predecessor_fixture"
+
+    def _envelope_case(self, predecessor: str | None, q99: str, ceiling: str):
+        """Move the row AND the artifact onto one lineage position.
+
+        A row-only move is refused upstream by the row-versus-artifact
+        comparisons of the 99 % prediction and the operatives, which proves
+        nothing about the ceiling relation.  Every case here therefore carries
+        the artifact with it, retunes the budgetable excess so
+        `screen + excess == maximum` still holds, and leaves the screen at
+        0.006000 so `screen < ceiling` still holds.
+        """
+
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        excess = str(Decimal(ceiling) - Decimal(generation["operatives"][
+            "bracket_screen_s"
+        ]))
+        operatives = {
+            **generation["operatives"],
+            "max_budgetable_excess_s": excess,
+            "maximum_budgetable_drift_s": ceiling,
+        }
+        row = dict(generation)
+        row["operatives"] = operatives
+        row["prediction_99_two_draw_s"] = q99
+        row["predecessor_ceiling_s"] = predecessor
+        # Jointly present or jointly absent: a genesis case names no
+        # predecessor at all, which is what the two registered rows look like.
+        if predecessor is None:
+            row.pop("predecessor_acceptance_id", None)
+        else:
+            row["predecessor_acceptance_id"] = self._PREDECESSOR_FIXTURE_ID
+        tuned = copy.deepcopy(artifact)
+        tuned["decimal_derivation"]["ratified_operatives"].update(operatives)
+        tuned["decimal_derivation"]["source_statistics"][
+            "prediction_99_two_draw_s"
+        ] = q99
+        return acceptance_id, row, _reseal(tuned)
+
+    @contextlib.contextmanager
+    def _predecessor_row(self, ceiling: str | None = "0.009"):
+        """Register the predecessor generation the lineage is read back from."""
+
+        if ceiling is None:
+            yield
+            return
+        predecessor = dict(_D102_GENERATION_DERIVATIONS[PREDECESSOR_ACCEPTANCE_ID])
+        predecessor["operatives"] = {
+            **predecessor["operatives"],
+            "maximum_budgetable_drift_s": ceiling,
+        }
+        predecessor["prediction_99_two_draw_s"] = ceiling
+        with _registered_generation(self._PREDECESSOR_FIXTURE_ID, predecessor):
+            yield
+
+    def test_envelope_ceiling_equals_max_of_predecessor_and_own_q99(self) -> None:
+        # Ruling 69 §Q1's admit control, which the round-1 clause wrongly
+        # refused: a legitimate D-125 successor whose INHERITED ceiling won the
+        # max, so the ceiling in force sits above this corpus's own Q99.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.009", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.009"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_envelope_ceiling_that_fell_below_its_predecessor_refuses(self) -> None:
+        # D-125 cl.2's whole point: a lineage's ceiling can never FALL.  An
+        # inequality against the row's own Q99 admits this input, which is why
+        # the relation is an exact equation.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_envelope_ceiling_invented_above_both_inputs_refuses(self) -> None:
+        # The other direction: headroom the corpus did not earn and the
+        # predecessor did not carry.  `ceiling >= own Q99` admits it too.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0085", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_genesis_ceiling_that_is_not_its_own_q99_refuses(self) -> None:
+        # With no predecessor the relation collapses to `ceiling == own Q99`,
+        # which is what all six issued artifacts satisfy today.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.008", ceiling="0.009"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_absent_predecessor_ceiling_is_none_and_never_a_present_zero(
+        self,
+    ) -> None:
+        # ABSENT and MALFORMED are different facts.  `None` says "no
+        # predecessor"; a present `0`, or an unparseable string, says the row
+        # is broken -- and reading `0` as absence would silently convert an
+        # envelope successor into a genesis one.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.009000", ceiling="0.009000"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        for malformed in (0, "", "not-a-decimal", Decimal("0.009")):
+            with self.subTest(predecessor=repr(malformed)):
+                broken = dict(row)
+                broken["predecessor_ceiling_s"] = malformed
+                with self._predecessor_row("0.009"), _registered_generation(
+                    acceptance_id, broken
+                ):
+                    self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_predecessor_ceiling_must_match_the_predecessor_row(self) -> None:
+        # The number is read BACK from the predecessor's own registered row, so
+        # a lineage cannot be rebased by editing one string in the successor.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.009", q99="0.008", ceiling="0.009"
+        )
+        with self._predecessor_row("0.009"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The predecessor row says something else.
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # No predecessor row is registered at all.
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # The row names no predecessor generation.
+        unnamed = dict(row)
+        unnamed.pop("predecessor_acceptance_id")
+        with self._predecessor_row("0.009"), _registered_generation(
+            acceptance_id, unnamed
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_envelope_ceiling_equals_own_q99_when_own_q99_dominates(self) -> None:
+        # Ruling 69 probe 3's fourth row, and the OTHER direction of the max:
+        # here the corpus's own Q99 is the larger input, so the ceiling must
+        # follow it, not the predecessor.  Without this case the relation could
+        # be written `ceiling == predecessor` and nothing would notice.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0085", q99="0.009000", ceiling="0.009000"
+        )
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The same lineage with the ceiling pinned to the predecessor instead:
+        # a budget ceiling BELOW this corpus's own 99 % two-draw prediction.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0085", q99="0.009000", ceiling="0.0085"
+        )
+        with self._predecessor_row("0.0085"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_malformed_ceiling_with_an_unresolvable_predecessor_refuses(self) -> None:
+        # Both sides of the read-back comparison are `None` here: the lexeme is
+        # present but unparseable, and the named predecessor row does not
+        # exist.  Without the `registered is None` disjunct the comparison
+        # `None != None` is False and the row is admitted AS A GENESIS -- the
+        # lineage fence switched off by two independent defects at once.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.009", q99="0.009000", ceiling="0.009000"
+        )
+        broken = dict(row)
+        broken["predecessor_ceiling_s"] = 0
+        broken["predecessor_acceptance_id"] = "no-such-generation"
+        with _registered_generation(acceptance_id, broken):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_lineage_fields_are_jointly_present_or_jointly_absent(self) -> None:
+        # A named predecessor with a nulled ceiling used to take the genesis
+        # arm, laundering the very violation the envelope relation refuses when
+        # the row is honest: the predecessor's ceiling is 0.0095 and this row
+        # would budget 0.009.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.009000", ceiling="0.009000"
+        )
+        nulled = dict(row)
+        nulled["predecessor_ceiling_s"] = None
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, nulled
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # Same row, honest: the ceiling must be max(0.0095, 0.009) = 0.0095.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.009000", ceiling="0.0095"
+        )
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, row
+        ):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The converse direction, already refused and kept: a ceiling with no
+        # predecessor named at all.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor="0.0095", q99="0.009000", ceiling="0.0095"
+        )
+        unnamed = dict(row)
+        unnamed.pop("predecessor_acceptance_id")
+        with self._predecessor_row("0.0095"), _registered_generation(
+            acceptance_id, unnamed
+        ):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+        # And a genesis row that names nothing still admits.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.009000", ceiling="0.009000"
+        )
+        genesis = dict(row)
+        genesis.pop("predecessor_acceptance_id", None)
+        with _registered_generation(acceptance_id, genesis):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    @staticmethod
+    def _envelope_member_values(count: int, step: str) -> list[str]:
+        """`count` distinct ascending member bounds spaced by `step`."""
+
+        base = Decimal("0.020000000000000000")
+        return [str(base + Decimal(step) * index) for index in range(count)]
+
+    def _envelope_fixture(
+        self,
+        *,
+        screen: str,
+        ceiling: str,
+        member_values: list[str],
+        screen_rule: str = SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+        d125_ruling: object = "D-125 cl.2 envelope ruling",
+    ):
+        """A generation derived under the pre-registered D-125 envelope.
+
+        The artifact's `source_statistics` and its preflight level screen are
+        RECOMPUTED from the member table, because the validator derives both
+        from that table itself; a fixture that edits only the operatives
+        refuses for an unrelated reason and proves nothing about the screen.
+        """
+
+        acceptance_id, generation, artifact = _live_prefix_generation(member_values)
+        values = [Decimal(value) for value in member_values]
+        quantized_range = (max(values) - min(values)).quantize(
+            BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
+        )
+        level_screen = str(
+            max(values).quantize(
+                PREFLIGHT_LEVEL_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN
+            )
+        )
+        operatives = {
+            **generation["operatives"],
+            "bracket_screen_s": screen,
+            "preflight_level_screen_s": level_screen,
+            "max_budgetable_excess_s": str(Decimal(ceiling) - Decimal(screen)),
+            "maximum_budgetable_drift_s": ceiling,
+        }
+        row = dict(generation)
+        row["operatives"] = operatives
+        row["screen_rule"] = screen_rule
+        row["corpus_n"] = len(member_values)
+        row["prediction_99_two_draw_s"] = ceiling
+        row["predecessor_ceiling_s"] = _D102_GENERATION_DERIVATIONS[
+            ANCHOR_V3_R6_ACCEPTANCE_ID
+        ]["operatives"]["maximum_budgetable_drift_s"]
+        row["predecessor_acceptance_id"] = ANCHOR_V3_R6_ACCEPTANCE_ID
+        if d125_ruling is not None:
+            row["d125_ruling"] = d125_ruling
+        tuned = copy.deepcopy(artifact)
+        members = tuned["derivation_corpus"]["members"]
+        member_ids = [member["member_id"] for member in members]
+        statistics = _decimal_statistics_for(values)
+        statistics.update(
+            {
+                "minimum_member_id": member_ids[values.index(min(values))],
+                "maximum_member_id": member_ids[values.index(max(values))],
+                "prediction_95_two_draw_s": generation["prediction_95_two_draw_s"],
+                "prediction_99_two_draw_s": ceiling,
+            }
+        )
+        derivation = tuned["decimal_derivation"]
+        derivation["source_statistics"] = statistics
+        derivation["ratified_operatives"].update(operatives)
+        derivation["rounding"]["operative_bracket_screen"]["value_s"] = screen
+        derivation["rounding"]["preflight_level_screen"]["value_s"] = level_screen
+        return acceptance_id, row, _reseal(tuned), str(quantized_range)
+
+    def _floored_envelope_case(
+        self,
+        *,
+        screen: str = "0.010818",
+        screen_rule: str = SCREEN_RULE_FLOORED_RANGE_ENVELOPE,
+        d125_ruling: object = "D-125 cl.2 envelope ruling",
+        member_count: int = 17,
+    ):
+        """An envelope generation whose range is BELOW the genesis floor.
+
+        17 members spaced 0.0001 s apart give a quantized range of 0.0016,
+        under the 0.010818 floor, so the floor binds and the screen is the
+        floor rather than the range.  The lineage is real: r6's registered
+        ceiling, named by r6's own id; own Q99 0.012000 wins the ceiling max,
+        keeping the screen strictly below the ceiling.
+        """
+
+        acceptance_id, row, artifact, quantized_range = self._envelope_fixture(
+            screen=screen,
+            ceiling="0.012000",
+            member_values=self._envelope_member_values(
+                member_count, "0.000100000000000000"
+            ),
+            screen_rule=screen_rule,
+            d125_ruling=d125_ruling,
+        )
+        self.assertLess(Decimal(quantized_range), D125_SCREEN_FLOOR_S)
+        return acceptance_id, row, artifact
+
+    def _range_bound_envelope_case(self, *, screen: str):
+        """An envelope generation whose corpus range EXCEEDS the floor.
+
+        This is the branch the pre-registration expects to be the common one:
+        `S = max(range, 0.010818)` with the range winning.  17 members spaced
+        0.0015625 s apart give a quantized range of 0.025000.
+        """
+
+        acceptance_id, row, artifact, quantized_range = self._envelope_fixture(
+            screen=screen,
+            ceiling="0.030000",
+            member_values=self._envelope_member_values(
+                17, "0.001562500000000000"
+            ),
+        )
+        self.assertGreater(Decimal(quantized_range), D125_SCREEN_FLOOR_S)
+        return acceptance_id, row, artifact, quantized_range
+
+    def test_envelope_generation_below_the_ruled_corpus_size_floor_refuses(
+        self,
+    ) -> None:
+        """REFUSE: production call site
+        calibration_bracketing._registered_generation_row_is_complete
+        (envelope corpus-size floor).
+
+        D-126 cl.2 ratified n >= 19; cold gate 46 addendum A-2 records n = 17
+        as the only departure ever ruled.  Below 17 the df = n-1 tail the 99 %
+        two-draw prediction rests on stops supporting the ceiling derived from
+        it, so the row refuses rather than issuing a number it cannot carry.
+        """
+
+        for count, admitted in ((16, False), (17, True), (19, True)):
+            with self.subTest(corpus_n=count):
+                acceptance_id, row, artifact = self._floored_envelope_case(
+                    member_count=count
+                )
+                self.assertEqual(row["corpus_n"], count)
+                with _registered_generation(acceptance_id, row):
+                    self.assertEqual(_valid_acceptance_bound(artifact), admitted)
+
+    def test_envelope_screen_is_the_range_once_the_range_exceeds_the_floor(
+        self,
+    ) -> None:
+        # The branch the pre-registration expects to be common, and the one the
+        # round-4 tests never reached: with a corpus range of 0.025000 the max
+        # is won by the RANGE, so the screen is the range and not the floor.
+        acceptance_id, row, artifact, quantized_range = (
+            self._range_bound_envelope_case(screen="0.025000")
+        )
+        self.assertEqual(quantized_range, "0.025000")
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_envelope_screen_understated_at_the_floor_refuses(self) -> None:
+        # The defect the envelope rule exists to bar: a screen pinned at the
+        # floor while this corpus's own range is 0.025000 understates it by
+        # 0.014182 s, so drift that should spend budget would pass free.
+        # The ADMIT control above shares this fixture and the same recomputed
+        # statistics, differing ONLY in `bracket_screen_s`, which is what makes
+        # this refusal attributable to the screen term rather than to any
+        # completeness failure.
+        floor_screen = str(D125_SCREEN_FLOOR_S)
+        acceptance_id, row, artifact, quantized_range = (
+            self._range_bound_envelope_case(screen=floor_screen)
+        )
+        self.assertEqual(row["operatives"]["bracket_screen_s"], "0.010818")
+        self.assertNotEqual(quantized_range, floor_screen)
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_floored_envelope_screen_rule_admits_a_floor_bound_generation(
+        self,
+    ) -> None:
+        # The route the pre-registration names: a corpus whose range came in
+        # below the genesis screen floor.  Under the envelope the screen is the
+        # floor, so it can never fall below the value the instrument was first
+        # characterised against.
+        acceptance_id, row, artifact = self._floored_envelope_case()
+        self.assertEqual(
+            Decimal(row["operatives"]["bracket_screen_s"]), D125_SCREEN_FLOOR_S
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_envelope_generation_that_ignored_the_floor_refuses(self) -> None:
+        # The same generation with the screen set to its own quantized range,
+        # which is what the range-equals-screen rule would give and what the
+        # envelope forbids while the floor is higher.
+        acceptance_id, row, artifact = self._floored_envelope_case(
+            screen="0.001600"
+        )
+        # Tie the screen to the fixture, so the case cannot silently stop being
+        # "the screen equals the range" when the member table changes.
+        self.assertEqual(
+            Decimal(
+                artifact["decimal_derivation"]["source_statistics"]["range_s"]
+            ).quantize(BRACKET_SCREEN_QUANTUM_S, rounding=ROUND_HALF_EVEN),
+            Decimal(row["operatives"]["bracket_screen_s"]),
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_floor_bound_screen_refuses_under_the_range_equals_screen_rule(
+        self,
+    ) -> None:
+        # And the converse: a row that registers the OLD rule name cannot carry
+        # a floored screen.  The two rules agree whenever the range exceeds the
+        # floor and disagree exactly here, so the name has to be honest.
+        acceptance_id, row, artifact = self._floored_envelope_case(
+            screen_rule=SCREEN_RULE_RANGE_EQUALS_SCREEN
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_envelope_generation_requires_a_non_empty_d125_ruling(self) -> None:
+        # The pre-registration: issuance refuses while the D-125 reference is
+        # absent.  It is conditional on the rule, not unconditional -- the six
+        # issued rows predate the envelope and carry none.
+        for ruling in (None, "", 0, ["D-125"]):
+            with self.subTest(d125_ruling=repr(ruling)):
+                acceptance_id, row, artifact = self._floored_envelope_case(
+                    d125_ruling=None
+                )
+                if ruling is not None:
+                    row["d125_ruling"] = ruling
+                self.assertEqual("d125_ruling" in row, ruling is not None)
+                with _registered_generation(acceptance_id, row):
+                    self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_range_equals_screen_rows_need_no_d125_ruling(self) -> None:
+        # The six issued generations carry no `d125_ruling` and must keep
+        # validating; the key is required only of envelope rows.
+        for acceptance_id, generation in _D102_GENERATION_DERIVATIONS.items():
+            with self.subTest(acceptance_id=acceptance_id):
+                self.assertNotIn("d125_ruling", generation)
+                self.assertEqual(
+                    generation["screen_rule"], SCREEN_RULE_RANGE_EQUALS_SCREEN
+                )
+        acceptance_id, generation, artifact = _live_prefix_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertNotIn("d125_ruling", generation)
+            self.assertTrue(_valid_acceptance_bound(artifact))
+
+    def test_generation_row_refuses_a_screen_at_or_above_its_ceiling(self) -> None:
+        # D-102 cl.3 spends `max(observed_drift_s, bracket_screen_s)` against
+        # the ceiling, and `screen + excess == maximum` would demand a zero or
+        # negative excess.  This is D-125's
+        # `successor_screen_exceeds_budget_ceiling` shape, and it is universal:
+        # it holds with or without a predecessor.
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.007000", ceiling="0.007000"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        acceptance_id, row, artifact = self._envelope_case(
+            predecessor=None, q99="0.006000", ceiling="0.006000"
+        )
+        with _registered_generation(acceptance_id, row):
+            self.assertFalse(_valid_acceptance_bound(artifact))
+
+    def test_unresolvable_session_is_barred_not_read_as_bracket(self) -> None:
+        # S2 refuter 71 F4.  `LedgerObservation` carries no kind of its own, so
+        # the session lookup is the only path; a row naming a session the
+        # snapshot does not hold may BE a derivation row, and admitting it on
+        # that doubt is the fail-open reading.
+        acceptance_id, _generation, artifact = _live_prefix_generation()
+        del acceptance_id
+        snapshot = self._prefix_snapshot(artifact, session_kind=None)
+        orphan = next(
+            observation
+            for observation in snapshot.observations
+            if observation.bracket_session_id
+        )
+        self.assertEqual(
+            _observation_session_kind(orphan, snapshot), SESSION_KIND_UNRESOLVED
+        )
+        self.assertTrue(_is_derivation_kind_observation(orphan, snapshot))
+        # A row belonging to no session at all is still an ordinary bracket
+        # row: that is every capture written before derivation kinds existed.
+        standalone = next(
+            observation
+            for observation in snapshot.observations
+            if not observation.bracket_session_id
+        )
+        self.assertEqual(
+            _observation_session_kind(standalone, snapshot), SESSION_KIND_BRACKET
+        )
+        self.assertFalse(_is_derivation_kind_observation(standalone, snapshot))
+
+    def test_import_only_cutoff_sequence_is_two_rows_per_observation(self) -> None:
+        # F5.  One reservation row plus one finalization row per imported
+        # observation; a live prefix adds session open and abort control rows,
+        # so the relation is asserted for import-only generations alone.
+        acceptance_id, generation, artifact = _two_epoch_import_only_generation()
+        with _registered_generation(acceptance_id, generation):
+            self.assertTrue(_valid_acceptance_bound(artifact))
+        # The artifact and the row agree on both numbers, so nothing downstream
+        # can refuse: only the 2-rows-per-observation relation is left.
+        skewed_artifact = copy.deepcopy(artifact)
+        skewed_artifact["ledger_cutoff"]["sequence"] = 77
+        skewed_artifact["prior_observation_set"]["cutoff"]["sequence"] = 77
+        skewed = dict(generation)
+        skewed["cutoff_sequence"] = 77
+        with _registered_generation(acceptance_id, skewed):
+            self.assertFalse(_valid_acceptance_bound(_reseal(skewed_artifact)))
+        # A live prefix is exempt: three session control rows (one open, one
+        # abort) put the head past twice the observation count, and refusing
+        # that would make the successor unissuable.
+        acceptance_id, generation, live_artifact = _live_prefix_generation()
+        offset_sequence = generation["cutoff_sequence"] + 3
+        live_artifact["ledger_cutoff"]["sequence"] = offset_sequence
+        live_artifact["prior_observation_set"]["cutoff"]["sequence"] = (
+            offset_sequence
+        )
+        exempt = dict(generation)
+        exempt["cutoff_sequence"] = offset_sequence
+        self.assertNotEqual(
+            offset_sequence, 2 * exempt["prior_observation_count"]
+        )
+        with _registered_generation(acceptance_id, exempt):
+            self.assertTrue(_valid_acceptance_bound(_reseal(live_artifact)))

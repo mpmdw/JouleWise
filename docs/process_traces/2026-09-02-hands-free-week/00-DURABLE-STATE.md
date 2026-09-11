@@ -851,4 +851,115 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   `feat/2026-09-10-g2a-handback-20260912`. In flight: execution + contract refuters, full replay at 8da99190, root cause of the local-only controller test failure.
   NEXT EXACT ACTION: this activation closes the sweep gauntlet and merges; the 09-11 activation runs checklist 13 (harvest → accept 5/6 → uninstall stub → handback+inventory
   commit H → fresh clone at H → runbook 68 → email-then-arm before 06:05 → exit). RUN_STATE T38h.
+- UPDATE 2026-09-10 ~07:55 PDT (headless activation `96bfeca7`): PR #314 (GATE-SENSIBILITY-SWEEP-01) MERGED at `0d4bb4fb` under the twelve-row gate;
+  row 9 discharged by waiver (cold gate 35 + Opus addendum 11; one pre-existing local-only fixture failure, CI green). 07:00 dead-man observed (record 30);
+  item 5 ruled MET by cold gate 31 with harvest predicate P1–P4 (checklist 13 §3a). Main also carries the kernel lanes (NIGHT-STREAM-PATHS-01,
+  FIXTURE-SENTINEL-CONTROLLER-01, GATE-R2-COVERAGE-ULP-01) and the G2-a arm materials 11/12/13. rehearsal-20260911 ARMED and untouched; this
+  activation exits on the 02:31 request. NEXT EXACT ACTION: the 09-11 activation runs checklist 13 end to end (harvest before 07:00 → H → clone at H →
+  runbook 68 → email-then-arm before 06:05 for t0 2026-09-12 02:56, WINDOW_MAX_S 13500). RUN_STATE T38i.
+- UPDATE 2026-09-10 ~08:15 PDT (headless activation `96bfeca7`): BLOCKER — the 2026-09-02 macOS update (25F84 → 25G83, new powermetrics binary)
+  invalidates the issued calibration acceptance (D-102 exact identity epoch); `bind-window` refuses `acceptance_artifact_epoch_mismatch` in a fresh
+  clone at d84da72e (record 39; consult 38). No installed new-epoch bootstrap route. The 09-12 02:56 G2-a arm is OFF; G2A-FIRST-WINDOW-01 blocked on
+  the new p1 lane ACCEPTANCE-EPOCH-25G83-01; checklist 13 steps 5–10 superseded (steps 1–4 stand: harvest, items 5/6, retire the stub). Ed emailed
+  08:05 (`1a08bd6ccb79ea1d`) with the route and his two decisions (corpus design rules; ledger representation), defaults stated. A blind three-seat
+  design consult on the bootstrap mechanism (brief 40; Astra 41, cold Fable 42, Opus) is in flight; next: synthesis → cold-gate ruling → implementation
+  under the gauntlet. rehearsal-20260911 ARMED and untouched; this activation exits on the 02:31 request. RUN_STATE T38j.
+- UPDATE 2026-09-10 ~08:45 PDT (headless activation `96bfeca7`): ACCEPTANCE-EPOCH-25G83-01 mechanism RULED — cold gate 46 (+ Opus addendum 11,
+  eight amendments incl. the recovery finalization path, the D-126 corpus-size floor of 19 → default THREE nights × 12 slots, the full D-125
+  envelope for S and C): derivation-only writer mode, derivation-kind ledger sessions, generation-keyed issuance validation, parameterized issuer,
+  one D-138 transaction (+ staged R2), desk epoch watch tool (step-0 wiring proposed to Ed). Implementation seats S2 (ledger sessions), S3 (validator),
+  S6 (contracts + D-102 addendum + pre-registration), S5 (chain skeleton + `check`) running on `feat/2026-09-10-epoch-s*` worktrees; S1 (writer) after
+  S2, S4 (issuer prepare-candidate) after S3/S5; each through the gauntlet. Ed emailed 08:39 (`1a08bf970c5cedf5`) with FOUR items needing his written
+  yes (V3 corpus 3×12 n≥19 — silence is NOT consent; V7 envelope; screen challenge; daytime windows + no macOS updates). Calendar if yes: corpus nights
+  09-12/13/14 → transaction 09-15 → first G2-a ≈ 09-16. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request. Records 38–56.
+- UPDATE 2026-09-10 ~09:25 PDT (headless activation `96bfeca7`): CODEX USAGE LIMIT hit 08:41 (reset 2026-09-15 00:52 PDT; record 57) — every
+  Astra seat since fails; implementation of ACCEPTANCE-EPOCH-25G83-01 pivoted to Opus agents under the same briefs (runner scope enforcement lost;
+  the lead reviews diffs against footprints). Seat state on `feat/2026-09-10-epoch-*` branches: S6 docs+pre-registration FINAL (39e813ff; refuter 62,
+  delta 66 applied; merged into `feat/2026-09-10-epoch-integration`); S5 chain skeleton + `check` tool round 1 (8a9eec61; refuter 63; delta pending);
+  S3 acceptance validator round 1 (93799321; refuters 64/65; delta pending); S2 ledger sessions RUNNING (Opus; carries the session_kind constant
+  binding for S3's barrier); S1 (writer) after S2, S4 (issuer prepare-candidate) after S3/S5 (briefs 55/56). Integration obligations: a real
+  derivation-kind session skipped at all three validator sites; `calibration_bracketing.DERIVATION_SESSION_KIND == calibration_ledger.SESSION_KIND_DERIVATION`;
+  a canonical-checkout run of tests/verify_calibration_acceptance_corpus.py before any transaction. Ed's four written-yes items (08:39 email) still open;
+  no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~11:20 PDT (headless activation `96bfeca7`): Claude 5-hour session limit fired ~09:46 (reset 11:10), terminating the
+  Opus pairing on cold gate 69, seat S6 round 3 and the S2 execution refuter (record 72); relaunched 11:19. State: S5 FINAL and merged into
+  `feat/2026-09-10-epoch-integration` (with S6 39e813ff); S6 round 3 (contract encoding + three refusals) running; S2 1e43d1cc contract refuter 71
+  MERGEABLE AFTER FIXES, execution refuter running; S3 93799321 awaits cold gate 69's cure (predecessor_ceiling_s; ceiling == max(predecessor, own
+  Q99) or own Q99 at genesis; strict screen<ceiling) after its Opus pairing, plus the seam fixes (import S2's SESSION_KIND constants; fail-closed
+  on a missing session). Ed's four written-yes items still open; no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
 
+- UPDATE 2026-09-10 ~11:50 PDT (headless activation `96bfeca7`): cold gate 69 upheld by its Opus pairing with amendments A1–A6 (packet 69
+  addendum 11). S3 rounds 2+3 landed (57d0044d: `predecessor_ceiling_s` paired with `predecessor_acceptance_id`, ruled ceiling relation,
+  `is None` before parsing, fail-closed unresolved session; delta 73 three should-fix cured; delta of round 3 = record 77, running). S2 FINAL
+  9558152e (execution refuter 74 MERGEABLE AFTER FIXES; test-only fix round; bench delta 78 CLEAN). S6 pre-registration renamed to
+  "predecessor ceiling" (074197d1). Integration `feat/2026-09-10-epoch-integration` = **0fe1fc5e** (main + S6 + S5 + S2 + S3; seam shim deleted;
+  266 focused tests OK). RUNNING: S1 writer `--derivation-only` (Opus, wt-s1-writer-derivation from 1e43d1cc → report 76); S4 issuer
+  `prepare-candidate` (Opus, wt-s4-issuer-prepare from 0fe1fc5e → report 79; pre-registration screen rule encoded as cold gate 46's adopted
+  default, record 80; the consult-vs-prereg conflict stays Ed's open V7 item). NEXT: verify S1/S4 at the bench → refuters → integrate →
+  sharded replay → PR(s) with twelve-row ledgers → cold science gate before any issuance. Ed's four written-yes items still open; no directive
+  issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~13:01 PDT (headless activation `96bfeca7`): ACCEPTANCE-EPOCH-25G83-01 seats — S1 FINAL 36197c5a (writer `--derivation-only`;
+  refuters 87/89, witness 90, rounds 1–2, records 84/86); S2 FINAL 9558152e; S3 FINAL 4c43089a (rounds 1–5, deltas 73/77/83 + bench, record 88 —
+  operand-collapse cuts lesson); S5 FINAL c1655a32; S6 8bdead19 (round 4: diagnostic field named, derivation-kind valid row licenses nothing).
+  Integration `feat/2026-09-10-epoch-integration` = **51565cee** (main + S6 + S5 + S2 + S3 + S1; seam shim deleted; 226 focused tests OK).
+  S4 (issuer `prepare-candidate`) fix round 1 landed 501bde4f/a3ae7bf8 after execution refuter 81 BLOCKED (triggers copied from r6; rule name by
+  outcome; per-df quantile proof missing) — the seat found four further authentication-fatal shape defects (derivation_sha256 recipe, backfill
+  block, decision_ids, quantum lexeme); delta 91 + contract refuter 93 RUNNING. NEXT: S4 verdicts → merge S4 → sharded replay at the integration
+  head (`scripts/shard_tests.py --workers 4`) → PR(s) with twelve-row ledgers → derivation-night runbook → cold science gate before issuance.
+  Screen-rule name judgment (record 82) and the pre-registration screen rule as cold gate 46's adopted default (record 80): Ed veto open.
+  Ed's four written-yes items still open; no directive issues. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~14:12 PDT (headless activation `96bfeca7`): ALL SIX SEATS FINAL — S1 36197c5a, S2 9558152e, S3 4c43089a, S4 4832dc75 (rounds
+  1–4; refuters 81/93; deltas 91/96 + bench), S5 c1655a32, S6 23f797be (rounds 4–5). Early sharded replay at integration 51565cee was RED (14 new
+  results, three clusters, records 94/98); root cause 97: all test/fixture-side (authoring fixture missing the production ledger fixture; v2 surface
+  guard line pins shifted +121; custody census rows for the issuer), zero production change. Integration `feat/2026-09-10-epoch-integration` =
+  **aea38b1a** (main + all seats + fixes + census rows). Fresh sharded replay at aea38b1a RUNNING (`JouleWise-wt-replay-2`, record 100); derivation-
+  night runbook draft RUNNING (record 99). NEXT: replay 2 green → PR from integration with the twelve-row ledger (terminal review + delta on the
+  PR head) → merge → clone at H → `check` dry run → NIGHT_HANDBACK for derivation night 1 (three nights × 12 slots) → cold science gate → D-138.
+  Open rulings for Ed (veto window): screen-rule name (82), pre-registration screen rule as CG46 default (80), isolation rule + operand-collapse
+  cuts (69/88); v2 surface guard re-keying (97) needs a ruling. Ed's four written-yes items still open; no directive issues. rehearsal-20260911
+  ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~15:30 PDT (headless activation `96bfeca7`): SEAT S7 ADDED (derivation-night wrapper generator `scripts/gen_derivation_night.py`,
+  records 101/102/103–106): scout 101 proved the driver passes a chain only four variables and no argv, so the night pins a generated wrapper
+  that exports the thirteen chain variables as literals, verifies the tracked chain's sha256 in-wrapper, and execs it with the 24 per-slot
+  bindings; refuters 104/105 + delta 106 cured (literal digest, window-fit refusal, `--verify` tripwire); round 3 RUNNING for the lead's diff-gate
+  defect (record 110: the writer exits 1 on a non-valid capture and the chain's `set -e` would end a twelve-slot night on one ordinary-invalid slot —
+  the chain must continue on rc 0/1 and stop only on a refusal). S4 round 5 RUNNING (third-epoch rows refuse). Replay 2 at aea38b1a: ONE failure
+  (a guard forbids the floor digits in comments) fixed at the bench; replay 3 at d9612e68 RUNNING (early signal; replay 4 at the final head is the
+  ledger row). Magistrate diff gate (row 7) over all nine production files DONE (110). Terminal review 109 RUNNING. Runbook 99 revised for the
+  wrapper (108). Integration = 819a9c40 (+ S7 final b2636d6c + comment fix). NEXT: S7 r3 + S4 r5 → merge → replay 4 → PR with the twelve-row
+  ledger → merge → clone at H + venv → `check` → NIGHT_HANDBACK derivation night 1. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~16:30 PDT (headless activation `96bfeca7`): lane ACCEPTANCE-EPOCH-25G83-01 at the PR gate. Final wave landed (S4 r5–r6 arm-gate
+  fences: pre-registration os_build + sampler digest parsed and enforced, 3 nights × 12 slots unless a written ruling, `--preregistration-sha256`;
+  S7 r3–r4: chain survives a non-valid slot and stops only on a refusal, slot ceiling, inputs parsed at arm time; S3 r6: envelope corpus floor 17,
+  A-5 counterfactual; S1 r3; S6 r6 + magistrate fix 6c91dd2c restoring cold gate 46 V7 wording with a dated addendum transcribing ruling 69 A1).
+  Terminal review 109 MERGEABLE AFTER FIXES → fixed; ruled-not-installed sweep 45/54 installed (isolation rule now a tracked lane); seam audit clean;
+  magistrate diff gate 110 (row 7) + row 12 (118) read in full; row 10 (117) should_fix → fixed. PR head moves once more (S6 docs + S4 r7 distinct
+  sessions); replay 6 at that head = row 9 (replay 5 at 1e15a3a5 running as an early signal). Main = cfe3aa49 + this line (trace records 55–118
+  merged; kernel lanes 182–184 registered). Runbook 99 revision 3 (record 115). NEXT: replay 6 green → PR from `feat/2026-09-10-epoch-integration`
+  with the twelve-row ledger → CI → merge → clone at H + venv → `check --preregistration` → NIGHT_HANDBACK derivation night 1. rehearsal-20260911
+  ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~17:55 PDT (headless activation `96bfeca7`): **PR #315 OPEN** (`feat/2026-09-10-epoch-integration` @ fa7dd55dd57b2be6d4cd4aa3cb117e0d5686c619 → main)
+  with the twelve-row gate ledger 12/12 (`check_gate_ledger.py` rc 0): row 9 = replay 7 at the exact head (5895 tests, 0 failures, 0 errors, no waiver —
+  the record-35 controller test passed), row 10 = three clean fresh-eyes passes (117/120/122), row 12 = record 118. Merge-surfaced defect found by the
+  early replays (a direct `git init` in the S7 fixture vs the git-fixture maintenance guard) fixed at fa7dd55d. CI (row 11) watching; the magistrate
+  self-merges after CI green under the standing D-072 authority, then the post-merge cross-unit review. Then: clone at H + venv → `check
+  --preregistration` → NIGHT_HANDBACK for derivation night 1 (earliest 09-12; rehearsal-20260911 runs tonight). Open for Ed: veto windows
+  (69/80/82/88), V3 affirmative acknowledgment, the successor screen rule (V7), the decision-log V4 "210 min" wording. rehearsal-20260911 ARMED and
+  untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~19:50 PDT (headless activation `96bfeca7`): **PR #315 MERGED → main 8cbcaf08** (ACCEPTANCE-EPOCH-25G83-01 implementation: seats S1–S7;
+  gate ledger 12/12 on 7107657d; replay 10 = 5897 tests, 0 failures, no waiver; CI 19/19). Two CI-only defects found after the local replays (desk watch
+  required machine-local custody dirs; pre-registration verdict broke the watch's byte identity on a mismatch) were fixed with killing cuts (records
+  124/127); six row-10 passes. Post-merge cross-unit review running (record 132). Kernel lane note updated; trace records 55–131 on main. NEXT (next
+  activation or this one after the rehearsal harvest): cut a measurement clone at main's head with venv → `issue_calibration_acceptance_generation.py
+  check --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md` (expect rc 3 + sampler `match`) → arm materials for
+  derivation night 1 per runbook 99 rev 3 (identity-epoch + T1-bindings JSON provenance is the open `[UNVERIFIED]`; pinned pre-registration digest;
+  `gen_derivation_night.py` + `--verify`) → NIGHT_HANDBACK email-then-arm (earliest 09-12; rehearsal-20260911 runs tonight). Ed: veto windows
+  69/80/82/88; V3 affirmative acknowledgment; V7 screen rule; V4 "210 min". rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~20:55 PDT (headless activation `96bfeca7`): PR #315 MERGED and post-merge green (main ci 17/17 at d18bc2b3; cross-unit review 132
+  CLEAN). Follow-up PR #316 in the gate on `feat/2026-09-10-derivation-night-inputs` @ bc1d7ef9: seat S8 desk writer `scripts/write_derivation_night_inputs.py`
+  (identity-epoch.json / t1-bindings.json from the capture writer's own helpers; refuter 136 proved byte-for-byte non-divergence; bench fix round),
+  the issuer's one-home import of the ruled corpus floor, hyphenated example filenames, and the operator runbook promoted to
+  `docs/phase_2/derivation_night_runbook.md` (revision 5 after contract review 141: every variable built before use, staged vs published plan path,
+  the frozen triple, real §1.4 install commands, the fence defined per the watchdog). Replay 12 (row 9) + fresh-eyes pass 2 (row 10) running; then
+  the PR, CI, merge. Desk dry run from a fresh clone at c1487ffb: rc 3 + pre-registered sampler MATCH (record 134). Ed emailed 19:56 (`1a08e62b7e99b312`)
+  with four decisions. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.

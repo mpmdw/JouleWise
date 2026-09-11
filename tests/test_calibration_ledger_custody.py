@@ -147,7 +147,10 @@ class CustodyProbeTests(unittest.TestCase):
             pass
 
         session = SimpleNamespace(state="open", finalized_slots=(),
-                                  slot_attempt_ids={"pre": "attempt"})
+                                  slot_attempt_ids={"pre": "attempt"},
+                                  session_kind=ledger.SESSION_KIND_BRACKET,
+                                  declared_slots=ledger.BRACKET_SESSION_SLOTS,
+                                  next_slot="pre")
         snapshot = SimpleNamespace(bracket_session_by_id={"session": session})
         inspection = SimpleNamespace(state="clean", legacy_journal_path=None)
         reserved = {"slots": {"pre": {"custody_locator": "/mock/original"}}}
