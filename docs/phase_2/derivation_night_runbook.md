@@ -8,10 +8,33 @@ script, gate and test this runbook operates is on `main` at
 establish from a primary source; they are open questions for the operator, not
 instructions.
 
-**Changelog — revision 4 (2026-09-10), one line: revised against the MERGED
-lane, and the §0.8 desk-input provenance is now RESOLVED by a tool that
-exists.** What that forced: the status banner no longer speaks of seat branches
-or a red replay; §0.8's `[UNVERIFIED]` block is replaced by the desk writer
+**Changelog — revision 5 (2026-09-10), one line: the operational defects a
+contract review found are closed, so the arm can be run from this file alone,
+without the operator supplying values the file never defined.** What that
+forced: §0.2 now exports every variable a later runnable block interpolates —
+`NIGHT_DATE`, `PLAN_ID`, `NIGHT_ROOT`, `STAGE`, `STAGED_PLAN`, `SESSION_ID`,
+`EVIDENCE_ROOT_ID`, `CALIBRATION_PLAN`, `CALIBRATION_LEDGER` and
+`LEDGER_HEAD_PIN` — each with a gloss and a rule for choosing it, and creates
+the night root rather than telling the operator it must already exist; the
+night plan is authored at a STAGING path and reaches its discoverable place
+only at §1.4's atomic move, which removes the collision between §1.1b's
+`--plan` INPUT and §1.4's "target must not pre-exist", and keeps §0.7's
+discoverability precondition true; §1.4 carries the install commands
+themselves instead of deferring to an unlocated runbook, and every citation of
+that runbook is now a repository path; §1.5 states the frozen checkout triple's
+exact contract fields and the new §2.0 derives from them every further value
+the harvest needs; `fence` is split into its two senses and the watchdog sense
+is stated as the contract states it, which is why a `t0` inside the
+02:45–03:30 belt is correct rather than forbidden; `Session` is disambiguated
+from the thing a fence blocks; `wrapper`, `night root` and `tracked chain` are
+built in §Terms before §0 uses them, and §0.5 gives the tracked chain's path
+and its `shasum` command at first use; and §0.8 always names which writer it
+means.
+
+Revision 4 (same day) revised against the MERGED
+lane, and RESOLVED the §0.8 desk-input provenance with a tool that
+exists. What that forced: the status banner no longer speaks of seat branches
+or a red replay; §0.8's `[UNVERIFIED]` block is replaced by the desk-inputs writer
 `scripts/write_derivation_night_inputs.py`, its flags, its refusals and the two
 paste lines it prints; §0.3's `[UNVERIFIED]` on the live `check` strings is
 replaced by the output recorded from a fresh clone at the desk (record 134);
@@ -30,12 +53,14 @@ JSON inputs instead of only hashing them. Revision 2 closed the §1.1
 `[UNVERIFIED]` on how the night driver supplies the chain's environment — it
 does not, by design; a generated wrapper carries it.
 
-Two `[UNVERIFIED]` blocks remain and are kept verbatim: the 06:05 last-start
+Two `[UNVERIFIED]` blocks remain, unchanged in substance: the 06:05 last-start
 cutoff's status (§1.3) and the complete night-gate refusal list with each
-refusal's remedy (§5).
+refusal's remedy (§5). Revision 5 edited one word inside the first — the
+citation of the prior night's arm runbook now carries its repository path, like
+every other citation of it.
 
 Audience: the operator is the **next magistrate activation** — the session a
-relaunch prompt starts, holding the frozen triple (the plan id, measurement
+relaunch prompt starts, holding the frozen checkout triple (the plan id, measurement
 clone path and head `H` of the night the previous activation armed, §1.5) and
 the project's standing authorities. It is a desk operator: it prepares, notices, arms, exits, and
 later harvests. It never observes a capture, because these nights are
@@ -73,6 +98,10 @@ Source for this paragraph: the pre-registration
 - **Session** — a ledger capability that reserves several attempts under one
   open receipt while the repository-committed head pin stays put. A
   `derivation`-kind session is the only route these captures may take.
+  Throughout this file, *session* unqualified always means this ledger object.
+  The watchdog fences below speak of a different thing entirely — a magistrate
+  **agent** session, a running Claude activation — and that sense is always
+  written out in full.
 - **Registration** — the set of ledger sessions (here: exactly three, one per
   night) that the pre-registration declares this corpus is drawn from. A valid
   same-epoch observation captured OUTSIDE the registration refuses issuance
@@ -102,16 +131,48 @@ Source for this paragraph: the pre-registration
 - **Dead-man** — the second LaunchAgent installed alongside the night agent,
   which fires at a fixed local minute and stands the night down if the night's
   completion time has passed without completion.
-- **Fence** — a half-open local-time interval in which the watchdog refuses to
-  launch or adopt a session: `[02:45:00, 03:30:00)` and `[07:00:00, 07:01:00)`
-  (`docs/process/MAGISTRATE_WATCHDOG.md`, §Fences).
+- **Tracked chain** — `scripts/night_chains/calibration_derivation_only.zsh`,
+  the committed script that actually runs the twelve captures. *Tracked* means
+  it is a repository file, byte-identical in every clone at `H`; contrast the
+  wrapper, which is generated per night and committed nowhere.
+- **Wrapper** — the generated `zsh` file, one per night, that the night driver
+  actually launches. It carries the night's whole environment as literal
+  `export` lines, re-checks its pinned inputs, and then `exec`s the tracked
+  chain. The plan's `chain_path` names it. §1.1a builds the mechanism and the
+  problem that forces it.
+- **Night root** — `<NIGHT_ROOT>`, the single custody directory one night's
+  evidence is filed under; the plan calls the same directory `custody_root`,
+  and the wrapper exports it as `WINDOW_CUSTODY_ROOT`. The two desk inputs, the
+  three generated files and everything the night writes live in it. Its path
+  convention is `/Users/edr/night-custody/<PLAN_ID>` (§0.2).
+- **Fence (watchdog sense)** — a period during which the relaunch watchdog
+  refuses to LAUNCH OR ADOPT a magistrate **agent** session on this machine.
+  Three things fence: a valid plan's span (opening at the closed boundary
+  `t0 − 25 min`), the fixed local belt `[02:45:00, 03:30:00)`, and the fixed
+  local dead-man minute `[07:00:00, 07:01:00)`; both fixed intervals are
+  half-open (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state
+  machine" for the `FENCED` state, §"Fence and deadlines" for the intervals).
+  **What a fence forbids is an agent being started, never a night being run.**
+  The night's own two LaunchAgents are not magistrate sessions, and no fence
+  touches them. That is why §1.2's worked `t0` of 02:56 local sits INSIDE the
+  belt and is nonetheless correct: a capture night wants precisely the hour in
+  which no agent can be launched or adopted. The rehearsal night of 2026-09-09
+  fired at 02:56 local and ran to chain exit 0
+  (`docs/process/NIGHT_HANDBACK.md`, §"Executed — rehearsal-20260909").
+- **Blindness fence** — a different object under a confusingly similar name:
+  the code-enforced prohibition on reading any captured value before night 3's
+  ledger session is terminal (§2.3). It is not an interval, and no clock
+  clears it. Where this file writes "fence" with no qualifier it means the
+  watchdog sense above.
 - **Handback** — `docs/process/NIGHT_HANDBACK.md`, the file the night courier
   (the process that emails the night's result, §1.2) reads first; the magistrate rewrites its three night-specific sections before
   every armed night and commits that rewrite with the night's plan.
 - **Email-then-arm** — the standing arming procedure: Ed is emailed the night
   notice, and the arm proceeds without waiting for a reply; **Ed's NO
   overrides** and stands the night down (`docs/process/MAGISTRATE_WATCHDOG.md`,
-  §Arming).
+  §"Install handoff", closing paragraph: "Arming itself remains outside this
+  watchdog's charter and always uses the email-then-arm handback; Ed's NO
+  overrides").
 
 A first-use table for every term of art in this file is at §8.
 
@@ -156,16 +217,18 @@ from which BOTH night agents are installed. Its path is recorded in
 `configs/production_custody_inventory.json` inside H itself, so the clone name
 carries no SHA. Use the fresh-clone recipe rather than fast-forwarding or
 renaming any provisional clone; renaming moves venv and editable-install
-absolute paths (runbook 68 §"Fresh clone at H").
+absolute paths (record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Fresh clone at H").
 
 ```zsh
 set -euo pipefail
 : "${H:?}"
+export NIGHT_DATE=<YYYYMMDD>
 export REMOTE_URL=https://github.com/mpmdw/JouleWise
-export MEASUREMENT_ROOT=/Users/edr/JouleWise-measurement-<NIGHT_DATE>-derivation
+export MEASUREMENT_ROOT="/Users/edr/JouleWise-measurement-$NIGHT_DATE-derivation"
 remote_main="$(git ls-remote --exit-code "$REMOTE_URL" refs/heads/main)"
 test "${remote_main%%$'\t'*}" = "$H"
-test ! -e "$MEASUREMENT_ROOT" && test ! -L "$MEASUREMENT_ROOT"
+test ! -e "$MEASUREMENT_ROOT"
+test ! -L "$MEASUREMENT_ROOT"
 git clone --no-hardlinks "$REMOTE_URL" "$MEASUREMENT_ROOT"
 git -C "$MEASUREMENT_ROOT" checkout --detach "$H"
 ```
@@ -176,22 +239,93 @@ interpreter every desk step in this runbook uses:
 ```zsh
 export PY="$MEASUREMENT_ROOT/.venv/bin/python"
 test -x "$PY"
+diff -u <(grep -Ev '^(#|[[:space:]]*$)' "$MEASUREMENT_ROOT/env/mac-measurement-lock.txt" | sort) \
+  <("$PY" -m pip freeze --exclude-editable | sort)
 ```
+
+The `diff` is the check that the environment is the reviewed one and not
+merely present: empty output and rc 0 mean the clone's installed packages are
+exactly the lock's. It is the same assertion the prior night's arm runbook runs
+(`docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`,
+§"Block A", last command).
 
 `$PY` is the **project venv interpreter** — the Python inside the measurement
 clone's `.venv`, the only one with this project's dependencies installed. It is
 not `/usr/bin/python3`. Two desk steps below fail in different ways under the
-wrong interpreter, and §0.8's desk writer is the one that fails silently enough
+wrong interpreter, and §0.8's desk-inputs writer is the one that fails silently enough
 to matter, so `$PY` is exported here, once, and used by name from now on. The
 emitted wrapper sets the same value for the night itself, from
 `<MEASUREMENT_ROOT>/.venv/bin/python`, and refuses if it is missing or not
 executable (§1.1a step 1).
+
+`<NIGHT_DATE>` is the eight-digit `YYYYMMDD` of the calendar date `t0` falls
+on — the morning the captures happen, not the evening the agents are installed
+(§1.3 installs on the day BEFORE `t0`). Every dated name below is built from
+this one value so that the plan id, the night root and the clone cannot
+disagree about which night they belong to.
 
 The production ledger lives in this clone's own
 `runs/calibration_observation_ledger.jsonl`, restored byte-exact from the
 canonical ledger and then authenticated with `verify_custody=True`. Custody
 locators are absolute iCloud paths; copy no custody directories and rewrite no
 locator (record 05 / file 11 route).
+
+#### Every other variable this runbook's commands interpolate
+
+Assign them here, in the same shell, before anything below runs. **No command
+later in this file assigns a variable**; a block that interpolates one it never
+defined is how an operator ends up running `--out-dir ""` against an empty
+string and writing the night's inputs into the current directory. Choose each
+value by the rule in the table that follows, then run the block.
+
+```zsh
+set -euo pipefail
+: "${H:?}" "${NIGHT_DATE:?}" "${MEASUREMENT_ROOT:?}"
+export PLAN_ID="d079-epoch-25g83-derivation-n1-$NIGHT_DATE"
+export SESSION_ID="d079-epoch-25g83-derivation-n1-$NIGHT_DATE"
+export EVIDENCE_ROOT_ID=<the registered evidence root id, no derivable default>
+export NIGHT_ROOT="/Users/edr/night-custody/$PLAN_ID"
+export STAGE="/Users/edr/night-plan-staging/$PLAN_ID"
+export STAGED_PLAN="$STAGE/night_plan.json"
+export CALIBRATION_PLAN="$NIGHT_ROOT/calibration_plan.json"
+export CALIBRATION_LEDGER="$MEASUREMENT_ROOT/runs/calibration_observation_ledger.jsonl"
+export LEDGER_HEAD_PIN="$MEASUREMENT_ROOT/configs/calibration/calibration_ledger_head.json"
+
+# No emitted literal may contain a census substring (§1.1b, §5).
+if print -rl -- "$PLAN_ID" "$SESSION_ID" "$EVIDENCE_ROOT_ID" "$NIGHT_ROOT" \
+     "$MEASUREMENT_ROOT" "$CALIBRATION_PLAN" | grep -iE 'codex|claude|t3'; then
+  print -u2 'census substring in an emitted literal above; rename it'
+  exit 1
+fi
+
+# Neither directory may be reused from an earlier night or an earlier attempt.
+test ! -e "$NIGHT_ROOT"
+test ! -L "$NIGHT_ROOT"
+test ! -e "$STAGE"
+test ! -L "$STAGE"
+mkdir -p "$NIGHT_ROOT" "$STAGE"
+test "$(stat -f %d "$NIGHT_ROOT")" = "$(stat -f %d "$STAGE")"
+```
+
+| Variable | One line, and the rule for choosing it |
+|---|---|
+| `NIGHT_DATE` | `YYYYMMDD` of the date `t0` falls on. Chosen first; everything dated is built from it. |
+| `PLAN_ID` | The night plan's `plan_id` (§1.1). One per night, so nights 2 and 3 get `-n2-`/`-n3-`. It names the night root, so it is fixed BEFORE any directory exists. |
+| `SESSION_ID` | The ledger session this night opens, passed to the generator as `--session-id` and baked into the wrapper. One per night; the three together are the registration (§3). It also prefixes every slot attempt id (`<SESSION_ID>-d01`…), so it is an emitted literal and must survive the census check. |
+| `EVIDENCE_ROOT_ID` | The identifier of the evidence root the night's bundles are filed under. **It has no derivable default**: take the literal from the record that registers it and record both in the arm materials (§1.1b step 3). |
+| `NIGHT_ROOT` | The night root (§Terms) — `/Users/edr/night-custody/<PLAN_ID>` by convention, and the value the plan's `custody_root` must carry. It is the directory the watchdog's discovery glob looks one level inside (§0.7). |
+| `STAGE` | The staging directory the plan is AUTHORED in, deliberately outside the watchdog's discovery path, so that authoring a plan does not arm a night (§0.7, §1.1b step 2). |
+| `STAGED_PLAN` | `$STAGE/night_plan.json` — the plan's path while it is being authored, generated from and verified against. §1.4 moves these bytes to `$NIGHT_ROOT/night_plan.json`, and that is the only moment the night becomes discoverable. |
+| `CALIBRATION_PLAN` | The **frozen calibration plan**: the committed capture plan a night's captures are taken under, a `calibration_plan.json` from a frozen campaign pack in the clone (`docs/phase_2/window_runbook.md`, §the ALPHA `window.env` example, calls the same file `FROZEN_PLAN` and notes it is not a custody reservation plan). Copy those committed bytes to `$CALIBRATION_PLAN` before §1.1b step 3; the path must be absolute, and the wrapper re-checks the file's `plan_id` and SHA-256 at launch (§1.1a step 3), so a wrong copy fails before the settle rather than at `d01`. |
+| `CALIBRATION_LEDGER` | The ledger the night opens its session against — **the clone's own**, never the canonical one. This is exactly the generator's `--ledger` default, written out so the harvest (§2.0) can rebuild it. |
+| `LEDGER_HEAD_PIN` | The committed head pin the ledger is authenticated against — again the clone's, and exactly the generator's `--head-pin` default. |
+
+Two notes on the block itself. `stat -f %d` prints a filesystem device number;
+the night root and the staging directory must share one, because §1.4 publishes
+the plan with `os.replace`, which cannot cross devices. And each precondition
+is its own statement rather than a `&&` chain: under `set -e` a failing command
+on the LEFT of `&&` does not end the shell, so `test ! -e X && test ! -L X`
+would sail past an existing night root.
 
 ### 0.3 The epoch watch: `check` must exit 3, and that is the expected result
 
@@ -310,8 +444,19 @@ was written; filling them reopens no scientific rule. The plan's
 `registration_path` points at this file (`NightPlan` in
 `joulewise/night_gate.py`).
 
-`[CHAIN_SHA256]` takes the **tracked chain's** SHA-256 — one value shared by all
-three nights — and NOT any night's wrapper digest. The registration reserves a
+`[DD]` is the authoring day of the registration text itself — the registration's
+own §"Fields filled at commit" glosses it exactly so — and the other four are
+the facts named below.
+
+`[CHAIN_SHA256]` takes the **tracked chain's** SHA-256 — the digest of
+`scripts/night_chains/calibration_derivation_only.zsh` in the clone (§Terms) —
+one value shared by all three nights, and NOT any night's wrapper digest:
+
+```zsh
+shasum -a 256 "$MEASUREMENT_ROOT/scripts/night_chains/calibration_derivation_only.zsh"
+```
+
+The registration reserves a
 single blank for it, and three nights produce three different wrappers (three
 plans, three session IDs, three `t0`s), so only the tracked chain's digest can
 fill it. That digest is also the literal each night's wrapper compares against
@@ -351,7 +496,7 @@ acknowledgment recorded.
 minutes`; that boundary is the closed start of the plan span, and the resident
 supervisor's cooperative ladder enforces it: `standdown.request` at
 `t0 − 25 min`, TERM no later than `t0 − 16 min`, KILL no later than
-`t0 − 15 min` (`docs/process/MAGISTRATE_WATCHDOG.md`, §Stand-down ladder).
+`t0 − 15 min` (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines", the boundary table).
 
 Before the arm census, stop all own seats, delegated tasks and background jobs
 using the activation's real task controls; record the task IDs and results and
@@ -374,7 +519,27 @@ test.
 No stand-down, no Ed NO, no unresolved owner-authored `directive` issue, no
 discoverable prior plan root, no active or indeterminate measurement ownership.
 Remove every `REHEARSAL_STUB` plan root before arming any real plan
-(`docs/process/MAGISTRATE_WATCHDOG.md`, §Arming).
+(`docs/process/MAGISTRATE_WATCHDOG.md`, §"Install handoff").
+
+**"Discoverable" is one exact glob, and that is what makes staging safe.** The
+watchdog enumerates plans by globbing `*/night_plan.json` in the PARENT of its
+own state directory — `glob_plans` in `scripts/magistrate_watchdog.py`, whose
+state root is `/Users/edr/night-custody/magistrate`, so the enumerated set is
+exactly `/Users/edr/night-custody/*/night_plan.json`: one level down, that
+filename, nothing else. A plan authored at `$STAGED_PLAN` under
+`/Users/edr/night-plan-staging/<PLAN_ID>/` is therefore invisible to it, which
+is precisely why §1.1b authors and verifies there. The night becomes
+discoverable at one instant and one only: §1.4's `os.replace` into
+`$NIGHT_ROOT/night_plan.json`, after the email. The night's own driver never
+discovers anything — launchd hands `scripts/run_night.py` the plan path as a
+`--plan` argument (its `--plan` is `required=True`), so the driver reads the
+file it was installed with and no other.
+
+Check it, and expect no output:
+
+```zsh
+print -rl -- /Users/edr/night-custody/*/night_plan.json(N)
+```
 
 ### 0.8 The clone's tree is clean, and the two desk inputs are written
 
@@ -403,10 +568,18 @@ any of them would run all night with no signal. **This check is procedure, not
 code**: no tool enforces it, which is precisely why it is written here and
 recorded in the arm record.
 
-#### The two desk inputs, and the writer that produces them
+#### The two desk inputs, and the desk-inputs writer that produces them
 
-The night root `<NIGHT_ROOT>` must hold two desk-produced JSON files before the
-wrapper can be generated:
+**Two different programs are called a writer in this lane, and this file always
+says which.** The **desk-inputs writer** is
+`scripts/write_derivation_night_inputs.py`, run once by the operator at the
+desk. The **capture writer** is `scripts/validate_powermetrics_fiducial.py`,
+run twelve times by the chain during the night. The bare word "writer" survives
+below only inside a tool's own quoted message, where it always means the
+capture writer.
+
+The night root `$NIGHT_ROOT` (§Terms; exported and created at §0.2) must hold
+two desk-produced JSON files before the wrapper can be generated:
 
 | File | What it holds |
 |---|---|
@@ -429,7 +602,7 @@ pins each one's SHA-256 into the wrapper as a literal.
 these thresholds exist to serve, and the one §6 clause 1 refuses to license
 until a successor acceptance is issued — cannot serve a derivation night: that
 tool authenticates the acceptance's epoch before writing anything, and a stale
-epoch is exactly what a derivation night has (record 134). The desk writer takes
+epoch is exactly what a derivation night has (record 134). The desk-inputs writer takes
 the same machine reads and skips that one authentication.
 
 **It must be run with `$PY`** — the project venv interpreter of §0.2. The writer
@@ -461,7 +634,7 @@ through a second implementation — `_sysctl_identity` for `os_build` and
 `hardware_model`, the module constants for the sampling interval, estimator
 revision and protocol id, and `_planned_t1_bindings` for the four execution
 pins, all from `scripts/validate_powermetrics_fiducial.py`. That is the point of
-the design: the reserved slot's copy and the value the writer measures at 03:10
+the design: the reserved slot's copy and the value the capture writer measures at 03:10
 come from the same code, so they cannot disagree. It then refuses any vector
 whose key set is not exactly the expected fields or whose values are not all
 present, asks the live preflight which fields are stale, and only then writes
@@ -490,15 +663,15 @@ writes nothing** — never one file of the pair:
 
 | Refusal | Meaning | Operator action |
 |---|---|---|
-| `no identity field differs from the acceptance's epoch at <path>: … this is an ORDINARY night, not a derivation night` | Nothing is stale. | **Stop.** The premise of the lane is gone — re-run §0.3. A derivation night captured here would be refused by the writer at `d01` with the settle already spent. |
+| `no identity field differs from the acceptance's epoch at <path>: … this is an ORDINARY night, not a derivation night` | Nothing is stale. | **Stop.** The premise of the lane is gone — re-run §0.3. A derivation night captured here would be refused by the capture writer at `d01` with the settle already spent. |
 | `machine vector derivation failed: ModuleNotFoundError: No module named 'mlx'` | The wrong interpreter. | Re-run with `$PY` (§0.2). |
 | `t1 bindings fields are empty on this machine: [...]` / `identity epoch fields are empty on this machine: [...]` | A machine read came back empty or `None` — an absent MLX or an unreadable sampler is the usual cause. | Fix the machine read. The night's reserve step refuses an empty binding, so this is a desk refusal standing in for a burned night. |
 | `refusing to overwrite [...]; a night may already be pinned to those bytes` | The two files already exist. | Do not reach for `--force` reflexively: a wrapper generated from the old bytes pins their digests, so overwriting them invalidates it. Pass `--force` only when you intend that, and re-emit and re-`--verify` the wrapper afterwards. |
-| `--out-dir <path> is not an existing directory` | The night root does not exist yet. | Create it first. |
+| `--out-dir <path> is not an existing directory` | The night root does not exist yet, or `$NIGHT_ROOT` was never exported and expanded to the empty string. | Re-run §0.2's export block, which both assigns `NIGHT_ROOT` and creates it. |
 | `--power-policy is empty` | An empty value was passed. | Omit the flag. |
 | `the acceptance at <path> could not be read as an issued artifact (…)` | The acceptance will not authenticate at all, so no stale field can be established. | Name a readable issued acceptance with `--acceptance`, or fix §0.3 first. |
 
-**Re-derive both files whenever the machine may have moved.** Run the writer at
+**Re-derive both files whenever the machine may have moved.** Run the desk-inputs writer at
 each night's arm, and re-run it if `os_build`, `powermetrics_sha256`,
 `mlx_version`, `estimator_revision` or `protocol_sha256` changed since the
 previous night: the capture writer compares its measured bindings against the
@@ -594,7 +767,7 @@ generator is `scripts/gen_derivation_night.py`. In order, the wrapper:
    JSON, carry a `plan_id` equal to the `PLAN_ID` literal, and hash to the
    `PLAN_SHA256` literal. For `IDENTITY_EPOCH_JSON` and `T1_BINDINGS_JSON`:
    each must exist and hash to its own baked-in SHA-256 literal — the digests
-   the writer printed on its paste lines.
+   the desk-inputs writer printed on its paste lines.
 4. **Verifies the tracked chain's bytes** — `shasum -a 256` of
    `<CLONE>/scripts/night_chains/calibration_derivation_only.zsh` must equal a
    SHA-256 literal inside the wrapper. This is the link that makes the
@@ -644,14 +817,43 @@ to still exist.
 
 1. **Cut the clone at H** (§0.2), export `$PY`, and record
    `git -C "$MEASUREMENT_ROOT" status --porcelain`; it must be empty (§0.8).
-   Then write the two desk inputs with the writer of §0.8 and record its three
+   Then write the two desk inputs with the desk-inputs writer of §0.8 and record its three
    printed lines.
-2. **Author the night plan** (§1.1 table), with `chain_path` =
-   `<NIGHT_ROOT>/chain.zsh` and `chain_sha256_path` = that path plus `.sha256`.
-   The plan must exist FIRST: the generator reads `t0_epoch_s`,
-   `window_max_s`, `custody_root`, `measurement_root`, `measurement_head`,
-   `receipt_class`, `chain_path` and `chain_sha256_path` out of it, and refuses
-   if `chain_path` is anything else.
+2. **Author the night plan at the STAGING path `$STAGED_PLAN`** (§1.1 table),
+   with `chain_path` = `<NIGHT_ROOT>/chain.zsh` and `chain_sha256_path` = that
+   path plus `.sha256`. The plan must exist FIRST: the generator reads
+   `t0_epoch_s`, `window_max_s`, `custody_root`, `measurement_root`,
+   `measurement_head`, `receipt_class`, `chain_path` and `chain_sha256_path`
+   out of it, and refuses if `chain_path` is anything else.
+
+   **The plan has two paths, in this order, and confusing them breaks the
+   arm.** `--plan` is an INPUT: the generator opens that file and reads the
+   eight fields above out of it, so the plan must already exist when step 3
+   runs. But §1.4 publishes the night by `os.replace`-ing the staged bytes into
+   `<NIGHT_ROOT>/night_plan.json`, and that target **must not pre-exist**. Both
+   are true only if authoring, generation and `--verify` all happen at a
+   different path from the published one:
+
+   | Phase | Path | Who reads or writes it |
+   |---|---|---|
+   | author → generate → `--verify` (§1.1b steps 2–4) | `$STAGED_PLAN` = `/Users/edr/night-plan-staging/<PLAN_ID>/night_plan.json` | the operator, then `gen_derivation_night.py --plan` |
+   | published, at the arm and for the whole night (§1.4) | `$NIGHT_ROOT/night_plan.json` | the watchdog's discovery glob, then the night driver via its `--plan` argument |
+
+   **Nothing is lost by verifying before the move, because the wrapper's bytes
+   depend on the plan's CONTENT and never on its path.** `gen_derivation_night.py`
+   uses the `--plan` argument for exactly one thing — `json.loads` of the bytes
+   at that path — and every value it renders into the wrapper comes from the
+   decoded fields (`custody_root`, `measurement_root`, `measurement_head`,
+   `t0_epoch_s`, `window_max_s`, `chain_path`, `chain_sha256_path`), not from
+   where the file sat. So `--verify` against `$STAGED_PLAN` before the move and
+   `--verify` against `$NIGHT_ROOT/night_plan.json` after it re-render the same
+   bytes and both print the same digest. §1.4 re-runs `--verify` after the move
+   for that reason: it is a free re-assertion, not a second, different check.
+
+   And the staged path is why §0.7's "nothing else is discoverable" survives
+   authoring: `/Users/edr/night-plan-staging/<PLAN_ID>/` is not one level below
+   `/Users/edr/night-custody`, so the watchdog's `*/night_plan.json` glob never
+   sees it, and the night is undiscoverable until §1.4 — after the email.
 3. **Generate the wrapper**, run from the measurement clone. Six flags are
    required and there are no others to supply for an ordinary twelve-slot
    night:
@@ -659,15 +861,15 @@ to still exist.
    ```zsh
    cd "$MEASUREMENT_ROOT"
    "$PY" -B scripts/gen_derivation_night.py \
-     --plan "$NIGHT_ROOT/night_plan.json" \
+     --plan "$STAGED_PLAN" \
      --session-id "$SESSION_ID" \
      --evidence-root-id "$EVIDENCE_ROOT_ID" \
-     --calibration-plan "$NIGHT_ROOT/calibration_plan.json" \
+     --calibration-plan "$CALIBRATION_PLAN" \
      --identity-epoch-json "$NIGHT_ROOT/identity-epoch.json" \
      --t1-bindings-json "$NIGHT_ROOT/t1-bindings.json"
    ```
 
-   The last two paths are exactly the ones the writer printed on its paste
+   The last two paths are exactly the ones the desk-inputs writer printed on its paste
    lines in §0.8; paste them rather than retyping them.
 
    On success it prints `emitted <NIGHT_ROOT>/chain.zsh sha256=<64 hex>` and
@@ -701,14 +903,14 @@ to still exist.
    more is asserted about its fields, because the ledger — not this tool — owns
    that block's shape.
 
-   A file written by §0.8's desk writer passes all three by construction: its
+   A file written by §0.8's desk-inputs writer passes all three by construction: its
    `--power-policy` default is imported from this generator's own
    `CHAIN_POWER_POLICY`, and it refuses an incomplete vector before writing.
    The generator's checks remain the ones that bind, because a hand-edited or
    hand-copied file reaches it by other routes.
 
    That last message states the forcing problem for all three. The chain
-   hardcodes `--power-policy ac_high_power` on every capture, and the writer
+   hardcodes `--power-policy ac_high_power` on every capture, and the capture writer
    compares its measured bindings against the reserved slot's identity epoch,
    whose contents are copied verbatim from this very file. So an epoch naming a
    different policy used to fail at `d01`: after the driver's gate work, after
@@ -731,23 +933,26 @@ to still exist.
    `--verify`:
 
    ```zsh
-   "$PY" -B scripts/gen_derivation_night.py --plan "$NIGHT_ROOT/night_plan.json" \
+   "$PY" -B scripts/gen_derivation_night.py --plan "$STAGED_PLAN" \
      --session-id "$SESSION_ID" --evidence-root-id "$EVIDENCE_ROOT_ID" \
-     --calibration-plan "$NIGHT_ROOT/calibration_plan.json" \
+     --calibration-plan "$CALIBRATION_PLAN" \
      --identity-epoch-json "$NIGHT_ROOT/identity-epoch.json" \
      --t1-bindings-json "$NIGHT_ROOT/t1-bindings.json" \
      --verify
    ```
 
    It renders the wrapper again from the same inputs and compares both the
-   wrapper and its sidecar byte-for-byte with the installed files. **rc 0**
+   wrapper and its sidecar byte-for-byte with the files installed at the plan's
+   `chain_path` and `chain_sha256_path` — that is, in the NIGHT ROOT. Only the
+   plan is staged; the wrapper it describes is written where the night will run
+   it. **rc 0**
    prints `VERIFIED <path> sha256=<64 hex>`. **rc 3** prints `FAIL wrapper
    bytes differ from re-derivation: re-derived sha256=… installed sha256=… at
    <path>`, with `<absent>` in place of the installed digest if the file is
    missing. Emission is deterministic, so a difference means an input drifted —
    the tracked chain, the frozen calibration plan, the identity-epoch or
    T1-bindings bytes, or the plan's own coordinates. Do not re-emit over the
-   difference; find it. Re-running the §0.8 writer with `--force` between
+   difference; find it. Re-running the §0.8 desk-inputs writer with `--force` between
    emission and arming is one way to cause exactly this, which is why that flag
    is not reflexive.
 5. **Syntax-check the wrapper, then install the plan.**
@@ -842,7 +1047,7 @@ before the settle. The courier allowance is spent AFTER the window ends: it is
 the time the driver reserves for the courier to send the night's result before
 the dead-man fires. Neither is a substitute for the other, and widening the
 window consumes dead-man slack while widening nothing else. Worked
-with real numbers, using the coordinates the prior night's runbook 68 pinned
+with real numbers, using the coordinates the prior night's arm runbook (record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`) pinned
 purely as an arithmetic example (`t0 = 2026-09-12 02:56:00 PDT`, epoch
 `1789206960`; that morning's 07:00 is epoch `1789221600`):
 
@@ -943,7 +1148,7 @@ The activation's absolute exit boundary is `t0 − 25 minutes` (§0.6). Finish
 recording and exit before it. Do not remain resident until `t0`.
 
 `[UNVERIFIED: whether a 06:05 "Block B last start" cutoff should carry over to
-these nights. Runbook 68 §"Pins and preconditions" marks its own 06:05 rule
+these nights. Record 12 (`docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`) §"Pins and preconditions" marks its own 06:05 rule
 PROPOSED for that runbook and notes runbook 67 contains no such rule. Treat it
 as the recommended operational cutoff, not a ratified gate: if the email-and-
 install block cannot begin by 06:05, do not arm — author the next night's
@@ -965,32 +1170,162 @@ deadline; the exit boundary; the planned install span; and the cancellation
 instruction — **launch needs no action from Ed unless he replies NO**. Record
 the actual send acceptance, time, message and thread IDs, and which NO relay is
 available. A headless activation that cannot read the thread must say so; it
-cannot certify that no reply went unseen. Recheck owner-authored open
-`directive` issues immediately before publication.
+cannot certify that no reply went unseen. Write that evidence to
+`$STAGE/notice-evidence.txt` before going on — the arm block below refuses to
+publish without it, which is what keeps "email, THEN arm" from being a matter
+of memory. Recheck owner-authored open `directive` issues immediately before
+publication.
 
-Then, in one foreground block: reassert the pins, run the final raw census,
-atomically move the staged plan into `<NIGHT_ROOT>/night_plan.json` with
-`os.replace` (same filesystem device, target must not pre-exist and must not be
-a symlink), install both agents FROM `<CLONE>`, and inspect the installed state
-— both `launchctl` labels present, both calendars, WorkingDirectory, exact
-driver/plan/courier argv, `RunAtLoad=false` — and record the post-install
-`night/` inventory as the baseline the morning harvest is compared against.
-Runbook 68 §"Block B" is the executable template; its plan-assertion block is
-the one to adapt, replacing its `t0`/`window_max_s`/pack assertions with this
-night's and adding `assert p.registration_path` is the committed
-pre-registration. If any step after publication fails, uninstall, copy the
-published plan aside, compare it byte-for-byte with the staged copy, remove it,
-and record the failure. If recovery itself fails, record the surviving labels
-and the discoverable plan and escalate; never claim nothing was armed.
+#### The arm itself, in one foreground block
+
+These are the commands, adapted from the prior night's arm runbook, record 12,
+`docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`,
+§"Block B" — the only executed template this project has for a real install.
+Two things are changed from it and both are named here: the plan assertions are
+this night's (`DIAGNOSTIC_NO_PACK`, `window_max_s = 9000`, no pack block, and a
+`registration_path` equal to the committed pre-registration of §0.5), and the
+chain re-check is this lane's wrapper `--verify` of §1.1b step 4 rather than
+that runbook's G2-a runsheet render.
+
+Run it only after the notice is sent and its evidence is written. Everything
+before the `os.replace` is reversible by doing nothing; everything after it is
+an armed night.
+
+```zsh
+set -euo pipefail
+: "${H:?}" "${PY:?}" "${MEASUREMENT_ROOT:?}" "${NIGHT_ROOT:?}" "${STAGE:?}" "${STAGED_PLAN:?}"
+: "${SESSION_ID:?}" "${EVIDENCE_ROOT_ID:?}" "${CALIBRATION_PLAN:?}"
+export NIGHT_HOUR=<t0's local hour, two digits or fewer, never the dead-man hour 7>
+export NIGHT_MINUTE=<t0's local minute>
+cd "$MEASUREMENT_ROOT"
+
+# 1. The pins still hold, and the notice really went out.
+test -s "$STAGE/notice-evidence.txt"
+test "$(git rev-parse HEAD)" = "$H"
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
+git fetch origin main
+git merge-base --is-ancestor "$H" origin/main
+
+# 2. The wrapper still re-derives to the installed bytes (§1.1b step 4).
+"$PY" -B scripts/gen_derivation_night.py --plan "$STAGED_PLAN" \
+  --session-id "$SESSION_ID" --evidence-root-id "$EVIDENCE_ROOT_ID" \
+  --calibration-plan "$CALIBRATION_PLAN" \
+  --identity-epoch-json "$NIGHT_ROOT/identity-epoch.json" \
+  --t1-bindings-json "$NIGHT_ROOT/t1-bindings.json" \
+  --verify
+
+# 3. The staged plan says what this night is, and the move is possible.
+cp "$STAGED_PLAN" "$STAGE/arm-night_plan.json"
+"$PY" -B - <<'PY'
+import json, os, time
+from pathlib import Path
+from joulewise.night_gate import NightPlan
+plan = NightPlan.from_mapping(json.loads(Path(os.environ['STAGED_PLAN']).read_text()))
+assert plan.repo_head == plan.measurement_head == os.environ['H']
+assert plan.measurement_root == os.environ['MEASUREMENT_ROOT']
+assert plan.custody_root == os.environ['NIGHT_ROOT']
+assert plan.receipt_class == 'DIAGNOSTIC_NO_PACK'
+assert plan.window_max_s == 9000
+assert plan.chain_path == os.environ['NIGHT_ROOT'] + '/chain.zsh'
+assert plan.chain_sha256_path == plan.chain_path + '.sha256'
+assert plan.registration_path.endswith(
+    'configs/calibration/preregistration_d079_epoch_25g83_rev1.md')
+assert 0 <= time.time() - plan.authored_epoch_s <= 36 * 3600
+assert 0 <= plan.t0_epoch_s - plan.authored_epoch_s <= 36 * 3600
+assert time.time() < plan.t0_epoch_s - 1500          # still before the exit boundary
+assert Path(os.environ['STAGE']).stat().st_dev == Path(os.environ['NIGHT_ROOT']).stat().st_dev
+print('staged plan checks PASS')
+PY
+
+# 4. The final raw census, immediately before publication (§0.6).
+ps -axo pid,ppid,command | grep -E 'claude (daemon run|bg-spare|bg-pty-host)|--resume' || true
+
+# 5. Publication: the one irreversible instant.
+"$PY" -B - <<'PY'
+import os
+from pathlib import Path
+target = Path(os.environ['NIGHT_ROOT']) / 'night_plan.json'
+assert not target.exists() and not target.is_symlink()
+os.replace(os.environ['STAGED_PLAN'], target)
+PY
+
+# 6. Install both agents FROM the clone.
+scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
+  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE"
+
+# 7. Inspect what was actually installed, and baseline the night directory.
+launchctl list | grep joulewise
+"$PY" -B - <<'PY'
+import json, os, subprocess
+from pathlib import Path
+labels = {line.split()[-1] for line in
+          subprocess.check_output(['launchctl', 'list'], text=True).splitlines() if line.split()}
+assert {'com.joulewise.night', 'com.joulewise.night.deadman'} <= labels
+night = Path(os.environ['NIGHT_ROOT']) / 'night'
+entries = sorted(night.iterdir()) if night.is_dir() else []
+print('post-install night/ baseline:', json.dumps(
+    [{'name': p.name, 'size': p.lstat().st_size, 'mtime_ns': p.lstat().st_mtime_ns}
+     for p in entries], indent=2))
+PY
+plutil -p ~/Library/LaunchAgents/com.joulewise.night.plist
+plutil -p ~/Library/LaunchAgents/com.joulewise.night.deadman.plist
+cmp "$NIGHT_ROOT/night_plan.json" "$STAGE/arm-night_plan.json"
+```
+
+Read both `plutil` dumps against four things and record the answers: each
+label's `StartCalendarInterval` (the night's `t0` hour and minute, and the
+dead-man's fixed minute), `WorkingDirectory` (the clone), the exact driver,
+plan and courier argv, and `RunAtLoad=false`. `install_night_agent.sh` refuses
+`--hour 7` outright, printing `refusing --hour <h>: it is the dead-man hour`,
+so the dead-man's own firing can never be the night's.
+
+**If any step AFTER publication fails**, recover in this exact order and record
+every return code — the same `--uninstall` / preserve / compare / unpublish
+sequence record 12 §"Block B" uses:
+
+```zsh
+scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
+  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE" --uninstall
+cp "$NIGHT_ROOT/night_plan.json" "$STAGE/failed-night_plan.json"
+cmp "$STAGE/failed-night_plan.json" "$STAGE/arm-night_plan.json"
+rm "$NIGHT_ROOT/night_plan.json"
+```
+
+The `cmp` before the `rm` is the point of keeping `arm-night_plan.json`: it
+proves the bytes that were briefly discoverable are the bytes that were
+reviewed, so the failed attempt is documentable rather than merely undone. If
+recovery itself fails, record the surviving labels and the discoverable plan
+and escalate; never claim nothing was armed.
 
 ### 1.5 Record and exit
 
 Write the arm record and its evidence directory in the authorized linked
-bookkeeping worktree, commit, push, and exit before `t0 − 25 min`. Carry the
-**frozen triple** — the three values `(<PLAN_ID>, <CLONE>, <H>)` that the next
-relaunch prompt must repeat verbatim so the successor activation harvests the
-night this one armed — into that prompt until the night completes. No own
+bookkeeping worktree, commit, push, and exit before `t0 − 25 min`. No own
 background work may remain alive.
+
+**The frozen checkout triple, exactly as the contract defines it.** It is three
+fields and only three: `(plan_id, root, head)`. The relaunch prompt carries
+them at line 9 — "Frozen checkout triples `(plan_id, root, head)` for this
+activation: `@@FENCED_CHECKOUTS@@`" (`docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`) —
+and the watchdog RENDERS that placeholder itself, at every launch, as a
+deterministic JSON list of the canonical repository plus every authored,
+not-completed v2 plan's measurement root and head
+(`docs/process/MAGISTRATE_WATCHDOG.md`, §"Complete write inventory"). The
+successor activation does not choose the list and this runbook cannot widen it:
+
+| Field | This night's value |
+|---|---|
+| `plan_id` | `$PLAN_ID` — e.g. `d079-epoch-25g83-derivation-n1-<YYYYMMDD>` (§0.2) |
+| `root` | `$MEASUREMENT_ROOT` — the fresh clone of §0.2, `/Users/edr/JouleWise-measurement-<NIGHT_DATE>-derivation` |
+| `head` | `$H` — the 40-character reviewed head of §0.1 |
+
+The triple's purpose is a fence, not a handover: the prompt forbids Git
+operations in the canonical root and forbids MOVING any listed measurement
+root, because a post-arm move invalidates the plan's pin and forces a re-arm
+(same section). Everything the morning harvest additionally needs is
+reconstructed from these three values plus the night root's own contents, and
+§2.0 does exactly that. Still write all of it into the arm record as well: the
+reconstruction is the successor's floor, not a licence to record less.
 
 ---
 
@@ -1000,6 +1335,53 @@ The next activation harvests only after the plan span's closed completion
 boundary has passed, the courier marker exists, and recorded process ownership
 is clear. An early chain exit alone does not authorize early resumption, and
 `courier.sent` alone clears neither chain nor campaign ownership.
+
+### 2.0 Rebuild the night's coordinates from the frozen triple
+
+The harvesting activation starts with three values (§1.5) and needs eight. Run
+this first; every command in §2 interpolates what it exports. Four values are
+derivations, and three are read back out of the wrapper the night actually ran
+— which is stronger than copying them from the arm record, because the wrapper
+is the file whose digest the plan pinned:
+
+```zsh
+set -euo pipefail
+export PLAN_ID=<plan_id from the frozen triple>
+export MEASUREMENT_ROOT=<root from the frozen triple>
+export H=<head from the frozen triple>
+export PY="$MEASUREMENT_ROOT/.venv/bin/python"
+export NIGHT_ROOT="/Users/edr/night-custody/$PLAN_ID"
+export WINDOW_CUSTODY_ROOT="$NIGHT_ROOT"
+export CALIBRATION_LEDGER="$MEASUREMENT_ROOT/runs/calibration_observation_ledger.jsonl"
+export LEDGER_HEAD_PIN="$MEASUREMENT_ROOT/configs/calibration/calibration_ledger_head.json"
+
+# The wrapper is the pinned artifact; check its bytes before reading anything out of it.
+test -x "$PY"
+test "$(git -C "$MEASUREMENT_ROOT" rev-parse HEAD)" = "$H"
+( cd "$NIGHT_ROOT" && shasum -a 256 -c chain.zsh.sha256 )
+
+# Its export lines are single-quoted literals the generator emitted.
+eval "$(grep -E '^export (SESSION_ID|EVIDENCE_ROOT_ID|PLAN|RUNS_ROOT)=' "$NIGHT_ROOT/chain.zsh")"
+export SESSION_ID EVIDENCE_ROOT_ID PLAN RUNS_ROOT
+print -rl -- "$NIGHT_ROOT" "$WINDOW_CUSTODY_ROOT" "$CALIBRATION_LEDGER" \
+  "$LEDGER_HEAD_PIN" "$SESSION_ID" "$EVIDENCE_ROOT_ID" "$PLAN" "$RUNS_ROOT"
+```
+
+Why each is what it is, so the reconstruction can be checked rather than
+trusted:
+
+| Value | Where it comes from |
+|---|---|
+| `NIGHT_ROOT` | The `/Users/edr/night-custody/<PLAN_ID>` convention of §0.2. Confirm it against the night's own plan: `$NIGHT_ROOT/night_plan.json` must exist and its `custody_root` must equal `$NIGHT_ROOT`. |
+| `WINDOW_CUSTODY_ROOT` | The night root itself. The generator sets the wrapper's `WINDOW_CUSTODY_ROOT` export from `plan.custody_root` and nothing else, so the two are the same directory under two names — §2.1's `<WINDOW_CUSTODY_ROOT>/operator_logs/derivation-chain.log` is inside the night root. |
+| `CALIBRATION_LEDGER` | `<measurement_root>/runs/calibration_observation_ledger.jsonl` — the generator's `--ledger` default, and the value §0.2 exported at the arm. |
+| `LEDGER_HEAD_PIN` | `<measurement_root>/configs/calibration/calibration_ledger_head.json` — the generator's `--head-pin` default. |
+| `SESSION_ID`, `EVIDENCE_ROOT_ID`, `PLAN` | Not derivable from anything: they were the operator's literals at §0.2 and §1.1b step 3. The wrapper carries all three as `export` lines, which is why the block above verifies the wrapper against its sidecar first and only then reads them. `PLAN` is the frozen calibration plan `$CALIBRATION_PLAN`. |
+| `RUNS_ROOT` | `<custody_root>/runs` unless the arm overrode `--runs-root`; taken from the wrapper for that reason, not assumed. |
+
+If the sidecar check fails, stop: the bytes in the night root are not the bytes
+the plan pinned, and nothing read out of them may be used. Recover the
+coordinates from the arm record instead and treat the discrepancy as a finding.
 
 ### 2.1 What to read
 
@@ -1023,7 +1405,7 @@ removal, and keep a separate `lstat` inventory of the original with sizes and
 ```zsh
 cd "$MEASUREMENT_ROOT"
 "$PY" scripts/issue_calibration_acceptance_generation.py check \
-  --session-ids "<NIGHT_1_SESSION_ID>"
+  --session-ids "$SESSION_ID"
 echo "rc=$?"
 ```
 
@@ -1052,7 +1434,7 @@ ledger rows, not from a plot, not "just to see if the night worked". The dry
 run of §2.2 answers whether the campaign is on schedule; **it cannot answer
 what the campaign got, and that is the point.**
 
-The fence is installed in code, not left to discipline: `prepare-candidate`
+The blindness fence is installed in code, not left to discipline: `prepare-candidate`
 refuses while any session named in the registration is not terminal, and names
 the session it found open. Terminal means the session's last declared slot is
 final or the session was aborted. Blindness is why the pre-registration also
@@ -1074,7 +1456,7 @@ reads a different thing for each:
 |---|---|---|---|
 | `0` | finalized, disposition `valid` | `slot_end slot=dNN disposition=valid` | Continues to the next declared slot on the unchanged start-to-start cadence. |
 | `1` | **finalized**, disposition not `valid` | `slot_end slot=dNN disposition=non-valid` | **Continues, identically.** This is a normal record, not a failure. |
-| `≥ 2` | **not finalized** | `slot_refused slot=dNN rc=<status>` | **Stops the night, leaving the session OPEN.** The chain exits with the writer's own status. |
+| `≥ 2` | **not finalized** | `slot_refused slot=dNN rc=<status>` | **Stops the night, leaving the session OPEN.** The chain exits with the capture writer's own status. |
 
 **Why a non-valid capture does not end the night.** The writer exits 1 when the
 capture's disposition is not `valid` and 0 when it is, and the ledger row is
@@ -1082,13 +1464,13 @@ FINALIZED either way. An ordinary-invalid capture is a legitimate outcome the
 pre-registration already handles, by named-mechanism exclusion at issuance —
 and derivation slots are INDEPENDENT of one another: none is an endpoint that
 another depends on, unlike a bracket session's two ends. So one non-valid
-capture must never cost the captures after it. The chain runs the writer as an
+capture must never cost the captures after it. The chain runs the capture writer as an
 `if` condition for exactly this reason, so that `set -e` cannot exit on status 1
 before the dispatch is reached. **Expect `disposition=non-valid` lines in a
 healthy night's log** — the pre-registration's own projection assumes a valid
 rate near 30/38 — and record their count without reading a value.
 
-**Why a refusal does end it.** Status 2 is the writer's refusal exit
+**Why a refusal does end it.** Status 2 is the capture writer's refusal exit
 (`emit_refusal`); anything above it is a crash. In both cases the row is NOT
 finalized, so continuing would write later slots into a session whose declared
 list has a hole nothing accounts for. The chain stops instead — and
@@ -1105,7 +1487,7 @@ never as a re-arm of the same night.
 cd "$MEASUREMENT_ROOT"
 "$PY" scripts/recover_calibration_ledger.py \
   --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
-  abort-session --session-id "<SESSION_ID>" --plan "<PLAN>" \
+  abort-session --session-id "$SESSION_ID" --plan "$PLAN" \
   --reason "<the named reason this night actually stopped>"
 ```
 
@@ -1176,6 +1558,10 @@ not generous.
 ## 4. After night 3 is terminal
 
 ### 4.1 Confirm admissibility, still blind
+
+`<S1>`, `<S2>` and `<S3>` below are the three nights' `SESSION_ID` values —
+one per night, each recovered from that night's wrapper by §2.0 and
+cross-checked against its arm record.
 
 ```zsh
 cd "$MEASUREMENT_ROOT"
@@ -1344,7 +1730,7 @@ turn that prepared the candidate.
 The five groups below are in the order the night can reach them: the desk
 writer refuses while writing the inputs (§0.8, its own table), the generator
 refuses at the desk, the wrapper refuses at launch, the chain exits during the
-night, and the writer and issuer refuse inside a capture or at the desk after.
+night, and the capture writer and the issuer refuse inside a capture or at the desk after.
 
 Generation-time refusals (`scripts/gen_derivation_night.py`, §1.1b step 3).
 Every one prints `FAIL <reason>` on stderr and **exits 2**, and **nothing is
@@ -1364,7 +1750,7 @@ failures with no window cost:
 | `--allow-slot-count requires --slot-count-ruling <ref>` / `slot-count ruling reference must be one line of [A-Za-z0-9._:/#@ -]` | The override was requested without an authority, or with one that is not a single line of ordinary reference characters. | Name the ruling in one plain line. The reference is interpolated into the wrapper's header, so a multi-line paste could open a comment and start a live line. |
 | `<field> contains the census substring 'codex' \| 'claude' \| 't3': …` | Some emitted literal — a plan ID, session ID, window ID, evidence root ID, frozen plan ID, or any absolute path — contains one of the three substrings the night's own agent census matches (`AGENT_CENSUS_ARGV` in `joulewise/night_gate.py`). | Rename it. The census runs every 30 s against the process table and would match the wrapper's own command line and kill the night. |
 | `<field> must be an absolute path: …` | A path literal is relative. | Use absolute paths everywhere; the wrapper runs with no useful working directory. |
-| `frozen calibration plan is unreadable or carries no plan_id` / `a pinned input is unreadable: …` | The frozen calibration plan, the identity-epoch JSON, the T1-bindings JSON, or the tracked chain inside the clone could not be read. | Re-check §0.8 and the night root's contents — including that the two desk inputs carry the hyphenated names the writer gave them. The chain is read from the CLONE, so this also catches a mis-cut clone. |
+| `frozen calibration plan is unreadable or carries no plan_id` / `a pinned input is unreadable: …` | The frozen calibration plan, the identity-epoch JSON, the T1-bindings JSON, or the tracked chain inside the clone could not be read. | Re-check §0.8 and the night root's contents — including that the two desk inputs carry the hyphenated names the desk-inputs writer gave them. The chain is read from the CLONE, so this also catches a mis-cut clone. |
 | `identity epoch json keys are not exactly the six IDENTITY_EPOCH_FIELDS …` / `… fields are empty or not scalar …` / `identity epoch power_policy is '<x>' …` | The identity-epoch file cannot do its job (§1.1b step 3). | Re-run the §0.8 writer with `$PY` and `--force`; a hand-edited file is the usual cause. Then re-emit. |
 | `slot count <n> exceeds the ledger's MAX_DECLARED_SESSION_SLOTS (99); the reservation would refuse it after the settle` | A slot count above the ledger's own ceiling. | Use twelve. |
 | `--verify`: `FAIL wrapper bytes differ from re-derivation: …` (**rc 3**, not 2) | The installed wrapper or its sidecar is not what these inputs render (§1.1b step 4). | An input drifted. Find which — chain, frozen plan, identity epoch, T1 bindings, or the plan's coordinates. Do not re-emit over the difference. |
@@ -1407,7 +1793,7 @@ Capture-writer refusals (`scripts/validate_powermetrics_fiducial.py`, codes in
 
 | Refusal code | Meaning | Operator action |
 |---|---|---|
-| `calibration_derivation_only_epoch_unchanged` | `--derivation-only` was used while the live identity epoch still matches the active acceptance's. Derivation-only exists only when no acceptance binds the current epoch. | **Stop.** Either the OS reverted or the wrong acceptance was read. Re-run §0.3; do not force the flag. This is the same condition §0.8's desk writer refuses on at the desk. |
+| `calibration_derivation_only_epoch_unchanged` | `--derivation-only` was used while the live identity epoch still matches the active acceptance's. Derivation-only exists only when no acceptance binds the current epoch. | **Stop.** Either the OS reverted or the wrong acceptance was read. Re-run §0.3; do not force the flag. This is the same condition §0.8's desk-inputs writer refuses on at the desk. |
 | `calibration_derivation_only_session_kind_required` | `--derivation-only` without a declared `derivation`-kind session slot. | The reservation did not open a derivation session, or the slot name is not in its declared list. Fix the reservation; never capture outside the registration. |
 | `calibration_derivation_session_requires_derivation_only` | A `derivation`-kind session slot was captured WITHOUT `--derivation-only` — the mid-night flag-loss case the guard exists for. | The chain's writer invocation lost the flag. Stop the night's remaining slots at the desk; the session is recoverable, the mixed evidence is not. |
 | `writer_bracket_arguments` | `--session-id`, `--slot` and `--attempt-id` are all-or-none; a partial triple refuses. | Fix the invocation; three values or none. |
@@ -1445,7 +1831,7 @@ implementation.]`
 2. **No issuance.** `prepare-candidate` writes a candidate the production
    loader refuses. Issuing is D-138's single reviewed commit (§4.4).
 3. **No writing into `configs/calibration/`.** Not by this runbook, not by the
-   issuer, not by the desk inputs writer, not "just to stage it".
+   issuer, not by the desk-inputs writer, not "just to stage it".
 4. **No look at any value before night 3 is terminal** (§2.3).
 5. **No extra, replacement, top-up or retry night**, no early stop, and no
    outcome-driven schedule change (§2.4).
@@ -1488,7 +1874,7 @@ numbered record.
 | Fact | Source |
 |---|---|
 | Chain order, `SLOT_COUNT=12`, `SETTLE_S=600`, `SLOT_CADENCE_S=600`, `SLOT_CAPTURE_BUDGET_S=480`, exits 64/66, `window_exhausted` abort, the thirteen required variables | `scripts/night_chains/calibration_derivation_only.zsh`: its knob defaults, its `:?required` guards, and its slot loop |
-| The three-way writer-status dispatch (0 → `disposition=valid` continue; 1 → row finalized `disposition=non-valid`, continue; ≥ 2 → `slot_refused slot=dNN rc=<n>`, exit with the session OPEN and no abort), the writer run as an `if` condition so `set -e` cannot pre-empt it, and the positivity guard covering `SLOT_CAPTURE_BUDGET_S` | same file: the slot loop's `if (( writer_rc == 0 )); then` branch and the pre-settle guards |
+| The three-way writer-status dispatch (0 → `disposition=valid` continue; 1 → row finalized `disposition=non-valid`, continue; ≥ 2 → `slot_refused slot=dNN rc=<n>`, exit with the session OPEN and no abort), the capture writer run as an `if` condition so `set -e` cannot pre-empt it, and the positivity guard covering `SLOT_CAPTURE_BUDGET_S` | same file: the slot loop's `if (( writer_rc == 0 )); then` branch and the pre-settle guards |
 | `chain_start` logged AFTER the reservation and immediately before the settle — the fact that makes Δ measurable at harvest | same file |
 | Chain environment fixture (the exact thirteen required variables) | the chain-environment test in `tests/test_issue_calibration_acceptance_generation.py` |
 | Writer flags `--allow-live --derivation-only --session-id --slot --attempt-id --power-policy`; all-or-none bracket triple | `scripts/validate_powermetrics_fiducial.py`, its argument parser and bracket-triple validation |
@@ -1500,16 +1886,25 @@ numbered record.
 | Three nights × 12 slots, retained n ≥ 19, the 16.95/25.4 projections, the 128 min schedule, blindness, the screen challenge, the D-125 envelope, the halt on `S >= C`, `0.04262208300415633`, `0.010818`, the predecessor ceiling `0.010164834757777545` | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` |
 | The three durations reconciled — programmed span 7680 s (128 min), generator minimum 7980 s (133 min), armed `window_max_s` 9000 s (150 min) — and the note that 210 min is the install span, not a window | same file, §"Why three nights of twelve slots" |
 | Display state at `t0` is unconstrained by the night gate, recorded as a known condition and not a rule | same file, §"Known conditions (recorded, not rules)" |
-| Fences `[02:45,03:30)` / `[07:00,07:01)`, plan span from `t0 − 25 min`, the stand-down ladder −25/−16/−15, the 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, the `measurement_root`/`measurement_head` install rule | `docs/process/MAGISTRATE_WATCHDOG.md`, §Fences, §Stand-down ladder, §Arming |
+| Fences `[02:45,03:30)` / `[07:00,07:01)`, plan span from `t0 − 25 min`, the stand-down ladder −25/−16/−15, the 15-minute watchdog liveness, email-then-arm with Ed's NO overriding, the `measurement_root`/`measurement_head` install rule | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines" (the intervals and the boundary table) and §"Install handoff" |
 | The handback's role, the courier's reading order, the campaign/chain process checks | `docs/process/NIGHT_HANDBACK.md`, its opening sections |
 | v2 plan required keys, `night_plan_overruns_deadman`, `registration_path`, the 36-hour authoring age | `joulewise/night_gate.py`: `_PLAN_KEYS`, `NightPlan.from_mapping`, `NIGHT_GATE_REASON_CODES`, `NIGHT_DRIVER_REASON_CODES`, `PLAN_MAX_AGE_S` |
 | Generation-time parsing of the two JSON inputs (six exact `IDENTITY_EPOCH_FIELDS`, scalar non-empty values, `power_policy == ac_high_power`; T1 bindings parsed as an object only), `MAX_DECLARED_SESSION_SLOTS = 99` as a desk-time ceiling, and the `CHAIN_ANCHORS` anchor-text discipline | `scripts/gen_derivation_night.py`: `_validated_identity_epoch`, `_validated_json_object`, `CHAIN_POWER_POLICY`, `CHAIN_ANCHORS`, and the slot-count and window checks in `build_spec`; `MAX_DECLARED_SESSION_SLOTS` from `joulewise/calibration_ledger.py` |
 | The wrapper mechanism, the thirteen + six exports, the three emitted files, the five-step arm order, the six required emit flags and their defaults, `--verify` rc 0 / rc 3, every generation-time refusal text, the 300 s pre-settle allowance, the 7680 s programmed span for twelve slots, the census substrings | `scripts/gen_derivation_night.py` (module docstring and the symbols `programmed_span_s`, `_census_clean`, `_validated_ruling`, `_next_deadman_epoch`, `build_spec`, `render_wrapper`, `emit`, `verify`, `build_parser`, `main`) and the `derivation-night-wrapper` generated region of `docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md` |
-| The desk inputs writer: its flags and defaults, its paste-line output format, every refusal in §0.8's table, the canonical hyphenated filenames, and the rule that it must run under the project venv interpreter | `scripts/write_derivation_night_inputs.py` (module docstring, `_derive_planned_vectors`, `_refuse_incomplete_vector`, `_stale_identity_fields`, `_resolved_out_dir`, `_refuse_overwrite`, `write_night_inputs`, `_build_parser`, `main`), whose names `IDENTITY_EPOCH_NAME` and `T1_BINDINGS_NAME` come from `scripts/generate_g2a_probe_inputs.py`; seat record 135, including its live desk smoke and its MLX finding |
-| Why the G2-a producer cannot serve a derivation night (it authenticates the acceptance epoch that is stale), and that the desk writer is the answer | record 134 |
+| The desk-inputs writer: its flags and defaults, its paste-line output format, every refusal in §0.8's table, the canonical hyphenated filenames, and the rule that it must run under the project venv interpreter | `scripts/write_derivation_night_inputs.py` (module docstring, `_derive_planned_vectors`, `_refuse_incomplete_vector`, `_stale_identity_fields`, `_resolved_out_dir`, `_refuse_overwrite`, `write_night_inputs`, `_build_parser`, `main`), whose names `IDENTITY_EPOCH_NAME` and `T1_BINDINGS_NAME` come from `scripts/generate_g2a_probe_inputs.py`; seat record 135, including its live desk smoke and its MLX finding |
+| Why the G2-a producer cannot serve a derivation night (it authenticates the acceptance epoch that is stale), and that the desk-inputs writer is the answer | record 134 |
 | The live `check` output in §0.3 — two mismatched fields, `mlx_version 0.31.2` matching, rc 3, and the appended `match` line on the pre-registered sampler digest | record 134, run from a fresh clone at the desk |
 | Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the execution refuter's independent derivation (record 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
-| Runbook shape, install span 03:00–06:30, never 07:xx, `t0+window_max_s+300 < 07:00`, the strict-maximum arithmetic, the Block A / Block B / record-and-exit structure | records 11 and 12 of this trace directory (the prior night's handback draft and arm runbook 68) |
+| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
+| "Discoverable" = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename — so the staging path arms nothing, and the driver discovers nothing because launchd hands it `--plan` | `glob_plans` in `scripts/magistrate_watchdog.py`; the `--plan` `required=True` argument of `scripts/run_night.py` |
+| The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
+| The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |
+| The frozen checkout triple is exactly `(plan_id, root, head)`, rendered by the watchdog into the relaunch prompt, and fences those checkouts against movement | `docs/process/MAGISTRATE_RELAUNCH_PROMPT.md`, the `@@FENCED_CHECKOUTS@@` line and the line after it; `docs/process/MAGISTRATE_WATCHDOG.md`, §"Complete write inventory" |
+| A fence forbids LAUNCHING OR ADOPTING a magistrate agent session, not running a night — so a `t0` inside the belt is correct | `docs/process/MAGISTRATE_WATCHDOG.md`, §"Safety model and state machine" (the `FENCED` state) and §"Fence and deadlines"; corroborated by the rehearsal night that fired at 02:56 local and exited 0 (`docs/process/NIGHT_HANDBACK.md`, §"Executed — rehearsal-20260909") |
+| The frozen calibration plan is a committed pack-relative `calibration_plan.json`, not a custody reservation plan | `docs/phase_2/window_runbook.md`, the ALPHA `window.env` example and its `FROZEN_PLAN` gloss |
+| `[DD]` is the registration's authoring day | `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, §"Fields filled at commit" |
+| The clone's environment must equal `env/mac-measurement-lock.txt` | record 12, §"Block A", its closing `pip freeze` diff |
+| Runbook shape, install span 03:00–06:30, never 07:xx, `t0+window_max_s+300 < 07:00`, the strict-maximum arithmetic, the Block A / Block B / record-and-exit structure | records 11 and 12 of this trace directory — `docs/process_traces/2026-09-10-activation-96bfeca7/11-night-handback-draft-g2a-20260912.md` and `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md` |
 | The supersession banner shape and the "read the newest activation records" instruction | record 13 |
 | Epoch↔local conversions and the four arithmetic results in §1.2 | computed with `TZ=America/Los_Angeles date -r <epoch>` and shell arithmetic when this runbook was drafted |
 | Driver hands the chain four variables and no argv (`_run_chain_once` in `scripts/run_night.py`, pinned by the argv assertion in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
@@ -1522,8 +1917,12 @@ Still unverified, and flagged in place: the 06:05 last-start cutoff's status
 the per-slot binding argv (§1.1, §1.1a) — there is no such driver code by
 design, and the emitted wrapper supplies both. **Closed since revision 3:** the
 live `check` strings (§0.3, record 134) and the producer of the two desk inputs
-(§0.8, `scripts/write_derivation_night_inputs.py`). The wrapper generator's
-tests live in `tests/test_gen_derivation_night.py`, the desk writer's in
+(§0.8, `scripts/write_derivation_night_inputs.py`). **Closed since revision
+4:** the plan's two paths and the discoverability window between them (§1.1b
+step 2, §0.7), the arm's actual install commands (§1.4), the frozen checkout
+triple's exact fields and the harvest's reconstruction from them (§1.5, §2.0),
+and the two senses of `fence` (§Terms). The wrapper generator's
+tests live in `tests/test_gen_derivation_night.py`, the desk-inputs writer's in
 `tests/test_write_derivation_night_inputs.py`, and the chain's own in
 `tests/test_issue_calibration_acceptance_generation.py` under no
 `test_night_chain_*` name.
@@ -1541,7 +1940,7 @@ means. A term is listed only if it does technical work.
 | identity epoch / epoch | same | The six-field vector `{os_build, hardware_model, power_policy, sampling_interval_ms, estimator_revision, pulse_protocol_id}` an acceptance binds. |
 | derivation-only capture | same | A capture taken to BUILD a future acceptance; it licenses no measurement. |
 | slot | §Terms | One declared, ordered place for one capture inside a session (`d01`…`d12`). |
-| session | §Terms | A ledger capability reserving several attempts under one open receipt at a fixed head pin. |
+| session (ledger) | §Terms | A ledger capability reserving several attempts under one open receipt at a fixed head pin. Unqualified, *session* always means this; the watchdog's *agent session* is always written out in full. |
 | registration | §Terms | The set of ledger sessions the pre-registration declares the corpus is drawn from. |
 | stale field | §Terms, used §0.8 | An identity field whose value on this machine differs from the active acceptance's epoch; at least one must be stale for a derivation night to be the right night. |
 | head pin / head-equals-pin | §Terms | The committed file naming the trusted receipt count and last digest; equality with the physical ledger head. |
@@ -1549,19 +1948,25 @@ means. A term is listed only if it does technical work.
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |
 | blind / blindness | §Terms, enforced §2.3 | No value, screen or statistic is examined before night 3's session is terminal. |
 | dead-man | §Terms | The second LaunchAgent that fires at a fixed local minute and stands the night down if completion has passed. |
-| fence | §Terms | A half-open local-time interval in which the watchdog refuses to launch or adopt. |
+| fence (watchdog sense) | §Terms | A period in which the watchdog refuses to LAUNCH OR ADOPT a magistrate agent session: a plan span, the half-open belt `[02:45:00, 03:30:00)`, or the half-open dead-man minute `[07:00:00, 07:01:00)`. It forbids an agent starting, never a night running — which is why a `t0` of 02:56 is inside the belt and correct. |
+| blindness fence | §Terms, enforced §2.3 | The code-enforced prohibition on reading any captured value before night 3's ledger session is terminal. Not an interval; no clock clears it. |
 | handback | §Terms | `docs/process/NIGHT_HANDBACK.md`, rewritten and committed with every armed night. |
 | email-then-arm | §Terms, §1.4 | Email Ed the notice, arm without waiting for a reply; Ed's NO overrides. |
 | `[QUIET-MAC]` | §0.6 | The agent-free machine discipline a capture night runs under. |
 | measurement root / measurement head | §0.2, §1.1 | The fresh clone both night agents are installed from, and the commit it is detached at. |
 | `$PY` / project venv interpreter | §0.2 | The Python inside the measurement clone's `.venv` — the only interpreter with this project's dependencies, and the one every desk step here uses. Not `/usr/bin/python3`. |
 | T1 bindings | §0.3, §0.8 | The toolchain-identity block a finalization receipt records: the six epoch fields plus the four execution pins (sampler digest, clock-anchor method version, MLX version, frozen protocol digest). |
-| desk inputs writer | §0.8 | `scripts/write_derivation_night_inputs.py`: the tool that reads this machine through the capture writer's own helpers and writes `identity-epoch.json` and `t1-bindings.json` into the night root, refusing rather than writing a vector the night would reject. |
-| paste line | §0.8 | One of the two lines the desk inputs writer prints in `NAME=<path> sha256=<64 hex>` form, shaped as a shell assignment so the path and digest reach the arm record and the generator's flags without retyping. |
+| desk-inputs writer | §0.8 | `scripts/write_derivation_night_inputs.py`: the tool that reads this machine through the capture writer's own helpers and writes `identity-epoch.json` and `t1-bindings.json` into the night root, refusing rather than writing a vector the night would reject. |
+| paste line | §0.8 | One of the two lines the desk-inputs writer prints in `NAME=<path> sha256=<64 hex>` form, shaped as a shell assignment so the path and digest reach the arm record and the generator's flags without retyping. |
 | clean tree | §0.8 | The measurement clone has no uncommitted change of any kind: `git status --porcelain` prints zero bytes. |
 | `DIAGNOSTIC_NO_PACK` | §1.1 | The receipt class for a night with no measurement pack; only C2 is not-applicable. |
-| wrapper | §1.1a | The generated zsh file, one per night, that carries the night's whole environment as literal `export` lines, authenticates its pinned inputs, and then `exec`s the tracked chain. The plan's `chain_path` names it. |
-| night root | §1.1a | `<NIGHT_ROOT>`, the custody directory the plan calls `custody_root`; the three emitted files and the night's two desk inputs live in it. |
+| wrapper | §Terms, built §1.1a | The generated zsh file, one per night, that carries the night's whole environment as literal `export` lines, authenticates its pinned inputs, and then `exec`s the tracked chain. The plan's `chain_path` names it. |
+| night root | §Terms, exported §0.2 | `<NIGHT_ROOT>`, the custody directory the plan calls `custody_root`; the three emitted files and the night's two desk inputs live in it. |
+| tracked chain | §Terms | `scripts/night_chains/calibration_derivation_only.zsh`, the committed script that runs the twelve captures — identical in every clone at `H`, unlike the per-night wrapper. |
+| capture writer | §0.8 | `scripts/validate_powermetrics_fiducial.py`, run twelve times by the chain during the night. Distinguished from the desk-inputs writer everywhere in this file; a bare "writer" survives only inside a tool's own quoted message, where it means this one. |
+| `<NIGHT_DATE>` | §0.2 | The eight-digit `YYYYMMDD` of the date `t0` falls on; every dated name in the arm is built from it. |
+| staging path / `$STAGED_PLAN` | §0.2, §1.1b step 2 | `/Users/edr/night-plan-staging/<PLAN_ID>/night_plan.json`, where the plan is authored, generated from and `--verify`-ed. Outside the watchdog's discovery glob, so authoring a plan arms nothing. |
+| published (plan) | §1.4 | The one instant a night becomes discoverable: `os.replace` of the staged bytes into `<NIGHT_ROOT>/night_plan.json`, a target that must not pre-exist. Everything before it is undone by doing nothing. |
 | sidecar | §1.1a | A small companion file holding another file's SHA-256 in `shasum` output form — the digest, two spaces, a name. |
 | advisory (of the third emitted file) | §1.1a | Written for a human's hand-check only; nothing reads it at launch, so deleting or rewriting it changes nothing about what the night will accept. |
 | anchor text | §1.1a | One exact line of the chain, quoted in full as a citation instead of a line number, and resolved against the chain's current bytes by a test. |
@@ -1576,7 +1981,7 @@ means. A term is listed only if it does technical work.
 | Δ (delta) | §1.2 | The elapsed time from the plan's `t0` to the moment the chain's settle begins: driver gate work + chain preflight + session reservation. `d12` is admitted only while Δ ≤ 1320 s. |
 | plan span / exit boundary | §0.6, §1.3 | The interval from `t0 − 25 min` in which no agent may be resident; the activation's hard exit time. |
 | census | §0.6 | The enumerated process inventory proving no foreign or own agent is live. |
-| frozen triple | §1.5 | `(plan id, measurement root, H)`, repeated verbatim in the next relaunch prompt so the successor harvests the right night. |
+| frozen checkout triple | §1.5 | Exactly `(plan_id, root, head)` — the three fields the watchdog renders into the relaunch prompt's `@@FENCED_CHECKOUTS@@` list. It fences those checkouts against movement; §2.0 reconstructs every further harvest coordinate from it. |
 | terminal (session) | §2.2 | The session's last declared slot is final, or the session was aborted. |
 | dispatch (writer-status) | §2.4 | The chain branching on the capture's EXACT status number rather than on "non-zero": 0 valid and 1 non-valid both finalize the row and continue the night; 2 or more is a refusal or crash that stops it with the session open. |
 | desk recovery | §2.4 | Closing an open session with `recover_calibration_ledger.py … abort-session --reason <named>`, run by the operator at the desk after the night is over — never inside the window and never as a re-arm. |
