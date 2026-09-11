@@ -1,0 +1,4 @@
+# Report 140 — Replay 11 (worktree replay-11, HEAD 7a0511d6a5b214175de29ddb76835f16987702e2): STOPPED, NO RESULT
+
+Replay 11 was launched at 20:22:52 PDT and stopped by the lead as superseded (runbook defects must land before the PR; the head moves; replay 12 runs at the new head) — there is no suite result at this head, and the trailing `WORKERS SUMMARY shards=4 modules=0 tests=0 failures=0 errors=0 skipped=0 failed_shards=1,2,3,4 result=FAIL` / `REPLAY_RC=1` in `/tmp/magistrate-96bfeca7/replay-11.log` (END 20:34:19 PDT) is a kill artifact, not a test verdict: zero modules and zero tests were reported, all four shards died together mid-run, and no `FAIL:`/`ERROR:` test verdict appears in the log.
+Nothing was restarted; no file was edited and no git state changed in `/Users/edr/code/JouleWise-wt-replay-11` or any other tree, and the log is kept at `/tmp/magistrate-96bfeca7/replay-11.log`.
