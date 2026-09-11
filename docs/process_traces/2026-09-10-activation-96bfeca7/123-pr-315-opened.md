@@ -1,0 +1,3 @@
+# 123 — PR #315 opened at fa7dd55dd57b2be6d4cd4aa3cb117e0d5686c619 (2026-09-10 17:53 PDT)
+
+`gh pr create --base main --head feat/2026-09-10-epoch-integration` with the body at `/tmp/magistrate-96bfeca7/pr-body-draft.md` (gate ledger 12/12, `check_gate_ledger.py --head-sha fa7dd55d… --repo-root <integration>` rc 0). The bookkeeping branch was merged into main first (38929f6b) so every `RUN <sha>` row is reachable from the base. Row 11 (CI) watched from the bench; self-merge after green under D-072; post-merge cross-unit integration review follows. The magistrate's terminal review is record 118 (closed on this head). Limitation carried in the body: Opus-only seats and refuters after the Codex limit (record 57).
