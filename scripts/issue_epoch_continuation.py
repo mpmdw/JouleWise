@@ -6,8 +6,8 @@ machine's six-field identity). A judged epoch is an identity that acceptance
 may evaluate. Acknowledged rows are exactly the equivalence night's finalized
 attempts; these bypass only the range-expansion trigger. Systematic failures
 remain triggers and prevent candidate preparation. The level screen caps
-each retained capture's bound. The bracket screen caps their range, maximum
-minus minimum. Both come from the prior
+every valid capture's bound, resolved or not. The bracket screen caps their
+range, maximum minus minimum. Both come from the prior
 acceptance's ratified operatives: no threshold is fitted to this night.
 """
 
@@ -31,6 +31,7 @@ from joulewise.calibration_epoch_continuation import (  # noqa: E402
     CONTINUATION_SCHEMA, DECLARED_SLOT_COUNT, TERMINAL_STATES,
     ContinuationRefusal, _decimal, _json_object, acceptance_judged_epochs,
     authenticate_epoch_continuation, continuation_rule, equivalence_statistics,
+    envelope_holds_over_all_valid,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_HEAD_PIN_PATH, SESSION_KIND_DERIVATION,
@@ -82,6 +83,8 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     continued_epoch: dict[str, Any] | None = None
     slots: list[dict[str, Any]] = []
     retained: list[str] = []
+    all_valid: list[str] = []
+    unresolved_valid: list[str] = []
     acknowledged: list[str] = []
     for name in session.declared_slots:
         observation = session.finalized_slots.get(name)
@@ -117,6 +120,11 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
             "b_fiducial_s": lexeme,
         })
         acknowledged.append(observation.attempt_id)
+        if disposition == "valid":
+            _decimal(lexeme, f"slots.{name}.b_fiducial_s")
+            all_valid.append(lexeme)
+            if not resolved:
+                unresolved_valid.append(f"slots.{name}")
         if disposition == "valid" and resolved:
             _refuse(not isinstance(lexeme, str), f"slots.{name}.b_fiducial_s")
             epoch = dict(observation.identity_epoch)
@@ -125,6 +133,11 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
             _refuse(epoch != continued_epoch, f"slots.{name}.identity_epoch_not_unanimous")
             _refuse(epoch == artifact["identity_epoch"], "continued_identity_epoch_unchanged")
             retained.append(lexeme)
+    # Fully resolved nights retain the ordinary FAIL/INCONCLUSIVE exits.
+    # Unresolved rows cannot remove a failing bound from the envelope.
+    _refuse(bool(unresolved_valid) and not envelope_holds_over_all_valid(all_valid, rule),
+            "unresolved_valid_row_exceeds_envelope: " + ", ".join(unresolved_valid)
+            + "; the desk reports it to Ed for a written ruling")
     statistics = equivalence_statistics(retained, rule)
     record = {
         "schema_version": CONTINUATION_SCHEMA,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 import copy
 from dataclasses import replace
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import hashlib
 import io
 import json
@@ -336,6 +336,62 @@ class EpochContinuationTests(unittest.TestCase):
             self.assertEqual(loaded, ())
             self.assertEqual(details[0]["detail"], "ledger_finalized_slots_mismatch")
 
+    def assert_unresolved_forgery_refuses(self, excluded_bound):
+        self.build([Slot("0.025")] * 6 + [Slot(excluded_bound)] * 3
+                   + [Slot("0.025")] * 3, fill_slots=9, abort_reason="window_exhausted")
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, error), (4, ""))
+        self.assertFalse(self.out.exists())
+        forged = json.loads(out)
+        self.assertEqual((forged["verdict"], forged["evidence"]["m"]), ("fail", 9))
+        snapshot = self.snapshot()
+        evidence = forged["evidence"]
+        self.assertEqual(len(evidence["acknowledged_attempt_ids"]), 9)
+        # Delta 179 forgery (a): keep every ledger-pinned field and all nine
+        # acknowledgments, but invent an anchor failure for the three outliers.
+        for slot in evidence["slots"][6:9]:
+            slot.update(anchor_v3_resolved=False, anchor_v3_detail="made-up-anchor-failure")
+        evidence.update(m=6, retained_min_s="0.025", retained_max_s="0.025", retained_range_s="0.000")
+        forged.update(verdict="pass", continuation_id="forged-unresolved-three-of-nine")
+        with self.issued(forged):
+            for ledger in (snapshot, None):
+                with self.subTest(ledger_present=ledger is not None):
+                    details = []
+                    loaded = continuation.load_epoch_continuations(
+                        self.artifact, ledger, refusal_details=details,
+                    )
+                    self.assertEqual(loaded, ())
+                    self.assertEqual(details[0]["detail"], "unresolved_valid_row_exceeds_envelope")
+
+    def test_failed_nine_row_night_cannot_relabel_over_level_rows_unresolved(self):
+        self.assert_unresolved_forgery_refuses(str(self.level + Decimal("0.001")))
+
+    def test_failed_nine_row_night_cannot_relabel_range_extrema_unresolved(self):
+        low = Decimal("0.025") - self.screen - Decimal("0.000000000000001")
+        self.assertGreaterEqual(low, 0)
+        self.assertLess(low, self.level)
+        self.assert_unresolved_forgery_refuses(str(low))
+
+    def test_every_slot_has_exact_documented_keys(self):
+        self.build(fill_slots=6, abort_reason="window_exhausted")
+        payload = self.candidate()
+        fields = {"slot", "attempt_id", "content_id", "manifest_sha256",
+                  "instrument_evidence_sha256", "disposition", "anchor_v3_resolved",
+                  "anchor_v3_detail", "b_fiducial_s"}
+        for index in range(12):
+            for field in sorted(fields | {"misleading_annotation"}):
+                with self.subTest(index=index, field=field):
+                    changed = copy.deepcopy(payload)
+                    slot = changed["evidence"]["slots"][index]
+                    if field in fields:
+                        del slot[field]
+                    else:
+                        slot[field] = "safe to ignore this capture"
+                    with self.issued(changed):
+                        loaded, details = self.load()
+                        self.assertEqual(loaded, ())
+                        self.assertEqual(details[0]["detail"], "slots.keys")
+
     def test_every_session_observation_must_be_disclosed(self):
         self.build(fill_slots=6, abort_reason="window_exhausted")
         with self.issued():
@@ -498,7 +554,7 @@ class EpochContinuationTests(unittest.TestCase):
 
     def test_only_valid_resolved_values_are_retained_but_all_finalized_acknowledged(self):
         self.build([Slot("0.025")] * 6 + [Slot("0.9", disposition="ordinary-invalid")] * 3
-                   + [Slot("0.9", unresolved_detail="affine_clock_fit_empty")] * 3)
+                   + [Slot("0.026", unresolved_detail="affine_clock_fit_empty")] * 3)
         payload = self.candidate()
         self.assertEqual(payload["evidence"]["m"], 6)
         self.assertEqual(len(payload["evidence"]["acknowledged_attempt_ids"]), 12)
@@ -508,7 +564,7 @@ class EpochContinuationTests(unittest.TestCase):
             self.assertEqual(details, [])
 
     def test_unresolved_valid_row_requires_nonempty_anchor_detail(self):
-        self.build([Slot("0.025")] * 6 + [Slot("0.9", unresolved_detail="affine_clock_fit_empty")] * 6)
+        self.build([Slot("0.025")] * 6 + [Slot("0.026", unresolved_detail="affine_clock_fit_empty")] * 6)
         payload = self.candidate()
         with self.issued(payload):
             loaded, details = self.load()
@@ -522,6 +578,96 @@ class EpochContinuationTests(unittest.TestCase):
                     loaded, details = self.load()
                     self.assertEqual(loaded, ())
                     self.assertEqual(details[0]["detail"], "slots.anchor_v3_detail_required")
+
+    def test_one_unresolved_valid_row_inside_envelope_prepares_and_authenticates(self):
+        low = str(self.level - self.screen)
+        self.build([Slot(low)] * 11 + [Slot(str(self.level), unresolved_detail="affine_clock_fit_empty")])
+        payload = self.candidate()
+        evidence = payload["evidence"]
+        self.assertEqual(evidence["m"], 11)
+        self.assertEqual(evidence["retained_min_s"], low)
+        self.assertEqual(evidence["retained_max_s"], low)
+        self.assertEqual(Decimal(evidence["retained_range_s"]), 0)
+        self.assertFalse(evidence["slots"][-1]["anchor_v3_resolved"])
+        self.assertEqual(len(evidence["acknowledged_attempt_ids"]), 12)
+        with self.issued(payload):
+            loaded, details = self.load()
+            self.assertEqual(details, [])
+            self.assertEqual((loaded[0].m, loaded[0].verdict), (11, "pass"))
+            self.assertEqual(loaded[0].ledger_cross_check, "verified_terminal_derivation_session")
+
+    def assert_prepare_unresolved_envelope_refusal(self, slots, names):
+        self.build(slots)
+        rc, out, error = self.prepare()
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("unresolved_valid_row_exceeds_envelope", error)
+        for name in names:
+            self.assertIn(f"slots.{name}", error)
+        self.assertIn("the desk reports it to Ed for a written ruling", error)
+        self.assertFalse(self.out.exists())
+
+    def test_prepare_refuses_unresolved_valid_row_above_level_without_writing(self):
+        self.assert_prepare_unresolved_envelope_refusal(
+            [Slot("0.025")] * 11
+            + [Slot(str(self.level + Decimal("0.001")), unresolved_detail="affine_clock_fit_empty")],
+            ["d12"],
+        )
+
+    def test_prepare_refuses_unresolved_valid_row_widening_range_without_writing(self):
+        with localcontext() as context:
+            context.prec = 120
+            low = str(self.level - self.screen - Decimal("1e-100"))
+        self.assert_prepare_unresolved_envelope_refusal(
+            [Slot(str(self.level))] * 11 + [Slot(low, unresolved_detail="affine_clock_fit_empty")],
+            ["d12"],
+        )
+
+    def test_prepare_checks_combined_unresolved_range(self):
+        middle = self.level / 2
+        offset = self.screen * Decimal("0.75")
+        low, high = middle - offset, middle + offset
+        self.assertGreaterEqual(low, 0)
+        self.assertLessEqual(high, self.level)
+        self.assertLess(offset, self.screen)  # Either alone would fit.
+        self.assertGreater(high - low, self.screen)
+        self.assert_prepare_unresolved_envelope_refusal(
+            [Slot(str(middle))] * 10
+            + [Slot(str(value), unresolved_detail="affine_clock_fit_empty") for value in (low, high)],
+            ["d11", "d12"],
+        )
+
+    def test_unresolved_valid_rows_do_not_count_toward_minimum(self):
+        self.build([Slot("0.025")] * 5 + [Slot("0.026", unresolved_detail="affine_clock_fit_empty")] * 7)
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, error), (5, ""))
+        record = json.loads(out)
+        self.assertEqual((record["evidence"]["m"], record["verdict"]), (5, "inconclusive"))
+        self.assertFalse(self.out.exists())
+
+    def test_unresolved_envelope_refusal_also_applies_below_minimum(self):
+        self.assert_prepare_unresolved_envelope_refusal(
+            [Slot("0.025")] * 5
+            + [Slot(str(self.level + Decimal("0.001")), unresolved_detail="affine_clock_fit_empty")] * 7,
+            [f"d{index:02d}" for index in range(6, 13)],
+        )
+
+    def test_all_valid_envelope_has_no_minimum_count(self):
+        for lexemes in ([], [str(self.level)], [str(self.level - self.screen), str(self.level)]):
+            with self.subTest(lexemes=lexemes):
+                self.assertTrue(continuation.envelope_holds_over_all_valid(lexemes, self.rule))
+        self.assertFalse(continuation.envelope_holds_over_all_valid(
+            [str(self.level + Decimal("0.001"))], self.rule,
+        ))
+
+    def test_unresolved_valid_row_still_requires_a_decimal_bound(self):
+        self.build([Slot("0.025")] * 11 + [Slot("0.026", unresolved_detail="affine_clock_fit_empty")])
+        payload = self.candidate()
+        payload["evidence"]["slots"][-1]["b_fiducial_s"] = None
+        with self.issued(payload):
+            loaded, details = self.load()
+            self.assertEqual(loaded, ())
+            self.assertEqual(details[0]["detail"], "slots.b_fiducial_s")
 
     def test_zero_retained_is_inconclusive(self):
         self.build([Slot("0.025", disposition="ordinary-invalid")] * 12)

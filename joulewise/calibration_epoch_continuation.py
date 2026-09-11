@@ -29,6 +29,11 @@ MINIMUM_RETAINED = 6
 DECLARED_SLOT_COUNT = 12
 RULE_SOURCE = "ratified_operatives of the acceptance"
 TERMINAL_STATES = frozenset({"finalized", "aborted"})
+SLOT_KEYS = frozenset({
+    "slot", "attempt_id", "content_id", "manifest_sha256",
+    "instrument_evidence_sha256", "disposition", "anchor_v3_resolved",
+    "anchor_v3_detail", "b_fiducial_s",
+})
 
 
 class ContinuationRefusal(ValueError):
@@ -66,6 +71,28 @@ def continuation_rule(acceptance: Mapping[str, Any]) -> dict[str, Any]:
         "m_minimum": MINIMUM_RETAINED,
         "source": RULE_SOURCE,
     }
+
+
+def envelope_holds_over_all_valid(
+    lexemes_all_valid: Sequence[str], rule: Mapping[str, Any],
+) -> bool:
+    """Check both screens independently of file-asserted anchor resolution.
+
+    This has no minimum count: retention alone determines m and whether the
+    equivalence statistics are inconclusive. An empty valid set is vacuous.
+    """
+
+    values = [_decimal(value, "b_fiducial_s") for value in lexemes_all_valid]
+    level = _decimal(rule["level_screen_s"], "rule.level_screen_s")
+    bracket = _decimal(rule["operative_bracket_screen_s"], "rule.operative_bracket_screen_s")
+    with localcontext() as context:
+        context.prec = 80 + sum(
+            len(v.as_tuple().digits) + abs(v.as_tuple().exponent)
+            for v in [*values, level, bracket]
+        )
+        return all(value <= level for value in values) and (
+            not values or max(values) - min(values) <= bracket
+        )
 
 
 def equivalence_statistics(
@@ -190,13 +217,17 @@ def authenticate_epoch_continuation(
              and all(isinstance(slot, str) and slot for slot in declared)
              and len(set(declared)) == DECLARED_SLOT_COUNT, "evidence.declared_slots")
     slots = evidence["slots"]
-    _require(isinstance(slots, list) and [slot["slot"] for slot in slots] == declared, "evidence.slots")
+    _require(isinstance(slots, list), "evidence.slots")
+    for slot in slots:
+        _require(isinstance(slot, dict) and set(slot) == SLOT_KEYS, "slots.keys")
+    _require([slot["slot"] for slot in slots] == declared, "evidence.slots")
     acknowledged = evidence["acknowledged_attempt_ids"]
     finalized = [slot for slot in slots if slot["content_id"] is not None]
     _require(isinstance(acknowledged, list) and all(isinstance(a, str) and a for a in acknowledged)
              and len(set(acknowledged)) == len(acknowledged)
              and acknowledged == [slot["attempt_id"] for slot in finalized], "evidence.acknowledged_attempt_ids")
     lexemes: list[str] = []
+    lexemes_all_valid: list[str] = []
     for slot in slots:
         _require(type(slot["anchor_v3_resolved"]) is bool, "slots.anchor_v3_resolved")
         _require(slot["anchor_v3_detail"] is None or isinstance(slot["anchor_v3_detail"], str), "slots.anchor_v3_detail")
@@ -215,9 +246,13 @@ def authenticate_epoch_continuation(
         _require(slot["disposition"] in {"valid", "ordinary-invalid", "systematic-invalid"}, "slots.disposition")
         if slot["b_fiducial_s"] is not None:
             _decimal(slot["b_fiducial_s"], "slots.b_fiducial_s")
-        if slot["disposition"] == "valid" and slot["anchor_v3_resolved"]:
+        if slot["disposition"] == "valid":
             _decimal(slot["b_fiducial_s"], "slots.b_fiducial_s")
-            lexemes.append(slot["b_fiducial_s"])
+            lexemes_all_valid.append(slot["b_fiducial_s"])
+            if slot["anchor_v3_resolved"]:
+                lexemes.append(slot["b_fiducial_s"])
+    _require(envelope_holds_over_all_valid(lexemes_all_valid, rule),
+             "unresolved_valid_row_exceeds_envelope")
     statistics = equivalence_statistics(lexemes, rule)
     for field, expected in statistics.items():
         actual = value["verdict"] if field == "verdict" else evidence[field]

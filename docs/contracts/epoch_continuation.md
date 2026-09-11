@@ -55,12 +55,33 @@ fit. A **retained value** is a finalized observation classified `valid` whose
 anchor-v3 result is resolved. Every retained observation must carry the same
 identity epoch, differing from the acceptance's original epoch in at least
 one field. Unresolved and invalid observations are recorded and excluded from
-the arithmetic; their exclusion is never based on the magnitude of a bound.
+the retained statistics; their exclusion is never based on the magnitude of
+a bound. The envelope must hold over every disclosed valid bound, resolved
+or not; `m` counts the resolved. Invalid rows do not enter the envelope.
 Every `valid` row with `anchor_v3_resolved: false` must name a non-empty
 `anchor_v3_detail`; null or empty detail refuses with
 `slots.anchor_v3_detail_required`. The reader enforces this audit trail but
 cannot replay anchor resolution from the ledger alone; the issuer owns that
 primary-evidence check.
+
+The shared `envelope_holds_over_all_valid` check applies the level screen to
+each disclosed `valid` bound and the bracket screen to the maximum minus
+minimum of **all** such bounds, including unresolved rows. Every valid row
+must therefore supply a finite, nonnegative decimal bound. The check has no
+minimum count; the empty valid set satisfies it vacuously. The loader cannot
+replay anchor resolution, so resolution remains file-asserted. Without this
+independent envelope check, re-labelling an over-screen row as unresolved
+could turn a FAIL into a PASS. Resolution can now reduce `m` but cannot
+produce that verdict flip.
+
+For a night with unresolved valid rows, if the all-valid envelope fails,
+preparation refuses with `unresolved_valid_row_exceeds_envelope`, names the unresolved
+slots, exits 3, and writes nothing; the desk reports it to Ed for a written
+ruling. This refusal also applies below the retained-count minimum. The
+loader requires the all-valid envelope before recomputing retained statistics
+and refuses a violating continuation with detail
+`unresolved_valid_row_exceeds_envelope`, with or without a ledger snapshot.
+Fully resolved nights retain the ordinary FAIL and INCONCLUSIVE exits below.
 
 Let `m` be the number of retained values. Let `L` be the acceptance's registered
 `preflight_level_screen_s`, and `S` its registered `bracket_screen_s`. Both
@@ -108,9 +129,10 @@ schema is `joulewise.calibration_epoch_continuation.v1`.
 | `candidate_not_issued` | Present on candidates; its presence, even with value `false`, forbids loading as issued. |
 | `derivation_sha256` | Canonical SHA-256 of every other top-level key, including any candidate marker. |
 
-Each slot record contains `slot`, `attempt_id`, `content_id`,
+Each slot record contains exactly `slot`, `attempt_id`, `content_id`,
 `manifest_sha256`, `instrument_evidence_sha256`, `disposition`,
-`anchor_v3_resolved`, `anchor_v3_detail`, and `b_fiducial_s`. An unfinalized
+`anchor_v3_resolved`, `anchor_v3_detail`, and `b_fiducial_s`. Extra or missing
+keys refuse with `slots.keys`, including on unfinalized records. An unfinalized
 slot has null attempt ID, content ID, hashes and bound, and false resolution.
 Its disposition is `window_exhausted` for an abort with that reason, otherwise
 `no_row`. These labels describe absent captures; they are not ledger

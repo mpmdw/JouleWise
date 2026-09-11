@@ -61,6 +61,43 @@ CUTS = (
     (continuation, "authenticate_epoch_continuation", "file_finalized == ledger_finalized", "True", "finalized_slots_must_match_ledger_attempt_ids"),
     (continuation, "authenticate_epoch_continuation", 'all((row.bracket_slot, row.attempt_id) in file_finalized\n                     for row in ledger_snapshot.observations\n                     if row.bracket_session_id == session.session_id)',
      "True", "every_session_observation_must_be_disclosed"),
+    (continuation, "authenticate_epoch_continuation", 'all(slot["slot"] not in session.finalized_slots\n                     for slot in slots if slot["content_id"] is None)',
+     "True", "failed_nine_row_night_cannot_hide_three_finalized_rows_to_pass"),
+    (continuation, "authenticate_epoch_continuation", "set(slot) == SLOT_KEYS", "True",
+     "every_slot_has_exact_documented_keys"),
+    (continuation, "authenticate_epoch_continuation", "envelope_holds_over_all_valid(lexemes_all_valid, rule)", "True",
+     "failed_nine_row_night_cannot_relabel_over_level_rows_unresolved"),
+    (continuation, "authenticate_epoch_continuation", 'lexemes_all_valid.append(slot["b_fiducial_s"])',
+     'lexemes_all_valid.extend([slot["b_fiducial_s"]] if slot["anchor_v3_resolved"] else [])',
+     "failed_nine_row_night_cannot_relabel_range_extrema_unresolved"),
+    (issuer, "derive_record", "not envelope_holds_over_all_valid(all_valid, rule)", "False",
+     "prepare_refuses_unresolved_valid_row_above_level_without_writing"),
+    (issuer, "derive_record", "all_valid.append(lexeme)", "all_valid.extend([lexeme] if resolved else [])",
+     "prepare_refuses_unresolved_valid_row_widening_range_without_writing"),
+    (issuer, "derive_record", "if not resolved:", "if False:",
+     "prepare_refuses_unresolved_valid_row_above_level_without_writing"),
+    (continuation, "envelope_holds_over_all_valid", "value <= level", "level <= level",
+     "prepare_refuses_unresolved_valid_row_above_level_without_writing"),
+    (continuation, "envelope_holds_over_all_valid", "max(values) - min(values) <= bracket", "bracket <= bracket",
+     "prepare_refuses_unresolved_valid_row_widening_range_without_writing"),
+    (continuation, "envelope_holds_over_all_valid", "value <= level", "value < level",
+     "one_unresolved_valid_row_inside_envelope_prepares_and_authenticates"),
+    (continuation, "envelope_holds_over_all_valid", "max(values) - min(values) <= bracket", "max(values) - min(values) < bracket",
+     "one_unresolved_valid_row_inside_envelope_prepares_and_authenticates"),
+    (continuation, "envelope_holds_over_all_valid", "not values or", "bool(values) and",
+     "all_valid_envelope_has_no_minimum_count"),
+    (continuation, "envelope_holds_over_all_valid", "return all(", "return len(values) >= MINIMUM_RETAINED and all(",
+     "all_valid_envelope_has_no_minimum_count"),
+    (continuation, "envelope_holds_over_all_valid", "max(values)", "min(values)",
+     "prepare_checks_combined_unresolved_range"),
+    (continuation, "envelope_holds_over_all_valid", "min(values)", "max(values)",
+     "prepare_checks_combined_unresolved_range"),
+    (continuation, "envelope_holds_over_all_valid", "context.prec = 80 + sum(", "context.prec = 28 or sum(",
+     "prepare_refuses_unresolved_valid_row_widening_range_without_writing"),
+    (continuation, "envelope_holds_over_all_valid", "value <= level", "value <= value",
+     "prepare_refuses_unresolved_valid_row_above_level_without_writing"),
+    (continuation, "envelope_holds_over_all_valid", "max(values) - min(values) <= bracket", "max(values) - min(values) <= max(values) - min(values)",
+     "prepare_refuses_unresolved_valid_row_widening_range_without_writing"),
 )
 
 
@@ -79,9 +116,9 @@ def main() -> int:
         name = f"tests.test_epoch_continuation.EpochContinuationTests.test_{test}"
         test_suite = unittest.defaultTestLoader.loadTestsFromName(name)
         log = io.StringIO()
-        # issuer imports the shared statistic by name; move both references.
+        # issuer imports the shared calculations by name; move both references.
         with patch.object(module, function, mutated):
-            if module is continuation and function == "equivalence_statistics":
+            if module is continuation and function in {"equivalence_statistics", "envelope_holds_over_all_valid"}:
                 with patch.object(issuer, function, mutated):
                     result = unittest.TextTestRunner(stream=log).run(test_suite)
             else:
