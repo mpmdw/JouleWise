@@ -2385,7 +2385,7 @@
       "priority": "p1_phase_gate",
       "rank": 185,
       "status": "queued",
-      "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value.",
+      "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
     "ESTIMAND-ENCLOSURE-01": {
@@ -2931,6 +2931,38 @@
       "rank": 156,
       "status": "queued",
       "status_note": "H2; Trace 47 C8 (canonical worktree): static finding; _custody_state exists/is_dir on tracked iCloud fixture locators has no budget. No live hang was reproduced.",
+      "stop_card": null
+    },
+    "IDENTITY-PROBE-LIVE-VERIFY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md verification V10/V11 and E1 needs: isolated live-probe failure with sysctl access denied",
+          "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md VERDICT: FOLLOW-UP NEEDED; lead-owned identity-probe verification"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/IDENTITY-PROBE-LIVE-VERIFY-01/acceptance",
+          "label": "IDENTITY-PROBE-LIVE-VERIFY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The Fable magistrate records a passing isolated tests.test_issue_calibration_acceptance_generation.DeskEpochWatchTests.test_live_probes_report_this_machine_against_the_active_epoch run with permitted identity-probe access, resolving the post-merge review verification gap."
+      },
+      "authority": {
+        "label": "PR #320 post-merge review verification gap and 2026-09-11 lead ownership ruling",
+        "path": "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Rerun the isolated PR #320 live identity-probe test in a session with permitted identity-probe access and record the result; the post-merge reviewer could not access the required probe in its sandbox.",
+      "id": "IDENTITY-PROBE-LIVE-VERIFY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 189,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started. Lead-owned (Fable magistrate; not delegable). Fixture or mock evidence cannot discharge this live verification.",
       "stop_card": null
     },
     "INSTALL-WINDOWS-MULTI-01": {
@@ -4853,6 +4885,43 @@
       "status_note": "Fix round 1 is in flight on feat/2026-09-04-paper-k after the first delta found late-built terms and a stale transfer note.",
       "stop_card": null
     },
+    "PASS-ROUTE-RUNBOOK-CONTINUATION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md F1 SHOULD_FIX: docs/phase_2/derivation_night_runbook.md:1695,1698-1699 omit the implemented transaction"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PASS-ROUTE-RUNBOOK-CONTINUATION-01/acceptance",
+          "label": "PASS-ROUTE-RUNBOOK-CONTINUATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The PASS route links the continuation contract and implemented CLI, identifies the issued continuation artifact and registry pin, and separates preparation, governed issuance/pinning, and authentication check before ordinary capture."
+      },
+      "authority": {
+        "label": "PR #320 post-merge review F1 and 2026-09-11 lead registration ruling",
+        "path": "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-09-11 lead brief: PASS-route pre-harvest fence",
+            "path": "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md"
+          },
+          "rule": "Must land before the first PASS-route harvest (the equivalence night)"
+        }
+      ],
+      "flags": [],
+      "goal": "Connect the PASS route in docs/phase_2/derivation_night_runbook.md:1695,1698-1699 to the epoch-continuation transaction implemented by PR #320 (main baf7b900): replace the stale SMALLEST-change instruction and distinguish preparation, governed issuance and registry pinning, and authentication with scripts/issue_epoch_continuation.py check.",
+      "id": "PASS-ROUTE-RUNBOOK-CONTINUATION-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 188,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started.",
+      "stop_card": null
+    },
     "PINSET-GRAMMAR-EXCLUSION-01": {
       "acceptance": {
         "evidence": [
@@ -5537,6 +5606,36 @@
       "rank": 71,
       "status": "blocked",
       "status_note": "The frozen renderer cannot represent the live 126-key registry. This successor waits for G2-a because that selection record fixes the prefill length embedded in the registry keys.",
+      "stop_card": null
+    },
+    "REPLAY-FIXTURE-LEAK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-36d3a823/00-launch-record.md leaked-fixture census at 10:31: tests/fixtures/p2038_v3_production/fake_powermetrics_process.py from replay worktrees -11 and -8 (14-16 h old), plus writer-fixtures/fake_sampler.py from an exit-witness temp repo (5 d 18 h old)",
+          "2026-09-11 seat 03 lead brief: all three fixtures reparented to PID 1; surviving agent or fixture processes abort arm-time admission and cause the production census to refuse the night at t0"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REPLAY-FIXTURE-LEAK-01/acceptance",
+          "label": "REPLAY-FIXTURE-LEAK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Fixture teardown uses addCleanup/finally as appropriate; an interrupted-test regression starts a fixture, aborts the test mid-run, and proves no survivor; the shard runner reports its post-replay survivor sweep in the replay tail and terminates its own surviving fixture children."
+      },
+      "authority": {
+        "label": "2026-09-11 activation 36d3a823 leaked-fixture census and lead registration brief",
+        "path": "docs/process_traces/2026-09-11-activation-36d3a823/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Fix fixture-process leaks when a shard or module in python3 scripts/shard_tests.py --workers 4 --split is interrupted: guarantee child-sampler teardown on every exit path and add a post-replay sweep that reports surviving fixtures and terminates the runner's own surviving children.",
+      "id": "REPLAY-FIXTURE-LEAK-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 191,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started.",
       "stop_card": null
     },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
