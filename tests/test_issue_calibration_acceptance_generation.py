@@ -140,6 +140,33 @@ class DeskEpochWatchTests(unittest.TestCase):
         self.assertEqual(rc, 0, output)
         self.assertIs(seen.get("verify_custody"), False)
 
+    def test_a_preregistration_sampler_mismatch_fails_the_watch_by_rc(self) -> None:
+        """REFUSE: production call site issue_calibration_acceptance_generation.check (preregistration_failed).
+
+        The watch itself is clean here (rc 0 without the flag), so the only
+        thing that can turn the code to 3 is the pre-registration verdict --
+        a rotated digest in a temp copy of the real text -- and deleting
+        `or preregistration_failed` from the rc condition fails this test.
+        """
+
+        text = PREREGISTRATION.read_text(encoding="utf-8")
+        registered = issuer.preregistration_epoch_pins(text)[1]
+        rotated = self.root / "preregistration_rotated.md"
+        rotated.write_text(text.replace(registered, "0" * 64), encoding="utf-8")
+        output = io.StringIO()
+        with mock.patch.object(issuer, "observe_machine", return_value=self.observed):
+            with redirect_stdout(output):
+                rc_without = issuer.main([
+                    "check", "--ledger", str(self.ledger), "--head-pin", str(self.pin),
+                    "--acceptance", str(self.acceptance),
+                ])
+                rc_with = issuer.main([
+                    "check", "--ledger", str(self.ledger), "--head-pin", str(self.pin),
+                    "--acceptance", str(self.acceptance), "--preregistration", str(rotated),
+                ])
+        self.assertEqual((rc_without, rc_with), (0, 3), output.getvalue())
+        self.assertIn("MISMATCH", output.getvalue())
+
     def test_equal_epoch_and_t1_admit_without_writes(self) -> None:
         rc, output = self.run_check()
         self.assertEqual(rc, 0, output)
@@ -1991,32 +2018,6 @@ class PrepareCandidateTest(unittest.TestCase):
                     "MISMATCH" in with_pin.split("pre-registered powermetrics sha256")[1],
                     not expect_match,
                 )
-
-    def test_a_preregistration_sampler_mismatch_fails_the_watch_by_rc(self) -> None:
-        """REFUSE: production call site issue_calibration_acceptance_generation.check (preregistration_failed)."""
-
-        observed = {
-            "os_build": "25G83", "hardware_model": "Mac15,9",
-            "powermetrics_sha256": "0" * 64, "mlx_version": "0.0.0",
-        }
-        stream = io.StringIO()
-        with mock.patch.object(issuer, "observe_machine", return_value=observed):
-            with redirect_stdout(stream):
-                rc_without = issuer.main([
-                    "check", "--ledger", str(self.wide["ledger"]),
-                    "--head-pin", str(self.wide["pin"]), "--acceptance", str(R6),
-                ])
-                rc_with = issuer.main([
-                    "check", "--ledger", str(self.wide["ledger"]),
-                    "--head-pin", str(self.wide["pin"]), "--acceptance", str(R6),
-                    "--preregistration", str(PREREGISTRATION),
-                ])
-        # The epoch watch itself already returns 3 on this mocked machine (the
-        # mocked sampler digest differs from the ledger's T1), so the flag's own
-        # verdict is proven by the printed MISMATCH line and by the rc staying 3
-        # when the watch's own errors are the only other reason.
-        self.assertEqual((rc_without, rc_with), (3, 3))
-        self.assertIn("MISMATCH", stream.getvalue())
 
     # B-2: the corpus is bound to the pre-registered shape
 
