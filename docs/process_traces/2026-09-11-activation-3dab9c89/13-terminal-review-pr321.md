@@ -17,3 +17,7 @@
 ## Replay tail (row 9) — appended when the run lands
 
 (pending)
+
+## Integration-tree note — 08:47 PDT
+
+PR #320 merged to main at baf7b900 before this PR. To honour row 9's "integration tree, not the stale branch", the lead merged origin/main into the branch (merge commit a6e0eb31, auto-merged `derivation_night_runbook.md`, no conflicts). Verified: `git diff baf7b900..a6e0eb31` is byte-identical (sorted +/- lines) to the unit's diff at e46f06c8 over 1dddcfea, so every review above holds at a6e0eb31 unchanged. The exact merge candidate is therefore **a6e0eb312f4e2cb52d2adc5fb5370724232b4b9f**; replay 22 runs there (log `/tmp/magistrate-3dab9c89/replay-22-pr321-main.log`); replay 21 at e46f06c8 was stopped at eight minutes as superseded.
