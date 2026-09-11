@@ -222,7 +222,7 @@ class WriteDerivationNightInputsTests(unittest.TestCase):
         ):
             code, _out, err = run_main(["--out-dir", raw])
             self.assertEqual(code, 2)
-            self.assertIn("no identity field differs", err)
+            self.assertIn("already judges", err)
             self.assertIn("ORDINARY night", err)
             self.assertEqual(sorted(Path(raw).iterdir()), [])
 

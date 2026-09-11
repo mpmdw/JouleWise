@@ -108,9 +108,11 @@ Source for this paragraph: the pre-registration
   rather than being quietly absorbed.
 - **Epoch** — the six-field identity vector above.
 - **Stale field** — an identity field whose value on this machine differs from
-  the active acceptance's identity epoch. A derivation night exists precisely
-  because at least one field is stale; if none is, this is an ordinary night
-  and the ordinary path applies.
+  every identity epoch the active acceptance judges (its own, and any epoch an
+  authenticated continuation has carried it onto). A derivation night exists
+  precisely because at least one field is stale; if none is — including the
+  case where a continuation already covers this machine — this is an ordinary
+  night and the ordinary path applies.
 - **Head pin** — the repository-committed file naming the ledger receipt count
   and last digest that consumers trust. *Head-equals-pin* means the physical
   ledger head matches that file exactly.
@@ -663,7 +665,7 @@ writes nothing** — never one file of the pair:
 
 | Refusal | Meaning | Operator action |
 |---|---|---|
-| `no identity field differs from the acceptance's epoch at <path>: … this is an ORDINARY night, not a derivation night` | Nothing is stale. | **Stop.** The premise of the lane is gone — re-run §0.3. A derivation night captured here would be refused by the capture writer at `d01` with the settle already spent. |
+| `this machine's identity epoch is one the acceptance at <path> already judges … this is an ORDINARY night, not a derivation night` | Nothing is stale: the machine matches the acceptance's own epoch, or an authenticated continuation already carries the acceptance onto this epoch (the PASS route completed). | **Stop.** The premise of the lane is gone — re-run §0.3; after a continuation, run the ordinary window path. A derivation night captured here would be refused by the capture writer at `d01` with the settle already spent. |
 | `machine vector derivation failed: ModuleNotFoundError: No module named 'mlx'` | The wrong interpreter. | Re-run with `$PY` (§0.2). |
 | `t1 bindings fields are empty on this machine: [...]` / `identity epoch fields are empty on this machine: [...]` | A machine read came back empty or `None` — an absent MLX or an unreadable sampler is the usual cause. | Fix the machine read. The night's reserve step refuses an empty binding, so this is a desk refusal standing in for a burned night. |
 | `refusing to overwrite [...]; a night may already be pinned to those bytes` | The two files already exist. | Do not reach for `--force` reflexively: a wrapper generated from the old bytes pins their digests, so overwriting them invalidates it. Pass `--force` only when you intend that, and re-emit and re-`--verify` the wrapper afterwards. |
@@ -1793,7 +1795,7 @@ Capture-writer refusals (`scripts/validate_powermetrics_fiducial.py`, codes in
 
 | Refusal code | Meaning | Operator action |
 |---|---|---|
-| `calibration_derivation_only_epoch_unchanged` | `--derivation-only` was used while the live identity epoch still matches the active acceptance's. Derivation-only exists only when no acceptance binds the current epoch. | **Stop.** Either the OS reverted or the wrong acceptance was read. Re-run §0.3; do not force the flag. This is the same condition §0.8's desk-inputs writer refuses on at the desk. |
+| `calibration_derivation_only_epoch_unchanged` | `--derivation-only` was used while the live identity epoch is one the active acceptance already judges (its own, or a continued epoch). Derivation-only exists only when no acceptance judges the current epoch. | **Stop.** Either the OS reverted, the wrong acceptance was read, or a continuation already covers this machine. Re-run §0.3; do not force the flag. This is the same condition §0.8's desk-inputs writer refuses on at the desk. |
 | `calibration_derivation_only_session_kind_required` | `--derivation-only` without a declared `derivation`-kind session slot. | The reservation did not open a derivation session, or the slot name is not in its declared list. Fix the reservation; never capture outside the registration. |
 | `calibration_derivation_session_requires_derivation_only` | A `derivation`-kind session slot was captured WITHOUT `--derivation-only` — the mid-night flag-loss case the guard exists for. | The chain's writer invocation lost the flag. Stop the night's remaining slots at the desk; the session is recoverable, the mixed evidence is not. |
 | `writer_bracket_arguments` | `--session-id`, `--slot` and `--attempt-id` are all-or-none; a partial triple refuses. | Fix the invocation; three values or none. |
