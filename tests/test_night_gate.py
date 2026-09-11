@@ -4,6 +4,7 @@ import copy
 import hashlib
 import inspect
 import json
+import re
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -203,6 +204,71 @@ class PackPreArmIdentityTests(unittest.TestCase):
                     self.assertEqual([], launches)
                 finally:
                     fixture.doCleanups()
+
+
+class RegistrationSeamTests(unittest.TestCase):
+    RUNBOOK = Path(__file__).resolve().parents[1] / "docs/phase_2/derivation_night_runbook.md"
+
+    def test_runbook_arm_block_checks_d166_registration(self) -> None:
+        """T2: following the foreground arm block must not select the wrong file."""
+        blocks = re.findall(r"^```[^\n]*\n(.*?)^```", self.RUNBOOK.read_text(), re.M | re.S)
+        arm_blocks = [
+            block for block in blocks
+            if "assert plan.receipt_class == 'DIAGNOSTIC_NO_PACK'" in block
+        ]
+        self.assertEqual(len(arm_blocks), 1)
+        self.assertIn(
+            "assert plan.registration_path == night_gate.D166_REGISTRATION_PATH",
+            arm_blocks[0],
+        )
+        self.assertNotIn("preregistration_d079_epoch_25g83_rev1.md", arm_blocks[0])
+
+    def test_runbook_registration_path_references_name_d166(self) -> None:
+        """T3: prose must not steer an operator back to the scientific pre-registration."""
+        section = None
+        references = []
+        index_rows = []
+        for number, line in enumerate(self.RUNBOOK.read_text().splitlines(), 1):
+            if line.startswith("## "):
+                section = line
+            if "registration_path" not in line:
+                continue
+            if section == "## 7. Fact table — where each load-bearing fact came from" and line.startswith("| v2 plan required keys,"):
+                index_rows.append(line)
+                continue
+            references.append((number, line))
+        self.assertEqual(len(index_rows), 1)
+        self.assertTrue(references)
+        for number, line in references:
+            with self.subTest(line=number):
+                self.assertRegex(line, r"D-166|D166_REGISTRATION_PATH")
+
+    def test_real_pre_registration_refuses_but_d166_passes_c1(self) -> None:
+        """T4 documents the registration seam; it already passes on main.
+
+        Only machine probes are fixtures: registration text and the gate's
+        digest constant are real, with no constant mock or live capture.
+        """
+        root = Path(__file__).resolve().parents[1]
+        pre_registration = "configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+        for path, expected_status in (
+            (pre_registration, "FAIL"),
+            (night_gate.D166_REGISTRATION_PATH, "PASS"),
+        ):
+            with self.subTest(path=path):
+                source = FakeProbeSource()
+                source.text[path] = (root / path).read_text(encoding="utf-8")
+                receipt = night_gate.evaluate_night(
+                    make_plan(registration_path=path), source.probes()
+                )
+                c1 = next(row for row in receipt.conditions if row.condition_id == "C1")
+                self.assertEqual(c1.status, expected_status)
+                self.assertIn(path, source.read_calls)
+                if expected_status == "FAIL":
+                    self.assertEqual(receipt.refusal.reason, "night_refused_registration")
+                else:
+                    self.assertIsNone(receipt.refusal)
+                    self.assertEqual(c1.measured["detail"], "D-166 registration hash passed")
 
 
 class NightGateTests(unittest.TestCase):

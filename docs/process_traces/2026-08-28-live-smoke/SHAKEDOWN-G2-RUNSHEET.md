@@ -1664,7 +1664,7 @@ custody directory the plan calls `custody_root`):
   "chain_path": "/Users/edr/night-custody/derivation-20260912/chain.zsh",
   "chain_sha256_path": "/Users/edr/night-custody/derivation-20260912/chain.zsh.sha256",
   "custody_root": "/Users/edr/night-custody/derivation-20260912",
-  "registration_path": "<repo-relative path of the committed pre-registration>"
+  "registration_path": "configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json"
 }
 ```
 
