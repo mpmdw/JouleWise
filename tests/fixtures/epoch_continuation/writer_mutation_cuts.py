@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import argparse
 import os
 from pathlib import Path
 import re
@@ -16,6 +17,10 @@ CAPTURE = (
     "tests.test_validate_powermetrics_fiducial_derivation_only."
     "DerivationOnlyLiveCaptureTests.test_ordinary_continued_epoch_capture_requires_registered_continuation"
 )
+ORDINARY_KEYS = (
+    "tests.test_validate_powermetrics_fiducial_derivation_only."
+    "DerivationOnlyLiveCaptureTests.test_ordinary_artifact_top_level_key_sets_require_deliberate_schema_changes"
+)
 
 # Path, unique original expression, replacement, one defect-shaped test.
 CUTS = (
@@ -25,7 +30,8 @@ CUTS = (
      PREFLIGHT + "unregistered_or_rotated_continuation_refuses_with_epoch_reason"),
     (WRITER, "if preflight_record is not None:", "if False:",
      PREFLIGHT + "ordinary_preflight_accepts_continuation_with_unchanged_screen"),
-    (WRITER, '"judged_epochs_basis": "registry_pins_only"', '"judged_epochs_basis": "verified"',
+    (WRITER, '"ledger_snapshot" if ledger_snapshot is not None else "registry_pins_only"',
+     '"ledger_snapshot"',
      PREFLIGHT + "ordinary_preflight_accepts_continuation_with_unchanged_screen"),
     (WRITER, '        **preflight_record,\n', '        "judged_epochs": [dict(epoch)],\n',
      PREFLIGHT + "derivation_basis_lists_original_and_continued_judged_epochs"),
@@ -39,14 +45,51 @@ CUTS = (
      "        pass  # mutation: skip writer preflight\n", PREFLIGHT + "g2a_live_vectors_use_real_continuation_preflight"),
     ("docs/contracts/d078_reason_registry_amendment.md", "| `calibration_epoch_continuation_invalid` |",
      "| `continuation_diagnostic_removed` |", "tests.test_d078_reason_registry.D078ReasonRegistryTests.test_epoch_continuation_diagnostic_is_registered"),
+    (WRITER, "artifact, ledger_snapshot=ledger_snapshot, refusal_details=continuation_refusals,",
+     "artifact, ledger_snapshot=None, refusal_details=continuation_refusals,",
+     PREFLIGHT + "snapshot_preflight_refuses_absent_or_nonterminal_continuation_session"),
+    (WRITER, '"ledger_snapshot" if ledger_snapshot is not None else "registry_pins_only"',
+     '"registry_pins_only"', PREFLIGHT + "snapshot_preflight_authenticates_terminal_session_and_records_basis"),
+    (WRITER, "        ledger_snapshot=ledger_snapshot,\n", "        ledger_snapshot=None,\n",
+     PREFLIGHT + "derivation_basis_forwards_snapshot_and_refuses_unbacked_continuation"),
+    (WRITER, "not isinstance(expected_epoch, Mapping)\n        or not isinstance(acceptance_id, str)",
+     "not isinstance(expected_epoch, Mapping)\n        or False",
+     PREFLIGHT + "invalid_acceptance_id_returns_named_cli_refusal_without_traceback"),
+    (WRITER, 'expected_epoch = artifact.get("identity_epoch")\n    acceptance_id = artifact.get("acceptance_id")',
+     'expected_epoch = artifact.get("identity_epoch")\n    acceptance_id = artifact["acceptance_id"]',
+     PREFLIGHT + "invalid_acceptance_id_returns_named_cli_refusal_without_traceback"),
+    (WRITER, 'evidence_payload["acceptance_preflight"] = acceptance_preflight',
+     'evidence_payload["acceptance_preflight"] = acceptance_preflight\n        evidence_payload["unexpected"] = True',
+     ORDINARY_KEYS),
+    (WRITER, 'manifest["acceptance_preflight"] = acceptance_preflight',
+     'manifest["acceptance_preflight"] = acceptance_preflight\n        manifest["unexpected"] = True',
+     ORDINARY_KEYS),
+    ("docs/contracts/powermetrics_fiducial.md", '["acceptance_id", "artifact_sha256", "preflight_level_screen_s", "epoch", "judged_epochs", "judged_epochs_basis", "continuation_refusals"]',
+     '["acceptance_id", "artifact_sha256", "preflight_level_screen_s", "epoch"]',
+     PREFLIGHT + "contract_documented_key_lists_equal_emitted_preflight_and_screen_basis"),
+    ("docs/contracts/powermetrics_fiducial.md", '["acceptance_id", "judged_epochs", "judged_epochs_basis", "continuation_refusals"]',
+     '["acceptance_id", "judged_epochs", "judged_epochs_basis"]',
+     PREFLIGHT + "contract_documented_key_lists_equal_emitted_preflight_and_screen_basis"),
+    ("scripts/write_derivation_night_inputs.py", "            planned_epoch, acceptance_path=acceptance_path\n",
+     '            {**planned_epoch, "os_build": "new-unjudged-build"}, acceptance_path=acceptance_path\n',
+     "tests.test_write_derivation_night_inputs.WriteDerivationNightInputsTests.test_continued_epoch_is_an_ordinary_night_and_writes_no_derivation_inputs"),
+    (WRITER, "not isinstance(expected_epoch, Mapping)\n        or not isinstance(acceptance_id, str)\n        or not acceptance_id",
+     "not isinstance(expected_epoch, Mapping)\n        or not isinstance(acceptance_id, str)\n        or False",
+     PREFLIGHT + "invalid_acceptance_id_returns_named_cli_refusal_without_traceback"),
 )
 
 
 def main() -> int:
-    originals = {ROOT / relative: (ROOT / relative).read_bytes() for relative, *_ in CUTS}
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cuts", nargs="+", choices=[f"W{i:02d}" for i in range(1, len(CUTS) + 1)],
+                        help="Run only these cuts, leaving every other path untouched.")
+    args = parser.parse_args()
+    selected = [(index, cut) for index, cut in enumerate(CUTS, 1)
+                if args.cuts is None or f"W{index:02d}" in args.cuts]
+    originals = {ROOT / relative: (ROOT / relative).read_bytes() for _, (relative, *_) in selected}
     hashes = {path: hashlib.sha256(raw).digest() for path, raw in originals.items()}
     failures = []
-    for index, (relative, expression, replacement, test) in enumerate(CUTS, 1):
+    for index, (relative, expression, replacement, test) in selected:
         path = ROOT / relative
         source = originals[path].decode()
         if source.count(expression) != 1:
@@ -69,7 +112,7 @@ def main() -> int:
         if not killed:
             failures.append(index)
             print(output, flush=True)
-    print(f"cuts={len(CUTS)} killed={len(CUTS) - len(failures)} survivors={len(failures)} source_sha256_restored=true", flush=True)
+    print(f"cuts={len(selected)} killed={len(selected) - len(failures)} survivors={len(failures)} source_sha256_restored=true", flush=True)
     return int(bool(failures))
 
 

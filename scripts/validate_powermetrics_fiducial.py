@@ -76,6 +76,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     DEFAULT_LEDGER_PATH,
     DEFAULT_HEAD_PIN_PATH,
     CalibrationLedgerError,
+    CalibrationLedgerSnapshot,
     CalibrationWriterLease,
     calibration_readiness,
     abort_bracket_session,
@@ -369,6 +370,7 @@ def _derive_preflight_systematic_screen_s(
     *,
     acceptance_path: Path | None = None,
     preflight_record: dict[str, Any] | None = None,
+    ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> Decimal:
     """Authenticate the active acceptance and derive its level comparator."""
 
@@ -396,16 +398,23 @@ def _derive_preflight_systematic_screen_s(
         raise _AcceptancePreflightError("acceptance_artifact_stale")
 
     expected_epoch = artifact.get("identity_epoch")
-    if not isinstance(expected_epoch, Mapping):
+    acceptance_id = artifact.get("acceptance_id")
+    if (
+        not isinstance(expected_epoch, Mapping)
+        or not isinstance(acceptance_id, str)
+        or not acceptance_id
+    ):
         raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
     continuation_refusals: list[dict[str, str]] = []
     judged_epochs = acceptance_judged_epochs(
-        artifact, ledger_snapshot=None, refusal_details=continuation_refusals,
+        artifact, ledger_snapshot=ledger_snapshot, refusal_details=continuation_refusals,
     )
     record = {
-        "acceptance_id": artifact["acceptance_id"],
+        "acceptance_id": acceptance_id,
         "judged_epochs": [dict(epoch) for epoch in judged_epochs],
-        "judged_epochs_basis": "registry_pins_only",
+        "judged_epochs_basis": (
+            "ledger_snapshot" if ledger_snapshot is not None else "registry_pins_only"
+        ),
         "continuation_refusals": continuation_refusals,
     }
     if preflight_record is not None:
@@ -511,6 +520,7 @@ def _exact_bound_lexeme_s(payload: Mapping[str, Any]) -> str | None:
 def _derivation_only_screen_basis(
     *,
     acceptance_path: Path | None = None,
+    ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> tuple[Decimal, dict[str, Any]]:
     """Authenticate the active acceptance WITHOUT its identity-epoch equality.
 
@@ -532,6 +542,7 @@ def _derivation_only_screen_basis(
     preflight_record: dict[str, Any] = {}
     level_screen_s = _derive_preflight_systematic_screen_s(
         None, acceptance_path=path, preflight_record=preflight_record,
+        ledger_snapshot=ledger_snapshot,
     )
     artifact = load_calibration_acceptance_bound(path)
     if artifact is None:

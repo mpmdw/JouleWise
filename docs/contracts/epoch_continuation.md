@@ -190,15 +190,14 @@ row checks above hold. This weaker path is available
 for identity-only preflight consumers that do not own a snapshot. Claim-time
 bracket evaluation always requires a valid snapshot and never uses it.
 
-The capture writer has no ledger snapshot at its identity preflight. It calls
-`acceptance_judged_epochs(artifact, ledger_snapshot=None)` and records
-`judged_epochs` with `judged_epochs_basis: "registry_pins_only"`. This label
-means that the session cross-check is skipped there; the continuation's byte
-pin, PASS verdict, absence of a candidate marker, all three acceptance
-references, schema, derivation hash and reproduced arithmetic remain enforced.
-For an ordinary capture, `acceptance_preflight` in both the hashed evidence
-and manifest carries that record, including any `continuation_refusals`.
-An epoch mismatch returns the same record in the refusal context.
+The capture writer's ordinary and derivation-only preflight helpers accept a
+ledger snapshot and pass it to `acceptance_judged_epochs`. The CLI currently
+calls those helpers before its slot-reservation snapshot is loaded, so its
+preflight still skips the session cross-check. That ordering can spend a
+capture window on a continuation whose cited session fails at claim time.
+The full `acceptance_preflight` and `screen_basis` artifact key lists and
+authentication-basis labels have one home in the
+[powermetrics artifact contract](powermetrics_fiducial.md#derivation-only-capture-for-a-new-identity-epoch).
 
 Derivation-only captures record the same fields in `screen_basis`, alongside
 the prior acceptance's original `epoch` and level screen. A planned epoch
@@ -300,10 +299,11 @@ The production identity-comparison census is:
 | Consumer | Disposition |
 | --- | --- |
 | `calibration_bracketing.evaluate_calibration_bracket` | Uses judged epochs for freshness and all three identity-scoped evidence triggers. |
-| `scripts/validate_powermetrics_fiducial._derive_preflight_systematic_screen_s` | Uses `acceptance_judged_epochs` without a snapshot and labels the preflight record `registry_pins_only`. |
+| `scripts/validate_powermetrics_fiducial._derive_preflight_systematic_screen_s` | Passes an optional ledger snapshot to `acceptance_judged_epochs`; the CLI and identity-only callers currently omit it and skip only the session cross-check. |
 | The same writer's derivation-only branch | Refuses when the planned epoch is already judged; its screen basis lists all judged epochs. |
 | `arm_readiness._issued_d079` | Checks an acceptance ID, not machine identity; unchanged r6 already routes as issued. No continuation comparison is needed. |
 | `generate_g2a_probe_inputs._derive_live_vectors` | Delegates epoch preflight to the writer above; no independent acceptance-epoch comparison. Its later inventory comparison binds planned inputs to each other and remains unchanged. |
+| `write_derivation_night_inputs._stale_identity_fields` | Delegates to the writer without a snapshot; an authenticated continued epoch is an ordinary night, so derivation-night inputs refuse. |
 | `issue_calibration_acceptance_generation.check` | Desk-only historical epoch watch remains unchanged; it can report the original epoch mismatch after continuation. It authorizes no capture. |
 | Ledger reservations, prior-set catalog purity and member bindings | Compare evidence to its own reserved or historical identity, rather than machine applicability to an acceptance. They remain exact and unchanged. |
 

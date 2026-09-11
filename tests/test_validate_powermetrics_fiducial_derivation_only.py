@@ -42,6 +42,7 @@ from tests.owned_process_runner import (
 import scripts.validate_powermetrics_fiducial as validation_script
 from tests.test_calibration_exits import _install_fake_writer_dependencies
 from tests.fixtures.epoch_continuation.build import build_issued_continuation
+from tests.test_validate_powermetrics_fiducial import documented_keys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ACCEPTANCE_RELATIVE = (
@@ -620,6 +621,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         )
         for payload in (evidence, manifest):
             self.assertIs(payload["derivation_only"], True)
+            self.assertEqual(set(payload["screen_basis"]), documented_keys("screen_basis"))
             self.assertEqual(
                 payload["screen_basis"]["acceptance_id"],
                 acceptance["acceptance_id"],
@@ -720,7 +722,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         self.assertEqual(ledger.read_bytes(), before)
         self.assertFalse(custody[declared[0]].exists())
 
-    def test_ordinary_mode_still_fills_a_bracket_kind_slot_unchanged(
+    def test_ordinary_artifact_top_level_key_sets_require_deliberate_schema_changes(
         self,
     ) -> None:
         """The guard is kind-scoped, not a blanket ordinary-path refusal.
@@ -769,6 +771,27 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         )
         self.assertNotIn("derivation_only", evidence)
         self.assertNotIn("screen_basis", evidence)
+        # Round-4's ordinary successful capture shape, pinned deliberately.
+        # Additions/removals require an explicit artifact-contract decision.
+        self.assertEqual(set(evidence), {
+            "schema_version", "protocol_id", "validation_id", "status", "reasons",
+            "anchor_method_version", "b_fiducial_s",
+            "residual_median_s_diagnostic_only", "residual_p95_s_diagnostic_only",
+            "residual_region_method", "residual_region_coverage_assumption",
+            "residual_region_coverage_resolution_s", "baseline_w", "robust_sigma_w",
+            "pulse_count", "all_pulses_detected", "spurious_plateau_count",
+            "bindings", "binding_evidence", "artifact_sha256", "pulses",
+            "capture_wall_time_s", "max_age_s", "clock_anchor",
+            "clock_anchor_resolved", "acceptance_preflight",
+        })
+        manifest = json.loads((custody["pre"] / "manifest.json").read_bytes())
+        self.assertEqual(set(manifest), {
+            "schema_version", "validation_id", "protocol_id", "pulse_count",
+            "artifacts", "acceptance_preflight",
+        })
+        for payload in (evidence, manifest):
+            self.assertEqual(set(payload["acceptance_preflight"]), documented_keys("acceptance_preflight"))
+        self.assertEqual(evidence["acceptance_preflight"], manifest["acceptance_preflight"])
 
 class CaptureClassificationTests(unittest.TestCase):
     """`_classify_capture` at the function level, no capture, no CLI.
