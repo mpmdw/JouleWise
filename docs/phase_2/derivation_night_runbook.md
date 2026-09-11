@@ -169,8 +169,8 @@ default ruling and the continuation.
   derivation's rules are likewise fixed before capture, and the issuer
   additionally enforces in code that no corpus statistic is computed before
   the last registration session is terminal (§2.2, §4.1).
-- **Dead-man** — the second LaunchAgent installed alongside the night agent,
-  which fires at a fixed local minute and stands the night down if the night's
+- **Dead-man** — the second LaunchAgent (a macOS launchd job file), installed
+  alongside the night agent, which fires at a fixed local minute and stands the night down if the night's
   completion time has passed without completion.
 - **Tracked chain** — `scripts/night_chains/calibration_derivation_only.zsh`,
   the committed script that actually runs the twelve captures. *Tracked* means
@@ -1303,7 +1303,7 @@ PY
 
 # 6. Install both agents FROM the clone.
 scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
-  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE"
+  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE" --python "$PY"
 
 # 7. Inspect what was actually installed, and baseline the night directory.
 launchctl list | grep joulewise
@@ -1323,6 +1323,18 @@ plutil -p ~/Library/LaunchAgents/com.joulewise.night.plist
 plutil -p ~/Library/LaunchAgents/com.joulewise.night.deadman.plist
 cmp "$NIGHT_ROOT/night_plan.json" "$STAGE/arm-night_plan.json"
 ```
+
+At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
+`python3` found through PATH selected macOS Python 3.9.6, which cannot import
+`datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
+(the executable running the driver). The **driver preflight** here runs the
+driver's imports under that exact interpreter and the job's environment before
+the job is installed; keep its printed JSON success line in the arm record.
+Install and `--render-only` use `--python "$PY"` above, or default to
+`<measurement_root>/.venv/bin/python` when `--python` is omitted, and refuse a
+missing interpreter, Python below 3.11, or failed imports. Even a stub checkout
+needs that venv or an explicit compatible interpreter. The chain's interpreter
+remains `<measurement_root>/.venv/bin/python`, independently of this driver pin.
 
 Read both `plutil` dumps against four things and record the answers: each
 label's `StartCalendarInterval` (the night's `t0` hour and minute, and the
@@ -2145,7 +2157,7 @@ numbered record.
 | Why the G2-a producer cannot serve a derivation night (it authenticates the acceptance epoch that is stale), and that the desk-inputs writer is the answer | record 134 |
 | The live `check` output in §0.3 — two mismatched fields, `mlx_version 0.31.2` matching, rc 3, and the appended `match` line on the pre-registered sampler digest | record 134, run from a fresh clone at the desk |
 | Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the execution refuter's independent derivation (record 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
-| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
+| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute --python "$PY"` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
 | "Discoverable" = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename — so the staging path arms nothing, and the driver discovers nothing because launchd hands it `--plan` | `glob_plans` in `scripts/magistrate_watchdog.py`; the `--plan` `required=True` argument of `scripts/run_night.py` |
 | The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
 | The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |

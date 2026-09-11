@@ -153,9 +153,22 @@ missing or inconsistent makes the plan malformed.
 Installer note: on install the installer checks `repo_head` against the
 driver checkout HEAD and `measurement_head` against the HEAD of the plan's
 `measurement_root`, while `--uninstall` checks neither pin and no longer
-needs `claude` on PATH.
-Ordinary
-daytime work in the dev checkout no longer invalidates an armed night; only
+needs `claude` on PATH or a Python virtual environment (a project-specific
+Python installation).
+Install and `--render-only` default to `<measurement_root>/.venv/bin/python`;
+pass `--python /absolute/path/to/python` to select another Python 3.11+
+interpreter (the executable running the driver). A stub checkout needs that
+venv or an explicit compatible interpreter with the driver's imports available.
+
+At 02:56 PDT on 2026-09-11, the night driver crashed before any gate because
+`python3` found through PATH selected macOS Python 3.9.6, which cannot import
+`datetime.UTC`. A **LaunchAgent** is a macOS launchd job file; each job now names
+an absolute interpreter path. A **driver preflight** here runs the driver's
+imports under that exact interpreter and the job's environment before the job
+is installed. The installer prints its JSON success record for the arm record
+and refuses installation if it fails.
+
+Ordinary daytime work in the dev checkout no longer invalidates an armed night; only
 moving the pinned measurement checkout does. Once authored, every armed
 plan's canonical `(plan_id, measurement_root, measurement_head)` is included
 in the magistrate relaunch prompt's frozen-checkout list until completion.
@@ -164,11 +177,13 @@ G2-a routing handoff (2026-09-08; installed):
 `scripts/run_night.py::_run_chain_once` derives `MEASUREMENT_ROOT`,
 `MEASUREMENT_HEAD`, and `PY` from the parsed v2 plan and overwrites inherited
 values in the child environment alongside `NIGHT_PLAN_ID`. There is no v2
-interpreter field: the driver, chain, and preflight always derive
-`<measurement_root>/.venv/bin/python`. The chain and preflight verify checkout
-HEAD against `measurement_head`. The preflight's sole argument is the absolute
-v2 plan filename. Future clone naming and the exact locked venv creation
-commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
+interpreter field: the driver always gives the chain
+`<measurement_root>/.venv/bin/python`, independently of the driver interpreter
+selected at install time. The chain and its input preflight (checks before
+measurements start) verify checkout HEAD against `measurement_head`; that
+input preflight's sole argument is the absolute v2 plan filename. The separate
+driver import check is `run_night.py preflight --plan PLAN.json`. Future clone
+naming and the exact locked venv creation commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
 
 D-176 pack-bound T0_REHEARSAL post-night handback (separate from the stub above):
 

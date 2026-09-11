@@ -2,13 +2,15 @@
 set -euo pipefail
 
 usage() {
-  print "usage: $0 --plan PLAN.json --hour H --minute M [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
+  print "usage: $0 --plan PLAN.json --hour H --minute M [--python ABS_PATH] [--uninstall] [--render-only DIR] [--launchctl-bin PATH]" >&2
   exit 2
 }
 
 plan=""
 hour=""
 minute=""
+python=""
+python_given=0
 uninstall=0
 render_only=""
 launchctl_bin="launchctl"
@@ -17,12 +19,14 @@ while (( $# )); do
     --plan) plan="${2:-}"; shift 2 ;;
     --hour) hour="${2:-}"; shift 2 ;;
     --minute) minute="${2:-}"; shift 2 ;;
+    --python) python="${2:-}"; python_given=1; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
     --render-only) render_only="${2:-}"; shift 2 ;;
     --launchctl-bin) launchctl_bin="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
+(( uninstall && python_given )) && usage
 [[ -n "$plan" && -n "$hour" && -n "$minute" ]] || usage
 [[ "$hour" == <-> && "$minute" == <-> ]] || usage
 (( hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 )) || usage
@@ -41,7 +45,41 @@ custody_root=""
 courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
-  plan_fields=("${(@f)$(/usr/bin/python3 -B - "$plan" "$repo" <<'PY'
+  if (( ! python_given )); then
+    # Bootstrap the candidate without running any Python or project imports.
+    measurement_root="$(/usr/bin/plutil -extract measurement_root raw -o - "$plan")" || {
+      print "cannot derive measurement_root/.venv/bin/python from $plan; pass --python ABS_PATH" >&2
+      exit 2
+    }
+    python="$measurement_root/.venv/bin/python"
+    [[ -f "$python" && -x "$python" ]] || {
+      print "missing executable interpreter: $python; pass --python ABS_PATH" >&2
+      exit 2
+    }
+  fi
+  [[ "$python" == /* && -f "$python" && -x "$python" ]] || {
+    print "invalid --python: $python (expected an absolute executable regular file)" >&2
+    exit 2
+  }
+  # Read only the minimum literal: importing the driver before checking the
+  # version could itself fail on an old interpreter (the 2026-09-11 defect).
+  "$python" -B - "$repo/scripts/run_night.py" "$python" <<'PYTHON_CHECK' || exit 2
+import ast
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    source = ast.parse(stream.read())
+minimum = next(ast.literal_eval(node.value) for node in source.body
+               if isinstance(node, ast.Assign)
+               and any(isinstance(target, ast.Name) and target.id == "MIN_PYTHON"
+                       for target in node.targets))
+if sys.version_info[:2] < minimum:
+    print("interpreter {} reports Python {}; minimum is {}".format(
+        sys.argv[2], ".".join(map(str, sys.version_info[:2])),
+        ".".join(map(str, minimum))), file=sys.stderr)
+    raise SystemExit(2)
+PYTHON_CHECK
+  plan_fields=("${(@f)$("$python" -B - "$plan" "$repo" <<'PY'
 import base64
 import json
 import sys
@@ -105,13 +143,19 @@ else
   # Uninstall only removes existing agents; no plan validation is needed to locate what to remove.
   custody_root="$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["custody_root"])' "$plan")"
 fi
-read -r deadman_hour deadman_minute < <(
-  cd "$repo"
-  /usr/bin/python3 -c 'from scripts.run_night import DEADMAN_HOUR, DEADMAN_MINUTE; print(DEADMAN_HOUR, DEADMAN_MINUTE)'
-)
-if (( ! uninstall && hour == deadman_hour )); then
-  print "refusing --hour $hour: it is the dead-man hour (DEADMAN_HOUR=$deadman_hour); arm the night in another hour" >&2
-  exit 2
+if (( ! uninstall )); then
+  # Match the job's PATH and HOME, without inherited Python import overrides.
+  /usr/bin/env -i PATH="$courier_path" HOME="$HOME" \
+    "$python" -B "$repo/scripts/run_night.py" preflight --plan "$plan" || exit 2
+  deadman_fields="$(
+    cd "$repo"
+    "$python" -B -c 'from scripts.run_night import DEADMAN_HOUR, DEADMAN_MINUTE; print(DEADMAN_HOUR, DEADMAN_MINUTE)'
+  )" || exit 2
+  read -r deadman_hour deadman_minute <<< "$deadman_fields"
+  if (( hour == deadman_hour )); then
+    print "refusing --hour $hour: it is the dead-man hour (DEADMAN_HOUR=$deadman_hour); arm the night in another hour" >&2
+    exit 2
+  fi
 fi
 
 if [[ -n "$render_only" ]]; then
@@ -133,13 +177,15 @@ render() {
   local entry_hour="$4"
   local entry_minute="$5"
   local log_stem="$6"
-  /usr/bin/python3 - "$template" "$out" "$label" "$mode" "$repo" "$plan" "$custody_root" "$entry_hour" "$entry_minute" "$courier_bin" "$courier_path" "$log_stem" <<'PY'
+  "$python" -B - "$template" "$out" "$label" "$mode" "$repo" "$plan" "$custody_root" "$entry_hour" "$entry_minute" "$courier_bin" "$courier_path" "$log_stem" "$python" <<'PY'
 from pathlib import Path
 import sys
+from xml.sax.saxutils import escape
 
-template, output, label, mode, repo, plan, custody, hour, minute, courier, path, log_stem = sys.argv[1:]
+template, output, label, mode, repo, plan, custody, hour, minute, courier, path, log_stem, python = sys.argv[1:]
 replacements = {
     "com.joulewise.night": label,
+    "@@PYTHON@@": escape(python),
     "@@MODE@@": mode,
     "@@REPO@@": repo,
     "@@PLAN@@": plan,

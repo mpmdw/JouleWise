@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import importlib.util
 import json
 import os
@@ -14,6 +15,7 @@ import time
 import types
 import unittest
 from datetime import datetime
+from contextlib import redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -248,6 +250,65 @@ class NightDriverTests(unittest.TestCase):
                 registration_path=str(self.registration),
             ),
         )
+
+    def test_preflight_emits_json_without_running_or_creating_custody(self) -> None:
+        self.custody.rmdir()
+        completed = subprocess.run(
+            [sys.executable, "-B", str(SCRIPT_PATH), "preflight", "--plan", str(self.plan_path)],
+            capture_output=True, text=True, check=False,
+            env={"HOME": str(self.root), "PATH": "/usr/bin:/bin"},
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual("", completed.stderr)
+        self.assertEqual(1, len(completed.stdout.splitlines()))
+        record = json.loads(completed.stdout)
+        self.assertEqual("ok", record["preflight"])
+        self.assertEqual(sys.executable, record["python"])
+        self.assertEqual(".".join(map(str, sys.version_info[:3])), record["version"])
+        self.assertEqual({
+            "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0",
+            "joulewise.t0_rehearsal", "joulewise.night_gate",
+            "joulewise.measurement_liveness",
+        }, set(record["modules"]))
+        self.assertFalse(self.custody.exists())
+        with redirect_stdout(io.StringIO()), \
+             mock.patch.object(self.driver.subprocess, "Popen", side_effect=AssertionError("process in preflight")), \
+             mock.patch.object(Path, "mkdir", side_effect=AssertionError("mkdir in preflight")):
+            self.assertEqual(0, self.driver.main(["preflight", "--plan", str(self.plan_path)]))
+        self.probes_mock.assert_not_called()
+
+    def test_preflight_refuses_every_formerly_lazy_project_import(self) -> None:
+        # Import hook runs in a fresh interpreter, so cached modules cannot
+        # hide a missing dependency or leak this injection into other tests.
+        harness = """
+import builtins, runpy, sys
+blocked, script, plan = sys.argv[1:]
+original = builtins.__import__
+def refusing_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == 'joulewise' and blocked in fromlist:
+        raise ImportError('missing preflight dependency: ' + blocked)
+    return original(name, globals, locals, fromlist, level)
+builtins.__import__ = refusing_import
+sys.argv = [script, 'preflight', '--plan', plan]
+runpy.run_path(script, run_name='__main__')
+"""
+        for name in ("arm_readiness", "arm_readiness_evidence_t0", "t0_rehearsal"):
+            with self.subTest(module=name):
+                completed = subprocess.run(
+                    [sys.executable, "-B", "-c", harness, name,
+                     str(SCRIPT_PATH), str(self.plan_path)],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertNotEqual(0, completed.returncode)
+                self.assertIn(f"ImportError: missing preflight dependency: {name}", completed.stderr)
+                self.assertIn("Traceback", completed.stderr)
+                self.assertNotIn('"preflight": "ok"', completed.stdout)
+
+    def test_minimum_python_matches_project_requires_python(self) -> None:
+        import tomllib
+        metadata = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+        floor = metadata["project"]["requires-python"].removeprefix(">=")
+        self.assertEqual(tuple(map(int, floor.split("."))), self.driver.MIN_PYTHON)
 
     def _popen_recorder(self, return_code: int = 0, running_once: bool = False):
         calls = []
@@ -1388,6 +1449,9 @@ class NightDriverTests(unittest.TestCase):
         measurement_root = root / "measurement"
         plan["measurement_root"] = str(measurement_root)
         plan["measurement_head"] = _init_git_repo(measurement_root)
+        python = measurement_root / ".venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
         plan["custody_root"] = str(root / "custody")
         plan["authored_epoch_s"] = time.time()  # bench fix: fixture authored "now" so the installer age check passes
         path = root / "install-plan.json"
