@@ -1,0 +1,18 @@
+# 14 — Magistrate synthesis: C1 registration seam (B-1) — 2026-09-11 08:55 PDT, activation 58a3bcfc
+
+Three seats on packet 10: Opus contract lens (07 §3: design decision, (i) or (ii)); Astra xhigh consult (11: **(ii)** — C1 selects a fixed calibration digest by path; fill the pre-registration's five placeholders first; byte-preserving read); cold Fable judge (12: **(i)** — plan binds to the D-166 literal C1 already enforces; the pre-registration is bound by the arm record's digest + blob id, the head pin, and the desk consumers; two docs-only additions). Split verdict → synthesized by the magistrate, not majority-voted.
+
+## Decision: (i), as ruled in record 12 with its two additions
+
+Grounds:
+1. **The binding (ii) would add already exists.** The plan pins `measurement_head = H`; the chain and preflight verify the clone's HEAD against it; the pre-registration is a tracked file inside that tree at H. Its bytes are therefore fixed before capture by the same mechanism that fixes the chain, the ledger head pin and every other rule — Ed's "rules fixed before data" is met without a second digest at t0. Record 12 §5 item 2 makes the binding auditable months later (path, sha256 at H, H, and the blob id).
+2. **Smallest change (Ed, issue 316):** (i) touches no gate code, no chain, no generator semantics (one example literal), no issuer; (ii) changes C1 semantics, adds a constant coupled to the night's `[DD]` date and to the ledger head pin (so every FAIL-route night or date slip re-pins code, which record 12 shows collides with the "a change between nights is a stop" rule).
+3. **Where a change should stop the campaign:** at the desk, with an operator present, before arm (12 §5 FAIL-route analysis); (ii) and (iii) convert that into an unattended t0 refusal that loses a quiet window.
+4. Astra's own F2 concedes the current digest is not a final pin (placeholders unfilled) — (ii)'s constant cannot be written today.
+
+Dissent recorded (Astra 11): C1 "becomes a ceremony for this class" under (i); the night itself never authenticates the pre-registration. Answer: the night authenticates H, which contains it. Two Astra findings are ADOPTED as follow-ups, not blockers: (a) the packet's F6 was wrong — the 09-09 receipt records C1 `FAIL` / `not evaluated after refusal`, so C1 has NEVER passed live (this strengthens ruling 06's G2 ground); (b) `Path.read_text()` newline normalization in the registration probe is a byte-fidelity nit — lane NIGHT-GATE-REGISTRATION-BYTES-01 registered for the kernel, not in this PR.
+
+## Cure lane: NIGHT-C1-REGISTRATION-DOCS-01 (brief 15)
+WRITE_SCOPE exactly as record 12 §5: `docs/phase_2/derivation_night_runbook.md` (§0.5 484–489, §1.1 760, §1.4 1238, arm block 1283–1284, §5 2054, §2.5 PASS-route sentence, changelog revision 7), `scripts/gen_derivation_night.py` (line 687 literal via `night_gate.D166_REGISTRATION_PATH`), the generator's regenerated region in `docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md`, `tests/test_gen_derivation_night.py` (T1; stop overriding the example path), `tests/test_night_gate.py` (T2, T3 defect-shaped; T4 documentary, labelled). Nothing in `night_gate.py`, the chain, the driver, the issuer, or the decision log. The arm record template for the equivalence night (record 13's successor for the real night) carries record 12 §5's five items.
+
+Consequence for tonight's stub (ruling 06 (c)): its plan carries `registration_path = configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json` — the same document the equivalence night will carry — so the stub's C1 PASS is a live test of the equivalence night's C1 (Opus 07 C-3 satisfied under (i)).

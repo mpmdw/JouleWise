@@ -1,0 +1,23 @@
+{
+  "plan_id": "rehearsal-20260911",
+  "receipt_class": "REHEARSAL_STUB",
+  "refusal": {
+    "detail": "pgrep exit 0; forbidden process output: 83102 /Users/edr/.local/bin/claude daemon run --origin transient --spawned-by {\"label\":\"claude\",\"cwd\":\"/Users/edr/code/JouleWise\",\"pid\":55645}\n83155 claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/14ebf21c/spare/a3972975.pty.sock 200 50 -- /Users/edr/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/a3972975.claim.sock\n83180 claude bg-spare --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/a3972975.claim.sock\n83195 claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/14ebf21c/spare/dcfeb3f2.pty.sock 200 50 -- /Users/edr/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/dcfeb3f2.claim.sock\n83220 claude bg-spare --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/dcfeb3f2.claim.sock\n83308 node /opt/homebrew/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n83319 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false",
+    "evidence": [
+      {
+        "argv": [
+          "/usr/bin/pgrep",
+          "-lf",
+          "codex|claude|t3"
+        ],
+        "exit_code": 0,
+        "monotonic_ns": 151066125,
+        "stderr": "",
+        "stdout": "83102 /Users/edr/.local/bin/claude daemon run --origin transient --spawned-by {\"label\":\"claude\",\"cwd\":\"/Users/edr/code/JouleWise\",\"pid\":55645}\n83155 claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/14ebf21c/spare/a3972975.pty.sock 200 50 -- /Users/edr/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/a3972975.claim.sock\n83180 claude bg-spare --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/a3972975.claim.sock\n83195 claude bg-pty-host --bg-pty-host /tmp/cc-daemon-501/14ebf21c/spare/dcfeb3f2.pty.sock 200 50 -- /Users/edr/.local/share/claude/versions/2.1.268 --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/dcfeb3f2.claim.sock\n83220 claude bg-spare --bg-spare /tmp/cc-daemon-501/14ebf21c/spare/dcfeb3f2.claim.sock\n83308 node /opt/homebrew/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n83319 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model=\"gpt-5.6-sol\" -c model_reasoning_effort=\"high\" -c mcp_servers.claude.enabled=false\n"
+      }
+    ],
+    "reason": "night_refused_agent_present"
+  },
+  "schema": "joulewise.night_refusal.v1",
+  "verdict": "REFUSED"
+}

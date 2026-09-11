@@ -1,0 +1,25 @@
+Courier duties are complete. The next lane is the magistrate's harvest, which is blocked on clearing the orphaned Claude daemon, a kill I deliberately left to Ed. Recap follows.
+
+**Outcome: the night did not run.** Email sent to Ed, id 1a090c8424231111. Delivery record written to courier.sent. Heartbeat written at start.
+
+**Verdict as recorded**
+- No result record exists. refusal.json says REFUSED, reason night_refused_agent_present.
+- Chain exit code: none. The chain never started.
+- Results branch night-results/20260911 at 5226ab7c holds only the refusal and the census.
+
+**Two distinct failures**
+- **02:56 driver crash.** launchd ran the driver under the Command Line Tools Python 3.9, and the driver imports a module that needs Python 3.11. The traceback is in launchd.night.err in the custody root and is not on the results branch. The offending import arrived on 2026-09-08, after the 09-09 night's head, which is why the earlier stub worked.
+- **07:00 dead-man refusal.** The census found an orphaned Claude daemon (pid 83102, its parent session already gone) and a Codex MCP server under it. That refusal is the dead-man's, not the night gate's.
+
+**Watchdog** is alive (age 47.254 s at courier start) with last decision HOLD_CENSUS. It is held on the same orphaned daemon, so no magistrate will relaunch until that process is cleared.
+
+**Acceptance reading for the magistrate.** Item 5's stand-down observation was obtained on 09-10. Item 6 is not satisfied. The interpreter crash is a cause other than agent-present and must be cured before any re-arm.
+
+**Left for Ed or the magistrate, all named in the email**
+1. Kill the orphaned daemon so the watchdog census clears.
+2. Harvest, including the traceback file.
+3. Uninstall both launchd agents from the stub checkout. They are still loaded and fire daily.
+4. Fix the installer so the plist launches a Python 3.11 or newer, with an arm-time import preflight.
+5. Arm a new stub plan on a new date.
+
+A memory checkpoint for the next session is saved and indexed.
