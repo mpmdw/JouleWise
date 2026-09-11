@@ -270,9 +270,15 @@ def check(args: argparse.Namespace) -> int:
         epoch = acceptance["identity_epoch"]
         expected.update({field: epoch.get(field) for field in WATCH_FIELDS[:2]})
 
+    # The desk watch compares IDENTITY fields; it never reads a capture bundle,
+    # so it must not require the custody directories to exist.  A watch that
+    # did would pass only on the machine that captured the corpus (whose
+    # absolute custody paths the fixture ledger records) and refuse everywhere
+    # else, including CI and a freshly cut measurement clone.  `prepare-candidate`
+    # loads the same way and authenticates each member's bytes itself.
     snapshot = load_calibration_ledger_snapshot(
         args.ledger, args.head_pin, require_committed_pin=True,
-        verify_custody=True, mode="read_replay", repo_root=REPO_ROOT,
+        verify_custody=False, mode="read_replay", repo_root=REPO_ROOT,
     )
     if snapshot.refusal_reasons:
         errors.append("ledger: " + ", ".join(snapshot.refusal_reasons))

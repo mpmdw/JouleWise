@@ -117,6 +117,29 @@ class DeskEpochWatchTests(unittest.TestCase):
         with mock.patch.object(issuer, "observe_machine", return_value=self.observed | changes):
             return self.invoke_check()
 
+    def test_the_watch_never_requires_custody_directories(self) -> None:
+        """REFUSE-FREE: production call site issue_calibration_acceptance_generation.check (snapshot load).
+
+        The fixture ledger's custody locators are absolute paths on the machine
+        that captured the corpus; CI and a fresh measurement clone have none of
+        them.  The desk watch compares identity fields only, so it must load the
+        snapshot WITHOUT custody verification -- pinned here because the only
+        environment where `verify_custody=True` passes is the one that never
+        needs the watch.
+        """
+
+        seen: dict[str, object] = {}
+        real = issuer.load_calibration_ledger_snapshot
+
+        def recording(*args: object, **kwargs: object):
+            seen.update(kwargs)
+            return real(*args, **kwargs)
+
+        with mock.patch.object(issuer, "load_calibration_ledger_snapshot", side_effect=recording):
+            rc, output = self.run_check()
+        self.assertEqual(rc, 0, output)
+        self.assertIs(seen.get("verify_custody"), False)
+
     def test_equal_epoch_and_t1_admit_without_writes(self) -> None:
         rc, output = self.run_check()
         self.assertEqual(rc, 0, output)
