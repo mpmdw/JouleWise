@@ -282,3 +282,229 @@ no re-capture.
 head pin at the first night's open), and `[CHAIN_SHA256]` (the capture chain's
 digest). Each is a fact that does not exist yet; none is a scientific choice,
 and filling them does not reopen any rule above.
+
+---
+
+# Revision 2 (2026-09-10, Ed's ruling by directive issue 316)
+
+STATUS: Ed's ruling by directive issue 316; recorded by the magistrate; not a
+magistrate amendment (rule 11)
+
+Revision 1 above is sealed. Not one word of it is edited here, and every
+status line it carries stands as written. This revision does two things and
+nothing else: it answers the one rule revision 1 left explicitly open — V3,
+the night count and the retained-corpus minimum — and it fixes, before any
+capture exists, a shorter route that revision 1 did not contain. Where the two
+texts disagree the rule below governs, until its own FAIL branch returns the
+campaign to revision 1 unchanged.
+
+## Provenance
+
+Directive issue 316 of this repository, authored by the owner account `mpmdw`,
+opens with its own provenance line, quoted here because the authority of
+everything below rests on it:
+
+> Ed's ruling on the evening 09-10 email (Gmail 1a08e62b7e99b312, "decisions I
+> need from you"). Filed on Ed's behalf by Fable from an interactive session
+> on 2026-09-10 ~21:20 PDT after Ed read the recommendation and signed off in
+> his own words ("cant you pass that to the magistrate yourself? i sign off").
+> The ruling is Ed's; the wording is Fable's.
+
+The issue body is the instruction. This section transcribes it; it adds no
+rule of its own, and where it quotes, the quotation is the operative text.
+
+## Decision 1 — V3's three-night default, as a default path: NO
+
+Ed's answer to V3 (three agent-free nights of twelve slots, retained n ≥ 19)
+is **NO as the default path**. His reason, in the issue's words:
+
+> Do not arm three derivation nights as the default path. The reason, in Ed's
+> words: the scheme "is acting for an adversary that doesn't exist"; with a
+> single trusted operator (D-161) the question is an instrument one: did the
+> OS point release move the clock-anchor bound or not? That is answered by one
+> quiet night compared against the envelope already in force, not by a
+> three-night blind derivation.
+
+The three-night derivation is not withdrawn and not amended. It becomes the
+FAIL branch below, and revision 1 remains on file, un-withdrawn, as the
+fallback route.
+
+## What replaces it: night one is an epoch-equivalence check
+
+**Epoch-equivalence check** — a comparison, decided by a rule fixed before any
+of its data exists, between what one new quiet night measures and the
+thresholds the acceptance already in force carries. It asks one question: did
+the OS point release move the clock-anchor bound outside the envelope the
+instrument was already characterised against? It derives nothing, and it
+issues nothing.
+
+**Reference envelope** — the two comparators plus the budget ceiling that the
+acceptance in force, `d079_calibration_acceptance_v2_n17_r6`, carries: its
+level screen, its bracket screen, and its maximum budgetable drift. The
+constants are tabulated below before they are used.
+
+**Retained value** — the `b_fiducial_s` (a capture's fiducial bound in
+seconds, glossed in revision 1) of one capture that both is `valid` in the
+ledger and resolves under anchor-v3 replay. A capture that is not retained
+contributes no value and is not compared against anything.
+
+**Continuation** — carrying the acceptance in force forward onto the new
+identity epoch by a dated addendum, rather than voiding it and deriving a
+successor. It changes no threshold: every number the acceptance publishes
+stays exactly what it is.
+
+### The night itself, unchanged from what is built
+
+Per the issue:
+
+> The first quiet night is ONE derivation-kind ledger session of 12 slots run
+> by the merged chain exactly as built (PR #315; runbook
+> docs/phase_2/derivation_night_runbook.md; NIGHT_HANDBACK email-then-arm
+> unchanged; tonight's rehearsal-20260911 untouched). Nothing about the arm,
+> the chain, the settle, the census, or the dead-man changes.
+
+So the night's shape is revision 1's night: one `derivation`-kind session,
+twelve declared slots, the same cadence, the same agent-free `[QUIET-MAC]`
+discipline, the same email-then-arm handback, and the same
+`DIAGNOSTIC_NO_PACK` receipt class. What changes is only what the night is
+FOR, and what may be read after it closes.
+
+### The reference envelope, as constants, with their sources
+
+Two values exist for each comparator: the raw corpus statistic, and the
+operative constant the validator actually compares against — the raw statistic
+quantized (rounded to a fixed decimal place) under the rule the artifact
+registers. Issue 316 fixes which one governs:
+
+> The magistrate confirms these operative constants from the artifact and the
+> validator's own code path and quotes them in the record; if the validator's
+> operative screen differs from the raw range (the never-zero floor), the
+> operative value is the one used.
+
+The operative value is therefore the comparator in the rule below, in every
+case. Both are printed so the difference is visible rather than hidden:
+
+| Quantity | Operative constant used by the rule (s) | Raw corpus statistic (s) | Where each is read |
+|---|---|---|---|
+| Level screen (corpus maximum) | `0.032898493715362` | `0.03289849371536248` | Operative: `joulewise/calibration_bracketing.py`, `_D102_N17_DERIVATION["operatives"]["preflight_level_screen_s"]`, keyed to this acceptance id through `_D102_GENERATION_DERIVATIONS`; the same lexeme is in the artifact at `decimal_derivation.ratified_operatives.preflight_level_screen_s`, and at `decimal_derivation.rounding.preflight_level_screen` with `numeric_role: operative_comparator`. Raw: the artifact's `decimal_derivation.source_statistics.maximum_s`, the value issue 316 quotes. |
+| Bracket screen (corpus range) | `0.009724` | `0.00972358928879385` | Operative: same validator row, `operatives["bracket_screen_s"]`; artifact `decimal_derivation.ratified_operatives.bracket_screen_s`, and `decimal_derivation.rounding.operative_bracket_screen` with `numeric_role: operative_comparator`. Raw: the artifact's `decimal_derivation.source_statistics.range_s`, the value issue 316 quotes. |
+| Budget ceiling (maximum budgetable drift) | `0.010164834757777545` | same value; it is not a rounded statistic | Validator row `operatives["maximum_budgetable_drift_s"]`; artifact `decimal_derivation.ratified_operatives.maximum_budgetable_drift_s`. |
+| Maximum budgetable excess | `0.000440834757777545` | same value | Validator row `operatives["max_budgetable_excess_s"]`; artifact `decimal_derivation.ratified_operatives.max_budgetable_excess_s`. Ceiling minus bracket screen, exactly: `0.010164834757777545 − 0.009724 = 0.000440834757777545`. |
+| Corpus size | `17` | `17` | Validator row `corpus_n`; artifact `derivation_corpus.n`. |
+
+Three facts about those numbers, each of which changes what a comparison
+means, so none is left to be inferred:
+
+1. **The operative bracket screen is LARGER than the raw range**, by
+   `0.009724 − 0.00972358928879385 = 4.1071120615e-7 s` (about 0.41 µs). The
+   artifact registers the quantum `0.000001` s with `ROUND_HALF_EVEN`, and the
+   raw range rounds UP to it. Using the operative value is therefore the
+   slightly more permissive of the two choices, by 0.41 µs on a comparator of
+   9.7 ms.
+2. **The operative level screen is SMALLER than the raw maximum**, by
+   `0.03289849371536248 − 0.032898493715362 = 4.8e-16 s`. Its registered
+   quantum is `0.000000000000001` s, and the raw maximum rounds DOWN to it.
+   Using the operative value is the slightly stricter of the two choices, by a
+   margin sixteen orders of magnitude below the instrument's ~1 J / ~ms
+   resolution: it can only matter to a capture that ties the corpus maximum in
+   its fifteenth decimal place.
+3. **No floor is in force for this comparison.** The never-zero floor issue
+   316 parenthesises — `0.010818` s, `D125_SCREEN_FLOOR_S` — belongs to the
+   screen rule `floored_range_envelope_screen`, which revision 1 registers for
+   the FUTURE successor corpus. The acceptance in force registers the other
+   rule, `range_equals_screen` (the quantized range IS the screen, with no
+   floor): `_D102_N17_DERIVATION["screen_rule"]`, checked in
+   `calibration_bracketing._valid_acceptance_bound`. The difference between
+   the operative bracket screen and the raw range here is quantization alone,
+   not a floor.
+
+### The rule, fixed now, before any capture of this night exists
+
+From issue 316, its operative text:
+
+> After the night closes, the magistrate READS the night's retained values and
+> applies this rule, written now:
+
+- **Retained m.** "Retained m = the night's valid, resolved captures
+  (anchor-v3 replay resolved, not window_exhausted or slot_refused)."
+- **INCONCLUSIVE.** "If m < 6 the check is INCONCLUSIVE: run one more
+  equivalence night before deciding. No other action."
+- **PASS.** "PASS = every retained b_fiducial_s <= the r6 level screen AND the
+  night's range (max minus min of the retained values) <= the r6 operative
+  bracket screen."
+- **FAIL.** "FAIL = anything else."
+
+Read against the table above, the two PASS comparisons are: every retained
+value ≤ `0.032898493715362` s, and (largest retained value − smallest retained
+value) ≤ `0.009724` s. A single retained value trivially has range zero and is
+compared on the level screen alone; the m < 6 branch decides whether so small
+a sample decides anything at all, and it decides before the values are seen.
+
+## On PASS: continuation, not derivation
+
+> On PASS: the r6 acceptance is CONTINUED onto identity epoch 25G83 by a dated
+> addendum under D-102 that Ed authorizes here ("epoch continuation on
+> evidence": an identity-field change followed by a same-envelope night
+> continues the acceptance in force rather than voiding it). The addendum
+> cites the night's session id, the twelve slot outcomes, and the m values
+> verbatim. Ordinary capture and the first real G2-a window proceed on the
+> next quiet slot after the addendum lands. The 25G83 pre-registration stays
+> on file, un-withdrawn, as the fallback route. If continuation needs a code
+> change (the epoch-freshness refusal in the loader or issuer), the magistrate
+> lands it through the normal PR gate as the smallest possible change and
+> reports the diff; it does not work around a refusal by hand.
+
+Four consequences, stated so they cannot be read loosely:
+
+1. PASS licenses NOTHING by itself. The addendum under D-102 is what licenses
+   ordinary capture; until it lands, the acceptance in force still binds the
+   old identity epoch and ordinary capture still refuses.
+2. The first real G2-a window is the next quiet slot AFTER the addendum lands,
+   under the ordinary window path and the standing gates — not a window this
+   pre-registration authorizes.
+3. No threshold moves. Continuation carries the existing numbers forward; it
+   derives nothing and issues no successor.
+4. A refusal in code is not worked around. If the loader's or issuer's
+   epoch-freshness refusal blocks continuation, the smallest change that
+   removes it goes through the ordinary pull-request gate with its diff
+   reported.
+
+## On FAIL: revision 1 proceeds, and V3 is affirmed
+
+> On FAIL: the pre-registered three-night derivation proceeds as written in
+> configs/calibration/preregistration_d079_epoch_25g83_rev1.md, and V3 is then
+> AFFIRMED by this issue (three nights, 12 slots, retained n >= 19, or exactly
+> 17 with a written ruling). Night one COUNTS as registration night one. Ed
+> rules here that examining night-one values under a rule fixed before capture
+> does not compromise the derivation: blindness for this campaign means "every
+> rule fixed before data", which this issue satisfies, not "no one may look".
+> If the issuer's in-code blindness refusal blocks counting night one, the
+> magistrate reports it and proposes the minimal change; it does not run a
+> fourth night to satisfy the guard.
+
+So on FAIL the campaign is revision 1's, entire and unamended — V3 carries the
+affirmative written acknowledgment it required, this equivalence night is
+registration night one, and two further nights follow under revision 1's
+stopping, membership, exclusion and analysis rules.
+
+**Ed's blindness clarification, which governs both branches.** Blindness for
+this campaign means every rule is fixed before the data exists. It does not
+mean no one may look. The rule above is fixed here, in writing, before the
+night runs; reading the night's retained values afterwards therefore selects
+nothing, because there is nothing left to select. Revision 1's own reason for
+blindness — "so that nothing can be chosen after seeing values" — is satisfied
+by fixing the rule, which is what this section does.
+
+## Decisions 2, 3 and 4; timing
+
+> Not addressed by this issue. Their stated defaults and veto windows stand
+> exactly as the email wrote them.
+
+> Earliest equivalence night: the early hours of 2026-09-12 as the email
+> already proposed, subject to PR #316 landing, the handback rewrite, and the
+> standing gates. The objective is real G2-a numbers on the first quiet slot
+> after a PASS.
+
+This revision authorizes no window and licenses no measurement, exactly as
+revision 1 did not. The arm still goes through the standing gates and the
+email-then-arm handback, and Ed's NO overrides.
