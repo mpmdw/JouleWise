@@ -16,7 +16,18 @@
 
 ## Replay tail (row 9) — appended when the run lands
 
-(pending)
+Replay 22 at a6e0eb31 (the integration tree: e46f06c8 + merge of main baf7b900), worktree `JouleWise-wt-interp-pin`, `python3 scripts/shard_tests.py --workers 4 --split`, detached pid 75385, started 08:46 PDT 2026-09-11 (activation 3dab9c89), finished before 10:09 (harvested by activation 2dae3835 from `/tmp/magistrate-3dab9c89/replay-22-pr321-main.log`, 1,199,436 bytes). Exact tail:
+
+```
+SHARD SUMMARY index=1/4 modules=52 tests=1390 failures=0 errors=0 skipped=50 result=PASS
+SHARD SUMMARY index=2/4 modules=59 tests=1210 failures=0 errors=0 skipped=7 result=PASS
+SHARD SUMMARY index=3/4 modules=59 tests=1923 failures=0 errors=0 skipped=47 result=PASS
+SHARD SUMMARY index=4/4 modules=62 tests=1509 failures=0 errors=0 skipped=5 result=PASS
+WORKERS SUMMARY shards=4 modules=232 tests=6032 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+REPLAY_RC=0
+```
+
+PASS: 6032 tests, 0 failures, 0 errors, 109 skipped, failed_shards=none.
 
 ## Integration-tree note — 08:47 PDT
 
