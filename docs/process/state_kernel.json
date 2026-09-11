@@ -22,7 +22,7 @@
           "label": "ACCEPTANCE-EPOCH-25G83-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "bind-window and check pass in a fresh clone at the transaction head with the live epoch; the successor's generation is registered in tests/verify_calibration_acceptance_corpus.py; every prior artifact unchanged; corpus design pre-registered before the first capture; every consumer refusal intact."
+        "summary": "EITHER (PASS route, Ed's ruling by directive issue 316) the r6 acceptance is continued onto the live epoch by the governed continuation transaction — issued epoch-continuation artifact registered and byte-pinned, dated D-102 addendum landed, bind-window and check-equivalent preflight passing in a fresh clone on the live epoch, r6 and every prior artifact byte-unchanged — OR (FAIL route) bind-window and check pass in a fresh clone at the transaction head with the live epoch; the successor's generation is registered in tests/verify_calibration_acceptance_corpus.py; every prior artifact unchanged; corpus design pre-registered before the first capture; every consumer refusal intact."
       },
       "authority": {
         "label": "Record 39: OS-build epoch blocker and successor acceptance route",
@@ -38,7 +38,7 @@
       "priority": "p1_phase_gate",
       "rank": 179,
       "status": "queued",
-      "status_note": "2026-09-10 19:49: IMPLEMENTATION MERGED (PR #315 → main 8cbcaf08; seven seats S1–S7; twelve-row gate ledger complete on 7107657d; replay 5897 tests 0 failures, no waiver; CI 19/19). Remaining phases: (3) agent-free corpus nights (3 × 12 slots; NIGHT_HANDBACK email-then-arm; runbook record 99 rev 3; wrapper via scripts/gen_derivation_night.py); (4) prepare-candidate + cold science gate; (5) D-138 atomic transaction (+ staged R2, registration row, tests/verify_calibration_acceptance_corpus.py); (6) regenerate G2-a inputs and prove bind-window/check at the desk. Open for Ed: veto windows (69/80/82/88), V3 affirmative acknowledgment, successor screen rule (V7), decision-log V4 '210 min' wording.",
+      "status_note": "2026-09-10 23:35: Ed's ruling (issue 316) recorded on main (PR #319); night one = epoch-equivalence check; continuation mechanism (S10) in the gate on its branch; arm materials next",
       "stop_card": null
     },
     "ARM-CENSUS-IDLE-INTERACTIVE-01": {
@@ -2330,6 +2330,35 @@
       "status_note": "PREWINDOW-REGEX-01 is complete; the agent-free external capture is now dependency-ready.",
       "stop_card": null
     },
+    "EPOCH-CONTINUATION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/153-continuation-synthesis.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/EPOCH-CONTINUATION-01/acceptance",
+          "label": "EPOCH-CONTINUATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "PR merged with ledger 12/12, replay and CI green; r6's file and derivation digests unchanged; EPOCH_CONTINUATION_REGISTRY empty of issued entries until the governed issuance after a PASSED night."
+      },
+      "authority": {
+        "label": "Ed's ruling, directive issue 316 (record 146) and the magistrate's synthesis (record 153)",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/153-continuation-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Land the PASS-route mechanism of directive issue 316: a separate byte-pinned epoch-continuation artifact (r6 stays byte-identical), the judged-epochs loader helper (freshness fallback; corpus doubling per judged epoch; the adjudicated night's rows exempt from range expansion only; the systematic-failure trigger keeps every row), the capture writer routed through it, and scripts/issue_epoch_continuation.py (re-derives the verdict from primary bytes; refuses a night containing a systematic failure) — through the normal gate as a PR from feat/2026-09-10-epoch-continuation.",
+      "id": "EPOCH-CONTINUATION-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 185,
+      "status": "queued",
+      "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened.",
+      "stop_card": null
+    },
     "ESTIMAND-ENCLOSURE-01": {
       "acceptance": {
         "evidence": [
@@ -2533,7 +2562,7 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "Successor calibration acceptance issued for the live epoch, with fresh-clone bind-window and check passing at the D-138 transaction head",
+          "required": "The r6 acceptance either CONTINUED onto the live epoch (issued continuation artifact + D-102 addendum, per directive issue 316) or a successor acceptance issued for the live epoch, with fresh-clone bind-window and preflight passing at the transaction head",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
@@ -2963,6 +2992,35 @@
       "rank": 182,
       "status": "queued",
       "status_note": "2026-09-10: registered by activation 96bfeca7 because the ruled-not-installed sweep found the adopted rule installed nowhere with no tracked obligation; blocked on Ed's veto window (email 2026-09-10), then a lieutenant seat installs it.",
+      "stop_card": null
+    },
+    "ISSUER-CHECK-CONTINUATION-AWARE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/153-continuation-synthesis.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ISSUER-CHECK-CONTINUATION-AWARE-01/acceptance",
+          "label": "ISSUER-CHECK-CONTINUATION-AWARE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "check reports the continued epoch as judged and exits 0 on a continued machine; a refusal otherwise unchanged."
+      },
+      "authority": {
+        "label": "Ed's ruling, directive issue 316 (record 146) and the magistrate's synthesis (record 153)",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/153-continuation-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Teach the acceptance issuer's desk `check` epoch watch (scripts/issue_calibration_acceptance_generation.py) about issued epoch continuations so the desk gate does not read MISMATCH rc 3 forever after a continuation; non-science, desk-only (synthesis 153, deferred).",
+      "id": "ISSUER-CHECK-CONTINUATION-AWARE-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 186,
+      "status": "queued",
+      "status_note": "2026-09-10 23:40: registered from synthesis 153 (deferred item); inert until a continuation is issued.",
       "stop_card": null
     },
     "L10-A-G2B-CONTRACT-PREFIX-01": {
