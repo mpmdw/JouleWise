@@ -500,9 +500,13 @@ was written; filling them reopens no scientific rule. The plan's
 `registration_path` is `night_gate.D166_REGISTRATION_PATH`, the D-166 literal
 in `joulewise/night_gate.py`: the fixed repository-relative path
 `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json`.
-D-166 records the D-117 contrast campaign's workload-comparison rule. It is
-the file that C1, the night gate's registration check, requires for this
-night's receipt class. A receipt class is the plan's category, and it selects
+The file is the `_v5` contrast campaign's registered dominance criterion: the
+rule, fixed before that campaign's data, that a measured energy difference
+counts only if it is at least twice the widened uncertainty bound (D-165's
+falsifier, carried in a file named for D-166). It has nothing to do with this
+calibration night's physics; it is simply the one document the night gate is
+coded to authenticate for this receipt class, through C1, the night gate's
+registration check. A receipt class is the plan's category, and it selects
 which gate checks apply; this night's class is `DIAGNOSTIC_NO_PACK`, a night
 that runs no measurement pack (§1.1 defines it in full). The scientific
 pre-registration is bound to this night by H, the
@@ -1416,7 +1420,7 @@ the stored bytes so they can be recovered without the working copy.
 
 | Item | Required evidence |
 |---|---|
-| 1. Frozen plan and gate registration | `plan_id`, the night's identifier; the frozen plan's SHA-256, equal to the wrapper's `PLAN_SHA256` literal (its recorded plan digest); and the plan's `registration_path` verbatim, equal to `night_gate.D166_REGISTRATION_PATH` (the fixed D-166 registration path required by the gate), with that file's SHA-256 inside `$MEASUREMENT_ROOT` (the measurement clone): `dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265` expected. |
+| 1. Frozen plan and gate registration | `plan_id`, the night's identifier; the SHA-256 of the frozen calibration plan of §0.2 (`$CALIBRATION_PLAN`, the committed capture plan the captures run under, not this night's `night_plan.json`), equal to the wrapper's `PLAN_SHA256` literal; and the plan's `registration_path` verbatim, equal to `night_gate.D166_REGISTRATION_PATH` (the fixed D-166 registration path required by the gate), with that file's SHA-256 inside `$MEASUREMENT_ROOT` (the measurement clone): `dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265` expected. |
 | 2. Scientific pre-registration | Repository-relative path `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`; the `shasum -a 256` result from the committed bytes inside `$MEASUREMENT_ROOT` after §0.5's fields are filled; measurement head H (the plan's pinned commit, 40 hexadecimal characters); and the Git blob id printed below. |
 | 3. Rule and instructions | The commit id containing the D-102 evening addendum (the written rule the PASS route applies), and the commit id containing the runbook revision followed, with its revision number. |
 | 4. Capture inputs | The wrapper chain's SHA-256 (the generated `chain.zsh` file the plan launches); the identity-epoch digest (the `identity-epoch.json` description of the instrument configuration); the T1-bindings digest (the `t1-bindings.json` fixed capture-input bindings); and `EVIDENCE_ROOT_ID` (the registered evidence-root identifier). These are the inputs already required in §0.2, §0.8 and §1.1b. |
@@ -1425,7 +1429,7 @@ the stored bytes so they can be recovered without the working copy.
 With `$H` set to the 40-hex measurement head, recover item 2's blob id with:
 
 ```zsh
-git -C "$MEASUREMENT_ROOT" rev-parse "$H:configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+git -C "$MEASUREMENT_ROOT" rev-parse "${H}:configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
 ```
 
 ---
@@ -1752,7 +1756,7 @@ route.
 
 Before applying the rule, the magistrate must re-hash the committed
 pre-registration at H (the arm record's pinned measurement commit) with
-`git -C "$MEASUREMENT_ROOT" show "$H:configs/calibration/preregistration_d079_epoch_25g83_rev1.md" | shasum -a 256`,
+`git -C "$MEASUREMENT_ROOT" show "${H}:configs/calibration/preregistration_d079_epoch_25g83_rev1.md" | shasum -a 256` (braced `${H}`: zsh reads an unbraced dollar-H followed by a colon as a history-style modifier and eats the colon, so git would hash nothing),
 require equality with the arm record's SHA-256 digest (the fingerprint of
 those committed bytes), and quote that digest in the D-102 continuation
 addendum on PASS.

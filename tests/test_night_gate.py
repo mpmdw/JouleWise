@@ -243,6 +243,18 @@ class RegistrationSeamTests(unittest.TestCase):
             with self.subTest(line=number):
                 self.assertRegex(line, r"D-166|D166_REGISTRATION_PATH")
 
+    def test_runbook_never_writes_unbraced_dollar_h_before_a_colon(self) -> None:
+        # Opus counter-review 07 B1 (activation 3dab9c89): in zsh an unbraced
+        # "$H:" is a history-style modifier; git then receives "<hash-1>path",
+        # rev-parse exits 128 and "git show | shasum" prints the digest of
+        # EMPTY input -- a false STOP on the PASS route. Require "${H}:".
+        offenders = [
+            f"{number}: {line.strip()}"
+            for number, line in enumerate(self.RUNBOOK.read_text().splitlines(), 1)
+            if re.search(r"\$H:", line)
+        ]
+        self.assertEqual([], offenders)
+
     def test_real_pre_registration_refuses_but_d166_passes_c1(self) -> None:
         """T4 documents the registration seam; it already passes on main.
 
