@@ -3,7 +3,7 @@ BRIDGE_ORIGIN: claude
 BRIDGE_HOPS_REMAINING: 0
 WRITE_SCOPE: []
 
-BOUNDED DELTA CHECK of fix round 4 for lane NIGHT-C1-REGISTRATION-DOCS-01 (PR #322), branch fix/2026-09-11-c1-registration-seam at HEAD 66963ace (one commit over 7fc058b9; ONE paragraph of docs/phase_2/derivation_night_runbook.md §0.5 replaced with the text of consult record 15 §Q4). Read-only; temp files only under /tmp. Read /Users/edr/code/JouleWise-wt-bk-3dab9c89/docs/process_traces/2026-09-11-activation-3dab9c89/12-delta-round3-c1-seam.md (S3) and 15-opus-consult-pr322-paragraph.md (Q2 fact-check, Q3 census, Q4 text), then 'git diff 7fc058b9..HEAD'.
+BOUNDED DELTA CHECK of fix round 4 for lane NIGHT-C1-REGISTRATION-DOCS-01 (PR #322), branch fix/2026-09-11-c1-registration-seam at HEAD d8cf309a (two commits over 7fc058b9 — 66963ace pasted consult 15 §Q4 and tripped T3 (its registration_path line did not name D-166); d8cf309a reworded that one parenthesis; ONE paragraph of docs/phase_2/derivation_night_runbook.md §0.5 replaced with the text of consult record 15 §Q4). Read-only; temp files only under /tmp. Read /Users/edr/code/JouleWise-wt-bk-3dab9c89/docs/process_traces/2026-09-11-activation-3dab9c89/12-delta-round3-c1-seam.md (S3) and 15-opus-consult-pr322-paragraph.md (Q2 fact-check, Q3 census, Q4 text), then 'git diff 7fc058b9..HEAD'. Also state whether the lead's rewording of the parenthesis changed any fact.
 
 Judge with commands + output:
 1. Is the committed paragraph byte-identical to consult 15 §Q4's text (diff them)? If not, list the differences.
