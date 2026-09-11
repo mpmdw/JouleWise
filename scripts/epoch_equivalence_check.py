@@ -45,10 +45,13 @@ the largest retained value minus the smallest -- must sit at or below it.
 RAW STATISTIC VERSUS OPERATIVE COMPARATOR.  The envelope's raw corpus maximum
 and range are the statistics of the seventeen captures r6 was derived from.
 The OPERATIVES are the numbers the validator actually measures with, and they
-are not always the raw statistics: the bracket screen is quantized upward from
-the raw range under the never-zero floor rule, and the level screen is
-quantized from the raw maximum.  Issue 316 rules that where they differ, THE
-OPERATIVE VALUE IS THE ONE USED.  This tool therefore prints both, with each
+are not always the raw statistics: each is the raw statistic rounded to the
+decimal place the artifact registers for it (for r6 the bracket screen rounds
+UP to six places and the level screen rounds DOWN to fifteen).  A generation
+whose registered screen rule is the floored one would also apply a never-zero
+floor; r6's rule is `range_equals_screen`, so no floor is in force there.  The
+tool prints the screen rule it read.  Issue 316 rules that where operative and
+raw differ, THE OPERATIVE VALUE IS THE ONE USED.  This tool therefore prints both, with each
 number's source, and compares against the operatives.  It refuses if the
 artifact's own `ratified_operatives` and the validator's registered generation
 row disagree about any of them, because then there is no single operative value
@@ -78,6 +81,7 @@ from __future__ import annotations
 
 import argparse
 from decimal import Decimal, localcontext
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -271,9 +275,23 @@ def reference_envelope(acceptance_path: Path) -> dict[str, Any]:
             raise EquivalenceRefusal(
                 f"acceptance {acceptance_id}: source_statistics has no {name}"
             )
+    screen_rule = registry_row.get("screen_rule")
+    if not isinstance(screen_rule, str):
+        raise EquivalenceRefusal(
+            f"acceptance {acceptance_id}: the registered generation names no screen_rule"
+        )
+    resolved_path = acceptance_path.expanduser().resolve()
+    try:
+        relative_path = str(resolved_path.relative_to(REPO_ROOT))
+    except ValueError:
+        relative_path = resolved_path.name
     return {
         "acceptance_id": acceptance_id,
-        "acceptance_path": str(acceptance_path),
+        # Repo-relative plus the byte digest, never an absolute path: two runs
+        # from two checkouts at the same head must produce identical records.
+        "acceptance_path": relative_path,
+        "acceptance_file_sha256": hashlib.sha256(resolved_path.read_bytes()).hexdigest(),
+        "screen_rule": screen_rule,
         "corpus_n": artifact_n,
         "raw_corpus_maximum_s": statistics["maximum_s"],
         "raw_corpus_range_s": statistics["range_s"],
@@ -291,9 +309,11 @@ def envelope_lines(envelope: Mapping[str, Any]) -> list[str]:
     lines = [
         "Reference envelope (the acceptance in force; issue 316)",
         f"  acceptance_id: {envelope['acceptance_id']}",
-        f"  artifact: {envelope['acceptance_path']}",
+        f"  artifact: {envelope['acceptance_path']}  "
+        f"sha256 {envelope['acceptance_file_sha256']}",
         "    loaded by joulewise.calibration_bracketing."
         "load_calibration_acceptance_bound",
+        f"  screen rule registered for this generation: {envelope['screen_rule']}",
         f"  corpus n = {envelope['corpus_n']} "
         "(artifact derivation_corpus.n; registry corpus_n; they agree)",
         f"  raw corpus maximum_s = {envelope['raw_corpus_maximum_s']}  [{artifact}]",
@@ -310,10 +330,15 @@ def envelope_lines(envelope: Mapping[str, Any]) -> list[str]:
     level_differs = envelope["level_screen_s"] != envelope["raw_corpus_maximum_s"]
     bracket_differs = envelope["bracket_screen_s"] != envelope["raw_corpus_range_s"]
     if level_differs or bracket_differs:
+        floor_note = (
+            " and the never-zero floor of that rule"
+            if envelope["screen_rule"] != "range_equals_screen"
+            else "; no floor is in force under this screen rule"
+        )
         lines.append(
             "    NOTE: the operative comparators differ from the raw statistics "
-            "(quantization / never-zero floor); issue 316 rules the OPERATIVE "
-            "value is the one compared against."
+            f"by quantization{floor_note}; issue 316 rules the OPERATIVE value "
+            "is the one compared against."
         )
     else:
         lines.append(

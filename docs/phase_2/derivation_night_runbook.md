@@ -1710,20 +1710,27 @@ their operands, and the verdict line. It judges only against the r6 generation
 named above; pointing it at any other acceptance refuses. It writes one JSON
 record to `--out` (never under `configs/calibration/`) and nothing else:
 
-```
-$PY scripts/epoch_equivalence_check.py \
+```zsh
+cd "$MEASUREMENT_ROOT"
+"$PY" scripts/epoch_equivalence_check.py \
   --session-id "$SESSION_ID" \
-  --ledger "$MEASUREMENT_ROOT/runs/calibration_observation_ledger.jsonl" \
-  --head-pin "$MEASUREMENT_ROOT/configs/calibration/calibration_ledger_head.json" \
+  --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
   --repo-root "$MEASUREMENT_ROOT" \
   --out "$NIGHT_ROOT/epoch-equivalence-record.json"
 ```
+
+`--acceptance` is left at its default, which resolves against the checkout
+the SCRIPT lives in (here the clone, because `$PY` runs the clone's copy); the
+tool then refuses any generation other than r6 by id, so a second checkout at
+the same head running its own copy judges against the same bytes.
 
 Exit code 0 is PASS, 4 is FAIL, 5 is INCONCLUSIVE; 3 means the tool refused
 to judge (the session is not terminal, is not derivation-kind, or the envelope
 did not authenticate) and wrote nothing. Run it twice — once from the clone,
 once from a second checkout at the same head — and compare the two records
-byte for byte before recording a verdict; the record is a witness for the
+byte for byte before recording a verdict (the record carries the artifact's
+repo-relative path and byte digest, never an absolute path, so two checkouts
+at one head produce identical bytes); the record is a witness for the
 continuation transaction, never its input.
 
 [OPEN, and not decided by issue 316: if the check is INCONCLUSIVE and the

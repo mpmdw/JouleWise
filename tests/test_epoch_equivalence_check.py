@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from contextlib import redirect_stdout
 from decimal import Decimal
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -446,6 +447,27 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertEqual(code, checker.REFUSAL_EXIT)
         self.assertIn("never writes into an acceptance directory", stream.getvalue())
+
+    def test_the_record_names_the_artifact_relative_with_its_digest_and_screen_rule(self) -> None:
+        """Counter-review 162: two checkouts at one head must produce identical records."""
+
+        values = _tight_grid(12, LEVEL_SCREEN - Decimal("0.0005"), Decimal("0.00001"))
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.build(tmp, "relpath", [Slot(v) for v in values])
+            code, text, record = self.run_check(fixture)
+        self.assertEqual(code, 0)
+        envelope = record["reference_envelope"]
+        self.assertFalse(Path(envelope["acceptance_path"]).is_absolute())
+        self.assertEqual(
+            envelope["acceptance_path"],
+            str(DEFAULT_ACCEPTANCE_BOUND_PATH.resolve().relative_to(checker.REPO_ROOT)),
+        )
+        self.assertEqual(
+            envelope["acceptance_file_sha256"],
+            hashlib.sha256(DEFAULT_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(envelope["screen_rule"], "range_equals_screen")
+        self.assertIn("no floor is in force under this screen rule", text)
 
     def test_exactly_six_retained_values_are_judged_not_inconclusive(self) -> None:
         """m = 6 is the first m the rule judges: the boundary is inclusive."""
