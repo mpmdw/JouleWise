@@ -296,12 +296,18 @@ def check(args: argparse.Namespace) -> int:
     observed = observe_machine()
     mismatches = mismatched_fields(expected, observed)
     preregistration_lines: list[str] = []
+    # The comparison's verdict travels ONLY in the appended block and its own
+    # rc flag: putting it into `errors` would print it in the middle of the
+    # watch table on a mismatch and break the byte-identity of the watch's own
+    # output, which is the property the flag must never touch.
+    preregistration_failed = False
     if args.preregistration is not None:
         try:
             text = Path(args.preregistration).read_text(encoding="utf-8")
             _, registered_powermetrics = preregistration_epoch_pins(text)
         except (OSError, PrepareRefusal) as error:
             preregistration_lines.append(f"pre-registration: unusable ({error})")
+            preregistration_failed = True
         else:
             agrees = observed.get("powermetrics_sha256") == registered_powermetrics
             preregistration_lines.append(
@@ -309,7 +315,7 @@ def check(args: argparse.Namespace) -> int:
                 + ("match" if agrees else "MISMATCH — the registration is void")
             )
             if not agrees:
-                errors.append("pre-registration: powermetrics sha256 differs")
+                preregistration_failed = True
     print("Desk epoch watch (identity comparison only; no capture authorization)")
     print(f"ACTIVE acceptance: {ACTIVE_ACCEPTANCE_ID}")
     print(f"{'field':<22} {'expected':<64} {'observed':<64} status")
@@ -332,7 +338,7 @@ def check(args: argparse.Namespace) -> int:
     # for a dry run; it must leave the watch output byte-identical.
     named = [session_id for session_id in args.session_ids if session_id]
     if not named:
-        return 3 if errors or mismatches else 0
+        return 3 if errors or mismatches or preregistration_failed else 0
     dry_run_code, lines = registration_dry_run(snapshot, named)
     for line in lines:
         print(line)

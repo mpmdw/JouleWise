@@ -1970,15 +1970,53 @@ class PrepareCandidateTest(unittest.TestCase):
                 issuer.check(args)
             return stream.getvalue()
 
-        baseline = run()
-        self.assertNotIn("pre-registered powermetrics", baseline)
-        with_pin = run("--preregistration", str(PREREGISTRATION))
-        self.assertTrue(with_pin.startswith(baseline))
-        self.assertIn(
-            "pre-registered powermetrics sha256 "
-            "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5",
-            with_pin,
-        )
+        # The machine is MOCKED both ways so the property holds on CI and on a
+        # clone with no sampler binary, not only on the capturing machine: with
+        # the flag the output is the watch's own bytes plus appended lines --
+        # on a match AND on a mismatch, where the verdict changes the rc only.
+        registered = "b762e5bf7628e77d279012882c096e922633a47aa38bd5f05c0381cfb21330c5"
+        for observed_sha, expect_match in ((registered, True), ("0" * 64, False)):
+            with self.subTest(match=expect_match):
+                observed = {
+                    "os_build": "25G83", "hardware_model": "Mac15,9",
+                    "powermetrics_sha256": observed_sha, "mlx_version": "0.0.0",
+                }
+                with mock.patch.object(issuer, "observe_machine", return_value=observed):
+                    baseline = run()
+                    self.assertNotIn("pre-registered powermetrics", baseline)
+                    with_pin = run("--preregistration", str(PREREGISTRATION))
+                self.assertTrue(with_pin.startswith(baseline), with_pin)
+                self.assertIn(f"pre-registered powermetrics sha256 {registered}: ", with_pin)
+                self.assertEqual(
+                    "MISMATCH" in with_pin.split("pre-registered powermetrics sha256")[1],
+                    not expect_match,
+                )
+
+    def test_a_preregistration_sampler_mismatch_fails_the_watch_by_rc(self) -> None:
+        """REFUSE: production call site issue_calibration_acceptance_generation.check (preregistration_failed)."""
+
+        observed = {
+            "os_build": "25G83", "hardware_model": "Mac15,9",
+            "powermetrics_sha256": "0" * 64, "mlx_version": "0.0.0",
+        }
+        stream = io.StringIO()
+        with mock.patch.object(issuer, "observe_machine", return_value=observed):
+            with redirect_stdout(stream):
+                rc_without = issuer.main([
+                    "check", "--ledger", str(self.wide["ledger"]),
+                    "--head-pin", str(self.wide["pin"]), "--acceptance", str(R6),
+                ])
+                rc_with = issuer.main([
+                    "check", "--ledger", str(self.wide["ledger"]),
+                    "--head-pin", str(self.wide["pin"]), "--acceptance", str(R6),
+                    "--preregistration", str(PREREGISTRATION),
+                ])
+        # The epoch watch itself already returns 3 on this mocked machine (the
+        # mocked sampler digest differs from the ledger's T1), so the flag's own
+        # verdict is proven by the printed MISMATCH line and by the rc staying 3
+        # when the watch's own errors are the only other reason.
+        self.assertEqual((rc_without, rc_with), (3, 3))
+        self.assertIn("MISMATCH", stream.getvalue())
 
     # B-2: the corpus is bound to the pre-registered shape
 
