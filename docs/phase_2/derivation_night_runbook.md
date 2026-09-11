@@ -2200,7 +2200,7 @@ means. A term is listed only if it does technical work.
 | slot | §Terms | One declared, ordered place for one capture inside a session (`d01`…`d12`). |
 | session (ledger) | §Terms | A ledger capability reserving several attempts under one open receipt at a fixed head pin. Unqualified, *session* always means this; the watchdog's *agent session* is always written out in full. |
 | registration | §Terms | The set of ledger sessions the pre-registration declares the corpus is drawn from. |
-| stale field | §Terms, used §0.8 | An identity field whose value on this machine differs from the active acceptance's epoch; at least one must be stale for a derivation night to be the right night. |
+| stale field | §Terms, used §0.8 | An identity field whose value on this machine differs from every epoch the active acceptance judges (its own, and any an authenticated continuation carried it onto); at least one must be stale for a derivation night to be the right night. |
 | head pin / head-equals-pin | §Terms | The committed file naming the trusted receipt count and last digest; equality with the physical ledger head. |
 | screen / level screen / bracket screen | §Terms, constants in §2.5, successor operatives in §4.2 | A threshold a value is compared against; corpus maximum; corpus range. |
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |

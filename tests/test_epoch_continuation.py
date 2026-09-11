@@ -903,6 +903,41 @@ class EpochContinuationTests(unittest.TestCase):
         self.assertEqual(self.prepare("--force")[0], 0)
         self.assertEqual(self.out.read_bytes(), raw)
 
+    def test_a_record_written_by_the_real_desk_tool_cross_checks_clean(self):
+        """Fresh-eyes 196 B: the witness cross-check must accept the desk tool's
+        own v1 record (its acceptance digest and screen rule are checked, not
+        forgiven) and refuse it once the digest is altered."""
+
+        from scripts import epoch_equivalence_check as desk
+        self.build()
+        witness = self.root / "desk-record.json"
+        rc, out, _ = self.run_cli_of(desk.main, [
+            "--session-id", SESSION_ID,
+            "--ledger", str(self.fixture["ledger"]), "--head-pin", str(self.fixture["pin"]),
+            "--acceptance", str(bracket.DEFAULT_ACCEPTANCE_BOUND_PATH),
+            "--repo-root", str(self.fixture["root"]), "--out", str(witness),
+        ])
+        self.assertEqual(rc, 0, out)
+        record = json.loads(witness.read_bytes())
+        self.assertIn("acceptance_file_sha256", record["reference_envelope"])
+        self.assertIn("screen_rule", record["reference_envelope"])
+        rc, _, error = self.prepare("--equivalence-record", str(witness))
+        self.assertEqual((rc, error), (0, ""))
+        for field, value in (("acceptance_file_sha256", "0" * 64), ("screen_rule", "floored_range_envelope_screen")):
+            with self.subTest(field=field):
+                tampered = copy.deepcopy(record)
+                tampered["reference_envelope"][field] = value
+                witness.write_text(json.dumps(tampered), encoding="utf-8")
+                rc, _, error = self.prepare("--force", "--equivalence-record", str(witness))
+                self.assertEqual(rc, 3)
+                self.assertIn(f"equivalence_record.reference_envelope.{field}", error)
+
+    def run_cli_of(self, entry, args):
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            rc = entry(args)
+        return rc, stdout.getvalue(), stderr.getvalue()
+
     def test_s9_witness_agrees_then_m_or_lexeme_disagreement_names_field(self):
         self.build()
         fixture = Path(__file__).parent / "fixtures/epoch_continuation/s9-pass.json"

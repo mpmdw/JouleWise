@@ -201,6 +201,11 @@ def _s9_projection(record: Mapping[str, Any], artifact: Mapping[str, Any], sessi
         "schema_version": "joulewise.epoch_equivalence_check.v1",
         "reference_envelope": {
             "acceptance_id": artifact["acceptance_id"],
+            # Provenance the desk tool records and this tool CHECKS: the
+            # artifact digest must be the one this record was derived from,
+            # and the screen rule the one the validator registers.
+            "acceptance_file_sha256": record["acceptance_file_sha256"],
+            "screen_rule": acceptance_module._D102_GENERATION_DERIVATIONS[artifact["acceptance_id"]]["screen_rule"],
             "corpus_n": artifact["derivation_corpus"]["n"],
             "raw_corpus_maximum_s": stats["maximum_s"], "raw_corpus_range_s": stats["range_s"],
             "level_screen_s": rule["level_screen_s"], "bracket_screen_s": rule["operative_bracket_screen_s"],
@@ -241,9 +246,17 @@ def _crosscheck(expected: Any, actual: Any, field: str = "equivalence_record") -
             "equivalence_record": {"verdict_reason", "tool_sha256", "repo_head", "emitted_at"},
             "equivalence_record.reference_envelope": {"acceptance_path"},
         }.get(field, set())
+        # Provenance the desk tool added after its first revision: CHECKED
+        # whenever the witness carries it, tolerated when an older v1 record
+        # does not.  Science fields are never optional.
+        optional_checked = {
+            "equivalence_record.reference_envelope": {"acceptance_file_sha256", "screen_rule"},
+        }.get(field, set())
         unknown = set(actual) - set(expected) - provenance
         _refuse(bool(unknown), f"{field}.{sorted(unknown)[0]}" if unknown else field)
         for key, value in expected.items():
+            if key in optional_checked and key not in actual:
+                continue
             _refuse(key not in actual, f"{field}.{key}")
             _crosscheck(value, actual[key], f"{field}.{key}")
     elif isinstance(expected, list):
