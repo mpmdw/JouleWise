@@ -7,3 +7,15 @@ What I read myself: the module at round 1 and its round-6 diff; the loader diff 
 Design questions answered: (1) the artifact is separate and byte-pinned so r6 and every pin that names it stay byte-identical (Ed's "smallest change"); (2) judged epochs is the single loader notion, with doubling per epoch, range expansion exempting only the adjudicated rows, and the systematic trigger keeping every row — a night with a systematic failure is refused at preparation; (3) the envelope must hold over every disclosed valid bound because the loader cannot replay anchor resolution; the tool applies it only where it would write, so FAIL and INCONCLUSIVE nights still reach the desk with their numbers; (4) the capture writer authenticates a continuation with the same snapshot rule as claim time; (5) the desk tool's record is a witness the tool checks and can contradict, including its provenance fields.
 
 Post-review commits after fresh-eyes 202: one (a6ddb2ab, a single rationale clause in the contract, read by me; no Python changed after be67a876). Replay 19 runs at be67a876; its exact tail is appended below when it lands. CI on a6ddb2ab in progress. VERDICT: MERGE on replay 19 PASS and CI green; the ledger's row 9 cites the commit carrying the tail. If the 02:31 exit arrives first, the 09-11 activation merges under D-072 with no further review needed unless the replay or CI fails.
+
+## Replay tail (row 9) — appended 2026-09-11 08:41 PDT by activation 3dab9c89
+
+Replay 19 (activation 96bfeca7) was stopped unfinished at 02:26 (record 205). Replay 20 at the exact merge candidate a6ddb2ab ran in `JouleWise-wt-replay-12` (detached HEAD a6ddb2ab, clean), `python3 scripts/shard_tests.py --workers 4 --split`, 07:59:22–~08:39 PDT (Python 3.14.7, log `/tmp/magistrate-3dab9c89/replay-20-a6ddb2ab.log`, 8856 lines). Exact tail:
+
+```
+SHARD SUMMARY index=4/4 modules=62 tests=1506 failures=0 errors=0 skipped=5 result=PASS
+WORKERS SUMMARY shards=4 modules=232 tests=6017 failures=0 errors=0 skipped=109 failed_shards=none result=PASS
+REPLAY_RC=0
+```
+
+The `shard_tests.py: error: …` lines inside the log are the argparse-refusal tests' expected stderr, not runner errors. Replay PASS satisfies the terminal review's first condition; CI at a6ddb2ab is green on every check except the ledger validator, which runs again on the body edit.
