@@ -110,7 +110,6 @@ CUTS = (
      "oserror_detail_uses_exception_class_and_relative_path"),
     (continuation, "load_epoch_continuations", "Path(relative).is_absolute()", "False",
      "oserror_detail_uses_exception_class_and_relative_path"),
-    (issuer, "derive_record", "not envelope_holds_over_all_valid(all_valid, rule)",
     (issuer, "derive_record", 'statistics["verdict"] == "pass" and not envelope_holds_over_all_valid(all_valid, rule)',
      "not envelope_holds_over_all_valid(all_valid, rule)",
      "a_failing_night_prints_its_derived_record_and_exits_4_without_writing"),
