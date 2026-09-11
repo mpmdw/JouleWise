@@ -1697,11 +1697,31 @@ lands, under the ordinary window path and the standing gates — not under this
 runbook. The pre-registration stays on file, un-withdrawn, as the fallback
 route.
 
-[UNVERIFIED: at this revision no committed tool extracts the retained values
-and evaluates this rule; a desk tool for it is in preparation. Until it lands,
-read the coordinates named in §2.1 by hand at the desk and record each retained
-value beside its slot and attempt id, with both the ledger lexeme and the
-bundle's.]
+**The desk tool that applies this rule.** `scripts/epoch_equivalence_check.py`
+reads the terminal session from the ledger, retains exactly the rows defined
+above (it re-reads each retained capture's `instrument_evidence.json` and
+refuses if its lexeme differs from the ledger row's), reads the operatives
+from the validator registry and refuses if the artifact disagrees, and prints
+the constants table, one line per declared slot, m, the two comparisons with
+their operands, and the verdict line. It judges only against the r6 generation
+named above; pointing it at any other acceptance refuses. It writes one JSON
+record to `--out` (never under `configs/calibration/`) and nothing else:
+
+```
+$PY scripts/epoch_equivalence_check.py \
+  --session-id "$SESSION_ID" \
+  --ledger "$MEASUREMENT_ROOT/configs/calibration/calibration_observation_ledger.jsonl" \
+  --head-pin "$MEASUREMENT_ROOT/configs/calibration/calibration_ledger_head.json" \
+  --repo-root "$MEASUREMENT_ROOT" \
+  --out "$NIGHT_ROOT/epoch-equivalence-record.json"
+```
+
+Exit code 0 is PASS, 4 is FAIL, 5 is INCONCLUSIVE; 3 means the tool refused
+to judge (the session is not terminal, is not derivation-kind, or the envelope
+did not authenticate) and wrote nothing. Run it twice — once from the clone,
+once from a second checkout at the same head — and compare the two records
+byte for byte before recording a verdict; the record is a witness for the
+continuation transaction, never its input.
 
 [OPEN, and not decided by issue 316: if the check is INCONCLUSIVE and the
 second equivalence night then FAILS, the issue fixes no answer to whether both
