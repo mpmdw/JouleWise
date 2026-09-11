@@ -938,3 +938,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   merged; kernel lanes 182–184 registered). Runbook 99 revision 3 (record 115). NEXT: replay 6 green → PR from `feat/2026-09-10-epoch-integration`
   with the twelve-row ledger → CI → merge → clone at H + venv → `check --preregistration` → NIGHT_HANDBACK derivation night 1. rehearsal-20260911
   ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~17:55 PDT (headless activation `96bfeca7`): **PR #315 OPEN** (`feat/2026-09-10-epoch-integration` @ fa7dd55dd57b2be6d4cd4aa3cb117e0d5686c619 → main)
+  with the twelve-row gate ledger 12/12 (`check_gate_ledger.py` rc 0): row 9 = replay 7 at the exact head (5895 tests, 0 failures, 0 errors, no waiver —
+  the record-35 controller test passed), row 10 = three clean fresh-eyes passes (117/120/122), row 12 = record 118. Merge-surfaced defect found by the
+  early replays (a direct `git init` in the S7 fixture vs the git-fixture maintenance guard) fixed at fa7dd55d. CI (row 11) watching; the magistrate
+  self-merges after CI green under the standing D-072 authority, then the post-merge cross-unit review. Then: clone at H + venv → `check
+  --preregistration` → NIGHT_HANDBACK for derivation night 1 (earliest 09-12; rehearsal-20260911 runs tonight). Open for Ed: veto windows
+  (69/80/82/88), V3 affirmative acknowledgment, the successor screen rule (V7), the decision-log V4 "210 min" wording. rehearsal-20260911 ARMED and
+  untouched; exit on the 02:31 request.
