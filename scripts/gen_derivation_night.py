@@ -44,7 +44,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     IDENTITY_EPOCH_FIELDS,
     MAX_DECLARED_SESSION_SLOTS,
 )
-from joulewise.night_gate import NightPlan, PlanError  # noqa: E402
+from joulewise.night_gate import D166_REGISTRATION_PATH, NightPlan, PlanError  # noqa: E402
 
 RUNSHEET_PATH = (
     REPO_ROOT / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
@@ -684,7 +684,7 @@ def example_night_plan(spec: WrapperSpec) -> dict:
         "chain_path": f"{spec.window_custody_root}/chain.zsh",
         "chain_sha256_path": f"{spec.window_custody_root}/chain.zsh.sha256",
         "custody_root": spec.window_custody_root,
-        "registration_path": "<repo-relative path of the committed pre-registration>",
+        "registration_path": D166_REGISTRATION_PATH,
     }
 
 
