@@ -271,6 +271,33 @@ class InstallNightAgentTests(unittest.TestCase):
         for path in self.rendered.glob("*.plist"):
             self.assertEqual(str(python), plistlib.loads(path.read_bytes())["ProgramArguments"][0])
 
+    def test_default_derivation_refuses_when_measurement_root_cannot_be_read(self) -> None:
+        # Opus counter-review 06 F3 (activation 3dab9c89): the round-3 refusal
+        # branch had no coverage. Four ways the stdlib JSON read can fail.
+        message = "cannot derive measurement_root/.venv/bin/python from"
+        cases = {}
+        empty = self._v2_plan()
+        data = json.loads(empty.read_text()); data["measurement_root"] = ""
+        empty.write_text(json.dumps(data)); cases["empty-measurement-root"] = (empty, self.environment)
+        missing = self.root / "missing-key.json"
+        data = json.loads(self._v2_plan().read_text()); del data["measurement_root"]
+        missing.write_text(json.dumps(data)); cases["missing-key"] = (missing, self.environment)
+        not_json = self.root / "not-json.json"
+        not_json.write_text("{ not json"); cases["not-json"] = (not_json, self.environment)
+        no_python = self.root / "no-python-bin"; no_python.mkdir()
+        env = dict(self.environment); env["PATH"] = str(no_python)
+        cases["no-python3-on-path"] = (self._v2_plan(), env)
+        for name, (plan, environment) in cases.items():
+            with self.subTest(case=name):
+                completed = subprocess.run(
+                    ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan), "--hour", "1",
+                     "--minute", "2", "--render-only", str(self.rendered)],
+                    env=environment, capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertEqual(f"{message} {plan}; pass --python ABS_PATH\n", completed.stderr)
+                self.assertFalse(self.rendered.exists())
+
     def test_installer_has_no_plutil_dependency(self) -> None:
         # CI run 34611633826: Linux runners do not provide the macOS JSON reader.
         self.assertNotIn("plutil", SCRIPT_PATH.read_text(encoding="utf-8"))

@@ -1248,7 +1248,8 @@ At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
 `datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
 (the executable running the driver). The installer flag `--python "$PY"`
 pins that path to the project interpreter defined in §0.2. Install and
-`--render-only` default to `<measurement_root>/.venv/bin/python` when
+`--render-only DIR` (render the two job files into `DIR` without installing
+anything) default to `<measurement_root>/.venv/bin/python` when
 `--python` is omitted. Even a stub checkout needs that venv or an absolute
 path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
 (currently 3.11) and whose driver preflight exits 0 from the stub checkout.
