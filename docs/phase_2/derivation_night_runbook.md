@@ -512,7 +512,8 @@ literal `night_gate.D166_REGISTRATION_SHA256` in the same module. Nothing
 else about the file is read. (Beware one word collision: the plan's
 `registration_path` — the D-166 literal above — and C1's "registration" are
 the gate's own names for THIS file, not §Terms' **Registration**, the set of
-ledger sessions a derivation corpus is drawn from.) A receipt class is the plan's category, and it selects which gate
+ledger sessions a derivation corpus is drawn from.) A receipt class is the
+plan's category, and it selects which gate
 checks apply; this night's is `DIAGNOSTIC_NO_PACK`, the class for a night
 that launches no measurement pack — no campaign's committed bundle of runs,
 pinned in a plan by id, root and digest — because this night takes only the
