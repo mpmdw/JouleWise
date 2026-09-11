@@ -90,7 +90,7 @@ rewrite for THIS night (§Step 0b). It is not today's `origin/main`
 | Measurement root (disposable) | `/private/tmp/joulewise-rehearsal-20260912-checkout` | ruling 06 C-4 "fresh disposable checkout path (61 N3)" |
 | Custody root | `/Users/edr/night-custody/rehearsal-20260912` | ruling 06 C-4 |
 | `chain_path` / `chain_sha256_path` | `<custody_root>/chain.zsh` / `.sha256` — **never written** | C5 skips the read for `REHEARSAL_STUB` (`night_gate.py:1043–1052`) |
-| `registration_path` | `<<REGISTRATION_PATH per ruling 12>>` — see §Step 0c | packet 10 is in a second cold gate |
+| `registration_path` | `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json` (filled 2026-09-11 09:35 PDT by activation b23f3cb7 per cold-gate ruling 12 (i) and synthesis 14; digest proven in Block A per §Step 0c) | ruling 12 (i): the D-166 literal C1 already enforces |
 | Both heads | `repo_head = measurement_head = H′` | installer pin checks (`install_night_agent.sh:81–96`) |
 | Install time | evening of **2026-09-11 local**, after 07:00 PDT | ruling 06 C-5 |
 | Installer calendar flags | `--hour 0 --minute 30` | the installer refuses only `--hour 7` (`install_night_agent.sh:112–115`) |
@@ -403,6 +403,11 @@ git -C "$DRIVER_SOURCE" show "$H_PRIME:docs/process/NIGHT_HANDBACK.md" | grep -n
 
 ## Step 0c — the `registration_path` placeholder and the one-line rule for filling it
 
+> **FILLED 2026-09-11 09:35 PDT (activation b23f3cb7):** ruling 12 decided (i) — `registration_path` =
+> `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json`, the D-166 literal that
+> row C1 already hashes (`night_gate.D166_REGISTRATION_PATH`); PR #322 carries the runbook consequence.
+> The original placeholder text follows for the record.
+>
 > **PLACEHOLDER — `<<REGISTRATION_PATH per ruling 12>>`.**
 > A second cold gate (packet [`10`](10-packet-c1-registration-seam-B1.md),
 > ruling 12) is deciding which document the *equivalence* night's row C1 must
