@@ -48,8 +48,10 @@ courier_bin=""
 courier_path=""
 if (( ! uninstall )); then
   if (( ! python_given )); then
-    # Bootstrap the candidate without running any Python or project imports.
-    measurement_root="$(/usr/bin/plutil -extract measurement_root raw -o - "$plan")" || {
+    # Any Python 3 (including the 3.9 from the 2026-09-11 defect) can read
+    # this JSON using only stdlib json and sys, never the project or driver.
+    # The plists still name the derived venv Python, checked by MIN_PYTHON below.
+    measurement_root="$(/usr/bin/env python3 -B -S -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["measurement_root"])' "$plan" 2>/dev/null)" && [[ -n "$measurement_root" ]] || {
       print "cannot derive measurement_root/.venv/bin/python from $plan; pass --python ABS_PATH" >&2
       exit 2
     }

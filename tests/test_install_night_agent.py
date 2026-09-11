@@ -271,6 +271,37 @@ class InstallNightAgentTests(unittest.TestCase):
         for path in self.rendered.glob("*.plist"):
             self.assertEqual(str(python), plistlib.loads(path.read_bytes())["ProgramArguments"][0])
 
+    def test_installer_has_no_plutil_dependency(self) -> None:
+        # CI run 34611633826: Linux runners do not provide the macOS JSON reader.
+        self.assertNotIn("plutil", SCRIPT_PATH.read_text(encoding="utf-8"))
+
+    def test_default_python_derivation_with_only_path_python3(self) -> None:
+        python = self.measurement_root / ".venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
+        (self.bin_dir / "python3").symlink_to(sys.executable)
+        completed = subprocess.run(
+            [
+                "/usr/bin/env", "-i",
+                f"PATH={self.bin_dir}:/bin:/usr/bin",
+                f"HOME={self.environment['HOME']}",
+                "/bin/zsh", str(SCRIPT_PATH),
+                "--plan", str(self._v2_plan()),
+                "--hour", "1", "--minute", "2",
+                "--render-only", str(self.rendered),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+        for path in self.rendered.glob("*.plist"):
+            self.assertEqual(
+                str(self.measurement_root / ".venv/bin/python"),
+                plistlib.loads(path.read_bytes())["ProgramArguments"][0],
+            )
+
     def test_missing_default_python_names_path_and_explicit_option(self) -> None:
         completed = self._run(self._v2_plan(), python=None)
         self.assertEqual(2, completed.returncode, completed.stderr)

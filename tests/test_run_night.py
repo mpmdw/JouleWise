@@ -1575,6 +1575,10 @@ runpy.run_path(script, run_name='__main__')
         plan = self._installer_plan(root)
         empty_path = root / "empty-bin"
         empty_path.mkdir()
+        # The default-interpreter derivation (fix round 3) needs a python3 on
+        # PATH for its stdlib-only JSON read; this test is about the ABSENT
+        # courier, so provide python3 and nothing else.
+        (empty_path / "python3").symlink_to(sys.executable)
         completed = subprocess.run(
             [
                 "/bin/zsh",
