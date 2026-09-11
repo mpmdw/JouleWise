@@ -3579,6 +3579,45 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "NIGHT-HANDBACK-GLOSS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-39e3f9e1/02-review-handback-rewrite.md F1–F3: first-use terminology glosses; lead-declined for verbatim-prescribed H′",
+          "docs/process_traces/2026-09-11-activation-36d3a823/04-opus-counter-review-pr323.md NIT-2: unguarded \"nothing is armed\" in the dated 09-11 history entry; NIT-3: the \"since PR #309\" sentence's colon clause supports C4/C3-tail but not C1; NIT-4: one 122-column line; NIT-1: four dangling trace-directory links resolve once the bookkeeping chain is on main",
+          "docs/process_traces/2026-09-11-activation-36d3a823/05-terminal-review-pr323.md fold-in decision: F1–F3 and NIT-2/NIT-3 deferred to NIGHT-HANDBACK-GLOSS-01; the night reads no documentation"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-HANDBACK-GLOSS-01/acceptance",
+          "label": "NIGHT-HANDBACK-GLOSS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "After rehearsal-20260912 is harvested and retired, a reviewed wording pass supplies first-use glosses, guards the dated 09-11 history entry, makes the C1/C4/C3-tail explanation precise, reflows the long line, and verifies the four trace-directory links against main after the bookkeeping merge."
+      },
+      "authority": {
+        "label": "PR #323 terminal review fold-in decision and 2026-09-11 lead registration ruling",
+        "path": "docs/process_traces/2026-09-11-activation-36d3a823/05-terminal-review-pr323.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-09-11 lead brief: post-harvest and retirement fence",
+            "path": "docs/process_traces/2026-09-11-activation-36d3a823/05-terminal-review-pr323.md"
+          },
+          "rule": "Do not begin until rehearsal-20260912 is harvested and retired; NIGHT_HANDBACK.md is verbatim-prescribed for tonight. This lane is not night-blocking: the night reads no documentation."
+        }
+      ],
+      "flags": [],
+      "goal": "Complete a reviewed gloss and wording pass over docs/process/NIGHT_HANDBACK.md only after rehearsal-20260912 is harvested and retired, addressing the deferred first-use terminology and historical wording findings.",
+      "id": "NIGHT-HANDBACK-GLOSS-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 190,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead part-2b ruling after the counter-review record was supplied; not started. Deferred until rehearsal-20260912 is harvested and retired; not night-blocking.",
+      "stop_card": null
+    },
     "NIGHT-PACK-REHEARSAL-01": {
       "acceptance": {
         "evidence": [

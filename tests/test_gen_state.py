@@ -21,9 +21,10 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
-    # 2026-09-11 activation 36d3a823: three follow-ups; handback gloss awaits evidence.
+    # 2026-09-11 activation 36d3a823: four follow-ups; handback gloss evidence supplied.
     "PASS-ROUTE-RUNBOOK-CONTINUATION-01",
     "IDENTITY-PROBE-LIVE-VERIFY-01",
+    "NIGHT-HANDBACK-GLOSS-01",
     "REPLAY-FIXTURE-LEAK-01",
     # T38j: record 39 blocks G2-a on a successor for the live OS-build epoch.
     "ACCEPTANCE-EPOCH-25G83-01",
@@ -747,7 +748,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 174)  # Activation 36d3a823 adds three follow-ups; handback gloss awaits evidence.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
+        self.assertEqual(len(self.tasks), 175)  # Activation 36d3a823 adds four follow-ups; handback gloss evidence supplied.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,
