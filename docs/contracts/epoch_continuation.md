@@ -91,9 +91,10 @@ a candidate. Only when the retained values PASS while an unresolved valid
 bound breaks the envelope does preparation refuse — exit 3,
 `unresolved_valid_row_exceeds_envelope` naming the unresolved slots, nothing
 written, the desk reporting it to Ed for a written ruling — because that is
-the one case where it would otherwise write a candidate the loader would
-accept. The two gates agree on every night that could be continued: a
-candidate is written only when both hold.
+the one case where it would otherwise write a candidate; the loader would
+refuse that candidate too, and refusing at preparation tells the desk at once
+rather than at claim time. The two gates agree on every night that could be
+continued: a candidate is written only when both hold.
 
 Let `m` be the number of retained values. Let `L` be the acceptance's registered
 `preflight_level_screen_s`, and `S` its registered `bracket_screen_s`. Both
