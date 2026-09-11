@@ -558,3 +558,259 @@ round, so the chain digest the wrapper bakes in is still the reviewed one
 **Delta 106's N-3 is now closed, not accepted:** every external command in the
 emitted wrapper is absolute. Nothing else in 106 was left open; its remaining
 observations were the three D-items and two nits, all fixed above.
+
+---
+
+# Fix round 3 (2026-09-10, on top of b2636d6c)
+
+Record 110's design defect, decided by the lead and not re-litigated: the writer
+returns `0 if disposition == "valid" else 1`
+(`scripts/validate_powermetrics_fiducial.py`, the tail of `main`), the ledger row
+is FINALIZED on the `1` path, and the chain ran the writer as a bare command
+under `set -euo pipefail`. One `ordinary-invalid` slot — a legitimate outcome the
+pre-registration handles by exclusion — would therefore have stopped a
+twelve-slot night at that slot, with the session left OPEN and every later slot
+uncaptured. Derivation slots are independent; none is an endpoint the others
+depend on.
+
+## The three outcomes, now explicit
+
+The writer runs as an `if` condition, so `set -e` cannot exit at that line, and
+the status is dispatched:
+
+```
+    if "$PY" "$REPO/scripts/validate_powermetrics_fiducial.py" \
+        … --power-policy ac_high_power; then
+        writer_rc=0
+    else
+        writer_rc=$?
+    fi
+    if (( writer_rc == 0 )); then
+        log_event "slot_end slot=$slot disposition=valid"
+    elif (( writer_rc == 1 )); then
+        log_event "slot_end slot=$slot disposition=non-valid"
+    else
+        log_event "slot_refused slot=$slot rc=$writer_rc"
+        exit $writer_rc
+    fi
+```
+
+- **0 — valid**: row finalized, night continues.
+- **1 — not valid**: row finalized, night continues. The comment states why (an
+  ordinary-invalid slot is handled by exclusion, and slots are independent).
+- **anything else** — refusal or crash: `emit_refusal` returns
+  `RefusalRecord.process_exit`, which is **2** for every record in
+  `REFUSAL_INVENTORY` (verified in this session:
+  `sorted({r.process_exit for r in REFUSAL_INVENTORY}) == [2]`). The row is not
+  finalized, so the chain stops with the session OPEN for desk recovery rather
+  than running on over an unrecorded slot.
+
+The cadence is untouched in all three cases: `next_start` is still
+`slot_start + SLOT_CADENCE_S`, anchored to the actual start, after the dispatch.
+
+Header and closing comments rewritten to state the three outcomes; the sentence
+"Any failure above stops the chain under set -e" now distinguishes the capture
+outcomes from the readiness/reservation failures that genuinely do stop the
+chain under `set -e`.
+
+## Tests
+
+- `test_a_non_valid_disposition_does_not_stop_the_night` — writer stub exits 1 on
+  d03: **all twelve** captures are invoked (`d01…d12` asserted in order),
+  `slot_end slot=d03 disposition=non-valid` and
+  `slot_end slot=d04 disposition=valid` are logged, the night ends
+  `derivation_night_complete slots=12`, rc 0, no `abort-session`, and d03 is
+  attempted exactly once (no retry).
+- `test_a_writer_refusal_stops_the_night_with_the_session_open` — stub exits 2 on
+  d03: exactly three captures (`d01`, `d02`, `d03`), rc 2, last log line
+  `slot_refused slot=d03 rc=2`, no `abort-session`, no
+  `derivation_night_complete`.
+- Harness: the fake writer's exit status is now settable (`FAIL_SLOT_RC`,
+  `run_chain(fail_rc=…)`, default 7, so every pre-existing call is unchanged).
+- Updated for the new log line: the operator-log transcript test, the
+  window-exhausted test, and `test_slot_count_override_and_writer_error_stop`
+  (whose last log line is now `slot_refused slot=d02 rc=7` — the stop is
+  explicit, not `set -e`).
+- `CHAIN_ANCHORS` gained three anchors (`writer_status_dispatch`,
+  `non_valid_continues`, `refusal_stops`), each resolved by
+  `test_every_chain_citation_resolves_to_a_real_chain_line`; the region was
+  regenerated because the chain digest moved.
+
+## Fix-round-3 cut table
+
+| # | Cut | Test | Result |
+|---|---|---|---|
+| T1 | delete the `writer_rc == 1` continue branch | `test_a_non_valid_disposition_does_not_stop_the_night` | Ran 1, FAILED (1), restored |
+| T2 | refusal branch logs but does not `exit` | `test_a_writer_refusal_stops_the_night_with_the_session_open` | Ran 1, FAILED (1), restored |
+| T3 | run the writer as a bare command again (the original defect) | `test_a_non_valid_disposition_does_not_stop_the_night` | Ran 1, FAILED (1), restored |
+| T4 | rot one new `CHAIN_ANCHORS` text | `test_every_chain_citation_resolves_to_a_real_chain_line` | Ran 1, FAILED (1), restored |
+
+4/4 killed. T3 is the pre-fix chain: it reproduces record 110's defect and the
+new test catches it.
+
+## A real flake found and fixed while running this round
+
+`tests/test_gen_derivation_night.py` failed twice across rounds with
+`AssertionError: 2 != 0` on an `emit()` that should have succeeded, and passed on
+re-run. Cause: `tempfile.mkdtemp`'s random component occasionally contains a
+census substring — `tmp4ew_t3eu` is a real example from this session, containing
+`t3` — so the generator **correctly** refused to emit a wrapper whose paths the
+night's own `pgrep -lf "codex|claude|t3"` census would match. The fixture now
+retries until it holds a census-clean temp path
+(`_census_clean_temporary_directory`), with the reason documented. This was a
+harness defect, not a production one: the refusal it triggered is the behaviour
+`test_a_census_substring_anywhere_in_the_night_refuses` exists to require.
+
+## Fix-round-3 runs and footprint
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_gen_derivation_night tests.test_issue_calibration_acceptance_generation \
+    tests.test_run_night tests.test_docs_freshness
+Ran 241 tests in 160.950s
+OK                                                SUITE_RC=0
+
+compileall_rc=0
+/bin/zsh -n scripts/night_chains/calibration_derivation_only.zsh   zsh_n_rc=0
+PASS generated derivation-night wrapper region matches             d_rc=0
+PASS generated Phase D matches pinned runbook bytes                g2_rc=0
+
+$ git status --short
+ M docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md
+ M scripts/gen_derivation_night.py
+ M scripts/night_chains/calibration_derivation_only.zsh
+ M tests/test_gen_derivation_night.py
+ M tests/test_issue_calibration_acceptance_generation.py
+```
+
+The chain's bytes moved this round, so the wrapper's baked chain digest and the
+region's live digest both moved with them — which is the property B-1 installed.
+Any wrapper emitted before this round now refuses, correctly, against the new
+chain; nothing has been armed, so nothing needs re-emitting.
+
+---
+
+# Fix round 4 (2026-09-10, on top of 3264cc4e)
+
+Six items from the seam audit (109 §seams) and the pin-rot sweep. Each code item
+has a defect-shaped test and a mutation cut.
+
+**1. Slot counts above the ledger's ceiling refuse at the desk.**
+`MAX_DECLARED_SESSION_SLOTS` is imported from `joulewise.calibration_ledger`
+(**99** at this HEAD) and checked after the positivity check; the refusal names
+both numbers and says why it matters — the ledger's own refusal happens *inside*
+the window, at the reservation, with the settle already spent. Test:
+`test_a_slot_count_above_the_ledger_ceiling_refuses` (uses `MAX + 1`, so it
+tracks the constant rather than hardcoding 100).
+
+**2. The chain's positivity guard now covers `SLOT_CAPTURE_BUDGET_S`.**
+At 0 the admission check `slot_start + budget > WINDOW_END_EPOCH_S` is vacuous
+until the final second, so a slot could start one second before the agent-free
+end and capture past it. The guard and its message now list all four knobs, and
+the chain's zero-refuses test loops over `SLOT_CAPTURE_BUDGET_S` as well.
+
+**3. The identity epoch and T1 bindings are PARSED, not only hashed.**
+Hashing pins *which* file the night uses; parsing is what tells the desk the file
+can do its job. Both must be JSON objects; the epoch's key set must be exactly
+the six `IDENTITY_EPOCH_FIELDS` (imported, not restated), every value must be
+present and scalar, and `power_policy` must equal the `ac_high_power` the chain
+hardcodes — a mismatch would otherwise be discovered by the writer at d01, after
+the settle. Tests: `test_the_identity_epoch_is_parsed_not_only_hashed` (six
+rejected shapes: unparseable, a list, a missing field, an extra field, an empty
+value, a wrong policy) and `test_the_t1_bindings_file_must_be_a_json_object`.
+
+> **Deviation from the brief, flagged rather than silently followed.** The brief
+> said the six fields must be "non-empty strings". They are not: every issued
+> acceptance carries `sampling_interval_ms` as an **integer** (`100`, verified in
+> `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json` this session),
+> and the ledger's own rule is `epoch.get(field) not in (None, "")`. A
+> string-only check would refuse every real identity epoch — the exact class of
+> over-tight gate the standing "sensible gates" direction forbids. Implemented as
+> the ledger's rule: present, non-empty, and scalar (str, or non-bool int/float).
+
+**4. The chain header cites by anchor text, not line numbers.** The five
+citations (`reserve…:82-106`, `:167-186`, writer `:1771`, `:1946`, `:1759-1761`)
+are replaced by quoted source lines — `"--slot-attempt-id",`,
+`"--slot-custody-locator",`, `"reason": "declared_slot_flag_count_mismatch",`,
+`"--derivation-only",`, the writer's `--derivation-only requires --session-id,
+--slot, and ` refusal text, and `--slot`'s own help line — with a sentence saying
+why (grep the quote; line numbers move, and this header claims to be re-read).
+`test_chain_header_pins_its_hand_written_and_landed_flag_surface` now asserts the
+CLAIM: no `<file>.py:<digits>` citation may appear in the chain at all, and each
+quoted anchor must exist both in the header and in the file the header names,
+plus `action="append"` (the repeated-flag contract) is still there.
+
+**5. Wording.** "twenty-four per-slot binding arguments" (which reads as 24 argv
+words; there are 48) becomes "24 per-slot binding flag/value pairs (48 argv
+words)" in the generator docstring and the region, and the wrapper's own header
+now states `24 flag/value pairs, 48 argv words` computed from its slot count.
+Test asserts the rendered numbers equal `len(exec argv) == 48` and that the old
+phrase appears nowhere.
+
+**6. The region carries an example night plan.** `example_night_plan` renders the
+exact `NightPlan.from_mapping` key set from the same example coordinates as the
+wrapper, with `chain_path`/`chain_sha256_path` pointing at the wrapper and its
+sidecar, and angle-bracket placeholders only for the three values the arm must
+supply (`repo_head`, `measurement_head`, `registration_path`). Arm-order step 2
+now shows it in a ```json block and says the key set is exact. `--check` covers
+it (the region is regenerated bytes). Test:
+`test_the_example_plan_is_one_the_driver_would_accept` fills the three
+placeholders and runs the example through the driver's **own**
+`NightPlan.from_mapping`, then asserts `chain_path` is the wrapper (not the
+tracked chain), the sidecar is `chain_path + ".sha256"`, and the declared window
+survives this generator's own window-fit fence.
+
+## Fix-round-4 cut table
+
+| # | Cut | Test | Result |
+|---|---|---|---|
+| U1 | ledger slot ceiling → `if False:` | `test_a_slot_count_above_the_ledger_ceiling_refuses` | Ran 1, FAILED (1), restored |
+| U2 | drop `SLOT_CAPTURE_BUDGET_S` from the chain's positivity guard | `test_zero_settle_or_cadence_refuses_before_readiness_or_settle` | Ran 1, FAILED (1), restored |
+| U3 | identity-epoch key-set check → `if False:` | `test_the_identity_epoch_is_parsed_not_only_hashed` | Ran 1, FAILED (2), restored |
+| U4 | power-policy agreement check → `if False:` | same | Ran 1, FAILED (1), restored |
+| U5 | drop the T1-bindings parse | `test_the_t1_bindings_file_must_be_a_json_object` | Ran 1, FAILED (2), restored |
+| U6 | revert the binding-count wording | `test_the_binding_count_is_stated_in_words_that_match_the_argv` | Ran 1, FAILED (1), restored |
+| U7 | example plan's `chain_path` → the tracked chain | `test_the_example_plan_is_one_the_driver_would_accept` | Ran 1, FAILED (1), restored |
+| U8 | restore a line-number citation in the chain header | `test_chain_header_pins_its_hand_written_and_landed_flag_surface` | Ran 1, FAILED (1), restored |
+
+8/8 killed.
+
+**Fixture change worth noting:** `WrapperFixture` used `{}` for the identity
+epoch, which item 3 now (correctly) refuses; it writes a real six-field epoch
+with `sampling_interval_ms` as an integer. 32 tests failed the moment item 3
+landed — the fixture had been asserting against a file no arm would ever use.
+
+## Fix-round-4 runs and footprint
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_gen_derivation_night tests.test_issue_calibration_acceptance_generation \
+    tests.test_run_night tests.test_docs_freshness
+Ran 246 tests in 213.180s
+OK                                                SUITE_RC=0
+
+compileall_rc=0
+/bin/zsh -n scripts/night_chains/calibration_derivation_only.zsh   zsh_n_rc=0
+PASS generated derivation-night wrapper region matches             d_rc=0
+PASS generated Phase D matches pinned runbook bytes                g2_rc=0
+
+$ git status --short
+ M docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md
+ M scripts/gen_derivation_night.py
+ M scripts/night_chains/calibration_derivation_only.zsh
+ M tests/test_gen_derivation_night.py
+ M tests/test_issue_calibration_acceptance_generation.py
+```
+
+The chain's bytes moved again (items 2 and 4), so the wrapper's baked chain
+digest and the region's rendered digest moved with them — the B-1 property
+holding. Nothing is armed, so nothing needs re-emitting.
+
+### Open for the arm checklist after this round
+
+The identity-epoch validation makes one requirement newly explicit: the epoch
+handed to the arm must name `power_policy: "ac_high_power"`, because the chain
+captures under that policy and the writer compares the two. If a night is ever
+wanted under a different policy, the chain's `--power-policy` and this check move
+together — the generator refuses the combination rather than letting it be
+discovered at d01.

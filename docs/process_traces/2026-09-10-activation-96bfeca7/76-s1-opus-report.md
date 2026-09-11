@@ -708,3 +708,79 @@ it as over-engineering under D-161. **Flagging it as the one open nit** so the
 lead rules rather than it being lost; the cure is threading the already-read
 bytes out of `_derive_preflight_systematic_screen_s`, roughly 10 lines in this
 seat's scope if wanted.
+
+---
+
+# Fix round 3
+
+On top of `36197c5a`. Tests file only, no behaviour change, no git state
+changed. Footprint is one file, `15 insertions(+), 7 deletions(-)`.
+
+## H1. Cold gate 46 R-d — the three new refusals now NAME their call site
+
+Form taken from `tests/test_calibration_ledger.py:3681`
+(`"""REFUSE: production call site recover_calibration_ledger.resume-finalize.`).
+Four tests carry it, because one of the three codes is refused from two
+distinct branches and R-d's requirement is per-regression, not per-code:
+
+| Refusal code | Test | First docstring line |
+|---|---|---|
+| `DERIVATION_ONLY_EPOCH_UNCHANGED` | `test_matching_identity_epoch_refuses_because_derivation_only_would_bypass_the_screen` | `REFUSE: production call site validate_powermetrics_fiducial.main (the derivation-only branch's empty-stale-field clause, `if not stale_fields`)` |
+| `DERIVATION_ONLY_SESSION_KIND_REQUIRED` | `test_standalone_derivation_only_refuses_without_a_declared_session_slot` | `… main (the derivation-only branch's standalone clause, `if not bracket_mode`)` |
+| `DERIVATION_ONLY_SESSION_KIND_REQUIRED` | `test_bracket_kind_session_refuses_a_derivation_only_capture` | `… main (the derivation-only branch's declared-kind clause, `declared_shape["session_kind"] != SESSION_KIND_DERIVATION`)` |
+| `DERIVATION_SESSION_REQUIRES_DERIVATION_ONLY` | `test_ordinary_mode_refuses_a_derivation_kind_slot_and_appends_nothing` | `REFUSE: production call site validate_powermetrics_fiducial._CaptureLedgerLifecycle.begin (the derivation-kind guard, before the writer lease)` |
+
+Each names the enclosing symbol AND the specific branch, so the call site is
+identifiable without a line number — which is the failure mode item 2 is about.
+The existing prose of every docstring is unchanged below the new first line.
+
+Deliberately NOT relabelled: `test_rederive_from_with_derivation_only_refuses_before_any_replay`.
+It refuses `WRITER_BRACKET_REDERIVE_CONFLICT`, a pre-existing registry code, not
+one of the three new writer refusals R-d names. Say the word if the gate wants
+the form applied to every refusal regression in the file rather than the three.
+
+## H2. Pin rot — converted to a symbol reference
+
+The docstring cited `_valid_acceptance_bound (joulewise/calibration_bracketing.py:676-687)`.
+Now:
+
+> Lowering the screen instead is blocked by the level-screen clause of
+> `joulewise.calibration_bracketing._valid_acceptance_bound`, which requires
+> max(member values) quantized to 1e-15 to equal `preflight_level_screen_s`.
+
+**A note the sweep will want.** In THIS worktree the function is at `:404` and
+its level-screen clause at `:685` — not `:1059-1066` as the brief states, and
+not `:676-687` as originally written. The brief's number is presumably from a
+tree carrying seat S3's generation-row work, which is not in this worktree.
+That divergence is the argument for the fix: three different correct line
+numbers for one clause across three trees in one day. The symbol plus the
+clause's own name resolves in all three.
+
+Swept the whole test file for further pins:
+
+```
+$ grep -n "\.py:[0-9]" tests/test_validate_powermetrics_fiducial_derivation_only.py
+none
+$ grep -nE "`:[0-9]+|:[0-9]+-[0-9]+`|line [0-9]+" tests/test_validate_powermetrics_fiducial_derivation_only.py
+none
+```
+
+Zero remaining line pins of any form in the file. (The seat REPORT still carries
+line anchors; those are dated audit evidence of what was executed when, not
+navigation aids, so I left them.)
+
+## H3. Runs
+
+```
+$ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+    tests.test_validate_powermetrics_fiducial_derivation_only \
+    tests.test_docs_freshness > /tmp/fr3.log 2>&1; RC=$?
+RC=0
+Ran 43 tests in 115.827s
+OK
+```
+
+```
+$ git status --short
+ M tests/test_validate_powermetrics_fiducial_derivation_only.py
+```
