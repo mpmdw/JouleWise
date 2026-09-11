@@ -188,6 +188,7 @@ render() {
   local log_stem="$6"
   "$python" -B - "$template" "$out" "$label" "$mode" "$repo" "$plan" "$custody_root" "$entry_hour" "$entry_minute" "$courier_bin" "$courier_path" "$log_stem" "$python" <<'PY'
 from pathlib import Path
+import re
 import sys
 from xml.sax.saxutils import escape
 
@@ -206,8 +207,14 @@ replacements = {
     "@@LOG_STEM@@": log_stem,
 }
 text = Path(template).read_text(encoding="utf-8")
-for old, new in replacements.items():
-    text = text.replace(old, new)
+# One pass over the TEMPLATE only: an inserted value (for example an interpreter
+# path that happens to contain "@@MODE@@") is never rescanned for tokens, so the
+# rendered argv[0] is byte-identical to the validated interpreter (re-audit 04 R1).
+text = re.sub(
+    r"com\.joulewise\.night|@@[A-Z_]+@@",
+    lambda match: replacements.get(match.group(0), match.group(0)),
+    text,
+)
 Path(output).write_text(text, encoding="utf-8")
 PY
 }

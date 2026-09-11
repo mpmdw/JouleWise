@@ -275,6 +275,20 @@ class InstallNightAgentTests(unittest.TestCase):
         # CI run 34611633826: Linux runners do not provide the macOS JSON reader.
         self.assertNotIn("plutil", SCRIPT_PATH.read_text(encoding="utf-8"))
 
+    def test_rendered_argv0_is_the_validated_python_even_with_token_like_name(self) -> None:
+        # Re-audit 04 R1: substitution used to rescan inserted values, so an
+        # interpreter path containing a template token was rewritten in the plists.
+        python = self.bin_dir / "python @@MODE@@ & pinned"
+        python.symlink_to(sys.executable)
+        completed = self._run(self._v2_plan(), python=str(python))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        plists = sorted(self.rendered.glob("*.plist"))
+        self.assertEqual(2, len(plists))
+        for path in plists:
+            argv = plistlib.loads(path.read_bytes())["ProgramArguments"]
+            self.assertEqual(str(python), argv[0])
+            self.assertTrue(Path(argv[0]).exists(), argv[0])
+
     def test_default_python_derivation_with_only_path_python3(self) -> None:
         python = self.measurement_root / ".venv/bin/python"
         python.parent.mkdir(parents=True)
