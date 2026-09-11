@@ -19,6 +19,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+from tests.git_fixture import init_git_fixture
 import unittest
 
 
@@ -116,7 +118,10 @@ class WrapperFixture:
         self.fake_python.write_text(FAKE_PYTHON)
         self.fake_python.chmod(0o755)
         self.calls_path = venv / "calls.jsonl"
-        _git(self.measurement_root, "init", "-q")
+        # The shared helper disables Git's detached maintenance writers, which
+        # a temp-dir cleanup would otherwise race; the maintenance guard in
+        # tests/test_git_fixture_maintenance.py refuses a direct `git init`.
+        init_git_fixture(self.measurement_root, "-q")
         _git(self.measurement_root, "add", "-A")
         _git(
             self.measurement_root,
