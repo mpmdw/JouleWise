@@ -25,9 +25,10 @@ PASS licenses nothing until the D-102 continuation addendum lands; §1 keeps
 its arm procedure unchanged, with only its title and its one "three nights"
 sentence corrected; §7 gains the ruling's own fact row; and §8 builds
 `epoch-equivalence check`, `reference envelope`, `retained value` and
-`continuation`. Two open items are RECORDED rather than answered: no committed
-tool yet extracts the retained values, and the ruling fixes no night count for
-the case where an INCONCLUSIVE night is followed by a failing one.
+`continuation`. §2.5 names the committed desk tool that extracts the retained
+values and applies the rule. One open item is RECORDED rather than answered:
+the ruling fixes no night count for the case where an INCONCLUSIVE night is
+followed by a failing one.
 
 Revision 5 (same day) closed the operational defects a
 contract review found, so the arm can be run from this file alone,
