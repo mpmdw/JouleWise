@@ -38,7 +38,7 @@
       "priority": "p1_phase_gate",
       "rank": 179,
       "status": "queued",
-      "status_note": "2026-09-10: found by the desk dry run in the fresh clone (record 39); blocks G2A-FIRST-WINDOW-01; design consult in flight (brief 40, seats 41/42 + Opus); earliest credible calendar per consult 38: corpus night 09-12, first G2-a 09-14.",
+      "status_note": "2026-09-10 19:49: IMPLEMENTATION MERGED (PR #315 → main 8cbcaf08; seven seats S1–S7; twelve-row gate ledger complete on 7107657d; replay 5897 tests 0 failures, no waiver; CI 19/19). Remaining phases: (3) agent-free corpus nights (3 × 12 slots; NIGHT_HANDBACK email-then-arm; runbook record 99 rev 3; wrapper via scripts/gen_derivation_night.py); (4) prepare-candidate + cold science gate; (5) D-138 atomic transaction (+ staged R2, registration row, tests/verify_calibration_acceptance_corpus.py); (6) regenerate G2-a inputs and prove bind-window/check at the desk. Open for Ed: veto windows (69/80/82/88), V3 affirmative acknowledgment, successor screen rule (V7), decision-log V4 '210 min' wording.",
       "stop_card": null
     },
     "ARM-CENSUS-IDLE-INTERACTIVE-01": {

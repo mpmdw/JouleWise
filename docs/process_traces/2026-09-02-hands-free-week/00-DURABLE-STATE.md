@@ -946,3 +946,12 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   --preregistration` → NIGHT_HANDBACK for derivation night 1 (earliest 09-12; rehearsal-20260911 runs tonight). Open for Ed: veto windows
   (69/80/82/88), V3 affirmative acknowledgment, the successor screen rule (V7), the decision-log V4 "210 min" wording. rehearsal-20260911 ARMED and
   untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~19:50 PDT (headless activation `96bfeca7`): **PR #315 MERGED → main 8cbcaf08** (ACCEPTANCE-EPOCH-25G83-01 implementation: seats S1–S7;
+  gate ledger 12/12 on 7107657d; replay 10 = 5897 tests, 0 failures, no waiver; CI 19/19). Two CI-only defects found after the local replays (desk watch
+  required machine-local custody dirs; pre-registration verdict broke the watch's byte identity on a mismatch) were fixed with killing cuts (records
+  124/127); six row-10 passes. Post-merge cross-unit review running (record 132). Kernel lane note updated; trace records 55–131 on main. NEXT (next
+  activation or this one after the rehearsal harvest): cut a measurement clone at main's head with venv → `issue_calibration_acceptance_generation.py
+  check --preregistration configs/calibration/preregistration_d079_epoch_25g83_rev1.md` (expect rc 3 + sampler `match`) → arm materials for
+  derivation night 1 per runbook 99 rev 3 (identity-epoch + T1-bindings JSON provenance is the open `[UNVERIFIED]`; pinned pre-registration digest;
+  `gen_derivation_night.py` + `--verify`) → NIGHT_HANDBACK email-then-arm (earliest 09-12; rehearsal-20260911 runs tonight). Ed: veto windows
+  69/80/82/88; V3 affirmative acknowledgment; V7 screen rule; V4 "210 min". rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
