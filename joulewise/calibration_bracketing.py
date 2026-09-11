@@ -173,6 +173,9 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         "file_sha256": ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
     },
 }
+# Issuance is a later governed transaction. A candidate file never adds an
+# epoch merely by existing on disk; this registry must pin its issued bytes.
+EPOCH_CONTINUATION_REGISTRY: dict[str, dict[str, Any]] = {}
 # The LIVE surface: what production loads when no artifact is named.
 ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
 DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
@@ -2046,10 +2049,28 @@ def evaluate_calibration_bracket(
     observed_identity = {
         field: bindings.get(field) for field in ACCEPTANCE_IDENTITY_FIELDS
     }
+    from joulewise.calibration_epoch_continuation import (
+        Continuation, acceptance_judged_epochs,
+    )
+
+    continuation_refusals: list[dict[str, str]] = []
+    continuations: list[Continuation] = []
+    judged_epochs = acceptance_judged_epochs(
+        artifact, ledger_snapshot, refusal_details=continuation_refusals,
+        continuation_details=continuations,
+    )
+    matched_epoch = next(
+        (epoch for epoch in judged_epochs if dict(epoch) == observed_identity),
+        identity_epoch,
+    )
+    matched_continuation = next(
+        (c for c in continuations if dict(c.continued_identity_epoch) == observed_identity),
+        None,
+    )
     stale_fields = [
         field
         for field in ACCEPTANCE_IDENTITY_FIELDS
-        if observed_identity.get(field) != identity_epoch.get(field)
+        if observed_identity.get(field) != matched_epoch.get(field)
     ]
     freshness_status = "stale" if stale_fields else "fresh"
     result["acceptance"] = {
@@ -2068,8 +2089,8 @@ def evaluate_calibration_bracket(
         },
         "freshness": {
             "status": freshness_status,
-            "basis": "exact_identity_epoch",
-            "expected_identity_epoch": dict(identity_epoch),
+            "basis": "epoch_continuation" if matched_continuation else "exact_identity_epoch",
+            "expected_identity_epoch": dict(matched_epoch),
             "observed_identity_epoch": observed_identity,
             "trigger_guard_protocol_sha256": prospective["protocol_sha256"],
             "trigger_guard_estimator_code_sha256": dict(
@@ -2102,7 +2123,13 @@ def evaluate_calibration_bracket(
         "preflight": None,
         "drift": None,
     }
+    if matched_continuation is not None:
+        result["acceptance"]["freshness"].update(matched_continuation.evaluation_record())
+    if continuation_refusals:
+        result["acceptance"]["continuation_refusals"] = continuation_refusals
     if stale_fields:
+        if continuation_refusals:
+            result["acceptance"]["freshness"]["reason"] = "calibration_epoch_continuation_invalid"
         return result, ("calibration_acceptance_bound_stale",)
     observations_by_attempt = ledger_snapshot.observation_by_attempt
     finalized_session_ids = {
@@ -2320,14 +2347,23 @@ def evaluate_calibration_bracket(
         for observation in new_observations
     ):
         return result, ("calibration_observation_unclassifiable",)
-    valid_same_epoch = [
-        observation
-        for observation in distinct_observations.values()
-        if observation.disposition == "valid"
-        and dict(observation.identity_epoch) == dict(identity_epoch)
+    valid_counts_by_epoch = [
+        sum(
+            observation.disposition == "valid"
+            and dict(observation.identity_epoch) == dict(epoch)
+            for observation in distinct_observations.values()
+        )
+        for epoch in judged_epochs
     ]
-    if len(valid_same_epoch) >= corpus_doubling_threshold:
+    if any(count >= corpus_doubling_threshold for count in valid_counts_by_epoch):
         observed_triggers.append(corpus_doubling_trigger)
+    # Equivalence compares retained values against the envelope, so only
+    # range expansion exempts the acknowledged rows. Systematic failures
+    # remain triggers even within the equivalence night.
+    acknowledged_attempt_ids = {
+        attempt_id for continuation in continuations
+        for attempt_id in continuation.acknowledged_attempt_ids
+    }
     corpus_values = [
         Decimal(member["b_fiducial_s"]) for member in corpus_members
     ]
@@ -2335,7 +2371,8 @@ def evaluate_calibration_bracket(
         value
         for observation in new_observations
         if observation.disposition == "valid"
-        and dict(observation.identity_epoch) == dict(identity_epoch)
+        and observation.attempt_id not in acknowledged_attempt_ids
+        and dict(observation.identity_epoch) in judged_epochs
         and (value := _decimal(observation.exact_bound_lexeme_s)) is not None
     ]
     if any(value < min(corpus_values) or value > max(corpus_values) for value in new_valid_values):
@@ -2344,7 +2381,7 @@ def evaluate_calibration_bracket(
         )
     if any(
         observation.disposition == "systematic-invalid"
-        and dict(observation.identity_epoch) == dict(identity_epoch)
+        and dict(observation.identity_epoch) in judged_epochs
         for observation in new_observations
     ):
         observed_triggers.append(

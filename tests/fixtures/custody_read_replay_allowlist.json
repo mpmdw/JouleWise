@@ -84,6 +84,13 @@
     "reason": "Read-only desk epoch watch and blind registration dry run replay the existing ledger snapshot once to compare identity fields, print a table and, with --session-ids, report session kinds/states/slot counts; never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest."
   },
   {
+    "file": "scripts/issue_epoch_continuation.py",
+    "function": "_load_snapshot",
+    "ordinal": 1,
+    "line": 52,
+    "reason": "prepare-candidate and check replay a committed ledger without custody writes. Preparation re-reads primary evidence and writes only a marked continuation candidate outside configs/calibration; check authenticates issued bytes. Neither issues, appends ledger receipts, or publishes a binding."
+  },
+  {
     "file": "scripts/recover_calibration_ledger.py",
     "function": "main",
     "ordinal": 1,

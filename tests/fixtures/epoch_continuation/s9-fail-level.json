@@ -1,0 +1,217 @@
+{
+  "schema_version": "joulewise.epoch_equivalence_check.v1",
+  "reference_envelope": {
+    "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+    "acceptance_path": "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json",
+    "corpus_n": 17,
+    "raw_corpus_maximum_s": "0.03289849371536248",
+    "raw_corpus_range_s": "0.00972358928879385",
+    "level_screen_s": "0.032898493715362",
+    "bracket_screen_s": "0.009724",
+    "maximum_budgetable_drift_s": "0.010164834757777545"
+  },
+  "session": {
+    "session_id": "derivation-night-1",
+    "session_kind": "derivation",
+    "state": "finalized",
+    "abort_reason": null,
+    "declared_slots": [
+      "d01",
+      "d02",
+      "d03",
+      "d04",
+      "d05",
+      "d06",
+      "d07",
+      "d08",
+      "d09",
+      "d10",
+      "d11",
+      "d12"
+    ]
+  },
+  "slot_outcomes": [
+    {
+      "slot": "d01",
+      "attempt_id": "derivation-night-1-d01",
+      "b_fiducial_s": "0.032898493715363",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d02",
+      "attempt_id": "derivation-night-1-d02",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d03",
+      "attempt_id": "derivation-night-1-d03",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d04",
+      "attempt_id": "derivation-night-1-d04",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d05",
+      "attempt_id": "derivation-night-1-d05",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d06",
+      "attempt_id": "derivation-night-1-d06",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d07",
+      "attempt_id": "derivation-night-1-d07",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d08",
+      "attempt_id": "derivation-night-1-d08",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d09",
+      "attempt_id": "derivation-night-1-d09",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d10",
+      "attempt_id": "derivation-night-1-d10",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d11",
+      "attempt_id": "derivation-night-1-d11",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    },
+    {
+      "slot": "d12",
+      "attempt_id": "derivation-night-1-d12",
+      "b_fiducial_s": "0.032898493715362",
+      "retained": true,
+      "outcome": "valid_resolved",
+      "detail": null
+    }
+  ],
+  "retained": [
+    {
+      "slot": "d01",
+      "attempt_id": "derivation-night-1-d01",
+      "b_fiducial_s": "0.032898493715363"
+    },
+    {
+      "slot": "d02",
+      "attempt_id": "derivation-night-1-d02",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d03",
+      "attempt_id": "derivation-night-1-d03",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d04",
+      "attempt_id": "derivation-night-1-d04",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d05",
+      "attempt_id": "derivation-night-1-d05",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d06",
+      "attempt_id": "derivation-night-1-d06",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d07",
+      "attempt_id": "derivation-night-1-d07",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d08",
+      "attempt_id": "derivation-night-1-d08",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d09",
+      "attempt_id": "derivation-night-1-d09",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d10",
+      "attempt_id": "derivation-night-1-d10",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d11",
+      "attempt_id": "derivation-night-1-d11",
+      "b_fiducial_s": "0.032898493715362"
+    },
+    {
+      "slot": "d12",
+      "attempt_id": "derivation-night-1-d12",
+      "b_fiducial_s": "0.032898493715362"
+    }
+  ],
+  "m": 12,
+  "maximum_s": "0.032898493715363",
+  "maximum_slot": "d01",
+  "minimum_s": "0.032898493715362",
+  "minimum_slot": "d02",
+  "range_s": "1E-15",
+  "level_screen_comparison": {
+    "left": "0.032898493715363",
+    "left_source": "retained maximum (d01)",
+    "operator": "<=",
+    "right": "0.032898493715362",
+    "right_source": "operative preflight_level_screen_s",
+    "holds": false
+  },
+  "bracket_screen_comparison": {
+    "left": "1E-15",
+    "left_source": "retained range (max - min)",
+    "operator": "<=",
+    "right": "0.009724",
+    "right_source": "operative bracket_screen_s",
+    "holds": true
+  },
+  "verdict": "FAIL",
+  "verdict_reason": null
+}
