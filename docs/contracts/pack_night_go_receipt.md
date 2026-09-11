@@ -628,6 +628,9 @@ code scope before contract refutation and landing. Line numbers below identify
 seams from the earlier baseline, with third-pass changed pins re-read at
 `d3cab2d4c2937886a25659756374483c7a8dc578`, not completed implementation
 locations. Each seat must pin final production/test lines in §9 on return.
+2026-09-11: seat 2's `install_night_agent.sh` seams were re-read on the
+NIGHT-INTERPRETER-PIN-01 branch as `:91–122` (NightPlan validation heredoc) and
+`:182–220` (`render()`); the baseline numbers above are unchanged.
 Whole-file entries allow the associated focused regressions and validator
 call-site repairs within that file; unrelated edits remain excluded.
 

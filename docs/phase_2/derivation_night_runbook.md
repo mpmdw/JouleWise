@@ -8,11 +8,23 @@ script, gate and test this runbook operates is on `main` at
 establish from a primary source; they are open questions for the operator, not
 instructions.
 
-**Changelog — revision 6 (2026-09-10), one line: the owner ruled, by directive
+**Changelog — revision 7 (2026-09-11), one line: the plan now names D-166,
+the registration file required by the night gate, while the scientific
+pre-registration is bound by the measurement head (the commit the plan pins) and the arm
+record's SHA-256 digest (a fingerprint of the file's bytes).** What that forced:
+§0.5, §1.1 and §1.4 name the gate's required file and the arm block checks its
+path and digest; §1.5 gathers the five required arm-record items, including
+the pre-registration's Git blob id (the identifier of its stored file bytes);
+§2.5 binds the PASS continuation (extending the existing acceptance to the
+new instrument configuration) to the recorded pre-registration digest;
+§3 requires nights two and three to re-hash it at the desk and stop on any
+change; and §5 explains which registration the gate actually checks.
+
+Revision 6 (2026-09-10): the owner ruled, by directive
 issue 316, that the first night is no longer the first of three blind
 derivation nights but an EPOCH-EQUIVALENCE CHECK — one night, compared after
 it closes against the thresholds the acceptance already in force carries,
-under a rule fixed before the night runs.** What that forced:
+under a rule fixed before the night runs. What that forced:
 §"What night one is for" is rewritten around the two routes and says which is
 tried first; §2 becomes the harvest of an equivalence night — §2.1 gains the
 retained values as things the magistrate MAY now read, §2.3 changes from a
@@ -171,9 +183,13 @@ default ruling and the continuation.
   derivation's rules are likewise fixed before capture, and the issuer
   additionally enforces in code that no corpus statistic is computed before
   the last registration session is terminal (§2.2, §4.1).
-- **Dead-man** — the second LaunchAgent installed alongside the night agent,
-  which fires at a fixed local minute and stands the night down if the night's
+- **Dead-man** — the second LaunchAgent (a macOS launchd job file), installed
+  alongside the night agent, which fires at a fixed local minute and stands the night down if the night's
   completion time has passed without completion.
+- **Driver preflight** — the install-time check that loads the driver module
+  and every project module it imports at module scope under the job's
+  interpreter and PATH and parses the plan, without exercising functions'
+  lazy imports inside `joulewise` or running the chain's input checks.
 - **Tracked chain** — `scripts/night_chains/calibration_derivation_only.zsh`,
   the committed script that actually runs the twelve captures. *Tracked* means
   it is a repository file, byte-identical in every clone at `H`; contrast the
@@ -487,8 +503,31 @@ follows.
 committed inside H with `[DD]`, `[MLX_VERSION]`, `[SEQ]`, `[DIGEST]` and
 `[CHAIN_SHA256]` filled. Those five are facts that did not exist when the text
 was written; filling them reopens no scientific rule. The plan's
-`registration_path` points at this file (`NightPlan` in
-`joulewise/night_gate.py`).
+`registration_path` is `night_gate.D166_REGISTRATION_PATH`, the D-166 literal
+in `joulewise/night_gate.py`: the fixed repository-relative path
+`configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json`.
+The file belongs to a different experiment. It records the comparison rule
+that decision D-165 fixed for the D-117 contrast campaign
+(`configs/campaigns/d117_contrast_v5`) before that campaign collected data;
+the filename instead names D-166, the decision that set that campaign's
+workload. What the rule says does not matter to this night, which never
+evaluates it. The night gate requires this file for this night's receipt
+class and checks exactly one thing, recorded as gate condition C1: it reads
+the file as UTF-8 text and requires the SHA-256 of that text to equal the
+literal `night_gate.D166_REGISTRATION_SHA256` in the same module. Nothing
+else about the file is read. (Beware one word collision: the plan's
+`registration_path` — the D-166 literal above — and C1's "registration" are
+the gate's own names for THIS file, not §Terms' **Registration**, the set of
+ledger sessions a derivation corpus is drawn from.) A receipt class is the
+plan's category, and it selects which gate
+checks apply; this night's is `DIAGNOSTIC_NO_PACK`, the class for a night
+that launches no measurement pack — no campaign's committed bundle of runs,
+pinned in a plan by id, root and digest — because this night takes only the
+twelve calibration captures (§1.1 defines the class in full). The night's
+own scientific pre-registration, the file named at the top of this section,
+is bound to the night separately: by H, the measurement commit whose tree
+contains it and which the plan pins, and by the digest recorded below and in
+§1.5.
 
 `[DD]` is the authoring day of the registration text itself — the registration's
 own §"Fields filled at commit" glosses it exactly so — and the other four are
@@ -759,7 +798,7 @@ key missing or any key extra:
 | `chain_path` | `<NIGHT_ROOT>/chain.zsh` — the **emitted wrapper** of §1.1a, NOT the tracked chain |
 | `chain_sha256_path` | `<NIGHT_ROOT>/chain.zsh.sha256` — exactly `chain_path` plus `.sha256`; the generator refuses any other value |
 | `custody_root` | `<NIGHT_ROOT>` — e.g. `/Users/edr/night-custody/<PLAN_ID>` |
-| `registration_path` | the committed pre-registration of §0.5 |
+| `registration_path` | `night_gate.D166_REGISTRATION_PATH` — the fixed D-166 registration path required for this receipt class by the night gate (§0.5), `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json` |
 
 The plan carries no pack block: `_PACK_NIGHT_KEYS` belongs to pack nights, and
 this night has no pack.
@@ -1237,9 +1276,33 @@ These are the commands, adapted from the prior night's arm runbook, record 12,
 §"Block B" — the only executed template this project has for a real install.
 Two things are changed from it and both are named here: the plan assertions are
 this night's (`DIAGNOSTIC_NO_PACK`, `window_max_s = 9000`, no pack block, and a
-`registration_path` equal to the committed pre-registration of §0.5), and the
+`registration_path` equal to `night_gate.D166_REGISTRATION_PATH`, the fixed
+D-166 registration path required by the night gate for this receipt class,
+whose file must hash to `night_gate.D166_REGISTRATION_SHA256`, the gate's
+expected SHA-256 fingerprint of those bytes), and the
 chain re-check is this lane's wrapper `--verify` of §1.1b step 4 rather than
 that runbook's G2-a runsheet render.
+
+At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
+`python3` found through PATH selected macOS Python 3.9.6, which cannot import
+`datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
+(the executable running the driver). The installer flag `--python "$PY"`
+pins that path to the project interpreter defined in §0.2. Install and
+`--render-only DIR` (render the two job files into `DIR` without installing
+anything) default to `<measurement_root>/.venv/bin/python` when
+`--python` is omitted. Even a stub checkout needs that venv or an absolute
+path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
+(currently 3.11) and whose driver preflight exits 0 from the stub checkout.
+The chain's interpreter remains `<measurement_root>/.venv/bin/python`,
+independently of this driver pin.
+
+Before installation, the **driver preflight** loads the driver module and
+every project module it imports at module scope, under the job's interpreter
+and PATH, and parses the plan. Its JSON `modules` list names the driver and
+those direct module-scope project imports; keep that success line in the arm
+record. It does not exercise functions' lazy imports inside `joulewise` or run
+the night's gates or measurements. The installer refuses a missing interpreter,
+a version below `MIN_PYTHON`, or a failed preflight.
 
 Run it only after the notice is sent and its evidence is written. Everything
 before the `os.replace` is reversible by doing nothing; everything after it is
@@ -1271,8 +1334,9 @@ git merge-base --is-ancestor "$H" origin/main
 # 3. The staged plan says what this night is, and the move is possible.
 cp "$STAGED_PLAN" "$STAGE/arm-night_plan.json"
 "$PY" -B - <<'PY'
-import json, os, time
+import hashlib, json, os, time
 from pathlib import Path
+from joulewise import night_gate
 from joulewise.night_gate import NightPlan
 plan = NightPlan.from_mapping(json.loads(Path(os.environ['STAGED_PLAN']).read_text()))
 assert plan.repo_head == plan.measurement_head == os.environ['H']
@@ -1282,8 +1346,10 @@ assert plan.receipt_class == 'DIAGNOSTIC_NO_PACK'
 assert plan.window_max_s == 9000
 assert plan.chain_path == os.environ['NIGHT_ROOT'] + '/chain.zsh'
 assert plan.chain_sha256_path == plan.chain_path + '.sha256'
-assert plan.registration_path.endswith(
-    'configs/calibration/preregistration_d079_epoch_25g83_rev1.md')
+assert plan.registration_path == night_gate.D166_REGISTRATION_PATH
+assert hashlib.sha256(
+    (Path(os.environ['MEASUREMENT_ROOT']) / night_gate.D166_REGISTRATION_PATH).read_bytes()
+).hexdigest() == night_gate.D166_REGISTRATION_SHA256
 assert 0 <= time.time() - plan.authored_epoch_s <= 36 * 3600
 assert 0 <= plan.t0_epoch_s - plan.authored_epoch_s <= 36 * 3600
 assert time.time() < plan.t0_epoch_s - 1500          # still before the exit boundary
@@ -1305,7 +1371,7 @@ PY
 
 # 6. Install both agents FROM the clone.
 scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
-  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE"
+  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE" --python "$PY"
 
 # 7. Inspect what was actually installed, and baseline the night directory.
 launchctl list | grep joulewise
@@ -1380,6 +1446,28 @@ root, because a post-arm move invalidates the plan's pin and forces a re-arm
 reconstructed from these three values plus the night root's own contents, and
 §2.0 does exactly that. Still write all of it into the arm record as well: the
 reconstruction is the successor's floor, not a licence to record less.
+
+#### What the arm record must carry, every night
+
+The arm record is the committed account of the plan and fixed inputs before
+capture; record these five items for the equivalence night and every night
+on the FAIL route (the three-night derivation after §2.5 returns FAIL).
+A SHA-256 digest is a fingerprint of file bytes; a Git blob id identifies
+the stored bytes so they can be recovered without the working copy.
+
+| Item | Required evidence |
+|---|---|
+| 1. Frozen plan and gate registration | `plan_id`, the night's identifier; the SHA-256 of the frozen calibration plan of §0.2 (`$CALIBRATION_PLAN`, the committed capture plan the captures run under, not this night's `night_plan.json`), equal to the wrapper's `PLAN_SHA256` literal; and the plan's `registration_path` verbatim, equal to `night_gate.D166_REGISTRATION_PATH` (the fixed D-166 registration path required by the gate), with that file's SHA-256 inside `$MEASUREMENT_ROOT` (the measurement clone): `dfe55f8d96cd21e07cd1c7fe230fef34f485f027f3920ce96b8a9ebacc1ac265` expected. |
+| 2. Scientific pre-registration | Repository-relative path `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`; the `shasum -a 256` result from the committed bytes inside `$MEASUREMENT_ROOT` after §0.5's fields are filled; measurement head H (the plan's pinned commit, 40 hexadecimal characters); and the Git blob id printed below. |
+| 3. Rule and instructions | The commit id containing the D-102 evening addendum (the written rule the PASS route applies), and the commit id containing the runbook revision followed, with its revision number. |
+| 4. Capture inputs | The wrapper chain's SHA-256 (the generated `chain.zsh` file the plan launches); the identity-epoch digest (the `identity-epoch.json` description of the instrument configuration); the T1-bindings digest (the `t1-bindings.json` fixed capture-input bindings); and `EVIDENCE_ROOT_ID` (the registered evidence-root identifier). These are the inputs already required in §0.2, §0.8 and §1.1b. |
+| 5. FAIL-route nights 2/3 | Re-record item 2's digest with the words **equal to night 1**, or record **STOP** and do not arm (§3). |
+
+With `$H` set to the 40-hex measurement head, recover item 2's blob id with:
+
+```zsh
+git -C "$MEASUREMENT_ROOT" rev-parse "${H}:configs/calibration/preregistration_d079_epoch_25g83_rev1.md"
+```
 
 ---
 
@@ -1703,6 +1791,13 @@ lands, under the ordinary window path and the standing gates — not under this
 runbook. The pre-registration stays on file, un-withdrawn, as the fallback
 route.
 
+Before applying the rule, the magistrate must re-hash the committed
+pre-registration at H (the arm record's pinned measurement commit) with
+`git -C "$MEASUREMENT_ROOT" show "${H}:configs/calibration/preregistration_d079_epoch_25g83_rev1.md" | shasum -a 256` (braced `${H}`: zsh reads an unbraced dollar-H followed by a colon as a history-style modifier and eats the colon, so git would hash nothing),
+require equality with the arm record's SHA-256 digest (the fingerprint of
+those committed bytes), and quote that digest in the D-102 continuation
+addendum on PASS.
+
 **The desk tool that applies this rule.** `scripts/epoch_equivalence_check.py`
 reads the terminal session from the ledger, retains exactly the rows defined
 above (it re-reads each retained capture's `instrument_evidence.json` and
@@ -1760,6 +1855,12 @@ Identical to §1 and §2, with these differences and no others:
    session with its own `<SESSION_ID>`, and all three session IDs together are
    the registration. Record every session ID in the arm record; §4 passes all
    three to the issuer.
+   Before arming night 2 or 3, re-hash the committed pre-registration at that
+   night's H (the plan's measurement commit) at the desk using §0.5 and
+   record its SHA-256 digest (the fingerprint of those bytes) as **equal to
+   night 1** in §1.5's table; if it differs, STOP, do not arm, file the
+   discrepancy for Ed's ruling, and never substitute a new pin (a replacement
+   expected digest).
 2. **A new plan ID and new coordinates.** Fresh `<PLAN_ID>`, fresh `<t0>`,
    fresh `authored_epoch_s`, fresh night custody root, fresh desk inputs
    written into it (§0.8), and the §1.2 arithmetic recomputed for that night's
@@ -2053,7 +2154,11 @@ Night-gate refusals to expect in `result.json`/`refusal.json` (names from
 `joulewise/night_gate.py`): `night_plan_malformed`,
 `night_plan_overruns_deadman` (the §1.2 arithmetic was wrong),
 `night_refused_agent_present` (§0.6 was violated), `night_refused_boot_clock`,
-`night_refused_registration` (the `registration_path` did not authenticate).
+`night_refused_registration` (the `registration_path` did not hash to the D-166
+literal expected by C1, the night gate's registration check for
+`DIAGNOSTIC_NO_PACK` (a diagnostic night without a measurement pack) and
+`REHEARSAL_STUB` (a rehearsal using a stub chain); the scientific pre-registration
+is not what C1 checks).
 `[UNVERIFIED: the full refusal list and each one's exact operator remedy; this
 seat read the names and the two lines around them, not each refusal's
 implementation.]`
@@ -2147,7 +2252,7 @@ numbered record.
 | Why the G2-a producer cannot serve a derivation night (it authenticates the acceptance epoch that is stale), and that the desk-inputs writer is the answer | record 134 |
 | The live `check` output in §0.3 — two mismatched fields, `mlx_version 0.31.2` matching, rc 3, and the appended `match` line on the pre-registered sampler digest | record 134, run from a fresh clone at the desk |
 | Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the execution refuter's independent derivation (record 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
-| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
+| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute --python "$PY"` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
 | "Discoverable" = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename — so the staging path arms nothing, and the driver discovers nothing because launchd hands it `--plan` | `glob_plans` in `scripts/magistrate_watchdog.py`; the `--plan` `required=True` argument of `scripts/run_night.py` |
 | The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
 | The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |
@@ -2205,6 +2310,7 @@ means. A term is listed only if it does technical work.
 | screen / level screen / bracket screen | §Terms, constants in §2.5, successor operatives in §4.2 | A threshold a value is compared against; corpus maximum; corpus range. |
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |
 | blind / blindness | §Terms, bounded §2.3 | Every rule that could be chosen after seeing values is fixed in writing BEFORE the data exists — "every rule fixed before data", not "no one may look". Nothing is read while a night runs; the equivalence night's retained values are read once its own session is terminal, and on the FAIL route no corpus statistic is computed before the last registration session is terminal. |
+| driver preflight | §Terms, §1.4 | The install-time check of the driver module, its module-scope project imports and the plan under the job's interpreter and PATH; it does not exercise lazy imports inside project functions or the chain's input checks. |
 | dead-man | §Terms | The second LaunchAgent that fires at a fixed local minute and stands the night down if completion has passed. |
 | fence (watchdog sense) | §Terms | A period in which the watchdog refuses to LAUNCH OR ADOPT a magistrate agent session: a plan span, the half-open belt `[02:45:00, 03:30:00)`, or the half-open dead-man minute `[07:00:00, 07:01:00)`. It forbids an agent starting, never a night running — which is why a `t0` of 02:56 is inside the belt and correct. |
 | blindness fence | §Terms, enforced §2.3 item 3 | The code-enforced refusal of `prepare-candidate` while any session named in the registration is not terminal — the FAIL route's fence on computing a corpus statistic early. Not an interval; no clock clears it, and it does not govern the equivalence check, whose rule is fixed before capture instead. |

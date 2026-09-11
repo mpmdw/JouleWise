@@ -2385,7 +2385,7 @@
       "priority": "p1_phase_gate",
       "rank": 185,
       "status": "queued",
-      "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened.",
+      "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
       "stop_card": null
     },
     "ESTIMAND-ENCLOSURE-01": {
@@ -2931,6 +2931,38 @@
       "rank": 156,
       "status": "queued",
       "status_note": "H2; Trace 47 C8 (canonical worktree): static finding; _custody_state exists/is_dir on tracked iCloud fixture locators has no budget. No live hang was reproduced.",
+      "stop_card": null
+    },
+    "IDENTITY-PROBE-LIVE-VERIFY-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md verification V10/V11 and E1 needs: isolated live-probe failure with sysctl access denied",
+          "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md VERDICT: FOLLOW-UP NEEDED; lead-owned identity-probe verification"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/IDENTITY-PROBE-LIVE-VERIFY-01/acceptance",
+          "label": "IDENTITY-PROBE-LIVE-VERIFY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The Fable magistrate records a passing isolated tests.test_issue_calibration_acceptance_generation.DeskEpochWatchTests.test_live_probes_report_this_machine_against_the_active_epoch run with permitted identity-probe access, resolving the post-merge review verification gap."
+      },
+      "authority": {
+        "label": "PR #320 post-merge review verification gap and 2026-09-11 lead ownership ruling",
+        "path": "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Rerun the isolated PR #320 live identity-probe test in a session with permitted identity-probe access and record the result; the post-merge reviewer could not access the required probe in its sandbox.",
+      "id": "IDENTITY-PROBE-LIVE-VERIFY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 189,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started. Lead-owned (Fable magistrate; not delegable). Fixture or mock evidence cannot discharge this live verification.",
       "stop_card": null
     },
     "INSTALL-WINDOWS-MULTI-01": {
@@ -3547,6 +3579,45 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "NIGHT-HANDBACK-GLOSS-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-39e3f9e1/02-review-handback-rewrite.md F1–F3: first-use terminology glosses; lead-declined for verbatim-prescribed H′",
+          "docs/process_traces/2026-09-11-activation-36d3a823/04-opus-counter-review-pr323.md NIT-2: unguarded \"nothing is armed\" in the dated 09-11 history entry; NIT-3: the \"since PR #309\" sentence's colon clause supports C4/C3-tail but not C1; NIT-4: one 122-column line; NIT-1: four dangling trace-directory links resolve once the bookkeeping chain is on main",
+          "docs/process_traces/2026-09-11-activation-36d3a823/05-terminal-review-pr323.md fold-in decision: F1–F3 and NIT-2/NIT-3 deferred to NIGHT-HANDBACK-GLOSS-01; the night reads no documentation"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-HANDBACK-GLOSS-01/acceptance",
+          "label": "NIGHT-HANDBACK-GLOSS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "After rehearsal-20260912 is harvested and retired, a reviewed wording pass supplies first-use glosses, guards the dated 09-11 history entry, makes the C1/C4/C3-tail explanation precise, reflows the long line, and verifies the four trace-directory links against main after the bookkeeping merge."
+      },
+      "authority": {
+        "label": "PR #323 terminal review fold-in decision and 2026-09-11 lead registration ruling",
+        "path": "docs/process_traces/2026-09-11-activation-36d3a823/05-terminal-review-pr323.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-09-11 lead brief: post-harvest and retirement fence",
+            "path": "docs/process_traces/2026-09-11-activation-36d3a823/05-terminal-review-pr323.md"
+          },
+          "rule": "Do not begin until rehearsal-20260912 is harvested and retired; NIGHT_HANDBACK.md is verbatim-prescribed for tonight. This lane is not night-blocking: the night reads no documentation."
+        }
+      ],
+      "flags": [],
+      "goal": "Complete a reviewed gloss and wording pass over docs/process/NIGHT_HANDBACK.md only after rehearsal-20260912 is harvested and retired, addressing the deferred first-use terminology and historical wording findings.",
+      "id": "NIGHT-HANDBACK-GLOSS-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 190,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead part-2b ruling after the counter-review record was supplied; not started. Deferred until rehearsal-20260912 is harvested and retired; not night-blocking.",
+      "stop_card": null
+    },
     "NIGHT-PACK-REHEARSAL-01": {
       "acceptance": {
         "evidence": [
@@ -3768,7 +3839,7 @@
       "priority": "p1_phase_gate",
       "rank": 88,
       "status": "blocked",
-      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open. 2026-09-10 07:00 PDT: pre-night dead-man observed standing down (record 30); item 5 ruled MET by cold gate 31 subject to the harvest predicate P1–P4 (checklist 13 §3a); items 4 and 6 await the 09-11 harvest. 2026-09-10 08:10: the 09-11 activation still harvests and closes items 5/6 and retires the stub; no real plan follows it until ACCEPTANCE-EPOCH-25G83-01.",
+      "status_note": "2026-09-09: BLOCKED/PARTIAL, not DONE. Rehearsal fired 02:56 PDT from activation 784a764e's arm (21h); result REHEARSAL_ONLY, chain exit 0, results branch night-results/20260909 @ a84e0f7f, courier email id 1a08599a4ff4d005. Receipt REFUSED night_probe_error (gate read chain.zsh for the stub class) is a FINDING; cure lane NIGHT-GATE-STUB-CHAIN-01. Agents uninstalled; stub checkout and plan root removed (21i); nothing armed. Acceptance item 2 MET; item 6 MET conditional on the cure landing; item 3 PARTIAL (send recorded, inbox unverified); items 1, 4, 5 OPEN. Item 5 (agents installed the morning before, 07:00 dead-man observed standing down) CANNOT be met by this night: installed 01:57 the same night. needs_ruling: whether a second stub night is required after the cure is for the cold gate or Ed. Evidence: docs/process_traces/2026-09-02-hands-free-week/21i-rehearsal-20260909-harvest-record.md. 2026-09-09 ~09:10 PDT: cure dependency SATISFIED (PR #309 merged a52810c9); the row stays BLOCKED on the second-stub-night ruling (needs_ruling; cold gate or Ed) — the magistrate does not decide it. Nothing is armed. 2026-09-09 ~17:00 PDT: acceptance item 1 (cold_start.json / COURIER_DEADLINE_S) CLOSED — derivation docs/process_traces/2026-09-09-rehearsal-harvest/70-item1-cold-start-deadline-derivation.md plus a fresh traced capture on the night-driver machine with provenance (104-cold_start.json: durations 3688/4375/5484/5158/7734 ms, median 5158 ms; 104-cold_start-provenance.txt: Eds-MacBook-Pro, script blob c1225c6d at main a03ce274, claude 2.1.265, captured 1788998192 with nothing armed); COURIER_DEADLINE_S = min(600, max(3*5.158, 300)) = 300 = scripts/run_night.py:51. Items 4 and 5 remain open (5 is what rehearsal-20260911 exercises). 2026-09-09 ~17:05 PDT (consistency sweep 106 F1): the SECOND-STUB-NIGHT-RULING event is SATISFIED (61/62/65: REQUIRED, combined with item 5); the row stays BLOCKED on the pending event REHEARSAL-20260911-HARVESTED (runbook 67; notice 1a086f4174733bfb sent after H 57ddad20). Item 1 CLOSED (above); items 4 (stage-1 email before any DIAGNOSTIC_NO_PACK arm) and 5/6 (this night) open. 2026-09-10 07:00 PDT: pre-night dead-man observed standing down (record 30); item 5 ruled MET by cold gate 31 subject to the harvest predicate P1–P4 (checklist 13 §3a); items 4 and 6 await the 09-11 harvest. 2026-09-10 08:10: the 09-11 activation still harvests and closes items 5/6 and retires the stub; no real plan follows it until ACCEPTANCE-EPOCH-25G83-01. 2026-09-11: item 5 MET on rehearsal-20260911 (harvest record 01 of activation 58a3bcfc); item 6 NOT met: driver crashed on Python 3.9 before any gate. Cure NIGHT-INTERPRETER-PIN-01 merged as PR #321 (main 4c06b3b4); C1 seam docs merged as PR #322 (main 18ab2cc4). Cold-gate ruling 06 §4(c): stub rehearsal-20260912, t0 2026-09-12 00:30 PDT, from a checkout at H′ (NIGHT_HANDBACK rewrite, PR #323), armed by NIGHT_HANDBACK notice; fallback (a) = stub 2026-09-13 02:56 PDT.",
       "stop_card": null
     },
     "NIGHT-STREAM-PATHS-01": {
@@ -4853,6 +4924,43 @@
       "status_note": "Fix round 1 is in flight on feat/2026-09-04-paper-k after the first delta found late-built terms and a stale transfer note.",
       "stop_card": null
     },
+    "PASS-ROUTE-RUNBOOK-CONTINUATION-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md F1 SHOULD_FIX: docs/phase_2/derivation_night_runbook.md:1695,1698-1699 omit the implemented transaction"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PASS-ROUTE-RUNBOOK-CONTINUATION-01/acceptance",
+          "label": "PASS-ROUTE-RUNBOOK-CONTINUATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The PASS route links the continuation contract and implemented CLI, identifies the issued continuation artifact and registry pin, and separates preparation, governed issuance/pinning, and authentication check before ordinary capture."
+      },
+      "authority": {
+        "label": "PR #320 post-merge review F1 and 2026-09-11 lead registration ruling",
+        "path": "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-09-11 lead brief: PASS-route pre-harvest fence",
+            "path": "docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md"
+          },
+          "rule": "Must land before the first PASS-route harvest (the equivalence night)"
+        }
+      ],
+      "flags": [],
+      "goal": "Connect the PASS route in docs/phase_2/derivation_night_runbook.md:1695,1698-1699 to the epoch-continuation transaction implemented by PR #320 (main baf7b900): replace the stale SMALLEST-change instruction and distinguish preparation, governed issuance and registry pinning, and authentication with scripts/issue_epoch_continuation.py check.",
+      "id": "PASS-ROUTE-RUNBOOK-CONTINUATION-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 188,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started.",
+      "stop_card": null
+    },
     "PINSET-GRAMMAR-EXCLUSION-01": {
       "acceptance": {
         "evidence": [
@@ -5537,6 +5645,36 @@
       "rank": 71,
       "status": "blocked",
       "status_note": "The frozen renderer cannot represent the live 126-key registry. This successor waits for G2-a because that selection record fixes the prefill length embedded in the registry keys.",
+      "stop_card": null
+    },
+    "REPLAY-FIXTURE-LEAK-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-11-activation-36d3a823/00-launch-record.md leaked-fixture census at 10:31: tests/fixtures/p2038_v3_production/fake_powermetrics_process.py from replay worktrees -11 and -8 (14-16 h old), plus writer-fixtures/fake_sampler.py from an exit-witness temp repo (5 d 18 h old)",
+          "2026-09-11 seat 03 lead brief: all three fixtures reparented to PID 1; surviving agent or fixture processes abort arm-time admission and cause the production census to refuse the night at t0"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REPLAY-FIXTURE-LEAK-01/acceptance",
+          "label": "REPLAY-FIXTURE-LEAK-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Fixture teardown uses addCleanup/finally as appropriate; an interrupted-test regression starts a fixture, aborts the test mid-run, and proves no survivor; the shard runner reports its post-replay survivor sweep in the replay tail and terminates its own surviving fixture children."
+      },
+      "authority": {
+        "label": "2026-09-11 activation 36d3a823 leaked-fixture census and lead registration brief",
+        "path": "docs/process_traces/2026-09-11-activation-36d3a823/00-launch-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Fix fixture-process leaks when a shard or module in python3 scripts/shard_tests.py --workers 4 --split is interrupted: guarantee child-sampler teardown on every exit path and add a post-replay sweep that reports surviving fixtures and terminates the runner's own surviving children.",
+      "id": "REPLAY-FIXTURE-LEAK-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 191,
+      "status": "queued",
+      "status_note": "2026-09-11: registered from activation 36d3a823 seat 03 under the lead resume rulings; not started.",
       "stop_card": null
     },
     "S9-01B-REFUSAL-PRODUCER-CHECK-01": {
@@ -7862,5 +8000,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-10"
+  "updated": "2026-09-11"
 }
