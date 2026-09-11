@@ -52,6 +52,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
+from joulewise.calibration_epoch_continuation import acceptance_judged_epochs  # noqa: E402
 from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
@@ -367,6 +368,7 @@ def _derive_preflight_systematic_screen_s(
     identity_epoch: Mapping[str, Any] | None = None,
     *,
     acceptance_path: Path | None = None,
+    preflight_record: dict[str, Any] | None = None,
 ) -> Decimal:
     """Authenticate the active acceptance and derive its level comparator."""
 
@@ -396,17 +398,29 @@ def _derive_preflight_systematic_screen_s(
     expected_epoch = artifact.get("identity_epoch")
     if not isinstance(expected_epoch, Mapping):
         raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
-    if identity_epoch is not None:
+    continuation_refusals: list[dict[str, str]] = []
+    judged_epochs = acceptance_judged_epochs(
+        artifact, ledger_snapshot=None, refusal_details=continuation_refusals,
+    )
+    record = {
+        "acceptance_id": artifact["acceptance_id"],
+        "judged_epochs": [dict(epoch) for epoch in judged_epochs],
+        "judged_epochs_basis": "registry_pins_only",
+        "continuation_refusals": continuation_refusals,
+    }
+    if preflight_record is not None:
+        preflight_record.update(record)
+    if identity_epoch is not None and identity_epoch not in judged_epochs:
         stale_fields = sorted(
             field
             for field, expected in expected_epoch.items()
             if identity_epoch.get(field) != expected
         )
-        if stale_fields:
-            raise _AcceptancePreflightError(
-                "acceptance_artifact_epoch_mismatch",
-                stale_fields=stale_fields,
-            )
+        raise _AcceptancePreflightError(
+            "acceptance_artifact_epoch_mismatch",
+            stale_fields=stale_fields,
+            **record,
+        )
 
     try:
         derivation = artifact["decimal_derivation"]
@@ -507,7 +521,7 @@ def _derivation_only_screen_basis(
     role, the frozen protocol digest, and the estimator-code digests.  The
     returned basis is the provenance block recorded in the hashed evidence, so
     a later reader can see exactly which artifact's screen this capture was
-    NOT judged by, and the epoch that artifact does bind.
+    NOT judged by, and every epoch that artifact judges.
     """
 
     path = (
@@ -515,8 +529,9 @@ def _derivation_only_screen_basis(
         if acceptance_path is None
         else Path(acceptance_path)
     )
+    preflight_record: dict[str, Any] = {}
     level_screen_s = _derive_preflight_systematic_screen_s(
-        None, acceptance_path=path
+        None, acceptance_path=path, preflight_record=preflight_record,
     )
     artifact = load_calibration_acceptance_bound(path)
     if artifact is None:
@@ -530,6 +545,7 @@ def _derivation_only_screen_basis(
     ):
         raise _AcceptancePreflightError("acceptance_artifact_derivation_invalid")
     return level_screen_s, {
+        **preflight_record,
         "acceptance_id": acceptance_id,
         "artifact_sha256": sha256_path(path),
         "preflight_level_screen_s": str(level_screen_s),
@@ -1913,6 +1929,7 @@ def main(argv: list[str] | None = None) -> int:
         "pulse_protocol_id": PROTOCOL_ID,
     }
     preflight_systematic_screen_s: Decimal | None
+    acceptance_preflight: dict[str, Any] = {}
     screen_basis: dict[str, Any] | None = None
     if args.derivation_only:
         try:
@@ -1923,17 +1940,9 @@ def main(argv: list[str] | None = None) -> int:
                 context={"reason": exc.reason, **exc.context},
                 stream=sys.stderr,
             )
-        # The stale-field list is the whole justification for this mode.  It is
-        # computed here rather than raised by the authenticator because an
-        # EMPTY list is the refusal: when the machine's epoch equals the one
-        # the active acceptance binds, an ordinary capture is possible and
-        # derivation-only would be a bypass of the screen that judges it.
-        stale_fields = sorted(
-            field
-            for field, expected in basis["epoch"].items()
-            if planned_epoch.get(field) != expected
-        )
-        if not stale_fields:
+        # Every judged epoch, including a continued one, must use the ordinary
+        # level screen. Derivation-only would bypass that screen.
+        if planned_epoch in basis["judged_epochs"]:
             return emit_refusal(
                 RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED,
                 context={"acceptance_id": basis["acceptance_id"]},
@@ -1974,7 +1983,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         try:
             preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
-                planned_epoch
+                planned_epoch, preflight_record=acceptance_preflight,
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
@@ -2457,6 +2466,8 @@ def main(argv: list[str] | None = None) -> int:
         evidence_payload["exceeds_prior_level_screen"] = (
             exceeds_prior_level_screen
         )
+    else:
+        evidence_payload["acceptance_preflight"] = acceptance_preflight
     _write_text_artifact(
         out_dir / "instrument_evidence.json",
         json.dumps(evidence_payload, indent=2, sort_keys=True) + "\n",
@@ -2483,6 +2494,8 @@ def main(argv: list[str] | None = None) -> int:
         manifest["exceeds_prior_level_screen"] = evidence_payload[
             "exceeds_prior_level_screen"
         ]
+    else:
+        manifest["acceptance_preflight"] = acceptance_preflight
     _write_text_artifact(
         out_dir / "manifest.json",
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",

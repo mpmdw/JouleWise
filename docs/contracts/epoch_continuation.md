@@ -137,8 +137,8 @@ details through `refusal_details`. Bracket evaluation always records these as
 judged epoch matches, freshness is stale and carries that reason; the existing
 claim refusal `calibration_acceptance_bound_stale` remains the outer result.
 A bad continuation does not revoke the acceptance's original epoch or another
-valid continuation. Registration of this new detail in the governing D-078
-reason amendment is required before promotion.
+valid continuation. The diagnostic is registered in the governing
+[D-078 reason amendment](d078_reason_registry_amendment.md).
 
 When `ledger_snapshot=None`, only the session cross-check is skipped; all file,
 acceptance, schema, and arithmetic checks still run. A returned continuation
@@ -146,6 +146,24 @@ then says `ledger_cross_check: "skipped_no_ledger_snapshot"`; with a snapshot
 it says `verified_terminal_derivation_session`. This weaker path is available
 for identity-only preflight consumers that do not own a snapshot. Claim-time
 bracket evaluation always requires a valid snapshot and never uses it.
+
+The capture writer has no ledger snapshot at its identity preflight. It calls
+`acceptance_judged_epochs(artifact, ledger_snapshot=None)` and records
+`judged_epochs` with `judged_epochs_basis: "registry_pins_only"`. This label
+means that the session cross-check is skipped there; the continuation's byte
+pin, PASS verdict, absence of a candidate marker, all three acceptance
+references, schema, derivation hash and reproduced arithmetic remain enforced.
+For an ordinary capture, `acceptance_preflight` in both the hashed evidence
+and manifest carries that record, including any `continuation_refusals`.
+An epoch mismatch returns the same record in the refusal context.
+
+Derivation-only captures record the same fields in `screen_basis`, alongside
+the prior acceptance's original `epoch` and level screen. A planned epoch
+equal to **any** judged epoch refuses with
+`calibration_derivation_only_epoch_unchanged`, because the ordinary capture
+screen already judges that epoch. Continued epochs are no longer new epochs
+for this guard. G2-a vector generation delegates to the same ordinary
+preflight and therefore applies the same registry-pins-only identity check.
 
 ## Freshness and prospective triggers
 
@@ -232,12 +250,12 @@ The production identity-comparison census is:
 | Consumer | Disposition |
 | --- | --- |
 | `calibration_bracketing.evaluate_calibration_bracket` | Uses judged epochs for freshness and all three identity-scoped evidence triggers. |
-| `scripts/validate_powermetrics_fiducial._derive_preflight_systematic_screen_s` | Ordinary capture's own epoch comparison must route through `acceptance_judged_epochs`; this writer is a separate required integration site. |
-| The same writer's derivation-only branch | Must refuse derivation-only when the planned epoch is already judged, to preserve the ordinary level-screen gate. |
+| `scripts/validate_powermetrics_fiducial._derive_preflight_systematic_screen_s` | Uses `acceptance_judged_epochs` without a snapshot and labels the preflight record `registry_pins_only`. |
+| The same writer's derivation-only branch | Refuses when the planned epoch is already judged; its screen basis lists all judged epochs. |
 | `arm_readiness._issued_d079` | Checks an acceptance ID, not machine identity; unchanged r6 already routes as issued. No continuation comparison is needed. |
 | `generate_g2a_probe_inputs._derive_live_vectors` | Delegates epoch preflight to the writer above; no independent acceptance-epoch comparison. Its later inventory comparison binds planned inputs to each other and remains unchanged. |
 | `issue_calibration_acceptance_generation.check` | Desk-only historical epoch watch remains unchanged; it can report the original epoch mismatch after continuation. It authorizes no capture. |
 | Ledger reservations, prior-set catalog purity and member bindings | Compare evidence to its own reserved or historical identity, rather than machine applicability to an acceptance. They remain exact and unchanged. |
 
-The ordinary and derivation-only writer integrations, governing reason
-registration, and subsequent issued registry entry are promotion requirements.
+An issued continuation and its registered byte pin remain requirements for
+production continuation; the implementation itself grants no continued epoch.

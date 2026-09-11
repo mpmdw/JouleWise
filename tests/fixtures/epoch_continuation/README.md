@@ -20,3 +20,13 @@ for the expression cuts. They replace compiled function copies only, run one
 killing test each, restore the original functions, and verify source-file
 SHA-256 equality after each cut. These are synthetic software checks, not
 live-night evidence.
+
+`build.py` supplies the same tool-produced fixture to the writer and G2-a
+integration tests. The writer CLI test installs a continuation pin only in
+its disposable copied runtime and runs the synthetic sampler.
+
+Run `PYTHONDONTWRITEBYTECODE=1 python3 tests/fixtures/epoch_continuation/writer_mutation_cuts.py`
+for the writer, G2-a delegation and diagnostic-registration cuts. Each cut
+runs one test in a subprocess, restores the exact source bytes in `finally`,
+and checks all affected source SHA-256s before continuing. Run this command
+alone, without another test run or writer using the checkout.
