@@ -1729,7 +1729,10 @@ the same head running its own copy judges against the same bytes.
 Exit code 0 is PASS, 4 is FAIL, 5 is INCONCLUSIVE; 3 means the tool refused
 to judge (the session is not terminal, is not derivation-kind, or the envelope
 did not authenticate) and wrote nothing. Run it twice — once from the clone,
-once from a second checkout at the same head — and compare the two records
+once from a second checkout at the same head, with a DIFFERENT `--out` for the
+second run (for example `"$NIGHT_ROOT/epoch-equivalence-record-2.json"`; the
+tool refuses to overwrite the first record without `--force`, and `--force`
+would destroy the comparison) — and compare the two records
 byte for byte before recording a verdict (the record carries the artifact's
 repo-relative path and byte digest, never an absolute path, so two checkouts
 at one head produce identical bytes); the record is a witness for the

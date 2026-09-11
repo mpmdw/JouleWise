@@ -22,7 +22,7 @@
           "label": "ACCEPTANCE-EPOCH-25G83-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "bind-window and check pass in a fresh clone at the transaction head with the live epoch; the successor's generation is registered in tests/verify_calibration_acceptance_corpus.py; every prior artifact unchanged; corpus design pre-registered before the first capture; every consumer refusal intact."
+        "summary": "EITHER (PASS route, Ed's ruling by directive issue 316) the r6 acceptance is continued onto the live epoch by the governed continuation transaction — issued epoch-continuation artifact registered and byte-pinned, dated D-102 addendum landed, bind-window and check-equivalent preflight passing in a fresh clone on the live epoch, r6 and every prior artifact byte-unchanged — OR (FAIL route) bind-window and check pass in a fresh clone at the transaction head with the live epoch; the successor's generation is registered in tests/verify_calibration_acceptance_corpus.py; every prior artifact unchanged; corpus design pre-registered before the first capture; every consumer refusal intact."
       },
       "authority": {
         "label": "Record 39: OS-build epoch blocker and successor acceptance route",
@@ -2562,7 +2562,7 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "Successor calibration acceptance issued for the live epoch, with fresh-clone bind-window and check passing at the D-138 transaction head",
+          "required": "The r6 acceptance either CONTINUED onto the live epoch (issued continuation artifact + D-102 addendum, per directive issue 316) or a successor acceptance issued for the live epoch, with fresh-clone bind-window and preflight passing at the transaction head",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
