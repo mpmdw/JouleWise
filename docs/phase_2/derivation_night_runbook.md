@@ -500,13 +500,16 @@ was written; filling them reopens no scientific rule. The plan's
 `registration_path` is `night_gate.D166_REGISTRATION_PATH`, the D-166 literal
 in `joulewise/night_gate.py`: the fixed repository-relative path
 `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json`.
-The file is the `_v5` contrast campaign's registered dominance criterion: the
-rule, fixed before that campaign's data, that a measured energy difference
-counts only if it is at least twice the widened uncertainty bound (D-165's
-falsifier, carried in a file named for D-166). It has nothing to do with this
-calibration night's physics; it is simply the one document the night gate is
-coded to authenticate for this receipt class, through C1, the night gate's
-registration check. A receipt class is the plan's category, and it selects
+The file is the D-117 contrast campaign's (`configs/campaigns/d117_contrast_v5`)
+registration of its dominance criterion, decision D-165, fixed before that
+campaign's data: for every energy component, the ratio of two floors that the
+file names — `corner_widened_unguarded_floor_j` divided by
+`point_unguarded_floor_j` — must be at least the file's `threshold` of 2.0
+(`R == 2.0 passes`) for the campaign's dominance sentence to stand; the file
+is named for D-166 although it carries the D-165 rule. It has nothing to do
+with this calibration night's physics; it is simply the one document the
+night gate is coded to authenticate for this receipt class, through C1, the
+night gate's registration check. A receipt class is the plan's category, and it selects
 which gate checks apply; this night's class is `DIAGNOSTIC_NO_PACK`, a night
 that runs no measurement pack (§1.1 defines it in full). The scientific
 pre-registration is bound to this night by H, the
