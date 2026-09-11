@@ -107,7 +107,7 @@ sentinel shape and emitted 1,280 generated output tokens per bundle.
 These points differ in model scale, architecture, tokenizer, and
 quantization, so they do not establish a controlled scaling relation,
 architecture effect, or efficiency comparison. The
-[bundle-cited extraction](docs/process_traces/2026-07-17-exploratory-block/results.md)
+[bundle-cited extraction](docs/legacy/process_traces/2026-07-17-exploratory-block/results.md)
 preserves the original figures as historical evidence only; D-078 bars their
 quotation or claim use.
 

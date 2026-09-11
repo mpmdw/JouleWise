@@ -276,7 +276,7 @@ Claude Code session remains first-class and carries no t3-specific ceremony.
 For a t3-mediated invocation, the tracked provenance record MUST distinguish
 four axes: `control_plane`, `transport`, `authority_class`, and `governance`
 (implementation follow-on: `T3-PROV-SCHEMA-01` in
-`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`).
+`docs/legacy/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`).
 The selected task-shape route in the table above is the authoritative
 transport record. A rollout's `session_meta.originator` MAY be recorded beside
 that set only as a provenance hint. It is never the sole discriminator and
@@ -303,7 +303,7 @@ lead-delegated or gate-bearing work. If their output is materially consumed,
 the lead MUST append a tracked ingestion event that binds the native session
 identity, output digest, lead disposition, and tracked process-trace location
 (implementation follow-on: `T3-PROV-SCHEMA-01` in
-`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`). A t3 activity
+`docs/legacy/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`). A t3 activity
 marker or thread transcript alone is not that event.
 
 The tracked Codex subagent route is limited to substantial background or
@@ -684,7 +684,7 @@ consult; a Claude-originated or delegated session is ineligible.
 **TRANSITIONAL — convention, not enforcement.** Until the four-axis provenance
 record, including its `authority_class` field, is representable through the
 implementation follow-on `T3-PROV-SCHEMA-01` in
-`docs/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`, the adapter has no
+`docs/legacy/process_traces/2026-08-05-t3-amend/AMENDMENT-MAP.md`, the adapter has no
 authoritative signal for the caller's launch route or delegated status: it
 validates only the caller-supplied `BRIDGE_ORIGIN: codex` and
 `BRIDGE_HOPS_REMAINING: 0` lines, which neither prove top-level status nor
