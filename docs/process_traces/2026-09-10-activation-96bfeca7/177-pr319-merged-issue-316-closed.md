@@ -1,0 +1,5 @@
+# 177 — PR #319 merged (e95bc22a); directive issue 316 closed with the outcome comment — 2026-09-10 23:31 PDT
+
+Merge commit e95bc22a6db8257af303908c2f02cf7a45d9b779 (head 25b7e967; CI 19/19 after the body edit's own run was restarted — a job re-run reuses the ORIGINAL event payload's PR body, so an edited ledger needs the `edited`-event run, not `gh run rerun --job`; noted for the next ledger fill). Issue 316 comment: the four recorded artifacts, the desk tool's contract, the continuation mechanism's status (separate PR under the gate), and the one open question for Ed (INCONCLUSIVE-then-FAIL night counting). Closed as completed; the directive poll returns zero open owner-authored directives.
+
+Deferred to the T38l checkpoint (post-merge review 166): RUN_STATE T38k's next-action text still names "runbook 99 rev 3" and "the G2-a input generator writes both" desk inputs — superseded by `docs/phase_2/derivation_night_runbook.md` revision 6 and `scripts/write_derivation_night_inputs.py`; `docs/process/state_kernel.json` lane RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01's status note says "runbook 99" (historical, accurate as written).
