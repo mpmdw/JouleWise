@@ -1355,6 +1355,35 @@
       "status_note": "2026-09-08: READY; current repair landed in 58d9225b through PR #307; this follow-up proposes continuing pin-check coverage.",
       "stop_card": null
     },
+    "CONTRACT-TEMPORAL-HEDGE-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-10-activation-96bfeca7/197-s10-r6-delta-triage.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CONTRACT-TEMPORAL-HEDGE-GUARD-01/acceptance",
+          "label": "CONTRACT-TEMPORAL-HEDGE-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "tests/test_docs_freshness.py refuses temporal-hedge sentences in docs/contracts/ ('Until the', 'currently', 'does not yet', 'for now') unless the sentence names the lane that closes it; every witness-format fixture under tests/fixtures is produced by its real emitter inside the test, never hand-shaped; both proven by a defect-shaped test and a killed cut."
+      },
+      "authority": {
+        "label": "Standing escalation trigger (rule 11): four consecutive rounds carried the doc-asserted-contract signature (records 174, 191, 196, 199, 202)",
+        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/197-s10-r6-delta-triage.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Turn the recurring 'a contract sentence describes a limitation a later round removed' defect class (and its sibling, a witness fixture shaped from the consumer's own projection rather than the real emitter) into a mechanism instead of another fix round.",
+      "id": "CONTRACT-TEMPORAL-HEDGE-GUARD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 187,
+      "status": "queued",
+      "status_note": "2026-09-11 01:20: registered by activation 96bfeca7 under the standing escalation trigger after the fourth occurrence in the S10 gate; not started.",
+      "stop_card": null
+    },
     "D080-TRIGGER-01": {
       "acceptance": {
         "evidence": [
