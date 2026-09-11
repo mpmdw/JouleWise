@@ -158,15 +158,25 @@ def _refuse_out_path(out: Path, force: bool) -> None:
     """Refuse a destination that would write into an acceptance directory."""
 
     resolved = out.expanduser().resolve()
-    # Compared case-folded: on a case-insensitive filesystem (the default on
-    # macOS) `CONFIGS/CALIBRATION` is the same directory as the forbidden one.
-    parts = tuple(part.lower() for part in resolved.parts)
+    # Compared case-folded (Unicode-aware, so LONG S folds to s): on a
+    # case-insensitive filesystem (the default on macOS) `CONFIGS/CALIBRATION`
+    # is the same directory as the forbidden one.
+    parts = tuple(part.casefold() for part in resolved.parts)
     for index in range(len(parts) - 1):
         if parts[index : index + 2] == FORBIDDEN_OUT_PARTS:
             raise EquivalenceRefusal(
                 f"--out {out} lies under {'/'.join(FORBIDDEN_OUT_PARTS)}; this "
                 "tool never writes into an acceptance directory"
             )
+    # And by identity, whatever the spelling: the parent must not BE this
+    # checkout's acceptance directory.
+    acceptance_dir = REPO_ROOT / FORBIDDEN_OUT_PARTS[0] / FORBIDDEN_OUT_PARTS[1]
+    parent = resolved.parent
+    if acceptance_dir.exists() and parent.exists() and parent.samefile(acceptance_dir):
+        raise EquivalenceRefusal(
+            f"--out {out} resolves into {acceptance_dir}; this tool never writes "
+            "into an acceptance directory"
+        )
     if resolved.exists() and not force:
         raise EquivalenceRefusal(
             f"--out {out} already exists; pass --force to overwrite it"

@@ -419,6 +419,34 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         self.assertEqual(code, checker.REFUSAL_EXIT)
         self.assertIn("never writes into an acceptance directory", stream.getvalue())
 
+    def test_an_out_path_under_a_unicode_case_alias_refuses(self) -> None:
+        """Delta 158: `configſ` (LONG S) folds to `configs`; lower() missed it."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config\u017f" / "calibration" / "record.json"
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                code = checker.main(
+                    ["--session-id", SESSION, "--out", str(target)]
+                )
+            self.assertFalse(target.exists())
+        self.assertEqual(code, checker.REFUSAL_EXIT)
+        self.assertIn("never writes into an acceptance directory", stream.getvalue())
+
+    def test_an_out_path_that_is_the_acceptance_directory_by_identity_refuses(self) -> None:
+        """Whatever the spelling, a parent that IS configs/calibration refuses."""
+
+        target = checker.REPO_ROOT / "configs" / "calibration" / "record.json"
+        with mock.patch.object(checker, "FORBIDDEN_OUT_PARTS", ("never", "matches")):
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                code = checker.main(
+                    ["--session-id", SESSION, "--out", str(target)]
+                )
+        self.assertFalse(target.exists())
+        self.assertEqual(code, checker.REFUSAL_EXIT)
+        self.assertIn("never writes into an acceptance directory", stream.getvalue())
+
     def test_exactly_six_retained_values_are_judged_not_inconclusive(self) -> None:
         """m = 6 is the first m the rule judges: the boundary is inclusive."""
 
