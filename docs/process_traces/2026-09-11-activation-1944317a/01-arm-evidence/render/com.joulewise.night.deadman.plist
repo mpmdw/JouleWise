@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joulewise.night.deadman</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/private/tmp/joulewise-rehearsal-20260912-checkout/.venv/bin/python</string>
+    <string>/private/tmp/joulewise-rehearsal-20260912-checkout/scripts/run_night.py</string>
+    <string>dead-man</string>
+    <string>--plan</string>
+    <string>/private/tmp/joulewise-rehearsal-20260912-validate/night_plan.json</string>
+    <string>--courier-bin</string>
+    <string>/Users/edr/.local/share/claude/versions/2.1.268</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/private/tmp/joulewise-rehearsal-20260912-checkout</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/private/tmp/joulewise-rehearsal-20260912-validate/custody/night/launchd.deadman.out</string>
+  <key>StandardErrorPath</key>
+  <string>/private/tmp/joulewise-rehearsal-20260912-validate/custody/night/launchd.deadman.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
