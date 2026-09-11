@@ -648,9 +648,9 @@ def example_spec(chain_bytes: bytes) -> WrapperSpec:
             f"{EXAMPLE_MEASUREMENT_ROOT}/configs/calibration/"
             "calibration_ledger_head.json"
         ),
-        identity_epoch_json=f"{EXAMPLE_NIGHT_ROOT}/identity_epoch.json",
+        identity_epoch_json=f"{EXAMPLE_NIGHT_ROOT}/identity-epoch.json",
         identity_epoch_sha256="1" * 64,
-        t1_bindings_json=f"{EXAMPLE_NIGHT_ROOT}/t1_bindings.json",
+        t1_bindings_json=f"{EXAMPLE_NIGHT_ROOT}/t1-bindings.json",
         t1_bindings_sha256="2" * 64,
         window_end_epoch_s=1789215960,
         slot_count=PRE_REGISTERED_SLOT_COUNT,
@@ -761,8 +761,8 @@ def render_region(chain_bytes: bytes) -> str:
         '  --session-id "$SESSION_ID" \\\n'
         '  --evidence-root-id "$EVIDENCE_ROOT_ID" \\\n'
         '  --calibration-plan "$NIGHT_ROOT/calibration_plan.json" \\\n'
-        '  --identity-epoch-json "$NIGHT_ROOT/identity_epoch.json" \\\n'
-        '  --t1-bindings-json "$NIGHT_ROOT/t1_bindings.json"\n'
+        '  --identity-epoch-json "$NIGHT_ROOT/identity-epoch.json" \\\n'
+        '  --t1-bindings-json "$NIGHT_ROOT/t1-bindings.json"\n'
         '/bin/zsh -n "$NIGHT_ROOT/chain.zsh"\n'
         "```\n"
         "\n"

@@ -83,6 +83,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACTIVE_ACCEPTANCE_ID,
+    ENVELOPE_MINIMUM_CORPUS_N,
     ACCEPTANCE_BOUND_SCHEMA,
     BRACKET_SCREEN_QUANTUM_S,
     D125_SCREEN_FLOOR_S,
@@ -372,7 +373,10 @@ SUCCESSOR_MINIMUM_CORPUS_SIZE = 19
 PRIOR_SET_DISPOSITIONS = ("valid", "systematic-invalid", "ordinary-invalid")
 # The one alternative floor the pre-registration and CG46 A-2 name, and the only
 # value `--ed-ruling` licenses.
-RULED_ALTERNATIVE_CORPUS_SIZE = 17
+# ONE home: the validator's hard bound for envelope rows IS the only ruled
+# departure below 19 (CG46 addendum A-2), so the issuer imports it rather than
+# restating the digit -- two homes for one ruled number could drift apart.
+RULED_ALTERNATIVE_CORPUS_SIZE = ENVELOPE_MINIMUM_CORPUS_N
 # The pre-registered schedule: three agent-free nights of twelve declared slots.
 PREREGISTERED_NIGHT_COUNT = 3
 PREREGISTERED_SLOTS_PER_NIGHT = 12

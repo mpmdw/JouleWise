@@ -1697,8 +1697,8 @@ custody directory the plan calls `custody_root`):
   --session-id "$SESSION_ID" \
   --evidence-root-id "$EVIDENCE_ROOT_ID" \
   --calibration-plan "$NIGHT_ROOT/calibration_plan.json" \
-  --identity-epoch-json "$NIGHT_ROOT/identity_epoch.json" \
-  --t1-bindings-json "$NIGHT_ROOT/t1_bindings.json"
+  --identity-epoch-json "$NIGHT_ROOT/identity-epoch.json" \
+  --t1-bindings-json "$NIGHT_ROOT/t1-bindings.json"
 /bin/zsh -n "$NIGHT_ROOT/chain.zsh"
 ```
 
@@ -1773,8 +1773,8 @@ export RUNS_ROOT='/Users/edr/night-custody/derivation-20260912/runs'
 export WINDOW_CUSTODY_ROOT='/Users/edr/night-custody/derivation-20260912'
 export CALIBRATION_LEDGER='/private/tmp/joulewise-derivation-20260912-checkout/runs/calibration_observation_ledger.jsonl'
 export LEDGER_HEAD_PIN='/private/tmp/joulewise-derivation-20260912-checkout/configs/calibration/calibration_ledger_head.json'
-export IDENTITY_EPOCH_JSON='/Users/edr/night-custody/derivation-20260912/identity_epoch.json'
-export T1_BINDINGS_JSON='/Users/edr/night-custody/derivation-20260912/t1_bindings.json'
+export IDENTITY_EPOCH_JSON='/Users/edr/night-custody/derivation-20260912/identity-epoch.json'
+export T1_BINDINGS_JSON='/Users/edr/night-custody/derivation-20260912/t1-bindings.json'
 export WINDOW_END_EPOCH_S='1789215960'
 export SLOT_COUNT='12'
 export SETTLE_S='600'
