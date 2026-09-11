@@ -955,3 +955,11 @@ All four interactive session lanes have landed (census/daemon at T38; clock, rou
   derivation night 1 per runbook 99 rev 3 (identity-epoch + T1-bindings JSON provenance is the open `[UNVERIFIED]`; pinned pre-registration digest;
   `gen_derivation_night.py` + `--verify`) → NIGHT_HANDBACK email-then-arm (earliest 09-12; rehearsal-20260911 runs tonight). Ed: veto windows
   69/80/82/88; V3 affirmative acknowledgment; V7 screen rule; V4 "210 min". rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
+- UPDATE 2026-09-10 ~20:55 PDT (headless activation `96bfeca7`): PR #315 MERGED and post-merge green (main ci 17/17 at d18bc2b3; cross-unit review 132
+  CLEAN). Follow-up PR #316 in the gate on `feat/2026-09-10-derivation-night-inputs` @ bc1d7ef9: seat S8 desk writer `scripts/write_derivation_night_inputs.py`
+  (identity-epoch.json / t1-bindings.json from the capture writer's own helpers; refuter 136 proved byte-for-byte non-divergence; bench fix round),
+  the issuer's one-home import of the ruled corpus floor, hyphenated example filenames, and the operator runbook promoted to
+  `docs/phase_2/derivation_night_runbook.md` (revision 5 after contract review 141: every variable built before use, staged vs published plan path,
+  the frozen triple, real §1.4 install commands, the fence defined per the watchdog). Replay 12 (row 9) + fresh-eyes pass 2 (row 10) running; then
+  the PR, CI, merge. Desk dry run from a fresh clone at c1487ffb: rc 3 + pre-registered sampler MATCH (record 134). Ed emailed 19:56 (`1a08e62b7e99b312`)
+  with four decisions. rehearsal-20260911 ARMED and untouched; exit on the 02:31 request.
