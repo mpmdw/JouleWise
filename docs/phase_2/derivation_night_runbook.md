@@ -1720,8 +1720,9 @@ cd "$MEASUREMENT_ROOT"
 ```
 
 `--acceptance` is left at its default, which resolves against the checkout
-the SCRIPT lives in (here the clone, because `$PY` runs the clone's copy); the
-tool then refuses any generation other than r6 by id, so a second checkout at
+the SCRIPT lives in (here the clone, because the `cd` and the relative script
+path select the clone's copy; `$PY` only selects the interpreter); the tool
+then refuses any generation other than r6 by id, so a second checkout at
 the same head running its own copy judges against the same bytes.
 
 Exit code 0 is PASS, 4 is FAIL, 5 is INCONCLUSIVE; 3 means the tool refused
