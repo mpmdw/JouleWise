@@ -362,6 +362,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         session_kind: str | None,
         epoch: dict,
         t1: dict,
+        continuation_root: Path | None = None,
     ):
         root = self.repo / "sessions" / token
         root.mkdir(parents=True)
@@ -378,6 +379,11 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+        if continuation_root is not None:
+            # Preserve the real terminal derivation history in the capture's
+            # ledger; preflight must cross-check it before opening a capture.
+            shutil.copy2(continuation_root / "night/runs/calibration_observation_ledger.jsonl", ledger)
+            shutil.copy2(continuation_root / "night/runs/calibration_ledger_head_pin.json", pin)
         subprocess.run(
             ["git", "add", str(pin.relative_to(self.repo))],
             cwd=self.repo,
@@ -493,9 +499,13 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         """The real writer CLI reaches a fixture capture only with a valid pin."""
         acceptance = self._rekey_acceptance()
         epoch, t1 = self._epoch("25G83")
+        continuation_root = Path(self.tmp.name) / "continuation"
+        _, registry = build_issued_continuation(
+            continuation_root, acceptance_path=self.repo / _ACCEPTANCE_RELATIVE,
+        )
         ledger, pin, session_id, custody = self._session(
             "ordinary-continued", slots=BRACKET_SESSION_SLOTS,
-            session_kind=None, epoch=epoch, t1=t1,
+            session_kind=None, epoch=epoch, t1=t1, continuation_root=continuation_root,
         )
         args = dict(ledger=ledger, pin=pin, session_id=session_id, slot="pre",
                     custody=custody["pre"], epoch=epoch, derivation_only=False)
@@ -506,9 +516,6 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         self.assertEqual(ledger.read_bytes(), before_ledger)
         self.assertFalse(custody["pre"].exists())
 
-        _, registry = build_issued_continuation(
-            Path(self.tmp.name) / "continuation", acceptance_path=self.repo / _ACCEPTANCE_RELATIVE,
-        )
         # Install the test pin in the copied subprocess runtime only. The
         # production registry remains empty and all issued bytes stay frozen.
         source_path = self.repo / "joulewise/calibration_bracketing.py"
@@ -530,11 +537,12 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             record = payload["acceptance_preflight"]
             self.assertIn("judged_epochs", record)
             self.assertEqual(record["judged_epochs"], [acceptance["identity_epoch"], epoch])
-            self.assertEqual(record["judged_epochs_basis"], "registry_pins_only")
+            self.assertEqual(record["judged_epochs_basis"], "ledger_snapshot")
             self.assertEqual(record["continuation_refusals"], [])
             self.assertNotIn("derivation_only", payload)
         finalized = [json.loads(line) for line in ledger.read_text().splitlines()
-                     if json.loads(line).get("event") == BRACKET_SESSION_FINALIZATION_EVENT]
+                     if json.loads(line).get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+                     and json.loads(line).get("session_id") == session_id]
         self.assertEqual(len(finalized), 1)
         self.assertEqual(finalized[0]["disposition"], "valid")
 
@@ -642,7 +650,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
                 payload["screen_basis"]["epoch"], acceptance["identity_epoch"]
             )
             self.assertEqual(payload["screen_basis"]["judged_epochs"], [acceptance["identity_epoch"]])
-            self.assertEqual(payload["screen_basis"]["judged_epochs_basis"], "registry_pins_only")
+            self.assertEqual(payload["screen_basis"]["judged_epochs_basis"], "ledger_snapshot")
             self.assertIn("exceeds_prior_level_screen", payload)
         # The bound of a healthy fixture capture is far below r6's screen, so
         # the diagnostic is false here; the true case is the next test.

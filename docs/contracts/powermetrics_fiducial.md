@@ -172,16 +172,21 @@ This contract is the one home for the artifact's preflight object.
 original six-field epoch followed by every authenticated continued epoch.
 `judged_epochs_basis` is `"ledger_snapshot"` when preflight was supplied a
 snapshot: continuation authentication then includes the terminal derivation
-session and all ledger row cross-checks. The writer CLI currently performs
-identity preflight before loading its slot-reservation snapshot and records
-`"registry_pins_only"`. The identity-only helper callers (G2-a vector
-generation, the derivation-night desk input writer, and the import-time
-historical screen constant) also have no snapshot and use that basis when
-requesting a record. Only the session cross-check is skipped on that path; all byte pins,
+session and all ledger row cross-checks. The writer CLI loads its custody-verified
+snapshot before identity preflight, passes it to both preflight helpers, and
+records `"ledger_snapshot"`. A governed open capture session does not prevent
+cross-checking a continuation's earlier terminal derivation session; integrity
+failures still refuse that continuation. The identity-only helper callers
+(G2-a vector generation, the derivation-night desk input writer, and the
+import-time historical screen constant) have no snapshot and use
+`"registry_pins_only"` when requesting a record. Only the session cross-check
+is skipped on that path; all byte pins,
 acceptance references, schema, derivation hash, PASS verdict, candidate-marker
 and arithmetic checks still apply. `continuation_refusals` lists every rejected
-registered continuation, with `reason`, `continuation_id` and `detail`; it is
-an empty list when none refused. Epoch mismatch refusals carry the same
+registered continuation, with `reason`, `continuation_id` and `detail`; the list
+is empty when none refused. An `OSError` detail carries its exception class and
+registry-relative path (or the path relative to the repository root), never the
+OS message or absolute filename. Epoch mismatch refusals carry the same
 preflight record in their context. Derivation-only captures include these
 judgment fields in `screen_basis` instead of `acceptance_preflight`. Until the
 CLI supplies its ledger snapshot here, a file-authenticated continuation can

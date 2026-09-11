@@ -11,6 +11,7 @@ from datetime import date
 from decimal import Decimal, DecimalException, InvalidOperation, localcontext
 import hashlib
 import json
+from os.path import relpath
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
@@ -29,6 +30,14 @@ MINIMUM_RETAINED = 6
 DECLARED_SLOT_COUNT = 12
 RULE_SOURCE = "ratified_operatives of the acceptance"
 TERMINAL_STATES = frozenset({"finalized", "aborted"})
+SNAPSHOT_STATE_REFUSALS = frozenset({
+    # Both bracket and derivation sessions use this reason while still open.
+    "calibration_ledger_bracket_session_open",
+    # State-only ONLY when is_governed_open_bracket_extension proves that the
+    # physical/pinned gap belongs entirely to the one reserved open session.
+    # An arbitrary pin/digest mismatch remains an integrity refusal below.
+    "calibration_ledger_head_mismatch",
+})
 SLOT_KEYS = frozenset({
     "slot", "attempt_id", "content_id", "manifest_sha256",
     "instrument_evidence_sha256", "disposition", "anchor_v3_resolved",
@@ -247,6 +256,8 @@ def authenticate_epoch_continuation(
         if slot["b_fiducial_s"] is not None:
             _decimal(slot["b_fiducial_s"], "slots.b_fiducial_s")
         if slot["disposition"] == "valid":
+            _require(slot["b_fiducial_s"] is not None,
+                     f"slots.{slot['slot']}.b_fiducial_s_required_for_valid_row")
             _decimal(slot["b_fiducial_s"], "slots.b_fiducial_s")
             lexemes_all_valid.append(slot["b_fiducial_s"])
             if slot["anchor_v3_resolved"]:
@@ -260,7 +271,10 @@ def authenticate_epoch_continuation(
 
     cross_check = "skipped_no_ledger_snapshot"
     if ledger_snapshot is not None:
-        _require(not ledger_snapshot.refusal_reasons, "ledger_snapshot_invalid")
+        _require(set(ledger_snapshot.refusal_reasons) <= SNAPSHOT_STATE_REFUSALS
+                 and ("calibration_ledger_head_mismatch" not in ledger_snapshot.refusal_reasons
+                      or ledger_snapshot.is_governed_open_bracket_extension),
+                 "ledger_snapshot_invalid")
         session = ledger_snapshot.bracket_session_by_id.get(evidence["session_id"])
         _require(session is not None, "session_absent")
         _require(session.state in TERMINAL_STATES and session.state == evidence["session_state"], "session_not_terminal_or_state_mismatch")
@@ -318,8 +332,16 @@ def load_epoch_continuations(
             accepted.append(continuation)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, DecimalException, OverflowError) as exc:
             if refusal_details is not None:
+                detail = str(exc)
+                if isinstance(exc, OSError):
+                    # Never serialize the OS message: it can contain absolute
+                    # filenames (including a second filename) in hashed bytes.
+                    relative = entry.get("relative_path")
+                    if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
+                        relative = relpath(entry["path"], Path(__file__).resolve().parents[1])
+                    detail = f"{type(exc).__name__}: {relative}"
                 refusal_details.append({"reason": CONTINUATION_INVALID,
-                                        "continuation_id": continuation_id, "detail": str(exc)})
+                                        "continuation_id": continuation_id, "detail": detail})
     return tuple(accepted)
 
 

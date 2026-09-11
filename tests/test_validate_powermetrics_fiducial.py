@@ -172,14 +172,36 @@ class ContinuedEpochPreflightTests(unittest.TestCase):
         identity = self.root / "identity.json"
         identity.write_text(json.dumps(TARGET_EPOCH))
         with registered_continuation(self.root), redirect_stderr(io.StringIO()) as error:
-            rc = writer.main([
-                "--allow-live", "--derivation-only", "--power-policy", TARGET_EPOCH["power_policy"],
-                "--identity-epoch-json-for-test", str(identity),
-                "--output-root", str(self.root / "captures"),
-            ])
+            snapshot = self._continuation_snapshot()
+            # CLI owns the snapshot; this test only replaces disk custody I/O.
+            with patch.object(writer, "load_calibration_ledger_snapshot", return_value=snapshot):
+                rc = writer.main([
+                    "--allow-live", "--derivation-only", "--power-policy", TARGET_EPOCH["power_policy"],
+                    "--identity-epoch-json-for-test", str(identity),
+                    "--output-root", str(self.root / "captures"),
+                ])
         self.assertEqual(rc, 2, error.getvalue())
         refusal = json.loads(error.getvalue())
         self.assertEqual(refusal["code"], RefusalCode.DERIVATION_ONLY_EPOCH_UNCHANGED.value)
+        self.assertFalse((self.root / "captures").exists())
+
+    def test_derivation_only_cli_uses_snapshot_before_epoch_guard(self):
+        identity = self.root / "identity.json"
+        identity.write_text(json.dumps(TARGET_EPOCH))
+        with registered_continuation(self.root), redirect_stderr(io.StringIO()) as error:
+            snapshot = replace(self._continuation_snapshot(), bracket_sessions=())
+            with patch.object(writer, "load_calibration_ledger_snapshot", return_value=snapshot) as loader:
+                rc = writer.main([
+                    "--allow-live", "--derivation-only", "--power-policy", TARGET_EPOCH["power_policy"],
+                    "--identity-epoch-json-for-test", str(identity),
+                    "--output-root", str(self.root / "captures"),
+                ])
+        self.assertEqual(rc, 2, error.getvalue())
+        loader.assert_called_once()
+        refusal = json.loads(error.getvalue())
+        # The absent terminal session excludes the continuation, so this epoch
+        # reaches the derivation-session requirement instead of the epoch guard.
+        self.assertEqual(refusal["code"], RefusalCode.DERIVATION_ONLY_SESSION_KIND_REQUIRED.value)
         self.assertFalse((self.root / "captures").exists())
 
     def test_g2a_live_vectors_use_real_continuation_preflight(self):

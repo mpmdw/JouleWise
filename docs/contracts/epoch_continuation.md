@@ -67,21 +67,29 @@ primary-evidence check.
 The shared `envelope_holds_over_all_valid` check applies the level screen to
 each disclosed `valid` bound and the bracket screen to the maximum minus
 minimum of **all** such bounds, including unresolved rows. Every valid row
-must therefore supply a finite, nonnegative decimal bound. The check has no
-minimum count; the empty valid set satisfies it vacuously. The loader cannot
+must therefore supply a finite, nonnegative decimal bound; a null bound refuses
+with `slots.<slot>.b_fiducial_s_required_for_valid_row` in both preparation and
+loading. The check has no minimum count; the empty valid set satisfies it vacuously. The loader cannot
 replay anchor resolution, so resolution remains file-asserted. Without this
 independent envelope check, re-labelling an over-screen row as unresolved
 could turn a FAIL into a PASS. Resolution can now reduce `m` but cannot
-produce that verdict flip.
+produce a FAIL→PASS flip. A hand-written, registry-pinned file can still promote
+an inside-envelope unresolved row to resolved, raising `m` and turning an
+INCONCLUSIVE night into a PASS; no published number can change, and the tool
+prevents that promotion by deriving resolution from authenticated primary bytes.
+The loader cannot replay those bytes, so owner registration review remains the
+boundary for that file-asserted resolution claim.
 
-For a night with unresolved valid rows, if the all-valid envelope fails,
-preparation refuses with `unresolved_valid_row_exceeds_envelope`, names the unresolved
-slots, exits 3, and writes nothing; the desk reports it to Ed for a written
-ruling. This refusal also applies below the retained-count minimum. The
-loader requires the all-valid envelope before recomputing retained statistics
+If the all-valid envelope fails, preparation unconditionally refuses with
+`unresolved_valid_row_exceeds_envelope`, names the unresolved slots (or says
+`none (all valid rows resolved)`), exits 3, and writes nothing; the desk reports
+it to Ed for a written ruling. This refusal also applies below the retained-count
+minimum. The loader requires the all-valid envelope before recomputing retained statistics
 and refuses a violating continuation with detail
 `unresolved_valid_row_exceeds_envelope`, with or without a ledger snapshot.
-Fully resolved nights retain the ordinary FAIL and INCONCLUSIVE exits below.
+The retained-statistics function still computes FAIL and INCONCLUSIVE as below;
+the prepare envelope gate now refuses every screen violation before that
+calculation.
 
 Let `m` be the number of retained values. Let `L` be the acceptance's registered
 `preflight_level_screen_s`, and `S` its registered `bracket_screen_s`. Both
@@ -153,8 +161,17 @@ requires agreement on **all three** of acceptance ID, acceptance file hash,
 and acceptance derivation hash. The continued epoch must differ from the
 original. The rule, retained count, extrema, range and verdict must reproduce.
 
-With a ledger snapshot, the reader also requires the cited session to exist,
-have derivation kind, be terminal in the recorded state, and declare the
+With a ledger snapshot, the reader refuses integrity failures with
+`ledger_snapshot_invalid`. The only state reasons tolerated are enumerated in
+`SNAPSHOT_STATE_REFUSALS`: `calibration_ledger_bracket_session_open` covers an
+open bracket or derivation session; `calibration_ledger_head_mismatch` is tolerated
+only when `is_governed_open_bracket_extension` proves the physical/pinned gap
+belongs to one governed open session. An unproven head mismatch, custody failure,
+uncommitted pin, malformed chain, pending attempt, or any unknown reason still
+refuses. This tolerance lets a capture in flight cross-check an earlier terminal
+continuation; it never licenses the continuation's own session to remain open.
+
+The reader also requires the cited session to exist, have derivation kind, be terminal in the recorded state, and declare the
 recorded slots. The snapshot cannot precede the recorded head sequence.
 The file's finalized `(slot, attempt_id)` pairs must equal the session's
 `finalized_slots` pairs, or it refuses with `ledger_finalized_slots_mismatch`.
@@ -171,7 +188,11 @@ observations remain eligible for future trigger evaluation; a continuation
 never acknowledges an entire future epoch.
 
 Invalid entries are ignored individually. Callers may collect named refusal
-details through `refusal_details`. Bracket evaluation records these as
+details through `refusal_details`. An `OSError` detail contains only its exception
+class and the registry's `relative_path` (falling back to the file path relative
+to the repository root); OS messages and absolute filenames never enter that
+detail or the hashed capture artifacts that carry it. Bracket evaluation records
+these as
 `acceptance.continuation_refusals` only when non-empty, with reason
 `calibration_epoch_continuation_invalid` and the precise failed field. The
 field is absent otherwise, preserving stable receipt hashes and the
@@ -191,10 +212,13 @@ for identity-only preflight consumers that do not own a snapshot. Claim-time
 bracket evaluation always requires a valid snapshot and never uses it.
 
 The capture writer's ordinary and derivation-only preflight helpers accept a
-ledger snapshot and pass it to `acceptance_judged_epochs`. The CLI currently
-calls those helpers before its slot-reservation snapshot is loaded, so its
-preflight still skips the session cross-check. That ordering can spend a
-capture window on a continuation whose cited session fails at claim time.
+ledger snapshot and pass it to `acceptance_judged_epochs`. The CLI loads its
+custody-verified snapshot before identity preflight and records `ledger_snapshot`
+for both ordinary and derivation-only captures. It reuses that snapshot for the
+early slot-reservation check and reloads under the writer lease before capture.
+Identity-only helper callers (G2-a vectors, derivation-night desk inputs, and the
+historical import-time screen constant) have no snapshot and retain the explicitly
+labelled `registry_pins_only` path.
 The full `acceptance_preflight` and `screen_basis` artifact key lists and
 authentication-basis labels have one home in the
 [powermetrics artifact contract](powermetrics_fiducial.md#derivation-only-capture-for-a-new-identity-epoch).
@@ -273,8 +297,10 @@ night is exempt from range expansion; systematic failures trigger even there.
 `scripts/issue_epoch_continuation.py prepare-candidate` requires `--session-id`,
 `--ledger`, `--head-pin`, `--acceptance`, `--repo-root`,
 `--d102-addendum-date`, and `--out`. PASS writes a marked candidate and exits
-0. FAIL prints the derived record and exits 4; INCONCLUSIVE prints it and exits
-5. Neither writes a candidate. Integrity refusals exit 3. Output under any
+0. INCONCLUSIVE prints the derived record and exits 5 without writing a
+candidate. Envelope and integrity refusals exit 3 without writing a candidate.
+Exit 4 remains the statistics FAIL mapping, but every screen violation now
+hits the unconditional envelope refusal before that mapping. Output under any
 resolved `configs/calibration` directory is forbidden. Existing output refuses
 without `--force`. Repeating identical inputs produces identical bytes.
 
@@ -299,7 +325,7 @@ The production identity-comparison census is:
 | Consumer | Disposition |
 | --- | --- |
 | `calibration_bracketing.evaluate_calibration_bracket` | Uses judged epochs for freshness and all three identity-scoped evidence triggers. |
-| `scripts/validate_powermetrics_fiducial._derive_preflight_systematic_screen_s` | Passes an optional ledger snapshot to `acceptance_judged_epochs`; the CLI and identity-only callers currently omit it and skip only the session cross-check. |
+| `scripts/validate_powermetrics_fiducial._derive_preflight_systematic_screen_s` | Passes an optional ledger snapshot to `acceptance_judged_epochs`; the CLI supplies its custody-verified snapshot; identity-only callers omit it and explicitly skip the session cross-check. |
 | The same writer's derivation-only branch | Refuses when the planned epoch is already judged; its screen basis lists all judged epochs. |
 | `arm_readiness._issued_d079` | Checks an acceptance ID, not machine identity; unchanged r6 already routes as issued. No continuation comparison is needed. |
 | `generate_g2a_probe_inputs._derive_live_vectors` | Delegates epoch preflight to the writer above; no independent acceptance-epoch comparison. Its later inventory comparison binds planned inputs to each other and remains unchanged. |

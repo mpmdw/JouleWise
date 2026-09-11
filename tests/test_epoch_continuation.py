@@ -26,6 +26,7 @@ from tests.fixtures.epoch_bootstrap.build import (
     tamper_member_bundle,
 )
 from tests.test_calibration_bracketing import _fixture_snapshot, _synthetic_issued_snapshot
+from tests.fixtures.epoch_continuation.build import append_open_capture_session
 
 
 def _seal(value):
@@ -153,6 +154,89 @@ class EpochContinuationTests(unittest.TestCase):
             policy=CalibrationBracketingPolicy(require_bracket=True, calibration_bracket_max_drift_s=0.010),
             acceptance_bound=self.artifact, ledger_snapshot=snapshot,
         )
+
+    def test_open_capture_session_still_crosschecks_terminal_continuation(self):
+        with self.issued():
+            for kind in ("bracket", "derivation"):
+                # The ledger uses the same open-state reason for both kinds.
+                snapshot = self.snapshot()
+                session = replace(snapshot.bracket_sessions[0], session_id="capture-in-flight",
+                                  session_kind=kind, state="open", finalized_slots={})
+                snapshot = replace(snapshot, bracket_sessions=(*snapshot.bracket_sessions, session),
+                                   refusal_reasons=("calibration_ledger_bracket_session_open",))
+                loaded, details = self.load(snapshot)
+                self.assertEqual(details, [])
+                self.assertEqual(len(loaded), 1)
+                self.assertEqual(loaded[0].ledger_cross_check, "verified_terminal_derivation_session")
+            snapshot = append_open_capture_session(self.fixture)
+            self.assertTrue(snapshot.is_governed_open_bracket_extension)
+            loaded, details = self.load(snapshot)
+            self.assertEqual(details, [])
+            self.assertEqual(len(loaded), 1)
+            self.assertEqual(loaded[0].ledger_cross_check, "verified_terminal_derivation_session")
+
+    def test_integrity_and_unknown_snapshot_refusals_remain_invalid(self):
+        reasons = (
+            "attempt_conflict", "baseline_missing", "bracket_session_conflict", "chain_conflict",
+            "content_conflict", "custody_invalid", "head_mismatch", "head_uncommitted",
+            "malformed", "missing", "operation_conflict", "pending", "recovery_required",
+            "rollback", "ungoverned_business", "future_unknown_reason",
+        )
+        with self.issued():
+            clean = self.snapshot()
+            governed = append_open_capture_session(self.fixture)
+            for reason in reasons:
+                for base in (clean, governed):
+                    with self.subTest(reason=reason, governed=base is governed):
+                        # A head mismatch alone or without the governed pin proof
+                        # is an integrity failure, even beside an open session.
+                        snapshot = replace(base, refusal_reasons=tuple(sorted(set(
+                            base.refusal_reasons + ("calibration_ledger_" + reason,)))),
+                            committed_head_sequence=None if reason == "head_mismatch" else base.committed_head_sequence)
+                        loaded, details = self.load(snapshot)
+                        self.assertEqual(loaded, ())
+                        self.assertEqual(details[0]["detail"], "ledger_snapshot_invalid")
+
+    def test_continuations_own_open_session_still_refuses(self):
+        with self.issued():
+            snapshot = self.snapshot()
+            session = replace(snapshot.bracket_sessions[0], state="open")
+            snapshot = replace(snapshot, bracket_sessions=(session,),
+                               refusal_reasons=("calibration_ledger_bracket_session_open",))
+            loaded, details = self.load(snapshot)
+            self.assertEqual(loaded, ())
+            self.assertEqual(details[0]["detail"], "session_not_terminal_or_state_mismatch")
+
+    def test_oserror_detail_uses_exception_class_and_relative_path(self):
+        with self.issued() as (value, path):
+            entry = bracket.EPOCH_CONTINUATION_REGISTRY[value["continuation_id"]]
+            for relative in (entry["relative_path"], None, str(path)):
+                for error in (FileNotFoundError(2, "missing", str(path)),
+                              OSError(5, "failure", str(path), None, "/private/other-secret")):
+                    with self.subTest(relative=relative, error=type(error).__name__):
+                        expected_path = relative if relative and not Path(relative).is_absolute() else continuation.relpath(
+                            path, Path(continuation.__file__).resolve().parents[1])
+                        with patch.dict(entry, {"relative_path": relative}), patch.object(
+                            continuation, "read_authentication_input", side_effect=error,
+                        ):
+                            loaded, details = self.load()
+                        self.assertEqual(loaded, ())
+                        self.assertEqual(details[0]["detail"], f"{type(error).__name__}: {expected_path}")
+                        self.assertFalse(Path(details[0]["detail"].split(": ", 1)[1]).is_absolute())
+                        self.assertNotIn("/private/other-secret", details[0]["detail"])
+            path.unlink()
+            loaded, details = self.load()
+            self.assertEqual(loaded, ())
+            self.assertEqual(details[0]["detail"],
+                             "FileNotFoundError: tests/fixtures/epoch_continuation/issued.json")
+
+    def test_prepare_valid_null_bound_names_slot(self):
+        self.build([Slot("0.025")] * 11 + [Slot(None, evidence_lexeme="null")])
+        rc, out, error = self.prepare()
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("slots.d12.b_fiducial_s_required_for_valid_row", error)
+        self.assertFalse(self.out.exists())
 
     def test_candidate_recipe_marker_pin_and_check(self):
         payload = self.candidate()
@@ -302,10 +386,9 @@ class EpochContinuationTests(unittest.TestCase):
     def test_failed_nine_row_night_cannot_hide_three_finalized_rows_to_pass(self):
         self.build([Slot("0.025")] * 6 + [Slot(str(self.level + Decimal("0.001")))] * 3
                    + [Slot("0.025")] * 3, fill_slots=9, abort_reason="window_exhausted")
-        rc, out, error = self.prepare()
-        self.assertEqual((rc, error), (4, ""))
+        with patch.object(issuer, "envelope_holds_over_all_valid", return_value=True):
+            forged, _, _ = issuer.derive_record(issuer.build_parser().parse_args(self.args()))
         self.assertFalse(self.out.exists())
-        forged = json.loads(out)
         self.assertEqual(forged["verdict"], "fail")
         self.assertEqual(forged["evidence"]["m"], 9)
         snapshot = self.snapshot()
@@ -339,10 +422,9 @@ class EpochContinuationTests(unittest.TestCase):
     def assert_unresolved_forgery_refuses(self, excluded_bound):
         self.build([Slot("0.025")] * 6 + [Slot(excluded_bound)] * 3
                    + [Slot("0.025")] * 3, fill_slots=9, abort_reason="window_exhausted")
-        rc, out, error = self.prepare()
-        self.assertEqual((rc, error), (4, ""))
+        with patch.object(issuer, "envelope_holds_over_all_valid", return_value=True):
+            forged, _, _ = issuer.derive_record(issuer.build_parser().parse_args(self.args()))
         self.assertFalse(self.out.exists())
-        forged = json.loads(out)
         self.assertEqual((forged["verdict"], forged["evidence"]["m"]), ("fail", 9))
         snapshot = self.snapshot()
         evidence = forged["evidence"]
@@ -515,10 +597,15 @@ class EpochContinuationTests(unittest.TestCase):
 
     def test_one_quantum_above_level_fails_without_writing(self):
         quantum = Decimal(1).scaleb(self.level.as_tuple().exponent)
+        self.assertEqual(continuation.equivalence_statistics(
+            [str(self.level + quantum)] + [str(self.level)] * 11, self.rule,
+        )["verdict"], "fail")
         self.build([Slot(str(self.level + quantum)), *[Slot(str(self.level))] * 11])
         rc, out, error = self.prepare()
-        self.assertEqual((rc, error), (4, ""))
-        self.assertEqual(json.loads(out)["verdict"], "fail")
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("unresolved_valid_row_exceeds_envelope", error)
+        self.assertIn("none (all valid rows resolved)", error)
         self.assertFalse(self.out.exists())
 
     def test_range_equality_passes_with_distinct_min_and_max(self):
@@ -531,10 +618,15 @@ class EpochContinuationTests(unittest.TestCase):
 
     def test_range_above_screen_fails_even_when_every_value_meets_level(self):
         low = self.level - self.screen - Decimal("0.000000000000001")
+        self.assertEqual(continuation.equivalence_statistics(
+            [str(low)] + [str(self.level)] * 11, self.rule,
+        )["verdict"], "fail")
         self.build([Slot(str(low)), *[Slot(str(self.level))] * 11])
         rc, out, error = self.prepare()
-        self.assertEqual((rc, error), (4, ""))
-        self.assertEqual(json.loads(out)["verdict"], "fail")
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("unresolved_valid_row_exceeds_envelope", error)
+        self.assertIn("none (all valid rows resolved)", error)
         self.assertFalse(self.out.exists())
 
     def test_full_precision_decimal_extrema_and_range_survive(self):
@@ -667,7 +759,7 @@ class EpochContinuationTests(unittest.TestCase):
         with self.issued(payload):
             loaded, details = self.load()
             self.assertEqual(loaded, ())
-            self.assertEqual(details[0]["detail"], "slots.b_fiducial_s")
+            self.assertEqual(details[0]["detail"], "slots.d12.b_fiducial_s_required_for_valid_row")
 
     def test_zero_retained_is_inconclusive(self):
         self.build([Slot("0.025", disposition="ordinary-invalid")] * 12)
@@ -822,18 +914,44 @@ class EpochContinuationTests(unittest.TestCase):
 
     def test_s9_level_fail_witness_preserves_false_comparison(self):
         quantum = Decimal(1).scaleb(self.level.as_tuple().exponent)
+        self.assertEqual(continuation.equivalence_statistics(
+            [str(self.level + quantum)] + [str(self.level)] * 11, self.rule,
+        )["verdict"], "fail")
         self.build([Slot(str(self.level + quantum)), *[Slot(str(self.level))] * 11])
         witness = Path(__file__).parent / "fixtures/epoch_continuation/s9-fail-level.json"
-        rc, _, error = self.prepare("--equivalence-record", str(witness))
-        self.assertEqual((rc, error), (4, ""))
+        # The prepare envelope refuses before witness projection. Exercise the
+        # unchanged S9 FAIL projection directly so its comparisons stay tested.
+        with patch.object(issuer, "envelope_holds_over_all_valid", return_value=True):
+            record, artifact, session = issuer.derive_record(issuer.build_parser().parse_args(self.args()))
+        projection = issuer._s9_projection(record, artifact, session)
+        expected = json.loads(witness.read_bytes())
+        for key in ("level_screen_comparison", "bracket_screen_comparison"):
+            self.assertEqual(projection[key], expected[key])
+        rc, out, error = self.prepare("--equivalence-record", str(witness))
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("unresolved_valid_row_exceeds_envelope", error)
         self.assertFalse(self.out.exists())
 
     def test_s9_bracket_fail_witness_preserves_false_comparison(self):
         low = self.level - self.screen - Decimal("0.000000000000001")
+        self.assertEqual(continuation.equivalence_statistics(
+            [str(low)] + [str(self.level)] * 11, self.rule,
+        )["verdict"], "fail")
         self.build([Slot(str(low)), *[Slot(str(self.level))] * 11])
         witness = Path(__file__).parent / "fixtures/epoch_continuation/s9-fail-bracket.json"
-        rc, _, error = self.prepare("--equivalence-record", str(witness))
-        self.assertEqual((rc, error), (4, ""))
+        # The prepare envelope refuses before witness projection. Exercise the
+        # unchanged S9 FAIL projection directly so its comparisons stay tested.
+        with patch.object(issuer, "envelope_holds_over_all_valid", return_value=True):
+            record, artifact, session = issuer.derive_record(issuer.build_parser().parse_args(self.args()))
+        projection = issuer._s9_projection(record, artifact, session)
+        expected = json.loads(witness.read_bytes())
+        for key in ("level_screen_comparison", "bracket_screen_comparison"):
+            self.assertEqual(projection[key], expected[key])
+        rc, out, error = self.prepare("--equivalence-record", str(witness))
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("unresolved_valid_row_exceeds_envelope", error)
         self.assertFalse(self.out.exists())
 
     def test_s9_extra_science_cannot_bypass_crosscheck(self):

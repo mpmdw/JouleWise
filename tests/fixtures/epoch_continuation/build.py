@@ -62,3 +62,27 @@ def registered_continuation(root: Path):
     value, registry = build_issued_continuation(root)
     with patch.dict(bracket.EPOCH_CONTINUATION_REGISTRY, registry, clear=True):
         yield value, registry[value["continuation_id"]]["path"]
+
+
+def append_open_capture_session(fixture: dict):
+    """Extend a terminal test ledger with a reserved capture still in flight."""
+    from joulewise.calibration_ledger import (
+        append_bracket_session_receipt, load_calibration_ledger_snapshot,
+    )
+    from tests.fixtures.epoch_bootstrap.build import TARGET_EPOCH, T1_BINDINGS
+
+    runs = fixture["runs"]
+    append_bracket_session_receipt(
+        fixture["ledger"], session_id="capture-in-flight", window_id="capture-window",
+        plan_id="capture-plan", plan_sha256="a" * 64, evidence_root_id="capture-evidence",
+        runs_root=runs,
+        slots={name: {"attempt_id": f"capture-{name}",
+                      "custody_locator": str(runs / "instrument_validation" / f"capture-{name}"),
+                      "identity_epoch": TARGET_EPOCH, "t1_bindings": T1_BINDINGS}
+               for name in ("pre", "post")},
+        head_pin_path=fixture["pin"], require_committed_pin=True, repo_root=fixture["root"],
+    )
+    return load_calibration_ledger_snapshot(
+        fixture["ledger"], fixture["pin"], require_committed_pin=True,
+        verify_custody=False, mode="read_replay", repo_root=fixture["root"],
+    )

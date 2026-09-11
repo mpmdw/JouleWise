@@ -1338,10 +1338,11 @@ def _validate_reserved_bracket_slot(
     identity_epoch: Mapping[str, Any],
     t1_bindings: Mapping[str, Any],
     require_committed_pin: bool = True,
+    ledger_snapshot: CalibrationLedgerSnapshot | None = None,
 ) -> None:
     """Authenticate the exact predeclared slot before capture state exists."""
 
-    snapshot = load_calibration_ledger_snapshot(
+    snapshot = ledger_snapshot if ledger_snapshot is not None else load_calibration_ledger_snapshot(
         ledger_path,
         head_pin_path,
         require_committed_pin=require_committed_pin,
@@ -1399,6 +1400,7 @@ class _CaptureLedgerLifecycle:
         slot: str | None = None,
         derivation_only: bool = False,
         require_committed_pin: bool = True,
+        preflight_snapshot: CalibrationLedgerSnapshot | None = None,
     ) -> None:
         if (session_id is None) != (slot is None):
             raise CalibrationLedgerError(RefusalCode.WRITER_BRACKET_ARGUMENTS)
@@ -1416,6 +1418,7 @@ class _CaptureLedgerLifecycle:
         self.slot = slot
         self.derivation_only = derivation_only
         self.require_committed_pin = require_committed_pin
+        self.preflight_snapshot = preflight_snapshot
         self.claim_id = (
             stable_bracket_claim_id(
                 session_id=session_id,
@@ -1497,7 +1500,7 @@ class _CaptureLedgerLifecycle:
                         ),
                     },
                 )
-            self._validate_slot()
+            self._validate_slot(ledger_snapshot=self.preflight_snapshot)
         try:
             _writer_stage(WriterStage.BEFORE_WRITER_LEASE)
             self.writer_lease.acquire()
@@ -1516,7 +1519,7 @@ class _CaptureLedgerLifecycle:
             self.writer_lease.release()
             raise
 
-    def _validate_slot(self) -> None:
+    def _validate_slot(self, *, ledger_snapshot: CalibrationLedgerSnapshot | None = None) -> None:
         assert self.session_id is not None and self.slot is not None
         _validate_reserved_bracket_slot(
             self.ledger_path,
@@ -1528,6 +1531,7 @@ class _CaptureLedgerLifecycle:
             identity_epoch=self.identity_epoch,
             t1_bindings=self.t1_bindings,
             require_committed_pin=self.require_committed_pin,
+            ledger_snapshot=ledger_snapshot,
         )
 
     def _begin_once(self) -> None:
@@ -1942,9 +1946,17 @@ def main(argv: list[str] | None = None) -> int:
     preflight_systematic_screen_s: Decimal | None
     acceptance_preflight: dict[str, Any] = {}
     screen_basis: dict[str, Any] | None = None
+    # Authenticate continued epochs before any capture state exists. Reuse this
+    # snapshot for the early slot check; the under-lease check still reloads it.
+    preflight_snapshot = load_calibration_ledger_snapshot(
+        args.ledger, args.head_pin, require_committed_pin=True,
+        verify_custody=True, mode="issuing",
+    )
     if args.derivation_only:
         try:
-            _level_screen_s, basis = _derivation_only_screen_basis()
+            _level_screen_s, basis = _derivation_only_screen_basis(
+                ledger_snapshot=preflight_snapshot,
+            )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
                 RefusalCode.FROZEN_PROTOCOL_INVALID,
@@ -1995,6 +2007,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             preflight_systematic_screen_s = _derive_preflight_systematic_screen_s(
                 planned_epoch, preflight_record=acceptance_preflight,
+                ledger_snapshot=preflight_snapshot,
             )
         except _AcceptancePreflightError as exc:
             return emit_refusal(
@@ -2039,6 +2052,7 @@ def main(argv: list[str] | None = None) -> int:
         session_id=args.session_id if bracket_mode else None,
         slot=args.slot if bracket_mode else None,
         derivation_only=args.derivation_only,
+        preflight_snapshot=preflight_snapshot,
     )
     try:
         if bracket_mode and args.slot == "post":

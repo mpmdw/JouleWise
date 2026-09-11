@@ -121,6 +121,7 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
         })
         acknowledged.append(observation.attempt_id)
         if disposition == "valid":
+            _refuse(lexeme is None, f"slots.{name}.b_fiducial_s_required_for_valid_row")
             _decimal(lexeme, f"slots.{name}.b_fiducial_s")
             all_valid.append(lexeme)
             if not resolved:
@@ -133,10 +134,11 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
             _refuse(epoch != continued_epoch, f"slots.{name}.identity_epoch_not_unanimous")
             _refuse(epoch == artifact["identity_epoch"], "continued_identity_epoch_unchanged")
             retained.append(lexeme)
-    # Fully resolved nights retain the ordinary FAIL/INCONCLUSIVE exits.
-    # Unresolved rows cannot remove a failing bound from the envelope.
-    _refuse(bool(unresolved_valid) and not envelope_holds_over_all_valid(all_valid, rule),
-            "unresolved_valid_row_exceeds_envelope: " + ", ".join(unresolved_valid)
+    # Apply the same unconditional envelope gate as the loader, independently
+    # of resolution, the retained count, and the statistics verdict.
+    _refuse(not envelope_holds_over_all_valid(all_valid, rule),
+            "unresolved_valid_row_exceeds_envelope: unresolved slots: "
+            + (", ".join(unresolved_valid) or "none (all valid rows resolved)")
             + "; the desk reports it to Ed for a written ruling")
     statistics = equivalence_statistics(retained, rule)
     record = {

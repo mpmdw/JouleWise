@@ -50,7 +50,7 @@ CUTS = (
      PREFLIGHT + "snapshot_preflight_refuses_absent_or_nonterminal_continuation_session"),
     (WRITER, '"ledger_snapshot" if ledger_snapshot is not None else "registry_pins_only"',
      '"registry_pins_only"', PREFLIGHT + "snapshot_preflight_authenticates_terminal_session_and_records_basis"),
-    (WRITER, "        ledger_snapshot=ledger_snapshot,\n", "        ledger_snapshot=None,\n",
+    (WRITER, "acceptance_path=path, preflight_record=preflight_record,\n        ledger_snapshot=ledger_snapshot,", "acceptance_path=path, preflight_record=preflight_record,\n        ledger_snapshot=None,",
      PREFLIGHT + "derivation_basis_forwards_snapshot_and_refuses_unbacked_continuation"),
     (WRITER, "not isinstance(expected_epoch, Mapping)\n        or not isinstance(acceptance_id, str)",
      "not isinstance(expected_epoch, Mapping)\n        or False",
@@ -76,7 +76,39 @@ CUTS = (
     (WRITER, "not isinstance(expected_epoch, Mapping)\n        or not isinstance(acceptance_id, str)\n        or not acceptance_id",
      "not isinstance(expected_epoch, Mapping)\n        or not isinstance(acceptance_id, str)\n        or False",
      PREFLIGHT + "invalid_acceptance_id_returns_named_cli_refusal_without_traceback"),
+    (WRITER, "planned_epoch, preflight_record=acceptance_preflight,\n                ledger_snapshot=preflight_snapshot,",
+     "planned_epoch, preflight_record=acceptance_preflight,\n                ledger_snapshot=None,", CAPTURE),
+    (WRITER, "_level_screen_s, basis = _derivation_only_screen_basis(\n                ledger_snapshot=preflight_snapshot,",
+     "_level_screen_s, basis = _derivation_only_screen_basis(\n                ledger_snapshot=None,",
+     PREFLIGHT + "derivation_only_cli_uses_snapshot_before_epoch_guard"),
 )
+
+
+# These caller/document cuts need no on-disk mutation. Python is compiled in a
+# fresh interpreter; the documentation read is substituted only for its test.
+IN_MEMORY_PATHS = {
+    "scripts/generate_g2a_probe_inputs.py",
+    "scripts/write_derivation_night_inputs.py",
+    "docs/contracts/d078_reason_registry_amendment.md",
+}
+
+
+def run_in_memory_cut(relative: str, source: str, test: str):
+    prelude = "import importlib, unittest\nfrom pathlib import Path\nfrom unittest.mock import patch\n"
+    if relative.endswith(".py"):
+        module = relative[:-3].replace("/", ".")
+        code = prelude + f"module = importlib.import_module({module!r})\n"
+        code += f"exec(compile({source!r}, {relative!r}, 'exec'), vars(module))\n"
+        code += f"unittest.main(module=None, argv=['cut', {test!r}])\n"
+    else:
+        code = prelude + f"target = Path({str(ROOT / relative)!r})\noriginal = Path.read_text\n"
+        code += f"def read(path, *args, **kwargs):\n    return {source!r} if path.resolve() == target else original(path, *args, **kwargs)\n"
+        code += f"with patch.object(Path, 'read_text', read):\n    unittest.main(module=None, argv=['cut', {test!r}])\n"
+    return subprocess.run(
+        [sys.executable, "-c", code], cwd=ROOT,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True, text=True, check=False,
+    )
 
 
 def main() -> int:
@@ -94,15 +126,19 @@ def main() -> int:
         source = originals[path].decode()
         if source.count(expression) != 1:
             raise AssertionError(f"W{index:02d}: mutation expression is not unique")
-        try:
-            path.write_text(source.replace(expression, replacement), encoding="utf-8")
-            result = subprocess.run(
-                [sys.executable, "-m", "unittest", test], cwd=ROOT,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-                capture_output=True, text=True, check=False,
-            )
-        finally:
-            path.write_bytes(originals[path])
+        mutated = source.replace(expression, replacement)
+        if relative in IN_MEMORY_PATHS:
+            result = run_in_memory_cut(relative, mutated, test)
+        else:
+            try:
+                path.write_text(mutated, encoding="utf-8")
+                result = subprocess.run(
+                    [sys.executable, "-m", "unittest", test], cwd=ROOT,
+                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                    capture_output=True, text=True, check=False,
+                )
+            finally:
+                path.write_bytes(originals[path])
         assert all(hashlib.sha256(item.read_bytes()).digest() == digest for item, digest in hashes.items())
         output = result.stdout + result.stderr
         killed = result.returncode == 1 and "Ran 1 test in " in output and (
