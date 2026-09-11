@@ -59,3 +59,6 @@ Delta bd22ed19..291725b3, authored by the magistrate at the bench (record 127): 
 
 ## Row 10 pass 6 (record 131) on 7107657d: CLEAN — row 10 discharged on the PR head
 Test-only (+27/−26, one file); `DeskEpochWatchTests` 19 OK; in-memory mutant (rc flag deleted) KILLED: `(0, 0) != (0, 3)`; the rotated pre-registration parses as a valid registration naming a different binary (not the unusable branch); no leftovers. Replay 9 stopped (its own note: a 10-minute background timeout in the seat's launch would have killed it anyway — replay seats must launch detached; replay 10's liveness is checked at the bench). Remaining: replay 10 (row 9, record 130) and CI (row 11).
+
+## Row 9 (record 130) — replay 10 at 7107657d8b1000c03be13060ca9a2caa821468a5: PASS; ledger complete on the PR head
+`shard_tests.py --workers 4 --split`, 18:59:28–19:44:36 PDT (45 min 08 s, machine otherwise idle): `WORKERS SUMMARY shards=4 modules=228 tests=5897 failures=0 errors=0 skipped=109 failed_shards=none result=PASS`; shards 1550/1196/1728/1423; the record-35 controller test ran and passed (no waiver carried). Row 11: CI on 7107657d — all eighteen test checks PASS (runs 34552826178); the gate-ledger check turns green when the body's rows name this head. Row 10: six passes (117/120/122/126/129/131), the last two on this head. Row 12: this record, closed on 7107657d. Verdict: MERGE.
