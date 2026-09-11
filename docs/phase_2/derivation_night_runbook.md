@@ -500,9 +500,12 @@ was written; filling them reopens no scientific rule. The plan's
 `registration_path` is `night_gate.D166_REGISTRATION_PATH`, the D-166 literal
 in `joulewise/night_gate.py`: the fixed repository-relative path
 `configs/campaigns/d117_contrast_v5/d166_dominance_criterion_registration.json`.
-D-166 records the D-117 contrast campaign's workload-comparison rule,
-the file required for this receipt class by C1, the night gate's registration
-check. The scientific pre-registration is bound to this night by H, the
+D-166 records the D-117 contrast campaign's workload-comparison rule. It is
+the file that C1, the night gate's registration check, requires for this
+night's receipt class. A receipt class is the plan's category, and it selects
+which gate checks apply; this night's class is `DIAGNOSTIC_NO_PACK`, a night
+that runs no measurement pack (§1.1 defines it in full). The scientific
+pre-registration is bound to this night by H, the
 measurement commit whose tree contains it and which the plan pins, and by
 the digest recorded below and in §1.5.
 
