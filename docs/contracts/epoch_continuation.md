@@ -60,7 +60,8 @@ a bound. The envelope must hold over every disclosed valid bound, resolved
 or not; `m` counts the resolved. Invalid rows do not enter the envelope.
 Every `valid` row with `anchor_v3_resolved: false` must name a non-empty
 `anchor_v3_detail`; null or empty detail refuses with
-`slots.anchor_v3_detail_required`. The reader enforces this audit trail but
+`slots.anchor_v3_detail_required`. A resolved row carries a null detail (a
+detail on a resolved row refuses `slots.anchor_v3_detail`). The reader enforces this audit trail but
 cannot replay anchor resolution from the ledger alone; the issuer owns that
 primary-evidence check.
 

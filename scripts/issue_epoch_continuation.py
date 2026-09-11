@@ -3,12 +3,18 @@
 
 A continuation lets an unchanged acceptance judge another identity epoch (the
 machine's six-field identity). A judged epoch is an identity that acceptance
-may evaluate. Acknowledged rows are exactly the equivalence night's finalized
-attempts; these bypass only the range-expansion trigger. Systematic failures
-remain triggers and prevent candidate preparation. The level screen caps
-every valid capture's bound, resolved or not. The bracket screen caps their
-range, maximum minus minimum. Both come from the prior
-acceptance's ratified operatives: no threshold is fitted to this night.
+may evaluate. The EQUIVALENCE NIGHT is the one derivation-kind ledger session
+of twelve capture slots run on the new epoch and judged, after it closes,
+against the envelope the acceptance already carries (directive issue 316).
+Acknowledged rows are exactly that night's finalized attempts. The
+RANGE-EXPANSION TRIGGER is the acceptance's own re-derivation trigger that
+fires when a new valid capture on a judged epoch falls outside the corpus's
+observed range; acknowledged rows bypass only that trigger, because the
+equivalence rule already compared them against the envelope. Systematic
+failures remain triggers and prevent candidate preparation. The level screen
+caps every valid capture's bound, resolved or not. The bracket screen caps
+their range, maximum minus minimum. Both come from the prior acceptance's
+ratified operatives: no threshold is fitted to this night.
 """
 
 from __future__ import annotations

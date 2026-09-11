@@ -188,9 +188,11 @@ is empty when none refused. An `OSError` detail carries its exception class and
 registry-relative path (or the path relative to the repository root), never the
 OS message or absolute filename. Epoch mismatch refusals carry the same
 preflight record in their context. Derivation-only captures include these
-judgment fields in `screen_basis` instead of `acceptance_preflight`. Until the
-CLI supplies its ledger snapshot here, a file-authenticated continuation can
-pass capture preflight but fail the session cross-check at claim time.
+judgment fields in `screen_basis` instead of `acceptance_preflight`. The
+capture writer supplies the custody-verified ledger snapshot it loads at
+preflight, so a continuation is cross-checked against the ledger session here
+exactly as it is at claim time; `judged_epochs_basis` records `ledger_snapshot`
+on that path.
 
 The prior artifact's level screen is not applied to the capture. The writer
 sets `preflight_systematic_screen_s = None` and skips the comparison, so the
