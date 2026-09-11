@@ -3,7 +3,8 @@
 `test_epoch_continuation.py` builds disposable committed ledgers with
 `tests.fixtures.epoch_bootstrap.build.build_derivation_ledger`. The continuation
 JSON is produced by `issue_epoch_continuation.prepare-candidate` during each
-test. Only fixture byte pins are temporarily registered; acceptance bytes and
+test, then deliberately altered and resealed for authentication counterexamples
+and the previously issued systematic-failure case. Only fixture byte pins are temporarily registered; acceptance bytes and
 the issued acceptance registry remain unchanged.
 
 The three `s9-*.json` witnesses were emitted independently by
@@ -20,6 +21,13 @@ for the expression cuts. They replace compiled function copies only, run one
 killing test each, restore the original functions, and verify source-file
 SHA-256 equality after each cut. These are synthetic software checks, not
 live-night evidence.
+
+The round-three cuts also remove the ledger completeness checks and required
+anchor exclusion detail, restore the systematic-failure acknowledgment
+exemption, and remove the preparer's systematic-night refusal. The completeness
+counterexample starts from an honest nine-row FAIL and forges a six-row PASS;
+the loader must refuse the three hidden finalized rows. Separate cuts cover
+slot/attempt equality and observations missing from the session index.
 
 `build.py` supplies the same tool-produced fixture to the writer and G2-a
 integration tests. The writer CLI test installs a continuation pin only in

@@ -43,6 +43,11 @@ original decimal text; numerically equal spellings are not interchangeable
 for this check. Primary-byte, content-ID, and lexeme disagreement refuse the
 whole operation.
 
+If any finalized row is `systematic-invalid`, preparation refuses with
+`night_contains_systematic_failure` naming its slot, exits 3, and writes
+nothing. Such a continuation would be stale on arrival: the desk reports the
+failure to Ed under D-102's systematic-failure trigger.
+
 **Anchor-v3 resolution** is the outcome returned by the acceptance issuer's
 `anchor_v3_replay_outcome` from the authenticated, stored clock-anchor
 record. This replays the recorded result; it does not perform a new raw-trace
@@ -51,6 +56,11 @@ anchor-v3 result is resolved. Every retained observation must carry the same
 identity epoch, differing from the acceptance's original epoch in at least
 one field. Unresolved and invalid observations are recorded and excluded from
 the arithmetic; their exclusion is never based on the magnitude of a bound.
+Every `valid` row with `anchor_v3_resolved: false` must name a non-empty
+`anchor_v3_detail`; null or empty detail refuses with
+`slots.anchor_v3_detail_required`. The reader enforces this audit trail but
+cannot replay anchor resolution from the ledger alone; the issuer owns that
+primary-evidence check.
 
 Let `m` be the number of retained values. Let `L` be the acceptance's registered
 `preflight_level_screen_s`, and `S` its registered `bracket_screen_s`. Both
@@ -124,16 +134,26 @@ original. The rule, retained count, extrema, range and verdict must reproduce.
 With a ledger snapshot, the reader also requires the cited session to exist,
 have derivation kind, be terminal in the recorded state, and declare the
 recorded slots. The snapshot cannot precede the recorded head sequence.
-Every acknowledged attempt must be finalized in that session and present in
+The file's finalized `(slot, attempt_id)` pairs must equal the session's
+`finalized_slots` pairs, or it refuses with `ledger_finalized_slots_mismatch`.
+A file slot marked unfinalized must be absent from that ledger index; hiding
+a finalized row behind an unused-slot label refuses with
+`hidden_finalized_row`. Every ledger observation belonging to the session
+must also appear in the file, including invalid and unresolved rows; an
+undisclosed observation refuses with `hidden_finalized_row` even if absent
+from the session index. Every acknowledged attempt must be present in
 the observation lookup with the same content ID, disposition, and bound
-lexeme. Retained attempts must carry the continued epoch. Additional ledger
+lexeme. Thus `m` cannot exceed the ledger session's valid-row count. Retained
+attempts must carry the continued epoch. Additional ledger
 observations remain eligible for future trigger evaluation; a continuation
 never acknowledges an entire future epoch.
 
 Invalid entries are ignored individually. Callers may collect named refusal
-details through `refusal_details`. Bracket evaluation always records these as
-`acceptance.continuation_refusals`, with reason
-`calibration_epoch_continuation_invalid` and the precise failed field. If no
+details through `refusal_details`. Bracket evaluation records these as
+`acceptance.continuation_refusals` only when non-empty, with reason
+`calibration_epoch_continuation_invalid` and the precise failed field. The
+field is absent otherwise, preserving stable receipt hashes and the
+pre-continuation evaluation record when no continuation is registered. If no
 judged epoch matches, freshness is stale and carries that reason; the existing
 claim refusal `calibration_acceptance_bound_stale` remains the outer result.
 A bad continuation does not revoke the acceptance's original epoch or another
@@ -143,7 +163,8 @@ valid continuation. The diagnostic is registered in the governing
 When `ledger_snapshot=None`, only the session cross-check is skipped; all file,
 acceptance, schema, and arithmetic checks still run. A returned continuation
 then says `ledger_cross_check: "skipped_no_ledger_snapshot"`; with a snapshot
-it says `verified_terminal_derivation_session`. This weaker path is available
+it says `verified_terminal_derivation_session` only after all completeness and
+row checks above hold. This weaker path is available
 for identity-only preflight consumers that do not own a snapshot. Claim-time
 bracket evaluation always requires a valid snapshot and never uses it.
 
@@ -184,10 +205,17 @@ acceptance applies the following four rules:
    challenges the acceptance if its value is below the original corpus
    minimum or above its maximum. Exempt exactly the acknowledged attempt IDs
    of authenticated continuations.
-4. **Systematic failure.** A later `systematic-invalid` observation from any
-   judged epoch challenges the level screen. Apply the same exact-attempt
-   exemption. Future derivation sessions are not exempt merely because of
-   their kind.
+4. **Systematic failure.** Every `systematic-invalid` observation from every
+   judged epoch challenges the level screen, including the equivalence
+   night's acknowledged rows. No acknowledgment exemption applies. Future
+   derivation sessions participate too.
+
+The exemption is asymmetric because the equivalence rule compared retained
+values against the envelope; it never examined a systematic failure.
+Acknowledgment therefore exempts range expansion only. D-102's
+systematic-failure trigger keeps its say, and preparation refuses a night
+containing such a failure rather than producing a continuation already stale
+under that trigger. Acknowledged valid rows still count toward corpus doubling.
 
 Protocol and estimator byte-change checks, custody, endpoint eligibility, the
 unclassifiable-observation refusal, the trigger-name vocabulary, and all
@@ -216,8 +244,8 @@ would incorrectly stale the acceptance. Twenty more distinct valid 25G83
 contents bring that epoch to 34 and trigger doubling. Independently, a new
 ordinary 25G83 attempt at `0.020` triggers range expansion immediately, and a
 new systematic-invalid attempt triggers systematic failure. The same applies
-to attempts in a later derivation session: only the specifically acknowledged
-night is exempt from these two triggers.
+to attempts in a later derivation session. Only the specifically acknowledged
+night is exempt from range expansion; systematic failures trigger even there.
 
 ## Commands and consumer census
 

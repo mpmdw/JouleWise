@@ -3,10 +3,11 @@
 
 A continuation lets an unchanged acceptance judge another identity epoch (the
 machine's six-field identity). A judged epoch is an identity that acceptance
-may evaluate. Acknowledged rows are exactly the finalized attempts already
-judged by the equivalence night; only these bypass later range/systematic
-triggers. The level screen caps each retained capture's bound. The bracket
-screen caps their range, maximum minus minimum. Both come from the prior
+may evaluate. Acknowledged rows are exactly the equivalence night's finalized
+attempts; these bypass only the range-expansion trigger. Systematic failures
+remain triggers and prevent candidate preparation. The level screen caps
+each retained capture's bound. The bracket screen caps their range, maximum
+minus minimum. Both come from the prior
 acceptance's ratified operatives: no threshold is fitted to this night.
 """
 
@@ -74,6 +75,10 @@ def derive_record(args: argparse.Namespace) -> tuple[dict[str, Any], Mapping[str
     _refuse(session.state not in TERMINAL_STATES, "session_not_terminal")
     _refuse(len(session.declared_slots) != DECLARED_SLOT_COUNT, "session_requires_12_declared_slots")
     _refuse(bool(snapshot.refusal_reasons), "ledger: " + ", ".join(snapshot.refusal_reasons))
+    for name, observation in session.finalized_slots.items():
+        _refuse(observation.classification_disposition == "systematic-invalid",
+                f"night_contains_systematic_failure: slots.{name}; continuation would be stale on arrival; "
+                "the desk reports the failure to Ed under D-102's systematic-failure trigger")
     continued_epoch: dict[str, Any] | None = None
     slots: list[dict[str, Any]] = []
     retained: list[str] = []

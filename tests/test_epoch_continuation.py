@@ -288,7 +288,7 @@ class EpochContinuationTests(unittest.TestCase):
                 (replace(snapshot, bracket_sessions=()), "session_absent"),
                 (replace(snapshot, bracket_sessions=(replace(session, state="open"),)), "session_not_terminal"),
                 (replace(snapshot, bracket_sessions=(replace(session, session_kind="bracket"),)), "session_not_derivation"),
-                (replace(snapshot, bracket_sessions=(replace(session, finalized_slots={}),)), "acknowledged_attempt_missing"),
+                (replace(snapshot, bracket_sessions=(replace(session, finalized_slots={}),)), "ledger_finalized_slots_mismatch"),
                 (replace(snapshot, observations=snapshot.observations[1:]), "acknowledged_attempt_missing"),
             ]
             for mutated, detail in cases:
@@ -298,6 +298,69 @@ class EpochContinuationTests(unittest.TestCase):
                     self.assertIn(detail, details[0]["detail"])
                     result, _ = self.evaluate(night=mutated)
                     self.assertEqual(result["acceptance"]["freshness"]["reason"], continuation.CONTINUATION_INVALID)
+
+    def test_failed_nine_row_night_cannot_hide_three_finalized_rows_to_pass(self):
+        self.build([Slot("0.025")] * 6 + [Slot(str(self.level + Decimal("0.001")))] * 3
+                   + [Slot("0.025")] * 3, fill_slots=9, abort_reason="window_exhausted")
+        rc, out, error = self.prepare()
+        self.assertEqual((rc, error), (4, ""))
+        self.assertFalse(self.out.exists())
+        forged = json.loads(out)
+        self.assertEqual(forged["verdict"], "fail")
+        self.assertEqual(forged["evidence"]["m"], 9)
+        snapshot = self.snapshot()
+        self.assertEqual(len(snapshot.bracket_session_by_id[SESSION_ID].finalized_slots), 9)
+        evidence = forged["evidence"]
+        # Reproduce refuter 170: disclose the six low rows, relabel the three
+        # over-screen rows as unused, then reseal and pin the forged PASS.
+        for index in range(6, 9):
+            evidence["slots"][index] = {
+                **evidence["slots"][9], "slot": evidence["slots"][index]["slot"],
+            }
+        evidence.update({
+            "acknowledged_attempt_ids": [slot["attempt_id"] for slot in evidence["slots"][:6]],
+            "m": 6, "retained_min_s": "0.025", "retained_max_s": "0.025", "retained_range_s": "0.000",
+        })
+        forged.update(verdict="pass", continuation_id="forged-six-of-nine")
+        with self.issued(forged):
+            loaded, details = self.load(snapshot)
+            self.assertEqual(loaded, ())
+            self.assertEqual(details[0]["detail"], "hidden_finalized_row")
+
+    def test_finalized_slots_must_match_ledger_attempt_ids(self):
+        payload = self.candidate()
+        payload["evidence"]["slots"][0]["attempt_id"] = "forged-attempt"
+        payload["evidence"]["acknowledged_attempt_ids"][0] = "forged-attempt"
+        with self.issued(payload):
+            loaded, details = self.load()
+            self.assertEqual(loaded, ())
+            self.assertEqual(details[0]["detail"], "ledger_finalized_slots_mismatch")
+
+    def test_every_session_observation_must_be_disclosed(self):
+        self.build(fill_slots=6, abort_reason="window_exhausted")
+        with self.issued():
+            snapshot = self.snapshot()
+            session = snapshot.bracket_session_by_id[SESSION_ID]
+            # A supplied snapshot must not hide a session observation simply
+            # because its finalized_slots index omitted the row too.
+            extra = replace(snapshot.observations[0], sequence=snapshot.head_sequence + 1,
+                            attempt_id=SESSION_ID + "-d07", bracket_slot=session.declared_slots[6])
+            snapshot = replace(snapshot, observations=(*snapshot.observations, extra))
+            loaded, details = self.load(snapshot)
+            self.assertEqual(loaded, ())
+            self.assertEqual(details[0]["detail"], "hidden_finalized_row")
+
+    def test_excluded_rows_still_crosscheck_disposition_and_exact_lexeme(self):
+        self.build([Slot("0.025")] * 6 + [Slot("0.9", disposition="ordinary-invalid")] * 6)
+        payload = self.candidate()
+        for field, value in (("disposition", "systematic-invalid"), ("b_fiducial_s", "0.90")):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(payload)
+                changed["evidence"]["slots"][-1][field] = value
+                with self.issued(changed):
+                    loaded, details = self.load()
+                    self.assertEqual(loaded, ())
+                    self.assertEqual(details[0]["detail"], "acknowledged_row_disagrees")
 
     def test_acknowledged_content_id_must_match_snapshot(self):
         with self.issued():
@@ -341,12 +404,32 @@ class EpochContinuationTests(unittest.TestCase):
             self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
             self.assertIn("new_valid_same_identity_capture_expands_observed_range", result["acceptance"]["prospective_rederivation"]["observed_triggers"])
 
-    def test_systematic_acknowledged_row_exempt_but_ordinary_row_stales(self):
-        self.build([Slot("0.040", disposition="systematic-invalid"), *[Slot("0.025")] * 11])
-        with self.issued():
-            result, reasons = self.evaluate()
-            self.assertEqual(reasons, ())
-            row = next(row for row in self.snapshot().observations if row.disposition == "systematic-invalid")
+    def test_systematic_row_in_the_equivalence_night_still_fires(self):
+        payload = self.candidate()
+        snapshot = self.snapshot()
+        session = snapshot.bracket_session_by_id[SESSION_ID]
+        name, original = next(iter(session.finalized_slots.items()))
+        row = replace(original, disposition="systematic-invalid")
+        # Model a previously issued continuation: today's preparer refuses
+        # this night, but evaluation must still catch an issued failure row.
+        payload["evidence"]["slots"][0]["disposition"] = "systematic-invalid"
+        payload["evidence"]["m"] = 11
+        night = replace(snapshot,
+            observations=tuple(row if item.attempt_id == row.attempt_id else item for item in snapshot.observations),
+            bracket_sessions=(replace(session, finalized_slots={**session.finalized_slots, name: row}),))
+        with self.issued(payload):
+            loaded, details = self.load(night)
+            self.assertEqual(details, [])
+            self.assertEqual(loaded[0].ledger_cross_check, "verified_terminal_derivation_session")
+            self.assertIn(row.attempt_id, loaded[0].acknowledged_attempt_ids)
+            result, reasons = self.evaluate(night=night)
+            self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
+            self.assertEqual(result["acceptance"]["prospective_rederivation"]["observed_triggers"], ["new_systematic_failure_challenges_preflight_screen"])
+        # An ordinary systematic failure independently fires, with a healthy
+        # equivalence night so the first case cannot mask a broken trigger.
+        payload["evidence"]["slots"][0]["disposition"] = "valid"
+        payload["evidence"]["m"] = 12
+        with self.issued(payload):
             hashes = {name: hashlib.sha256(f"ordinary-systematic-{name}".encode()).hexdigest()
                       for name in ("manifest.json", "instrument_evidence.json")}
             row = replace(
@@ -359,6 +442,16 @@ class EpochContinuationTests(unittest.TestCase):
             result, reasons = self.evaluate(extra_rows=(row,))
             self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
             self.assertEqual(result["acceptance"]["prospective_rederivation"]["observed_triggers"], ["new_systematic_failure_challenges_preflight_screen"])
+
+    def test_prepare_refuses_systematic_failure_night_without_writing(self):
+        self.build([Slot("0.025")] * 11 + [Slot("0.025", disposition="systematic-invalid")])
+        rc, out, error = self.prepare()
+        self.assertEqual(rc, 3)
+        self.assertEqual(out, "")
+        self.assertIn("night_contains_systematic_failure: slots.d12", error)
+        self.assertIn("stale on arrival", error)
+        self.assertIn("the desk reports the failure to Ed under D-102's systematic-failure trigger", error)
+        self.assertFalse(self.out.exists())
 
     def test_level_equality_passes(self):
         self.build([Slot(str(self.level))] * 12)
@@ -413,6 +506,22 @@ class EpochContinuationTests(unittest.TestCase):
             loaded, details = self.load()
             self.assertEqual(len(loaded), 1)
             self.assertEqual(details, [])
+
+    def test_unresolved_valid_row_requires_nonempty_anchor_detail(self):
+        self.build([Slot("0.025")] * 6 + [Slot("0.9", unresolved_detail="affine_clock_fit_empty")] * 6)
+        payload = self.candidate()
+        with self.issued(payload):
+            loaded, details = self.load()
+            self.assertEqual(len(loaded), 1)
+            self.assertEqual(details, [])
+        for detail in (None, ""):
+            with self.subTest(detail=detail):
+                changed = copy.deepcopy(payload)
+                changed["evidence"]["slots"][-1]["anchor_v3_detail"] = detail
+                with self.issued(changed):
+                    loaded, details = self.load()
+                    self.assertEqual(loaded, ())
+                    self.assertEqual(details[0]["detail"], "slots.anchor_v3_detail_required")
 
     def test_zero_retained_is_inconclusive(self):
         self.build([Slot("0.025", disposition="ordinary-invalid")] * 12)

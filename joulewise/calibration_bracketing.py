@@ -2357,8 +2357,9 @@ def evaluate_calibration_bracket(
     ]
     if any(count >= corpus_doubling_threshold for count in valid_counts_by_epoch):
         observed_triggers.append(corpus_doubling_trigger)
-    # A continuation judges only its named finalized rows. Later derivation
-    # sessions and ordinary captures still participate in both triggers.
+    # Equivalence compares retained values against the envelope, so only
+    # range expansion exempts the acknowledged rows. Systematic failures
+    # remain triggers even within the equivalence night.
     acknowledged_attempt_ids = {
         attempt_id for continuation in continuations
         for attempt_id in continuation.acknowledged_attempt_ids
@@ -2380,7 +2381,6 @@ def evaluate_calibration_bracket(
         )
     if any(
         observation.disposition == "systematic-invalid"
-        and observation.attempt_id not in acknowledged_attempt_ids
         and dict(observation.identity_epoch) in judged_epochs
         for observation in new_observations
     ):

@@ -1,7 +1,7 @@
 """Authenticated additional identity epochs judged by an unchanged acceptance.
 
 The candidate issuer owns primary-evidence replay. This reader authenticates
-issued bytes and, when given a snapshot, checks the acknowledged session rows.
+issued bytes and, when given a snapshot, checks every finalized session row.
 """
 
 from __future__ import annotations
@@ -201,6 +201,8 @@ def authenticate_epoch_continuation(
         _require(type(slot["anchor_v3_resolved"]) is bool, "slots.anchor_v3_resolved")
         _require(slot["anchor_v3_detail"] is None or isinstance(slot["anchor_v3_detail"], str), "slots.anchor_v3_detail")
         _require(not slot["anchor_v3_resolved"] or slot["anchor_v3_detail"] is None, "slots.anchor_v3_detail")
+        _require(slot["disposition"] != "valid" or slot["anchor_v3_resolved"]
+                 or bool(slot["anchor_v3_detail"]), "slots.anchor_v3_detail_required")
         if slot["content_id"] is None:
             _require(evidence["session_state"] == "aborted" and slot["disposition"] in {"window_exhausted", "no_row"}
                      and slot["attempt_id"] is None
@@ -231,6 +233,16 @@ def authenticate_epoch_continuation(
         _require(list(session.declared_slots) == declared, "session_declared_slots")
         _require(ledger_snapshot.ledger_schema == ledger["ledger_schema"]
                  and ledger_snapshot.head_sequence >= ledger["head_sequence"], "ledger_head_precedes_continuation")
+        file_finalized = {(slot["slot"], slot["attempt_id"]) for slot in finalized}
+        ledger_finalized = {(name, row.attempt_id) for name, row in session.finalized_slots.items()}
+        # Check absence before equality so a finalized row relabelled as an
+        # unused opportunity is reported explicitly, even if the subset passes.
+        _require(all(slot["slot"] not in session.finalized_slots
+                     for slot in slots if slot["content_id"] is None), "hidden_finalized_row")
+        _require(file_finalized == ledger_finalized, "ledger_finalized_slots_mismatch")
+        _require(all((row.bracket_slot, row.attempt_id) in file_finalized
+                     for row in ledger_snapshot.observations
+                     if row.bracket_session_id == session.session_id), "hidden_finalized_row")
         for slot in finalized:
             row = session.finalized_slots.get(slot["slot"])
             _require(row is not None and row.attempt_id == slot["attempt_id"], "acknowledged_attempt_missing")

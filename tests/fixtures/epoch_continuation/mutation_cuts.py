@@ -19,9 +19,18 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise import calibration_bracketing as bracket
 from joulewise import calibration_epoch_continuation as continuation
 from scripts import issue_epoch_continuation as issuer
 
+
+CONVERSE_CHECKS = '''        _require(all(slot["slot"] not in session.finalized_slots
+                     for slot in slots if slot["content_id"] is None), "hidden_finalized_row")
+        _require(file_finalized == ledger_finalized, "ledger_finalized_slots_mismatch")
+        _require(all((row.bracket_slot, row.attempt_id) in file_finalized
+                     for row in ledger_snapshot.observations
+                     if row.bracket_session_id == session.session_id), "hidden_finalized_row")
+'''
 
 # Function, original expression, mutation, single killing test.
 CUTS = (
@@ -43,11 +52,20 @@ CUTS = (
     (issuer, "_s9_projection", 'Decimal(spread) <= Decimal(rule["operative_bracket_screen_s"])', 'Decimal(rule["operative_bracket_screen_s"]) <= Decimal(rule["operative_bracket_screen_s"])', "s9_bracket_fail_witness_preserves_false_comparison"),
     (issuer, "_s9_projection", 'Decimal(spread) <= Decimal(rule["operative_bracket_screen_s"])', "Decimal(spread) <= Decimal(spread)", "s9_bracket_fail_witness_preserves_false_comparison"),
     (continuation, "authenticate_epoch_continuation", 'file_sha == registered.get("file_sha256")', "True", "rotated_byte_surfaces_invalid_and_stale"),
+    (continuation, "authenticate_epoch_continuation", CONVERSE_CHECKS, "", "failed_nine_row_night_cannot_hide_three_finalized_rows_to_pass"),
+    (continuation, "authenticate_epoch_continuation", 'bool(slot["anchor_v3_detail"])', "True", "unresolved_valid_row_requires_nonempty_anchor_detail"),
+    (bracket, "evaluate_calibration_bracket", 'observation.disposition == "systematic-invalid"\n        and dict(observation.identity_epoch) in judged_epochs',
+     'observation.disposition == "systematic-invalid"\n        and observation.attempt_id not in acknowledged_attempt_ids\n        and dict(observation.identity_epoch) in judged_epochs',
+     "systematic_row_in_the_equivalence_night_still_fires"),
+    (issuer, "derive_record", 'observation.classification_disposition == "systematic-invalid"', "False", "prepare_refuses_systematic_failure_night_without_writing"),
+    (continuation, "authenticate_epoch_continuation", "file_finalized == ledger_finalized", "True", "finalized_slots_must_match_ledger_attempt_ids"),
+    (continuation, "authenticate_epoch_continuation", 'all((row.bracket_slot, row.attempt_id) in file_finalized\n                     for row in ledger_snapshot.observations\n                     if row.bracket_session_id == session.session_id)',
+     "True", "every_session_observation_must_be_disclosed"),
 )
 
 
 def main() -> int:
-    paths = [Path(continuation.__file__), Path(issuer.__file__)]
+    paths = [Path(continuation.__file__), Path(issuer.__file__), Path(bracket.__file__)]
     before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
     survivors = []
     for index, (module, function, original, mutation, test) in enumerate(CUTS, 1):
@@ -71,7 +89,7 @@ def main() -> int:
         assert getattr(module, function) is target
         assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths} == before
         killed = result.testsRun == 1 and bool(result.failures) and not result.errors
-        print(f"C{index:02d} {'KILLED' if killed else 'SURVIVED'} {function}: {original} -> {mutation} | test_{test}")
+        print(f"C{index:02d} {'KILLED' if killed else 'SURVIVED'} {function}: {original!r} -> {mutation!r} | test_{test}")
         if not killed:
             survivors.append(index)
             print(log.getvalue())
