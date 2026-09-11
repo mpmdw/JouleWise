@@ -1710,7 +1710,7 @@ record to `--out` (never under `configs/calibration/`) and nothing else:
 ```
 $PY scripts/epoch_equivalence_check.py \
   --session-id "$SESSION_ID" \
-  --ledger "$MEASUREMENT_ROOT/configs/calibration/calibration_observation_ledger.jsonl" \
+  --ledger "$MEASUREMENT_ROOT/runs/calibration_observation_ledger.jsonl" \
   --head-pin "$MEASUREMENT_ROOT/configs/calibration/calibration_ledger_head.json" \
   --repo-root "$MEASUREMENT_ROOT" \
   --out "$NIGHT_ROOT/epoch-equivalence-record.json"
