@@ -81,16 +81,19 @@ prevents that promotion by deriving resolution from authenticated primary bytes.
 The loader cannot replay those bytes, so owner registration review remains the
 boundary for that file-asserted resolution claim.
 
-If the all-valid envelope fails, preparation unconditionally refuses with
-`unresolved_valid_row_exceeds_envelope`, names the unresolved slots (or says
-`none (all valid rows resolved)`), exits 3, and writes nothing; the desk reports
-it to Ed for a written ruling. This refusal also applies below the retained-count
-minimum. The loader requires the all-valid envelope before recomputing retained statistics
-and refuses a violating continuation with detail
-`unresolved_valid_row_exceeds_envelope`, with or without a ledger snapshot.
-The retained-statistics function still computes FAIL and INCONCLUSIVE as below;
-the prepare envelope gate now refuses every screen violation before that
-calculation.
+The two sites apply that rule at different points. The LOADER refuses a
+continuation whose disclosed valid bounds break the envelope, unconditionally
+and with or without a ledger snapshot, with detail
+`unresolved_valid_row_exceeds_envelope`. The PREPARATION tool first computes
+the ruling's verdict over the retained values; a FAIL prints the derived
+record and exits 4, an INCONCLUSIVE prints it and exits 5, and neither writes
+a candidate. Only when the retained values PASS while an unresolved valid
+bound breaks the envelope does preparation refuse — exit 3,
+`unresolved_valid_row_exceeds_envelope` naming the unresolved slots, nothing
+written, the desk reporting it to Ed for a written ruling — because that is
+the one case where it would otherwise write a candidate the loader would
+accept. The two gates agree on every night that could be continued: a
+candidate is written only when both hold.
 
 Let `m` be the number of retained values. Let `L` be the acceptance's registered
 `preflight_level_screen_s`, and `S` its registered `bracket_screen_s`. Both
@@ -316,7 +319,10 @@ statistics, and verdict. Any disagreement names the precise field and exits
 path. The witness never supplies a bound, comparator, or retention decision.
 Recognized additional science fields, including a ledger head or return code,
 are also cross-checked. Unknown fields refuse; only the explicitly identified
-path and tool/publication provenance may be ignored.
+path and tool/publication provenance may be ignored. Two provenance fields the
+desk tool records — the acceptance artifact's byte digest and the validator's
+registered screen rule — are checked whenever the witness carries them (a
+wrong value refuses by name) and tolerated when an older record omits them.
 
 `check --candidate PATH` uses the same authentication function as the loader,
 refuses a marker or missing registry pin, and prints the judged epochs. With
