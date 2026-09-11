@@ -13,6 +13,10 @@ that cost this lane two CI-only failures already.
 
 from __future__ import annotations
 
+from unittest import mock
+
+import contextlib
+
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import hashlib
 import importlib.util
@@ -310,3 +314,38 @@ class WriteDerivationNightInputsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneHomeAndAcceptanceBranchTests(unittest.TestCase):
+    """REFUSE-FREE: production call sites write_derivation_night_inputs.SAMPLER_BINARY and _stale_identity_fields (unreadable acceptance)."""
+
+    def test_the_sampler_path_is_the_writers_own(self) -> None:
+        from scripts import validate_powermetrics_fiducial as writer
+        from scripts import write_derivation_night_inputs as script
+
+        self.assertEqual(script.SAMPLER_BINARY, Path(writer.POWER_METRICS))
+        source = Path(script.__file__).read_text(encoding="utf-8")
+        self.assertNotIn('Path("/usr/bin/powermetrics")', source)
+
+    def test_an_unreadable_acceptance_refuses_by_name_and_writes_nothing(self) -> None:
+        from scripts import write_derivation_night_inputs as script
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bad = root / "acceptance.json"
+            bad.write_text("{not json", encoding="utf-8")
+            planned = {
+                "os_build": "25G83", "hardware_model": "Mac15,9", "power_policy": "ac_high_power",
+                "sampling_interval_ms": 100, "estimator_revision": "r", "pulse_protocol_id": "p",
+            }
+            t1 = dict(planned, powermetrics_sha256="0" * 64, clock_anchor_method="v3",
+                      mlx_version="0.0.0", protocol_sha256="1" * 64)
+            with mock.patch.object(script, "_derive_planned_vectors", return_value=(planned, t1)):
+                stream = io.StringIO()
+                with contextlib.redirect_stderr(stream):
+                    rc = script.main(["--out-dir", str(root), "--acceptance", str(bad)])
+            self.assertEqual(rc, 2)
+            self.assertIn("could not be read as an issued artifact", stream.getvalue())
+            self.assertFalse((root / "identity-epoch.json").exists())
+            self.assertFalse((root / "t1-bindings.json").exists())
+

@@ -67,7 +67,13 @@ from scripts.generate_g2a_probe_inputs import (  # noqa: E402
     _sha256_bytes,
 )
 
-SAMPLER_BINARY = Path("/usr/bin/powermetrics")
+# ONE home: the sampler path the night hashes into T1 is the writer's own
+# `POWER_METRICS` (its --sampler-binary default), imported rather than
+# restated, so the desk file and the capture can never hash different
+# binaries.
+from scripts.validate_powermetrics_fiducial import POWER_METRICS  # noqa: E402
+
+SAMPLER_BINARY = Path(POWER_METRICS)
 
 
 class NightInputsRefusal(Exception):
