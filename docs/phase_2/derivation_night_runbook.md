@@ -171,9 +171,13 @@ default ruling and the continuation.
   derivation's rules are likewise fixed before capture, and the issuer
   additionally enforces in code that no corpus statistic is computed before
   the last registration session is terminal (§2.2, §4.1).
-- **Dead-man** — the second LaunchAgent installed alongside the night agent,
-  which fires at a fixed local minute and stands the night down if the night's
+- **Dead-man** — the second LaunchAgent (a macOS launchd job file), installed
+  alongside the night agent, which fires at a fixed local minute and stands the night down if the night's
   completion time has passed without completion.
+- **Driver preflight** — the install-time check that loads the driver module
+  and every project module it imports at module scope under the job's
+  interpreter and PATH and parses the plan, without exercising functions'
+  lazy imports inside `joulewise` or running the chain's input checks.
 - **Tracked chain** — `scripts/night_chains/calibration_derivation_only.zsh`,
   the committed script that actually runs the twelve captures. *Tracked* means
   it is a repository file, byte-identical in every clone at `H`; contrast the
@@ -1241,6 +1245,27 @@ this night's (`DIAGNOSTIC_NO_PACK`, `window_max_s = 9000`, no pack block, and a
 chain re-check is this lane's wrapper `--verify` of §1.1b step 4 rather than
 that runbook's G2-a runsheet render.
 
+At 02:56 PDT on 2026-09-11, the driver crashed before any gate because
+`python3` found through PATH selected macOS Python 3.9.6, which cannot import
+`datetime.UTC`. Each LaunchAgent now names an absolute Python interpreter
+(the executable running the driver). The installer flag `--python "$PY"`
+pins that path to the project interpreter defined in §0.2. Install and
+`--render-only DIR` (render the two job files into `DIR` without installing
+anything) default to `<measurement_root>/.venv/bin/python` when
+`--python` is omitted. Even a stub checkout needs that venv or an absolute
+path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
+(currently 3.11) and whose driver preflight exits 0 from the stub checkout.
+The chain's interpreter remains `<measurement_root>/.venv/bin/python`,
+independently of this driver pin.
+
+Before installation, the **driver preflight** loads the driver module and
+every project module it imports at module scope, under the job's interpreter
+and PATH, and parses the plan. Its JSON `modules` list names the driver and
+those direct module-scope project imports; keep that success line in the arm
+record. It does not exercise functions' lazy imports inside `joulewise` or run
+the night's gates or measurements. The installer refuses a missing interpreter,
+a version below `MIN_PYTHON`, or a failed preflight.
+
 Run it only after the notice is sent and its evidence is written. Everything
 before the `os.replace` is reversible by doing nothing; everything after it is
 an armed night.
@@ -1305,7 +1330,7 @@ PY
 
 # 6. Install both agents FROM the clone.
 scripts/install_night_agent.sh --plan "$NIGHT_ROOT/night_plan.json" \
-  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE"
+  --hour "$NIGHT_HOUR" --minute "$NIGHT_MINUTE" --python "$PY"
 
 # 7. Inspect what was actually installed, and baseline the night directory.
 launchctl list | grep joulewise
@@ -2147,7 +2172,7 @@ numbered record.
 | Why the G2-a producer cannot serve a derivation night (it authenticates the acceptance epoch that is stale), and that the desk-inputs writer is the answer | record 134 |
 | The live `check` output in §0.3 — two mismatched fields, `mlx_version 0.31.2` matching, rc 3, and the appended `match` line on the pre-registered sampler digest | record 134, run from a fresh clone at the desk |
 | Δ ≤ 1320 s for `d12` to be admitted at `window_max_s = 9000`; the three components of Δ | the chain's admission test read against the wrapper's pinned knobs; corroborated by the execution refuter's independent derivation (record 104 §7, "the night tolerates up to 1320 s of launch delay") and named as a runbook defect by the seam finding N-3 |
-| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
+| The install commands of §1.4 — `scripts/install_night_agent.sh --plan --hour --minute --python "$PY"` installing BOTH labels in one call and `--uninstall` removing them, the `os.replace` publication with its non-pre-existing target and same-device requirement, the staged-copy `cmp` in recovery, the `launchctl list` and post-install `night/` baseline | record 12, `docs/process_traces/2026-09-10-activation-96bfeca7/12-arm-runbook-68-g2a-20260912.md`, §"Block A" (exports and staging) and §"Block B" (notice, census, move, install, inspect, rollback); the installer's own `--hour` dead-man refusal is in `scripts/install_night_agent.sh` |
 | "Discoverable" = `/Users/edr/night-custody/*/night_plan.json`, one level, that filename — so the staging path arms nothing, and the driver discovers nothing because launchd hands it `--plan` | `glob_plans` in `scripts/magistrate_watchdog.py`; the `--plan` `required=True` argument of `scripts/run_night.py` |
 | The plan is an INPUT to the generator, and the wrapper's bytes depend on the plan's CONTENT not its path | `scripts/gen_derivation_night.py`: `--plan`'s help text ("frozen v2 night plan JSON (emit mode)"), and `build_spec`, which renders every wrapper literal from the decoded plan fields |
 | The wrapper's `WINDOW_CUSTODY_ROOT` is `plan.custody_root`, its `RUNS_ROOT` defaults to `<custody_root>/runs`, its `CALIBRATION_LEDGER` and `LEDGER_HEAD_PIN` to the clone's ledger and head pin — the derivations §2.0 uses | `scripts/gen_derivation_night.py`: `WrapperSpec`, `build_spec`, and the `--runs-root` / `--ledger` / `--head-pin` defaults in `build_parser` |
@@ -2205,6 +2230,7 @@ means. A term is listed only if it does technical work.
 | screen / level screen / bracket screen | §Terms, constants in §2.5, successor operatives in §4.2 | A threshold a value is compared against; corpus maximum; corpus range. |
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |
 | blind / blindness | §Terms, bounded §2.3 | Every rule that could be chosen after seeing values is fixed in writing BEFORE the data exists — "every rule fixed before data", not "no one may look". Nothing is read while a night runs; the equivalence night's retained values are read once its own session is terminal, and on the FAIL route no corpus statistic is computed before the last registration session is terminal. |
+| driver preflight | §Terms, §1.4 | The install-time check of the driver module, its module-scope project imports and the plan under the job's interpreter and PATH; it does not exercise lazy imports inside project functions or the chain's input checks. |
 | dead-man | §Terms | The second LaunchAgent that fires at a fixed local minute and stands the night down if completion has passed. |
 | fence (watchdog sense) | §Terms | A period in which the watchdog refuses to LAUNCH OR ADOPT a magistrate agent session: a plan span, the half-open belt `[02:45:00, 03:30:00)`, or the half-open dead-man minute `[07:00:00, 07:01:00)`. It forbids an agent starting, never a night running — which is why a `t0` of 02:56 is inside the belt and correct. |
 | blindness fence | §Terms, enforced §2.3 item 3 | The code-enforced refusal of `prepare-candidate` while any session named in the registration is not terminal — the FAIL route's fence on computing a corpus statistic early. Not an interval; no clock clears it, and it does not govern the equivalence check, whose rule is fixed before capture instead. |
