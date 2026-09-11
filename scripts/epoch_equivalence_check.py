@@ -133,6 +133,9 @@ CROSSCHECKED_OPERATIVES = (
 # acceptance directory of SOME checkout, not only this one, so the guard holds
 # for a worktree, a clone or a copy.
 FORBIDDEN_OUT_PARTS = ("configs", "calibration")
+# This checkout's own acceptance directory, refused by IDENTITY (samefile) so
+# that no spelling of the path -- case, Unicode alias, symlink -- reaches it.
+ACCEPTANCE_DIR = REPO_ROOT / "configs" / "calibration"
 # Issue 316 names the reference envelope by generation: "the acceptance in
 # force, d079_calibration_acceptance_v2_n17_r6".  Any other generation --
 # however well it authenticates -- carries different screens, and a caller
@@ -170,11 +173,10 @@ def _refuse_out_path(out: Path, force: bool) -> None:
             )
     # And by identity, whatever the spelling: the parent must not BE this
     # checkout's acceptance directory.
-    acceptance_dir = REPO_ROOT / FORBIDDEN_OUT_PARTS[0] / FORBIDDEN_OUT_PARTS[1]
     parent = resolved.parent
-    if acceptance_dir.exists() and parent.exists() and parent.samefile(acceptance_dir):
+    if ACCEPTANCE_DIR.exists() and parent.exists() and parent.samefile(ACCEPTANCE_DIR):
         raise EquivalenceRefusal(
-            f"--out {out} resolves into {acceptance_dir}; this tool never writes "
+            f"--out {out} resolves into {ACCEPTANCE_DIR}; this tool never writes "
             "into an acceptance directory"
         )
     if resolved.exists() and not force:
