@@ -56,6 +56,13 @@
     "reason": "Replay the existing whole-window verdict against its already-loaded ledger snapshot."
   },
   {
+    "file": "scripts/epoch_equivalence_check.py",
+    "function": "run",
+    "ordinal": 1,
+    "line": 621,
+    "reason": "Desk epoch-equivalence check replays the authenticated ledger snapshot once to read one closed derivation night's retained values and compare them with the acceptance envelope in force; it never mints, appends a receipt, publishes a binding, issues or continues an acceptance, or finalizes an analysis manifest, and its only output is a JSON record written outside configs/calibration."
+  },
+  {
     "file": "scripts/extract_detection_floors.py",
     "function": "main",
     "ordinal": 1,

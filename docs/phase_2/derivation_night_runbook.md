@@ -8,9 +8,30 @@ script, gate and test this runbook operates is on `main` at
 establish from a primary source; they are open questions for the operator, not
 instructions.
 
-**Changelog — revision 5 (2026-09-10), one line: the operational defects a
-contract review found are closed, so the arm can be run from this file alone,
-without the operator supplying values the file never defined.** What that
+**Changelog — revision 6 (2026-09-10), one line: the owner ruled, by directive
+issue 316, that the first night is no longer the first of three blind
+derivation nights but an EPOCH-EQUIVALENCE CHECK — one night, compared after
+it closes against the thresholds the acceptance already in force carries,
+under a rule fixed before the night runs.** What that forced:
+§"What night one is for" is rewritten around the two routes and says which is
+tried first; §2 becomes the harvest of an equivalence night — §2.1 gains the
+retained values as things the magistrate MAY now read, §2.3 changes from a
+blanket prohibition into a before/after boundary, and the new §2.5 states the
+rule in full with its operative constants, its three outcomes (PASS, FAIL,
+INCONCLUSIVE) and the exact next action for each; §3 and §4 are marked as the
+FAIL route's continuation rather than the default; §6 items 4, 5, 7, 8 and 11
+are restated so that the equivalence night licenses nothing by itself and a
+PASS licenses nothing until the D-102 continuation addendum lands; §1 keeps
+its arm procedure unchanged, with only its title and its one "three nights"
+sentence corrected; §7 gains the ruling's own fact row; and §8 builds
+`epoch-equivalence check`, `reference envelope`, `retained value` and
+`continuation`. Two open items are RECORDED rather than answered: no committed
+tool yet extracts the retained values, and the ruling fixes no night count for
+the case where an INCONCLUSIVE night is followed by a failing one.
+
+Revision 5 (same day) closed the operational defects a
+contract review found, so the arm can be run from this file alone,
+without the operator supplying values the file never defined. What that
 forced: §0.2 now exports every variable a later runnable block interpolates —
 `NIGHT_DATE`, `PLAN_ID`, `NIGHT_ROOT`, `STAGE`, `STAGED_PLAN`, `SESSION_ID`,
 `EVIDENCE_ROOT_ID`, `CALIBRATION_PLAN`, `CALIBRATION_LEDGER` and
@@ -68,7 +89,7 @@ agent-free by construction (§0.6).
 
 ---
 
-## What these three nights are for, in one paragraph
+## What night one is for, in one paragraph
 
 Every calibration capture is judged against thresholds that live in one JSON
 artifact called the **acceptance** — the issued file whose corpus statistics
@@ -78,17 +99,28 @@ power_policy, sampling_interval_ms, estimator_revision, pulse_protocol_id}`
 describing the machine and estimator it was derived on. This machine's
 `os_build` moved from `25F84` to `25G83`, so the live acceptance
 `d079_calibration_acceptance_v2_n17_r6` binds an epoch that no longer exists
-and refuses every ordinary capture (D-102 clause 2). A new acceptance needs a
-corpus of captures taken on the NEW epoch — but those captures must happen
-before any acceptance of their own epoch exists to judge them. The lane's
-answer is a **derivation-only capture**: an observation taken expressly to
-build a future acceptance, which licenses no measurement of anything. Three
-agent-free nights of twelve such captures each produce the corpus. This
-runbook operates those three nights.
+and refuses every ordinary capture (D-102 clause 2). Two routes lead out of
+that refusal, and the owner's directive issue 316 of 2026-09-10 ruled which is
+tried first. The LONG route DERIVES a replacement acceptance from a corpus of
+captures taken on the new epoch — three agent-free nights of twelve
+**derivation-only captures** each, a derivation-only capture being an
+observation taken expressly to build a future acceptance, which licenses no
+measurement of anything. The SHORT route, now the default, is an
+**epoch-equivalence check**: ONE night of the same twelve derivation-only
+captures, whose values are compared after the night closes against the
+thresholds the existing acceptance already carries, under a rule fixed in
+writing before the night runs. If every value sits inside that envelope, the
+existing acceptance is CONTINUED onto the new epoch by a dated addendum and
+nothing is derived; if any value does not, the three-night derivation proceeds
+exactly as pre-registered, with this night counting as its first. This runbook
+operates that one night; §2.5 is the rule that decides which route follows it,
+and §3 and §4 run only if the check fails.
 
-Source for this paragraph: the pre-registration
+Sources for this paragraph: the pre-registration
 `configs/calibration/preregistration_d079_epoch_25g83_rev1.md`,
-§"Why this registration exists".
+§"Why this registration exists" for the derivation route, and its revision 2
+— which transcribes directive issue 316 — for the equivalence route, the
+default ruling and the continuation.
 
 ## Terms, glossed here because every later section uses them
 
@@ -102,10 +134,12 @@ Source for this paragraph: the pre-registration
   The watchdog fences below speak of a different thing entirely — a magistrate
   **agent** session, a running Claude activation — and that sense is always
   written out in full.
-- **Registration** — the set of ledger sessions (here: exactly three, one per
-  night) that the pre-registration declares this corpus is drawn from. A valid
+- **Registration** — the set of ledger sessions that the pre-registration
+  declares a derivation corpus is drawn from: three, one per night, on the
+  FAIL route of §2.5, where the equivalence night counts as the first. A valid
   same-epoch observation captured OUTSIDE the registration refuses issuance
-  rather than being quietly absorbed.
+  rather than being quietly absorbed. An equivalence check that PASSES derives
+  no corpus and issues nothing, so no registration closes.
 - **Epoch** — the six-field identity vector above.
 - **Stale field** — an identity field whose value on this machine differs from
   the active acceptance's identity epoch. A derivation night exists precisely
@@ -125,9 +159,15 @@ Source for this paragraph: the pre-registration
 - **Prior set** — an acceptance's list of every ledger observation through
   its cutoff receipt. **Corpus** — the subset of the prior set whose values
   the statistics are computed from; **retained n** is the corpus size.
-- **Blind** — no person and no agent examines any member value, screen, or
-  statistic before the third night's session is terminal. This is not a
-  convention; the issuer enforces it in code (§2.2, §4.1).
+- **Blind** — every rule that could otherwise be chosen after seeing values is
+  fixed in writing BEFORE the data exists. That is the sense directive issue
+  316 fixed for this campaign: blindness here means "every rule fixed before
+  data", not "no one may look". Two consequences, differing by route. The
+  equivalence night's rule is fixed at §2.5 before the night runs, so its
+  retained values are read as soon as the night closes. On the FAIL route the
+  derivation's rules are likewise fixed before capture, and the issuer
+  additionally enforces in code that no corpus statistic is computed before
+  the last registration session is terminal (§2.2, §4.1).
 - **Dead-man** — the second LaunchAgent installed alongside the night agent,
   which fires at a fixed local minute and stands the night down if the night's
   completion time has passed without completion.
@@ -160,10 +200,12 @@ Source for this paragraph: the pre-registration
   fired at 02:56 local and ran to chain exit 0
   (`docs/process/NIGHT_HANDBACK.md`, §"Executed — rehearsal-20260909").
 - **Blindness fence** — a different object under a confusingly similar name:
-  the code-enforced prohibition on reading any captured value before night 3's
-  ledger session is terminal (§2.3). It is not an interval, and no clock
-  clears it. Where this file writes "fence" with no qualifier it means the
-  watchdog sense above.
+  the code-enforced refusal of `prepare-candidate` while any session named in
+  the registration is not terminal, which stops a corpus statistic being
+  computed early on the FAIL route (§2.3 item 3). It is not an interval, and
+  no clock clears it; it does not govern the equivalence check of §2.5, whose
+  rule is fixed before capture instead. Where this file writes "fence" with no
+  qualifier it means the watchdog sense above.
 - **Handback** — `docs/process/NIGHT_HANDBACK.md`, the file the night courier
   (the process that emails the night's result, §1.2) reads first; the magistrate rewrites its three night-specific sections before
   every armed night and commits that rewrite with the night's plan.
@@ -433,7 +475,8 @@ the night's first machine action opens a session at head-equals-pin, and a
 ledger that will not authenticate at the desk will not authenticate at 03:00
 either. Record the head pin's sequence and digest now — the pre-registration's
 `[SEQ]` and `[DIGEST]` fields are filled from the pin in force at the FIRST
-night's open, and are then frozen for all three nights.
+night's open, and are then frozen for every night of the campaign that
+follows.
 
 ### 0.5 Pre-registration committed, with its bracket fields filled
 
@@ -457,9 +500,9 @@ shasum -a 256 "$MEASUREMENT_ROOT/scripts/night_chains/calibration_derivation_onl
 ```
 
 The registration reserves a
-single blank for it, and three nights produce three different wrappers (three
-plans, three session IDs, three `t0`s), so only the tracked chain's digest can
-fill it. That digest is also the literal each night's wrapper compares against
+single blank for it, and every night produces its own wrapper (its own plan,
+session ID and `t0`), so only the tracked chain's digest — the one value every
+night shares — can fill it. That digest is also the literal each night's wrapper compares against
 before it `exec`s (§1.1a step 4), which is what makes the registered value and
 the value in force at capture the same number.
 
@@ -480,15 +523,19 @@ pre-registration exists to fix the rules BEFORE the data; this pin is what makes
 "before" checkable by someone reading the artifacts months later, because
 without it the tool would derive against whatever the file says on the day it
 runs, which is exactly the edit the document exists to forbid. Record it once,
-at night 1's arm, and re-record the same value at nights 2 and 3 — a change
-between nights is a stop, not a new pin.
+at the first night's arm, and re-record the same value at every night that
+follows — a change between nights is a stop, not a new pin.
 
-**V3 requires Ed's affirmative written acknowledgment before the first
-capture's arm — silence is not consent for V3.** V3 is the night count, the
-slots per night, and the retained-corpus minimum: three nights × 12 slots,
-retained n ≥ 19. Every other rule in the registration is a proposed default
-adopted by cold gate 46 under an open Ed veto. Do not arm night 1 without that
-acknowledgment recorded.
+**V3 is answered, and is no longer a precondition of this arm.** V3 is the
+night count, the slots per night and the retained-corpus minimum — three
+nights × 12 slots, retained n ≥ 19 — and the pre-registration required Ed's
+affirmative written acknowledgment of it before the first capture's arm.
+Directive issue 316 supplied the answer instead: NO as the default path, with
+the equivalence night of §2.5 in its place, and V3 AFFIRMED only on that
+check's FAIL route. Revision 2 of the pre-registration carries the ruling;
+record its digest in the arm materials exactly as above, since revision 2 is
+part of the committed file's bytes. The registration's other rules remain
+proposed defaults adopted by cold gate 46 under an open Ed veto.
 
 ### 0.6 Census clean, and the night is agent-free
 
@@ -681,7 +728,7 @@ night's custody.
 
 ---
 
-## 1. Night 1 arm
+## 1. The equivalence night's arm (also night one of the FAIL route)
 
 ### 1.1 The plan is `joulewise.night_plan.v2`, class `DIAGNOSTIC_NO_PACK`
 
@@ -966,8 +1013,12 @@ to still exist.
    digest and the wrapper pins the chain's, so the plan's attestation reaches
    the bytes that actually capture.
 
-One wrapper per night: three nights means three plans, three session IDs and
-three wrappers, and the generator refuses to reuse one wrapper across plans.
+One wrapper per night, and one night per wrapper: any further night — the FAIL
+route's nights two and three, or the m < 6 branch's second equivalence night
+(§2.5) — means its own plan, its own session ID and its own wrapper, because
+the generator refuses to reuse one wrapper across plans. How many nights
+follow this one is decided by §2.5 after this night closes, and is not fixed
+in advance.
 
 ### 1.2 WINDOW_MAX_S, with the arithmetic
 
@@ -1395,6 +1446,7 @@ coordinates from the arm record instead and treat the discrepancy as a finding.
 | `<NIGHT_ROOT>/night/courier.sent`, `courier.json`, `courier.heartbeat` | Send time and message ID; verify the email separately in Ed's inbox. |
 | launchd `.out`/`.err` for both labels | Present or absent, complete bytes, sizes, nanosecond mtimes — compare against the arm-time baseline. |
 | `check --session-ids <SESSION_ID>` (§2.2) | The night's session kind, state, terminality, declared and filled slot counts, exclusion counts by mechanism. |
+| The night's own ledger rows in `$CALIBRATION_LEDGER`, and each capture's `manifest.json` and `instrument_evidence.json` under `$RUNS_ROOT` | The twelve slot outcomes, and — for the captures that are `valid` and whose stored anchor record resolves — the **retained values** the equivalence rule compares (§2.5). Reading these AFTER this night has closed is what the check IS; §2.3 draws the line. |
 
 Preserve the full custody root byte-exact outside watchdog discovery before any
 removal, and keep a separate `lstat` inventory of the original with sizes and
@@ -1421,29 +1473,45 @@ obstacle. Every field is a count, a state name, or a mechanism name.
 **Return code when a session is named: 0 = admissible, 5 = inadmissible**
 (`DRY_RUN_INADMISSIBLE_EXIT = 5`; `check` returns the dry run's code,
 deliberately, so that a drifted epoch does not mask the question actually
-asked). After night 1 and night 2 the expected code is **5**, with the blocker
-naming the sessions that are not yet terminal. That is the correct mid-campaign
-answer.
+asked). The code answers ONE question — whether the named sessions are
+admissible for `prepare-candidate` — and it is neither the equivalence check
+nor an anticipation of it. On the FAIL route, where this night is registration
+night one and two more follow, the expected code after nights one and two is
+**5**, with the blocker naming the sessions that are not yet terminal; that is
+the correct mid-campaign answer there. On the PASS route nothing is ever
+prepared, and this code decides nothing.
 
-### 2.3 What NOT to read — the blindness fence
+### 2.3 When a value may be read, and when it may not
 
-Do not open, print, extract, summarise, or ask any agent about ANY captured
-value: no `b_fiducial_s`, no minimum, maximum, range, mean or SD, no screen, no
-statistic, and no comparison against one. Not from the bundles, not from the
-ledger rows, not from a plot, not "just to see if the night worked". The dry
-run of §2.2 answers whether the campaign is on schedule; **it cannot answer
-what the campaign got, and that is the point.**
+The boundary moved with directive issue 316, and it is a boundary in TIME, not
+a prohibition on looking at all. Three rules, in force in this order:
 
-The blindness fence is installed in code, not left to discipline: `prepare-candidate`
-refuses while any session named in the registration is not terminal, and names
-the session it found open. Terminal means the session's last declared slot is
-final or the session was aborted. Blindness is why the pre-registration also
-fixes membership, exclusion mechanisms, stopping and analysis before any data
-exists — so that nothing can be chosen after seeing values.
+1. **While the night is running, nothing is read.** No `b_fiducial_s`, no
+   minimum, maximum, range, mean or SD, no screen, no statistic, no comparison
+   against one — not from the bundles, not from the ledger rows, not "just to
+   see if the night is working". The night is agent-free by construction
+   (§0.6): no one is present to read anything, and no agent session may be
+   launched to look.
+2. **Once this night's ledger session is terminal, the retained values ARE
+   read**, and §2.5 is what they are read for. Terminal means the session's
+   last declared slot is final or the session was aborted. This is the change
+   revision 6 carries, and it is licensed by the ruling rather than by the
+   desk: the equivalence rule is fixed at §2.5, in writing, before the night
+   runs, so reading afterwards selects nothing — nothing is left to choose.
+3. **On the FAIL route only, the derivation's blindness fence resumes.**
+   Nights two and three are captured and harvested with no corpus statistic
+   computed, and that fence is installed in code rather than left to
+   discipline: `prepare-candidate` refuses while any session named in the
+   registration is not terminal, and names the session it found open. It is
+   why the pre-registration fixes membership, exclusion mechanisms, stopping
+   and analysis before the data exists — so that nothing can be chosen after
+   seeing values.
 
-Whether a capture's bound exceeded r6's level screen `0.032898493715362` IS
-recorded in the hashed evidence as a diagnostic — recorded, not read. Leave it
-until §4.
+Whether a capture's bound exceeded the level screen `0.032898493715362` IS
+recorded in each capture's hashed evidence as a diagnostic. That recorded
+boolean is NOT the equivalence check and never stands in for it: the check
+compares every retained value against that screen AND the night's own range
+against the bracket screen, computed from the values themselves (§2.5).
 
 ### 2.4 The writer-status dispatch: how a slot ends, and how a night ends early
 
@@ -1504,12 +1572,15 @@ reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
 --reason window_exhausted`, and exits 0. An aborted session IS terminal, and
 its finalized observations remain in the prior set.
 
-The correct response is: record the unused count, and **do nothing else**. The
-registration forbids top-ups, retries, early stops and outcome-driven extra
-nights. All three nights run all twelve declared slots regardless of interim
-values; a night that lost slots to the window simply contributed fewer members,
-and the shortfall (if any) is resolved at §4, in the open, under Ed's written
-ruling. Do not add a fourth night to make the numbers work.
+The correct response is: record the unused count, and **do nothing else**.
+Every night runs all twelve declared slots regardless of interim values, and
+no top-up, retry, early stop or outcome-driven extra night is permitted. A
+night that lost slots to the window simply retained fewer captures. That
+shortfall is not repaired; it is an INPUT to §2.5, whose `m < 6` branch is the
+one place a further night can be required, and it is required by a rule fixed
+before the night ran rather than chosen after it. On the FAIL route a
+shortfall is resolved at §4, in the open, under Ed's written ruling. Do not
+add a night to make the numbers work.
 
 Everything else that can fail mid-night — a refused readiness check, a refused
 reservation, a `slot_refused` dispatch — stops the chain with the session still
@@ -1519,7 +1590,163 @@ inside the window.
 
 ---
 
-## 3. Nights 2 and 3
+### 2.5 The epoch-equivalence check — the rule, its constants, and the one action each outcome takes
+
+This section is the reason the night ran. The EPOCH-EQUIVALENCE CHECK is one
+comparison: the night's retained values, captured on the new operating-system
+build, are held against the envelope the acceptance in force already carries
+from the old build; if they sit inside it, the build change did not move the
+instrument. Its rule was fixed in writing before the night was armed, by the owner's directive issue 316 of 2026-09-10,
+transcribed as revision 2 of
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the dated
+Ed addendum under D-102 in `docs/decision_log.md`. Nothing here is decided at
+the desk; the desk applies it.
+
+**The question the check asks.** Did the operating-system point release move
+the clock-anchor bound outside the envelope this instrument was already
+characterised against? It is an instrument question, not a derivation: the
+check builds no corpus, computes no successor statistic, and issues nothing.
+
+#### The three inputs
+
+- **Retained value** — the `b_fiducial_s` (a capture's fiducial bound in
+  seconds) of one capture of this night that BOTH carries ledger disposition
+  `valid` AND resolves under anchor-v3 replay: its stored `clock_anchor`
+  record was written by the anchor-v3 estimator and is not
+  `affine_clock_fit_empty`. A capture that is `ordinary-invalid`, that was
+  refused (`slot_refused`), or whose slot the window never reached
+  (`window_exhausted`) is not retained and contributes no value. The value is
+  the ledger row's `exact_bound_lexeme_s`, which the capture's authenticated
+  `instrument_evidence.json` must carry identically — read both and refuse the
+  night's numbers if they differ.
+- **Retained m** — how many retained values this night produced. Issue 316's
+  words: "Retained m = the night's valid, resolved captures (anchor-v3 replay
+  resolved, not window_exhausted or slot_refused)."
+- **Reference envelope** — the comparators the acceptance in force,
+  `d079_calibration_acceptance_v2_n17_r6`, already carries, in the OPERATIVE
+  form the validator uses. Issue 316 fixes that choice: "if the validator's
+  operative screen differs from the raw range (the never-zero floor), the
+  operative value is the one used."
+
+#### The reference envelope, as constants, with their sources
+
+Each comparator exists in two forms: the raw corpus statistic, and the
+operative constant — the raw statistic rounded to the fixed decimal place the
+artifact registers for it. The operative constant is the comparator in the
+rule; the raw statistic is printed beside it so the difference is visible.
+
+| Quantity | Operative constant the rule uses (s) | Raw corpus statistic (s) | Where each is read |
+|---|---|---|---|
+| Level screen (corpus maximum) | `0.032898493715362` | `0.03289849371536248` | Operative: `joulewise/calibration_bracketing.py`, `_D102_N17_DERIVATION["operatives"]["preflight_level_screen_s"]`, bound to this acceptance id through `_D102_GENERATION_DERIVATIONS`; same lexeme in the artifact at `decimal_derivation.ratified_operatives.preflight_level_screen_s` and at `decimal_derivation.rounding.preflight_level_screen`, whose `numeric_role` is `operative_comparator`. Raw: the artifact's `decimal_derivation.source_statistics.maximum_s`. |
+| Bracket screen (corpus range) | `0.009724` | `0.00972358928879385` | Operative: the same validator row, `operatives["bracket_screen_s"]`; artifact `decimal_derivation.ratified_operatives.bracket_screen_s` and `decimal_derivation.rounding.operative_bracket_screen`, `numeric_role` `operative_comparator`. Raw: the artifact's `decimal_derivation.source_statistics.range_s`. |
+| Budget ceiling (maximum budgetable drift) | `0.010164834757777545` | not a rounded statistic; the same value | Validator row `operatives["maximum_budgetable_drift_s"]`; artifact `decimal_derivation.ratified_operatives.maximum_budgetable_drift_s`. Carried for the record: the check itself compares against the two screens only. |
+| Corpus size | `17` | `17` | Validator row `corpus_n`; artifact `derivation_corpus.n`. |
+
+Three facts about those numbers, each of which changes what a comparison
+means:
+
+1. **The operative bracket screen is LARGER than the raw range**, by
+   `0.009724 − 0.00972358928879385 = 4.1071120615e-7 s` — about 0.41 µs on a
+   comparator of 9.7 ms. The artifact registers the quantum `0.000001` s under
+   `ROUND_HALF_EVEN`, and the raw range rounds UP to it. Using the operative
+   value is therefore marginally the more permissive choice.
+2. **The operative level screen is SMALLER than the raw maximum**, by
+   `0.03289849371536248 − 0.032898493715362 = 4.8e-16 s`; its registered
+   quantum is `0.000000000000001` s and the raw maximum rounds DOWN to it.
+   Marginally the stricter choice, at a margin that can only matter to a value
+   tying the corpus maximum in its fifteenth decimal place.
+3. **No floor is in force here.** The never-zero floor issue 316
+   parenthesises — `0.010818` s, `D125_SCREEN_FLOOR_S` — belongs to the screen
+   rule `floored_range_envelope_screen`, which the pre-registration registers
+   for a FUTURE successor corpus. The acceptance in force registers the other
+   rule, `range_equals_screen` — the quantized range IS the screen, with no
+   floor (`_D102_N17_DERIVATION["screen_rule"]`, checked in
+   `calibration_bracketing._valid_acceptance_bound`). The gap between the
+   operative bracket screen and the raw range here is quantization alone.
+
+#### The rule
+
+Issue 316's operative text, quoted:
+
+- "If m < 6 the check is INCONCLUSIVE: run one more equivalence night before
+  deciding. No other action."
+- "PASS = every retained b_fiducial_s <= the r6 level screen AND the night's
+  range (max minus min of the retained values) <= the r6 operative bracket
+  screen."
+- "FAIL = anything else."
+
+Against the table, the two PASS comparisons are: every retained value
+≤ `0.032898493715362` s, and (largest retained value − smallest retained
+value) ≤ `0.009724` s. Evaluate the `m < 6` branch FIRST: with fewer than six
+retained values the check returns INCONCLUSIVE whatever those values are, and
+no PASS or FAIL is recorded. A night retaining exactly one value has range
+zero and would be decided on the level screen alone — which is precisely why
+the sample-size branch is evaluated before the comparisons, and why it was
+fixed before the night ran.
+
+#### The three outcomes, and the exact next action for each
+
+| Outcome | The exact next action, and nothing else |
+|---|---|
+| **INCONCLUSIVE** (`m < 6`) | Arm ONE more equivalence night: back to §1 with a fresh plan id, fresh `t0`, fresh night root, fresh desk inputs and a fresh session id, then harvest it through this same §2 and apply this same rule to it. No top-up of this night, no partial decision, no other action. |
+| **PASS** | Write the dated continuation addendum under D-102 — "epoch continuation on evidence": an identity-field change followed by a same-envelope night CONTINUES the acceptance in force rather than voiding it. The addendum cites this night's session id, the twelve slot outcomes, the count m, and each of the m retained values as the ledger lexeme (issue 316: "the m values"), all verbatim from the desk tool's record, and moves no threshold. If the epoch-freshness refusal in the loader or the issuer blocks continuation, land the SMALLEST change that removes it through the ordinary pull-request gate and report its diff; never work around a refusal by hand. §3 and §4 do not run. |
+| **FAIL** | The pre-registered three-night derivation proceeds exactly as revision 1 of the pre-registration writes it, with V3 AFFIRMED by the same issue (three nights, twelve slots, retained n ≥ 19, or exactly 17 under a written ruling). THIS night counts as registration night one, so §3 runs for nights two and three and §4 closes the registration. If the issuer's in-code blindness refusal blocks counting this night, report it and propose the minimal change — never run a fourth night to satisfy the guard. |
+
+**A PASS licenses nothing by itself.** What licenses ordinary capture is the
+D-102 continuation addendum, once it lands; until then the acceptance in force
+still binds the old identity epoch and ordinary capture still refuses. The
+first real G2-a measurement window is the next quiet slot AFTER the addendum
+lands, under the ordinary window path and the standing gates — not under this
+runbook. The pre-registration stays on file, un-withdrawn, as the fallback
+route.
+
+**The desk tool that applies this rule.** `scripts/epoch_equivalence_check.py`
+reads the terminal session from the ledger, retains exactly the rows defined
+above (it re-reads each retained capture's `instrument_evidence.json` and
+refuses if its lexeme differs from the ledger row's), reads the operatives
+from the validator registry and refuses if the artifact disagrees, and prints
+the constants table, one line per declared slot, m, the two comparisons with
+their operands, and the verdict line. It judges only against the r6 generation
+named above; pointing it at any other acceptance refuses. It writes one JSON
+record to `--out` (never under `configs/calibration/`) and nothing else:
+
+```zsh
+cd "$MEASUREMENT_ROOT"
+"$PY" scripts/epoch_equivalence_check.py \
+  --session-id "$SESSION_ID" \
+  --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
+  --repo-root "$MEASUREMENT_ROOT" \
+  --out "$NIGHT_ROOT/epoch-equivalence-record.json"
+```
+
+`--acceptance` is left at its default, which resolves against the checkout
+the SCRIPT lives in (here the clone, because the `cd` and the relative script
+path select the clone's copy; `$PY` only selects the interpreter); the tool
+then refuses any generation other than r6 by id, so a second checkout at
+the same head running its own copy judges against the same bytes.
+
+Exit code 0 is PASS, 4 is FAIL, 5 is INCONCLUSIVE; 3 means the tool refused
+to judge (the session is not terminal, is not derivation-kind, or the envelope
+did not authenticate) and wrote nothing. Run it twice — once from the clone,
+once from a second checkout at the same head — and compare the two records
+byte for byte before recording a verdict (the record carries the artifact's
+repo-relative path and byte digest, never an absolute path, so two checkouts
+at one head produce identical bytes); the record is a witness for the
+continuation transaction, never its input.
+
+[OPEN, and not decided by issue 316: if the check is INCONCLUSIVE and the
+second equivalence night then FAILS, the issue fixes no answer to whether both
+nights count as registration nights one and two or only one of them does.
+Report that to Ed and get a written answer; do not choose it at the desk.]
+
+---
+
+## 3. Nights 2 and 3 — the FAIL route only
+
+**This section runs only if §2.5 returned FAIL.** On PASS the derivation does
+not happen at all, and on INCONCLUSIVE the next night is a second equivalence
+night under §2.5, not night two of a registration. On FAIL the equivalence
+night IS registration night one, and two further nights follow.
 
 Identical to §1 and §2, with these differences and no others:
 
@@ -1555,7 +1782,11 @@ not generous.
 
 ---
 
-## 4. After night 3 is terminal
+## 4. After night 3 is terminal — the FAIL route only
+
+**This section runs only if §2.5 returned FAIL** and §3's two further nights
+have been captured. A PASS ends the lane at the D-102 continuation addendum;
+nothing below is reached.
 
 ### 4.1 Confirm admissibility, still blind
 
@@ -1785,7 +2016,7 @@ Chain exits (`scripts/night_chains/calibration_derivation_only.zsh`):
 | `slot_end slot=dNN disposition=non-valid`, night continues | **Not a failure.** The writer exited 1: the row is finalized with a disposition other than `valid`, and the next declared slot runs on the unchanged cadence (§2.4). | Record the count of such slots. Do nothing else, and read no value. Exclusion is decided at issuance, by named mechanism. |
 | `slot_refused slot=dNN rc=2` + chain exits 2, session left OPEN | The writer REFUSED this capture (`emit_refusal` exits 2). The row is **not** finalized, so the chain stops rather than continuing over an unrecorded slot — and deliberately does not abort the session. | Read the refusal in `chain.stderr.log`, then **desk recovery**: `recover_calibration_ledger.py … abort-session --session-id <id> --plan <plan> --reason <the named reason>` (§2.4). Never a retry inside the window. Until the session is closed the next night cannot open at head-equals-pin. |
 | `slot_refused slot=dNN rc=<n≥3>` + chain exits with that status, session left OPEN | The writer crashed rather than refusing. Same dispatch branch, same unfinalized row. | Same desk recovery, and account for the crash before any further night is armed: a crash is a defect, not an outcome. |
-| `slot_unused … reason=window_exhausted` + `session_abort` + exit 0 | The window could not finish a slot's 480 s budget. Slots are recorded unused, never compressed or retried. Δ larger than 1320 s is the usual cause (§1.2). | Record the count. No top-up, no fourth night (§2.4). |
+| `slot_unused … reason=window_exhausted` + `session_abort` + exit 0 | The window could not finish a slot's 480 s budget. Slots are recorded unused, never compressed or retried. Δ larger than 1320 s is the usual cause (§1.2). | Record the count. The session is terminal and §2.5 judges its finalized rows (an equivalence night with fewer than six retained values is INCONCLUSIVE). No top-up, no fourth night (§2.4). |
 | Any other non-zero exit, with a `session_open` line already in the chain log | A ledger call failed under `set -e` after the session was opened. | Treat exactly as `slot_refused`: read the log, then desk recovery with a named reason. A `session_open` line with no `session_abort` and no terminal slot means the session is still open, whatever the exit code was. |
 
 Capture-writer refusals (`scripts/validate_powermetrics_fiducial.py`, codes in
@@ -1805,7 +2036,7 @@ Issuer return codes (`scripts/issue_calibration_acceptance_generation.py`):
 |---|---|---|---|
 | `check` (no `--session-ids`) | 3 | Identity mismatch and/or an acceptance/ledger error. | **Expected throughout this lane** (§0.3). Read the table; confirm the mismatched fields are `os_build` and `powermetrics_sha256` and no others. |
 | `check` (no `--session-ids`) | 0 | No mismatch, no error. | **Unexpected — stop.** The machine now matches the old epoch; the lane's premise is gone. Escalate before capturing. |
-| `check --session-ids …` | 0 | Registration would be admissible. | Proceed to §4.2. Expected only after night 3 is terminal. |
+| `check --session-ids …` | 0 | Registration would be admissible. | Proceed to §4.2 — on the FAIL route, and expected only after night 3 is terminal. |
 | `check --session-ids …` | 5 | Inadmissible; each blocker is printed. | Expected after nights 1 and 2. Clear the named blocker at the desk; never capture more to clear it. |
 | `prepare-candidate` | 3 | `REFUSED: <reason>` and nothing written — a non-terminal session, absent `--d125-ruling`, corpus below the minimum, a pending/unresolved prior-set row, a valid same-epoch observation outside the registration, a member whose stored bytes disagree with its ledger row, a failed quantile proof, `S >= C`, or two or more retained members over the level screen. | Read the reason literally. Several of these are science stops requiring Ed's written ruling (§4.2), not defects to fix. |
 | `prepare-candidate` | 3 | The arm-gate fences of §4.2, same `REFUSED:` shape: `pre-registration sha256 … does not match the pinned …; not issued`; `registration names <n> sessions, not the pre-registered 3`; `session <id> declared <n> slots, not the pre-registered 12`; `registration os_build … is not the pre-registered …; the registration is void`; `registration powermetrics sha256 … is not the pre-registered …; the registration is void`; `predecessor maximum plus range … does not equal the ruled diagnostic …`. | None of these is fixed by re-running with different flags. The first three are answered by naming the correct file and sessions, or by a written-ruling escape that already exists (§4.2) — never by inventing one. The two `void` refusals mean the campaign was captured on a machine the registration does not describe: stop, and take it to Ed in writing. |
@@ -1832,15 +2063,24 @@ implementation.]`
    loader refuses. Issuing is D-138's single reviewed commit (§4.4).
 3. **No writing into `configs/calibration/`.** Not by this runbook, not by the
    issuer, not by the desk-inputs writer, not "just to stage it".
-4. **No look at any value before night 3 is terminal** (§2.3).
+4. **No look at any value while a night is running, and on the FAIL route no
+   corpus statistic before night 3 is terminal** (§2.3). The equivalence
+   night's retained values are read once its own session is terminal, and only
+   to apply §2.5's fixed rule.
 5. **No extra, replacement, top-up or retry night**, no early stop, and no
-   outcome-driven schedule change (§2.4).
+   outcome-driven schedule change (§2.4). The one further night this lane can
+   require is §2.5's `m < 6` branch, which is fixed by rule BEFORE capture and
+   is therefore not outcome-driven in the sense forbidden here.
 6. **No amendment of the pre-registration** to accommodate what the data did.
    Its rules were fixed before capture precisely so they could not be.
-7. **No arm without Ed's affirmative acknowledgment of V3**, and no arm that
-   skips the email-then-arm handback or the pre-arm `check` dry run.
-8. **No agent present during any of the three nights**, and no use of the
-   chain, driver or a live capture as a quietness test from a live session.
+7. **No arm that skips the email-then-arm handback, the standing gates, or the
+   pre-arm `check` dry run.** V3's affirmative acknowledgment is no longer a
+   precondition of THIS night: directive issue 316 answered V3 NO as the
+   default path and authorized the equivalence night in its place. V3 becomes
+   binding again only on the FAIL route, where the same issue affirms it.
+8. **No agent present during any night this runbook operates**, and no use of
+   the chain, driver or a live capture as a quietness test from a live
+   session.
 9. **No claim, floor, or paper number** may consume a derivation observation:
    derivation observations are corpus members and never bracket endpoints,
    before or after issuance, and no G2-a, floor or claim output is an input to
@@ -1849,14 +2089,20 @@ implementation.]`
     and its whole-suite replay is green, but arming a night still takes a
     magistrate ruling that adopts this text, plus §1.4's email-then-arm — and
     Ed's NO overrides.
-11. **No departure from three nights, or from twelve declared slots a night.**
-    Nothing here authorises one. Both tools refuse a departure that is not
-    accompanied by the written ruling they each require — the generator's
-    `--allow-slot-count` with `--slot-count-ruling` at the arm (§1.1b), the
-    issuer's `--nights-ruling` and `--slot-count-ruling` at issuance (§4.2) —
-    and this runbook does not supply, imply or stand in for such a ruling. The
-    flags exist so that a ruled departure is RECORDED in the artifact, not so
-    that a campaign can reshape itself around what the nights produced.
+11. **No departure from twelve declared slots a night, and no night count
+    chosen at the desk.** The twelve-slot shape is unchanged, and how many
+    nights follow this one is decided by §2.5's rule, which was fixed before
+    the night ran — never by what the night produced. Both tools still refuse
+    a departure that is not accompanied by the written ruling they each
+    require: the generator's `--allow-slot-count` with `--slot-count-ruling`
+    at the arm (§1.1b), the issuer's `--nights-ruling` and
+    `--slot-count-ruling` at issuance (§4.2). This runbook does not supply,
+    imply or stand in for such a ruling; the flags exist so that a ruled
+    departure is RECORDED in the artifact.
+12. **No licence from a PASS.** A PASS authorizes exactly one thing: writing
+    the D-102 continuation addendum. Ordinary capture, the first real G2-a
+    window, and every claim-bearing use of the acceptance wait until that
+    addendum has landed (§2.5).
 
 ---
 
@@ -1910,6 +2156,8 @@ numbered record.
 | Driver hands the chain four variables and no argv (`_run_chain_once` in `scripts/run_night.py`, pinned by the argv assertion in `tests/test_run_night.py`); the gate binds the clone by `HEAD` only (the clone-head condition in `joulewise/night_gate.py`); the reservation copies the identity-epoch and T1-bindings CONTENTS verbatim into every slot record (`main` in `scripts/reserve_calibration_window_bracket.py`) | scout record 101 §0–§2 and the contract-lens refuter record 105 §2, §5 |
 | Clean tree and desk-input provenance as arm-checklist items, and "one wrapper per night" | seat record 103 §7.1–§7.4 and its fix-round items B-1, B-2, S-1, S-4; refuter record 105 §5 |
 | Whole-suite replay green at the merged head, and the merge itself | records 130 and 133 |
+| The epoch-equivalence rule itself — the `m < 6` INCONCLUSIVE branch, the PASS and FAIL definitions, the continuation route and its addendum contents, the FAIL route's affirmation of V3, and the blindness clarification | The owner's directive issue 316 of 2026-09-10, transcribed as revision 2 of `configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the dated Ed addendum under D-102 in `docs/decision_log.md` |
+| The reference-envelope constants `0.032898493715362`, `0.009724`, `0.010164834757777545` and n = 17, their raw counterparts `0.03289849371536248` and `0.00972358928879385`, and the fact that this generation's screen rule carries no floor | `joulewise/calibration_bracketing.py`: `_D102_N17_DERIVATION` (its `operatives`, `corpus_n` and `screen_rule`), bound to the acceptance id by `_D102_GENERATION_DERIVATIONS` and checked in `_valid_acceptance_bound`; the same lexemes in `configs/calibration/calibration_acceptance_d079_v2_n17_r6.json` under `decimal_derivation.ratified_operatives`, `decimal_derivation.rounding` and `decimal_derivation.source_statistics` |
 
 Still unverified, and flagged in place: the 06:05 last-start cutoff's status
 (§1.3) and the complete night-gate refusal list with each refusal's remedy (§5).
@@ -1936,20 +2184,24 @@ means. A term is listed only if it does technical work.
 
 | Term | Built at | One-line meaning |
 |---|---|---|
-| acceptance | §"What these three nights are for" | The issued artifact whose corpus statistics set the thresholds later captures are judged against. |
-| identity epoch / epoch | same | The six-field vector `{os_build, hardware_model, power_policy, sampling_interval_ms, estimator_revision, pulse_protocol_id}` an acceptance binds. |
-| derivation-only capture | same | A capture taken to BUILD a future acceptance; it licenses no measurement. |
+| acceptance | §"What night one is for" | The issued artifact whose corpus statistics set the thresholds later captures are judged against. |
+| epoch-equivalence check | §"What night one is for", applied §2.5 | One night's retained values compared against the thresholds the acceptance in force already carries, under a rule fixed in writing before the night runs. It derives nothing and issues nothing; it answers whether the OS point release moved the clock-anchor bound outside the existing envelope. |
+| reference envelope | §2.5 | The comparators of the acceptance in force, in the OPERATIVE form the validator uses: level screen `0.032898493715362` s, bracket screen `0.009724` s, budget ceiling `0.010164834757777545` s, n = 17. Where an operative constant differs from the raw corpus statistic, the operative one is the comparator. |
+| retained value / retained m | §2.5 | The `b_fiducial_s` of a capture that is both `valid` in the ledger and resolved under anchor-v3 replay; `m` is how many such values the night produced. A refused, unreached or invalid capture contributes none. |
+| continuation ("epoch continuation on evidence") | §2.5 | Carrying the acceptance in force onto the new identity epoch by a dated D-102 addendum instead of voiding it and deriving a successor. It moves no threshold, and it is what licenses ordinary capture — a PASS by itself licenses nothing. |
+| identity epoch / epoch | §"What night one is for" | The six-field vector `{os_build, hardware_model, power_policy, sampling_interval_ms, estimator_revision, pulse_protocol_id}` an acceptance binds. |
+| derivation-only capture | §"What night one is for" | A capture taken to BUILD a future acceptance; it licenses no measurement. The equivalence night's twelve captures are of this kind, whichever route follows. |
 | slot | §Terms | One declared, ordered place for one capture inside a session (`d01`…`d12`). |
 | session (ledger) | §Terms | A ledger capability reserving several attempts under one open receipt at a fixed head pin. Unqualified, *session* always means this; the watchdog's *agent session* is always written out in full. |
 | registration | §Terms | The set of ledger sessions the pre-registration declares the corpus is drawn from. |
 | stale field | §Terms, used §0.8 | An identity field whose value on this machine differs from the active acceptance's epoch; at least one must be stale for a derivation night to be the right night. |
 | head pin / head-equals-pin | §Terms | The committed file naming the trusted receipt count and last digest; equality with the physical ledger head. |
-| screen / level screen / bracket screen | §Terms, operatives in §4.2 | A threshold a value is compared against; corpus maximum; corpus range. |
+| screen / level screen / bracket screen | §Terms, constants in §2.5, successor operatives in §4.2 | A threshold a value is compared against; corpus maximum; corpus range. |
 | ceiling (budget ceiling) | §Terms, §4.2 | The largest drift a generation will ever budget for; the bracket screen must be strictly below it. |
-| blind / blindness | §Terms, enforced §2.3 | No value, screen or statistic is examined before night 3's session is terminal. |
+| blind / blindness | §Terms, bounded §2.3 | Every rule that could be chosen after seeing values is fixed in writing BEFORE the data exists — "every rule fixed before data", not "no one may look". Nothing is read while a night runs; the equivalence night's retained values are read once its own session is terminal, and on the FAIL route no corpus statistic is computed before the last registration session is terminal. |
 | dead-man | §Terms | The second LaunchAgent that fires at a fixed local minute and stands the night down if completion has passed. |
 | fence (watchdog sense) | §Terms | A period in which the watchdog refuses to LAUNCH OR ADOPT a magistrate agent session: a plan span, the half-open belt `[02:45:00, 03:30:00)`, or the half-open dead-man minute `[07:00:00, 07:01:00)`. It forbids an agent starting, never a night running — which is why a `t0` of 02:56 is inside the belt and correct. |
-| blindness fence | §Terms, enforced §2.3 | The code-enforced prohibition on reading any captured value before night 3's ledger session is terminal. Not an interval; no clock clears it. |
+| blindness fence | §Terms, enforced §2.3 item 3 | The code-enforced refusal of `prepare-candidate` while any session named in the registration is not terminal — the FAIL route's fence on computing a corpus statistic early. Not an interval; no clock clears it, and it does not govern the equivalence check, whose rule is fixed before capture instead. |
 | handback | §Terms | `docs/process/NIGHT_HANDBACK.md`, rewritten and committed with every armed night. |
 | email-then-arm | §Terms, §1.4 | Email Ed the notice, arm without waiting for a reply; Ed's NO overrides. |
 | `[QUIET-MAC]` | §0.6 | The agent-free machine discipline a capture night runs under. |
