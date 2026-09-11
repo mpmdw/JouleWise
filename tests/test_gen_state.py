@@ -42,6 +42,9 @@ EXPECTED_IDS = {
     "ISOLATION-RULE-DOCTRINE-01",
     "V2-SURFACE-GUARD-REKEY-01",
     "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01",
+    # T38l: Ed's ruling (directive issue 316) — the continuation mechanism and its desk-check follow-up.
+    "EPOCH-CONTINUATION-01",
+    "ISSUER-CHECK-CONTINUATION-AWARE-01",
     "FIXTURE-SENTINEL-CONTROLLER-01",
     "GATE-R2-COVERAGE-ULP-01",
 
