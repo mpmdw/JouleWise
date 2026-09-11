@@ -90,6 +90,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.calibration_bracketing import (  # noqa: E402
     _D102_GENERATION_DERIVATIONS,
+    ANCHOR_V3_R6_ACCEPTANCE_ID,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     acceptance_generation_operatives,
     load_calibration_acceptance_bound,
@@ -132,6 +133,13 @@ CROSSCHECKED_OPERATIVES = (
 # acceptance directory of SOME checkout, not only this one, so the guard holds
 # for a worktree, a clone or a copy.
 FORBIDDEN_OUT_PARTS = ("configs", "calibration")
+# Issue 316 names the reference envelope by generation: "the acceptance in
+# force, d079_calibration_acceptance_v2_n17_r6".  Any other generation --
+# however well it authenticates -- carries different screens, and a caller
+# who points `--acceptance` at the n19 predecessor would turn a FAIL into a
+# PASS.  The id is pinned here; the path may vary (a clone's copy of the same
+# bytes is the same generation).
+REQUIRED_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
 
 VERDICT_PASS = "PASS"
 VERDICT_FAIL = "FAIL"
@@ -150,7 +158,9 @@ def _refuse_out_path(out: Path, force: bool) -> None:
     """Refuse a destination that would write into an acceptance directory."""
 
     resolved = out.expanduser().resolve()
-    parts = resolved.parts
+    # Compared case-folded: on a case-insensitive filesystem (the default on
+    # macOS) `CONFIGS/CALIBRATION` is the same directory as the forbidden one.
+    parts = tuple(part.lower() for part in resolved.parts)
     for index in range(len(parts) - 1):
         if parts[index : index + 2] == FORBIDDEN_OUT_PARTS:
             raise EquivalenceRefusal(
@@ -190,6 +200,12 @@ def reference_envelope(acceptance_path: Path) -> dict[str, Any]:
     acceptance_id = acceptance.get("acceptance_id")
     if not isinstance(acceptance_id, str):
         raise EquivalenceRefusal(f"acceptance {acceptance_path} names no acceptance_id")
+    if acceptance_id != REQUIRED_ACCEPTANCE_ID:
+        raise EquivalenceRefusal(
+            f"acceptance {acceptance_path} is generation {acceptance_id!r}; issue "
+            f"316 fixes the reference envelope as {REQUIRED_ACCEPTANCE_ID!r} and "
+            "no other generation's screens may stand in for it"
+        )
     derivation = acceptance.get("decimal_derivation")
     if not isinstance(derivation, Mapping):
         raise EquivalenceRefusal(f"acceptance {acceptance_id}: no decimal_derivation")

@@ -381,6 +381,75 @@ class EpochEquivalenceCheckTest(unittest.TestCase):
         self.assertEqual(code, checker.REFUSAL_EXIT)
         self.assertIn("never writes into an acceptance directory", stream.getvalue())
 
+    def test_another_authenticated_generation_is_refused_as_the_reference(self) -> None:
+        """Issue 316 names r6; the n19 predecessor authenticates but is not it.
+
+        Refuter 157 F1: twelve values of 0.033 FAIL against r6's level screen
+        and PASS against the n19 predecessor's. Pointing `--acceptance` at any
+        other registered generation must refuse before a comparison exists.
+        """
+
+        predecessor = (
+            DEFAULT_ACCEPTANCE_BOUND_PATH.parent / "calibration_acceptance_d079_v2.json"
+        )
+        self.assertTrue(predecessor.exists())
+        values = ["0.033"] * 12
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.build(tmp, "n19", [Slot(v) for v in values])
+            code, text, record = self.run_check(
+                fixture, "--acceptance", str(predecessor)
+            )
+        self.assertEqual(code, checker.REFUSAL_EXIT)
+        self.assertIsNone(record)
+        self.assertIn("issue 316 fixes the reference envelope", text)
+        self.assertIn(checker.REQUIRED_ACCEPTANCE_ID, text)
+        self.assertNotIn("EPOCH_EQUIVALENCE:", text)
+
+    def test_an_out_path_under_configs_calibration_refuses_case_folded(self) -> None:
+        """Refuter 157 F2: CONFIGS/CALIBRATION is the same directory on macOS."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "CONFIGS" / "CALIBRATION" / "record.json"
+            stream = io.StringIO()
+            with redirect_stdout(stream):
+                code = checker.main(
+                    ["--session-id", SESSION, "--out", str(target)]
+                )
+            self.assertFalse(target.exists())
+        self.assertEqual(code, checker.REFUSAL_EXIT)
+        self.assertIn("never writes into an acceptance directory", stream.getvalue())
+
+    def test_exactly_six_retained_values_are_judged_not_inconclusive(self) -> None:
+        """m = 6 is the first m the rule judges: the boundary is inclusive."""
+
+        values = _tight_grid(6, LEVEL_SCREEN - Decimal("0.0005"), Decimal("0.00001"))
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.build(
+                tmp, "m6",
+                [Slot(v) for v in values] + [Slot(values[0])] * 6,
+                fill_slots=6, abort_reason="window_exhausted",
+            )
+            code, text, record = self.run_check(fixture)
+        self.assertEqual(code, 0)
+        self.assertEqual(record["m"], 6)
+        self.assertEqual(record["verdict"], "PASS")
+        self.assertIsNotNone(record["bracket_screen_comparison"])
+        self.assertIn("EPOCH_EQUIVALENCE: PASS (m=6)", text)
+
+    def test_a_range_exactly_equal_to_the_bracket_screen_passes(self) -> None:
+        """`<=` on the spread too: a night whose spread IS the screen passes."""
+
+        top = LEVEL_SCREEN - Decimal("0.00005")
+        bottom = top - BRACKET_SCREEN
+        values = [_lexeme(bottom)] + _tight_grid(11, top, Decimal("0.000001"))
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = self.build(tmp, "rangeeq", [Slot(v) for v in values])
+            code, text, record = self.run_check(fixture)
+        self.assertEqual(code, 0)
+        self.assertEqual(Decimal(record["range_s"]), BRACKET_SCREEN)
+        self.assertTrue(record["bracket_screen_comparison"]["holds"])
+        self.assertEqual(record["verdict"], "PASS")
+
     def test_an_existing_out_is_not_overwritten_without_force(self) -> None:
         values = _tight_grid(12, LEVEL_SCREEN - Decimal("0.0005"), Decimal("0.00001"))
         with tempfile.TemporaryDirectory() as tmp:
