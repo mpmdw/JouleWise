@@ -202,6 +202,42 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertFalse(self.rendered.exists())
         self.assertFalse((self.root / "custody").exists())
 
+    def test_python_39_message_survives_newer_syntax_in_the_driver(self) -> None:
+        # Refuter 08 F1: the version check must not parse the whole driver under
+        # the candidate interpreter (a driver carrying syntax newer than the
+        # candidate would turn the version message into a parser traceback).
+        # The appended text is unparseable under EVERY Python, which proves the
+        # check reads only the MIN_PYTHON assignment line — the portable form of
+        # "3.10+ syntax under a 3.9 candidate" (the fake candidate below runs on
+        # the real interpreter and would parse real 3.10 syntax).
+        driver = self.root / "newer-syntax-driver"
+        driver_head = _init_repo(driver)
+        for relative in ("scripts/install_night_agent.sh", "scripts/run_night.py",
+                         "configs/launchd/com.joulewise.night.plist.template"):
+            target = driver / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO_ROOT / relative, target)
+        with (driver / "scripts/run_night.py").open("a", encoding="utf-8") as stream:
+            stream.write("\n\nthis line is not Python under any version )(\n")
+        fake = self.bin_dir / "old-python"
+        fake.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            "sys.argv = sys.argv[2:]\n"
+            "sys.version_info = (3, 9, 6)\n"
+            "exec(sys.stdin.read())\n", encoding="utf-8",
+        )
+        fake.chmod(0o755)
+        completed = self._run(
+            self._write_plan(repo_head=driver_head),
+            python=str(fake),
+            script=driver / "scripts/install_night_agent.sh",
+        )
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn("reports Python 3.9; minimum is 3.11", completed.stderr)
+        self.assertNotIn("SyntaxError", completed.stderr)
+        self.assertFalse(self.rendered.exists())
+
     def test_python_must_be_an_absolute_executable_regular_file(self) -> None:
         nonexecutable = self.bin_dir / "nonexecutable"
         nonexecutable.write_text("not executable\n")

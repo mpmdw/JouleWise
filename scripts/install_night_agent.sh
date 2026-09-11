@@ -65,14 +65,19 @@ if (( ! uninstall )); then
   # version could itself fail on an old interpreter (the 2026-09-11 defect).
   "$python" -B - "$repo/scripts/run_night.py" "$python" <<'PYTHON_CHECK' || exit 2
 import ast
+import re
 import sys
 
+# Parse ONLY the MIN_PYTHON assignment line, never the whole driver: the driver
+# may use syntax the rejected interpreter cannot parse, and a SyntaxError here
+# would replace the version message with a parser traceback (refuter 08 F1).
 with open(sys.argv[1], encoding="utf-8") as stream:
-    source = ast.parse(stream.read())
-minimum = next(ast.literal_eval(node.value) for node in source.body
-               if isinstance(node, ast.Assign)
-               and any(isinstance(target, ast.Name) and target.id == "MIN_PYTHON"
-                       for target in node.targets))
+    match_line = next(
+        (line for line in stream if re.match(r"^MIN_PYTHON\s*=\s*\(", line)), None)
+if match_line is None:
+    print("cannot find the MIN_PYTHON assignment in {}".format(sys.argv[1]), file=sys.stderr)
+    raise SystemExit(2)
+minimum = ast.literal_eval(match_line.split("=", 1)[1].strip())
 if sys.version_info[:2] < minimum:
     print("interpreter {} reports Python {}; minimum is {}".format(
         sys.argv[2], ".".join(map(str, sys.version_info[:2])),
