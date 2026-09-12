@@ -1,0 +1,226 @@
+ARM BLOCK START 2026-09-12T03:00:18-0700
+arm clock: 1789207218.536117 2026-09-12T03:00:18.536117-07:00
+span/stop checks PASS
+From https://github.com/mpmdw/JouleWise
+ * branch              main       -> FETCH_HEAD
+VERIFIED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/chain.zsh sha256=569daedae03126d9eb819abd3b132baf860597dbe926a0db87311643a854df45
+staged plan checks PASS
+20439 20420 grep -E claude (daemon run|bg-spare|bg-pty-host)|--resume
+launchctl list | grep joulewise:
+-	0	com.joulewise.magistrate
+pgrep -fl "codex|claude|t3" rc= 0
+94366 node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+94373 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false
+census ancestry: 94366 [94366, 94352, 94349] (94352, 'node /opt/homebrew/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false')
+census ancestry: 94373 [94373, 94366, 94352, 94349] (94366, '/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex mcp-server -c model="gpt-5.6-sol" -c model_reasoning_effort="high" -c mcp_servers.claude.enabled=false')
+foreign agent matches: []
+PUBLISHED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+{"preflight": "ok", "python": "/Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python", "version": "3.13.1", "modules": ["scripts.run_night", "joulewise.arm_readiness", "joulewise.arm_readiness_evidence_t0", "joulewise.t0_rehearsal", "joulewise.night_gate", "joulewise.measurement_liveness"]}
+gui/501/com.joulewise.night = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python
+	arguments = {
+		/Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python
+		/Users/edr/JouleWise-measurement-20260913-derivation/scripts/run_night.py
+		run
+		--plan
+		/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.268
+	}
+
+	working directory = /Users/edr/JouleWise-measurement-20260913-derivation
+
+	stdout path = /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.night.out
+	stderr path = /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.night.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.4N8vPsY7xo/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night
+	}
+
+	domain = gui/501 [100018]
+	asid = 100018
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.268435479 => {
+			keepalive = 0
+			service = com.joulewise.night
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 56
+				"Hour" => 2
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+gui/501/com.joulewise.night.deadman = {
+	active count = 0
+	path = /Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist
+	type = LaunchAgent
+	state = not running
+
+	program = /Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python
+	arguments = {
+		/Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python
+		/Users/edr/JouleWise-measurement-20260913-derivation/scripts/run_night.py
+		dead-man
+		--plan
+		/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+		--courier-bin
+		/Users/edr/.local/share/claude/versions/2.1.268
+	}
+
+	working directory = /Users/edr/JouleWise-measurement-20260913-derivation
+
+	stdout path = /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.deadman.out
+	stderr path = /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.deadman.err
+	inherited environment = {
+		SSH_AUTH_SOCK => /var/run/com.apple.launchd.4N8vPsY7xo/Listeners
+	}
+
+	default environment = {
+		PATH => /usr/bin:/bin:/usr/sbin:/sbin
+	}
+
+	environment = {
+		OSLogRateLimit => 64
+		PATH => /Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+		XPC_SERVICE_NAME => com.joulewise.night.deadman
+	}
+
+	domain = gui/501 [100018]
+	asid = 100018
+	minimum runtime = 10
+	exit timeout = 5
+	runs = 0
+	last exit code = (never exited)
+
+	event triggers = {
+		com.joulewise.night.deadman.268435480 => {
+			keepalive = 0
+			service = com.joulewise.night.deadman
+			stream = com.apple.launchd.calendarinterval
+			monitor = com.apple.UserEventAgent-Aqua
+			descriptor = {
+				"Minute" => 0
+				"Hour" => 7
+			}
+		}
+	}
+
+	event channels = {
+		"com.apple.launchd.calendarinterval" = {
+			port = 0x0
+			active = 0
+			managed = 1
+			reset = 0
+			hide = 0
+			watching = 1
+		}
+	}
+
+	spawn type = daemon (3)
+	jetsam priority = 40
+	jetsam memory limit (active) = (unlimited)
+	jetsam memory limit (inactive) = (unlimited)
+	jetsamproperties category = daemon
+	jetsam thread limit = 32
+	cpumon = default
+
+	properties = inferred program
+}
+validated pins: repo_head=f90cb8c016662f8af6faa73d905fc472443432ab measurement_root=/Users/edr/JouleWise-measurement-20260913-derivation measurement_head=f90cb8c016662f8af6faa73d905fc472443432ab
+-	0	com.joulewise.night
+-	0	com.joulewise.magistrate
+-	0	com.joulewise.night.deadman
+post-install night/ baseline: []
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-20260913-derivation/scripts/run_night.py"
+    2 => "run"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.268"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.night.err"
+  "StandardOutPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.night.out"
+  "StartCalendarInterval" => {
+    "Hour" => 2
+    "Minute" => 56
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-20260913-derivation"
+}
+{
+  "EnvironmentVariables" => {
+    "PATH" => "/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  }
+  "Label" => "com.joulewise.night.deadman"
+  "ProgramArguments" => [
+    0 => "/Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python"
+    1 => "/Users/edr/JouleWise-measurement-20260913-derivation/scripts/run_night.py"
+    2 => "dead-man"
+    3 => "--plan"
+    4 => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json"
+    5 => "--courier-bin"
+    6 => "/Users/edr/.local/share/claude/versions/2.1.268"
+  ]
+  "RunAtLoad" => false
+  "StandardErrorPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.deadman.err"
+  "StandardOutPath" => "/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night/launchd.deadman.out"
+  "StartCalendarInterval" => {
+    "Hour" => 7
+    "Minute" => 0
+  }
+  "WorkingDirectory" => "/Users/edr/JouleWise-measurement-20260913-derivation"
+}
+a6e83d14b3143dd5313e30c0f5a0f4688bb23ceb3b5c4f8c91378221533e2131  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=36896867)	80%; AC attached; not charging present: true
+ powermode            0
+ARM BLOCK DONE 2026-09-12T03:00:23-0700

@@ -75,6 +75,33 @@ night down.
 | 4. Capture inputs | wrapper `chain.zsh` sha256 `569daedae03126d9eb819abd3b132baf860597dbe926a0db87311643a854df45`; identity-epoch `b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607`; T1 bindings `8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98`; `EVIDENCE_ROOT_ID` `evidence-d079-epoch-25g83-derivation-n1-20260913` |
 | 5. FAIL-route nights 2/3 | not applicable to night one |
 
-## Executed
+## Executed — ARMED 2026-09-12 03:00:23 PDT
 
-(to be completed by the arm block at 03:00 PDT)
+`40-arm.zsh` ran in the foreground from 03:00:18 to 03:00:23 PDT, rc 0
+(full transcript `02-arm-evidence/arm-block-output.txt`). Step by step:
+
+| Step | Observed |
+|---|---|
+| 0 span/stop | arm clock 1789207218.5 = 03:00:18.5 PDT, inside 03:00–06:30; local-time check of 1789293360 = `2026-09-13 02:56`; dead-man arithmetic holds; no `standdown.request`, no `STOP` |
+| 1 pins | `notice-evidence.txt` non-empty; clone HEAD = H; tree clean; `git fetch origin main` then `merge-base --is-ancestor H origin/main` PASS |
+| 2 wrapper | `--verify`: `VERIFIED …/chain.zsh sha256=569daedae03126d9eb819abd3b132baf860597dbe926a0db87311643a854df45` |
+| 3 staged plan | all assertions PASS (`DIAGNOSTIC_NO_PACK`, 9000 s, both heads H, D-166 registration hash `dfe55f8d…1ac265`, authored 01:03:17 within 36 h of now and of t0, now < t0 − 1500 s, same filesystem device) |
+| 4 census | `ps … grep -E 'claude (daemon run\|bg-spare\|bg-pty-host)\|--resume'` matched only the grep itself; `launchctl list` = `com.joulewise.magistrate` only; no discoverable plan; `pgrep -fl 'codex\|claude\|t3'` rc 0 with two hits, pids 94366 and 94373 (the Codex MCP server this activation's harness starts), ancestry `[94366, 94352, 94349]` / `[94373, 94366, 94352, 94349]` through the lock pid 94352 → OWN; foreign matches `[]`. Both die with this activation, long before t0. |
+| 5 publication | `os.replace` → `PUBLISHED /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json` |
+| 6 install | `scripts/install_night_agent.sh --plan <night root>/night_plan.json --hour 2 --minute 56 --python <clone>/.venv/bin/python` from the clone: driver preflight `{"preflight": "ok", "python": "<clone>/.venv/bin/python", "version": "3.13.1", "modules": [scripts.run_night, joulewise.arm_readiness, joulewise.arm_readiness_evidence_t0, joulewise.t0_rehearsal, joulewise.night_gate, joulewise.measurement_liveness]}`; `validated pins: repo_head=f90cb8c0… measurement_root=/Users/edr/JouleWise-measurement-20260913-derivation measurement_head=f90cb8c0…`; both agents loaded |
+| 7 inspect | `launchctl list`: `com.joulewise.night` (0), `com.joulewise.magistrate` (0), `com.joulewise.night.deadman` (0). `plutil -p` night: `StartCalendarInterval` Hour 2 Minute 56, `WorkingDirectory` the clone, `ProgramArguments` = clone venv python, `<clone>/scripts/run_night.py run --plan <night root>/night_plan.json --courier-bin /Users/edr/.local/share/claude/versions/2.1.268`, `RunAtLoad` false, stdio to `<night root>/night/launchd.night.{out,err}`, PATH `/Users/edr/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin`. Dead-man: Hour 7 Minute 0, same program/root, `dead-man` subcommand, `RunAtLoad` false, stdio `launchd.deadman.{out,err}`. `night/` baseline: EMPTY (`[]`). Published plan `cmp` equal to the staged copy; sha256 `a6e83d14b3143dd5313e30c0f5a0f4688bb23ceb3b5c4f8c91378221533e2131`. Power: AC, battery 80 % not charging, `powermode 0`. |
+
+**Frozen triple in force:** `(d079-epoch-25g83-derivation-n1-20260913,
+/Users/edr/JouleWise-measurement-20260913-derivation, f90cb8c016662f8af6faa73d905fc472443432ab)`.
+The watchdog renders it into the next relaunch prompt from the published
+plan; the clone must not be moved, fast-forwarded or checked out until the
+night completes.
+
+**Expected observations before the harvest:** the 07:00 PDT 2026-09-12
+dead-man firing stands down with one `night.log` line and nothing else in
+`night/`; the watchdog's plan span opens at 02:31:00 PDT 09-13 with its
+stand-down request to whichever activation is then alive; the night agent
+fires at 02:56:00 PDT 09-13.
+
+This activation exits after this record is pushed (no own background work
+remains; the two MCP server processes die with it).
