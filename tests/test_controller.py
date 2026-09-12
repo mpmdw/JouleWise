@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -664,6 +665,17 @@ class RetryAdmissionPowermetricsAdapter(PowermetricsTelemetryAdapter):
         super().__init__(*args, **kwargs)
         self.concurrent_bounded_capture = False
         self.idle_slice_count = 0
+
+    def _command(self, *args, **kwargs):
+        argv = super()._command(*args, **kwargs)
+        # Shared controller/campaign policy from PR #310 (consult 87).
+        # Only bounded synthetic sentinels skip sleeping; continuous admission
+        # and measured sampling still own the real cadence/clock bracket.
+        # Production derives the post count from baseline duration, capped at
+        # 5 s; do not replace that count with a universal 100-sample request.
+        if kwargs.get("count") is not None:
+            argv.append("--no-sleep")
+        return argv
 
     def _run_bounded_capture(self, *args, **kwargs):
         if self._process is not None:
@@ -1596,21 +1608,54 @@ class HappyPathTests(ControllerTestCase):
             admission["attempts"][1]["cpu_admission"]["cpu_busy_ratio_p95"],
         )
 
+    def test_powermetrics_fixture_command_only_unpaces_bounded_captures(self) -> None:
+        adapter = RetryAdmissionPowermetricsAdapter(self.clock)
+        config = make_config("fixture-command-policy")
+        output = self.runs_root / "post.plist"
+        for count in (None, 3, 7, 100):
+            with self.subTest(count=count):
+                expected = PowermetricsTelemetryAdapter._command(
+                    adapter, config, output, count=count,
+                )
+                if count is not None:
+                    expected.append("--no-sleep")
+                self.assertEqual(
+                    adapter._command(config, output, count=count), expected,
+                )
+
     def test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce(
         self,
     ) -> None:
         from joulewise.cli import validate_bundle
         from joulewise.reduce import reduce_bundle
 
-        registry = RetryAdmissionPowermetricsRegistry()
-        bundle_path, summary = _produce_admission_powermetrics_bundle(
-            self.runs_root,
-            "controller-powermetrics-retry-pass",
-            registry,
+        # A177 / report 19: third host-timing fixture instance (87, 99, 19),
+        # caused by incomplete propagation of the bounded-sentinel cure.
+        # Keep the established stress floor while preserving continuous pacing.
+        scale = max(
+            3.5, float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")),
         )
+        registry = RetryAdmissionPowermetricsRegistry()
+        with patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)}):
+            bundle_path, summary = _produce_admission_powermetrics_bundle(
+                self.runs_root,
+                "controller-powermetrics-retry-pass",
+                registry,
+            )
 
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         metadata = json.loads((bundle_path / "metadata.json").read_text())
+        drift = metadata["uncertainty_evidence"]["idle_drift"]
+        self.assertEqual(drift["status"], "bounded", drift)
+        self.assertIsNotNone(summary.idle_baseline)
+        interval_s = 0.05  # The producer requests 20 Hz.
+        post_duration_s = max(
+            3 * interval_s, min(5.0, summary.idle_baseline.duration_s),
+        )
+        self.assertEqual(
+            drift["post_sample_count"],
+            max(3, math.ceil(post_duration_s / interval_s)),
+        )
         attempts = metadata["environment_admission"]["attempts"]
         self.assertEqual(
             [row["cpu_admission"]["decision"] for row in attempts],
@@ -1668,6 +1713,7 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(teardown["termination_grace_s"], 10.0)
         command = metadata["adapters"]["telemetry"]["command"]
         self.assertNotIn("-n", command)
+        self.assertNotIn("--no-sleep", command)
         self.assertEqual(
             command[command.index("--samplers") + 1],
             "cpu_power,gpu_power,ane_power,thermal",
