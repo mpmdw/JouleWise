@@ -105,9 +105,9 @@ quantities the calculation is intended to estimate:
 | Same-model null A/B/B/A blocks (four runs in the order A, B, B, A), with A = B | Comparative floor |
 | Two-model A/B/B/A blocks | Science contrast |
 
-The absolute floor is built from centered repeat energies, the comparative floor from same-model block differences, and a science contrast is a difference between two models; Section 3 gives each construction. For each block, the difference is mean B energy minus mean A energy.
+The absolute floor is built from centered repeat energies (each repeat energy taken as its difference from the mean of the repeats), the comparative floor from same-model block differences, and a science contrast is a difference between two models; Section 3 gives each construction. For each block, the difference is mean B energy minus mean A energy.
 
-JouleWise bounds each of these floors separately; Section 3 gives the construction, and no floor value is published in this paper.
+JouleWise bounds each floor separately, and no floor value is published in this paper.
 
 The short-prefill question is narrower: when prompt processing is brief, do
 enough sampling-record intervals overlap it to support a phase reduction—that
@@ -147,7 +147,7 @@ The checks above use the following fixed numbers. Define resting power \(P_{\mat
 and σ=max(1.4826 × median absolute deviation from \(P_{\mathrm{rest}}\), 0.001 W); median absolute deviation is the median absolute distance from that resting power; the factor puts a median absolute deviation on the same scale as a standard deviation. The quiet-record
 threshold is \(P_{\mathrm{rest}}+\max(5\ \mathrm{W},5\sigma)\). With \(P_{\mathrm{rest}}=0\) W and σ=0.001 W, consecutive quiet
 records of 6 W and 7 W exceed 5 W and fail the uncommanded-plateau check.
-A pulse must rise at least 10 W above resting power and have pulse height/σ ≥ 10. Its fit loss — the dimensionless score of Appendix A.3.5, which sums Huber scores — squared for small differences, proportional for large ones — of the differences between predicted and observed interval averages after division by σ — must be strictly below half the loss of the no-pulse model fitted to the same records: a fit loss of 4 against a no-pulse loss of 10 passes; 5 against 10 fails.
+A pulse must rise at least 10 W above resting power and have pulse height/σ ≥ 10. Its fit loss — the dimensionless score of Appendix A.3.5, which sums Huber scores (squared for small differences, proportional for large ones) of the differences between predicted and observed interval averages after division by σ — must be strictly below half the loss of the no-pulse model fitted to the same records: a fit loss of 4 against a no-pulse loss of 10 passes; 5 against 10 fails.
 Both fitted shifts must have absolute value strictly below 0.5 s: 0.499 s
 passes and 0.500 s fails. Trace coverage must extend at least 0.75 s beyond
 each command. Appendix A.3.5 specifies the loss and full checks.
@@ -194,7 +194,7 @@ Appendix Figure A1 shows the records, window, and three energy results for this 
 
 Each separately bounded floor source is a component. The registered sensitivity question is whether permitted edge movement—every lower-or-upper
 edge position allowed by that calibration and mapping—at least doubles each
-component's source of false difference. Let \(U_{\mathrm{point}}\) be a component bound calculated
+component's source of false difference (an energy difference that appears between runs of the same model under the same condition, where the true difference is zero). Let \(U_{\mathrm{point}}\) be a component bound calculated
 at the recorded edges; this is the **point-only value**. Let
 \(U_{\mathrm{corner}}\) be its counterpart after every allowed
 lower-or-upper edge choice for that component is evaluated jointly and the
@@ -216,7 +216,8 @@ increase in one timing term.
 An A/B/B/A block is four runs in the order A, B, B, A.
 
 A cell has two false-difference
-components. The **absolute component** measures spread among repeated runs of
+components; the spread of each is enlarged into a threshold a model comparison
+must exceed. The **absolute component** measures spread among repeated runs of
 one model. The **comparative component** measures differences from four-run
 blocks executed in A, B, B, A order. If the four phase energies in one block
 are \(A_1,B_1,B_2,A_2\), the block difference is
@@ -238,7 +239,7 @@ either component, first calculate its **point-only unguarded value**;
 **admitted energy** is an energy from a run that passed the required entry
 checks; this validity condition alone does not establish statistical independence. “Point only” means using each admitted
 energy at its recorded value. The later factor is the **small-sample
-multiplier**, specified with the publication safeguards in the prospective comparison protocol linked in Section 3; no value in this paper uses it. Here \(n\), the number of
+multiplier**, specified with the publication safeguards in the prospective comparison protocol linked at the end of this section; no value in this paper uses it. Here \(n\), the number of
 **independent units**, counts one repeated run for the absolute component and
 one four-run A/B/B/A block for the comparative component. These are the
 observations the statistical model assumes independent; admission does not
@@ -511,7 +512,7 @@ precision without a raw capture.
 *Figure A4. Synthetic shared-sign calculation. The two boxes show each block’s
 point difference, shared energy allowance and local half-width in joules.
 The lower rows apply one shared sign and one local sign per block, enumerate
-the cases in Table A4 (Appendix A.3.10), and identify the maximum complete bound. These signs
+the cases in Table A4 (Appendix A.3.10; the figure's own note calls it Table 4), and identify the maximum complete bound. These signs
 move energy allowances; they do not preserve one physical time shift.*
 
 The **cell floor** is the final gate value for assigned-energy differences in a cell
@@ -547,7 +548,7 @@ The following table and arithmetic reconstruct one retained diagnostic capture f
 <!-- evidence: runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/instrument_evidence.json -> clock_anchor.clock_stamps; row order is joulewise/uncertainty_evidence.py STAMP_ORDER; R_s composition is max(wall_resolution_s, monotonic_resolution_s) per the same module -->
 <!-- replay fence: scripts/check_paper_replay_fence.py is the mechanical re-derivation check for this table — it reads the five stamp rows back out of the retained evidence file in solver order and requires each printed value to be the same double, failing closed if a row is dropped or the caption is reworded. -->
 
-*Worked historical-capture arithmetic.* One retained current-estimator derivation reports all \(59\) pulses detected, \(122{,}859\) evaluated rectangles, a local clock-anchor bound of \(0.0011349971959968978\) s, and a final capture bound of \(0.030067931757111657\) s. Subtracting the two printed bounds gives \(0.030067931757111657-0.0011349971959968978=0.0289329345611147592\) s; the separately retained largest pulse residual is recorded in the source artifact (Appendix A.3.6). Re-running the detector over that capture's retained raw power trace and event log, under the current anchor method, reproduces both the capture bound and the evaluated-rectangle count exactly, and identifies the pulse attaining the maximum: the tenth commanded pulse of the capture, scheduled to switch on \(26.625\) s and off \(27.625\) s measured from the origin of the commanded pulse schedule, which is where the schedule places its first protocol pulse rather than an observed onset. Its two commands were stamped at \(1784757381.2856488\) s and \(1784757382.293089\) s of wall time, expressed as seconds since 1970. The fit leaves its onset lag anywhere in \([0.02544938965763524,\,0.02893293456111476]\) s and its offset lag anywhere in \([-0.008607394549133255,\,-0.005308621075866744]\) s, about a best-fit pair of \(+0.027\) s and \(-0.007\) s. The retained residual bound for the pulse is the largest absolute value those four endpoints allow — \(0.02893293456111476\) s, the upper end of the onset interval — and adding the local clock-anchor bound to it returns the capture bound quoted above. These values support only the diagnostic reconstruction of this retained calibration capture; they do not supply the prospective Qwen3 comparison.
+*Worked historical-capture arithmetic.* One retained current-estimator derivation reports all \(59\) pulses detected, \(122{,}859\) evaluated rectangles, a local clock-anchor bound of \(0.0011349971959968978\) s, and a final capture bound of \(0.030067931757111657\) s. Subtracting the two printed bounds gives \(0.030067931757111657-0.0011349971959968978=0.0289329345611147592\) s; the retained largest pulse residual is not this subtraction result but a value computed and stored separately (Appendix A.3.6), and it is printed below. Re-running the detector over that capture's retained raw power trace and event log, under the current anchor method, reproduces both the capture bound and the evaluated-rectangle count exactly, and identifies the pulse attaining the maximum: the tenth commanded pulse of the capture, scheduled to switch on \(26.625\) s and off \(27.625\) s measured from the origin of the commanded pulse schedule, which is where the schedule places its first protocol pulse rather than an observed onset. Its two commands were stamped at \(1784757381.2856488\) s and \(1784757382.293089\) s of wall time, expressed as seconds since 1970. The fit leaves its onset lag anywhere in \([0.02544938965763524,\,0.02893293456111476]\) s and its offset lag anywhere in \([-0.008607394549133255,\,-0.005308621075866744]\) s, about a best-fit pair of \(+0.027\) s and \(-0.007\) s. The retained residual bound for the pulse is the largest absolute value those four endpoints allow — \(0.02893293456111476\) s, the upper end of the onset interval — and adding the local clock-anchor bound to it returns the capture bound quoted above. These values support only the diagnostic reconstruction of this retained calibration capture; they do not supply the prospective Qwen3 comparison.
 <!-- evidence: runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/{events.jsonl,instrument_evidence.json}; commanded edges from events.jsonl pulse_command_on/off #10 metadata.clock_stamp.epoch_s (planned offsets 26.625 s / 27.625 s). The v3-anchored fit rows are re-derived deterministically by joulewise.powermetrics_fiducial.rederive_detection_from_artifacts over the retained raw plist + events.jsonl, reproducing b_fiducial_s = 0.030067931757111657 and projection_evaluated_cell_count = 122859 exactly; the byte-retained pulses[] in this 2026-07-22 file are v2-anchor-era, while fresh _v5 captures byte-retain v3. -->
 <!-- evidence: docs/process_traces/2026-08-19-refreeze-execution/r6-issuance/r4-derivation.json -->
 <!-- replay fence: scripts/check_paper_replay_fence.py is the mechanical re-derivation check for this paragraph — it re-runs the anchor and the 59 pulse fits from the capture's primary bytes and requires every literal above to be the same double it re-derives (stored rows and the stored bound are never inputs). -->
@@ -569,7 +570,7 @@ energy claim.
 A best-fit lag is fitted edge time minus its command time: positive means late,
 negative means early. Fitted onsets and offsets are the rectangular model’s switch-on and switch-off times. The 59
 onset lags are all positive; 49 of 59 offset lags are negative, eight positive,
-and two zero. Their medians—the middle sorted values—are +13.0 ms and
+and two zero. Their medians are +13.0 ms and
 −5.5 ms. These are 59 onset and 59 offset values (118 edges) from one capture,
 not independent calibration draws; these sample statistics make no coverage
 or independence claim.
@@ -587,7 +588,7 @@ time. Blue and orange dashed horizontal lines mark the respective medians,
 future coverage. The title, explanatory subtitle, right-hand line labels,
 bottom shape legend and notes name those marks and the late/early counts.
 The leader at pulse index 9 marks its +27-ms best-fit onset. The accepted region defined in Section 2
-is distinct from the allowance: the largest endpoint displacement in an accepted
+is distinct from the allowance it yields: the largest endpoint displacement in an accepted
 region, 28.93293456111476 ms on that onset, equals the retained worst edge
 excursion. Adding the 1.1349971959968978-ms clock-anchor allowance gives
 30.067931757111657 ms. The endpoint displacements and anchor
@@ -655,7 +656,7 @@ records and 17 overlapped four (registry DG-135–139). Median prefill duration
 was 0.2815 s for 7B versus 0.1365 s for 1.5B (DG-143–144), compared with the
 120.9-ms median record width (the duration of a sampling record’s interval)
 in the retained a10 sample described below (DG-071). A per-edge allowance of a
-few tens of milliseconds, as in the Section 2 example (Section 2's worked example, not a measured window bound), amounts across both
+few tens of milliseconds, as in the Section 2 example (a worked example, not a measured window bound), amounts across both
 edges to more than half of the 1.5B median and roughly a quarter of the 7B
 median. The three-record minimum guards only against a split supported by two
 straddling averages, not against a timing envelope comparable to the phase

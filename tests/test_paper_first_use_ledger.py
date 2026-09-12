@@ -177,7 +177,7 @@ SENTENCE_GLOSS_TERMS = frozenset({
 LEXICON_REQUIRED_TERMS = (
     "| powermetrics | Abstract |",
     "| mint | A.4 |",
-    "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | A.4 |",
+    "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 (reservation plan) / A.4 (the rest) |",
     "| entry check | §2 |",
     "| admitted | §2 |",
     "| workload level / workload magnitude / per-token conversion | §3 |",

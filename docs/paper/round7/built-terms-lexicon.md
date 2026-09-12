@@ -20,7 +20,7 @@ silently discard it.
 | member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
 | energy-allowance sign / shared sign / local sign | §3 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
 | reasoning disabled | §1 | Qwen3's optional chain-of-thought output is switched off. |
-| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | A.4 | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
+| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 (reservation plan) / A.4 (the rest) | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
 | mint | A.4 | The analysis run that issues the paper's fixed results. |
 | frozen | §2 | Fixed and fingerprinted before collection. |
 | signal, fit, range, trace-coverage, and completeness checks | §2 | Signal rises above rest; the fit beats a no-pulse model; shifts stay in range; both trace margins exist; and required pulses, fingerprints, and binding fields are present. |

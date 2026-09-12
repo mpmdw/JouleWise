@@ -171,7 +171,7 @@ def extract_draft_literals(draft_text: str) -> dict[str, Any]:
     ).group(1)
 
     difference = _search(
-        r"Subtracting the two printed bounds gives "
+        r"(?:Subtracting the two printed bounds gives|largest pulse residual before the anchor term is) "
         r"\\\(([0-9.eE+-]+)-([0-9.eE+-]+)=([0-9.eE+-]+)\\\) s",
         arithmetic,
         "residual subtraction",

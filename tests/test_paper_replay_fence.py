@@ -132,6 +132,16 @@ class DraftLiteralExtractionTests(unittest.TestCase):
         self.assertTrue(FENCE.check_draft_internal_identities(literals))
 
 
+    def test_frozen_v1_draft_still_extracts(self) -> None:
+        """The frozen v1 prose keeps the older subtraction anchor; both forms must extract."""
+        v1_text = (ROOT / "docs" / "paper" / "draft-v1.md").read_text(encoding="utf-8")
+        v1_literals = FENCE.extract_draft_literals(v1_text)
+        self.assertEqual(set(v1_literals), set(self.literals))
+        self.assertEqual(
+            v1_literals["subtraction_result"], self.literals["subtraction_result"]
+        )
+
+
 class FenceInvocationTests(unittest.TestCase):
     """The committed script's own exit contract."""
 

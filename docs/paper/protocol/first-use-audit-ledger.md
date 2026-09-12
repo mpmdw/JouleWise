@@ -14,6 +14,16 @@ have no ledger rows; surviving terms are re-homed to their first occurrence.
 The frozen round-7 lexicon remains historical context; this ledger owns the
 current single-draft reading order.
 
+**Use-site rule for prose fix contracts (cold gate 23, 2026-09-12).** Every delete, move, or rename item in a
+prose fix contract must (i) list every term the affected text builds or glosses (for a deletion: the terms
+in the removed lines that still occur in the post-edit draft), and (ii) name and quote every site that uses
+each such term or the renamed object — in the draft, in pinned figure text under `docs/paper/figures/`, and
+in the status and gloss columns of this ledger and the built-terms lexicon's successor table — found by a
+literal search over `docs/paper/` whose command and output the seat's report reproduces verbatim. After
+the edit, the report quotes each listed site and shows every term built or glossed at or before its first
+use. Replacement text prescribed by a reviewer carries no exemption: it is subject to the same test before
+it is copied into a contract.
+
 | Term | First reader-facing home | Status | Definition or disposition |
 |---|---|---|---|
 | commanded graphics-processor pulses | 1. Introduction | glossed-at-first-use | The Introduction defines fixed-duration work with time-stamped start and stop commands inside one measurement session. |
@@ -92,7 +102,7 @@ current single-draft reading order.
 | onset lag / offset lag / pulse residual | One diagnostic reconstruction | glossed-at-first-use | Observed edge minus its matching commanded edge; the residual is the largest endpoint magnitude before the anchor term. |
 | record clipping / clip a record | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | Keep only record time inside the phase and multiply duration by average power; the joule example is worked. |
 | configuration cell / cell | 1. Introduction | glossed-at-first-use | A configuration cell groups runs sharing work, model, machine, software, and power definition; the shorter name follows in the defining sentence. |
-| false-difference components / false-difference | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | The same-model null A/B/B/A block produces this diagnostic, distinct from the two-model science contrast. |
+| false-difference components / false-difference | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | The doubling question glosses a false difference at first use as an energy difference that appears between runs of the same model under the same condition, where the true difference is zero; the components paragraph adds that the spread of each component is enlarged into a threshold a model comparison must exceed. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | P.2 Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
 | floor packs / contrast pack | P.2 Instrument characterization | glossed-at-first-use | The first use defines floor packs as campaign plans that collect calibration data used to build a comparator floor; the contrast pack is the separate two-model science comparison. |
