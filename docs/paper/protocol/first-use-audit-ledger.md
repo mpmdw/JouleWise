@@ -138,7 +138,7 @@ it is copied into a contract.
 | reintegrate | Combining shared movements and local widths | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
 | onset set / offset set / zero-shift value | Combining shared movements and local widths | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
 | shared lower and upper energy swings | Combining shared movements and local widths | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
-| binary64 / member-envelope integral sum | Record support in two historical model stacks | audience-vocabulary | Binary64 is the usual 64-bit float format; Appendix A.3 defines the nonnegative four-member joule scale that covers the integrals before contrast. |
+| binary64 / member-envelope integral sum | Record support in two historical model stacks | glossed-at-first-use | Binary64 is glossed at its first main-text use as the usual 64-bit floating-point format; the member-envelope integral sum is built in Appendix A.3.10 before its only use there. |
 | ulp | A.3 Formal calibration algorithms | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local sign | Combining shared movements and local widths | glossed-at-first-use | The comparative replay chooses one separately for each block. |
 | local half-width / shared sign | Combining shared movements and local widths | glossed-at-first-use | One sign for energy allowances across all blocks; Section 3 constructs the local half-width from four member residuals. |
@@ -146,7 +146,7 @@ it is copied into a contract.
 | \(R_{cm}\) | Combining shared movements and local widths | glossed-at-first-use | Shared-energy-sign/local-corner sensitivity diagnostic with one shared sign for block-level energy allowances and one local sign per block; it does not replay the same timing shift in every block. |
 | shared-energy-sign/local-corner sensitivity diagnostic / shared-energy-sign/local-corner ratio | Combining shared movements and local widths | glossed-at-first-use | Registered comparative diagnostic that retains scalar energy-allowance signs without claiming that its limit covers the effect of the same timing shift in every block. |
 | two-block fixture / Student-\(t\) critical | Combining shared movements and local widths | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
-| resolution bound | Adding publication safeguards after the ratio | audience-vocabulary | Registered operational resolution guard for assigned-energy differences in one cell. |
+| resolution bound | Adding publication safeguards after the ratio | glossed-at-first-use | Registered operational resolution guard for assigned-energy differences in one cell; its first use in the protocol supplies that definition. |
 | cell floor | Combining shared movements and local widths | glossed-at-first-use | Final gate value for assigned-energy differences in a cell after the publication safeguards of protocol Section P.3. |
 | small-sample multiplier / \(g(n)\) | Comparing the moved-edge limit and point-only value | glossed-at-first-use | A factor that widens a result to allow for limited repetition; its formula follows under publication safeguards. |
 | directional comparison / directional comparisons | Directional comparison | glossed-at-first-use | The expected direction is fixed before collection. |
