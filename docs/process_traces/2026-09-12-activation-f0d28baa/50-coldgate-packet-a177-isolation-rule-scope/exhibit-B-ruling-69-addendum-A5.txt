@@ -1,0 +1,8 @@
+registered row's `operatives.maximum_budgetable_drift_s`; a non-None ceiling with no resolvable predecessor row refuses. Absence is tested as
+`is None` BEFORE `_decimal` is called (`_decimal` maps every non-string to None); a present non-string or unparseable value refuses.
+A5 (F7). Isolation rule clause (3) replaced: the delta re-audit of a fix round re-cuts, one term at a time, every clause the round's diff adds or changes
+plus every clause downstream of a fence the diff adds or moves — a scope derived from the diff, not chosen by the seat — running the single test
+selected for each cut, with `Ran N ≥ 1` parsed and source bytes restored and hash-asserted after every cut; a surviving atomic cut is should_fix.
+A6 (F6). `None` on the n17 row rests on D-145 (decision_log.md:187: r3 issued with screens TIGHTENED; statistics generation-derived, never copied) and
+the artifacts' own `protocol_or_estimator_byte_change` re-derivation trigger; no decision states an explicit exemption; the authority chain is recorded
+with the S3 landing.
