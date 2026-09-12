@@ -5225,11 +5225,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - CONTINUE — A88 `NIGHT-REHEARSAL-01`: After the watchdog install handoff, run one fresh REHEARSAL_STUB night through the installed LaunchAgent and night-driver courier before any real plan, then send the stage-1 email before the first diagnostic plan is armed.
 - CONTINUE — A139 `PAPER-CUSTODY-SEAM-01`: Finish the shared paper-custody read seam that wraps the existing authentication session, derives all bindings from a clean-Git supply map, replays validators, and returns only family-specific frozen verified objects.
 - CONTINUE — A149 `DECISION-LOG-RATIFY`: Install the ruling-43 addenda for D-078, D-083, D-165, D-166, and D-161 plus the new D-174 submission scope freeze in the decision log.
-- CONTINUE — A150 `ESTIMAND-ENCLOSURE-01`: Replace the rejected reducer-field approach with the pinned desk script for the paper's partial-record enclosure diagnostic.
-- CONTINUE — A151 `FB-PLANNING-METADATA-01`: Migrate the F+B planning metadata to a version-aware .v2 rule across the complete exact-equality and paper-consumer census.
-- CONTINUE — A152 `D165-RELABEL-01`: Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.
 - CONTINUE — A153 `D166-PROMPT0-01`: Move both decode comparison arms to prompt 0, beginning with a dependency census and ending with explicit supersession, regenerated custody, and the clone proof.
-- CONTINUE — A154 `PAPER-K`: Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.
 - CONTINUE — A175 `GATE-SENSIBILITY-SWEEP-01`: Before consuming the first real G2-a numbers, audit every numeric acceptance gate on the claim path for physical sensibility and remove microscopic tolerances that have no physical justification (Ed: 'make sure all barriers are sensible').
 
 <!-- END GENERATED: state-kernel run-state-intake -->

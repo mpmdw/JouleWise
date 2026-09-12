@@ -1656,37 +1656,6 @@
       "status_note": "The renderer branch reached the same caller-authority custody failure and is blocked on PAPER-CUSTODY-SEAM-01. WHOLE-WINDOW-STOP-RECEIPT-01 and CLAIM-NONISSUANCE-RECEIPT-01 remain separate queued producers.",
       "stop_card": null
     },
-    "D165-RELABEL-01": {
-      "acceptance": {
-        "evidence": [
-          "The successor rule id is d165_shared_sign_local_corner_replay.v2",
-          "The physical common-time and absolute-cancellation rationales are replaced by shared-energy-sign and local-corner sensitivity language",
-          "The eight independent and four comparative ratios, thresholds, census, arithmetic, and branch restrictions remain unchanged, and no submission-time rebuild occurs"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/D165-RELABEL-01/acceptance",
-          "label": "D165-RELABEL-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "D-165 is relabelled as a shared-energy-sign and local-corner sensitivity diagnostic without changing values or claiming physical common-time robustness."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate seat state",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Apply the ratified D-165 semantic relabel while preserving the issued arithmetic, thresholds, census, and historical bytes.",
-      "id": "D165-RELABEL-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 152,
-      "status": "active",
-      "status_note": "In flight on feat/2026-09-05-d165-relabel; Ed's estimand-relabel veto question remains outstanding while the ruled default proceeds.",
-      "stop_card": null
-    },
     "D166-PROMPT0-01": {
       "acceptance": {
         "evidence": [
@@ -2386,68 +2355,6 @@
       "rank": 185,
       "status": "queued",
       "status_note": "2026-09-10 23:40: seat S10 rounds 1-3 committed (c75da300, e1877237, 6d838a10); refuter 170 closed by round 3; refuter 174 and delta 179 in flight; PR not yet opened. 2026-09-11: PR #320 MERGED (main baf7b900), ledger 12/12, replay and CI green; r6 file and derivation digests unchanged and EPOCH_CONTINUATION_REGISTRY has no issued entries (PR #320 body). Post-merge review docs/process_traces/2026-09-11-activation-b23f3cb7/01-postmerge-review-pr320.md: no BLOCKER or code integration defect; VERDICT FOLLOW-UP NEEDED. Follow-ups designated PASS-ROUTE-RUNBOOK-CONTINUATION-01 (F1, runbook PASS route) and IDENTITY-PROBE-LIVE-VERIFY-01 (isolated live-probe test; lead-owned); kernel registration awaits the lead ruling on enum and authority-pointer representation. Existing queued status retained because the schema has no done/completed value. 2026-09-11 seat 03 resume: lead rulings installed; PASS-ROUTE-RUNBOOK-CONTINUATION-01 and IDENTITY-PROBE-LIVE-VERIFY-01 are registered at agent ranks 188 and 189, with live verification marked lead_only.",
-      "stop_card": null
-    },
-    "ESTIMAND-ENCLOSURE-01": {
-      "acceptance": {
-        "evidence": [
-          "A pinned desk script produces the appendix enclosure figure and exactly one DERIVE registry row from authenticated inputs",
-          "Every source record is counted exactly once",
-          "Negative and unsupported domains refuse, and no reducer field or frozen-bound composition is introduced"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ESTIMAND-ENCLOSURE-01/acceptance",
-          "label": "ESTIMAND-ENCLOSURE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A pinned desk script reports the nonnegative partial-record enclosure as a diagnostic without changing stored summaries or any frozen bound."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate seat state",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Replace the rejected reducer-field approach with the pinned desk script for the paper's partial-record enclosure diagnostic.",
-      "id": "ESTIMAND-ENCLOSURE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 150,
-      "status": "active",
-      "status_note": "In flight on feat/2026-09-04-estimand-enclosure after ruling 43 rejected the reducer field and selected the desk-script shape.",
-      "stop_card": null
-    },
-    "FB-PLANNING-METADATA-01": {
-      "acceptance": {
-        "evidence": [
-          "SINGLE_COUNT_DISCIPLINE_ID migrates to a .v2 rule with version-aware consumers while legacy objects retain exact bytes and historical meaning",
-          "The migration covers all ten exact-equality object sites, the key in four of seventeen fill-rehearsal JSON objects, and the df-ph-decode-floor-mint1.json and docs/site/adapter_contracts.html consumers",
-          "Both roles remain mandatory, planning_sizing_formula is non-gating, max(F,h+B) uses strict inequalities at both boundaries, and asymmetric intervals use actual endpoints"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FB-PLANNING-METADATA-01/acceptance",
-          "label": "FB-PLANNING-METADATA-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Versioned planning metadata preserves both mandatory gates while making F+B explicitly non-gating and migration-safe."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate seat state",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Migrate the F+B planning metadata to a version-aware .v2 rule across the complete exact-equality and paper-consumer census.",
-      "id": "FB-PLANNING-METADATA-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 151,
-      "status": "active",
-      "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
     "FLOOR-BIND-01": {
@@ -4830,37 +4737,6 @@
       "rank": 139,
       "status": "active",
       "status_note": "In progress on feat/2026-09-04-paper-custody-seam. Landing and two refuters were followed by fix round 1, a residual delta, and bounded fix round 2; a repeated signature routes back to a consult. All four supplier lanes wait on this seam.",
-      "stop_card": null
-    },
-    "PAPER-K": {
-      "acceptance": {
-        "evidence": [
-          "The paper consistently names interval-overlap-assigned energy and its conditional timing sensitivity without claiming an unconditional physical phase-energy bound",
-          "D-165, F+B planning metadata, and TR-01 use the ratified semantics; TR-01 is a fixed limitation and not a submission predicate",
-          "The source-to-estimand table distinguishes same-model repeats, same-model null A/B/B/A blocks, and the two-model science contrast, and the methods text matches the current implementation and statistical assumptions"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PAPER-K/acceptance",
-          "label": "PAPER-K acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The methods paper incorporates the peer-audit corrections, ratified semantic relabels, honest source-to-estimand mapping, and qualified statistical claims."
-      },
-      "authority": {
-        "label": "Ruling 43 ratification and post-gate Paper-K seat",
-        "path": "docs/process_traces/2026-09-02-hands-free-week/00-DURABLE-STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Finish the paper corrections selected by the three peer audits and ruling 43, including the estimand, D-165, planning metadata, transfer limitation, source mapping, and statistical qualifications.",
-      "id": "PAPER-K",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 154,
-      "status": "active",
-      "status_note": "Fix round 1 is in flight on feat/2026-09-04-paper-k after the first delta found late-built terms and a stale transfer note.",
       "stop_card": null
     },
     "PASS-ROUTE-RUNBOOK-CONTINUATION-01": {
