@@ -275,12 +275,19 @@ class FreezeFixtureClockOriginTests(unittest.TestCase):
     def setUp(self) -> None:
         temporary, repo, self.pack, _custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
-        # Reproduce a host awake longer than the seven-day evidence horizon.
-        self.origin = 1 + 15 * 86_400_000_000_000 // 2
-        with mock.patch.object(time, "monotonic_ns", return_value=self.origin):
-            install_passing_freeze(repo, self.pack, mint_receipt=False)
         registry, _raw, _reference = readiness._registry_reference(self.pack)
         self.lifecycle = registry["freeze_evidence_lifecycle"]
+        # ONE home for the horizon: the registry's evidence policy for the
+        # kind this test authenticates (a retuned registry retunes the test).
+        self.horizon_ns = next(
+            policy["horizon_ns"]
+            for policy in self.lifecycle["evidence_policies"]
+            if policy["kind"] == "ACCEPTANCE_OWNER"
+        )
+        # Reproduce a host awake longer than the evidence horizon (by 1/14).
+        self.origin = 1 + self.horizon_ns + self.horizon_ns // 14
+        with mock.patch.object(time, "monotonic_ns", return_value=self.origin):
+            install_passing_freeze(repo, self.pack, mint_receipt=False)
         path = self.pack / "arm_readiness.evidence/evidence-acceptance-owner.json"
         raw = path.read_bytes()
         self.receipt = json.loads(raw)
@@ -310,7 +317,7 @@ class FreezeFixtureClockOriginTests(unittest.TestCase):
 
     def test_evidence_still_expires_eight_days_after_authoring(self) -> None:
         with mock.patch.object(
-            time, "monotonic_ns", return_value=self.origin + 8 * 86_400_000_000_000
+            time, "monotonic_ns", return_value=self.origin + self.horizon_ns + 1_000_000_000
         ):
             with self.assertRaises(readiness.ArmReadinessError) as caught:
                 readiness._authenticate_generic_evidence_item(
