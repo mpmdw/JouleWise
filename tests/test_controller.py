@@ -1646,7 +1646,6 @@ class HappyPathTests(ControllerTestCase):
                     count = kwargs["count"]
                     bounded_captures.append({
                         "count": count,
-                        "interval_s": self._interval_ms(config) / 1000.0,
                         "scale": float(os.environ["FAKE_POWERMETRICS_SLEEP_SCALE"]),
                         "config": config,
                         "argv": argv,
@@ -1674,17 +1673,24 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(validate_bundle(bundle_path, strict=True), [])
         drift = metadata["uncertainty_evidence"]["idle_drift"]
         self.assertEqual(drift["status"], "bounded")
+        # Exactly one bounded (post-idle sentinel) capture: a second, paced one
+        # would otherwise survive every assertion below (Opus 49 should-fix).
+        self.assertEqual(len(bounded_captures), 1)
         capture = bounded_captures[0]
         self.assertGreaterEqual(capture["scale"], 12.0, "effective bounded stress floor")
         self.assertIn("--no-sleep", capture["argv"])
         self.assertEqual(
             int(capture["argv"][capture["argv"].index("-n") + 1]), capture["count"],
         )
+        # Both production inputs are witnessed from the argv production built:
+        # count from -n above, the interval below (derived from the recorded
+        # config through production's own _interval_ms, never recorded by hand).
+        interval_s = registry.adapter._interval_ms(capture["config"]) / 1000.0
         self.assertEqual(
             int(capture["argv"][capture["argv"].index("-i") + 1]) / 1000.0,
-            capture["interval_s"],
+            interval_s,
         )
-        nominal_s = capture["count"] * capture["interval_s"]
+        nominal_s = capture["count"] * interval_s
         # Production's own deadline for this capture. One home:
         # powermetrics.py _capture_timeout_s; both max operands are pinned by
         # test_run_campaign.test_real_powermetrics_capture_timeout_is_unchanged.
