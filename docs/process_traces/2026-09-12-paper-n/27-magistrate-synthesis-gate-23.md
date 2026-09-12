@@ -24,31 +24,22 @@ plan §2; the rest A.4) with the protected tuple updated.
 
 ## After-edit text the judge required quoted
 
-- 108: The absolute floor is built from centered repeat energies (each repeat energy taken as its difference from the mean of the repeats), the comparative floor from same-model block differences, and a science contrast is a difference between two models; Section 3 g
+(Re-harvested at the committed head 0fa5fa60 after record 28 found the first harvest used pre-edit line numbers; line numbers are the final head's.)
 
+- 108: The absolute floor is built from centered repeat energies (each repeat energy taken as its difference from the mean of the repeats), the comparative floor from same-model block differences, and a science contrast is a difference between two models; Section 3 gives each construction. For each block, 
 - 110: JouleWise bounds each floor separately, and no floor value is published in this paper.
-
-- 150: A pulse must rise at least 10 W above resting power and have pulse height/σ ≥ 10. Its fit loss — the dimensionless score of Appendix A.3.5, which sums Huber scores (squared for small differences, proportional for large ones) of the differences between predicte
-
+- 150: A pulse must rise at least 10 W above resting power and have pulse height/σ ≥ 10. Its fit loss — the dimensionless score of Appendix A.3.5, which sums Huber scores (squared for small differences, proportional for large ones) of the differences between predicted and observed interval averages after d
 - 197: component's source of false difference (an energy difference that appears between runs of the same model under the same condition, where the true difference is zero). Let \(U_{\mathrm{point}}\) be a component bound calculated
-
 - 218: A cell has two false-difference
-
 - 219: components; the spread of each is enlarged into a threshold a model comparison
-
-- 241: energy at its recorded value. The later factor is the **small-sample
-
-- 514: The lower rows apply one shared sign and one local sign per block, enumerate
-
-- 572: onset lags are all positive; 49 of 59 offset lags are negative, eight positive,
-
-- 589: bottom shape legend and notes name those marks and the late/early counts.
-
-- 590: The leader at pulse index 9 marks its +27-ms best-fit onset. The accepted region defined in Section 2
-
-- 658: in the retained a10 sample described below (DG-071). A per-edge allowance of a
-
-- 550 (F7 sentence): - ledger row 95: 105:| false-difference components / false-difference | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | The doubling question glosses a false difference at first use as an energy difference that appears between runs of the same model under the same condition, where the true difference i
+- 220: must exceed. The **absolute component** measures spread among repeated runs of
+- 242: multiplier**, specified with the publication safeguards in the prospective comparison protocol linked at the end of this section; no value in this paper uses it. Here \(n\), the number of
+- 515: the cases in Table A4 (Appendix A.3.10; the figure's own note calls it Table 4), and identify the maximum complete bound. These signs
+- 573: and two zero. Their medians are +13.0 ms and
+- 591: is distinct from the allowance it yields: the largest endpoint displacement in an accepted
+- 659: few tens of milliseconds, as in the Section 2 example (a worked example, not a measured window bound), amounts across both
+- 551 (F7 sentence): Subtracting the two printed bounds gives \(0.030067931757111657-0.0011349971959968978=0.0289329345611147592\) s; the retained largest pulse residual is not this subtraction result but a value computed and stored separately (Appendix A.3.6), and it is printed b
+- ledger row: | false-difference components / false-difference | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | The doubling question glosses a false difference at first use as an energy difference that appears between runs of the same model under the same condition, where the true difference is ze
 
 ## Bench acceptance (lead, venv Python 3.13.1, R7F_CORPUS_ROOT=/Users/edr/code/JouleWise)
 
