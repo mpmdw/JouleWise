@@ -1662,7 +1662,13 @@ If the chain could not reach every slot it logs `slot_unused slot=dNN
 reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
 --reason window_exhausted`, and exits 0. An aborted session IS terminal, and
 its finalized observations remain in the prior set.
-The desk tool's `session-refusal` reports this reason as `calibration_window_exhausted`.
+`session-refusal` (the recovery tool's subcommand that prints a stored abort as a
+refusal code, run from the checkout you harvest with) reports this reason as
+`calibration_window_exhausted` only in checkouts that contain that code (main
+after 2026-09-12). The armed night's frozen clone at H f90cb8c0 predates it and
+prints `calibration_session_not_open` for the same session; there, read the
+reason from the chain log line above instead. Harvest always uses the night's
+frozen clone, never main.
 
 The correct response is: record the unused count, and **do nothing else**.
 Every night runs all twelve declared slots regardless of interim values, and
