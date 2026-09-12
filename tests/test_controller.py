@@ -1648,7 +1648,7 @@ class HappyPathTests(ControllerTestCase):
                         "count": count,
                         "interval_s": self._interval_ms(config) / 1000.0,
                         "scale": float(os.environ["FAKE_POWERMETRICS_SLEEP_SCALE"]),
-                        "timeout_s": self._capture_timeout_s(config, count),
+                        "config": config,
                         "argv": argv,
                     })
                 return argv
@@ -1685,10 +1685,12 @@ class HappyPathTests(ControllerTestCase):
             capture["interval_s"],
         )
         nominal_s = capture["count"] * capture["interval_s"]
-        # Production _capture_timeout_s: max(15.0, nominal_s * 1.5 + 10.0).
-        self.assertEqual(capture["timeout_s"], max(15.0, nominal_s * 1.5 + 10.0))
+        # Production's own deadline for this capture. One home:
+        # powermetrics.py _capture_timeout_s; both max operands are pinned by
+        # test_run_campaign.test_real_powermetrics_capture_timeout_is_unchanged.
+        timeout_s = registry.adapter._capture_timeout_s(capture["config"], capture["count"])
         self.assertGreater(
-            nominal_s * capture["scale"], capture["timeout_s"],
+            nominal_s * capture["scale"], timeout_s,
             "this bounded capture must time out if --no-sleep is removed",
         )
         self.assertEqual(capture["count"], drift["post_sample_count"])
