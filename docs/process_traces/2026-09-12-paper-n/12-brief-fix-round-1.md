@@ -1,7 +1,7 @@
 # Fix contract — Paper-N round 1 (advisor-readiness pass on the merged article)
 
 SESSION_MODE: delegated
-WRITE_SCOPE: ["docs/paper/draft-v2-skeleton.md","docs/paper/protocol/first-use-audit-ledger.md","tests/test_paper_terms_lint.py","tests/test_paper_first_use_ledger.py","tests/fixtures/d165_rationale_allowlist.json","docs/process_traces/2026-09-12-paper-n/13-fix-round-1-astra-report.md"]
+WRITE_SCOPE: ["docs/paper/draft-v2-skeleton.md","docs/paper/protocol/first-use-audit-ledger.md","tests/test_paper_terms_lint.py","tests/test_paper_first_use_ledger.py","tests/fixtures/d165_rationale_allowlist.json"]
 
 Branch `feat/2026-09-12-paper-n` in this worktree (base origin/main dbe6c675). Land ONE commit
 "Paper-N fix round 1: <one line>" with every edit below; write your report to
