@@ -2,7 +2,7 @@
 
 `built-before` means the body constructs the referent from physical inputs before its first named use.
 `glossed-at-first-use` means the first named use supplies a plain-word definition or an equivalent calculation in the same sentence or paragraph.
-`audience-vocabulary` means a textbook-statistics or plain-English expression the intended metrology/CS professor uses without definition; that class here is exactly: repeatability, repetition, random scatter, complete, completeness, sampler cadence, refused, refuses, missing, malformed, corpus range, degrees of freedom, threshold, exact equality, null hypothesis, tail area, quarantine, append-only, run bundle, full-history checkout, third-party dependencies, cumulative counter, linear programme, infeasible, argmin, and detected.
+`audience-vocabulary` means a textbook-statistics or plain-English expression the intended metrology/CS professor uses without definition; that class here is exactly: repeatability, repetition, random scatter, complete, completeness, sampler cadence, refused, refuses, missing, malformed, corpus range, degrees of freedom, threshold, exact equality, null hypothesis, tail area, quarantine, append-only, run bundle, full-history checkout, third-party dependencies, cumulative counter, linear programme, infeasible, argmin, detected, measurement interval (the benchmark methodology's reporting duration in Section 6), and deterministic bound (a non-random maximum displacement).
 `forward-pointer-next-paragraph` means the first use carries an explicit cross-reference to a definition in the immediately following paragraph.
 `FAILS` means the term is neither built before nor glossed at first use and therefore requires a prose cure or deletion.
 The inventory excludes literal field names and reason names inside quoted omission sentences, and all text inside `<!-- -->` build notes.
@@ -138,7 +138,8 @@ it is copied into a contract.
 | reintegrate | Combining shared movements and local widths | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
 | onset set / offset set / zero-shift value | Combining shared movements and local widths | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
 | shared lower and upper energy swings | Combining shared movements and local widths | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
-| binary64 / member-envelope integral sum | Record support in two historical model stacks | glossed-at-first-use | Binary64 is glossed at its first main-text use as the usual 64-bit floating-point format; the member-envelope integral sum is built in Appendix A.3.10 before its only use there. |
+| binary64 | Record support in two historical model stacks | glossed-at-first-use | Glossed at its first main-text use as the usual 64-bit floating-point format; Appendix A.3 restates the convention. |
+| member-envelope integral sum | A.3 Formal calibration algorithms | built-before | Built in Appendix A.3.10 from the four member integrals with absolute contrast weights before its two uses there. |
 | ulp | A.3 Formal calibration algorithms | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local sign | Combining shared movements and local widths | glossed-at-first-use | The comparative replay chooses one separately for each block. |
 | local half-width / shared sign | Combining shared movements and local widths | glossed-at-first-use | One sign for energy allowances across all blocks; Section 3 constructs the local half-width from four member residuals. |
@@ -293,4 +294,4 @@ The audit also searched the reader-facing draft for empirical outcome branches,
 prospective result-fill markers, the false between-record pause mechanism,
 and the retired any-exceedance falsifier. Historical calibration and record
 support retain their explicit era labels; fixtures retain their arithmetic-only
-labels. Any uncured first use is a failure. Terms inventoried: 262; FAILS: 0.
+labels. Any uncured first use is a failure. Terms inventoried: 263; FAILS: 0.

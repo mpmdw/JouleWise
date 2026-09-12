@@ -509,6 +509,22 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
 
         unknown = sorted({row.status for row in self.rows} - STATUSES)
         self.assertEqual(unknown, [], f"unknown ledger statuses: {unknown}")
+
+        # `audience-vocabulary` is a closed class enumerated in the header ("that class
+        # here is exactly: ..."); a row may claim it only for a listed expression.
+        header_match = re.search(r"that class here is exactly: (.*?)\.\n", self.text, re.S)
+        self.assertIsNotNone(header_match, "audience-vocabulary class list missing from the header")
+        listed = {
+            re.sub(r"\s*\(.*?\)\s*$", "", item).strip().casefold()
+            for item in re.split(r",\s*(?:and\s+)?", header_match.group(1).replace("\n", " "))
+        }
+        outside = sorted(
+            row.term
+            for row in self.rows
+            if row.status == "audience-vocabulary"
+            and not any(alt.casefold() in listed for alt in _alternatives(row.term))
+        )
+        self.assertEqual(outside, [], f"audience-vocabulary claimed outside the header's class: {outside}")
         failures = [row.term for row in self.rows if row.status == "FAILS"]
         self.assertEqual(failures, [], f"unresolved first-use rows: {failures}")
 
