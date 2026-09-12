@@ -1,0 +1,2 @@
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 623397686487875, "refusal": null, "stderr": "", "stdout": ""}
+{"argv": ["/usr/bin/pgrep", "-lf", "codex|claude|t3"], "exit_code": 1, "monotonic_ns": 623398233434458, "refusal": null, "stderr": "", "stdout": ""}

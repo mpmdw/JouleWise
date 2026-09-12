@@ -129,6 +129,26 @@ RECORD: harvest, uninstall and removal for this night are complete; nothing
 is armed. The next plan is authored under record 13 of the same directory;
 this entry assigns it no pins.
 
+## Executed — rehearsal-20260912 (2026-09-12)
+
+The night ran. Launchd started the driver at 00:30:04 PDT under the pinned
+Python 3.13 (H′ `a7d1eb88`); gate verdict `REHEARSAL_ONLY`; the built-in stub
+exited 0; `result.json` `REHEARSAL_ONLY` with `chain_exit_code` 0; receipt
+C1/C3/C4/C5 PASS with measured keys, C2 `NOT_APPLICABLE`
+(`no_pack_by_design`), refusal null; `launchd.night.err` EMPTY; results
+branch `night-results/20260912` at `e657f30f`; courier email
+`1a09487237fa6be2`. Ruling 06 C-7 is MET clause by clause and acceptance
+item 6 is MET in
+[record 01](../process_traces/2026-09-12-courier-rehearsal-20260912/01-rehearsal-20260912-harvest-record.md).
+Both agents were uninstalled FROM the stub checkout, the checkout was
+removed, and the plan root was moved out of discovery (delete refused by the
+harness; bytes archived) in
+[record 02](../process_traces/2026-09-12-courier-rehearsal-20260912/02-rehearsal-20260912-uninstall-and-retirement.md).
+RECORD: harvest, uninstall and retirement for this night are complete; nothing
+is armed; this file's §Purpose / §Where the results are / §Next lane still
+describe this completed night until the magistrate rewrites them for the
+next plan.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/rehearsal-20260912`; records in
