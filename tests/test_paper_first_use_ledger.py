@@ -70,17 +70,15 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "measures one Apple M3 Max",
         "128 GB of unified memory",
     ),
-    "detection floor": (
-        "registered operational resolution guard for assigned-energy differences",
-        "the detection floor in the advisor's terminology",
-        "the artifacts call the final gate value after those safeguards the cell floor",
+    "cell floor": (
+        "final gate value for assigned-energy differences in a cell",
+        "after the publication safeguards of section p.3",
     ),
     r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
         "component bound calculated at the recorded edges",
         "largest result retained",
-        "this replay uses a different numerator",
     ),
-    "A/B/B/A block": ("An A/B/B/A block is four runs in the order A, B, B, A",),
+    "A/B/B/A block": ("four runs in the order A, B, B, A",),
     "registered rounding / registered": (
         "registered timing domain—the edge movements fixed before collection",
     ),
@@ -91,20 +89,20 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "floor packs are the campaign plans that collect calibration data used to build a comparator floor",
     ),
     "energy-allowance sign": (
-        "says which direction a nonnegative block-level allowance moves assigned energy",
+        r"says which direction a nonnegative per-block joule allowance derived below as \(q_j\) moves assigned energy",
     ),
     r"\(R_{cm}\)": (
         "shared-energy-sign/local-corner sensitivity diagnostic",
+        "this replay uses a different numerator",
         "does not replay the same timing shift in every block",
         "or prove that its limit covers the effect of such a shift",
     ),
     "reasoning disabled": ("optional chain-of-thought output is switched off",),
     "declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file": (
         "hardware and operating conditions recorded before collection",
-        "list of its calibration artifacts and their SHA-256 fingerprints",
-        "file that names the reserved collection slots",
-        "pins in the calibration ledger's session record",
-        "expected digest from the in-code ISSUED_ACCEPTANCE_REGISTRY",
+        "every input to a capture",
+        "is fingerprinted, and any mismatch refuses the capture",
+        "appendix a.4 lists the identifiers and refusal names",
     ),
     "mint": ("the analysis run that issues the paper's fixed results",),
     "frozen": ("fixed and fingerprinted before collection",),
@@ -114,7 +112,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "trace coverage extends through the fixed margin on both sides",
         "cap both the number of search rectangles evaluated and the elapsed search time",
     ),
-    "first-record endpoint": ("wall-clock time assigned to the end of the first native power record",),
+    "first-record endpoint": ("wall-clock time assigned to the end of the first native sampling record",),
     "calibration-acceptance rule": ("pre-collection rule that decides whether those two captures may bracket one window",),
     "entry check": ("pass/fail checks on recorded machine state that a stage must satisfy before its first run is measured",),
     "admitted": ("allowed to begin its measured runs",),
@@ -151,7 +149,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "gpu (graphics-processor)",
         "switch-on and switch-off times selected by matching predicted interval-average power",
     ),
-    "allowed region": ("contains every edge pair surviving the fit's discrepancy limit",),
+    "accepted region": ("every edge pair surviving the loss tolerance of appendix a.3.5",),
     "measured contrast": ("point estimate and composed uncertainty interval",),
 }
 
@@ -177,15 +175,15 @@ SENTENCE_GLOSS_TERMS = frozenset({
 })
 
 LEXICON_REQUIRED_TERMS = (
-    "| powermetrics | §1 |",
-    "| mint | §2 |",
-    "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 |",
+    "| powermetrics | Abstract |",
+    "| mint | A.4 |",
+    "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 (reservation plan) / A.4 (the rest) |",
     "| entry check | §2 |",
     "| admitted | §2 |",
     "| workload level / workload magnitude / per-token conversion | §3 |",
     "| cadence ratio / sampling flags | §3 |",
     "| interpolation edge / deterministic-bound kinds | §4 |",
-    "| measured contrast / custody / Figure 3 | §4 |",
+    "| measured contrast / custody / Figure P1 | protocol P.3 / §7 |",
 )
 
 

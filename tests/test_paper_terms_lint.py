@@ -39,9 +39,9 @@ def enclosure_placement_errors(draft: str, registry: str) -> list[str]:
     image = "(figures/figA_partial_record_enclosure.svg)"
     if appendix.count(image) != 1 or "Figure A1. Synthetic; no hardware observation." not in appendix:
         errors.append("PE-01 appendix figure and synthetic caption are required")
-    introduction = body.split("## 1. Introduction", 1)[-1].split("## 2.", 1)[0]
-    if "Appendix Figure A1 shows the records, window, and three energy results for this synthetic example." not in introduction:
-        errors.append("Introduction must cite Figure A1")
+    construction = body.split("## 3. How the method quantifies assigned-energy sensitivity", 1)[-1].split("## 4.", 1)[0]
+    if "Appendix Figure A1 shows the records, window, and three energy results for this synthetic example." not in construction:
+        errors.append("Section 3 must cite Figure A1")
     return errors
 
 
@@ -417,11 +417,13 @@ class RealDocumentRegressionTests(unittest.TestCase):
             self.assertIn("13 crossed three and passed", section)
             self.assertIn("33 crossed three records and 17 crossed four", section)
         conclusion = draft.split("## 8. Conclusion", 1)[1].split("## 9. References", 1)[0]
-        self.assertIn("Record identifiability depended on the model/stack", conclusion)
+        self.assertIn("Record-support outcomes differed between the retained model/stack populations.", conclusion)
         self.assertNotIn("count discipline", draft)
-        self.assertIn("Phases with only two overlapping records failed the three-record minimum", conclusion)
-        self.assertIn("37 of the 50 1.5B phases and none of the 50 7B phases", conclusion)
-        self.assertIn("which overlapped three or four records each", conclusion)
+        # Keep the supported population statement, without repeating its counts.
+        self.assertEqual(conclusion.count("37 of 50"), 1)
+        self.assertEqual(conclusion.count("13 crossed three and passed"), 1)
+        self.assertEqual(conclusion.count("33 crossed three records and 17 crossed four"), 1)
+        self.assertNotIn("37 of the 50 1.5B phases", conclusion)
         self.assertIn("Accordingly, in this 1.5B population, 37 failed", draft)
         self.assertIn("In the 1.5B run r03", draft)
         import statistics
@@ -605,7 +607,7 @@ class RealDocumentRegressionTests(unittest.TestCase):
         first_figures = list(dict.fromkeys(re.findall(r"Figure (A?\d+)\b", draft)))
         self.assertEqual([n for n in first_figures if n.isdigit()], ["1", "2", "3"])
         self.assertEqual([n for n in first_figures if n.startswith("A")],
-                         [f"A{n}" for n in range(1, 7)])
+                         ["A2", "A1", "A3", "A4", "A5", "A6"])
         for label, locator in re.findall(r"!\[Figure (A?\d+)[^\]]*\]\(([^)]+)\)", draft):
             self.assertRegex(draft, rf"(?m)^\*?Figure {label}\. ")
             svg = (SUCCESSOR_DRAFT.parent / locator).read_text()
@@ -615,6 +617,16 @@ class RealDocumentRegressionTests(unittest.TestCase):
             if label not in ("2", "A1"):
                 self.assertTrue(embedded, locator)
             self.assertTrue(all(number == label for number in embedded), locator)
+        integrity = draft.split("### A.4 Executable verification order", 1)[1].split("### A.5", 1)[0]
+        for phrase in (
+            "list of its calibration artifacts and their SHA-256 fingerprints",
+            "file that names the reserved collection slots",
+            "pins in the calibration ledger's session record",
+            "expected digest from the in-code `ISSUED_ACCEPTANCE_REGISTRY`",
+            "`validation_manifest_sha256`", "`instrument_calibration_invalid`",
+            "`PLAN_HASH_MISMATCH`", "`GENESIS_FIXTURE_ACCEPTANCE_SHA256`",
+        ):
+            self.assertIn(phrase, integrity)
         self.assertIn("Figure P1.", protocol)
         self.assertNotRegex(protocol, r"Figure [1-9]|^### A\.")
         for phrase in ("P.6 describes the separate", "gap described in P.5 above",

@@ -14,50 +14,59 @@ have no ledger rows; surviving terms are re-homed to their first occurrence.
 The frozen round-7 lexicon remains historical context; this ledger owns the
 current single-draft reading order.
 
+**Use-site rule for prose fix contracts (cold gate 23, 2026-09-12).** Every delete, move, or rename item in a
+prose fix contract must (i) list every term the affected text builds or glosses (for a deletion: the terms
+in the removed lines that still occur in the post-edit draft), and (ii) name and quote every site that uses
+each such term or the renamed object — in the draft, in pinned figure text under `docs/paper/figures/`, and
+in the status and gloss columns of this ledger and the built-terms lexicon's successor table — found by a
+literal search over `docs/paper/` whose command and output the seat's report reproduces verbatim. After
+the edit, the report quotes each listed site and shows every term built or glossed at or before its first
+use. Replacement text prescribed by a reviewer carries no exemption: it is subject to the same test before
+it is copied into a contract.
+
 | Term | First reader-facing home | Status | Definition or disposition |
 |---|---|---|---|
-| commanded graphics-processor pulses | Abstract | glossed-at-first-use | The Abstract defines work with time-stamped start and stop commands; the Introduction supplies the fixed duration and measurement session. |
-| pulse-derived limit | 1. Introduction | glossed-at-first-use | Largest displacement between the commanded times and every edge position allowed by the pulse records, plus the clock-anchor bound. |
-| interval-overlap allocation / interval-overlap-assigned phase energy | 1. Introduction | glossed-at-first-use | Split each record's energy in proportion to the interval on each side of the phase boundary; the Abstract and Conclusion states average power times overlap duration. |
+| commanded graphics-processor pulses | 1. Introduction | glossed-at-first-use | The Introduction defines fixed-duration work with time-stamped start and stop commands inside one measurement session. |
+| pulse-derived limit | 1. Introduction | glossed-at-first-use | Largest displacement between the commanded times and every edge position in the fit’s model-defined accepted regions, plus the clock-anchor bound. |
+| interval-overlap allocation / interval-overlap-assigned phase energy | 1. Introduction | glossed-at-first-use | Split each record's energy in proportion to the interval on each side of the phase boundary; the Conclusion states average power times overlap duration. |
 | held-average reconstruction | 1. Introduction | glossed-at-first-use | Hold each record at its reported average; the Abstract states the mechanism and the Conclusion glosses the label. |
 | timing envelope | 1. Introduction | glossed-at-first-use | Range of assigned energies over the registered timing domain, conditional on the stated reconstruction. |
-| synthetic enclosure diagnostic | 1. Introduction | glossed-at-first-use | A labelled 0.9-s, ten-record example comparing the timing envelope with a nonnegative partial-record enclosure; it is never composed into a bound. |
-| component | 1. Introduction | glossed-at-first-use | One separate same-model repeat or same-model null A/B/B/A floor calculation. |
-| permitted edge movement | 1. Introduction | glossed-at-first-use | Every lower-or-upper edge position allowed by the pulse calibration and clock mapping. |
-| independent-edge ratio / four-run comparison | 1. Introduction | glossed-at-first-use | Moved-edge limit divided by the point-only value with separate movement per run; a four-run comparison can be a same-model null or a two-model science contrast. |
-| moved-edge limit / independent-edge corner bound / point-only value | 1. Introduction | glossed-at-first-use | The first is \(U_{\mathrm{corner}}\) after every allowed edge choice; the second is its single artifact alias, declared at first use; the point-only value is \(U_{\mathrm{point}}\) at the stored boundary times. |
+| synthetic enclosure diagnostic | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | A labelled 0.9-s, ten-record example comparing the timing envelope with a nonnegative partial-record enclosure; it is never composed into a bound. |
+| component | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | One separate same-model repeat or same-model null A/B/B/A floor calculation. |
+| permitted edge movement | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | Every lower-or-upper edge position allowed by the pulse calibration and clock mapping. |
+| independent-edge ratio / four-run comparison | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | Moved-edge limit divided by the point-only value with separate movement per run; a four-run comparison can be a same-model null or a two-model science contrast. |
+| moved-edge limit / independent-edge corner bound / point-only value | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | The first is \(U_{\mathrm{corner}}\) after every allowed edge choice; the second is its single artifact alias, declared at first use; the point-only value is \(U_{\mathrm{point}}\) at the stored boundary times. |
 | decision rule | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | A direction prints only when the measured difference clears its cell floor and the lowest-to-highest range after known measurement errors stays on the direction fixed before collection. |
 | twofold boundary contribution | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | The moved-edge limit is at least twice the point-only value. |
 | prompt processing / prefill | Abstract | glossed-at-first-use | Prompt work through the first output token; the shorthand follows the physical phrase. |
 | token generation / decode | Abstract | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
-| phase boundary | Abstract | glossed-at-first-use | The runtime-recorded time between prompt processing and token generation. |
-| powermetrics | Abstract | glossed-at-first-use | The macOS power sampler and its start-to-end interval-average record are stated at first use. |
+| phase boundary | 1. Introduction | glossed-at-first-use | The runtime-recorded time between prompt processing and token generation. |
+| powermetrics | Abstract | glossed-at-first-use | The Abstract names macOS powermetrics as the power sampler used here; Section 1 defines its interval-average records. |
 | sampler | Abstract | glossed-at-first-use | macOS powermetrics is introduced as the power sampler before any definite reference to it. |
 | token | Abstract | glossed-at-first-use | A piece of generated text, defined in the sentence that first uses the word. |
 | Apple M3 Max / 128 GB unified memory | 1. Introduction | glossed-at-first-use | The single measured machine and its memory capacity. |
-| sampling record | Abstract | glossed-at-first-use | One sampler output averaging processor power from its recorded start to its recorded end. |
+| sampling record | 1. Introduction | glossed-at-first-use | One sampler output averaging processor power from its recorded start to its recorded end. |
 | integrated energy | 1. Introduction | glossed-at-first-use | The time integral of power over a sampling record. |
-| detection floor | 1. Introduction | glossed-at-first-use | The advisor's term for the resolution bound before the safeguards; the artifacts call the final gate value after those safeguards the cell floor. |
 | power-measurement boundary | 1. Introduction | glossed-at-first-use | Which power is counted: the processor power macOS reports, not power at the wall outlet. |
-| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | 1. Introduction | glossed-at-first-use | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement uses the separately defined \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
+| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement uses the separately defined \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
 | A/B/B/A block | 1. Introduction | glossed-at-first-use | Four runs in the order A, B, B, A. |
-| energy-allowance sign | 1. Introduction | glossed-at-first-use | Says which direction a nonnegative block-level allowance moves assigned energy. |
+| energy-allowance sign | Combining shared movements and local widths | glossed-at-first-use | Says which direction a nonnegative block-level allowance moves assigned energy. |
 | twelve required ratios | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | Eight independent-edge ratios over same-model repeat and null floor components and four comparative \(R_{cm}\) diagnostics over same-model null components. |
 | reasoning disabled | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | Qwen3's optional chain-of-thought output is switched off. |
 | bracketed readings | 1. Introduction | glossed-at-first-use | One wall-clock reading placed between the monotonic-clock readings taken immediately before and after it. |
 | repeatability / repetition / random scatter | 2. In-window calibration method | audience-vocabulary | Ordinary metrology words for between-repeat spread and repeated observation. |
 | systematic reassignment | 2. In-window calibration method | built-before | The joule reassigned between phases under the held-average allocation is built before this label. |
 | science window / measurement window | Abstract | glossed-at-first-use | One uninterrupted measurement session; Appendix Figure A2 later diagrams the same window. |
-| SHA-256 / SHA-256 fingerprint | Bracketed pulse-train algorithm | glossed-at-first-use | A fingerprint that identifies exact file bytes. |
+| SHA-256 / SHA-256 fingerprint | Moving edges and enumerating endpoints | glossed-at-first-use | A fingerprint that identifies exact file bytes. |
 | applied chat-template | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | The formatter that turns a prompt into model input. |
 | greedy generation | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | Chooses the highest-probability next token at every step. |
 | phase reduction | 1. Introduction | glossed-at-first-use | Computes separate phase energies from overlapping sampler records. |
 | measurement refusal | 1. Introduction | glossed-at-first-use | A no-result stop when the fixed support requirement fails. |
-| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | Bracketed pulse-train algorithm | glossed-at-first-use | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
-| mint | Bracketed pulse-train algorithm | glossed-at-first-use | The analysis run that issues the paper's fixed results. |
+| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | Bracketed pulse-train algorithm | glossed-at-first-use | Section 2 states the recorded machine conditions, reserved-slot plan, and fingerprint/refusal rule and points to Appendix A.4, which defines the manifest, reserved-slot plan, ledger pins, and acceptance-file digest authority. |
+| mint | A.4 Executable verification order | glossed-at-first-use | The analysis run that issues the paper's fixed results. |
 | frozen | Bracketed pulse-train algorithm | glossed-at-first-use | Fixed and fingerprinted before collection. |
 | signal, fit, range, trace-coverage, and completeness checks / shared search-work limits | Bracketed pulse-train algorithm | glossed-at-first-use | Signal rises above rest; the pulse fit beats a no-pulse model; shifts stay in range; the trace covers both margins; required pulses, fingerprints, and binding fields exist; rectangle count and elapsed search time remain within their caps. |
-| first-record endpoint | Bracketed pulse-train algorithm | glossed-at-first-use | Wall-clock time assigned to the end of the first native power record. |
+| first-record endpoint | Bracketed pulse-train algorithm | glossed-at-first-use | Wall-clock time assigned to the end of the first native sampling record. |
 | calibration-acceptance rule | Bracketed pulse-train algorithm | glossed-at-first-use | Pre-collection rule deciding whether two capture bounds may bracket one window. |
 | entry check | Bracketed pulse-train algorithm | glossed-at-first-use | The pass/fail checks on recorded machine state that a stage must satisfy before its first run is measured. |
 | reference runs | Bracketed pulse-train algorithm | glossed-at-first-use | Fixed reference workloads repeated at opening, midpoint when present, and close to track drift. |
@@ -86,14 +95,14 @@ current single-draft reading order.
 | minimum allowance / operative timing bound / \(B_{\mathrm{fiducial}}\) / \(b\) | Bracketed pulse-train algorithm | glossed-at-first-use | The corpus lower allowance, one-capture pulse-derived limit, and distinct window bound are separated and numerically worked. |
 | stage / block member | Bracketed pulse-train algorithm | glossed-at-first-use | A back-to-back declared run group and one of its four individual A/B/B/A runs. |
 | members | Bracketed pulse-train algorithm | glossed-at-first-use | The four individual runs in an A/B/B/A science block. |
-| A/B/B/A order / block difference | 1. Introduction | glossed-at-first-use | The four-member order and \((B_1+B_2-A_1-A_2)/2\) contrast are printed together. |
+| A/B/B/A order / block difference | 1. Introduction | glossed-at-first-use | The table defines the four-member order; the paragraph below defines mean B energy minus mean A energy. Section 2 prints the equivalent four-energy formula. |
 | curvature | Counterbalanced order | glossed-at-first-use | Drift that bends rather than runs straight. |
-| whole-window allowance / energy family | Bracketed pulse-train algorithm | glossed-at-first-use | A once-added joule allowance for a group reduced under one energy definition. |
-| reference-trajectory excursion / issued repeatability bound | Bracketed pulse-train algorithm | glossed-at-first-use | Largest-minus-smallest reference means versus a retained earlier-window repeatability bound. |
+| whole-window allowance / energy family | Bracketed pulse-train algorithm | glossed-at-first-use | Section 2 points to the prospective protocol for this separately measured allowance and states that no paper value uses it; the energy-family construction remains in that protocol. |
+| reference-trajectory excursion / issued repeatability bound | Adding publication safeguards after the ratio | glossed-at-first-use | Largest-minus-smallest reference means versus a retained earlier-window repeatability bound. |
 | onset lag / offset lag / pulse residual | One diagnostic reconstruction | glossed-at-first-use | Observed edge minus its matching commanded edge; the residual is the largest endpoint magnitude before the anchor term. |
 | record clipping / clip a record | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | Keep only record time inside the phase and multiply duration by average power; the joule example is worked. |
 | configuration cell / cell | 1. Introduction | glossed-at-first-use | A configuration cell groups runs sharing work, model, machine, software, and power definition; the shorter name follows in the defining sentence. |
-| false-difference components / false-difference | 1. Introduction | glossed-at-first-use | The same-model null A/B/B/A block produces this diagnostic, distinct from the two-model science contrast. |
+| false-difference components / false-difference | 3. How the method quantifies assigned-energy sensitivity | glossed-at-first-use | The doubling question glosses a false difference at first use as an energy difference that appears between runs of the same model under the same condition, where the true difference is zero; the components paragraph adds that the spread of each component is enlarged into a threshold a model comparison must exceed. |
 | admitted | Bracketed pulse-train algorithm | glossed-at-first-use | A stage that passes the entry check is allowed to begin its measured runs. |
 | leaking dependence across the phase boundary | P.2 Instrument characterization | glossed-at-first-use | Prompt-processing energy changes with work performed only after prompt processing ended. |
 | floor packs / contrast pack | P.2 Instrument characterization | glossed-at-first-use | The first use defines floor packs as campaign plans that collect calibration data used to build a comparator floor; the contrast pack is the separate two-model science comparison. |
@@ -123,22 +132,22 @@ current single-draft reading order.
 | independent units | Comparing the moved-edge limit and point-only value | glossed-at-first-use | The calculation counts runs or complete blocks as specified for each component; admission does not establish statistical independence. |
 | point-only unguarded value / unguarded | Comparing the moved-edge limit and point-only value | glossed-at-first-use | The first calculation uses admitted energies at their recorded values before the later small-sample multiplier and whole-window allowance. |
 | independent-edge ratio \(R\) / dominates | Moving edges and enumerating endpoints | glossed-at-first-use | Moved-edge limit divided by the matching point-only value; dominates means \(R\ge2\). |
-| threshold / exact equality | 1. Introduction | glossed-at-first-use | A threshold is the numerical cutoff that the positive slope must exceed. |
+| threshold / exact equality | Bracketed pulse-train algorithm | glossed-at-first-use | A numerical cutoff; Section 2 first uses it for the quiet-record power check. |
 | authentication / evaluation | Benchmark and metrology lineage | glossed-at-first-use | Authentication matches inputs to named source-file contents; evaluation requires a nonzero second value. |
-| registered rounding / registered | Abstract | glossed-at-first-use | Each Abstract branch defines the registered timing domain as the set of edge movements fixed before collection; the later registered-rounding use names a rule fixed in fingerprinted plan bytes. |
+| registered rounding / registered | Abstract | glossed-at-first-use | The Abstract defines the registered timing domain as the set of edge movements fixed before collection; the later registered-rounding use names a rule fixed in fingerprinted plan bytes. |
 | reintegrate | Combining shared movements and local widths | glossed-at-first-use | Reintegrate the four retained power traces after moving all four phase starts while holding their ends fixed. |
 | onset set / offset set / zero-shift value | Combining shared movements and local widths | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
-| shared lower and upper excursions | Combining shared movements and local widths | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
-| binary64 / member-envelope integral sum | Combining shared movements and local widths | glossed-at-first-use | The usual 64-bit float format and a nonnegative four-member joule scale that covers the integrals before contrast. |
-| ulp | Combining shared movements and local widths | glossed-at-first-use | The gap between 1 and the next larger representable number. |
-| local sign | 1. Introduction | glossed-at-first-use | The comparative replay chooses one separately for each block. |
-| local half-width / shared sign | 1. Introduction | glossed-at-first-use | One sign for energy allowances across all blocks; Section 3 constructs the local half-width from four member residuals. |
-| half-width | Combining shared movements and local widths | glossed-at-first-use | A timing half-width is half an allowed timing range. |
-| \(R_{cm}\) | 1. Introduction | glossed-at-first-use | Shared-energy-sign/local-corner sensitivity diagnostic with one shared sign for block-level energy allowances and one local sign per block; it does not replay the same timing shift in every block. |
-| shared-energy-sign/local-corner sensitivity diagnostic / shared-energy-sign/local-corner ratio | 1. Introduction | glossed-at-first-use | Registered comparative diagnostic that retains scalar energy-allowance signs without claiming that its limit covers the effect of the same timing shift in every block. |
+| shared lower and upper energy swings | Combining shared movements and local widths | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
+| binary64 / member-envelope integral sum | Record support in two historical model stacks | audience-vocabulary | Binary64 is the usual 64-bit float format; Appendix A.3 defines the nonnegative four-member joule scale that covers the integrals before contrast. |
+| ulp | A.3 Formal calibration algorithms | glossed-at-first-use | The gap between 1 and the next larger representable number. |
+| local sign | Combining shared movements and local widths | glossed-at-first-use | The comparative replay chooses one separately for each block. |
+| local half-width / shared sign | Combining shared movements and local widths | glossed-at-first-use | One sign for energy allowances across all blocks; Section 3 constructs the local half-width from four member residuals. |
+| half-width | Moving edges and enumerating endpoints | glossed-at-first-use | Half the symmetric energy interval: the largest raw displacement plus the registered joint-interpolation allowance. |
+| \(R_{cm}\) | Combining shared movements and local widths | glossed-at-first-use | Shared-energy-sign/local-corner sensitivity diagnostic with one shared sign for block-level energy allowances and one local sign per block; it does not replay the same timing shift in every block. |
+| shared-energy-sign/local-corner sensitivity diagnostic / shared-energy-sign/local-corner ratio | Combining shared movements and local widths | glossed-at-first-use | Registered comparative diagnostic that retains scalar energy-allowance signs without claiming that its limit covers the effect of the same timing shift in every block. |
 | two-block fixture / Student-\(t\) critical | Combining shared movements and local widths | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
-| resolution bound | 1. Introduction | glossed-at-first-use | Registered operational resolution guard for assigned-energy differences in one cell. |
-| cell floor | 1. Introduction | glossed-at-first-use | Artifact name for the final resolution bound, bridged in Section 1 to the detection-floor name. |
+| resolution bound | Adding publication safeguards after the ratio | audience-vocabulary | Registered operational resolution guard for assigned-energy differences in one cell. |
+| cell floor | Combining shared movements and local widths | glossed-at-first-use | Final gate value for assigned-energy differences in a cell after the publication safeguards of protocol Section P.3. |
 | small-sample multiplier / \(g(n)\) | Comparing the moved-edge limit and point-only value | glossed-at-first-use | A factor that widens a result to allow for limited repetition; its formula follows under publication safeguards. |
 | directional comparison / directional comparisons | Directional comparison | glossed-at-first-use | The expected direction is fixed before collection. |
 | Holm step-down correction / raw probability | Directional comparison | glossed-at-first-use | Applied at nominal family-wise level 0.05 to two model-based tests, conditional on distributional and dependence assumptions; the later worked ordering supplies mechanics. |
@@ -158,7 +167,7 @@ current single-draft reading order.
 | deterministic-bound kinds / interpolation edge | Directional comparison | glossed-at-first-use | Native interval-average records integrate constant reported power and have zero interpolation-bound term; the named interpolation edge belongs to the point-sample fallback, while timing uses separate boundary envelopes. |
 | close-out artifact | P.1 Prospective campaign identities and ratio census | glossed-at-first-use | Post-campaign artifact that checks every required ratio. |
 | signed clearance or shortfall | Directional comparison | glossed-at-first-use | Absolute point estimate minus cell floor, with positive clearance and nonpositive shortfall. |
-| request total | Abstract | glossed-at-first-use | Energy assigned over the whole request; moving the dividing time reallocates energy between its parts without changing that total. |
+| request total | 1. Introduction | glossed-at-first-use | Energy assigned over the whole request; moving the dividing time reallocates energy between its parts without changing that total. |
 | MLX | 1. Introduction | glossed-at-first-use | Apple's on-device inference framework. |
 | inserted-gap check | 1. Introduction | glossed-at-first-use | An approximately 500-ms no-work gap between the request parts whose time-stamped edges are compared with the power record. |
 | Figure P1 | Evidence refusal and claim gates | glossed-at-first-use | The prose and caption enumerate the refusal lane, measured-contrast input, magnitude and direction gates, yes/no arrows, and four outcomes. |
@@ -250,8 +259,7 @@ current single-draft reading order.
 | Per-pulse fit | A.3 Formal calibration algorithms | glossed-at-first-use | The numbered procedure defines the local data, plateau, model, search, and acceptance checks. |
 | Local set | A.3 Formal calibration algorithms | glossed-at-first-use | Trace intervals overlapping one pulse's margin window. |
 | Interior set | A.3 Formal calibration algorithms | glossed-at-first-use | Local intervals wholly inside the plateau inset. |
-| Amplitude | Bracketed pulse-train algorithm | glossed-at-first-use | Amplitude \(a\) = median{ \(y_i\) : interior } − \(b\), fixed at this value for the rest of the fit. |
-| robust SNR | A.3 Formal calibration algorithms | glossed-at-first-use | Fitted plateau amplitude divided by robust baseline scale. |
+| robust SNR | A.3 Formal calibration algorithms | glossed-at-first-use | Fitted pulse height divided by robust baseline scale. |
 | Edge coverage | A.3 Formal calibration algorithms | glossed-at-first-use | Local trace must extend through both fixed pulse-edge margins. |
 | The model and the objective | A.3 Formal calibration algorithms | glossed-at-first-use | Shifted rectangular-pulse interval average scored by standardized Huber residual loss. |
 | Huber loss | A.3 Formal calibration algorithms | glossed-at-first-use | Quadratic for small residuals and linear for large ones; the loss remains unbounded, so a large discrepancy can still dominate the total. |
@@ -260,7 +268,6 @@ current single-draft reading order.
 | Significance | A.3 Formal calibration algorithms | glossed-at-first-use | Require \(Loss^* < 0.5\,Loss_{flat}\), the loss of a model with no pulse at all. |
 | Shift limit | A.3 Formal calibration algorithms | glossed-at-first-use | Both fitted shifts must remain strictly below 0.5 s in magnitude. |
 | The set of acceptable edge pairs / loss limit | A.3 Formal calibration algorithms | glossed-at-first-use | Edge pairs with loss no more than best loss plus the fixed tolerance. |
-| accepted region | A.3 Formal calibration algorithms | glossed-at-first-use | All pulse-edge pairs whose loss is within that limit. |
 | Cell lower bound | A.3 Formal calibration algorithms | glossed-at-first-use | Sum of least attainable per-interval Huber values over one shift rectangle. |
 | monotone | A.3 Formal calibration algorithms | glossed-at-first-use | Covered fraction decreases as onset moves later and increases as offset moves later. |
 | interval branch-and-bound / region's enclosure | A.3 Formal calibration algorithms | glossed-at-first-use | Reject a rectangle only by a rigorous lower bound and retain passing resolution cells whole. |
@@ -277,7 +284,7 @@ current single-draft reading order.
 | matching refusal / reproduced result | A.5 Interpreting a refusal | glossed-at-first-use | Identical bytes and plan should reproduce the same reason name; that refusal is a result. |
 | GPU / fitted onsets and offsets | Abstract | glossed-at-first-use | A graphics processor; switch-on and switch-off times selected by matching predicted interval-average power to the recorded trace. |
 | best-fit lag | One diagnostic reconstruction | glossed-at-first-use | Fitted edge time minus its matching command time; positive means later, negative earlier. |
-| allowed region | Historical current-method edge result | glossed-at-first-use | Every edge pair surviving the fit's discrepancy limit; its endpoints differ from a best-fit lag. |
+| accepted region | 1. Introduction | glossed-at-first-use | Every edge pair surviving the loss tolerance of Appendix A.3.5; Section 2 constructs the enclosure and distinguishes its endpoints from a best-fit lag. |
 | medians | Bracketed pulse-train algorithm | glossed-at-first-use | Middle sorted values; for the 59-value series each is its 30th sorted lag. |
 | source map | Combining shared movements and local widths | glossed-at-first-use | Registry rows associate each printed diagnostic value or mark with its exact artifact and field. |
 | typed custody-read interface / supply map | P.6 Prospective publication supply chain | glossed-at-first-use | A role name and runs root resolve through a clean-Git table to fixed paths and expected digests before disk replay. |
@@ -286,4 +293,4 @@ The audit also searched the reader-facing draft for empirical outcome branches,
 prospective result-fill markers, the false between-record pause mechanism,
 and the retired any-exceedance falsifier. Historical calibration and record
 support retain their explicit era labels; fixtures retain their arithmetic-only
-labels. Any uncured first use is a failure. Terms inventoried: 265; FAILS: 0.
+labels. Any uncured first use is a failure. Terms inventoried: 262; FAILS: 0.
