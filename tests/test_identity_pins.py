@@ -37,16 +37,11 @@ from joulewise.schemas import (
 )
 from scripts import mint_floor_artifact_generalized as generalized
 from scripts import project_identity_pins
+from tests.git_fixture import GIT_MAINTENANCE_CONTROLS, init_git_fixture
 
 
 MINT_GIT_ANCHOR = identity_pins._mint_git_anchor
 RUNTIME_PROBE_METADATA = identity_pins._runtime_probe_metadata
-GIT_MAINTENANCE_CONTROLS = (
-    ("maintenance.auto", "false"),
-    ("gc.auto", "0"),
-    ("maintenance.autoDetach", "false"),
-    ("gc.autoDetach", "false"),
-)
 REGISTERED_PROMPT_TOKEN_IDS_SHA256 = "d" * 64
 
 
@@ -75,12 +70,7 @@ def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def init_git(root: Path) -> None:
-    git(root, "init", "-q")
-    # Detached auto-maintenance can write .git/info while TemporaryDirectory
-    # tears it down. Hosted run 32974766555 attempt 1, job 98196695324:
-    # [Errno 39] Directory not empty: '/tmp/.../.git/info'.
-    for key, value in GIT_MAINTENANCE_CONTROLS:
-        git(root, "config", "--local", key, value)
+    init_git_fixture(root, "-q")
     git(root, "config", "user.name", "Identity Pin Test")
     git(root, "config", "user.email", "identity-pin-test@example.invalid")
 

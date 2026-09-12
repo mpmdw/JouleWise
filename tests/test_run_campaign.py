@@ -7,6 +7,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import math
 import os
 import random
 import shutil
@@ -9542,33 +9543,15 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         expected_strict_valid: bool = True,
     ):
         from tests.test_controller import (
-            RetryAdmissionPowermetricsAdapter,
             produce_retry_powermetrics_bundle,
         )
 
-        command = RetryAdmissionPowermetricsAdapter._command
-
-        def unpaced_sentinel(adapter, *args, **kwargs):
-            argv = command(adapter, *args, **kwargs)
-            # Only the bounded sentinel is synthetic. The continuous stream
-            # still owns admission, measured cadence, and the clock bracket.
-            # The bounded capture in this producer is the post-idle sentinel;
-            # its count is DERIVED (ceil(min(5.0, baseline.duration_s) / 0.05),
-            # joulewise/adapters/powermetrics.py:1030-1031), so it is only 100
-            # when the baseline spans the 5 s cap — do not pin it here (delta
-            # re-audit 79 F1 refuted the round-1 pin). Continuous captures pass
-            # count=None and stay paced.
-            if kwargs.get("count") is not None:
-                argv.append("--no-sleep")
-            return argv
-
-        with patch.object(
-            RetryAdmissionPowermetricsAdapter, "_command", unpaced_sentinel
-        ):
-            bundle_path, _summary = produce_retry_powermetrics_bundle(
-                self.root / "runs",
-                bundle_id,
-            )
+        # The shared producer owns the bounded-only --no-sleep policy so
+        # direct controller callers receive the same fixture cure.
+        bundle_path, _summary = produce_retry_powermetrics_bundle(
+            self.root / "runs",
+            bundle_id,
+        )
         attempt1_path = bundle_path / "rich_telemetry_idle.jsonl"
         attempt2_path = bundle_path / "rich_telemetry_idle_attempt_2.jsonl"
         for path, replacements in (
@@ -9641,7 +9624,14 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "bounded",
             (drift, evaluation.validation_problems),
         )
-        self.assertEqual(drift["post_sample_count"], 100, drift)
+        interval_s = 0.05  # The shared producer requests 20 Hz.
+        baseline_s = evaluation.summary["idle_baseline"]["duration_s"]
+        post_duration_s = max(3 * interval_s, min(5.0, baseline_s))
+        self.assertEqual(
+            drift["post_sample_count"],
+            max(3, math.ceil(post_duration_s / interval_s)),
+            drift,
+        )
 
     def test_real_powermetrics_capture_timeout_is_unchanged(self) -> None:
         from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
