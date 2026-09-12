@@ -6,3 +6,5 @@
 - Applied at the bench to PR #325 as commit 01cf8b0d (byte-equality of the applied lines against report 12 §6 checked by script). The Opus recommendation to add an §8 first-use row for `session-refusal`/`refusal code` is NOT applied in this lane (§8 is a generated/first-use table owned by the runbook's own revision process; registered below as a follow-up nit, not a blocker, because the terms are built inline at first use).
 - Q2 recorded as: "escalated on two consecutive blockers in one paragraph; classes differ" (ruling 10's wording, seconded by refuter 12).
 - Follow-up nit (not blocking merge): §8 first-use table rows for `session-refusal` and `refusal code`.
+
+**Correction (04:47 PDT):** refuter 12 finalised its report file after commit 01cf8b0d had applied its DRAFT §6 text. Commit 43c1ce95 applies the FINAL §6 text verbatim and ALSO adds the §8 first-use row refuter 12 §4 asks for (`| refusal code / `session-refusal` | §2.4 | … |`), because §8's preamble ("Every term of art in this file") would otherwise be false — the earlier "follow-up nit" disposition above is withdrawn. PR #325 head for the ledger: 43c1ce95.
