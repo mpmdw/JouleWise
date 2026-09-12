@@ -342,6 +342,7 @@ with a non-null `legacy_journal_path` is blocked by the machine gate.
 | `calibration_display_arm_failed` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_display_arm_failed` | `` | `` |
 | `calibration_sampler_never_ready` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_sampler_never_ready` | `` | `` |
 | `pulse_calibration_rollover_gate_timeout` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.pulse_calibration_rollover_gate_timeout` | `` | `` |
+| `calibration_window_exhausted` | `operational` | writer | pre-slot-or-capture | `abort-session` | `session_aborted` | `true` | `witness.calibration_window_exhausted` | `` | `` |
 <!-- END GENERATED: calibration-refusal-registry -->
 
 This table is generated from `REFUSAL_INVENTORY`. Its exact freshness is a

@@ -1662,6 +1662,20 @@ If the chain could not reach every slot it logs `slot_unused slot=dNN
 reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
 --reason window_exhausted`, and exits 0. An aborted session IS terminal, and
 its finalized observations remain in the prior set.
+`session-refusal` is the recovery tool's subcommand that reads an aborted
+session and prints its abort as a **refusal code** — the machine-readable name
+the tool prints in place of a prose reason, the kind §5's "Refusal code"
+column carries. Which name it prints for a `window_exhausted` abort depends on
+the copy of `scripts/recover_calibration_ledger.py` you run, and §2.4's
+`cd "$MEASUREMENT_ROOT"` runs the measurement clone's copy at `H`, so ask that
+copy by full path:
+`grep -c window_exhausted "$MEASUREMENT_ROOT/scripts/recover_calibration_ledger.py"`.
+A count of `0` — every head before the mapping landed, including the night
+armed at `f90cb8c0` — prints `calibration_session_not_open`, which it
+also prints for a session never aborted; read the reason from the
+`slot_unused … reason=window_exhausted` line above instead. A count of `1` or
+more whose matched line is the entry `"window_exhausted": RefusalCode.…`
+prints `calibration_window_exhausted`. Either way the session is terminal.
 
 The correct response is: record the unused count, and **do nothing else**.
 Every night runs all twelve declared slots regardless of interim values, and
@@ -2350,6 +2364,7 @@ means. A term is listed only if it does technical work.
 | dispatch (writer-status) | §2.4 | The chain branching on the capture's EXACT status number rather than on "non-zero": 0 valid and 1 non-valid both finalize the row and continue the night; 2 or more is a refusal or crash that stops it with the session open. |
 | desk recovery | §2.4 | Closing an open session with `recover_calibration_ledger.py … abort-session --reason <named>`, run by the operator at the desk after the night is over — never inside the window and never as a re-arm. |
 | `window_exhausted` | §2.4 | The abort reason recorded when the window cannot finish a slot's capture budget. |
+| refusal code / `session-refusal` | §2.4 | The machine-readable name (`RefusalCode`) a tool prints instead of a prose reason; `session-refusal` prints an aborted session's stored one. |
 | prior set / corpus / retained n | §Terms | Every ledger observation through the cutoff; the subset whose values are computed from; the corpus size. |
 | written-ruling escape | §4.2 | A flag that permits departure from one pre-registered number, and only by naming the written ruling that authorised it, so the departure is recorded in the artifact: `--nights-ruling`, `--slot-count-ruling`, `--allow-slot-count`, `--ed-ruling`. |
 | Q99 / two-draw prediction | §4.2 | `t(0.995, n−1) × sample SD × √2`: how far apart two fresh draws fall at that confidence. |
