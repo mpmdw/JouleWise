@@ -2450,36 +2450,6 @@
       "status_note": "In flight on feat/2026-09-04-fb-metadata, re-briefed from the rejected exact-equality-breaking first round to ruling 43's .v2 migration.",
       "stop_card": null
     },
-    "FIXTURE-SENTINEL-CONTROLLER-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-10-activation-96bfeca7/19-rootcause-controller-idle-drift-local-astra-report.md",
-          "docs/process_traces/2026-09-10-activation-96bfeca7/19-lead-note-local-controller-failure.md"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FIXTURE-SENTINEL-CONTROLLER-01/acceptance",
-          "label": "FIXTURE-SENTINEL-CONTROLLER-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The fixture uses the bounded --no-sleep policy shared with the campaign-test helper (PR #310, consult 87); defect-shaped regression per report 19 §Remediation (byte-exact promotion, bounded post drift, strict validation clean, timeout reproduces without the cure); third instance of the host-timing fixture class (87, 99, 19) recorded."
-      },
-      "authority": {
-        "label": "Root-cause report 19 + lead note",
-        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/19-rootcause-controller-idle-drift-local-astra-report.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Cure the controller test fixture that still sleeps through its post-idle capture against a real deadline, so tests.test_controller::test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce stops failing on a loaded local host (CI green at 078a13a4; local failure reproduced at main).",
-      "id": "FIXTURE-SENTINEL-CONTROLLER-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 177,
-      "status": "queued",
-      "status_note": "2026-09-10: registered by activation 96bfeca7; not on the G2-a path; CI is the gate of record for PR #314, whose local replay names this one known local-only failure.",
-      "stop_card": null
-    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -2856,52 +2826,6 @@
       "rank": 133,
       "status": "queued",
       "status_note": "Registered 2026-09-03 from the code-and-tests audit's ranked five. The audit's argument for sequence: the unowned floor-producer finding from the companion audit becomes a small task instead of a risky one only if this lands first, because under the current design owning it means hand-copying about 2900 lines twice. Ordered last of the five on cost, but it gates the cheapness of the others.",
-      "stop_card": null
-    },
-    "GIT-FIXTURE-MAINTENANCE-SWEEP-01": {
-      "acceptance": {
-        "evidence": [
-          "An enumeration test fails if a tests/ module creates a git fixture repository without the four-key tuple, so the class cannot regrow",
-          "Every touched module is green three consecutive times at the bench",
-          "One green hosted run across both interpreters"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/GIT-FIXTURE-MAINTENANCE-SWEEP-01/acceptance",
-          "label": "GIT-FIXTURE-MAINTENANCE-SWEEP-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The detached-git-maintenance teardown race cannot regrow from any tests/ fixture repository."
-      },
-      "authority": {
-        "label": "T26 S5 CI-reliability record, section 'What this cure does NOT cover, and the row that would' (proposed row text), plus the three prior members of the failure family: EVIDENCE-AUTHOR-GIT-TEARDOWN-01 (closed 2026-08-22), PLANTEST-RGLOB-RACE-01 (a28b55bf), the identity-pins teardown race (PR #203)",
-        "path": "docs/process_traces/2026-08-26-t26-ci-reliability/README.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "T26 S5 CI-reliability record, proposed row fence",
-            "path": "docs/process_traces/2026-08-26-t26-ci-reliability/README.md"
-          },
-          "rule": "Fixture hygiene only: no product code and no change to any test's assertions"
-        },
-        {
-          "authority": {
-            "label": "T26 S5 CI-reliability record, proposed row fence",
-            "path": "docs/process_traces/2026-08-26-t26-ci-reliability/README.md"
-          },
-          "rule": "The calibration-exits fixtures that deliberately force maintenance ON (tests/test_calibration_exits.py, the two sites the S5 record cites at :2125-2130 and :2660-2668) are excluded by name, since provoking maintenance is their whole mechanism"
-        }
-      ],
-      "flags": [],
-      "goal": "Apply the four-key git auto-maintenance hygiene tuple (maintenance.auto=false, gc.auto=0, maintenance.autoDetach=false, gc.autoDetach=false) at every git init call site in tests/ that creates a fixture repository later removed by TemporaryDirectory.cleanup() or shutil.rmtree, routing sites through a shared helper where one already exists rather than copying the tuple.",
-      "id": "GIT-FIXTURE-MAINTENANCE-SWEEP-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 99,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
       "stop_card": null
     },
     "ICLOUD-CUSTODY-LOCATOR-01": {
@@ -5435,35 +5359,6 @@
       "rank": 114,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-13 of the ruled-not-installed sweep (status C, cure RUNBOOK). Compounds with TRANSACTION-RULED-ARTIFACTS-01: two separate rulings point at the same absent section 11 step.",
-      "stop_card": null
-    },
-    "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-10-activation-96bfeca7/113-terminal-review-triage-final-wave.md"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01/acceptance",
-          "label": "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "session-refusal on a window_exhausted-aborted derivation session prints that reason with a defect-shaped test and a killed cut; the runbook's harvest section cites it."
-      },
-      "authority": {
-        "label": "Seam audit (record 113, N-4)",
-        "path": "docs/process_traces/2026-09-10-activation-96bfeca7/113-terminal-review-triage-final-wave.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Map the derivation night's abort reason window_exhausted in scripts/recover_calibration_ledger.py's session-refusal path (_AUTOMATIC_ABORT_REFUSALS names three reasons; a window-exhausted abort surfaces as SESSION_NOT_OPEN instead of its reason), so a desk operator reading the session sees the reason the chain wrote.",
-      "id": "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 184,
-      "status": "queued",
-      "status_note": "2026-09-10: registered by activation 96bfeca7 from the S1-S5-S7 seam audit; inert today (runbook 99 does not route through the subcommand).",
       "stop_card": null
     },
     "REGISTRY-ID-NAMING-01": {
@@ -8015,5 +7910,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-11"
+  "updated": "2026-09-12"
 }
