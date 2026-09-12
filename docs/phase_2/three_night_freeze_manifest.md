@@ -49,7 +49,7 @@ Status terms:
 - **STALE** — newer binding authority changed the required content.
 
 The upstream names U5, U6, and U7 mean the ALPHA, BETA, and GAMMA campaign-pack
-units defined by `docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`,
+units defined by `docs/legacy/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`,
 “Work-order list with enforced WRITE_SCOPE units.” D-117 clause 7 authorizes
 the pack work but does not define those unit names. “Pack freeze” means Phase B
 item B2 in the 40-hour plan: final identifiers, stage-launch recipes, budgets,

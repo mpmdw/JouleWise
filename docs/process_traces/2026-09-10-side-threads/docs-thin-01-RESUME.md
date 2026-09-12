@@ -15,9 +15,12 @@ session was closed for the measurement window; its verdict was never received.
 
 | Commit | What |
 |---|---|
-| `f6aed467` | 376 git renames: 309 historical files (83,121,775 bytes) into `docs/legacy/`, plus the two-line `tests/test_docs_freshness.py` scan exclusion |
+| `f6aed467` | 309 git renames: 309 historical files (83,121,775 bytes) into `docs/legacy/`, plus the two-line `tests/test_docs_freshness.py` scan exclusion |
 | `32c6d0b3` | `docs/legacy/README.md` (the archive's front door) and six link repairs in live documents |
 | this commit | seat reports, this note, the pin list |
+
+Verified branch census against `origin/main...HEAD` at `29dbc537`: 309 renames,
+7 additions, and 5 modifications (321 files changed).
 
 Active documentation surface, `docs/` excluding `docs/legacy/`:
 **3809 files / 145.8 MB -> 3504 files / 62.7 MB.** Nothing was deleted.
@@ -78,13 +81,17 @@ carries the full move table and the table of what deliberately stayed put.
 3. **The freshness test's glob is a silent-coverage trap.**
    `tests/test_docs_freshness.py::_decision_reference_documents` globs
    `docs/**/*.md` and skips `docs/process_traces/`. Archiving traces to
-   `docs/legacy/process_traces/` would have swept ~250 historical transcripts
+   `docs/legacy/process_traces/` would have swept historical transcripts
    INTO the scan — the suite might still pass while checking a different set of
-   documents. The fix skips `docs/legacy/` so the scanned set is byte-identical
-   to before.
+   documents. The fix skips `docs/legacy/`: main scans 459 documents and the
+   branch scans 402. The 57 dropped documents are archived `.md` files that
+   were never under `process_traces/`, including 52 now in
+   `docs/legacy/strategy/2026-08-07-paper-portfolio/`; no live document leaves the scan
+   and no new document enters it. This is intended: archived history leaves
+   the live reference scan, and Ed may veto.
 4. **A linked worktree cannot run `git mv` from a sandboxed seat.** The real
    `.git` is outside the sandbox and `index.lock` gives EACCES; the Phase B
-   Astra seat returned `blocked` with zero moves. The lead did the 376 renames
+   Astra seat returned `blocked` with zero moves. The lead did the 309 renames
    at the bench and re-delegated only the prose and link work.
 5. **No deletion candidate survived scrutiny.** The read-only survey found
    byte-identical pairs (capsule instruction files, font faces, duplicate
