@@ -1,0 +1,7 @@
+notice_message_id=1a091cf89ffa1e38
+notice_thread_id=1a0800cdb282c3f1
+notice_to=claude2.glaring610@passmail.net
+notice_accepted_local=2026-09-11T11:51:46-0700 (Gmail send_message returned the id; accepted within the minute before this line)
+notice_accepted_epoch_approx=1789152706
+launch_email_id=1a091cb1c58d0e19
+limitation=headless activation cannot re-read the thread after sending; owner-authored open directive issues rechecked immediately before publication (B3)

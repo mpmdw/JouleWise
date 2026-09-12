@@ -5,6 +5,7 @@ import hashlib
 import json
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -139,6 +140,9 @@ def install_passing_freeze(
         "path": plan_relative,
         "sha256": hashlib.sha256((pack / "calibration_plan.json").read_bytes()).hexdigest(),
     }
+    # Freeze replay uses the host clock, so evidence must age from authoring,
+    # not from boot. Sample once for every caller, including real-clock CLI tests.
+    authored_at_monotonic_ns = time.monotonic_ns()
     for kind, rows in sorted(by_kind.items()):
         facts = {}
         for row in rows:
@@ -173,7 +177,7 @@ def install_passing_freeze(
             policy,
             issued_at_utc="2026-08-11T00:00:00Z",
             boot_session_id=TEST_BOOT_SESSION_ID,
-            now_monotonic_ns=1,
+            now_monotonic_ns=authored_at_monotonic_ns,
             environment_fingerprint=environment,
         )
         raw = render_json(evidence)
@@ -265,6 +269,66 @@ def install_passing_freeze(
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "passing freeze")
     git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+
+class FreezeFixtureClockOriginTests(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary, repo, self.pack, _custody, _arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        registry, _raw, _reference = readiness._registry_reference(self.pack)
+        self.lifecycle = registry["freeze_evidence_lifecycle"]
+        # ONE home for the horizon: the registry's evidence policy for the
+        # kind this test authenticates (a retuned registry retunes the test).
+        self.horizon_ns = next(
+            policy["horizon_ns"]
+            for policy in self.lifecycle["evidence_policies"]
+            if policy["kind"] == "ACCEPTANCE_OWNER"
+        )
+        # Reproduce a host awake longer than the evidence horizon (by 1/14).
+        self.origin = 1 + self.horizon_ns + self.horizon_ns // 14
+        with mock.patch.object(time, "monotonic_ns", return_value=self.origin):
+            install_passing_freeze(repo, self.pack, mint_receipt=False)
+        path = self.pack / "arm_readiness.evidence/evidence-acceptance-owner.json"
+        raw = path.read_bytes()
+        self.receipt = json.loads(raw)
+        self.item = {
+            "evidence_id": self.receipt["evidence_id"],
+            "receipt_kind": self.receipt["kind"],
+            "namespace": "PACK",
+            "path": path.relative_to(self.pack).as_posix(),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "schema_version": self.receipt["schema_version"],
+            "status": self.receipt["status"],
+        }
+
+    def test_fresh_evidence_authenticates_after_seven_days_host_uptime(self) -> None:
+        with mock.patch.object(
+            time, "monotonic_ns", return_value=self.origin + 1_000_000_000
+        ):
+            authenticated = readiness._authenticate_generic_evidence_item(
+                self.item,
+                self.pack,
+                self.pack,
+                expected_boot_session_id=TEST_BOOT_SESSION_ID,
+                lifecycle_registry=self.lifecycle,
+            )
+        self.assertEqual(authenticated["status"], "PASS")
+        self.assertEqual(authenticated, self.receipt)
+
+    def test_evidence_still_expires_eight_days_after_authoring(self) -> None:
+        with mock.patch.object(
+            time, "monotonic_ns", return_value=self.origin + self.horizon_ns + 1_000_000_000
+        ):
+            with self.assertRaises(readiness.ArmReadinessError) as caught:
+                readiness._authenticate_generic_evidence_item(
+                    self.item,
+                    self.pack,
+                    self.pack,
+                    expected_boot_session_id=TEST_BOOT_SESSION_ID,
+                    lifecycle_registry=self.lifecycle,
+                )
+        self.assertEqual(caught.exception.reason_code, "readiness_record_expired")
+        self.assertIn("evidence item expired", str(caught.exception))
 
 
 class ArmReadinessDryRunTests(unittest.TestCase):

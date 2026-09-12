@@ -1,0 +1,27 @@
+-	0	com.joulewise.night
+-	0	com.joulewise.magistrate
+-	0	com.joulewise.night.deadman
+---
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913:
+total 160
+drwxr-xr-x@ 10 edr  staff    320 Sep 12 03:00 .
+drwxr-xr-x@  7 edr  staff    224 Sep 12 01:03 ..
+-rw-r--r--@  1 edr  staff  45076 Sep 12 01:03 calibration_plan.json
+-rwxr-xr-x@  1 edr  staff   8916 Sep 12 01:03 chain.zsh
+-rw-r--r--@  1 edr  staff    119 Sep 12 01:03 chain.zsh.chain-source.sha256
+-rw-r--r--@  1 edr  staff     76 Sep 12 01:03 chain.zsh.sha256
+-rw-r--r--@  1 edr  staff    246 Sep 12 01:03 identity-epoch.json
+drwxr-xr-x@  2 edr  staff     64 Sep 12 03:00 night
+-rw-------@  1 edr  staff    852 Sep 12 01:03 night_plan.json
+-rw-r--r--@  1 edr  staff    541 Sep 12 01:03 t1-bindings.json
+
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night:
+total 0
+drwxr-xr-x@  2 edr  staff   64 Sep 12 03:00 .
+drwxr-xr-x@ 10 edr  staff  320 Sep 12 03:00 ..
+---
+a6e83d14b3143dd5313e30c0f5a0f4688bb23ceb3b5c4f8c91378221533e2131  /Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+ad8e0c181b365222b51dd00c22338840fe6bfae470e8e36f0af2b0218ecc6506  /Users/edr/Library/LaunchAgents/com.joulewise.night.plist
+c04787fdf7ca1b6b928b63a970977358e50a3b83a9c93ba078f947c16ecf1757  /Users/edr/Library/LaunchAgents/com.joulewise.night.deadman.plist
+---
+published == staged bytes

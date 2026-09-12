@@ -41,6 +41,8 @@ from tests.owned_process_runner import (
 )
 import scripts.validate_powermetrics_fiducial as validation_script
 from tests.test_calibration_exits import _install_fake_writer_dependencies
+from tests.fixtures.epoch_continuation.build import build_issued_continuation
+from tests.test_validate_powermetrics_fiducial import documented_keys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _ACCEPTANCE_RELATIVE = (
@@ -111,14 +113,14 @@ class DerivationOnlyPreflightRefusalTests(unittest.TestCase):
         self,
     ) -> None:
         """REFUSE: production call site validate_powermetrics_fiducial.main
-        (the derivation-only branch's empty-stale-field clause,
-        `if not stale_fields`).
+        (the derivation-only branch's judged-epoch membership clause,
+        `if planned_epoch in basis["judged_epochs"]`).
 
         A matching epoch means the active acceptance DOES judge this machine,
         so an ordinary capture is possible and derivation-only would be a way
         to take a capture the level screen never sees.  The counterfactual
         input is an identity fixture equal to the artifact's own epoch; delete
-        the `if not stale_fields` clause and this capture proceeds.
+        the judged-epoch clause and this capture proceeds.
         """
 
         completed = self._writer(
@@ -360,6 +362,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         session_kind: str | None,
         epoch: dict,
         t1: dict,
+        continuation_root: Path | None = None,
     ):
         root = self.repo / "sessions" / token
         root.mkdir(parents=True)
@@ -376,6 +379,11 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
+        if continuation_root is not None:
+            # Preserve the real terminal derivation history in the capture's
+            # ledger; preflight must cross-check it before opening a capture.
+            shutil.copy2(continuation_root / "night/runs/calibration_observation_ledger.jsonl", ledger)
+            shutil.copy2(continuation_root / "night/runs/calibration_ledger_head_pin.json", pin)
         subprocess.run(
             ["git", "add", str(pin.relative_to(self.repo))],
             cwd=self.repo,
@@ -487,6 +495,57 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         return json.loads(stream.splitlines()[-1])
 
     # ---- tests ------------------------------------------------------------
+    def test_ordinary_continued_epoch_capture_requires_registered_continuation(self):
+        """The real writer CLI reaches a fixture capture only with a valid pin."""
+        acceptance = self._rekey_acceptance()
+        epoch, t1 = self._epoch("25G83")
+        continuation_root = Path(self.tmp.name) / "continuation"
+        _, registry = build_issued_continuation(
+            continuation_root, acceptance_path=self.repo / _ACCEPTANCE_RELATIVE,
+        )
+        ledger, pin, session_id, custody = self._session(
+            "ordinary-continued", slots=BRACKET_SESSION_SLOTS,
+            session_kind=None, epoch=epoch, t1=t1, continuation_root=continuation_root,
+        )
+        args = dict(ledger=ledger, pin=pin, session_id=session_id, slot="pre",
+                    custody=custody["pre"], epoch=epoch, derivation_only=False)
+        before_ledger = ledger.read_bytes()
+        refusal = self._refusal(self._writer(**args))
+        self.assertEqual(refusal["code"], RefusalCode.FROZEN_PROTOCOL_INVALID.value)
+        self.assertEqual(refusal["context"]["reason"], "acceptance_artifact_epoch_mismatch")
+        self.assertEqual(ledger.read_bytes(), before_ledger)
+        self.assertFalse(custody["pre"].exists())
+
+        # Install the test pin in the copied subprocess runtime only. The
+        # production registry remains empty and all issued bytes stay frozen.
+        source_path = self.repo / "joulewise/calibration_bracketing.py"
+        pristine = source_path.read_bytes()
+        serializable = {key: {**entry, "path": str(entry["path"])} for key, entry in registry.items()}
+        addition = (
+            f"\nEPOCH_CONTINUATION_REGISTRY.update({serializable!r})\n"
+        ).encode()
+        try:
+            source_path.write_bytes(pristine + addition)
+            completed = self._writer(**args)
+        finally:
+            source_path.write_bytes(pristine)
+        self.assertEqual(hashlib.sha256(source_path.read_bytes()).digest(), hashlib.sha256(pristine).digest())
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        for name in ("instrument_evidence.json", "manifest.json"):
+            payload = json.loads((custody["pre"] / name).read_bytes())
+            self.assertIn("acceptance_preflight", payload)
+            record = payload["acceptance_preflight"]
+            self.assertIn("judged_epochs", record)
+            self.assertEqual(record["judged_epochs"], [acceptance["identity_epoch"], epoch])
+            self.assertEqual(record["judged_epochs_basis"], "ledger_snapshot")
+            self.assertEqual(record["continuation_refusals"], [])
+            self.assertNotIn("derivation_only", payload)
+        finalized = [json.loads(line) for line in ledger.read_text().splitlines()
+                     if json.loads(line).get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+                     and json.loads(line).get("session_id") == session_id]
+        self.assertEqual(len(finalized), 1)
+        self.assertEqual(finalized[0]["disposition"], "valid")
+
     def test_bracket_kind_session_refuses_a_derivation_only_capture(self) -> None:
         """REFUSE: production call site validate_powermetrics_fiducial.main
         (the derivation-only branch's declared-kind clause,
@@ -570,6 +629,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         )
         for payload in (evidence, manifest):
             self.assertIs(payload["derivation_only"], True)
+            self.assertEqual(set(payload["screen_basis"]), documented_keys("screen_basis"))
             self.assertEqual(
                 payload["screen_basis"]["acceptance_id"],
                 acceptance["acceptance_id"],
@@ -589,6 +649,8 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
             self.assertEqual(
                 payload["screen_basis"]["epoch"], acceptance["identity_epoch"]
             )
+            self.assertEqual(payload["screen_basis"]["judged_epochs"], [acceptance["identity_epoch"]])
+            self.assertEqual(payload["screen_basis"]["judged_epochs_basis"], "ledger_snapshot")
             self.assertIn("exceeds_prior_level_screen", payload)
         # The bound of a healthy fixture capture is far below r6's screen, so
         # the diagnostic is false here; the true case is the next test.
@@ -668,7 +730,7 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         self.assertEqual(ledger.read_bytes(), before)
         self.assertFalse(custody[declared[0]].exists())
 
-    def test_ordinary_mode_still_fills_a_bracket_kind_slot_unchanged(
+    def test_ordinary_artifact_top_level_key_sets_require_deliberate_schema_changes(
         self,
     ) -> None:
         """The guard is kind-scoped, not a blanket ordinary-path refusal.
@@ -717,6 +779,27 @@ class DerivationOnlyLiveCaptureTests(unittest.TestCase):
         )
         self.assertNotIn("derivation_only", evidence)
         self.assertNotIn("screen_basis", evidence)
+        # Round-4's ordinary successful capture shape, pinned deliberately.
+        # Additions/removals require an explicit artifact-contract decision.
+        self.assertEqual(set(evidence), {
+            "schema_version", "protocol_id", "validation_id", "status", "reasons",
+            "anchor_method_version", "b_fiducial_s",
+            "residual_median_s_diagnostic_only", "residual_p95_s_diagnostic_only",
+            "residual_region_method", "residual_region_coverage_assumption",
+            "residual_region_coverage_resolution_s", "baseline_w", "robust_sigma_w",
+            "pulse_count", "all_pulses_detected", "spurious_plateau_count",
+            "bindings", "binding_evidence", "artifact_sha256", "pulses",
+            "capture_wall_time_s", "max_age_s", "clock_anchor",
+            "clock_anchor_resolved", "acceptance_preflight",
+        })
+        manifest = json.loads((custody["pre"] / "manifest.json").read_bytes())
+        self.assertEqual(set(manifest), {
+            "schema_version", "validation_id", "protocol_id", "pulse_count",
+            "artifacts", "acceptance_preflight",
+        })
+        for payload in (evidence, manifest):
+            self.assertEqual(set(payload["acceptance_preflight"]), documented_keys("acceptance_preflight"))
+        self.assertEqual(evidence["acceptance_preflight"], manifest["acceptance_preflight"])
 
 class CaptureClassificationTests(unittest.TestCase):
     """`_classify_capture` at the function level, no capture, no CLI.

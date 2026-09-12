@@ -63,6 +63,7 @@ _AUTOMATIC_ABORT_REFUSALS = {
     "display_arm_failed": RefusalCode.DISPLAY_ARM_FAILED,
     "powermetrics_never_ready": RefusalCode.SAMPLER_NEVER_READY,
     "pulse_calibration_rollover_gate_timeout": RefusalCode.ROLLOVER_GATE_TIMEOUT,
+    "window_exhausted": RefusalCode.WINDOW_EXHAUSTED,
 }
 
 

@@ -1,0 +1,12 @@
+LOCK DIFF EMPTY (rc 0)
+Package   Version Editable project location
+--------- ------- ----------------------------------------------------
+joulewise 0.1.0   /Users/edr/JouleWise-measurement-20260913-derivation
+joulewise from /Users/edr/JouleWise-measurement-20260913-derivation/joulewise/__init__.py
+mlx 0.31.2 mlx_lm 0.31.3
+.gitignore:48:*.egg-info/	joulewise.egg-info/
+aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f  /Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
+aa80684848d0ce156ed2d14df47472006175840eda17f9025eff9754af694e3f  /Users/edr/JouleWise-measurement-20260913-derivation/runs/calibration_observation_ledger.jsonl
+PASS exact 76-record ledger restore
+PASS custody authentication sequence=76 digest=08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7
+CLONE FINISH DONE 01:03:07

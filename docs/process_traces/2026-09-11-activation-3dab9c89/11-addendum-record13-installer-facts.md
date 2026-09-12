@@ -1,0 +1,13 @@
+# 11 — Dated addendum to record 13 of activation 58a3bcfc (`13-arm-runbook-stub-20260912.md`): installer facts after PR #321 rounds 2–5 — 2026-09-11 08:5x PDT
+
+Record 13 was drafted against PR #321's seat landing (17c26a1a). Opus counter-review 06 (F5) found four of its statements false at the merge candidate. The **operational instruction is unchanged — do not pass `--python`; rely on the default derivation** — only the evidence and line pins below are corrected. Read this addendum before Block A. Line numbers are at `e46f06c8` (the installer is byte-identical from 6dddb545 on).
+
+| Record 13 location | Says | Truth at the merge candidate |
+|---|---|---|
+| §A4 reason 1 (`:629–633`) | the installer extracts `measurement_root` with `/usr/bin/plutil -extract` — "no Python at all" (`install_night_agent.sh:47–58`) | `scripts/install_night_agent.sh:50–62`: the read is `/usr/bin/env python3 -B -S -c '<stdlib json read>'` under the caller's PATH (any Python 3, including the 3.9 that caused the defect; it imports only `json` and `sys`). Reason 1 becomes: the default path is the one the equivalence night takes, and it needs only a `python3` on the arming shell's PATH — which the arming activation's shell has (`/opt/homebrew/bin/python3`). |
+| §A4 reason 3 (`:636–638`) | `--python` with `--uninstall` is a usage error | `:29–31`: the installer prints `--python ignored on uninstall` to stderr and continues (round 2, refuter 09 F4). The harvest-time uninstall may therefore be run with or without `--python`; run it without. |
+| Fact table A8 (`:1122`) | default derivation at `:47–58` via plutil; preflight at `:152–154` | derivation `:50–62`; preflight `:155–158` (`/usr/bin/env -i PATH="$courier_path" HOME="$HOME" "$python" -B "$repo/scripts/run_night.py" preflight --plan "$plan"`) |
+| A6/A10 (`:734`, `:1124`) | `install_night_agent.sh:123–125` creates `custody_root/night` | `:175` / `:178` |
+| `:94`, `:96`, `:880`, `:1123` | pin checks `:81–96`; dead-man-hour refusal `:112–115` | pin checks `:128–143`; dead-man-hour refusal `:164–167` |
+
+Also true at the candidate and relevant to Block A A6 (record 13 U4/U5): the preflight JSON line lists exactly six modules (`scripts.run_night`, `joulewise.arm_readiness`, `joulewise.arm_readiness_evidence_t0`, `joulewise.t0_rehearsal`, `joulewise.night_gate`, `joulewise.measurement_liveness`); a bare 3.13 venv passes it under `env -i` (Opus 06 §E, executed); the preflight parses a stub plan whose `chain_path` does not exist (installer tests render such plans). The rendered `argv[0]` is byte-identical to the validated interpreter (round 4). The unit run for ruling 06 C-1's paste is now `python3 -m unittest tests.test_install_night_agent tests.test_run_night` → 110 tests.

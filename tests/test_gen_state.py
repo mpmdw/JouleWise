@@ -21,6 +21,11 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # 2026-09-11 activation 36d3a823: four follow-ups; handback gloss evidence supplied.
+    "PASS-ROUTE-RUNBOOK-CONTINUATION-01",
+    "IDENTITY-PROBE-LIVE-VERIFY-01",
+    "NIGHT-HANDBACK-GLOSS-01",
+    "REPLAY-FIXTURE-LEAK-01",
     # T38j: record 39 blocks G2-a on a successor for the live OS-build epoch.
     "ACCEPTANCE-EPOCH-25G83-01",
     "POWERMODE-PREFLIGHT-RECORD-01",
@@ -41,8 +46,10 @@ EXPECTED_IDS = {
     # Activation 96bfeca7, final wave: doctrine install obligation, guard re-keying (ruling first), recover reason mapping.
     "ISOLATION-RULE-DOCTRINE-01",
     "V2-SURFACE-GUARD-REKEY-01",
-    "RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01",
-    "FIXTURE-SENTINEL-CONTROLLER-01",
+    # T38l: Ed's ruling (directive issue 316) — the continuation mechanism and its desk-check follow-up.
+    "EPOCH-CONTINUATION-01",
+    "ISSUER-CHECK-CONTINUATION-AWARE-01",
+    "CONTRACT-TEMPORAL-HEDGE-GUARD-01",
     "GATE-R2-COVERAGE-ULP-01",
 
     # 2026-09-08 D-176 decision 5: isolated pack-bound rehearsal successor.
@@ -84,7 +91,6 @@ EXPECTED_IDS = {
     # 2026-08-27 T26 end-of-sprint kernel wave (WAVE-ROWS.md ledger: S5 sweep,
     # paper ruling item 16, D-156 Q1-B/Q4-B, S2 producers, S11 F4, D-160 R-3
     # in flight, D-158 A-5, D-160 R-4, D-158 R-3, S3 delta2 D4/D3, S9-04/09/10/11/12/13)
-    "GIT-FIXTURE-MAINTENANCE-SWEEP-01",
     "TRANSFER-FIDUCIAL-01",
     "SUPERSESSION-CHAINED-RECOVERY-01",
     "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01",
@@ -739,7 +745,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows; ruling 43 opens six paper lanes and preserves modularity
         # residue in one shelved successor: 142 - 5 + 7 = 144.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 168)  # Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
+        self.assertEqual(len(self.tasks), 172)  # Activation f0d28baa (2026-09-12) closes FIXTURE-SENTINEL-CONTROLLER-01 (PR #324), RECOVER-SESSION-REFUSAL-WINDOW-EXHAUSTED-01 (PR #325) and GIT-FIXTURE-MAINTENANCE-SWEEP-01 (PR #326): 175 - 3 = 172; ARM-READINESS-FIXTURE-CLOCK-ORIGIN-01 (PR #327) was registered and closed in the same activation without a kernel row. Activation 36d3a823 adds four follow-ups; handback gloss evidence supplied.  T38l+ adds CONTRACT-TEMPORAL-HEDGE-GUARD-01; T38l adds EPOCH-CONTINUATION-01 and ISSUER-CHECK-CONTINUATION-AWARE-01; Activation 96bfeca7 final wave adds the doctrine-install obligation, the guard re-keying (ruling first) and the recover reason mapping; T38j adds the OS-build epoch blocker; Activation 96bfeca7 adds three follow-ups; T38g: D-180 (Ed, 2026-09-10) adds INSTALL-WINDOWS-MULTI-01, ARM-RETRY-CLASS-01, ARM-CENSUS-IDLE-INTERACTIVE-01, REMOTE-CONTROL-BETWEEN-WINDOWS-01; T38d + cold gate 44 lanes; NIGHT-GATE-STUB-CHAIN-01 (PR #309), FIXTURE-TIMEOUT-WALLCLOCK-01 (PR #310) and ARM-INTEGRATION-LOAD-01 (PR #311) DONE left the kernel
 
     def test_d176_ruling_installs_build_start_and_live_close_graph(self):
         # 2026-09-08 D-176 §5: this proves the installed scheduling boundary,

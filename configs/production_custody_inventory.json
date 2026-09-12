@@ -26,5 +26,12 @@
     "custody_root": null,
     "ledger_path": null,
     "notes": "D-176 2026-09-08 retained deployment census; no separate custody or ledger locator attested by the ruling."
+  },
+  {
+    "deployment_id": "JouleWise-measurement-20260913-derivation",
+    "measurement_root": "/Users/edr/JouleWise-measurement-20260913-derivation",
+    "custody_root": null,
+    "ledger_path": "/Users/edr/JouleWise-measurement-20260913-derivation/runs/calibration_observation_ledger.jsonl",
+    "notes": "ACCEPTANCE-EPOCH-25G83-01 equivalence night d079-epoch-25g83-derivation-n1-20260913 (DIAGNOSTIC_NO_PACK, t0 2026-09-13 02:56 PDT); fresh GitHub clone detached at the handback and inventory commit H. Restore the canonical 76-record ledger byte-exact and authenticate its absolute iCloud custody locators with verify_custody=True; no separate deployment custody root is attested."
   }
 ]

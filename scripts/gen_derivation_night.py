@@ -44,7 +44,7 @@ from joulewise.calibration_ledger import (  # noqa: E402
     IDENTITY_EPOCH_FIELDS,
     MAX_DECLARED_SESSION_SLOTS,
 )
-from joulewise.night_gate import NightPlan, PlanError  # noqa: E402
+from joulewise.night_gate import D166_REGISTRATION_PATH, NightPlan, PlanError  # noqa: E402
 
 RUNSHEET_PATH = (
     REPO_ROOT / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
@@ -648,9 +648,9 @@ def example_spec(chain_bytes: bytes) -> WrapperSpec:
             f"{EXAMPLE_MEASUREMENT_ROOT}/configs/calibration/"
             "calibration_ledger_head.json"
         ),
-        identity_epoch_json=f"{EXAMPLE_NIGHT_ROOT}/identity_epoch.json",
+        identity_epoch_json=f"{EXAMPLE_NIGHT_ROOT}/identity-epoch.json",
         identity_epoch_sha256="1" * 64,
-        t1_bindings_json=f"{EXAMPLE_NIGHT_ROOT}/t1_bindings.json",
+        t1_bindings_json=f"{EXAMPLE_NIGHT_ROOT}/t1-bindings.json",
         t1_bindings_sha256="2" * 64,
         window_end_epoch_s=1789215960,
         slot_count=PRE_REGISTERED_SLOT_COUNT,
@@ -684,7 +684,7 @@ def example_night_plan(spec: WrapperSpec) -> dict:
         "chain_path": f"{spec.window_custody_root}/chain.zsh",
         "chain_sha256_path": f"{spec.window_custody_root}/chain.zsh.sha256",
         "custody_root": spec.window_custody_root,
-        "registration_path": "<repo-relative path of the committed pre-registration>",
+        "registration_path": D166_REGISTRATION_PATH,
     }
 
 
@@ -761,8 +761,8 @@ def render_region(chain_bytes: bytes) -> str:
         '  --session-id "$SESSION_ID" \\\n'
         '  --evidence-root-id "$EVIDENCE_ROOT_ID" \\\n'
         '  --calibration-plan "$NIGHT_ROOT/calibration_plan.json" \\\n'
-        '  --identity-epoch-json "$NIGHT_ROOT/identity_epoch.json" \\\n'
-        '  --t1-bindings-json "$NIGHT_ROOT/t1_bindings.json"\n'
+        '  --identity-epoch-json "$NIGHT_ROOT/identity-epoch.json" \\\n'
+        '  --t1-bindings-json "$NIGHT_ROOT/t1-bindings.json"\n'
         '/bin/zsh -n "$NIGHT_ROOT/chain.zsh"\n'
         "```\n"
         "\n"

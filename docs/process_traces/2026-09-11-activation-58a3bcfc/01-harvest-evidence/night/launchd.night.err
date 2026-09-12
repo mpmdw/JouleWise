@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/private/tmp/joulewise-rehearsal-20260911-checkout/scripts/run_night.py", line 1870, in <module>
+    raise SystemExit(main())
+  File "/private/tmp/joulewise-rehearsal-20260911-checkout/scripts/run_night.py", line 1862, in main
+    return run_night(args.plan, courier_bin=args.courier_bin)
+  File "/private/tmp/joulewise-rehearsal-20260911-checkout/scripts/run_night.py", line 1417, in run_night
+    from joulewise import arm_readiness as readiness
+  File "/private/tmp/joulewise-rehearsal-20260911-checkout/joulewise/arm_readiness.py", line 26, in <module>
+    from datetime import UTC, datetime
+ImportError: cannot import name 'UTC' from 'datetime' (/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/datetime.py)
