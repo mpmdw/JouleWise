@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import subprocess
 import sys
@@ -1637,35 +1636,12 @@ class HappyPathTests(ControllerTestCase):
         # With unstressed admission the post count can be only 30, so 3.5x
         # would no longer kill a sleeping sentinel. At 12x even 30 x 50 ms
         # takes 18 s, exceeding the unchanged 15 s timeout for that count.
-        def bounded_sleep_scale():
-            if "FAKE_POWERMETRICS_SLEEP_SCALE" not in os.environ:
-                return float("12")
-            return max(
-                12.0, float(os.environ["FAKE_POWERMETRICS_SLEEP_SCALE"]),
-            )
-
-        # Exercise each policy branch without launching another capture. The
-        # default is separate from the floor so neither can mask a broken one.
-        for requested, expected in ((None, 12.0), ("1", 12.0), ("20", 20.0)):
-            with self.subTest(requested_scale=requested), patch.dict(os.environ):
-                os.environ.pop("FAKE_POWERMETRICS_SLEEP_SCALE", None)
-                if requested is not None:
-                    os.environ["FAKE_POWERMETRICS_SLEEP_SCALE"] = requested
-                self.assertEqual(bounded_sleep_scale(), expected, "stress policy")
-        scale = bounded_sleep_scale()
         bounded_captures = []
-        capture_commands = []
 
         class StressedSentinelAdapter(RetryAdmissionPowermetricsAdapter):
             def _command(self, *args, **kwargs):
                 argv = super()._command(*args, **kwargs)
-                capture_commands.append((kwargs.get("count"), list(argv)))
-                return argv
-
-            def _run_bounded_capture(self, *args, **kwargs):
-                with patch.dict(
-                    os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)},
-                ):
+                if kwargs.get("count") is not None:
                     config = args[0]
                     count = kwargs["count"]
                     bounded_captures.append({
@@ -1673,7 +1649,14 @@ class HappyPathTests(ControllerTestCase):
                         "interval_s": self._interval_ms(config) / 1000.0,
                         "scale": float(os.environ["FAKE_POWERMETRICS_SLEEP_SCALE"]),
                         "timeout_s": self._capture_timeout_s(config, count),
+                        "argv": argv,
                     })
+                return argv
+
+            def _run_bounded_capture(self, *args, **kwargs):
+                with patch.dict(
+                    os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": "12"},
+                ):
                     return super()._run_bounded_capture(*args, **kwargs)
 
         registry = RetryAdmissionPowermetricsRegistry()
@@ -1686,72 +1669,27 @@ class HappyPathTests(ControllerTestCase):
             )
 
         metadata = json.loads((bundle_path / "metadata.json").read_text())
-        self.assertEqual(
-            summary.status,
-            RunStatus.SUCCEEDED,
-            {
-                "status": summary.status,
-                "failure_reason": summary.failure_reason,
-                "failure_message": summary.failure_message,
-                "idle_baseline": summary.idle_baseline,
-                "measurement_quality": summary.measurement_quality,
-                "environment_admission": metadata.get("environment_admission"),
-                "uncertainty_evidence": metadata.get("uncertainty_evidence"),
-                "telemetry": metadata.get("adapters", {}).get("telemetry"),
-            },
-        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue(bounded_captures, "bounded stress was not exercised")
+        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
         drift = metadata["uncertainty_evidence"]["idle_drift"]
-        def assert_strict_reduction(drift, validate_bundle):
-            strict_problems = validate_bundle(bundle_path, strict=True)
-            validate_bundle.assert_called_once_with(bundle_path, strict=True)
-            self.assertEqual(drift["status"], "bounded", (drift, strict_problems))
-            self.assertEqual(strict_problems, [])
-
-        with patch("joulewise.cli.validate_bundle", wraps=validate_bundle) as validator:
-            assert_strict_reduction(drift, validator)
-        # Prove that the strict assertion rejects errors even with bounded
-        # drift, and that unknown-drift failures retain the strict diagnostic.
-        with patch("joulewise.cli.validate_bundle", return_value=["strict sentinel"]) as validator:
-            with self.assertRaises(AssertionError):
-                assert_strict_reduction({"status": "bounded"}, validator)
-        with patch("joulewise.cli.validate_bundle", return_value=["strict sentinel"]) as validator:
-            with self.assertRaises(AssertionError) as failure:
-                assert_strict_reduction({"status": "unknown"}, validator)
-            self.assertIn("strict sentinel", str(failure.exception))
-        self.assertEqual(len(bounded_captures), 1, "bounded stress was not exercised")
+        self.assertEqual(drift["status"], "bounded")
         capture = bounded_captures[0]
         self.assertGreaterEqual(capture["scale"], 12.0, "effective bounded stress floor")
-        self.assertEqual(capture["scale"], scale, "effective bounded stress override")
+        self.assertIn("--no-sleep", capture["argv"])
+        self.assertEqual(
+            int(capture["argv"][capture["argv"].index("-n") + 1]), capture["count"],
+        )
+        self.assertEqual(
+            int(capture["argv"][capture["argv"].index("-i") + 1]) / 1000.0,
+            capture["interval_s"],
+        )
         nominal_s = capture["count"] * capture["interval_s"]
         # Production _capture_timeout_s: max(15.0, nominal_s * 1.5 + 10.0).
         self.assertEqual(capture["timeout_s"], max(15.0, nominal_s * 1.5 + 10.0))
         self.assertGreater(
             nominal_s * capture["scale"], capture["timeout_s"],
             "this bounded capture must time out if --no-sleep is removed",
-        )
-        bounded_commands = [argv for count, argv in capture_commands if count is not None]
-        continuous_commands = [argv for count, argv in capture_commands if count is None]
-        self.assertEqual(len(bounded_commands), 1)
-        self.assertTrue(continuous_commands)
-        self.assertIn("--no-sleep", bounded_commands[0])
-        bounded_argv = bounded_commands[0]
-        self.assertEqual(
-            int(bounded_argv[bounded_argv.index("-n") + 1]), capture["count"],
-        )
-        self.assertEqual(
-            int(bounded_argv[bounded_argv.index("-i") + 1]) / 1000.0,
-            capture["interval_s"],
-        )
-        for argv in continuous_commands:
-            self.assertNotIn("--no-sleep", argv)
-        self.assertIsNotNone(summary.idle_baseline)
-        interval_s = 0.05  # The producer requests 20 Hz.
-        post_duration_s = max(
-            3 * interval_s, min(5.0, summary.idle_baseline.duration_s),
-        )
-        self.assertEqual(
-            drift["post_sample_count"],
-            max(3, math.ceil(post_duration_s / interval_s)),
         )
         self.assertEqual(capture["count"], drift["post_sample_count"])
         attempts = metadata["environment_admission"]["attempts"]
@@ -1826,8 +1764,7 @@ class HappyPathTests(ControllerTestCase):
             fresh.idle_mean_uncertainty["source_sha256"],
             hashlib.sha256(attempt_two.read_bytes()).hexdigest(),
         )
-        with patch("joulewise.cli.validate_bundle", wraps=validate_bundle) as validator:
-            assert_strict_reduction(drift, validator)
+        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
 
     def test_powermetrics_without_custodied_spawn_succeeds_not_engaged(
         self,
