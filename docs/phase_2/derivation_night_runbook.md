@@ -1662,13 +1662,20 @@ If the chain could not reach every slot it logs `slot_unused slot=dNN
 reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
 --reason window_exhausted`, and exits 0. An aborted session IS terminal, and
 its finalized observations remain in the prior set.
-`session-refusal` (the recovery tool's subcommand that prints a stored abort as a
-refusal code, run from the checkout you harvest with) reports this reason as
-`calibration_window_exhausted` only in checkouts that contain that code (main
-after 2026-09-12). The armed night's frozen clone at H f90cb8c0 predates it and
-prints `calibration_session_not_open` for the same session; there, read the
-reason from the chain log line above instead. Harvest always uses the night's
-frozen clone, never main.
+`session-refusal` is the recovery tool's subcommand that reads a session the
+chain aborted and prints the abort as a **refusal code** — the machine-readable
+name the tool prints in place of a prose reason (the same kind of name the §5
+tables' "Refusal code" column carries). Which name it prints for a
+`window_exhausted` abort depends on the copy of
+`scripts/recover_calibration_ledger.py` you run; §2.4's `cd "$MEASUREMENT_ROOT"`
+runs the measurement clone's copy at `H`, so ask that copy:
+`grep -c window_exhausted scripts/recover_calibration_ledger.py`. A count of
+`0` — every head before the mapping landed, including the equivalence night
+armed at `f90cb8c0` — prints `calibration_session_not_open`, the tool's fallback
+for an abort reason it does not know; read the reason from the `slot_unused …
+reason=window_exhausted` line above instead. A count of `1` or more prints
+`calibration_window_exhausted`. Neither name changes what follows: the session
+is terminal either way.
 
 The correct response is: record the unused count, and **do nothing else**.
 Every night runs all twelve declared slots regardless of interim values, and
