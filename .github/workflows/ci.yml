@@ -5,18 +5,17 @@ on:
     branches: [main]
   pull_request:
 
-# One live run per ref: a newer push to the same branch (or PR) cancels the
-# superseded queued/in-progress run, so bookkeeping commits do not pile up
-# behind each other in the hosted-runner queue (32 runs were queued on
-# 2026-09-01 with ~2 h latency each).
+# Cancel superseded PR runs only. Docs pushes to main cost ~1.6 minutes, so
+# queuing them is cheap; a later docs push must never cancel a code push's
+# full run.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Docs-only means docs/** or top-level *.md (including README.md and
-  # TASK_QUEUE.md). Everything else runs the full matrix. Fail open on any
-  # ambiguity: a redundant full run costs minutes; a false skip loses a fence.
+  # Docs-only paths are selected by classify_path below; docs-resident code
+  # still runs the full matrix. Fail open on any ambiguity: a redundant full
+  # run costs minutes; a false skip loses a fence.
   # F2-F5 remain unconditional in fences; build and installed-wheel also remain.
   changes:
     runs-on: ubuntu-latest
@@ -38,6 +37,24 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          classify_path() {
+            # Under docs/, code extensions are .py .sh .zsh .bash .json .jsonl
+            # .plist .toml .yaml .yml .cfg .ini; extensionless files are code too.
+            case "$1" in
+              docs/*)
+                case "${1##*/}" in
+                  *.py|*.sh|*.zsh|*.bash|*.json|*.jsonl|*.plist|*.toml|*.yaml|*.yml|*.cfg|*.ini)
+                    echo code ;;
+                  *.) echo code ;;
+                  ?*.*) echo docs ;;
+                  *) echo code ;;
+                esac
+                ;;
+              */*) echo code ;;
+              *.md) echo docs ;;
+              *) echo code ;;
+            esac
+          }
           paths=$(mktemp)
           trap 'rm -f "$paths"' EXIT
           diff_ok=false
@@ -63,12 +80,7 @@ jobs:
             # NUL boundaries preserve unusual names; disabling renames includes
             # the old code path when a file is moved into a docs-only location.
             while IFS= read -r -d '' path; do
-              kind=code
-              case "$path" in
-                docs/*) kind=docs ;;
-                */*) ;;
-                *.md) kind=docs ;;
-              esac
+              kind=$(classify_path "$path")
               printf '%s: %q\n' "$kind" "$path"
               if [ "$kind" = code ]; then code=true; fi
             done < "$paths"
