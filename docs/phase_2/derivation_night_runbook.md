@@ -1662,6 +1662,7 @@ If the chain could not reach every slot it logs `slot_unused slot=dNN
 reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
 --reason window_exhausted`, and exits 0. An aborted session IS terminal, and
 its finalized observations remain in the prior set.
+The desk tool's `session-refusal` reports this reason as `calibration_window_exhausted`.
 
 The correct response is: record the unused count, and **do nothing else**.
 Every night runs all twelve declared slots regardless of interim values, and

@@ -1229,6 +1229,7 @@ WITNESS_CASES = (
     WitnessCase(RefusalCode.DISPLAY_ARM_FAILED, "_state_display_abort", "writer-display-failure"),
     WitnessCase(RefusalCode.SAMPLER_NEVER_READY, "_state_sampler_abort", "writer-sampler-failure"),
     WitnessCase(RefusalCode.ROLLOVER_GATE_TIMEOUT, "_state_rollover_abort", "writer-rollover-failure"),
+    WitnessCase(RefusalCode.WINDOW_EXHAUSTED, "_state_window_exhausted_abort", "session-refusal"),
 )
 
 
@@ -4595,6 +4596,25 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def _state_rollover_abort(self) -> dict:
         return self._state_real_writer("session-rollover-abort")
 
+    def _state_window_exhausted_abort(self) -> dict:
+        session_id = "session-window-exhausted"
+        plan = self._open_session(
+            session_id,
+            session_kind=ledger_module.SESSION_KIND_DERIVATION,
+            slots=ledger_module.derivation_session_slots(2),
+        )
+        aborted = self._run(
+            "abort-session",
+            "--session-id",
+            session_id,
+            "--plan",
+            str(plan),
+            "--reason",
+            "window_exhausted",
+        )
+        self.assertEqual(aborted.returncode, 0, aborted.stdout + aborted.stderr)
+        return {"session_id": session_id, "plan": plan}
+
     def _state_pre_slot_not_ready(self) -> dict:
         return self._state_real_writer("session-pre-slot-not-ready")
 
@@ -5439,7 +5459,9 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             )
             payload = self._json_payload(refused)
             self.assertEqual(payload["code"], case.code.value)
-            if record.terminal_result is not TerminalResult.NIGHT_STOPPED_PRESERVED:
+            if case.observer == "session-refusal":
+                self.assertEqual(payload["terminal_result"], "session_aborted")
+            elif record.terminal_result is not TerminalResult.NIGHT_STOPPED_PRESERVED:
                 self.assertNotIn(
                     "terminal_result",
                     payload,
@@ -5558,6 +5580,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     RefusalCode.DISPLAY_ARM_FAILED,
                     RefusalCode.SAMPLER_NEVER_READY,
                     RefusalCode.ROLLOVER_GATE_TIMEOUT,
+                    RefusalCode.WINDOW_EXHAUSTED,
                 }:
                     status = self._run(
                         "session-status",
@@ -5577,6 +5600,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                             RefusalCode.ROLLOVER_GATE_TIMEOUT: (
                                 "pulse_calibration_rollover_gate_timeout"
                             ),
+                            RefusalCode.WINDOW_EXHAUSTED: "window_exhausted",
                         }[case.code],
                     )
                     fresh = self._run(
@@ -5952,6 +5976,27 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                         f"baseline_sha256={hashlib.sha256(baseline_bytes).hexdigest()}"
                     ),
                 )
+
+    def test_session_refusal_reports_window_exhausted_derivation_abort(self) -> None:
+        state = self._state_window_exhausted_abort()
+        refused = self._run(
+            "session-refusal",
+            "--session-id",
+            state["session_id"],
+            "--plan",
+            str(state["plan"]),
+        )
+        payload = self._json_payload(refused)
+        self.assertEqual(payload["code"], RefusalCode.WINDOW_EXHAUSTED.value)
+        self.assertEqual(payload["terminal_result"], "session_aborted")
+        self.assertEqual(
+            refused.returncode,
+            REFUSAL_BY_CODE[RefusalCode.WINDOW_EXHAUSTED].process_exit,
+        )
+        self.assertEqual(
+            payload["context"]["durable_session_status"]["abort_reason"],
+            "window_exhausted",
+        )
 
     def test_abort_witness_payload_survives_nonowned_sampler_census_decoy(self) -> None:
         decoy_capture = self.repo / "powermetrics-decoy.plist"
