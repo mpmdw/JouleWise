@@ -9,6 +9,8 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
+**Now (2026-09-12):** the first epoch-equivalence measurement night is armed for 02:56 PDT on 2026-09-13 from a frozen clone; today's desk work merged four test-and-fixture fixes (a git-fixture hygiene census, a new desk-tool refusal code for window-exhausted sessions, an uptime-proof readiness fixture, and a CI-safe controller sentinel regression) under the twelve-row gate, with two cold-gate rulings on the way. **Next:** harvest the night on 2026-09-13 and apply the pre-registered equivalence rule.
+
 **Status:** The fallback methods/diagnostic paper is merged: it describes the measurement
 honestly as energy assigned to inference phases from interval-average power records, with
 its sensitivity to allowed timing changes, reports both historical model stacks, and keeps
