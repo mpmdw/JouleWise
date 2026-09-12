@@ -1,0 +1,141 @@
+diff --git a/tests/test_controller.py b/tests/test_controller.py
+index 8d41c927..d1ce65eb 100644
+--- a/tests/test_controller.py
++++ b/tests/test_controller.py
+@@ -665,6 +665,17 @@ class RetryAdmissionPowermetricsAdapter(PowermetricsTelemetryAdapter):
+         self.concurrent_bounded_capture = False
+         self.idle_slice_count = 0
+ 
++    def _command(self, *args, **kwargs):
++        argv = super()._command(*args, **kwargs)
++        # Shared controller/campaign policy from PR #310 (consult 87).
++        # Only bounded synthetic sentinels skip sleeping; continuous admission
++        # and measured sampling still own the real cadence/clock bracket.
++        # Production derives the post count from baseline duration, capped at
++        # 5 s; do not replace that count with a universal 100-sample request.
++        if kwargs.get("count") is not None:
++            argv.append("--no-sleep")
++        return argv
++
+     def _run_bounded_capture(self, *args, **kwargs):
+         if self._process is not None:
+             self.concurrent_bounded_capture = True
+@@ -1596,21 +1607,91 @@ class HappyPathTests(ControllerTestCase):
+             admission["attempts"][1]["cpu_admission"]["cpu_busy_ratio_p95"],
+         )
+ 
++    def test_powermetrics_fixture_command_only_unpaces_bounded_captures(self) -> None:
++        adapter = RetryAdmissionPowermetricsAdapter(self.clock)
++        config = make_config("fixture-command-policy")
++        output = self.runs_root / "post.plist"
++        for count in (None, 3, 7, 100):
++            with self.subTest(count=count):
++                expected = PowermetricsTelemetryAdapter._command(
++                    adapter, config, output, count=count,
++                )
++                if count is not None:
++                    expected.append("--no-sleep")
++                self.assertEqual(
++                    adapter._command(config, output, count=count), expected,
++                )
++
+     def test_powermetrics_retry_promotes_admitted_attempt_for_strict_reduce(
+         self,
+     ) -> None:
+         from joulewise.cli import validate_bundle
+         from joulewise.reduce import reduce_bundle
+ 
++        # A177 / report 19: third host-timing fixture instance (87, 99, 19),
++        # caused by incomplete propagation of the bounded-sentinel cure.
++        # Stress only the bounded sentinel. Consult 87 lines 135-138 and 174:
++        # a 112 ms workload can lack samples under 175 ms continuous pacing;
++        # campaign strict validity alone does not require a succeeded summary.
++        # With unstressed admission the post count can be only 30, so 3.5x
++        # would no longer kill a sleeping sentinel. At 12x even 30 x 50 ms
++        # takes 18 s, exceeding the unchanged 15 s timeout for that count.
++        bounded_captures = []
++
++        class StressedSentinelAdapter(RetryAdmissionPowermetricsAdapter):
++            def _command(self, *args, **kwargs):
++                argv = super()._command(*args, **kwargs)
++                if kwargs.get("count") is not None:
++                    config = args[0]
++                    count = kwargs["count"]
++                    bounded_captures.append({
++                        "count": count,
++                        "interval_s": self._interval_ms(config) / 1000.0,
++                        "scale": float(os.environ["FAKE_POWERMETRICS_SLEEP_SCALE"]),
++                        "timeout_s": self._capture_timeout_s(config, count),
++                        "argv": argv,
++                    })
++                return argv
++
++            def _run_bounded_capture(self, *args, **kwargs):
++                with patch.dict(
++                    os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": "12"},
++                ):
++                    return super()._run_bounded_capture(*args, **kwargs)
++
+         registry = RetryAdmissionPowermetricsRegistry()
+-        bundle_path, summary = _produce_admission_powermetrics_bundle(
+-            self.runs_root,
+-            "controller-powermetrics-retry-pass",
+-            registry,
+-        )
++        registry.adapter_type = StressedSentinelAdapter
++        with patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": "1"}):
++            bundle_path, summary = _produce_admission_powermetrics_bundle(
++                self.runs_root,
++                "controller-powermetrics-retry-pass",
++                registry,
++            )
+ 
+-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+         metadata = json.loads((bundle_path / "metadata.json").read_text())
++        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
++        self.assertTrue(bounded_captures, "bounded stress was not exercised")
++        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
++        drift = metadata["uncertainty_evidence"]["idle_drift"]
++        self.assertEqual(drift["status"], "bounded")
++        capture = bounded_captures[0]
++        self.assertGreaterEqual(capture["scale"], 12.0, "effective bounded stress floor")
++        self.assertIn("--no-sleep", capture["argv"])
++        self.assertEqual(
++            int(capture["argv"][capture["argv"].index("-n") + 1]), capture["count"],
++        )
++        self.assertEqual(
++            int(capture["argv"][capture["argv"].index("-i") + 1]) / 1000.0,
++            capture["interval_s"],
++        )
++        nominal_s = capture["count"] * capture["interval_s"]
++        # Production _capture_timeout_s: max(15.0, nominal_s * 1.5 + 10.0).
++        self.assertEqual(capture["timeout_s"], max(15.0, nominal_s * 1.5 + 10.0))
++        self.assertGreater(
++            nominal_s * capture["scale"], capture["timeout_s"],
++            "this bounded capture must time out if --no-sleep is removed",
++        )
++        self.assertEqual(capture["count"], drift["post_sample_count"])
+         attempts = metadata["environment_admission"]["attempts"]
+         self.assertEqual(
+             [row["cpu_admission"]["decision"] for row in attempts],
+@@ -1668,11 +1749,11 @@ class HappyPathTests(ControllerTestCase):
+         self.assertEqual(teardown["termination_grace_s"], 10.0)
+         command = metadata["adapters"]["telemetry"]["command"]
+         self.assertNotIn("-n", command)
++        self.assertNotIn("--no-sleep", command)
+         self.assertEqual(
+             command[command.index("--samplers") + 1],
+             "cpu_power,gpu_power,ane_power,thermal",
+         )
+-        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
+         fresh = reduce_bundle(bundle_path)
+         self.assertEqual(fresh.status, RunStatus.SUCCEEDED)
+         self.assertEqual(
+@@ -1683,6 +1764,7 @@ class HappyPathTests(ControllerTestCase):
+             fresh.idle_mean_uncertainty["source_sha256"],
+             hashlib.sha256(attempt_two.read_bytes()).hexdigest(),
+         )
++        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
+ 
+     def test_powermetrics_without_custodied_spawn_succeeds_not_engaged(
+         self,

@@ -103,6 +103,7 @@ class RefusalCode(str, Enum):
     DISPLAY_ARM_FAILED = "calibration_display_arm_failed"
     SAMPLER_NEVER_READY = "calibration_sampler_never_ready"
     ROLLOVER_GATE_TIMEOUT = "pulse_calibration_rollover_gate_timeout"
+    WINDOW_EXHAUSTED = "calibration_window_exhausted"
 
 
 class TerminalResult(str, Enum):
@@ -264,6 +265,7 @@ _DESCRIPTIONS: Mapping[RefusalCode, str] = MappingProxyType(
         RefusalCode.DISPLAY_ARM_FAILED: "display sleep arm failed after the bracket claim",
         RefusalCode.SAMPLER_NEVER_READY: "powermetrics sampler never became ready",
         RefusalCode.ROLLOVER_GATE_TIMEOUT: "powermetrics rollover gate timed out",
+        RefusalCode.WINDOW_EXHAUSTED: "quiet window exhausted before the next slot",
     }
 )
 
@@ -285,6 +287,7 @@ _ABORT = {
     RefusalCode.DISPLAY_ARM_FAILED,
     RefusalCode.SAMPLER_NEVER_READY,
     RefusalCode.ROLLOVER_GATE_TIMEOUT,
+    RefusalCode.WINDOW_EXHAUSTED,
 }
 _RESUME = {RefusalCode.CUSTODY_COMPLETE_USE_RESUME}
 _ADVANCE = {
@@ -367,6 +370,7 @@ _WRITER_COMPONENT = {
     RefusalCode.DISPLAY_ARM_FAILED,
     RefusalCode.SAMPLER_NEVER_READY,
     RefusalCode.ROLLOVER_GATE_TIMEOUT,
+    RefusalCode.WINDOW_EXHAUSTED,
 }
 
 

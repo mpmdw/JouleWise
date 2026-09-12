@@ -1,0 +1,14 @@
+NIGHT_HANDBACK stage-1 notice for d079-epoch-25g83-derivation-n1-20260913
+sent_by: activation b58fb582 (Fable 5.1) via the Gmail MCP send_message tool
+accepted_at_local: 2026-09-12T01:05:01-0700 (tool returned at ~01:04:40 PDT 2026-09-12)
+message_id: 1a094a59a84b53be
+thread_id: 1a0800cdb282c3f1 (the standing notice thread; Ed's last inbound 2026-09-10 23:05Z, no NO)
+recipient: claude.ai.copper531@passmail.net
+H: f90cb8c016662f8af6faa73d905fc472443432ab
+wrapper_sha256: 569daedae03126d9eb819abd3b132baf860597dbe926a0db87311643a854df45
+identity_epoch_sha256: b8a1094c24d1795e39fc527ce96ba9e1a4ba2bda66d4250f35a462e28a90b607
+t1_bindings_sha256: 8dcdfb009d9cf6c7d218bf19667ad1b88f6a9747c6822c02fd2997ef9a1e9d98
+preregistration_sha256_at_H: 84b820b9069c5b7b34b35e1b8fcd1c436c54ded04cbb24c6c985bbc867ce0b5c
+NO_relay_available: reply NO on thread 1a0800cdb282c3f1 (re-read METADATA_ONLY immediately before publication); owner-authored GitHub issues labelled directive (re-listed immediately before publication)
+headless_limit: the session reads the thread only while alive; a NO after exit is acted on by the next activation
+plan_published: NOT YET (arm block step 5 publishes)

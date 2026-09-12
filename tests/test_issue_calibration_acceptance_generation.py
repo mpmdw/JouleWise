@@ -2019,6 +2019,16 @@ class PrepareCandidateTest(unittest.TestCase):
                     not expect_match,
                 )
 
+    def test_the_ruled_alternative_floor_has_one_home(self) -> None:
+        """The issuer's only licensed departure equals the validator's hard bound by IMPORT, not by a matching literal."""
+
+        from joulewise import calibration_bracketing
+
+        self.assertEqual(issuer.RULED_ALTERNATIVE_CORPUS_SIZE, calibration_bracketing.ENVELOPE_MINIMUM_CORPUS_N)
+        source = Path(issuer.__file__).read_text(encoding="utf-8")
+        self.assertIn("RULED_ALTERNATIVE_CORPUS_SIZE = ENVELOPE_MINIMUM_CORPUS_N", source)
+        self.assertNotIn("RULED_ALTERNATIVE_CORPUS_SIZE = 17", source)
+
     # B-2: the corpus is bound to the pre-registered shape
 
     def test_a_registration_of_other_than_three_nights_refuses(self) -> None:

@@ -1,0 +1,21 @@
+HEAD is now at f90cb8c0 Handback H for the equivalence night d079-epoch-25g83-derivation-n1-20260913: NIGHT_HANDBACK rewritten, production inventory row appended, pre-registration commit-time fields filled (DD 10, MLX 0.31.2, pin 76, chain digest), inventory pin test raised to five deployments; activation b58fb582 records 00/01 + durable pointer
+https://github.com/mpmdw/JouleWise
+Python 3.13.1
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: /Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python -m pip install --upgrade pip
+WARNING: The candidate selected for download or install is a yanked version: 'charset-normalizer' candidate (version 3.4.8 at https://files.pythonhosted.org/packages/11/49/fe5a8572a70cd9cba79f80af9388ac8c5c914ed4459b956f940244e499a5/charset_normalizer-3.4.8-cp313-cp313-macosx_10_13_universal2.whl (from https://pypi.org/simple/charset-normalizer/) (requires-python:>=3.7))
+Reason for being yanked: <none given>
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: /Users/edr/JouleWise-measurement-20260913-derivation/.venv/bin/python -m pip install --upgrade pip
+--- /dev/fd/11	2026-09-12 01:01:25
++++ /dev/fd/12	2026-09-12 01:01:26
+@@ -15,6 +15,7 @@
+ httpx==0.28.1
+ huggingface_hub==1.22.0
+ idna==3.18
++joulewise==0.1.0
+ markdown-it-py==4.2.0
+ mdurl==0.1.2
+ mlx-lm==0.31.3

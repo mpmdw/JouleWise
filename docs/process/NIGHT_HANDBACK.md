@@ -41,44 +41,88 @@ have been assigned to later processes.
 
 ## Purpose of this night
 
-Plan `rehearsal-20260911`, class `REHEARSAL_STUB`, is planned for
-2026-09-11 at 02:56:00 PDT (`t0`, epoch 1789120560), with a 900-second
-window. The courier deadline is `t0 + 900 + 300`, epoch 1789121760,
-03:16:00 PDT that morning. The driver runs its built-in stub,
-`sleep 2; echo REHEARSAL`: no pack, no model, no measurement, no sudo.
-This notice describes the planned night; the arm record establishes
-whether installation happened.
+Plan `d079-epoch-25g83-derivation-n1-20260913`, class `DIAGNOSTIC_NO_PACK`,
+is planned for 2026-09-13 at 02:56:00 PDT (`t0`, epoch 1789293360) with a
+9000-second window (`window_max_s`; the acquisition allocation ends at
+05:26:00 PDT, epoch 1789302360). The courier deadline is
+`t0 + 9000 + 300`, epoch 1789302660, 05:31:00 PDT; the next 07:00 dead-man
+minute is epoch 1789308000, 89 minutes after it. This notice describes the
+planned night; the arm record establishes whether installation happened.
 
-This second stub night combines two checks for `NIGHT-REHEARSAL-01`.
-Installing both agents on **2026-09-10 between 03:00 and 06:30 PDT**
-lets the 07:00 dead-man fire that morning (epoch 1789048800), before
-the night, and stand down with one line in `night.log` and nothing
-written into `night/` by that firing. That is acceptance item 5's
-R-7 observation. Installing after that day's 02:56 also keeps the night
-agent from firing a day early. The night then fires at 02:56 on 09-11;
-item 6 is re-satisfied only if its receipt is not refused. An
-agent-present refusal can close item 5 only, not item 6.
+**What the night does.** It is the epoch-equivalence check that Ed's
+directive issue 316 ruled on 2026-09-10, transcribed as revision 2 of
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md` and as the
+dated addendum under D-102. The 2026-09-02 macOS update moved `os_build`
+from 25F84 to 25G83 and replaced the `/usr/bin/powermetrics` binary, so the
+issued D-079 calibration acceptance (`d079_calibration_acceptance_v2_n17_r6`)
+no longer matches this machine and ordinary capture refuses. Night one asks
+one instrument question: did the update move the clock-anchor bound outside
+the envelope the instrument was already characterised against? The night
+opens one agent-free `derivation`-kind ledger session of 12 declared slots
+at head-equals-pin (ledger head sequence 76), settles once for 600 s, then
+takes twelve derivation-only `powermetrics` fiducial captures at a 600 s
+start-to-start cadence (programmed span 7680 s). No model runs, no
+measurement pack, no Git, no claim output. The plan's `chain_path` is the
+plan-pinned wrapper `<night root>/chain.zsh`, emitted by
+`scripts/gen_derivation_night.py`, which carries the night's environment as
+literals, verifies the tracked chain's bytes and `exec`s
+`scripts/night_chains/calibration_derivation_only.zsh` (SHA-256
+`b8bf5b0a85bb2012eed9763f70743963d6f24c3ec3038142525766c00f1ac8cf`, the value
+this commit also writes into the pre-registration's chain-digest field).
 
-`repo_head = measurement_head = H`, where H is **this commit**, the main
-commit that rewrites this handback for this night, descended from the
-cure merge `a52810c9`. The disposable detached checkout at H is
-`/private/tmp/joulewise-rehearsal-20260911-checkout`. Both night agents
-are installed from it. It is used only by this stub and removed with
-the plan root after harvest; it is never reused for a real plan.
+**What happens with the result, fixed before the night** (runbook
+`docs/phase_2/derivation_night_runbook.md` §2.5). Let m be the number of
+retained captures: ledger disposition `valid` and a stored anchor record
+that resolves. m < 6 is INCONCLUSIVE: one more equivalence night, nothing
+else. PASS is every retained `b_fiducial_s` at or below 0.032898493715362 s
+AND the retained range (largest minus smallest) at or below 0.009724 s; on
+PASS the dated D-102 continuation addendum is written and real G2-a windows
+follow under the ordinary window path. FAIL is anything else; on FAIL
+revision 1's three-night derivation proceeds with this night as night one.
+No member value is read by anyone before the session is terminal; the desk
+tool `scripts/epoch_equivalence_check.py` applies the rule at harvest.
 
-The consolidated notice with these pins is sent after commit H and
-before the plan is moved into place. Ed's NO on the notice thread
-stands the night down. The arming activation exits after recording the
-arm. The watchdog's exit boundary is 02:31:00 PDT on 09-11
-(epoch 1789119060, `t0 − 25 minutes`); its relaunch belt is
-02:45–03:30 PDT. Power source, powermode and the timer probe are
-recorded at arm time. Powermode is recorded, not gated, for this stub;
-a green stub says nothing about the capture-timeout seam.
+**Pins.** `repo_head = measurement_head = H`, where H is **this commit**: the
+main commit that rewrites this handback, appends the production inventory
+row for the measurement root, and fills the pre-registration's five
+commit-time fields (authoring day 10, MLX 0.31.2, head pin 76 /
+`08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`, chain
+digest above). The measurement root is
+`/Users/edr/JouleWise-measurement-20260913-derivation`, a fresh GitHub clone
+detached at H whose `.venv/bin/python` is Python 3.13 built from
+`env/mac-measurement-lock.txt`; both LaunchAgents are installed FROM it and
+name that interpreter by absolute path; its
+`runs/calibration_observation_ledger.jsonl` is the canonical 76-record
+ledger restored byte-exact and authenticated against its committed head pin
+with custody verification. The night root (`custody_root`) is
+`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913`; the runs
+root is `<night root>/runs`; the chain's own log is
+`<night root>/operator_logs/derivation-chain.log`. The session id equals the
+plan id. The evidence root id is
+`evidence-d079-epoch-25g83-derivation-n1-20260913`, registered by this
+night's arm record (the runbook names no derivable default; the form follows
+the G2-a runbook's `evidence-<window id>`). The frozen calibration plan is
+the committed bytes of
+`configs/campaigns/d117_floor_qwen25_1p5b_v3/calibration_plan.json` copied to
+`<night root>/calibration_plan.json`: the ledger session records it by
+`plan_id` and SHA-256 as an identity binding, and a derivation-only capture
+reads nothing else from it. The two desk inputs `identity-epoch.json` and
+`t1-bindings.json` are written into the night root by
+`scripts/write_derivation_night_inputs.py` at the arm and their digests are
+baked into the wrapper.
 
-These pins and acceptance conditions come from the
-[magistrate synthesis](../process_traces/2026-09-09-rehearsal-harvest/65-magistrate-synthesis-second-stub-night.md).
-The [arm runbook](../process_traces/2026-09-09-rehearsal-harvest/67-arm-runbook-rehearsal-20260911.md)
-gives the command sequence.
+**Timeline.** Both agents are installed on 2026-09-12 inside 03:00–06:30
+PDT, the calendar day before `t0`. The 07:00 dead-man firing on 09-12 stands
+down with one log line and writes nothing else into `night/`; that line is
+expected evidence. The watchdog's plan span opens, and its stand-down request
+lands, at `t0 − 25 minutes`, 02:31:00 PDT on 09-13 (epoch 1789291860); TERM
+is `t0 − 16 minutes` (1789292400) and KILL is `t0 − 15 minutes`
+(1789292460); `t0` sits inside the fixed 02:45–03:30 belt, which is correct
+for a night. The consolidated notice with these pins is sent after commit H
+and before the plan is moved into its discoverable place; Ed's NO on the
+notice thread stands the night down. The arming activation exits after
+recording the arm. Power source, powermode and the timer probe are recorded
+at arm time.
 
 ## Executed — rehearsal-20260909 (history)
 
@@ -99,49 +143,118 @@ from the canonical repo. The standing rules below are unchanged. RECORD: harvest
 armed; §Purpose, §Where the results are and §Next lane describe the completed night (this file's history holds no separate
 between-nights template text; whether one should exist is referred to the cold gate, not decided here).
 
+## Executed — rehearsal-20260911 (2026-09-11)
+
+The night did not run. At 02:56 PDT, Python 3.9.6 crashed on the
+`datetime.UTC` import before any census, gate or stub. At 07:00 PDT, the
+dead-man refused `night_refused_agent_present` on an orphaned Claude daemon;
+that refusal is not a night-gate verdict. No `result.json` or `receipt.json`
+was produced. Courier email `1a090c8424231111` reported the failures.
+
+Harvest is complete in
+[record 01](../process_traces/2026-09-11-activation-58a3bcfc/01-rehearsal-20260911-harvest-record.md):
+item 5 MET, item 6 NOT MET. Item 5 rests on the pre-night 2026-09-10 07:00
+dead-man stand-down, not the 09-11 refusal. Both agents were uninstalled FROM
+the stub checkout, and the checkout and plan root were retired in
+[record 02](../process_traces/2026-09-11-activation-58a3bcfc/02-rehearsal-20260911-uninstall-and-retirement.md).
+RECORD: harvest, uninstall and removal for this night are complete; nothing
+is armed. The next plan is authored under record 13 of the same directory;
+this entry assigns it no pins.
+
+## Executed — rehearsal-20260912 (2026-09-12)
+
+The night ran. Launchd started the driver at 00:30:04 PDT under the pinned
+Python 3.13 (H′ `a7d1eb88`); gate verdict `REHEARSAL_ONLY`; the built-in stub
+exited 0; `result.json` `REHEARSAL_ONLY` with `chain_exit_code` 0; receipt
+C1/C3/C4/C5 PASS with measured keys, C2 `NOT_APPLICABLE`
+(`no_pack_by_design`), refusal null; `launchd.night.err` EMPTY; results
+branch `night-results/20260912` at `e657f30f`; courier email
+`1a09487237fa6be2`. Ruling 06 C-7 is MET clause by clause and acceptance
+item 6 is MET in
+[record 01](../process_traces/2026-09-12-courier-rehearsal-20260912/01-rehearsal-20260912-harvest-record.md).
+Both agents were uninstalled FROM the stub checkout, the checkout was
+removed, and the plan root was moved out of discovery (delete refused by the
+harness; bytes archived) in
+[record 02](../process_traces/2026-09-12-courier-rehearsal-20260912/02-rehearsal-20260912-uninstall-and-retirement.md).
+RECORD: harvest, uninstall and retirement for this night are complete; nothing
+is armed; this file's §Purpose / §Where the results are / §Next lane still
+describe this completed night until the magistrate rewrites them for the
+next plan.
+
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/rehearsal-20260911`; records in `night/` —
-  `result.json` (expected verdict `REHEARSAL_ONLY`, `chain_exit_code` 0),
-  `receipt.json` or `refusal.json` as `result.json` directs,
-  `chain.started`, `chain.exited`, `censuses.jsonl`, `courier.sent`,
-  `courier.json`.
-- Driver log: `/Users/edr/night-custody/rehearsal-20260911/night.log`.
-  At harvest, look for the 2026-09-10 07:00 dead-man stand-down line
-  before the 09-11 `night gate verdict=` line.
-- Results branch: `night-results/20260911` on `origin`, if the driver's
-  push succeeded — verify, do not presume.
+- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913`;
+  driver records in `night/` — `result.json` (expected verdict `GO` for
+  this class when every gate row passes, `chain_exit_code` 0),
+  `receipt.json` or `refusal.json` as `result.json` directs (C1 PASS with the
+  D-166 registration hash, C2 `NOT_APPLICABLE` / `no_pack_by_design`, C3, C4
+  and C5 PASS with C5's `chain_sha256` equal to the wrapper's digest),
+  `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`,
+  `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
+  `courier.sent`, `courier.json`, `courier.heartbeat`.
+- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night.log`.
+  At harvest, look for the 09-12 07:00 dead-man stand-down line, then
+  `night driver started` and a `night gate verdict=` line for 09-13.
+- Chain log: `<custody root>/operator_logs/derivation-chain.log` —
+  `session_open kind=derivation slots=12`, `chain_start` (its timestamp
+  minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
+  lines each answered by `slot_end … disposition=valid`,
+  `slot_end … disposition=non-valid` or `slot_refused`, then
+  `derivation_night_complete slots=12` or `slot_unused … reason=window_exhausted`
+  followed by `session_abort`.
+- Captures: `<custody root>/runs/instrument_validation/<session id>-dNN/`
+  (`manifest.json`, `instrument_evidence.json`, raw trace); ledger rows in
+  the clone's `runs/calibration_observation_ledger.jsonl`. The clone and the
+  night root are production custody after this night and are RETAINED, not
+  removed.
+- Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
+  `launchd.night.err` must be EMPTY.
+- Results branch: `night-results/20260913` on `origin`, if the driver's push
+  succeeded — verify, do not presume.
 
-## Next lane for rehearsal-20260911
+## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`rehearsal-20260911` / `/private/tmp/joulewise-rehearsal-20260911-checkout`
-/ this commit) harvests `result.json`, the receipt or refusal, the courier
-message id and the results-branch evidence, records them under
-`NIGHT-REHEARSAL-01`. Acceptance requires `receipt.json` verdict
-`REHEARSAL_ONLY`, with C5 recording `chain_stub: built_in_stub_by_design`
-and null `chain_sha256` and `expected_chain_sha256`. The log must show
-the pre-night dead-man standing down, with nothing in `night/` from
-that firing. A receipt refusing `night_refused_agent_present` is
-acceptable only for item 5; item 6 still needs a non-refused night.
-The stub's launchd exit status 3 is not a receipt-refusal signal.
+`d079-epoch-25g83-derivation-n1-20260913` /
+`/Users/edr/JouleWise-measurement-20260913-derivation` / this commit) harvests
+only after the plan span's completion boundary has passed and `courier.sent`
+exists. It follows runbook §2 in order: §2.0 rebuilds the night's
+coordinates from the frozen triple and verifies the wrapper against its
+sidecar before reading anything out of it; §2.1 reads `result.json`, the
+receipt or refusal, the chain log, the launchd streams and
+`check --session-ids <session id>`; the custody root is preserved byte-exact
+outside watchdog discovery with an `lstat` inventory before anything is
+moved. Then §2.5: run `scripts/epoch_equivalence_check.py` twice (the clone,
+and a second checkout at the same head, different `--out`), compare the two
+records byte for byte, and take exactly the one action the outcome table
+names — INCONCLUSIVE (m < 6): arm one more equivalence night; PASS: write the
+dated D-102 continuation addendum quoting the session id, the twelve slot
+outcomes, m and the m retained lexemes, then the first real G2-a window under
+the ordinary path; FAIL: revision 1's nights two and three follow (§3, §4)
+with this night counted as night one. Before applying the rule, re-hash the
+committed pre-registration at H and require equality with the arm record's
+digest.
 
-After preserving the evidence, the magistrate runs
-`scripts/install_night_agent.sh --plan /Users/edr/night-custody/rehearsal-20260911/night_plan.json --hour 2 --minute 56 --uninstall`
-FROM the stub checkout, removes the stub checkout (`git worktree remove`)
-and the plan root before any real plan, and then sends the stage-1 plan
-email to Ed before any `DIAGNOSTIC_NO_PACK` plan is armed. Accept only
-`night_refused_agent_present` as a receipt refusal; cure any other cause
-before re-arming; never re-arm the same plan on the same signature twice.
-Item 1, the `cold_start.json` deadline derivation, was desk work
-separate from this night and is CLOSED as of 2026-09-09 ~17:00 PDT (derivation 70,
-fresh capture 104: median 5158 ms, deadline 300 s).
+A receipt refusing `night_refused_agent_present`, `night_refused_not_quiet`
+or `night_refused_hid_idle` is a correct refusal — the rows ran and refused —
+and the night is re-planned, never re-armed on the same plan. Any
+`night_probe_error`, crash, non-empty `launchd.night.err`, a wrapper `FAIL`
+before the settle, or a `slot_refused` line is a finding to cure before any
+further night.
+
+After the harvest, run `scripts/install_night_agent.sh --plan
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+--hour 2 --minute 56 --uninstall` FROM the clone. Do NOT remove the clone or
+the night root: the ledger session and the captures live there and the clone
+is a production inventory row. Never re-arm this plan; every further night is
+its own plan, session id, night root, desk inputs and wrapper.
+
 For every v2 plan, run `scripts/install_night_agent.sh` FROM the checkout
 named by the plan's `measurement_root`, with that checkout at the plan's
-`measurement_head`; never install the two night agents from the
-development checkout. Once authored, every armed plan's canonical
-`(plan_id, measurement_root, measurement_head)` is included in the magistrate relaunch prompt's
-frozen-checkout list until completion.
+`measurement_head`; never install the two night agents from the development
+checkout. Once authored, every armed plan's canonical
+`(plan_id, measurement_root, measurement_head)` is included in the magistrate
+relaunch prompt's frozen-checkout list until completion.
 
 **Standing rules** <!-- F11 -->
 
@@ -153,9 +266,28 @@ missing or inconsistent makes the plan malformed.
 Installer note: on install the installer checks `repo_head` against the
 driver checkout HEAD and `measurement_head` against the HEAD of the plan's
 `measurement_root`, while `--uninstall` checks neither pin and no longer
-needs `claude` on PATH.
-Ordinary
-daytime work in the dev checkout no longer invalidates an armed night; only
+needs `claude` on PATH or a Python virtual environment (a project-specific
+Python installation).
+Install and `--render-only DIR` (render the two job files to a directory
+without installing anything) default to `<measurement_root>/.venv/bin/python`;
+pass `--python /absolute/path/to/python` to select the interpreter (the
+executable running the driver). A stub checkout needs that venv or an absolute
+path to a Python whose version is at least `MIN_PYTHON` in `scripts/run_night.py`
+(currently 3.11) and for which `run_night.py preflight --plan PLAN.json` exits 0
+from the stub checkout under the job's PATH.
+
+At 02:56 PDT on 2026-09-11, the night driver crashed before any gate because
+`python3` found through PATH selected macOS Python 3.9.6, which cannot import
+`datetime.UTC`. A **LaunchAgent** is a macOS launchd job file; each job now names
+an absolute interpreter path. A **driver preflight** loads the driver module
+and every project module it imports at module scope, under the job's
+interpreter and PATH, and parses the plan before installation. Its JSON
+`modules` list names the driver and those direct module-scope project imports.
+It does not exercise functions' lazy imports inside `joulewise` or run the
+night's gates or measurements. The installer prints the JSON success record
+for the arm record and refuses installation if preflight fails.
+
+Ordinary daytime work in the dev checkout no longer invalidates an armed night; only
 moving the pinned measurement checkout does. Once authored, every armed
 plan's canonical `(plan_id, measurement_root, measurement_head)` is included
 in the magistrate relaunch prompt's frozen-checkout list until completion.
@@ -164,11 +296,15 @@ G2-a routing handoff (2026-09-08; installed):
 `scripts/run_night.py::_run_chain_once` derives `MEASUREMENT_ROOT`,
 `MEASUREMENT_HEAD`, and `PY` from the parsed v2 plan and overwrites inherited
 values in the child environment alongside `NIGHT_PLAN_ID`. There is no v2
-interpreter field: the driver, chain, and preflight always derive
-`<measurement_root>/.venv/bin/python`. The chain and preflight verify checkout
-HEAD against `measurement_head`. The preflight's sole argument is the absolute
-v2 plan filename. Future clone naming and the exact locked venv creation
-commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
+interpreter field: the driver always gives the chain
+`<measurement_root>/.venv/bin/python`, independently of the driver interpreter
+selected at install time. (Since PR #321 the installer also pins the driver's
+own interpreter by absolute path; before it, the driver ran under whatever
+`python3` the LaunchAgent's PATH resolved to, which is the 2026-09-11 defect.)
+The chain and its input preflight (checks before measurements start) verify checkout HEAD against `measurement_head`; that
+input preflight's sole argument is the absolute v2 plan filename. The separate
+driver import check is `run_night.py preflight --plan PLAN.json`. Future clone
+naming and the exact locked venv creation commands live in [the runsheet's plan-derived block](../process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md#plan-derived-measurement-variables).
 
 D-176 pack-bound T0_REHEARSAL post-night handback (separate from the stub above):
 

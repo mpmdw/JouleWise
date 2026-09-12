@@ -121,8 +121,9 @@ future acceptance, never to license a measurement.
 
 What the mode still authenticates is unchanged: the active issued artifact's
 exact bytes, its pulse-protocol digest, and its estimator-code digest. What it
-inverts is one test. It REQUIRES the live identity epoch to differ from the
-artifact's epoch, and refuses when they match — a matching epoch means an
+inverts is one test. It REQUIRES the live identity epoch to differ from EVERY
+epoch the artifact judges (its own and any authenticated continuation), and
+refuses when any matches — a matching epoch means an
 ordinary capture is possible, so derivation-only would be a way around
 ordinary judgment. It also refuses without a derivation-kind session slot; a
 standalone attempt and a bracket-kind slot are both rejected. Sessions, slots,
@@ -138,15 +139,60 @@ therefore breaks a recorded digest:
 
 - `derivation_only`, the boolean `true`, marking the capture as taken in this
   mode;
-- `screen_basis`, an object with exactly four keys — `acceptance_id`, the
-  prior acceptance's ID; `artifact_sha256`, that artifact file's SHA-256;
+- `screen_basis`, the seven-key provenance object documented below:
+  `acceptance_id` is the prior acceptance's ID;
+  `artifact_sha256` is that artifact file's SHA-256;
   `preflight_level_screen_s`, its **level screen**, meaning that acceptance's
   corpus maximum, the threshold one observation's bound is judged against;
-  and `epoch`, the six-field identity vector that artifact binds — so every
-  derivation row states for itself which artifact it was captured under;
+  `epoch` is the six-field identity vector that artifact binds. The remaining
+  fields carry the judged epochs, authentication basis and continuation
+  refusals defined below, so each row names every epoch the artifact judges;
 - `exceeds_prior_level_screen`, a boolean: `true` when this capture's own
   `b_fiducial_s` is strictly greater than the `preflight_level_screen_s`
   recorded in `screen_basis`, `false` otherwise.
+
+`screen_basis` has exactly these keys:
+
+```json
+["acceptance_id", "artifact_sha256", "preflight_level_screen_s", "epoch", "judged_epochs", "judged_epochs_basis", "continuation_refusals"]
+```
+
+Ordinary captures instead carry a top-level `acceptance_preflight` object in
+both `instrument_evidence.json` and `manifest.json`, before either is hashed.
+They omit `derivation_only`, `screen_basis` and `exceeds_prior_level_screen`.
+This contract is the one home for the artifact's preflight object.
+
+`acceptance_preflight` has exactly these keys:
+
+```json
+["acceptance_id", "judged_epochs", "judged_epochs_basis", "continuation_refusals"]
+```
+
+`acceptance_id` identifies the issued acceptance. `judged_epochs` lists its
+original six-field epoch followed by every authenticated continued epoch.
+`judged_epochs_basis` is `"ledger_snapshot"` when preflight was supplied a
+snapshot: continuation authentication then includes the terminal derivation
+session and all ledger row cross-checks. The writer CLI loads its custody-verified
+snapshot before identity preflight, passes it to both preflight helpers, and
+records `"ledger_snapshot"`. A governed open capture session does not prevent
+cross-checking a continuation's earlier terminal derivation session; integrity
+failures still refuse that continuation. The identity-only helper callers
+(G2-a vector generation, the derivation-night desk input writer, and the
+import-time historical screen constant) have no snapshot and use
+`"registry_pins_only"` when requesting a record. Only the session cross-check
+is skipped on that path; all byte pins,
+acceptance references, schema, derivation hash, PASS verdict, candidate-marker
+and arithmetic checks still apply. `continuation_refusals` lists every rejected
+registered continuation, with `reason`, `continuation_id` and `detail`; the list
+is empty when none refused. An `OSError` detail carries its exception class and
+registry-relative path (or the path relative to the repository root), never the
+OS message or absolute filename. Epoch mismatch refusals carry the same
+preflight record in their context. Derivation-only captures include these
+judgment fields in `screen_basis` instead of `acceptance_preflight`. The
+capture writer supplies the custody-verified ledger snapshot it loads at
+preflight, so a continuation is cross-checked against the ledger session here
+exactly as it is at claim time; `judged_epochs_basis` records `ledger_snapshot`
+on that path.
 
 The prior artifact's level screen is not applied to the capture. The writer
 sets `preflight_systematic_screen_s = None` and skips the comparison, so the

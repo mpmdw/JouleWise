@@ -56,6 +56,13 @@
     "reason": "Replay the existing whole-window verdict against its already-loaded ledger snapshot."
   },
   {
+    "file": "scripts/epoch_equivalence_check.py",
+    "function": "run",
+    "ordinal": 1,
+    "line": 621,
+    "reason": "Desk epoch-equivalence check replays the authenticated ledger snapshot once to read one closed derivation night's retained values and compare them with the acceptance envelope in force; it never mints, appends a receipt, publishes a binding, issues or continues an acceptance, or finalizes an analysis manifest, and its only output is a JSON record written outside configs/calibration."
+  },
+  {
     "file": "scripts/extract_detection_floors.py",
     "function": "main",
     "ordinal": 1,
@@ -75,6 +82,13 @@
     "ordinal": 1,
     "line": 268,
     "reason": "Read-only desk epoch watch and blind registration dry run replay the existing ledger snapshot once to compare identity fields, print a table and, with --session-ids, report session kinds/states/slot counts; never mints, appends a receipt, publishes a binding, or finalizes an analysis manifest."
+  },
+  {
+    "file": "scripts/issue_epoch_continuation.py",
+    "function": "_load_snapshot",
+    "ordinal": 1,
+    "line": 52,
+    "reason": "prepare-candidate and check replay a committed ledger without custody writes. Preparation re-reads primary evidence and writes only a marked continuation candidate outside configs/calibration; check authenticates issued bytes. Neither issues, appends ledger receipts, or publishes a binding."
   },
   {
     "file": "scripts/recover_calibration_ledger.py",

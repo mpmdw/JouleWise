@@ -1,0 +1,105 @@
+[
+ {
+  "path": "night/censuses.jsonl",
+  "type": "file",
+  "size": 3793,
+  "birth": 1789135202.2676387,
+  "mtime_ns": 1789135202267914617,
+  "sha256": "acc0c7c10efb941ca0169ce772fe38fdc016255e30d3e34790e6bad6359f82bf"
+ },
+ {
+  "path": "night/courier.attempts.jsonl",
+  "type": "file",
+  "size": 101,
+  "birth": 1789135462.8983524,
+  "mtime_ns": 1789135462898943106,
+  "sha256": "d41f3e34ca4c421e734dcaca1627575a4a56d2d366f1f01008bb570cedca627f"
+ },
+ {
+  "path": "night/courier.heartbeat",
+  "type": "file",
+  "size": 24,
+  "birth": 1789135221.1340976,
+  "mtime_ns": 1789135221134195325,
+  "sha256": "b8a13c8a1d8b74cd13c0eb60fda9cbf1c3c9db202d240353d46775451b58e589"
+ },
+ {
+  "path": "night/courier.json",
+  "type": "file",
+  "size": 85,
+  "birth": 1789135462.9001858,
+  "mtime_ns": 1789135462900333259,
+  "sha256": "b3d6f7915c6e04c8bee078576db899113b984dab134bd8691a6b89f716f14d56"
+ },
+ {
+  "path": "night/courier.sent",
+  "type": "file",
+  "size": 142,
+  "birth": 1789135462.3731508,
+  "mtime_ns": 1789135462373342931,
+  "sha256": "309c20587fa52fc5fdacc0641b17ec67c2be0af719117330668ddf4d4c92f627"
+ },
+ {
+  "path": "night/launchd.deadman.err",
+  "type": "file",
+  "size": 0,
+  "birth": 1789048801.9482262,
+  "mtime_ns": 1789048801948226143,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ },
+ {
+  "path": "night/launchd.deadman.out",
+  "type": "file",
+  "size": 2028,
+  "birth": 1789048801.9481382,
+  "mtime_ns": 1789135475927113682,
+  "sha256": "babd9e2e12006b0ff1a9cb7b682f9e3ff07a2177be809c696fcf5dcb902968d5"
+ },
+ {
+  "path": "night/launchd.night.err",
+  "type": "file",
+  "size": 807,
+  "birth": 1789120560.0225446,
+  "mtime_ns": 1789120561076940466,
+  "sha256": "bc21aec54db914c55a09621d2255c66869bd87cd9231ecb1a9e817e3dbaadb89"
+ },
+ {
+  "path": "night/launchd.night.out",
+  "type": "file",
+  "size": 0,
+  "birth": 1789120560.0224109,
+  "mtime_ns": 1789120560022410850,
+  "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+ },
+ {
+  "path": "night/refusal.json",
+  "type": "file",
+  "size": 2786,
+  "birth": 1789135202.2680504,
+  "mtime_ns": 1789135202268080407,
+  "sha256": "d6126e07331876232bbc6db252d8c1ca7f9187348963d0068eea8088b5a19d43"
+ },
+ {
+  "path": "night.log",
+  "type": "file",
+  "size": 415,
+  "birth": 1789048802.0925953,
+  "mtime_ns": 1789135465078288008,
+  "sha256": "96d482aeac213c2b2f4e15ee39ac4dfd937bffdd73a3c00072cbbfbd2379b99d"
+ },
+ {
+  "path": "night_plan.json",
+  "type": "file",
+  "size": 761,
+  "birth": 1789038611.4410605,
+  "mtime_ns": 1789038611441130825,
+  "sha256": "a7447608c7c7dc0a3d2a3f6ab56489bd509c9206e8574746c1cf01d113c887bc"
+ },
+ {
+  "path": "results-clone",
+  "type": "dir",
+  "size": 1152,
+  "birth": 1789135202.2898943,
+  "mtime_ns": 1789135207169378794
+ }
+]

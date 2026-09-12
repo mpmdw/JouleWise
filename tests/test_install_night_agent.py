@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import shutil
+import sys
 import subprocess
 import tempfile
 import time
@@ -116,23 +118,27 @@ class InstallNightAgentTests(unittest.TestCase):
             path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
         return path
 
-    def _run(self, plan: Path, *, uninstall: bool = False) -> subprocess.CompletedProcess[str]:
+    def _run(self, plan: Path, *, uninstall: bool = False,
+             python: str | None = sys.executable, script: Path = SCRIPT_PATH,
+             render_only: bool = True) -> subprocess.CompletedProcess[str]:
         argv = [
             "/bin/zsh",
-            str(SCRIPT_PATH),
+            str(script),
             "--plan",
             str(plan),
             "--hour",
             "1",
             "--minute",
             "2",
-            "--render-only",
-            str(self.rendered),
             "--launchctl-bin",
             str(self.launchctl),
         ]
+        if render_only:
+            argv.extend(["--render-only", str(self.rendered)])
         if uninstall:
             argv.append("--uninstall")
+        elif python is not None:
+            argv.extend(["--python", python])
         return subprocess.run(
             argv,
             env=self.environment,
@@ -149,6 +155,234 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertIn(f"measurement_head={self.measurement_head}", completed.stdout)
         self.assertTrue((self.rendered / "com.joulewise.night.plist").is_file())
         self.assertTrue((self.rendered / "com.joulewise.night.deadman.plist").is_file())
+
+    def test_explicit_python_is_the_only_interpreter_in_both_agents(self) -> None:
+        completed = self._run(self._write_plan())
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        preflight = json.loads(completed.stdout.splitlines()[0])
+        self.assertEqual("ok", preflight["preflight"])
+        self.assertEqual(sys.executable, preflight["python"])
+        self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+        for path in self.rendered.glob("*.plist"):
+            argv = plistlib.loads(path.read_bytes())["ProgramArguments"]
+            self.assertEqual(sys.executable, argv[0])
+            self.assertTrue(Path(argv[0]).is_absolute())
+            self.assertNotIn("/usr/bin/env", argv)
+            self.assertNotIn("python3", argv)
+
+    def test_explicit_python_overrides_venv_and_preserves_xml_characters(self) -> None:
+        python = self.bin_dir / "python & pinned"
+        python.symlink_to(sys.executable)
+        default = self.measurement_root / ".venv/bin/python"
+        default.parent.mkdir(parents=True)
+        default.write_text("#!/bin/zsh\nexit 99\n")
+        default.chmod(0o755)
+        completed = self._run(self._v2_plan(), python=str(python))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        for path in self.rendered.glob("*.plist"):
+            self.assertEqual(str(python), plistlib.loads(path.read_bytes())["ProgramArguments"][0])
+
+    def test_python_39_is_refused_with_version_and_minimum(self) -> None:
+        fake = self.bin_dir / "old-python"
+        # Execute the installer's stdin version probe with a simulated 3.9
+        # sys.version_info; the real interpreter still parses/runs the probe.
+        fake.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            "sys.argv = sys.argv[2:]\n"
+            "sys.version_info = (3, 9, 6)\n"
+            "exec(sys.stdin.read())\n", encoding="utf-8",
+        )
+        fake.chmod(0o755)
+        completed = self._run(self._write_plan(), python=str(fake))
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn(str(fake), completed.stderr)
+        self.assertIn("3.9", completed.stderr)
+        self.assertIn("minimum is 3.11", completed.stderr)
+        self.assertFalse(self.rendered.exists())
+        self.assertFalse((self.root / "custody").exists())
+
+    def test_python_39_message_survives_newer_syntax_in_the_driver(self) -> None:
+        # Refuter 08 F1: the version check must not parse the whole driver under
+        # the candidate interpreter (a driver carrying syntax newer than the
+        # candidate would turn the version message into a parser traceback).
+        # The appended text is unparseable under EVERY Python, which proves the
+        # check reads only the MIN_PYTHON assignment line — the portable form of
+        # "3.10+ syntax under a 3.9 candidate" (the fake candidate below runs on
+        # the real interpreter and would parse real 3.10 syntax).
+        driver = self.root / "newer-syntax-driver"
+        driver_head = _init_repo(driver)
+        for relative in ("scripts/install_night_agent.sh", "scripts/run_night.py",
+                         "configs/launchd/com.joulewise.night.plist.template"):
+            target = driver / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO_ROOT / relative, target)
+        with (driver / "scripts/run_night.py").open("a", encoding="utf-8") as stream:
+            stream.write("\n\nthis line is not Python under any version )(\n")
+        fake = self.bin_dir / "old-python"
+        fake.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            "sys.argv = sys.argv[2:]\n"
+            "sys.version_info = (3, 9, 6)\n"
+            "exec(sys.stdin.read())\n", encoding="utf-8",
+        )
+        fake.chmod(0o755)
+        completed = self._run(
+            self._write_plan(repo_head=driver_head),
+            python=str(fake),
+            script=driver / "scripts/install_night_agent.sh",
+        )
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn("reports Python 3.9; minimum is 3.11", completed.stderr)
+        self.assertNotIn("SyntaxError", completed.stderr)
+        self.assertFalse(self.rendered.exists())
+
+    def test_python_must_be_an_absolute_executable_regular_file(self) -> None:
+        nonexecutable = self.bin_dir / "nonexecutable"
+        nonexecutable.write_text("not executable\n")
+        for value in ("python3", str(self.bin_dir), str(nonexecutable),
+                      str(self.root / "missing-python"), ""):
+            with self.subTest(python=value):
+                completed = self._run(self._write_plan(), python=value)
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertIn(f"invalid --python: {value}", completed.stderr)
+        self.assertFalse(self.rendered.exists())
+
+    def _v2_plan(self) -> Path:
+        plan = self._write_plan()
+        data = json.loads(plan.read_text())
+        data.update(schema="joulewise.night_plan.v2", schema_version=2,
+                    receipt_class="REHEARSAL_STUB",
+                    registration_path=str(self.root / "registration.json"))
+        del data["pack_night"]
+        plan.write_text(json.dumps(data))
+        return plan
+
+    def test_default_python_is_measurement_venv(self) -> None:
+        python = self.measurement_root / ".venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
+        completed = self._run(self._v2_plan(), python=None)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        # A symlink fixture has no pyvenv.cfg; macOS may report its target.
+        reported = Path(json.loads(completed.stdout.splitlines()[0])["python"])
+        self.assertTrue(reported.samefile(python))
+        for path in self.rendered.glob("*.plist"):
+            self.assertEqual(str(python), plistlib.loads(path.read_bytes())["ProgramArguments"][0])
+
+    def test_default_derivation_refuses_when_measurement_root_cannot_be_read(self) -> None:
+        # Opus counter-review 06 F3 (activation 3dab9c89): the round-3 refusal
+        # branch had no coverage. Four ways the stdlib JSON read can fail.
+        message = "cannot derive measurement_root/.venv/bin/python from"
+        cases = {}
+        empty = self._v2_plan()
+        data = json.loads(empty.read_text()); data["measurement_root"] = ""
+        empty.write_text(json.dumps(data)); cases["empty-measurement-root"] = (empty, self.environment)
+        missing = self.root / "missing-key.json"
+        data = json.loads(self._v2_plan().read_text()); del data["measurement_root"]
+        missing.write_text(json.dumps(data)); cases["missing-key"] = (missing, self.environment)
+        not_json = self.root / "not-json.json"
+        not_json.write_text("{ not json"); cases["not-json"] = (not_json, self.environment)
+        no_python = self.root / "no-python-bin"; no_python.mkdir()
+        env = dict(self.environment); env["PATH"] = str(no_python)
+        cases["no-python3-on-path"] = (self._v2_plan(), env)
+        for name, (plan, environment) in cases.items():
+            with self.subTest(case=name):
+                completed = subprocess.run(
+                    ["/bin/zsh", str(SCRIPT_PATH), "--plan", str(plan), "--hour", "1",
+                     "--minute", "2", "--render-only", str(self.rendered)],
+                    env=environment, capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertEqual(f"{message} {plan}; pass --python ABS_PATH\n", completed.stderr)
+                self.assertFalse(self.rendered.exists())
+
+    def test_installer_has_no_plutil_dependency(self) -> None:
+        # CI run 34611633826: Linux runners do not provide the macOS JSON reader.
+        self.assertNotIn("plutil", SCRIPT_PATH.read_text(encoding="utf-8"))
+
+    def test_rendered_argv0_is_the_validated_python_even_with_token_like_name(self) -> None:
+        # Re-audit 04 R1: substitution used to rescan inserted values, so an
+        # interpreter path containing a template token was rewritten in the plists.
+        python = self.bin_dir / "python @@MODE@@ & pinned"
+        python.symlink_to(sys.executable)
+        completed = self._run(self._v2_plan(), python=str(python))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        plists = sorted(self.rendered.glob("*.plist"))
+        self.assertEqual(2, len(plists))
+        for path in plists:
+            argv = plistlib.loads(path.read_bytes())["ProgramArguments"]
+            self.assertEqual(str(python), argv[0])
+            self.assertTrue(Path(argv[0]).exists(), argv[0])
+
+    def test_default_python_derivation_with_only_path_python3(self) -> None:
+        python = self.measurement_root / ".venv/bin/python"
+        python.parent.mkdir(parents=True)
+        python.symlink_to(sys.executable)
+        (self.bin_dir / "python3").symlink_to(sys.executable)
+        completed = subprocess.run(
+            [
+                "/usr/bin/env", "-i",
+                f"PATH={self.bin_dir}:/bin:/usr/bin",
+                f"HOME={self.environment['HOME']}",
+                "/bin/zsh", str(SCRIPT_PATH),
+                "--plan", str(self._v2_plan()),
+                "--hour", "1", "--minute", "2",
+                "--render-only", str(self.rendered),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(2, len(list(self.rendered.glob("*.plist"))))
+        for path in self.rendered.glob("*.plist"):
+            self.assertEqual(
+                str(self.measurement_root / ".venv/bin/python"),
+                plistlib.loads(path.read_bytes())["ProgramArguments"][0],
+            )
+
+    def test_missing_default_python_names_path_and_explicit_option(self) -> None:
+        completed = self._run(self._v2_plan(), python=None)
+        self.assertEqual(2, completed.returncode, completed.stderr)
+        self.assertIn(str(self.measurement_root / ".venv/bin/python"), completed.stderr)
+        self.assertIn("pass --python", completed.stderr)
+        self.assertFalse(self.rendered.exists())
+        self.assertFalse((self.root / "custody").exists())
+
+    def test_failed_import_preflight_refuses_install_and_render(self) -> None:
+        driver = self.root / "broken-driver"
+        driver_head = _init_repo(driver)
+        for relative in ("scripts/install_night_agent.sh", "scripts/run_night.py",
+                         "configs/launchd/com.joulewise.night.plist.template"):
+            target = driver / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO_ROOT / relative, target)
+        shutil.copytree(REPO_ROOT / "joulewise", driver / "joulewise",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        (driver / "joulewise/arm_readiness.py").write_text(
+            'import os\n'
+            f'assert os.environ["PATH"] == {self.environment["PATH"]!r}\n'
+            f'assert os.environ["HOME"] == {self.environment["HOME"]!r}\n'
+            'assert "LAUNCH_LOG" not in os.environ\n'
+            'raise ImportError("preflight import failure witness")\n'
+        )
+        for render_only in (False, True):
+            with self.subTest(render_only=render_only):
+                completed = self._run(
+                    self._write_plan(repo_head=driver_head),
+                    script=driver / "scripts/install_night_agent.sh",
+                    render_only=render_only,
+                )
+                self.assertEqual(2, completed.returncode, completed.stderr)
+                self.assertIn("ImportError: preflight import failure witness", completed.stderr)
+                self.assertIn("Traceback", completed.stderr)
+                self.assertNotIn('"preflight": "ok"', completed.stdout)
+                self.assertFalse(self.rendered.exists())
+                self.assertFalse((self.root / "custody").exists())
+                self.assertFalse(self.launch_log.exists())
+                self.assertFalse((self.root / "home/Library/LaunchAgents").exists())
 
     def test_v3_install_pins_resolved_absolute_plan_in_both_agents(self) -> None:
         plan = self._write_plan()
@@ -251,6 +485,15 @@ class InstallNightAgentTests(unittest.TestCase):
         self.assertEqual(0, uninstalled.returncode, uninstalled.stderr)
 
     def test_uninstall_ignores_both_pin_mismatches_and_invokes_launchctl(self) -> None:
+        self.courier.unlink()
+        self.assertFalse((self.measurement_root / ".venv").exists())
+        # No run_night.py or joulewise package: uninstall must not import them.
+        driver = self.root / "uninstall-only"
+        for relative in ("scripts/install_night_agent.sh",
+                         "configs/launchd/com.joulewise.night.plist.template"):
+            target = driver / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO_ROOT / relative, target)
         completed = self._run(
             self._write_plan(
                 repo_head="b" * 40,
@@ -258,10 +501,22 @@ class InstallNightAgentTests(unittest.TestCase):
                 measurement_head="c" * 40,
             ),
             uninstall=True,
+            script=driver / "scripts/install_night_agent.sh",
         )
         self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertFalse((self.root / "custody").exists())
+        self.assertNotIn("preflight", completed.stdout)
+        # Recovery can reuse install arguments, even if that interpreter is
+        # now missing. Uninstall must still avoid interpreter validation.
+        ignored_python = subprocess.run(
+            [*completed.args, "--python", "/missing/recovery/python"],
+            env=self.environment, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(0, ignored_python.returncode, ignored_python.stderr)
+        self.assertEqual("--python ignored on uninstall\n", ignored_python.stderr)
+        self.assertNotIn("preflight", ignored_python.stdout)
         calls = self.launch_log.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(2, len(calls))
+        self.assertEqual(4, len(calls))
         self.assertTrue(any(line.endswith("com.joulewise.night") for line in calls))
         self.assertTrue(any(line.endswith("com.joulewise.night.deadman") for line in calls))
 

@@ -1,0 +1,8 @@
+{
+  "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+  "hardware_model": "Mac15,9",
+  "os_build": "25G83",
+  "power_policy": "ac_high_power",
+  "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
+  "sampling_interval_ms": 100
+}

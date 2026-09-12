@@ -1,0 +1,44 @@
+## Q2 — the harness rule: ADOPT AS AMENDED (subject to Ed's veto)
+
+Delta 68 §7 names the right trigger but the wrong unit. The masked-counterfactual signature recurred four times because cuts were COMPOUND:
+the seat's M18 deleted both equalities together and was "killed" by the `inherited` subtest, which never exercised the second equality. The
+refuter's X2 cut one term and survived. The rule that catches the class is atomicity plus isolation, and it applies whether or not a fence was
+added this round; the "fence added upstream" case is where it is most often violated, so it is named as the mandatory re-cut trigger.
+
+Exact wording for the adversarial-review doctrine:
+
+> **Isolation rule.** A *clause* is one boolean term of a refusal condition. A *fence* is any check that refuses an input before a later check
+> sees it. (1) Every clause a diff adds or changes is named by a test whose counterfactual is refused by that clause ALONE: with that single
+> term deleted and every other line intact, the test fails. A cut that deletes two terms at once discharges nothing. (2) A diff that adds or
+> moves a fence re-cuts, one term at a time, every existing clause downstream of that fence whose counterfactual passes through it, and shows
+> each still flips on its own deletion; a fence that now refuses a downstream clause's counterfactual means that counterfactual must be re-cut
+> to one the fence admits. (3) The delta re-audit of a fix round re-runs the seat's whole sweep at one term per cut, with `Ran N ≥ 1` parsed
+> from the runner and source bytes restored and hash-asserted; a surviving atomic cut is `should_fix`, never a nit, because a term nothing can
+> isolate is either dead or unruled. (4) When a clause's only isolating counterfactual is an input a ruling licenses, the finding routes to the
+> clause, not to the test; if no ruling states the clause, it goes to the cold gate before round three.
+
+Amendments relative to §7 as proposed: the unit is the atomic term (§7 said "counterfactual", which let compound cuts pass); clause (4) is
+new and is the lesson of this packet; "re-runs the WHOLE mutation sweep" is kept but bounded to the seat's sweep plus the fence-downstream
+re-cuts, not every clause in the module.
+
+## Executed probes (all read-only, foreground, this session)
+
+1. `git rev-parse HEAD` → `58d4696b`; `git rev-parse origin/feat/2026-09-10-epoch-s3-acceptance-validator` → `93799321`;
+   `cat 00-PACKET.md exhibit-A-delta-68.md | shasum -a 256` → `1563495784febe46…` (matches the packet digest).
+   `grep -l inherited configs/calibration/calibration_acceptance_*.json` → no match across the 6 artifacts (the field is registry-only).
+2. `git show <S3>:joulewise/calibration_bracketing.py | sed -n '300,400p'` (clause at `:348-358`, `screen_rule` fence `:384`);
+   `sed -n '895,975p'` (row-vs-artifact prediction comparison `:928-929`, operatives comparison `:942`, `screen + excess == maximum` `:967`);
+   `grep -n prediction_99_two_draw_s` → `:241,264,288,350,928` only, so the Q99 is compared, never recomputed, and a row+artifact move reaches
+   the clause unmasked. Artifact `ratified_operatives` and `source_statistics` for r6 read: ceiling `0.010164834757777545` == own Q99, screen
+   `0.009724`. Decimal evaluation of the ruled relation with predecessor `None` on the n19 and n17 rows → `True`, `True`; HEAD clause → same.
+3. `python3` Decimal table (screen `0.006`), columns = ruled / HEAD / option (i):
+   legit successor `P=0.009 Q=0.008 C=0.009` → True / **False** / True;
+   ceiling fell `P=0.0095 Q=0.008 C=0.009` → False / False / **True**;
+   ceiling invented `P=0.0085 Q=0.008 C=0.009` → False / False / **True**;
+   own Q99 dominates `P=0.0085 Q=0.009 C=0.009` → True / True / True;
+   ceiling below own Q99 `P=0.0085 Q=0.0095 C=0.009` → False / False / False.
+   X2 masking reproduced arithmetically: the D2 test's row-only move (`0.009` → `0.010164834757777545`) is unequal to the artifact's
+   statistic, so `:928` refuses it with the clause deleted.
+4. `git show <S3>:tests/test_calibration_bracketing.py` at `:3565-3615` (D2 test and the `retuned` helper) and `:2945-2985` (live-prefix
+   fixture). `sed -n '8166,8215p' docs/decision_log.md` and consult `:97,105,140-165` read; exhibit D is a faithful copy.
+5. NOT EXECUTED: the test suite, the seat's or the refuter's mutation harnesses, and the delta's `/tmp/dr_f3_probe.py`. The arithmetic

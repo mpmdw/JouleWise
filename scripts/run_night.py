@@ -21,6 +21,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
+# Keep aligned with pyproject.toml requires-python. The installer reads this literal.
+MIN_PYTHON = (3, 11)
+if sys.version_info[:2] < MIN_PYTHON:
+    raise RuntimeError(
+        f"Python {sys.version_info[0]}.{sys.version_info[1]} is below the minimum "
+        f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]}"
+    )
+
+
 # A LaunchAgent starts this file by absolute path with a minimal environment.
 # Make the checkout importable before importing any project module.
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +37,11 @@ if str(REPO_ROOT) in sys.path:
     sys.path.remove(str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise import night_gate
+# Eager imports cover every formerly lazy run/dead-man/rehearse dependency,
+# so importing this driver during preflight catches failures before installation.
+from joulewise import arm_readiness as readiness
+from joulewise import arm_readiness_evidence_t0 as t0_author
+from joulewise import night_gate, t0_rehearsal
 from joulewise.measurement_liveness import observe_identity  # noqa: E402
 
 from joulewise.night_gate import (  # noqa: E402
@@ -1112,8 +1125,6 @@ def _prepare_pack_night(plan: NightPlan, plan_path: Path, plan_raw: bytes):
 
 
 def _author_pack_arm(plan: NightPlan, prepared):
-    from joulewise import arm_readiness as readiness
-    from joulewise import arm_readiness_evidence_t0 as t0_author
     root = prepared["root"]
     custody = Path(plan.custody_root)
     pack_custody = custody / plan.pack_night["pack_id"]
@@ -1150,7 +1161,6 @@ def _author_pack_arm(plan: NightPlan, prepared):
 
 
 def _pack_launch_references(plan: NightPlan, arm):
-    from joulewise import arm_readiness as readiness
     root = Path(plan.pack_night["pack_root"])
     pack_custody = Path(plan.custody_root) / plan.pack_night["pack_id"]
     fixed = pack_custody / "arm_readiness.t0.inputs/launch-manifest.json"
@@ -1175,7 +1185,6 @@ _pack_rehearsal_roots = night_gate._pack_rehearsal_roots
 
 def _produce_pack_go(plan, plan_path, plan_raw, prepared, arm_state, receipt, probes):
     """Final producer reauthentication; publish once only after every check."""
-    from joulewise import arm_readiness as readiness
     if receipt.verdict != "GO" or any(row.status != "PASS" for row in receipt.conditions):
         raise PackNightRefusal("conditions: refused night")
     current = _prepare_pack_night(plan, plan_path, plan_raw)
@@ -1268,7 +1277,6 @@ def produce_g7_control(control_plan_path, rehearsal_receipt_path, rehearsal_go_p
     This post-night command uses the production launcher's real eight-flag
     entry. It never starts a rehearsal or changes the completed night.
     """
-    from joulewise import arm_readiness as readiness, t0_rehearsal
 
     plan_path = Path(control_plan_path)
     plan_raw = plan_path.read_bytes()
@@ -1414,7 +1422,6 @@ def run_night(
     rehearsal: bool = False,
     courier_bin: Path | None = None,
 ) -> int:
-    from joulewise import arm_readiness as readiness
     probes = make_probes()
     initial_probe, initial_refusal = agent_census(probes)
     try:
@@ -1845,6 +1852,8 @@ def build_parser() -> argparse.ArgumentParser:
         command = subcommands.add_parser(name)
         command.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
         command.add_argument("--courier-bin", type=Path, metavar="ABSOLUTE_PATH")
+    preflight = subcommands.add_parser("preflight")
+    preflight.add_argument("--plan", required=True, type=Path, metavar="PLAN.json")
     control = subcommands.add_parser("g7-control")
     control.add_argument("--plan", required=True, type=Path)
     control.add_argument("--rehearsal-receipt", required=True, type=Path)
@@ -1854,6 +1863,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "preflight":
+        _load_plan(args.plan)
+        print(json.dumps({
+            "preflight": "ok",
+            "python": sys.executable,
+            "version": ".".join(map(str, sys.version_info[:3])),
+            # The driver and its direct module-scope project imports; this
+            # does not claim to exercise lazy imports inside those modules.
+            "modules": ["scripts.run_night"] + [module.__name__ for module in (
+                readiness, t0_author, t0_rehearsal, night_gate,
+                sys.modules["joulewise.measurement_liveness"],
+            )],
+        }))
+        return 0
     if args.command == "g7-control":
         locator = produce_g7_control(args.plan, args.rehearsal_receipt, args.rehearsal_go)
         sys.stdout.buffer.write(_json_bytes(locator))

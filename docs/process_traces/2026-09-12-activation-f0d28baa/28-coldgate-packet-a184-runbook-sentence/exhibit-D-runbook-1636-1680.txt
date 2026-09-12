@@ -1,0 +1,45 @@
+deliberately does NOT call `abort-session`. It leaves the session OPEN so that
+what this night amounts to is decided at the desk by a person reading the
+refusal, rather than by the chain's own guess at 3 a.m.
+
+**Operator action on `slot_refused` — desk recovery, never a retry.** *Desk
+recovery* means the recovery tool run by the operator, at the desk, after the
+night is over, against the measurement clone: never inside the window, and
+never as a re-arm of the same night.
+
+```zsh
+cd "$MEASUREMENT_ROOT"
+"$PY" scripts/recover_calibration_ledger.py \
+  --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
+  abort-session --session-id "$SESSION_ID" --plan "$PLAN" \
+  --reason "<the named reason this night actually stopped>"
+```
+
+Read the refusal in `chain.stderr.log` and name THAT as the reason. Do not
+reach for `window_exhausted`: that is the window's reason and belongs to the
+chain's own abort path below. Until the session is closed the ledger head does
+not settle, so §3 item 4 bites — the next night cannot open at head-equals-pin,
+and a refused night blocks its successor until the desk clears it.
+
+**The other early end: `window_exhausted`.**
+
+If the chain could not reach every slot it logs `slot_unused slot=dNN
+reason=window_exhausted`, calls `recover_calibration_ledger.py … abort-session
+--reason window_exhausted`, and exits 0. An aborted session IS terminal, and
+its finalized observations remain in the prior set.
+`session-refusal` (the recovery tool's subcommand that prints a stored abort as a
+refusal code, run from the checkout you harvest with) reports this reason as
+`calibration_window_exhausted` only in checkouts that contain that code (main
+after 2026-09-12). The armed night's frozen clone at H f90cb8c0 predates it and
+prints `calibration_session_not_open` for the same session; there, read the
+reason from the chain log line above instead. Harvest always uses the night's
+frozen clone, never main.
+
+The correct response is: record the unused count, and **do nothing else**.
+Every night runs all twelve declared slots regardless of interim values, and
+no top-up, retry, early stop or outcome-driven extra night is permitted. A
+night that lost slots to the window simply retained fewer captures. That
+shortfall is not repaired; it is an INPUT to §2.5, whose `m < 6` branch is the
+one place a further night can be required, and it is required by a rule fixed
+before the night ran rather than chosen after it. On the FAIL route a
+shortfall is resolved at §4, in the open, under Ed's written ruling. Do not

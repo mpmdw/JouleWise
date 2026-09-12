@@ -6697,6 +6697,104 @@ decided here: whether a daytime quiet window may serve as one of the three
 nights, and whether macOS auto-update is deferred for the campaign's
 duration.
 
+### Addendum 2026-09-10 (evening) — Ed's ruling by directive issue 316: V3 answered NO, night one is an epoch-equivalence check, continuation on evidence authorized
+
+Authority and provenance: directive issue 316 of this repository, authored by
+the owner account `mpmdw` through the owner-authored directive channel. Its
+own opening line: "Ed's ruling on the evening 09-10 email (Gmail
+1a08e62b7e99b312, 'decisions I need from you'). Filed on Ed's behalf by Fable
+from an interactive session on 2026-09-10 ~21:20 PDT after Ed read the
+recommendation and signed off in his own words ('cant you pass that to the
+magistrate yourself? i sign off'). The ruling is Ed's; the wording is
+Fable's." This addendum TRANSCRIBES that ruling; it is not a magistrate
+amendment of a process rule, and rule 11 is intact. The cold-gate text above
+is untouched. The registration-side recording is revision 2 of
+`configs/calibration/preregistration_d079_epoch_25g83_rev1.md`, and the
+operating text is revision 6 of `docs/phase_2/derivation_night_runbook.md`.
+
+**Decision 1 (V3 — three nights of 12 captures, retained n ≥ 19): NO as the
+default path.** Ed's reason, quoted: the scheme "is acting for an adversary
+that doesn't exist"; with a single trusted operator (D-161) the question is an
+instrument one — did the OS point release move the clock-anchor bound or not?
+"That is answered by one quiet night compared against the envelope already in
+force, not by a three-night blind derivation." V3's clause above is not
+withdrawn: it becomes the FAIL branch below.
+
+**What replaces it.** The first quiet night is ONE `derivation`-kind ledger
+session of 12 slots, run by the merged chain exactly as built — arm, chain,
+settle, census and dead-man unchanged, email-then-arm unchanged. After the
+night closes the magistrate READS the night's retained values (the `b_fiducial_s`
+of each capture that is `valid` in the ledger and resolves under anchor-v3
+replay) and applies this rule, fixed here before any capture of that night
+exists:
+
+- **Reference envelope** — the acceptance in force,
+  `d079_calibration_acceptance_v2_n17_r6`, as the validator operates it:
+  level screen `0.032898493715362` s, bracket screen `0.009724` s, budget
+  ceiling `0.010164834757777545` s, n = 17. These are the OPERATIVE constants
+  (`joulewise/calibration_bracketing.py`,
+  `_D102_N17_DERIVATION["operatives"]`, keyed to this acceptance id through
+  `_D102_GENERATION_DERIVATIONS`; identical lexemes in the artifact's
+  `decimal_derivation.ratified_operatives`), not the raw corpus statistics
+  (maximum `0.03289849371536248` s, range `0.00972358928879385` s) the issue
+  also quotes. Issue 316 fixes that choice: "if the validator's operative
+  screen differs from the raw range (the never-zero floor), the operative
+  value is the one used." Here the difference is quantization, not a floor:
+  this generation registers `range_equals_screen` (no floor), while the
+  `0.010818` s floor belongs to the envelope rule pre-registered for a future
+  SUCCESSOR corpus.
+- **Retained m** = "the night's valid, resolved captures (anchor-v3 replay
+  resolved, not window_exhausted or slot_refused)". "If m < 6 the check is
+  INCONCLUSIVE: run one more equivalence night before deciding. No other
+  action."
+- **PASS** = "every retained b_fiducial_s <= the r6 level screen AND the
+  night's range (max minus min of the retained values) <= the r6 operative
+  bracket screen." **FAIL** = "anything else."
+
+**Continuation, authorized here.** On PASS the r6 acceptance is CONTINUED onto
+identity epoch 25G83 by a dated addendum under this decision that Ed
+authorizes in advance — "epoch continuation on evidence": an identity-field
+change followed by a same-envelope night continues the acceptance in force
+rather than voiding it. That addendum cites the night's session id, the twelve
+slot outcomes and the m values verbatim. It moves no threshold and issues no
+successor. Ordinary capture and the first real G2-a window proceed on the next
+quiet slot AFTER the addendum lands — the addendum is what licenses them, not
+the PASS. The 25G83 pre-registration stays on file, un-withdrawn, as the
+fallback route. If continuation needs a code change (the epoch-freshness
+refusal in the loader or issuer) the magistrate "lands it through the normal
+PR gate as the smallest possible change" with its diff reported; a refusal is
+never worked around by hand. What this displaces, named so the record is complete:
+clause 2 above lists "any identity-field change" among the MANDATORY
+prospective re-derivation triggers, and under it the os_build change alone
+would have voided r6 and required a new derivation. Ed's ruling carves out
+the case where a same-envelope night follows the identity change: the trigger
+still fires and the night still runs, but a PASS continues the acceptance
+instead of re-deriving it. Clause 2's other rule — that a trigger observation
+is judged under the PRIOR artifact and never incorporated into a threshold
+that judges itself — is preserved exactly: the equivalence night's values are
+compared against r6 and enter no statistic.
+
+**FAIL route.** The pre-registered three-night derivation proceeds as written
+in the pre-registration, and V3 is then AFFIRMED by this ruling (three nights,
+12 slots, retained n ≥ 19, or exactly 17 with a written ruling). The
+equivalence night COUNTS as registration night one. If the issuer's in-code
+blindness refusal blocks counting it, the magistrate reports that and proposes
+the minimal change; it "does not run a fourth night to satisfy the guard."
+
+**Blindness, clarified by Ed, governing both branches.** "Examining night-one
+values under a rule fixed before capture does not compromise the derivation:
+blindness for this campaign means 'every rule fixed before data', which this
+issue satisfies, not 'no one may look'."
+
+**Unchanged.** Decisions 2, 3 and 4 of the same evening email are not
+addressed by the issue; their stated defaults and veto windows stand exactly
+as the email wrote them. Timing: earliest equivalence night the early hours of
+2026-09-12, subject to the recording landing, the handback rewrite and the
+standing gates; the objective is real G2-a numbers on the first quiet slot
+after a PASS. Nothing here licenses a window or weakens a physics or evidence
+refusal.
+
+
 ## D-103: C3 structural cold-gate synthesis — WAL attestation ordering, two named aggregation policies (cold instance overruled on B2 with recorded dissent), reader-tolerant/writer-strict path discipline
 
 - Date: 2026-08-01

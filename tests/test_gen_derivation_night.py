@@ -1037,17 +1037,21 @@ class GeneratedRegionTests(unittest.TestCase):
         and the example is the only shape the arm has to copy.
         """
 
-        from joulewise.night_gate import NightPlan  # noqa: PLC0415
+        from joulewise import night_gate  # noqa: PLC0415
 
         spec = GEN.example_spec(CHAIN_PATH.read_bytes())
         plan = GEN.example_night_plan(spec)
+        self.assertEqual(plan["registration_path"], night_gate.D166_REGISTRATION_PATH)
+        self.assertEqual(
+            hashlib.sha256((REPO_ROOT / plan["registration_path"]).read_bytes()).hexdigest(),
+            night_gate.D166_REGISTRATION_SHA256,
+        )
         concrete = {
             **plan,
             "repo_head": "a" * 40,
             "measurement_head": "b" * 40,
-            "registration_path": "configs/campaigns/example/registration.json",
         }
-        parsed = NightPlan.from_mapping(concrete)
+        parsed = night_gate.NightPlan.from_mapping(concrete)
         self.assertEqual(parsed.receipt_class, "DIAGNOSTIC_NO_PACK")
         # chain_path is the WRAPPER, not the tracked chain, and the sidecar is
         # the one the generator writes beside it.
