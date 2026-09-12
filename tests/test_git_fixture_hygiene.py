@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,6 +54,27 @@ class GitFixtureHygieneTests(unittest.TestCase):
         for name, source in sources.items():
             with self.subTest(name=name):
                 self.assertIn("support/factory.py", self._scan(source))
+
+    def test_constant_folder_rejects_nonstring_and_dynamic_nodes(self) -> None:
+        from tests.test_git_fixture_maintenance import _constant_command_value
+
+        for source in (
+            "42", "True", "None", "b'git'", "variable", "make_command()",
+            "variable + other", "variable + 'suffix'", "'prefix' + variable",
+        ):
+            with self.subTest(source=source):
+                self.assertIsNone(_constant_command_value(ast.parse(source, mode="eval").body))
+
+    def test_constant_folder_rejects_non_add_operators(self) -> None:
+        from tests.test_git_fixture_maintenance import _constant_command_value
+
+        for source in (
+            "'status: %s' % 'clean'",
+            "'prefix' + ('status: %s' % 'clean')",
+            "('status: %s' % 'clean') + 'suffix'",
+        ):
+            with self.subTest(source=source):
+                self.assertIsNone(_constant_command_value(ast.parse(source, mode="eval").body))
 
     def test_shared_helper_routes_are_accepted(self) -> None:
         self.assertEqual(self._scan(
