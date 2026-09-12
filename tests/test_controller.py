@@ -1631,22 +1631,50 @@ class HappyPathTests(ControllerTestCase):
 
         # A177 / report 19: third host-timing fixture instance (87, 99, 19),
         # caused by incomplete propagation of the bounded-sentinel cure.
-        # Keep the established stress floor while preserving continuous pacing.
+        # Stress only the bounded sentinel. Consult 87 lines 135-138 and 174:
+        # a 112 ms workload can lack samples under 175 ms continuous pacing;
+        # campaign strict validity alone does not require a succeeded summary.
+        # With unstressed admission the post count can be only 30, so 3.5x
+        # would no longer kill a sleeping sentinel. At 12x even 30 x 50 ms
+        # takes 18 s, exceeding the unchanged 15 s timeout for that count.
         scale = max(
-            3.5, float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "3.5")),
+            12.0, float(os.environ.get("FAKE_POWERMETRICS_SLEEP_SCALE", "12")),
         )
+
+        class StressedSentinelAdapter(RetryAdmissionPowermetricsAdapter):
+            def _run_bounded_capture(self, *args, **kwargs):
+                with patch.dict(
+                    os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)},
+                ):
+                    return super()._run_bounded_capture(*args, **kwargs)
+
         registry = RetryAdmissionPowermetricsRegistry()
-        with patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": str(scale)}):
+        registry.adapter_type = StressedSentinelAdapter
+        with patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": "1"}):
             bundle_path, summary = _produce_admission_powermetrics_bundle(
                 self.runs_root,
                 "controller-powermetrics-retry-pass",
                 registry,
             )
 
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(
+            summary.status,
+            RunStatus.SUCCEEDED,
+            {
+                "status": summary.status,
+                "failure_reason": summary.failure_reason,
+                "failure_message": summary.failure_message,
+                "idle_baseline": summary.idle_baseline,
+                "measurement_quality": summary.measurement_quality,
+                "environment_admission": metadata.get("environment_admission"),
+                "uncertainty_evidence": metadata.get("uncertainty_evidence"),
+                "telemetry": metadata.get("adapters", {}).get("telemetry"),
+            },
+        )
         drift = metadata["uncertainty_evidence"]["idle_drift"]
-        self.assertEqual(drift["status"], "bounded", drift)
+        strict_problems = validate_bundle(bundle_path, strict=True)
+        self.assertEqual(drift["status"], "bounded", (drift, strict_problems))
         self.assertIsNotNone(summary.idle_baseline)
         interval_s = 0.05  # The producer requests 20 Hz.
         post_duration_s = max(
@@ -1718,7 +1746,7 @@ class HappyPathTests(ControllerTestCase):
             command[command.index("--samplers") + 1],
             "cpu_power,gpu_power,ane_power,thermal",
         )
-        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
+        self.assertEqual(strict_problems, [])
         fresh = reduce_bundle(bundle_path)
         self.assertEqual(fresh.status, RunStatus.SUCCEEDED)
         self.assertEqual(
