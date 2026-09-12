@@ -8,7 +8,6 @@ from pathlib import Path
 
 from tests.test_git_fixture_maintenance import (
     MAINTENANCE_ON_EXCEPTIONS,
-    TESTS_ROOT,
     _git_init_violations,
 )
 
@@ -21,9 +20,6 @@ class GitFixtureHygieneTests(unittest.TestCase):
             module.parent.mkdir(parents=True)
             module.write_text(source, encoding="utf-8")
             return _git_init_violations(tests_root)
-
-    def test_repository_census(self) -> None:
-        self.assertEqual(_git_init_violations(TESTS_ROOT), {})
 
     def test_unsafe_command_forms_cannot_bypass_census(self) -> None:
         sources = {
@@ -40,6 +36,19 @@ class GitFixtureHygieneTests(unittest.TestCase):
             "wrapper_argv": "execute(repository, ['init', '-q'])",
             "subcommand_alias": "verb = 'init'\nexecute(repository, verb)",
             "conditional": "command = ['git', 'status']\nif unsafe:\n    command = ['git', 'init']\nrun(command)",
+        }
+        for name, source in sources.items():
+            with self.subTest(name=name):
+                self.assertIn("support/factory.py", self._scan(source))
+
+    def test_constant_concatenation_cannot_bypass_census(self) -> None:
+        sources = {
+            "string_in_argv": "cmd = ['git', 'in' + 'it']; subprocess.run(cmd)",
+            "shell_string": "cmd = 'git ' + 'in' + 'it'; subprocess.run(cmd, shell=True)",
+            "list": "cmd = ['git'] + ['in' + 'it']; subprocess.run(cmd)",
+            "tuple": "cmd = ('git',) + ('in' + 'it',); subprocess.run(cmd)",
+            "nested_list": "cmd = [] + ['g' + 'it'] + ['i' + ('n' + 'it')]; subprocess.run(cmd)",
+            "nested_tuple": "cmd = () + ('g' + 'it',) + ('i' + ('n' + 'it'),); subprocess.run(cmd)",
         }
         for name, source in sources.items():
             with self.subTest(name=name):

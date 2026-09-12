@@ -70,6 +70,22 @@ def _uses_local_hygiene(function: ast.AST) -> bool:
     )
 
 
+def _constant_command_value(node: ast.AST) -> str | list[str] | tuple[str, ...] | None:
+    """Fold only literal strings and their argv containers, never source calls."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, (ast.List, ast.Tuple)):
+        values = [_constant_command_value(element) for element in node.elts]
+        if all(isinstance(value, str) for value in values):
+            return values if isinstance(node, ast.List) else tuple(values)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _constant_command_value(node.left)
+        right = _constant_command_value(node.right)
+        if isinstance(left, (str, list, tuple)) and type(left) is type(right):
+            return left + right
+    return None
+
+
 class _CommandLiterals:
     """Resolve literal argv aliases without importing or executing test modules.
 
@@ -105,6 +121,12 @@ class _CommandLiterals:
             return self.cache[cache_key]
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             result = (node.value,)
+        elif (
+            isinstance(node, ast.BinOp)
+            and isinstance(node.op, ast.Add)
+            and (folded := _constant_command_value(node)) is not None
+        ):
+            result = (folded,) if isinstance(folded, str) else tuple(folded)
         elif isinstance(node, ast.JoinedStr):
             result = ("".join(
                 part.value if isinstance(part, ast.Constant) else "DYNAMIC"
