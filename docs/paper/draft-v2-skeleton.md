@@ -9,15 +9,15 @@ No empirical outcome selection or prospective result fill remains.
 ## Abstract
 
 JouleWise studies timing sensitivity when processor-power records are divided
-between parts of an inference request. Prompt processing reads input through
+between parts of an inference request. macOS `powermetrics` is the power sampler used here. Prompt processing reads input through
 the first output token, a piece of generated text; token generation emits
 later tokens. The method specifies clock placement, pulse calibration, and
 sensitivity calculations over the registered timing domain—the edge movements fixed before collection.
+Fitted onsets and offsets are switch-on and switch-off times selected by matching
+predicted interval-average power to the recorded trace.
 This paper specifies the sensitivity calculation and demonstrates it on synthetic inputs; it reports no sensitivity ratio on measured inference data.
 The allocation holds each record at its reported average; it does not bound
-physical phase energy under arbitrary within-record allocations. Fitted
-onsets and offsets are switch-on and switch-off times selected by matching
-predicted interval-average power to the recorded trace. In a current-method
+physical phase energy under arbitrary within-record allocations. In a current-method
 re-analysis of one historical GPU (graphics-processor) pulse capture, all 59
 fitted onsets occur after their commands and 49 of 59 fitted offsets occur
 before them; transfer of its timing allowance to inference remains untested.
@@ -26,15 +26,19 @@ phases crossed two records and fell below the three-record minimum this paper
 requires for a phase split; 13 crossed three and passed. Qwen2.5-7B-Instruct-4bit passed in all
 50 phases: 33 crossed three records and 17 crossed four.
 The historical evidence covers one Apple computer across retained measurement
-windows—windows whose evidence bytes are kept on disk and never overwritten.
+windows—uninterrupted sessions whose evidence bytes are kept on disk and never overwritten.
 It supplies no new model-energy comparison, and no finding that boundary placement
-is the limiting uncertainty (Section 3's R ≥ 2 test).
+is the limiting uncertainty (Section 3's doubling test).
 <!-- Headline: DX-001/003/012/013; record support: DG-067/068/069/072/073/135–142. -->
 
 ## 1. Introduction
 
 This methods/diagnostic paper asks how a software power record can support
-an allocation to separate parts of an inference request. This paper specifies the sensitivity calculation and demonstrates it on synthetic inputs; it reports no sensitivity ratio on measured inference data. The raw captures behind the historical numbers are retained under project custody and are not released; the synthetic examples are the only fully reproducible part. Custody means that each named input's fingerprint still matches its recorded bytes. macOS `powermetrics` is the power sampler used here. A sampling record
+an allocation to separate parts of an inference request.
+
+This paper specifies the sensitivity calculation and demonstrates it on synthetic inputs; it reports no sensitivity ratio on measured inference data. The raw captures behind the historical numbers are retained by the project and are not released; the synthetic examples are the only fully reproducible part.
+
+macOS `powermetrics` is the power sampler used here. A sampling record
 reports average power between recorded start and end times. An inference request first reads its
 input through production of the first output token; this paper calls that
 prompt processing, or *prefill*. It then emits later output tokens; this is
@@ -79,7 +83,8 @@ power record. **Commanded graphics-processor pulses** are fixed-duration GPU
 work with time-stamped start and stop commands, recorded inside a measurement
 window—one uninterrupted measurement session.
 The largest displacement between the commanded times and every edge position
-in the fit’s model-defined accepted regions, plus the **clock-anchor bound**—the uncertainty in
+in the fit’s model-defined accepted region (every edge pair surviving the loss
+tolerance of Appendix A.3.5), plus the **clock-anchor bound**—the uncertainty in
 placing the power record on wall-clock time—is the **pulse-derived limit**.
 Applying that limit to inference assumes that the power record locates pulse edges and
 model-work edges with the same error. Because pulses are not inference, an
@@ -100,7 +105,9 @@ quantities the calculation is intended to estimate:
 | Same-model null A/B/B/A blocks (four runs in the order A, B, B, A), with A = B | Comparative floor |
 | Two-model A/B/B/A blocks | Science contrast |
 
-JouleWise bounds each floor source separately; Section 3 gives the construction, and no floor value is published in this paper.
+The absolute floor is built from centered repeat energies, the comparative floor from same-model block differences, and a science contrast is a difference between two models; Section 3 gives each construction. For each block, the difference is mean B energy minus mean A energy.
+
+JouleWise bounds each of these floors separately; Section 3 gives the construction, and no floor value is published in this paper.
 
 The short-prefill question is narrower: when prompt processing is brief, do
 enough sampling-record intervals overlap it to support a phase reduction—that
@@ -132,22 +139,22 @@ the 3.00-J request total is unchanged.*
 
 ### Bracketed pulse-train algorithm
 
-**Frozen** means fixed and fingerprinted before collection. Immediately before and after each measurement window, JouleWise records a calibration under the same hardware and operating conditions recorded before collection. Every input to a capture — the calibration artifacts, the frozen reservation plan, and the capture's own manifest — is fingerprinted, and any mismatch refuses the capture; Appendix A.4 lists the identifiers and refusal names. The capture's timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. After three warm-up pulses, which are discarded, it commands 59 one-second GPU matrix-multiplication pulses on preallocated \(4096\times4096\) 16-bit floating-point matrices. A fixed base-two varied-gap schedule—gaps generated by reversing binary digits as specified in Appendix A.3.2—prevents the pulse edges from repeatedly lining up with the requested 100-ms sampler cadence. Five seconds of quiet trace (no commanded pulse) are requested on both sides of the train, of which at least 4.5 s must be present.
+**Frozen** means fixed and fingerprinted before collection. Immediately before and after each measurement window, JouleWise records a calibration under the same hardware and operating conditions recorded before collection. Every input to a capture — the calibration artifacts, the frozen reservation plan (the file naming reserved collection slots), and the capture's own manifest — is fingerprinted, and any mismatch refuses the capture; Appendix A.4 lists the identifiers and refusal names. The capture's timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. After three warm-up pulses, which are discarded, it commands 59 one-second GPU matrix-multiplication pulses on preallocated \(4096\times4096\) 16-bit floating-point matrices. A fixed base-two varied-gap schedule—gaps generated by reversing binary digits as specified in Appendix A.3.2—prevents the pulse edges from repeatedly lining up with the requested 100-ms sampler cadence. Five seconds of quiet trace (no commanded pulse) are requested on both sides of the train, of which at least 4.5 s must be present.
 
-For each commanded pulse, the detector estimates resting GPU power from samples outside the fixed time margin around every pulse and pulse height from samples wholly inside its flat high-power portion, called the plateau. It predicts each reported interval average from the fraction of that interval covered by a shifted rectangular pulse, then scores the difference between predicted and observed power with a rule that limits the influence of one large discrepancy while moving the onset and offset separately. After finding the best pair, it encloses every onset/offset pair close enough to that fit — the allowed region, which contains every edge pair surviving the fit's discrepancy limit. Each rectangle is a range of candidate onset shifts crossed with a range of candidate offset shifts; a rectangle is rejected only when a mathematical lower bound proves in exact arithmetic that none of it can pass, and every surviving rectangle is split to a fixed resolution. The four outer edge values are widened for uncertainty in the two command timestamps. A capture is refused unless all 59 pulses pass five kinds of check: the signal rises far enough above resting power; the fitted pulse explains the trace better than a no-pulse model; the fitted onset and offset stay inside the accepted shift range; trace coverage extends through the fixed margin on both sides of the pulse; and the required pulses, file fingerprints, and machine-and-protocol fields are complete. Appendix A.3.5 gives the signal, fit, range, and trace-coverage calculations, and Appendix A.3.6 gives the completeness test. No uncommanded plateau may appear. The shared search-work limits cap both the number of search rectangles evaluated and the elapsed search time for the whole capture; exhausting either limit refuses the capture (Appendix A.3.7). The accepted capture bound is the largest allowed edge displacement among all pulses plus the trace's clock-anchor bound, the uncertainty in placing the trace on wall-clock time, built next.
+For each commanded pulse, the detector estimates resting GPU power from samples outside the fixed time margin around every pulse and pulse height from samples wholly inside its flat high-power portion, called the plateau. It predicts each reported interval average from the fraction of that interval covered by a shifted rectangular pulse, then scores the difference between predicted and observed power with a rule that limits the influence of one large discrepancy while moving the onset and offset separately. After finding the best pair, it encloses every onset/offset pair close enough to that fit — the accepted region, which contains every edge pair surviving the loss tolerance of Appendix A.3.5. Each rectangle is a range of candidate onset shifts crossed with a range of candidate offset shifts; a rectangle is rejected only when a mathematical lower bound proves in exact arithmetic that none of it can pass, and every surviving rectangle is split to a fixed resolution. The four outer edge values are widened for uncertainty in the two command timestamps. A capture is refused unless all 59 pulses pass five kinds of check: the signal rises far enough above resting power; the fitted pulse explains the trace better than a no-pulse model; the fitted onset and offset stay inside the accepted shift range; trace coverage extends through the fixed margin on both sides of the pulse; and the required pulses, file fingerprints, and machine-and-protocol fields are complete. Appendix A.3.5 gives the signal, fit, range, and trace-coverage calculations, and Appendix A.3.6 gives the completeness test. No uncommanded plateau may appear. The shared search-work limits cap both the number of search rectangles evaluated and the elapsed search time for the whole capture; exhausting either limit refuses the capture (Appendix A.3.7). The accepted capture bound is the largest allowed edge displacement among all pulses plus the trace's clock-anchor bound, the uncertainty in placing the trace on wall-clock time, built next.
 
-The checks above use the following fixed numbers. Define resting power \(P_{\mathrm{rest}}\) as the median of quiet records
-and σ=max(1.4826 × median absolute deviation from \(P_{\mathrm{rest}}\), 0.001 W); the factor puts a median absolute deviation on the same scale as a standard deviation. The quiet-record
+The checks above use the following fixed numbers. Define resting power \(P_{\mathrm{rest}}\) as the median (the middle sorted value, or the mean of the two middle values for an even count) of quiet records
+and σ=max(1.4826 × median absolute deviation from \(P_{\mathrm{rest}}\), 0.001 W); median absolute deviation is the median absolute distance from that resting power; the factor puts a median absolute deviation on the same scale as a standard deviation. The quiet-record
 threshold is \(P_{\mathrm{rest}}+\max(5\ \mathrm{W},5\sigma)\). With \(P_{\mathrm{rest}}=0\) W and σ=0.001 W, consecutive quiet
 records of 6 W and 7 W exceed 5 W and fail the uncommanded-plateau check.
-A pulse must rise at least 10 W above resting power and have pulse height/σ ≥ 10. Its fit loss — the dimensionless score of Appendix A.3.5, which sums Huber scores of the differences between predicted and observed interval averages after division by σ — must be strictly below half the loss of the no-pulse model fitted to the same records: a fit loss of 4 against a no-pulse loss of 10 passes; 5 against 10 fails.
+A pulse must rise at least 10 W above resting power and have pulse height/σ ≥ 10. Its fit loss — the dimensionless score of Appendix A.3.5, which sums Huber scores — squared for small differences, proportional for large ones — of the differences between predicted and observed interval averages after division by σ — must be strictly below half the loss of the no-pulse model fitted to the same records: a fit loss of 4 against a no-pulse loss of 10 passes; 5 against 10 fails.
 Both fitted shifts must have absolute value strictly below 0.5 s: 0.499 s
 passes and 0.500 s fails. Trace coverage must extend at least 0.75 s beyond
 each command. Appendix A.3.5 specifies the loss and full checks.
 
 The clock anchor uses five wall-clock readings, each bracketed by readings from a monotonic clock—a counter that advances but is never corrected to civil time—together with every whole-second label embedded in the native (unparsed) sampling records. The **first-record endpoint** is the wall-clock time assigned to the end of the first native sampling record. The method retains every straight-line mapping whose rate and offset satisfy four evidence constraints: each wall reading lies inside its monotonic stamp bracket; each native whole-second label contains its modeled record end; the first record starts after sampler launch; and that record is parsed only after it is written. Appendix A.3.3 gives the inequalities. The method permits the two clocks to run at slightly different fixed rates and charges the full allowed departure of a native label from that line. It refuses missing or malformed inputs, an empty set or an unbounded one (the allowed rate reaches the edge of its search box), inadequate capture span, implausible clock rate, or a bound outside the accepted range. Otherwise it finds the earliest and latest allowed first-record endpoint and adds four allowances: half the endpoint range, the observed wall-versus-monotonic span, the largest reported clock resolution, and a fixed numeric-rounding pad. Prospective claim use separately refuses active or unknown automatic network-time correction; historical evidence with correction ON or unknown is restricted to diagnostic use. This corrected rate-aware model replaced the false equal-rate assumption, which could move every fitted edge in the same direction.
 
-Finally, the pre-window and post-window capture bounds form a bracket. The frozen **calibration-acceptance rule** is the pre-collection rule that decides whether those two captures may bracket one window; it derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—the two-sided 99% point, written \(t_{0.995,16}\) because it leaves 0.5% in each tail with 16 degrees of freedom, and larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation (the \(n-1\) formula of Section 3) is \(s_b = 2.460856\) ms (retained SD operand, \(2.460856207694636\) ms) and \(t_{0.995,16}\) is about 3 (retained as 2.92078162242509999197 for byte-exact replay); the two-draw rule is the registered independent, equal-variance normal-model design convention—two fresh capture bounds are drawn, and the spread of their difference is \(\sqrt{2}\) times one capture's spread—so \(t_{0.995,16}\times s_b\times\sqrt{2}\) records about 10 ms (retained as 10.164834757777545 ms for byte-exact replay), printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest microsecond, with an exact tie going to the even digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained calibration acceptance file `configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (results registry row S17; the registry is the project's row-by-row index of every displayed value and its supplying artifact). The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. A pre/post difference above the threshold would indicate a change in the sampler's fitted edge response across the window. Interpreting this threshold as an instrument screen is conditional on the retained corpus being representative, which has not been tested; empirical 99% coverage has not been established. Appendix A.3.6 calls one capture's pulse-derived limit \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
+Finally, the pre-window and post-window capture bounds form a bracket. The frozen **calibration-acceptance rule** is the pre-collection rule that decides whether those two captures may bracket one window; it derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—the two-sided 99% point, written \(t_{0.995,16}\) because it leaves 0.5% in each tail with 16 degrees of freedom, and larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation (the \(n-1\) formula of Section 3) is \(s_b = 2.460856\) ms (retained SD operand, \(2.460856207694636\) ms) and \(t_{0.995,16}\) is about 3 (retained as 2.92078162242509999197 for byte-exact replay); the two-draw rule is the registered independent, equal-variance normal-model design convention—two fresh capture bounds are drawn, and the spread of their difference is \(\sqrt{2}\) times one capture's spread—so \(t_{0.995,16}\times s_b\times\sqrt{2}\) records about 10 ms (retained as 10.164834757777545 ms for byte-exact replay), printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest microsecond, with an exact tie going to the even digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained calibration acceptance file `configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (results registry row S17; the registry is the project's row-by-row index of every displayed value and its supplying artifact). The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. A pre/post difference above the threshold indicates a change in the compound calibration allowance; it does not distinguish a change in fitted edge response from a change in clock-placement uncertainty. Interpreting this threshold as an instrument screen is conditional on the retained corpus being representative, which has not been tested; empirical 99% coverage has not been established. Appendix A.3.6 calls one capture's pulse-derived limit \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
 
 Commanded GPU pulses calibrate edge placement, but applying that bound to sustained mixed inference is an assumption. The before-and-after bracket tests for change across the measurement window; it does not test whether the pulse-derived limit applies to inference.
 
@@ -197,6 +204,7 @@ largest result retained. This **moved-edge limit** is called the
 run's edge may move separately. In the same-model null blocks, A and B are
 condition-slot labels set equal to each other; the science contrast assigns the
 two models to different conditions.
+
 ### Comparing the moved-edge limit and point-only value
 
 The forcing problem is that any positive boundary interval can make a
@@ -206,10 +214,6 @@ asks for a fixed twofold increase in the complete bound, not just a positive
 increase in one timing term.
 
 An A/B/B/A block is four runs in the order A, B, B, A.
-Repeat the same model to measure false differences; enlarge their spread into
-a threshold a model comparison must exceed. The absolute floor uses centered
-repeat energies; the comparative floor uses same-model block differences. A
-science contrast is a difference between two models.
 
 A cell has two false-difference
 components. The **absolute component** measures spread among repeated runs of
@@ -234,7 +238,7 @@ either component, first calculate its **point-only unguarded value**;
 **admitted energy** is an energy from a run that passed the required entry
 checks; this validity condition alone does not establish statistical independence. “Point only” means using each admitted
 energy at its recorded value. The later factor is the **small-sample
-multiplier**, specified with the publication safeguards in that protocol; no value in this paper uses it. Here \(n\), the number of
+multiplier**, specified with the publication safeguards in the prospective comparison protocol linked in Section 3; no value in this paper uses it. Here \(n\), the number of
 **independent units**, counts one repeated run for the absolute component and
 one four-run A/B/B/A block for the comparative component. These are the
 observations the statistical model assumes independent; admission does not
@@ -291,7 +295,7 @@ demonstrate the formulas and are not campaign evidence (registry SYN-03).
 ### Moving edges and enumerating endpoints
 
 For each member, let \(a\) be its own clock-anchor displacement allowance,
-\(b\) the window's operative calibration allowance, and \(w\) its
+\(b\) the window's operative timing bound, and \(w\) its
 wall-minus-monotonic edge span. Shift the whole trace by a common displacement
 in \([-a,a]\), and move the start and end independently in
 \([-(b+w),b+w]\). Use a nonnegative trace whose records have explicit
@@ -306,11 +310,13 @@ Call the resulting raw integration extrema \(E_{\min}\) and \(E_{\max}\),
 and the admitted point \(E\). The floor consumes a symmetric interval,
 not those potentially asymmetric raw extrema: its half-width is the largest
 of \(E-E_{\min}\), \(E_{\max}-E\), and the recorded maximum absolute
-energy displacement, plus the registered joint-interpolation allowance.
+energy displacement, plus the registered joint-interpolation allowance, the extra
+half-width charged when a record's power must be interpolated between reported
+averages rather than held flat; it is zero for the native interval-average records used here.
 Writing that half-width as \(h\), the floor inputs are
 \(E^L=E-h\) and \(E^U=E+h\), the member's lower and upper values.
-For native interval-average records the joint-interpolation term is zero;
-timing sensitivity remains in the recomputed envelope. For the absolute
+For these native interval-average records, timing sensitivity remains in the
+recomputed envelope despite the zero joint-interpolation allowance. For the absolute
 component, enumerate the \(2^n\) lower/upper choices for the n repeat energies.
 For the comparative component, first form block \(j\)’s difference interval,
 writing \(E^L\) and \(E^U\) for a member’s lower and upper values:
@@ -365,7 +371,7 @@ would let any positive interval width do the decisive work. If
 `dominance_ratio_zero_denominator`; it does not print infinity.
 
 Here, **authenticated** means that each named input carries its expected
-SHA-256 fingerprint and the inputs its record names agree with the files on
+SHA-256 fingerprint, which identifies exact file bytes, and the inputs its record names agree with the files on
 disk. A missing fingerprint, a mismatch, or a required input that cannot be
 checked is unauthenticated and cannot select a ratio outcome.
 
@@ -374,7 +380,7 @@ checked is unauthenticated and cannot select a ratio outcome.
 R asks how much the bound grows when every run’s edges move independently; R_cm asks how much it grows when one direction of energy allowance is applied to every block at once and each block’s own edges then move to their worst local corner.
 
 The comparative replay also retains an **energy-allowance sign**, which says
-which direction a nonnegative per-block joule allowance derived in Section 3 moves assigned energy. A
+which direction a nonnegative per-block joule allowance derived below as \(q_j\) moves assigned energy. A
 shared sign is one choice applied across all blocks, while a local sign is
 chosen separately for each block. This replay uses a different numerator:
 let \(U_{\mathrm{cmp,point}}\) be the four-run comparison's point-only value, and
@@ -505,10 +511,10 @@ precision without a raw capture.
 *Figure A4. Synthetic shared-sign calculation. The two boxes show each block’s
 point difference, shared energy allowance and local half-width in joules.
 The lower rows apply one shared sign and one local sign per block, enumerate
-the cases in Table 4, and identify the maximum complete bound. These signs
+the cases in Table A4 (Appendix A.3.10), and identify the maximum complete bound. These signs
 move energy allowances; they do not preserve one physical time shift.*
 
-The **cell floor** is the registered operational resolution guard for assigned-energy differences
+The **cell floor** is the final gate value for assigned-energy differences in a cell
 after the publication safeguards of Section P.3 of the
 [prospective comparison protocol](protocol/prospective-comparison-protocol.md).
 That section gives the safeguards and their synthetic composition example. The calculations above stop at the sensitivity
@@ -541,7 +547,7 @@ The following table and arithmetic reconstruct one retained diagnostic capture f
 <!-- evidence: runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/instrument_evidence.json -> clock_anchor.clock_stamps; row order is joulewise/uncertainty_evidence.py STAMP_ORDER; R_s composition is max(wall_resolution_s, monotonic_resolution_s) per the same module -->
 <!-- replay fence: scripts/check_paper_replay_fence.py is the mechanical re-derivation check for this table — it reads the five stamp rows back out of the retained evidence file in solver order and requires each printed value to be the same double, failing closed if a row is dropped or the caption is reworded. -->
 
-*Worked historical-capture arithmetic.* One retained current-estimator derivation reports all \(59\) pulses detected, \(122{,}859\) evaluated rectangles, a local clock-anchor bound of \(0.0011349971959968978\) s, and a final capture bound of \(0.030067931757111657\) s. Therefore the largest pulse residual before the anchor term is \(0.030067931757111657-0.0011349971959968978=0.0289329345611147592\) s. Re-running the detector over that capture's retained raw power trace and event log, under the current anchor method, reproduces both the capture bound and the evaluated-rectangle count exactly, and identifies the pulse attaining the maximum: the tenth commanded pulse of the capture, scheduled to switch on \(26.625\) s and off \(27.625\) s measured from the origin of the commanded pulse schedule, which is where the schedule places its first protocol pulse rather than an observed onset. Its two commands were stamped at \(1784757381.2856488\) s and \(1784757382.293089\) s of wall time, expressed as seconds since 1970. The fit leaves its onset lag anywhere in \([0.02544938965763524,\,0.02893293456111476]\) s and its offset lag anywhere in \([-0.008607394549133255,\,-0.005308621075866744]\) s, about a best-fit pair of \(+0.027\) s and \(-0.007\) s. The retained residual bound for the pulse is the largest absolute value those four endpoints allow — \(0.02893293456111476\) s, the upper end of the onset interval — and adding the local clock-anchor bound to it returns the capture bound quoted above. These values support only the diagnostic reconstruction of this retained calibration capture; they do not supply the prospective Qwen3 comparison.
+*Worked historical-capture arithmetic.* One retained current-estimator derivation reports all \(59\) pulses detected, \(122{,}859\) evaluated rectangles, a local clock-anchor bound of \(0.0011349971959968978\) s, and a final capture bound of \(0.030067931757111657\) s. Subtracting the two printed bounds gives \(0.030067931757111657-0.0011349971959968978=0.0289329345611147592\) s; the separately retained largest pulse residual is recorded in the source artifact (Appendix A.3.6). Re-running the detector over that capture's retained raw power trace and event log, under the current anchor method, reproduces both the capture bound and the evaluated-rectangle count exactly, and identifies the pulse attaining the maximum: the tenth commanded pulse of the capture, scheduled to switch on \(26.625\) s and off \(27.625\) s measured from the origin of the commanded pulse schedule, which is where the schedule places its first protocol pulse rather than an observed onset. Its two commands were stamped at \(1784757381.2856488\) s and \(1784757382.293089\) s of wall time, expressed as seconds since 1970. The fit leaves its onset lag anywhere in \([0.02544938965763524,\,0.02893293456111476]\) s and its offset lag anywhere in \([-0.008607394549133255,\,-0.005308621075866744]\) s, about a best-fit pair of \(+0.027\) s and \(-0.007\) s. The retained residual bound for the pulse is the largest absolute value those four endpoints allow — \(0.02893293456111476\) s, the upper end of the onset interval — and adding the local clock-anchor bound to it returns the capture bound quoted above. These values support only the diagnostic reconstruction of this retained calibration capture; they do not supply the prospective Qwen3 comparison.
 <!-- evidence: runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/{events.jsonl,instrument_evidence.json}; commanded edges from events.jsonl pulse_command_on/off #10 metadata.clock_stamp.epoch_s (planned offsets 26.625 s / 27.625 s). The v3-anchored fit rows are re-derived deterministically by joulewise.powermetrics_fiducial.rederive_detection_from_artifacts over the retained raw plist + events.jsonl, reproducing b_fiducial_s = 0.030067931757111657 and projection_evaluated_cell_count = 122859 exactly; the byte-retained pulses[] in this 2026-07-22 file are v2-anchor-era, while fresh _v5 captures byte-retain v3. -->
 <!-- evidence: docs/process_traces/2026-08-19-refreeze-execution/r6-issuance/r4-derivation.json -->
 <!-- replay fence: scripts/check_paper_replay_fence.py is the mechanical re-derivation check for this paragraph — it re-runs the anchor and the 59 pulse fits from the capture's primary bytes and requires every literal above to be the same double it re-derives (stored rows and the stored bound are never inputs). -->
@@ -571,17 +577,17 @@ or independence claim.
 ![Figure 2. Historical capture re-derived with the current clock method.](figures/fig4_edge_excursions.svg)
 
 *Figure 2. Historical current-method re-derivation, one GPU pulse capture.
-The horizontal axis is pulse index 0–58 in command order; the vertical axis
-is fitted edge excursion in milliseconds (the axis label), with pale horizontal grid lines and
-labelled ticks. Blue circles are the 59 fitted onset lags; orange squares are
+The horizontal axis is pulse index 0–58 in command order; the vertical axis, labelled
+`excursion (milliseconds)`, is the fitted edge excursion — fitted edge time minus
+commanded edge time — in milliseconds. Pale horizontal grid lines and labelled
+ticks mark the scale. Blue circles are the 59 fitted onset lags; orange squares are
 the 59 fitted offset lags. The solid black zero line is each edge's commanded
 time. Blue and orange dashed horizontal lines mark the respective medians,
 +13.0 ms and −5.5 ms; they describe this sample, not a repeatable error or
 future coverage. The title, explanatory subtitle, right-hand line labels,
 bottom shape legend and notes name those marks and the late/early counts.
-The leader at pulse index 9 marks its +27-ms best-fit onset. An allowed region contains every edge
-pair surviving the fit's discrepancy limit. The allowance
-is a different quantity: the largest endpoint displacement in an allowed
+The leader at pulse index 9 marks its +27-ms best-fit onset. The accepted region defined in Section 2
+is distinct from the allowance: the largest endpoint displacement in an accepted
 region, 28.93293456111476 ms on that onset, equals the retained worst edge
 excursion. Adding the 1.1349971959968978-ms clock-anchor allowance gives
 30.067931757111657 ms. The endpoint displacements and anchor
@@ -638,7 +644,7 @@ and 40 from `runs_window_c_20260726` (DG-140–142). Across this retained
 population, 37 of 50 phases overlapped two sampling records and the remaining
 13 of 50 overlapped three. Accordingly, in this 1.5B population, 37 failed
 the three-record minimum (`not_resolvable_sample_count`) and 13 passed
-(`identifiable` — the artifacts' label for a phase whose record support reaches the
+(`identifiable` — the label a phase receives when its record support reaches the
 minimum). This describes the retained population; it does not estimate the failure rate on future requests, show
 zero prompt-processing energy, or supply a model comparison.
 
@@ -649,7 +655,7 @@ records and 17 overlapped four (registry DG-135–139). Median prefill duration
 was 0.2815 s for 7B versus 0.1365 s for 1.5B (DG-143–144), compared with the
 120.9-ms median record width (the duration of a sampling record’s interval)
 in the retained a10 sample described below (DG-071). A per-edge allowance of a
-few tens of milliseconds, as in the Section 2 example, amounts across both
+few tens of milliseconds, as in the Section 2 example (Section 2's worked example, not a measured window bound), amounts across both
 edges to more than half of the 1.5B median and roughly a quarter of the 7B
 median. The three-record minimum guards only against a split supported by two
 straddling averages, not against a timing envelope comparable to the phase
@@ -679,8 +685,7 @@ positions are not to scale; the count labels explain the three-record minimum
 rather than population frequencies, and the diagram contains no measured timing
 value.*
 
-The forcing problem appears in one run whose power trace was retained, meaning
-kept on disk as preserved evidence and never overwritten. Its prompt-processing phase
+The forcing problem appears in one run whose power trace was retained. Its prompt-processing phase
 lasted 0.121034145 s, rendered as 0.121 s for the comparison below. Over that
 run's retained power trace, the 406 sampling records had a record-width median
 of 120.9186 ms. An
@@ -748,7 +753,7 @@ DG-070/074 bind the example's duration to its phase-start/end events;
 DG-071/075 bind its record widths and spacings to the issued statistics JSON
 and Markdown. Each bundle occurs once within its named population. The source
 report's raw-to-CSV checks matched the native sampling records; its source-code
-provenance and per-bundle configuration fingerprints are retained. This is
+provenance (the record of the code’s origin) and per-bundle configuration fingerprints are retained. This is
 historical descriptive evidence, not a prospective inference-energy result.
 
 Future selection should count actual overlaps for every probe. A longer phase
@@ -773,8 +778,6 @@ no proof that its limit covers the effect of the same timing shift in every bloc
 comparison or empirical coverage guarantee.
 
 ### Further limitations
-
-The raw captures behind the historical numbers are retained under project custody and are not released; the synthetic examples are the only fully reproducible part.
 
 <!-- Source: docs/paper/round7/survival-map.md; reviewer items C9, D6, D7, D8, D9, D11; ranked items 12, 15, 16. -->
 
@@ -814,9 +817,11 @@ give an interpretable energy quantity, while the
 quantity remains expressed on the counter’s reported scale, whose gain was not
 independently checked. <!-- Reviewer D7; ranked item 16. -->
 
+The raw captures behind the historical numbers are retained by the project and are not released; the synthetic examples are the only fully reproducible part.
+
 On the retained capture, σ sat at its 1-mW floor despite much larger plateau
 scatter; the accepted region is therefore a tolerance set whose width depends
-on the 5% and 1-mW constants, which were not varied.
+on the 5% loss tolerance and the 1-mW noise floor of Appendix A.3.5, which were not varied.
 
 The 59 of 59 onsets late and 49 of 59 offsets early form a one-directional
 pattern. GPU start latency after the command and sampler window stamping are
@@ -851,7 +856,7 @@ its units for representing text.
 
 *The Illusion of Power Capping in LLM Decode* is the closest methodological rival. It is phase-aware, repeats configurations, and cross-checks sufficiently long sampled-power integrals against the GPU's own hardware energy counter on the same telemetry interface [13]. JouleWise lacks that counter cross-check. Its narrower advance is different: the power-capping study reports counter agreement, repetition, and timing regimes as separate diagnostics, whereas JouleWise carries registered phase-edge perturbations into the allocation-sensitivity calculation that decides whether a phase contrast may be reported.
 
-TokenPowerBench reports prefill and decode energy and groups measurements by context length [6]. Its disclosed method in the published paper does not specify the boundary events, alignment rule, repetition and variance protocol, idle baseline, or external validation needed to reconstruct a phase-attribution error budget. Ruf and Detyniecki isolate prefill by generating one token and infer decode by subtraction, from one run per context length without error bars [12]. Broader efforts such as ML.ENERGY, Intelligence per Watt, and Apple-focused inference characterizations map energy across useful deployed configurations [7] [14], and Benazir and Lin characterize inference throughput on Apple silicon without energy measurement [10]. They answer system-selection questions; JouleWise instead asks whether one named software-counter boundary can support a phase claim at all.
+TokenPowerBench reports prefill and decode energy and groups measurements by context length [6]. Its disclosed method in the published paper does not specify the boundary events, alignment rule, repetition and variance protocol, idle baseline (power with no workload), or external validation needed to reconstruct a phase-attribution error budget. Ruf and Detyniecki isolate prefill by generating one token and infer decode by subtraction, from one run per context length without error bars [12]. Broader efforts such as ML.ENERGY, Intelligence per Watt, and Apple-focused inference characterizations map energy across useful deployed configurations [7] [14], and Benazir and Lin characterize inference throughput on Apple silicon without energy measurement [10]. They answer system-selection questions; JouleWise instead asks whether one named software-counter boundary can support a phase claim at all.
 
 ### Benchmark and metrology lineage
 
@@ -863,7 +868,7 @@ Rigorous performance metrology supplies the experimental lineage. Georges, Buyta
 
 Paired minimum-detectable-effect methods use paired variation to estimate the smallest effect a planned study has adequate power to detect. They can allow observed variability to raise, but not lower, a threshold fixed by pre-registration—before results are seen [16]. That work concerns quantization-accuracy benchmarking, not energy. JouleWise borrows its prospective discipline, but treats movement over the registered phase-edge domain as deterministic allocation sensitivity and does not combine it statistically as though it were independent random noise; doing so would take credit for cancellation that the instrument has not demonstrated.
 
-Split and disaggregated inference remain a demanding application rather than this capstone's contribution. Prior work reports whole-run or GPU-only energy for disaggregation and phase-aware placement [17] [9] [8], while SplitZip makes no energy claim [18]. A future JouleWise study would need named boundaries at both endpoints, cross-device clock alignment, and a resolution bound established before collection.
+Split and disaggregated inference—running parts of one request on separate devices—remain a demanding application rather than this capstone's contribution. Prior work reports whole-run or GPU-only energy for disaggregation and phase-aware placement [17] [9] [8], while SplitZip makes no energy claim [18]. A future JouleWise study would need named boundaries at both endpoints, cross-device clock alignment, and a detection threshold fixed before collection.
 
 ## 7. Evidence and code availability
 
@@ -1397,7 +1402,7 @@ first retained record endpoint to avoid epoch-scale rounding. The replay
 script and `worked-examples.json#synthetic.blocks` retain the four integrals,
 b, trimmed-file fingerprints, and all full-precision operands (registry SYN-01).
 
-In production, form \(d_j^-\) and \(d_j^+\) with exact floating summation,
+In production, form \(d_j^-\) and \(d_j^+\) using `math.fsum`,
 subtract `pad` from the former and add it to the latter, then move each
 endpoint four binary64 values outward to obtain \(L_j\) and \(H_j\).
 Let \(\operatorname{out}_4\) mean four representable steps toward positive
@@ -1406,13 +1411,13 @@ infinity. The production allowance is
 q_j=\operatorname{out}_4\!\left(
 \operatorname{out}_4(\max(|L_j|,|H_j|))+|z_j-\delta_j|\right),
 \]
-with the final addition also evaluated by exact floating summation.
+with the final addition also evaluated using `math.fsum`.
 `joulewise/dominance_closeout.py` implements these widths and the shared/local
 sign enumeration; `joulewise/detection_floor.py` supplies the complete floor
 formula evaluated at each corner. The sign table below uses the unpadded
 illustrative widths from Section 3.
 
-Table 4. All eight sign cases from the full-precision SYN-01 fixture. Values
+Table A4. All eight sign cases from the full-precision SYN-01 fixture. Values
 are joules, rounded to ten decimals after calculation; signs label energy
 allowances, not physical timing directions. This table uses the unpadded
 illustrative formula for \(q_j\), whose printed precision is unaffected by

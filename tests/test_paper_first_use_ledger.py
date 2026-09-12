@@ -71,7 +71,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "128 GB of unified memory",
     ),
     "cell floor": (
-        "registered operational resolution guard for assigned-energy differences",
+        "final gate value for assigned-energy differences in a cell",
         "after the publication safeguards of section p.3",
     ),
     r"\(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\)": (
@@ -89,7 +89,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "floor packs are the campaign plans that collect calibration data used to build a comparator floor",
     ),
     "energy-allowance sign": (
-        "says which direction a nonnegative per-block joule allowance derived in section 3 moves assigned energy",
+        r"says which direction a nonnegative per-block joule allowance derived below as \(q_j\) moves assigned energy",
     ),
     r"\(R_{cm}\)": (
         "shared-energy-sign/local-corner sensitivity diagnostic",
@@ -149,7 +149,7 @@ GLOSS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
         "gpu (graphics-processor)",
         "switch-on and switch-off times selected by matching predicted interval-average power",
     ),
-    "allowed region": ("contains every edge pair surviving the fit's discrepancy limit",),
+    "accepted region": ("every edge pair surviving the loss tolerance of appendix a.3.5",),
     "measured contrast": ("point estimate and composed uncertainty interval",),
 }
 
@@ -175,15 +175,15 @@ SENTENCE_GLOSS_TERMS = frozenset({
 })
 
 LEXICON_REQUIRED_TERMS = (
-    "| powermetrics | §1 |",
-    "| mint | §2 |",
-    "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 |",
+    "| powermetrics | Abstract |",
+    "| mint | A.4 |",
+    "| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | A.4 |",
     "| entry check | §2 |",
     "| admitted | §2 |",
     "| workload level / workload magnitude / per-token conversion | §3 |",
     "| cadence ratio / sampling flags | §3 |",
     "| interpolation edge / deterministic-bound kinds | §4 |",
-    "| measured contrast / custody / Figure 3 | §4 |",
+    "| measured contrast / custody / Figure P1 | protocol P.3 / §7 |",
 )
 
 
