@@ -591,7 +591,7 @@ edr ALL=(root) NOPASSWD: JOULEWISE_NETWORK_TIME
 - [ ] **ED-OWED:** after the reviewed tracked fragment
   `scripts/joulewise-network-time.sudoers` exists, run the authenticated,
   no-overwrite installer from
-  `docs/process_traces/2026-08-08-d127-autonomous-loop/CONSULT-RESPONSE.md`
+  `docs/legacy/process_traces/2026-08-08-d127-autonomous-loop/CONSULT-RESPONSE.md`
   with that source path and the digest above. Ed alone installs
   `/etc/sudoers.d/joulewise-network-time`; no repository script runs as root.
 - [ ] **ED-OWED:** exercise both exact vectors from a cold credential state,

@@ -3,7 +3,7 @@
 Status 2026-08-07: the per-night checklists below are the ratified SHAPE;
 the `[PLAN-ID]`/`[BUDGET]` cells bind only when the campaign packs freeze
 (work orders U5-U7). Magistrate-supplied values from the ratified design
-memo (`docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`):
+memo (`docs/legacy/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`):
 
 | Night | Plan (frozen identifier scheme) | Occupancy incl. 20% margin — **DESIGN ESTIMATE, not an arm value** |
 |---|---|---|
