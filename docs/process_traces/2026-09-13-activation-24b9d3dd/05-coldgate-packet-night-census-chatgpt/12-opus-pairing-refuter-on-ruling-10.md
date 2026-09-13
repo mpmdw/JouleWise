@@ -10,13 +10,13 @@ The ruled option (i) is **correct and I affirm it**, and the regression test
 required before the text is installed, plus one correction to the ruling's
 reason paragraph.
 
-**A1 — NIGHT_HANDBACK replacement is ungrammatical as written.** The target
-sentence is `docs/process/NIGHT_HANDBACK.md:48-50`: "Precondition that only the
+**A1 — NIGHT_HANDBACK replacement is ungrammatical as written.** Target
+sentence, `docs/process/NIGHT_HANDBACK.md:48-50`: "Precondition that only the
 operator can meet: no interactive agent session and no ChatGPT desktop app
 alive from the plan span (02:31 PDT on 2026-09-15) through t0." The ruling's
 replacement ends in a parenthetical, severing `alive` from `from the plan span
-… through t0`, and its "quit both" now follows a three-item list. Replacement
-text (substitute for the same span, "no interactive agent session … alive"):
+… through t0`, and its "quit both" now follows a three-item list. Substitute
+this for the same span ("no interactive agent session … alive"):
 
 ```
 no interactive agent session, no ChatGPT desktop app and no Claude desktop
@@ -25,12 +25,12 @@ alive
 ```
 
 **A2 — the §0.6 sentence over-claims and has a garbled clause.** "both match
-the census" is false for the apps' own processes: `pgrep -lf "codex|claude|t3"`
-is case-sensitive, so `25633 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT`
-and `29809 /Applications/Claude.app/Contents/MacOS/Claude` do **not** match
-(probe: `pgrep -lf "codex|claude|t3" | grep -cE "^(25633|29809) "` → `0`). Only
-helpers match. "An app started after the arm reaches t0" reads as the app
-reaching t0. Replacement:
+the census" is false for the apps' own processes: the pattern is case-sensitive,
+so `25633 …/ChatGPT.app/Contents/MacOS/ChatGPT` and
+`29809 …/Claude.app/Contents/MacOS/Claude` do **not** match (probe:
+`pgrep -lf "codex|claude|t3" | grep -cE "^(25633|29809) "` → `0`); only helpers
+do. And "An app started after the arm reaches t0" reads as the app reaching t0.
+Replacement:
 
 ```
 Desktop apps that bundle an agent runtime — a shipped command-line agent
@@ -46,12 +46,11 @@ t0 refuses the night; that refusal is correct.
 **A3 — the third sentence is mis-placed and mis-labelled.** Its stated anchor,
 "abort the arm; do not signal them." (`derivation_night_runbook.md:602`), ends
 a paragraph about the **manual** ancestry inspection of `claude (daemon
-run|bg-spare|bg-pty-host)|--resume` (lines 590-604), not about the coded probe.
-The runbook contains no "agent probe" term (`grep -iE 'agent probe|browser|
-process census'` over the file at `27957b60` → one glossary row, line 2353), so
-"The agent probe" fails the first-use test at that site. "by design" is also
-false as history — the match is a substring accident this ruling now ratifies.
-Put it in §0.6 instead, after the A2 block:
+run|…)|--resume` (lines 590-604), not the coded probe. The runbook has no
+"agent probe" term (`grep -iE 'agent probe|browser|process census'` at
+`27957b60` → one glossary row, `:2353`), so "The agent probe" fails the
+first-use test there; and "by design" is false as history — the match is a
+substring accident this ruling now ratifies. Put it in §0.6 instead:
 
 ```
 The coded census that the t0 gate and a pack night's arm both run
@@ -87,10 +86,10 @@ All verified at `27957b60` unless marked live.
   argv and `Codex (Service)` is correct (executed: both `True`). See §6 for
   what it misses.
 - `tests/test_night_gate.py:296` pins the t0 literal
-  (`test_production_argv_constants_match_the_t0_author_literals`); the ruling
-  cites `:298` (the assert body, off by two). `tests/test_arm_readiness_
-  evidence_t0.py:2509` is inside `test_real_process_census_executes_pgrep_and_
-  binds_output` and does pin the four arm literals. Substantively correct.
+  (`test_production_argv_constants_match_the_t0_author_literals`; the ruling
+  cites `:298`, the assert body). `tests/test_arm_readiness_evidence_t0.py:2509`
+  sits in `test_real_process_census_executes_pgrep_and_binds_output` and does
+  pin the four arm literals. Substantively correct.
 
 ## 2. The proposed test, run exactly as written
 
@@ -106,7 +105,7 @@ Ran 1 test in 0.000s / OK
 Whole module with the test added: `Ran 59 tests in 0.110s / OK` — the reason-code
 coverage test at `:1041` is unaffected.
 
-Narrowing (a), pattern literal → `"codex mcp-server|codex exec|claude|t3"`:
+Narrowing (a), literal → `"codex mcp-server|codex exec|claude|t3"`:
 
 ```
 - ('/usr/bin/pgrep', '-lf', 'codex|claude|t3')
@@ -123,7 +122,7 @@ AttributeError: 'NoneType' object has no attribute 'reason'
 FAILED (errors=1)
 ```
 
-The test is defect-shaped against both narrowing routes. Confirmed.
+Defect-shaped against both narrowing routes. Confirmed.
 
 ## 3. Writing standard on the three ruled sentences
 
@@ -132,9 +131,8 @@ as English once substituted (A1); (b) "agent runtime" is a term of art used
 undefined, and "both match the census" is false for the processes an operator
 would look for in Activity Monitor (A2); (c) "agent probe" is undefined at its
 insertion site and the site is the wrong paragraph (A3). No checkout-dependent
-claim was found: all three land in tracked files and describe behaviour of the
-same tree. The `27957b60` line numbers the ruling cites are not written into
-the installed text, so the operator's checkout cannot disagree with it.
+claim was found: all three land in tracked files, and the `27957b60` line
+numbers the ruling cites never enter the installed text.
 
 ## 4. Extending the ruling to the Claude desktop app
 
@@ -142,32 +140,32 @@ Within Q1's licence ("or write a better one"): the packet asks what the census
 does from now on, and a second app with the same failure mode is in scope. But
 the factual basis is weaker than the ruling's own standard. For ChatGPT it
 proves agency from argv (`…/Resources/codex … app-server`, Exhibit F). For
-Claude it proves only that helpers match, and my probe shows **why**: `29828/29835/29861 …/Claude Helper (Renderer) …
---standard-schemes=cowork-artifact,cowork-file,claude-media,claude-simulator,…`
-and `29816/29862/29863 … Claude Helper --type=utility … --bypasscsp-schemes=
-claude-media,…` — a lowercase Chromium scheme list, plus `30091 … ShipIt
+Claude it proves only that helpers match, and my probe shows **why** they
+match: `29828/29835/29861 … Claude Helper (Renderer) … --standard-schemes=
+cowork-artifact,cowork-file,claude-media,claude-simulator,…` and
+`29816/29862/29863 … Claude Helper --type=utility … --bypasscsp-schemes=
+claude-media,…` — a lowercase Chromium scheme list; plus `30091 … ShipIt
 com.anthropic.claudefordesktop…`. No `claude` CLI runs as a local server in
-that argv set. So the match is incidental to a vendor flag string that a future
-build can change silently, and the ruling's "The Claude app can drive local
-agent work as well" is asserted, not probed. A2's wording keeps the instruction
-(quit both) without resting it on that unprobed claim; the operator
-instruction, not the pattern, is what protects the night here.
+that argv set, so the match rides on a vendor flag string a future build can
+change silently, and "The Claude app can drive local agent work as well" is
+asserted, not probed. A2 keeps the instruction (quit both) without resting it
+on that claim: here the operator instruction, not the pattern, protects the
+night.
 
 ## 5. The browser probe — a live blocker, not just an observation
 
 `_expect_absent` (`joulewise/arm_readiness_evidence_t0.py:1312-1314`) raises
 `_underivable` unless `exit_code == 1` **and** stdout is empty, and it is
-applied unconditionally to all four probes including `browser`
-(`:1725`, `:1728-1729`), producing row `t0.no_stray_keepawake` (`:1731`,
-deriver bound at `:1954`). That row's `applicability_rule` is `ALWAYS` and it
-is in the `required_row_ids` of all three plan profiles ALPHA/BETA/GAMMA
+applied unconditionally to all four probes including `browser` (`:1725`,
+`:1728-1729`), producing row `t0.no_stray_keepawake` (`:1731`, deriver bound at
+`:1954`). That row is `applicability_rule: ALWAYS` and in the
+`required_row_ids` of all three plan profiles ALPHA/BETA/GAMMA
 (`configs/arm_readiness/d117_row_registry_v2.json`, verified by parse).
 
-Live probe of the exact browser argv returned rc=0 with, among others,
+The live browser probe returned rc=0 with, among others,
 `995 …/SafariBookmarksSyncAgent`, `1457/24791/25700 …SafariPlatformSupport…Helper`,
-`1794 …com.apple.Safari.SafeBrowsing.Service`, `3644 …/SafariLaunchAgent`,
-`17142 …SafariConfigurationSubscriber` — all system XPC services, present with
-no Safari window open.
+`1794 …com.apple.Safari.SafeBrowsing.Service`, `3644 …/SafariLaunchAgent` — all
+system XPC services, present with no Safari window open.
 
 So: **yes, today, for `TRANSACTION_PACK` plans only.**
 `author_arm_readiness_evidence_t0` is reached from `scripts/run_night.py:1509`
@@ -193,15 +191,14 @@ browser class is made ancestry- or bundle-aware.
 - **A4**, above: the arm-time refusal the reason paragraph relies on does not
   exist for the very plan class of the 09-15 successor night.
 - Exhibit F was gathered with `pgrep -fl 'claude|codex'`, not the census
-  pattern; harmless here (`t3` adds nothing), but the exhibit is not literally
-  the census output.
-- Q3 is correct and the deciding line is right: the first census line was
+  pattern; harmless (`t3` adds nothing) but not literally the census output.
+- Q3 is correct, deciding line included: the first census line was
   `24974 claude`, so the night refuses regardless of the app.
 
 ## Executed probes
 
-`pgrep -lf "codex|claude|t3"` (live, ~07:4x PDT) and the `Safari|Google Chrome|
-Chromium|Firefox|browser automation` probe; `ps -axo pid,ppid,command` for pids
-25633/29809/29816; `git show 27957b60:<path>` + `sed`/`grep` for every line
-number above; JSON parse of both row registries; the unittest runs in §2 under
-`/tmp/cg-refuter` with `PYTHONPATH=/tmp/cg-refuter`.
+Live `pgrep -lf "codex|claude|t3"` and the `Safari|Google Chrome|Chromium|
+Firefox|browser automation` probe; `ps -axo pid,ppid,command` for 25633/29809/
+29816; `git show 27957b60:<path>` + `sed`/`grep` for every line number above;
+JSON parse of both row registries; the §2 unittest runs under `/tmp/cg-refuter`
+with `PYTHONPATH=/tmp/cg-refuter`.
