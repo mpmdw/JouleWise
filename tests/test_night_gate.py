@@ -364,6 +364,23 @@ class NightGateTests(unittest.TestCase):
         self.assertIn("42 claude", refusal.detail)
         self.assertIn("43 codex", refusal.detail)
 
+    def test_a_desktop_app_bundled_agent_server_refuses_the_census(self) -> None:
+        # Ruling 2026-09-13 (NIGHT-CENSUS-CHATGPT-APP-01): the ChatGPT app's
+        # bundled Codex CLI is an agent process; the pattern is not narrowed.
+        source = FakeProbeSource()
+        source.results[night_gate.AGENT_CENSUS_ARGV] = result(
+            night_gate.AGENT_CENSUS_ARGV,
+            exit_code=0,
+            stdout=(
+                "25658 /Applications/ChatGPT.app/Contents/Resources/codex "
+                "-c features.code_mode_host=true app-server\n"
+            ),
+        )
+        _, refusal = night_gate.agent_census(source.probes())
+        self.assertEqual("night_refused_agent_present", refusal.reason)
+        self.assertIn("25658 /Applications/ChatGPT.app", refusal.detail)
+        self.assertEqual(("/usr/bin/pgrep", "-lf", "codex|claude|t3"), night_gate.AGENT_CENSUS_ARGV)
+
     def test_a_nonmatch_exit_with_output_still_refuses_the_census(self) -> None:
         source = FakeProbeSource()
         source.results[night_gate.AGENT_CENSUS_ARGV] = result(
