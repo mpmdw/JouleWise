@@ -139,7 +139,7 @@ it is copied into a contract.
 | onset set / offset set / zero-shift value | Combining shared movements and local widths | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
 | shared lower and upper energy swings | Combining shared movements and local widths | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
 | binary64 | Record support in two historical model stacks | glossed-at-first-use | Glossed at its first main-text use as the usual 64-bit floating-point format; Appendix A.3 restates the convention. |
-| member-envelope integral sum | A.3 Formal calibration algorithms | glossed-at-first-use | Built in Appendix A.3.10 from the four member integrals with absolute contrast weights before its two uses there. |
+| member-envelope integral sum | A.3 Formal calibration algorithms | glossed-at-first-use | Named and defined in one sentence of Appendix A.3.10 as the four member integrals summed with absolute contrast weights; used twice after that sentence. |
 | ulp | A.3 Formal calibration algorithms | glossed-at-first-use | The gap between 1 and the next larger representable number. |
 | local sign | Combining shared movements and local widths | glossed-at-first-use | The comparative replay chooses one separately for each block. |
 | local half-width / shared sign | Combining shared movements and local widths | glossed-at-first-use | One sign for energy allowances across all blocks; Section 3 constructs the local half-width from four member residuals. |

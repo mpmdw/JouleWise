@@ -514,12 +514,13 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
         # here is exactly: ..."); a row may claim it only for a listed expression.
         header_match = re.search(r"that class here is exactly: (.*?)\.\n", self.text, re.S)
         self.assertIsNotNone(header_match, "audience-vocabulary class list missing from the header")
+        self.assertNotIn(
+            "(", header_match.group(1), "the audience class must list bare expressions, never glosses"
+        )
         listed = {
             re.sub(r"\s*\(.*?\)\s*$", "", item).strip().casefold()
             for item in re.split(r",\s*(?:and\s+)?", header_match.group(1).replace("\n", " "))
         }
-        glossed_in_class = sorted(item for item in listed if "(" in item)
-        self.assertEqual(glossed_in_class, [], "the audience class must list bare expressions, never glosses")
         outside = sorted(
             row.term
             for row in self.rows
