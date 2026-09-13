@@ -30,3 +30,23 @@ Under the text in force at `27957b60`, was refusing a correct outcome (a fence d
 ## Constraints on the judge
 
 Read-only. Probes allowed: `git show 27957b60:<path>`, `grep`/`rg`, `sed -n`, `ps`/`pgrep` reads, and the read-only login-items query `osascript -e 'tell application "System Events" to get the name of every login item'`. Do not edit any tracked file. Never touch `/Users/edr/code/JouleWise`, any `/Users/edr/JouleWise-measurement-*` directory, or `/Users/edr/night-custody` (Exhibit C is the copy you read). Ruling file: `10-coldgate-fable-ruling.md` in this packet directory — sections: Contamination disclosure; Q1 (ruled option; exact text/code in fenced blocks; the reason); Q2; Q3; Executed probes (commands and the lines they returned). Plain words; define each term at first use.
+
+## Charter pin
+
+Charter: `docs/process/coldgate_charter.md`
+sha256:
+099de884b1d081ffa547dfd8ff5837e75813a870ff8c7285c749c1b440c95d81
+
+The judge independently checks this digest against the separately supplied pin in the convening prompt.
+
+## Exhibit manifest
+
+```
+d19e8dff435a51eec7079ce7e02c9185630236749d44138ba904a522a0bab048  exhibit-A-night_gate-agent_census.md
+3403e77cc9a056be6cf9dea93a5192a32975bbf0a4b86d548f868c981b50c0d9  exhibit-B-arm_readiness-process-census.md
+8a554299453a1fdb466c9c928701e920f684041f7dd5d8fe448eebb612d42b22  exhibit-C-refused-night-record.md
+90128d55b970a276cbacfcfb98fa8c11745c2e75072172ebb07164ce232c208a  exhibit-D-governing-text.md
+9e85be3666a25211c641a726ea47efbb2bd3dff76a62383aec267f1096731e8a  exhibit-E-existing-tests.md
+aa7e0c9327d7abb73163102a662f5b1e5bdca2cafc246d8959ecb6cab1d82bfe  exhibit-F-process-list.md
+96fc832477f3838a5d2d4cb160fef39b28870fe36c59b5b945492e7f665e9f60  exhibit-G-pattern-sites.md
+```
