@@ -287,6 +287,8 @@ def _decision_reference_documents(root: Path) -> dict[str, str]:
         if path.is_file()
         and path.relative_to(root).as_posix() != "docs/decision_log.md"
         and not path.relative_to(root).as_posix().startswith("docs/process_traces/")
+        # DOCS-THIN-01: archived history stays outside the live reference scan.
+        and not path.relative_to(root).as_posix().startswith("docs/legacy/")
     )
     paths.update(path for path in (root / ".github").rglob("*") if path.is_file())
     paths.update(
