@@ -41,12 +41,20 @@ have been assigned to later processes.
 
 ## Purpose of this night
 
-Plan `d079-epoch-25g83-derivation-n1-20260913`, class `DIAGNOSTIC_NO_PACK`,
-is planned for 2026-09-13 at 02:56:00 PDT (`t0`, epoch 1789293360) with a
+This plan is the SUCCESSOR of `d079-epoch-25g83-derivation-n1-20260913`, which
+fired on 2026-09-13 and was refused at its own t0 census (an interactive
+`claude` session and the ChatGPT desktop app's Codex helper were alive; see
+§Executed below). Same purpose, same rule, same chain and pre-registration;
+its own plan id, session id, night root, desk inputs and wrapper. Precondition
+that only the operator can meet: no interactive agent session and no ChatGPT
+desktop app alive from the plan span (02:31 PDT on 2026-09-15) through t0.
+
+Plan `d079-epoch-25g83-derivation-n1-20260915`, class `DIAGNOSTIC_NO_PACK`,
+is planned for 2026-09-15 at 02:56:00 PDT (`t0`, epoch 1789466160) with a
 9000-second window (`window_max_s`; the acquisition allocation ends at
-05:26:00 PDT, epoch 1789302360). The courier deadline is
-`t0 + 9000 + 300`, epoch 1789302660, 05:31:00 PDT; the next 07:00 dead-man
-minute is epoch 1789308000, 89 minutes after it. This notice describes the
+05:26:00 PDT, epoch 1789475160). The courier deadline is
+`t0 + 9000 + 300`, epoch 1789475460, 05:31:00 PDT; the next 07:00 dead-man
+minute is epoch 1789480800, 89 minutes after it. This notice describes the
 planned night; the arm record establishes whether installation happened.
 
 **What the night does.** It is the epoch-equivalence check that Ed's
@@ -88,18 +96,18 @@ row for the measurement root, and fills the pre-registration's five
 commit-time fields (authoring day 10, MLX 0.31.2, head pin 76 /
 `08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7`, chain
 digest above). The measurement root is
-`/Users/edr/JouleWise-measurement-20260913-derivation`, a fresh GitHub clone
+`/Users/edr/JouleWise-measurement-20260915-derivation`, a fresh GitHub clone
 detached at H whose `.venv/bin/python` is Python 3.13 built from
 `env/mac-measurement-lock.txt`; both LaunchAgents are installed FROM it and
 name that interpreter by absolute path; its
 `runs/calibration_observation_ledger.jsonl` is the canonical 76-record
 ledger restored byte-exact and authenticated against its committed head pin
 with custody verification. The night root (`custody_root`) is
-`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913`; the runs
+`/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915`; the runs
 root is `<night root>/runs`; the chain's own log is
 `<night root>/operator_logs/derivation-chain.log`. The session id equals the
 plan id. The evidence root id is
-`evidence-d079-epoch-25g83-derivation-n1-20260913`, registered by this
+`evidence-d079-epoch-25g83-derivation-n1-20260915`, registered by this
 night's arm record (the runbook names no derivable default; the form follows
 the G2-a runbook's `evidence-<window id>`). The frozen calibration plan is
 the committed bytes of
@@ -111,13 +119,13 @@ reads nothing else from it. The two desk inputs `identity-epoch.json` and
 `scripts/write_derivation_night_inputs.py` at the arm and their digests are
 baked into the wrapper.
 
-**Timeline.** Both agents are installed on 2026-09-12 inside 03:00–06:30
-PDT, the calendar day before `t0`. The 07:00 dead-man firing on 09-12 stands
+**Timeline.** Both agents are installed on 2026-09-14 inside 03:00–06:30
+PDT, the calendar day before `t0`. The 07:00 dead-man firing on 09-14 stands
 down with one log line and writes nothing else into `night/`; that line is
 expected evidence. The watchdog's plan span opens, and its stand-down request
-lands, at `t0 − 25 minutes`, 02:31:00 PDT on 09-13 (epoch 1789291860); TERM
-is `t0 − 16 minutes` (1789292400) and KILL is `t0 − 15 minutes`
-(1789292460); `t0` sits inside the fixed 02:45–03:30 belt, which is correct
+lands, at `t0 − 25 minutes`, 02:31:00 PDT on 09-15 (epoch 1789464660); TERM
+is `t0 − 16 minutes` (1789465200) and KILL is `t0 − 15 minutes`
+(1789465260); `t0` sits inside the fixed 02:45–03:30 belt, which is correct
 for a night. The consolidated notice with these pins is sent after commit H
 and before the plan is moved into its discoverable place; Ed's NO on the
 notice thread stands the night down. The arming activation exits after
@@ -204,7 +212,7 @@ night are complete; nothing is armed; the successor plan is
 
 ## Where the results are
 
-- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913`;
+- Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915`;
   driver records in `night/` — `result.json` (expected verdict `GO` for
   this class when every gate row passes, `chain_exit_code` 0),
   `receipt.json` or `refusal.json` as `result.json` directs (C1 PASS with the
@@ -213,9 +221,9 @@ night are complete; nothing is armed; the successor plan is
   `chain.started`, `chain.exited`, `censuses.jsonl`, `chain.stdout.log`,
   `chain.stderr.log` (the wrapper's `FAIL <reason>` lines, if any),
   `courier.sent`, `courier.json`, `courier.heartbeat`.
-- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night.log`.
-  At harvest, look for the 09-12 07:00 dead-man stand-down line, then
-  `night driver started` and a `night gate verdict=` line for 09-13.
+- Driver log: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night.log`.
+  At harvest, look for the 09-14 07:00 dead-man stand-down line, then
+  `night driver started` and a `night gate verdict=` line for 09-15.
 - Chain log: `<custody root>/operator_logs/derivation-chain.log` —
   `session_open kind=derivation slots=12`, `chain_start` (its timestamp
   minus `t0` is the realized Δ), `settle_complete`, twelve `slot_start`
@@ -230,14 +238,14 @@ night are complete; nothing is armed; the successor plan is
   removed.
 - Launchd streams: `night/launchd.night.out` and `night/launchd.night.err`;
   `launchd.night.err` must be EMPTY.
-- Results branch: `night-results/20260913` on `origin`, if the driver's push
+- Results branch: `night-results/20260915` on `origin`, if the driver's push
   succeeded — verify, do not presume.
 
 ## Next lane
 
 The relaunched magistrate (its prompt carries the frozen triple
-`d079-epoch-25g83-derivation-n1-20260913` /
-`/Users/edr/JouleWise-measurement-20260913-derivation` / this commit) harvests
+`d079-epoch-25g83-derivation-n1-20260915` /
+`/Users/edr/JouleWise-measurement-20260915-derivation` / this commit) harvests
 only after the plan span's completion boundary has passed and `courier.sent`
 exists. It follows runbook §2 in order: §2.0 rebuilds the night's
 coordinates from the frozen triple and verifies the wrapper against its
@@ -264,7 +272,7 @@ before the settle, or a `slot_refused` line is a finding to cure before any
 further night.
 
 After the harvest, run `scripts/install_night_agent.sh --plan
-/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913/night_plan.json
+/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260915/night_plan.json
 --hour 2 --minute 56 --uninstall` FROM the clone. Do NOT remove the clone or
 the night root: the ledger session and the captures live there and the clone
 is a production inventory row. Never re-arm this plan; every further night is
