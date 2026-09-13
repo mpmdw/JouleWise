@@ -351,7 +351,7 @@ Pair-specific CUDA artifacts and sparse/MLA kernel paths remain
 primary fleet, with Jetson optional and non-cap-setting.
 
 The missing DSpark/DFlash web memo does not bear on this axis; the vendored
-clone and `docs/process_traces/2026-07-17-dspark-dflash-smoke/` were checked
+clone and `docs/legacy/process_traces/2026-07-17-dspark-dflash-smoke/` were checked
 only as surviving context.
 
 ### Draft candidate registry wording
@@ -543,7 +543,7 @@ for bounded-window KV marginal slope, `C5-2.13` for serialized prompt-cache
 crossover, and `C5-2.14` for cache policy as a Q4 coefficient rider. The flat-
 pool idea `RQ-KV-POOL-OBSERVABLES` was explicitly disposed because correlation
 cannot support allocator-design inference
-(`docs/process_traces/2026-07-17-extension-axes/roadmap-synthesis.md:71`).
+(`docs/legacy/process_traces/2026-07-17-extension-axes/roadmap-synthesis.md:71`).
 
 The new information is experiment-design precision, not a new question.
 Installed mlx-lm 0.31.3 exposes `kv_bits`, `kv_group_size`,
@@ -675,7 +675,7 @@ dense gate/up/down projections, so zero activations do not skip computation
 and cannot create the proposed energy mechanism. Current upstream MLX,
 mlx-lm, llama.cpp/Metal, and ProSparse/PowerInfer-Metal support is
 **NEEDS-WEB**. The surviving local evidence is
-`docs/process_traces/2026-07-17-dspark-dflash-smoke/` and the vendored clone;
+`docs/legacy/process_traces/2026-07-17-dspark-dflash-smoke/` and the vendored clone;
 the earlier identification web memo is missing.
 
 The clone `/Users/edr/code/mlx-dspark-vendor` is EAGLE-family speculative
