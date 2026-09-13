@@ -11779,3 +11779,64 @@ Standing direction recorded with the rulings: Ed accepts the loss of live
 observability for the issue channel ("KILL as long as you can keep experimenting and
 have all the tools to keep running windows until you have a paper"), and the target is
 a minimum viable paper ("i just want a minimum viable paper already").
+
+### D-124 dated addendum — 2026-09-13 (cold gate 47, GATE-SENSIBILITY-SWEEP-01 B1): the zero-point provenance band is scale-bounded, and its re-set is ruled but not yet installed
+
+Round 4's `isclose(rel_tol=1e-9, abs_tol=1e-12)` band compares the stored ABBA delta
+`(B1+B2-A1-A2)/2` with the zero-shift contrast `z` (a coefficient-weighted `fsum` of
+freshly re-integrated member energies). These are two different binary64 routes over
+the same four numbers: the sequential route rounds once when it forms `B1+B2` (and
+once more if the members straddle a power of two), so `|z - delta| <= 0.375 x
+ulp(B1+B2)`, a quantity that steps in powers of two. Consequences, bench-derived: the
+band CANNOT refuse identical operands while the largest member is below 8,192 J,
+whatever the operand pattern, nor below 16,384 J when the four members lie in one
+binade; the first refusal on the packet's pattern is at exactly 16,384 J per member
+(demonstrated at 20,000 J: sequential 1.8189894035458565e-12 J against `fsum` 0.0),
+and an any-pattern refusal is demonstrated at a largest member of 8,625.6 J. A second
+condition must hold for any refusal at all: `rel_tol` rescues the block unless its
+true delta is smaller than about 1.7e-7 of the member scale (about 1.8 mJ at 20,000 J
+members), so only blocks whose members nearly cancel are exposed. G2-a member
+energies are tens of joules, three orders below the lowest refusing scale, so B1 is
+not G2-a-blocking.
+RULED, NOT YET INSTALLED (option (ii)): both sites -- `dominance_closeout.py` (the
+D-165 replay consumer) and `floor_extraction.py` (the upstream duplicate) -- are to
+call one shared predicate with `abs_tol = max(1e-12, 64u x S)`, `u = 2^-53`,
+`S = max(1, member envelope integral sum, |delta|, |z|, every |onset| and |offset|
+sweep value)`, `rel_tol = 1e-9` unchanged and the once-only outward `|z - delta|`
+charge unchanged. `S` and the `64u` factor are not new: `split_common_mode_block_width`
+already computes exactly this scale and pad for the registered member-envelope term,
+and the shared predicate is to be factored out of it, so no constant is added and the
+registered parameter hash `dd61d388...` (which enumerates no tolerance) does not move.
+The guard remains a pure provenance guard, not load-bearing for soundness; a delta
+moved by 1e-6 J still refuses. The code change and its regressions R-B1-ADMIT /
+R-B1-REFUSE / R-B1-ONE-PREDICATE are tracked as GATE-B1-PROVENANCE-BAND-01 and are
+not a fence on G2-a. Option (iii), deriving `z` through `abba_delta`, was rejected:
+the stored member energies are `summary.json` `phase_energy_j` reducer fields
+(`floor_extraction.py:1839-1845`, consumed at 2710-2713) while `z` re-integrates the
+trace curve (2534-2543), so no construction makes them byte-identical. The same
+`1e-9/1e-12` band at `floor_extraction.py:2092` is unaffected: there both operands
+are of member-energy magnitude, so `rel_tol` governs.
+
+## TEST-SPEED-01 addendum (2026-09-13, activation 24b9d3dd, transcribing cold-gate ruling 17 Q2(b) as amended by its Opus pairing refuter 12 §3; the magistrate records, it does not amend)
+
+**TEST-SPEED-01 addendum (2026-09-13): the PR-fast/full tier split is
+retired.** Ed ratified three levers on 2026-08-03 (suite-speed priority, a
+PR-fast/full tier split, a Blacksmith runner evaluation). The tier split
+shipped 2026-08-23 in commit 349e06f4 as the additive `pr-fast` job in
+`.github/workflows/ci.yml` and the `pr_fast_tier` block in
+`scripts/test_timings.json`. Naming note: this row's status_note and that
+commit subject both use "lever 2" for the unit-atomic sharding and crash-matrix
+split that landed the same day; those stay, and only the tier split is retired.
+The shipped tier was never a required check (main carries no branch protection
+and no rulesets, verified 2026-09-13), although acceptance-evidence row 2 as
+ratified says "the fast tier gates PRs"; that gating clause was never
+implemented and is withdrawn with the tier. On 2026-09-12 Ed accepted PR #317
+"as proposed" (Gmail 1a0969ba0b31c2b2), whose decision 2 proposed deleting
+`pr-fast`, retiring `pr_fast_tier`, and amending this task's kernel text. The
+retirement deletes zero tests. Row 2 becomes "Shard-runner implemented from the data;
+the ratified PR-fast/full tier split implemented 2026-08-23 and retired
+2026-09-13 by owner acceptance; the FULL suite remains the gate for merges,
+verdicts, and audited heads; zero test deletions", and the goal sentence drops
+"and the PR-fast/full tier split". The fence is unchanged and remains literally
+true. Cold gate 17 (2026-09-13) ruled option A on PR #317 T2, so no path-based
+skipping narrows it. Levers 1 and 3 are unaffected.

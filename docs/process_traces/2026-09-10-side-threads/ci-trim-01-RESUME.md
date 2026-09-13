@@ -156,3 +156,5 @@ post-merge.
 5. gate-ledger is red on #317 by construction (a fresh PR body has no filled
    twelve-row ledger). It is advisory, not a required check. Fill the ledger
    when the PR is taken out of draft.
+
+2026-09-13 (activation 24b9d3dd): CI-TRIM-01 MERGED as PR #317 (merge `73bf1754`, head `c59bdc57`) under cold gate 17 option A — no path-based matrix skipping; fences hoist, pr-fast deletion, zsh guard and per-run push concurrency landed. Thread CLOSED.

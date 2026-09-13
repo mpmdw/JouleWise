@@ -2759,6 +2759,37 @@
       "status_note": "UNBLOCKED 2026-09-03: the only thing holding this row was D-170's hard-start decision gate, and D-170's three installing pull requests (#273 items 1 and 4, #275 item 2, #274 item 3) are all merged to main. Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD. 2026-09-02: the cold-gate ruling section B4 (coldgate-dx-t26a) directed the S9-04 row to register with a hard/start/pending dependency on D-170; the row already existed from the 2026-08-27 wave, so the dependency is added here instead of a duplicate row (dated addendum on the ruling).",
       "stop_card": null
     },
+    "GATE-B1-PROVENANCE-BAND-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/47-coldgate-packet-d165-provenance-band/10-coldgate-fable-ruling.md (option ii; regression spec R-B1-ADMIT / R-B1-REFUSE / R-B1-ONE-PREDICATE)",
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/47-coldgate-packet-d165-provenance-band/12-opus-pairing-refuter-on-ruling-10.md (A-1 hoist the envelope validation above the guard; A-2 placement in dominance_closeout.py factored from split_common_mode_block_width; bound 0.375 x ulp(B1+B2); first refusal 16,384 J, any-pattern 8,625.6 J, none below 8,192 J)",
+          "docs/process_traces/2026-09-13-activation-24b9d3dd/47-coldgate-packet-d165-provenance-band/13-magistrate-synthesis-ruling-10-with-opus-amendments.md"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GATE-B1-PROVENANCE-BAND-01/acceptance",
+          "label": "GATE-B1-PROVENANCE-BAND-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Both sites, joulewise/dominance_closeout.py (the D-165 replay consumer, currently at the isclose call near line 963) and joulewise/floor_extraction.py (the upstream duplicate near line 590), call one shared predicate abs_tol = max(1e-12, 64u x S) with u = 2^-53, S = max(1, member envelope integral sum, abs(delta), abs(z), every abs onset and offset sweep value), rel_tol 1e-9 unchanged, the once-only outward abs(z - delta) charge unchanged; the predicate and a scale helper are factored OUT of split_common_mode_block_width in dominance_closeout.py (the cycle-free direction: floor_extraction.py already imports that module at top level) so band and registered pad share one scale by construction; at the upstream site the envelope-sum finiteness/sign validation is hoisted ABOVE the guard and S is built from the validated value never the raw loop variable; regressions R-B1-ADMIT (identical 20,000 J operands through the registered delta and zero-shift builders admit at both sites end-to-end, shared width still charges abs(z - delta)), R-B1-REFUSE (delta moved by 1e-6 J refuses at both sites; a block with member_envelope_integral_sum_j = inf and abs(z - delta) = 1 J refuses with common_mode_precondition_failed at both sites), R-B1-ONE-PREDICATE (the scale helper used by the pad and by the band is the same object; the admit case fails if one site is reverted); refusal reason strings, the emitted shared half-width and the registered parameter hash dd61d388... unchanged; paired refuters with a physics lens; not a fence on G2-a."
+      },
+      "authority": {
+        "label": "2026-09-13 cold gate 47 ruling 10 + Opus pairing refuter 12 (A-1..A-4) + synthesis 13; D-124 dated addendum 2026-09-13",
+        "path": "docs/process_traces/2026-09-13-activation-24b9d3dd/47-coldgate-packet-d165-provenance-band/13-magistrate-synthesis-ruling-10-with-opus-amendments.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Install cold-gate ruling 47 as amended: the D-165 zero-point provenance band (isclose rel 1e-9, abs 1e-12) falsely refuses identical operands once the largest member exceeds 8,192 J (exactly 16,384 J on the demonstrated pattern) because the stored ABBA delta and the zero-shift fsum contrast are different binary64 routes; make the band scale-aware with the registered 64u x S pad through one shared predicate at both sites, with the upstream envelope validation hoisted above the guard.",
+      "id": "GATE-B1-PROVENANCE-BAND-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 194,
+      "status": "queued",
+      "status_note": "2026-09-13: registered from activation 24b9d3dd in the same commit as the D-124 addendum that records the B1 disposition (cold gate 47). NOT a G2-a fence: G2-a member energies are tens of joules, three orders below the lowest refusing scale (8,192 J); the equivalence and G2-a nights do not wait on it. The blocker-grade placement defect found by the pairing refuter (an unvalidated +inf envelope sum would make the pad infinite) is an acceptance clause here, not a live defect on main (the current band does not use the envelope sum).",
+      "stop_card": null
+    },
     "GATE-R2-COVERAGE-ULP-01": {
       "acceptance": {
         "evidence": [
@@ -2797,35 +2828,6 @@
       "rank": 178,
       "status": "queued",
       "status_note": "2026-09-10: STAGED, not landed (reduce.py is a D-138 governed input); a rare near-boundary false refusal until then, not a G2-a blocker. 2026-09-10: rides the ACCEPTANCE-EPOCH-25G83-01 D-138 transaction.",
-      "stop_card": null
-    },
-    "GATE-SENSIBILITY-SWEEP-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/GATE-SENSIBILITY-SWEEP-01/acceptance",
-          "label": "GATE-SENSIBILITY-SWEEP-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A table of every numeric gate, tolerance, threshold and refusal between capture and a reported number (admission, floors, clock skew/drift, timing anchors, custody freshness, sample counts), each with its current value, the physical quantity it protects, and its ratio to the ~1 J attribution limit and ~5 J claim bar; every gate is either justified by physics or evidence (kept, D-161 fail-closed classes) or re-set to a physically motivated tolerance with a defect-shaped test; no microscopic tolerance survives without a written physical reason. Reviewed by an execution refuter and a physics-lens refuter; lands before any G2-a number is consumed."
-      },
-      "authority": {
-        "label": "Ed 2026-09-10 ~04:20 PDT: no silly gates on accepting numbers",
-        "path": "docs/process_traces/2026-09-09-rehearsal-harvest/121-ed-rulings-2026-09-10-recoverability-steerability.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Before consuming the first real G2-a numbers, audit every numeric acceptance gate on the claim path for physical sensibility and remove microscopic tolerances that have no physical justification (Ed: 'make sure all barriers are sensible').",
-      "id": "GATE-SENSIBILITY-SWEEP-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 175,
-      "status": "active",
-      "status_note": "2026-09-10: Ed, verbatim: 'make sure there are no silly gates on accepting numbers, like make sure all barriers are sensible, recall that time where you wanted a tolerance of like 1e-15 sensitivity or something ridiculously microscopic compared to the measurement, be sensible about instrument rigor requirements.' Physics/evidence refusals stay (D-161); everything else gets a tolerance sized to the instrument. 2026-09-10 (activation 96bfeca7): inventory complete (02a 156 rows / 02b 143 rows; the 1e-15 is a decimal presentation quantum in an identity check and stays); repairs R1/R3/R4 + G2-a idle_seconds 75 on PR #314 (`feat/2026-09-10-gate-sensibility-sweep`, final head beb808bc) through the full gauntlet incl. cold gate 24 on the contract prose; R2 staged (GATE-R2-COVERAGE-ULP-01); B1 (D-165 provenance band, seat B) needs a decision-log correction → cold gate, not G2-a-blocking at G2-a energies; the lane closes when PR #314 merges and the B1 disposition is recorded.",
       "stop_card": null
     },
     "GENERATOR-CORE-01": {
@@ -3532,36 +3534,6 @@
       "rank": 56,
       "status": "shelved",
       "status_note": "D-174 scope freeze",
-      "stop_card": null
-    },
-    "NIGHT-CENSUS-CHATGPT-APP-01": {
-      "acceptance": {
-        "evidence": [
-          "docs/process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md F2: night census pgrep -lf over the codex, claude and t3 names matched the ChatGPT desktop app's 'Codex (Service)' helper (codex-sandbox in its argv) at t0 2026-09-13 02:56",
-          "docs/process_traces/2026-09-12-activation-b58fb582/02-equivalence-night-arm-record.md step 4: the arm-time census classifies pgrep hits by ancestry (own vs foreign) but the t0 census in joulewise/night_gate.py does not"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/NIGHT-CENSUS-CHATGPT-APP-01/acceptance",
-          "label": "NIGHT-CENSUS-CHATGPT-APP-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A written ruling (cold gate or Ed) decides whether the t0 agent census keeps refusing on the ChatGPT desktop app's Codex helper (operator quits the app before every plan span; runbook 0.6 and the notice template say so) or the pattern is narrowed to agent sessions and MCP servers with a defect-shaped regression that still refuses claude/codex/t3 agent processes; either way the decision is installed in code or runbook text, not left to the desk."
-      },
-      "authority": {
-        "label": "2026-09-13 activation c5048879 harvest record F2 (magistrate registration; rule change needs a ruling)",
-        "path": "docs/process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Ruling-first: the night gate's t0 agent census (pgrep -lf over the codex, claude and t3 names) matches the ChatGPT desktop app's own Codex helper process, so the app must be quit for every armed night or the pattern must be narrowed under a ruling; decide, then install the decision (code + regression, or runbook/notice text).",
-      "id": "NIGHT-CENSUS-CHATGPT-APP-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 192,
-      "status": "queued",
-      "status_note": "2026-09-13: registered from activation c5048879 after the equivalence night refused at t0 (agent present: Ed's interactive session AND the ChatGPT app helper). Blocked on a ruling; not started. Until ruled, every notice tells Ed to quit the ChatGPT app before the plan span. 2026-09-13 (activation 24b9d3dd): RULED by cold gate packet 05 ruling 10 (option i: keep the pattern; desktop apps that bundle an agent runtime count as agents) with Opus pairing amendments A1-A3 adopted in synthesis 13; installed on branch fix/2026-09-13-night-census-desktop-apps (runbook 0.6 paragraph, successor notice sentence, one regression in tests/test_night_gate.py); closes when that PR merges.",
       "stop_card": null
     },
     "NIGHT-HANDBACK-GLOSS-01": {
@@ -6522,7 +6494,7 @@
       "acceptance": {
         "evidence": [
           "Per-module timing corpus collected on a quiet bench (the recovered Sol profiling scripts; timings.jsonl + summary.json banked under .desk/) identifying the slow tail by module and by test",
-          "Shard-runner and the ratified PR-fast/full tier split implemented from the data: the fast tier gates PRs, the FULL suite remains the gate for merges, verdicts, and audited heads; zero test deletions",
+          "Shard-runner implemented from the data; the ratified PR-fast/full tier split implemented 2026-08-23 and retired 2026-09-13 by owner acceptance; the FULL suite remains the gate for merges, verdicts, and audited heads; zero test deletions",
           "Blacksmith runner evaluation recorded with an adopt/defer recommendation and measured latency/cost comparison against GitHub-hosted runners"
         ],
         "pointer": {
@@ -6548,13 +6520,13 @@
         }
       ],
       "flags": [],
-      "goal": "Cut suite wall-clock (three Ed-ratified levers, 2026-08-03): collect per-module timing data with the recovered profiling scripts, implement the shard-runner and the PR-fast/full tier split from the data, and evaluate Blacksmith runners.",
+      "goal": "Cut suite wall-clock (three Ed-ratified levers, 2026-08-03): collect per-module timing data with the recovered profiling scripts, implement the shard-runner from the data, and evaluate Blacksmith runners.",
       "id": "TEST-SPEED-01",
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 12,
       "status": "queued",
-      "status_note": "Lever 1 (reduce memo) + lever 2 (crash-matrix parallelization, hosted-verified 23.1->6.5 min worst shard) + the ack backstop LANDED via PR #172; the exclusive crash-matrix job is no longer the CI critical path. Remaining to the <=12 min target: ordinary test shard 4 (~18 min worst) and calibration-exits-exclusive (~16.6 min); scripts/test_timings.json shard split needs re-declaration (unbalanced the other way).",
+      "status_note": "Lever 1 (reduce memo) + lever 2 (crash-matrix parallelization, hosted-verified 23.1->6.5 min worst shard) + the ack backstop LANDED via PR #172; the exclusive crash-matrix job is no longer the CI critical path. Remaining to the <=12 min target: ordinary test shard 4 (~18 min worst) and calibration-exits-exclusive (~16.6 min); scripts/test_timings.json shard split needs re-declaration (unbalanced the other way). 2026-09-13 (activation 24b9d3dd): the PR-fast/full tier split is RETIRED by owner acceptance of PR #317 (merge 73bf1754) under cold gate 17; decision-log addendum of the same date; goal and evidence row 2 amended as the addendum specifies. Lever naming: this note's lever 2 (crash-matrix parallelization) is unaffected.",
       "stop_card": null
     },
     "THREAT-MODEL-PRUNE-01": {

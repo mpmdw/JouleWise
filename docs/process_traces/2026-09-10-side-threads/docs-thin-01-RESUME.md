@@ -290,3 +290,5 @@ docs/tables/T2.md
 ```
 
 2026-09-13 FIX round 1: sibling RESUME-2026-07-26 archived by the lead at the bench (`git mv`, 13,223 bytes, README row + totals 309 -> 310 files; the seat's sandbox could not write the shared `.git` index); three live pointers repaired: docs/paper/results-fill-registry.md:132, docs/project_critique_review.html:880, docs/specs/axi/sb_static_batch_verdict.md:200; base for review is `a4bb8838`. Delta re-audit 11 (activation 24b9d3dd) found the round's edits unstaged in the first commit (cured in the second) and three more living citations of the sibling in docs/process/model_allocation_ledger.md (repaired in the third); docs/site/*.html are generated pages of the retired site lane (D-136) and are left as they are.
+
+2026-09-13 (activation 24b9d3dd): DOCS-THIN-01 MERGED as PR #329 (merge `64fc4e27`, head `58bf4a23`). Thread CLOSED.
