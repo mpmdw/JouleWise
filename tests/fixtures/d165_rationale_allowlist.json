@@ -55,7 +55,7 @@
   },
   {
     "path": "docs/paper/draft-v2-skeleton.md",
-    "line": 1459,
+    "line": 1525,
     "phrase": "common-time",
     "reason": "Unrelated Figure-A2 ABBA drift schematic caption: the common-time line illustrates cancellation of steady drift, not D-165 timing robustness."
   },
