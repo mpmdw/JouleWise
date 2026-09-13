@@ -197,7 +197,7 @@ field to alter `supported` or either `unsupported_for_joulewise(...)` code.
 ## Current evidence and verdict
 
 Attached live probe outputs (lead-run 2026-07-16, Metal live, repo venv):
-`docs/process_traces/2026-07-16-axi-sb-live-probes/axi-sb-b2.jsonl`
+`docs/legacy/process_traces/2026-07-16-axi-sb-live-probes/axi-sb-b2.jsonl`
 (SHA-256 `ba632327dd16940b42d017600f7c7864a2dc8c8ee7a81a2cf072af249ee9f612`)
 and `.../axi-sb-b4.jsonl`
 (SHA-256 `e0e5804dacc1270ee94561988314274fcda1b4159e3e2b2cb436ea448616951b`),

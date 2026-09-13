@@ -205,7 +205,7 @@ docs/paper/results-fill-registry.md
 docs/paper/round7/anchor-correction-quantified.json
 docs/paper/round7/dg071-dg075-statistics.json
 docs/paper/round7/excursion-decomposition.json
-docs/paper/round7/excursion-decomposition.json --svg 
+docs/paper/round7/excursion-decomposition.json --svg
 docs/paper/round7/retensing-plan.md
 docs/paper/round7/structural-edits.md
 docs/paper/round7/successor-migration-inventory.md
@@ -222,13 +222,13 @@ docs/process_traces/
 docs/process_traces/2026-07-15-axi-xhigh-consult/response.md
 docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json
 docs/process_traces/2026-07-24-diagnostic-extraction/
-docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md 
+docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md
 docs/process_traces/2026-08-09-prefill-phase-proof/results.json
 docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md
 docs/process_traces/2026-08-28-live-smoke/preflight.sh
 docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md
 docs/process_traces/2026-08-30-prefill-margin-coldgate/
-docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the 
+docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the
 docs/process_traces/2026-08-30-t28-estate11/estate-12-anchor-spec.json
 docs/process_traces/2026-09-02-coldgate-dx-t26a/MAGISTRATE-RULING-coldgate-dx-t26a.md
 docs/process_traces/2026-09-02-process-rules/
@@ -288,3 +288,5 @@ docs/stop_cards/fixture-active.md
 docs/tables
 docs/tables/T2.md
 ```
+
+2026-09-13 FIX round 1: sibling RESUME-2026-07-26 archived by the lead at the bench (`git mv`, 13,223 bytes, README row + totals 309 -> 310 files; the seat's sandbox could not write the shared `.git` index); three live pointers repaired: docs/paper/results-fill-registry.md:132, docs/project_critique_review.html:880, docs/specs/axi/sb_static_batch_verdict.md:200; base for review is `a4bb8838`.

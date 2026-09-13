@@ -17,11 +17,11 @@ Old links inside historical documents were not rewritten because rewriting a his
 
 ## Nothing was deleted
 
-309 files moved, totaling 83,121,775 bytes (79.27 MiB, where 1 MiB = 1,048,576 bytes); every byte is preserved, and every move is a Git rename, so `git log --follow` still works.
+310 files moved, totaling 83,134,998 bytes (79.28 MiB, where 1 MiB = 1,048,576 bytes); every byte is preserved, and every move is a Git rename, so `git log --follow` still works.
 
 ## What moved
 
-Counts and sizes describe the files moved in `f6aed467`, excluding this new guide; sizes are file bytes, not disk allocation.
+Counts and sizes describe the files moved in `f6aed467` plus the one sibling restart record moved in the 2026-09-13 fix round, excluding this new guide; sizes are file bytes, not disk allocation.
 
 | Old path | New path | Files | Size | What it is |
 |---|---|---:|---:|---|
@@ -35,6 +35,7 @@ Counts and sizes describe the files moved in `f6aed467`, excluding this new guid
 | `docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl` | `docs/legacy/process_traces/2026-07-13-bridge-v11.manifest.jsonl` | 1 | 10,871 bytes | Index of automated-session invocations and their outputs. |
 | `docs/process_traces/2026-07-26-prereg-clock-mitigation.md` | `docs/legacy/process_traces/2026-07-26-prereg-clock-mitigation.md` | 1 | 8,742 bytes | Past plan for handling clock changes during measurements. |
 | `docs/process_traces/2026-08-08-t1-consistency-sweep.md` | `docs/legacy/process_traces/2026-08-08-t1-consistency-sweep.md` | 1 | 12,770 bytes | Past check for disagreements among project documents. |
+| `docs/process_traces/RESUME-2026-07-26.md` | `docs/legacy/process_traces/RESUME-2026-07-26.md` | 1 | 13,223 bytes | Past session restart instructions. |
 | `docs/process_traces/RESUME-2026-07-27.md` | `docs/legacy/process_traces/RESUME-2026-07-27.md` | 1 | 11,259 bytes | Past session restart instructions. |
 | `docs/process_traces/RESUME-2026-07-28.md` | `docs/legacy/process_traces/RESUME-2026-07-28.md` | 1 | 11,927 bytes | Past session restart instructions. |
 | `docs/research_question_coverage-2026-08-28.md` | `docs/legacy/research_question_coverage-2026-08-28.md` | 1 | 55,643 bytes | Past mapping of research questions to planned measurements and retained evidence. |
