@@ -3,7 +3,7 @@
 - Date opened: 2026-07-16
 - Runtime pin: `mlx-lm==0.31.3`, `mlx==0.31.2`
 - Verdict: **`supported`** (2026-07-16, lead-run live probes at B=2 and B=4;
-  evidence: `docs/process_traces/2026-07-16-axi-sb-live-probes/`)
+  evidence: `docs/legacy/process_traces/2026-07-16-axi-sb-live-probes/`)
 - Source-level feasibility: **`feasible_candidate`**
 - Memory-fit range: fit at B=2 (peak 968,744,980 B) and B=4
   (peak 1,034,368,392 B) for Qwen2.5-1.5B-Instruct-4bit at 8 max tokens; no
