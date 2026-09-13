@@ -4,7 +4,7 @@
 - Runtime pin: `mlx-lm==0.31.3`, `mlx==0.31.2`
 - Verdict: **`unsupported_for_joulewise`** (2026-07-17, lead-run live probes;
   external-draft: `event_observability`; native MTP: `native_mtp_generation`;
-  evidence + SHA-256: `docs/process_traces/2026-07-17-axi-sc-live-probes/`).
+  evidence + SHA-256: `docs/legacy/process_traces/2026-07-17-axi-sc-live-probes/`).
   Filed per the Hailo idiom as a dated applicability finding: the Mac
   spec-decode energy leg is NOT minted on pinned mlx-lm 0.31.3. External
   draft is revisited only after a pinned-runtime upgrade exposes an exercised
@@ -277,7 +277,7 @@ Historical lead-closeout checklist (**completed 2026-07-17**):
 The earlier `PENDING-LIVE`, missing-draft, and sandbox-only text above is
 history retained with explicit supersession. The lead-run Metal artifacts and
 their hashes are attached under
-`docs/process_traces/2026-07-17-axi-sc-live-probes/`.
+`docs/legacy/process_traces/2026-07-17-axi-sc-live-probes/`.
 
 1. **Does the exact external target/draft pair execute? — Yes.**
    `axi-sc-mlx-draft.jsonl` records the requested Qwen2.5-1.5B target and

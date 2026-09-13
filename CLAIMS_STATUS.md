@@ -65,7 +65,7 @@ under the issued acceptance regime, with prefill floor cells riding
 both floor windows. Prior "re-mint conditions" in this file are
 historical: D-109 landed (PR #100), issuance executed (D-116, PR #109),
 validator pin widening landed (PR #105). Full record:
-`docs/process_traces/2026-08-06-d110-remint-fork/`.)
+`docs/legacy/process_traces/2026-08-06-d110-remint-fork/`.)
 
 Earlier header (2026-08-03 night, for the record): D-108/D-109 ruled +
 executed; D-110 made mint #1 retroactively NON-CLAIM-BEARING; window B
@@ -158,7 +158,7 @@ default consumption. Outcomes per window:
   collection-time clock-anchor failure (`native_intersection_empty`). The cold
   gate ruled that this was CORRECT fail-closed machinery (classification (i),
   convergent instruments; record
-  `docs/process_traces/2026-08-03-winB-reeval-stop/`). No licensed channel can
+  `docs/legacy/process_traces/2026-08-03-winB-reeval-stop/`). No licensed channel can
   remove r06: the exclusion cap was spent on r08, it is not a dangling
   occurrence, and waivers are forbidden. The NEG-8 drift bound also expired
   2026-08-02, so no PASS path exists under the license as drawn. The original
