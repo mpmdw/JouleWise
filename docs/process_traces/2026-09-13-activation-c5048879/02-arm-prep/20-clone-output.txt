@@ -1,0 +1,24 @@
+Cloning into '/Users/edr/JouleWise-measurement-20260915-derivation'...
+Updating files:  90% (6362/7002)Updating files:  91% (6372/7002)Updating files:  92% (6442/7002)Updating files:  93% (6512/7002)Updating files:  94% (6582/7002)Updating files:  95% (6652/7002)Updating files:  96% (6722/7002)Updating files:  97% (6792/7002)Updating files:  98% (6862/7002)Updating files:  99% (6932/7002)Updating files: 100% (7002/7002)Updating files: 100% (7002/7002), done.
+HEAD is now at 27957b60 Handback H for d079-epoch-25g83-derivation-n1-20260915: successor equivalence night (t0 2026-09-15 02:56 PDT), inventory row JouleWise-measurement-20260915-derivation
+https://github.com/mpmdw/JouleWise
+Python 3.13.1
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: /Users/edr/JouleWise-measurement-20260915-derivation/.venv/bin/python -m pip install --upgrade pip
+WARNING: The candidate selected for download or install is a yanked version: 'charset-normalizer' candidate (version 3.4.8 at https://files.pythonhosted.org/packages/11/49/fe5a8572a70cd9cba79f80af9388ac8c5c914ed4459b956f940244e499a5/charset_normalizer-3.4.8-cp313-cp313-macosx_10_13_universal2.whl (from https://pypi.org/simple/charset-normalizer/) (requires-python:>=3.7))
+Reason for being yanked: <none given>
+
+[notice] A new release of pip is available: 24.3.1 -> 26.2.1
+[notice] To update, run: /Users/edr/JouleWise-measurement-20260915-derivation/.venv/bin/python -m pip install --upgrade pip
+--- /dev/fd/11	2026-09-13 05:50:40
++++ /dev/fd/12	2026-09-13 05:50:40
+@@ -15,6 +15,7 @@
+ httpx==0.28.1
+ huggingface_hub==1.22.0
+ idna==3.18
++joulewise==0.1.0
+ markdown-it-py==4.2.0
+ mdurl==0.1.2
+ mlx-lm==0.31.3
+clone rc=1
