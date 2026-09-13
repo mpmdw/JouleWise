@@ -12,8 +12,9 @@ concurrency:
 
 jobs:
   # F2 state generation, F3 explicit docs freshness, F4 historical receipt
-  # semantics, and F5 CLI/strict mock smokes run once here, deliberately
-  # ungated on every push and pull request, including docs-only changes.
+  # semantics, and F5 CLI/strict mock smokes ran identically inside every
+  # matrix job; they run once here instead. Every job below runs on every
+  # push to main and every pull request.
   fences:
     runs-on: ubuntu-latest
     steps:
