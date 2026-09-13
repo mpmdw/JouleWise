@@ -46,8 +46,10 @@ fired on 2026-09-13 and was refused at its own t0 census (an interactive
 `claude` session and the ChatGPT desktop app's Codex helper were alive; see
 §Executed below). Same purpose, same rule, same chain and pre-registration;
 its own plan id, session id, night root, desk inputs and wrapper. Precondition
-that only the operator can meet: no interactive agent session and no ChatGPT
-desktop app alive from the plan span (02:31 PDT on 2026-09-15) through t0.
+that only the operator can meet: no interactive agent session, no ChatGPT
+desktop app and no Claude desktop app (quit both apps from their menu bar; a
+running app refuses the night, so no chain starts) alive from the plan span
+(02:31 PDT on 2026-09-15) through t0.
 
 Plan `d079-epoch-25g83-derivation-n1-20260915`, class `DIAGNOSTIC_NO_PACK`,
 is planned for 2026-09-15 at 02:56:00 PDT (`t0`, epoch 1789466160) with a

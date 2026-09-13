@@ -587,6 +587,21 @@ supervisor's cooperative ladder enforces it: `standdown.request` at
 `t0 − 25 min`, TERM no later than `t0 − 16 min`, KILL no later than
 `t0 − 15 min` (`docs/process/MAGISTRATE_WATCHDOG.md`, §"Fence and deadlines", the boundary table).
 
+Desktop apps that bundle an agent runtime — a shipped command-line agent
+binary that the app runs as a local server — count as agents. The ChatGPT
+desktop app runs the Codex CLI as `codex … app-server`, and both it and the
+Claude desktop app run helper processes (the child processes an app starts
+for its windows, network and services) whose argv (the command line a process
+was started with) contains `codex` or `claude`; the census matches those
+helpers (it does not match the apps' own top-level processes, which are named
+`ChatGPT` and `Claude`). Quit both apps before the plan span and keep them
+quit through t0. An app still running at t0 refuses the night — the gate
+records a refusal and no measurement chain starts; that refusal is correct.
+
+The coded census that the t0 gate and a pack night's arm both run
+(`pgrep -lf codex|claude|t3`) matches those helper processes; that is the
+ruled behaviour, and the pattern is not narrowed to exclude them.
+
 Before the arm census, stop all own seats, delegated tasks and background jobs
 using the activation's real task controls; record the task IDs and results and
 invent none. Then inspect and classify by ancestry:
