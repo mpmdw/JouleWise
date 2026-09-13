@@ -5,90 +5,12 @@ on:
     branches: [main]
   pull_request:
 
-# A queued run is replaced by a newer run in the same group, so only PRs share a group.
-# Docs-only baseline cost was about 1.5 minutes before the docs-readers fence.
+# Pushes get a per-run group so nothing can evict a queued run; PRs share a ref group and cancel superseded runs.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Docs-only paths are selected by classify_path below; docs-resident code
-  # still runs the full matrix. Fail open on any ambiguity: a redundant full
-  # run costs minutes; a false skip loses a fence.
-  # F2-F5 remain unconditional in fences; build and installed-wheel also remain.
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      code: ${{ steps.detect.outputs.code || 'true' }}
-    steps:
-      # Checkout/detector errors must not block the heavy jobs via needs.
-      - uses: actions/checkout@v5
-        continue-on-error: true
-        with:
-          fetch-depth: 0
-      - name: Classify changed paths (fail open)
-        id: detect
-        continue-on-error: true
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          classify_path() {
-            # Under docs/, code extensions are .py .sh .zsh .bash .json .jsonl
-            # .plist .toml .yaml .yml .cfg .ini; extensionless files are code too.
-            case "$1" in
-              docs/*)
-                case "${1##*/}" in
-                  *.py|*.sh|*.zsh|*.bash|*.json|*.jsonl|*.plist|*.toml|*.yaml|*.yml|*.cfg|*.ini)
-                    echo code ;;
-                  *.) echo code ;;
-                  ?*.*) echo docs ;;
-                  *) echo code ;;
-                esac
-                ;;
-              */*) echo code ;;
-              *.md) echo docs ;;
-              *) echo code ;;
-            esac
-          }
-          paths=$(mktemp)
-          trap 'rm -f "$paths"' EXIT
-          diff_ok=false
-          case "$EVENT_NAME" in
-            pull_request)
-              if [ -n "$BASE_REF" ] &&
-                 git fetch origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF" &&
-                 git diff --no-renames --name-only -z "origin/$BASE_REF...HEAD" -- > "$paths"; then
-                diff_ok=true
-              fi
-              ;;
-            push)
-              if [ -n "$BEFORE_SHA" ] && [ -n "$HEAD_SHA" ] &&
-                 [ "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ] &&
-                 git diff --no-renames --name-only -z "$BEFORE_SHA" "$HEAD_SHA" -- > "$paths"; then
-                diff_ok=true
-              fi
-              ;;
-          esac
-          code=true
-          if [ "$diff_ok" = true ] && [ -s "$paths" ]; then
-            code=false
-            # NUL boundaries preserve unusual names; disabling renames includes
-            # the old code path when a file is moved into a docs-only location.
-            while IFS= read -r -d '' path; do
-              kind=$(classify_path "$path")
-              printf '%s: %q\n' "$kind" "$path"
-              if [ "$kind" = code ]; then code=true; fi
-            done < "$paths"
-          else
-            echo 'Diff unavailable, empty, or ambiguous; running the full matrix.'
-          fi
-          echo "code=$code"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-
   # F2 state generation, F3 explicit docs freshness, F4 historical receipt
   # semantics, and F5 CLI/strict mock smokes run once here, deliberately
   # ungated on every push and pull request, including docs-only changes.
@@ -122,79 +44,7 @@ jobs:
           python -m joulewise reduce "$bundle"
           python -m joulewise validate-bundle --strict "$bundle"
 
-  # FENCE for documentation-asserting tests on docs-only runs.
-  # This job never substitutes for the full suite.
-  # The module list is derived at run time from documentation paths in test source.
-  docs-readers:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'true' }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-      - name: Compile Python sources
-        run: python -m compileall -q joulewise tests
-      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
-        run: |
-          # Tests require /bin/zsh: /usr/bin/zsh without that symlink is insufficient.
-          if [ ! -x /bin/zsh ]; then
-            sudo apt-get update -q
-            sudo apt-get install -y -q zsh
-          fi
-          test -x /bin/zsh
-      - name: Documentation-reading unit tests
-        env:
-          SHARD_INDEX: ${{ matrix.shard }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          import re
-          import sys
-
-          sys.path.insert(0, "scripts")
-          import shard_tests
-
-          payload = json.loads(Path("scripts/test_timings.json").read_text())
-          exclusive = frozenset(payload["exclusive_modules"])
-          timings = shard_tests.load_timing_map()
-          unknown = shard_tests.conservative_unknown_weight()
-          doc_path = re.compile(r"[\"'](docs/|README\.md|RUN_STATE\.md|TASK_QUEUE\.md|AGENTS\.md|AGENT_PLAN\.md)")
-          sources = sorted(Path("tests").glob("test_*.py"))
-          selected = tuple(
-              f"tests.{path.stem}"
-              for path in sources
-              if f"tests.{path.stem}" not in exclusive
-              and doc_path.search(path.read_text(encoding="utf-8"))
-          )
-          print(f"DOCS READERS selected={len(selected)} of {len(sources)}")
-          print("\n".join(sorted(selected)))
-          if not selected:
-              raise SystemExit("docs readers selected zero modules; refusing to report success")
-
-          partitions = shard_tests.partition_modules(
-              selected, timings, 2, unknown_weight=unknown
-          )
-          totals = shard_tests.partition_totals(
-              partitions, timings, unknown_weight=unknown
-          )
-          print("DOCS READERS SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
-          index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
-          PY
-
   test:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -283,8 +133,6 @@ jobs:
           PY
 
   calibration-exits-exclusive:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     # Exclusive by design: this module already runs sequentially internally;
     # colocating it with an ordinary shard only adds scheduler starvation.
     # The module watchdog ceiling is 10 minutes per child and this hosted job
@@ -319,8 +167,6 @@ jobs:
         run: python -m unittest -v tests.test_calibration_exits
 
   calibration-writer-crash-matrix-exclusive:
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     # Exclusive because fallback-weight shard placement is unsound for this
     # module: its hosted runtime is dominated by its own subprocess-heavy
     # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
