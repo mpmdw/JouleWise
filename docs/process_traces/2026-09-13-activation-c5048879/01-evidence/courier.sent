@@ -1,0 +1,10 @@
+{
+  "message_id": "1a09a3319d602a37",
+  "thread_id": "1a09a3319d602a37",
+  "to": "claude.ai.copper531@passmail.net",
+  "sent_epoch_s": 1789293446,
+  "courier_pid": 3777,
+  "verdict": "REFUSED",
+  "aborted_reason": "night_refused_agent_present",
+  "results_branch": "night-results/20260913"
+}

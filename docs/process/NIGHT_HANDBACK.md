@@ -181,6 +181,27 @@ is armed; this file's §Purpose / §Where the results are / §Next lane still
 describe this completed night until the magistrate rewrites them for the
 next plan.
 
+## Executed — d079-epoch-25g83-derivation-n1-20260913 (2026-09-13)
+
+The night fired and was REFUSED at the gate. Launchd started the driver at
+02:56:02 PDT from the clone at H `f90cb8c0`; gate verdict `REFUSED`, reason
+`night_refused_agent_present` (census `pgrep -lf codex|claude|t3` exit 0:
+Ed's interactive `claude` session pid 24974 with its two Codex MCP servers,
+and the ChatGPT desktop app's Codex helper); no chain started
+(`chain_exit_code` null), no ledger session opened, nothing captured;
+`launchd.night.err` EMPTY; results branch `night-results/20260913` at
+`e2dd56d5`; courier email `1a09a3319d602a37`. Per §Next lane this refusal
+kind is correct behaviour and the night is re-planned, never re-armed.
+Harvest per runbook §2.0–§2.2, byte-exact preservation with an `lstat`
+inventory, and the §2.5 tool's refusal (`session … is not in the ledger`,
+rc 3) are in
+[record 01](../process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md).
+Both agents were uninstalled FROM the clone at 05:39:52 PDT (rc 0); the
+clone and the night root are RETAINED. RECORD: harvest and uninstall for this
+night are complete; nothing is armed; the successor plan is
+`d079-epoch-25g83-derivation-n1-20260915` once this file's §Purpose /
+§Where the results are / §Next lane are rewritten for it.
+
 ## Where the results are
 
 - Custody root: `/Users/edr/night-custody/d079-epoch-25g83-derivation-n1-20260913`;
