@@ -15,3 +15,5 @@ Post-review commit after refuter 20 (`cda6b727`): `92408a18` — the three gloss
 
 ## Row 12 (terminal review)
 Merge candidate `92408a18`. Authority chain: kernel lane (ruling-first) → cold gate packet 05 ruling 10 → Opus pairing refuter 12 (AMEND) → synthesis 13 (amendments adopted; gloss addendum recorded) → refuter 20 → this review. Nothing in the diff amends a process rule: the ruled behaviour is the existing behaviour, now stated and pinned. Verdict: LANDABLE once row 9 (replay at `92408a18`) and row 11 (CI) are green.
+
+**Addendum (07:35 PDT):** main moved to `64fc4e27` (PR #329); merge `f8bcccb2` = `92408a18` + main, zero conflicts, `git diff 92408a18..f8bcccb2 --stat` = main's own 334 archive files, none touched by this PR. Merge candidate is now `f8bcccb2`; row 9 is the replay on the integration tree `ee82373b` (= #317's `c59bdc57` + this head).
