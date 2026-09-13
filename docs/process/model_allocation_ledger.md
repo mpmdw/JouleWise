@@ -93,7 +93,7 @@ Operationally:
   decision wanting apex judgment. **This supersedes the 2026-07-25 standing
   rule that Fable be consulted in parallel on every major/design-bearing
   question** (that rule is still written into
-  `docs/process_traces/RESUME-2026-07-26.md` §7 "Working model", which
+  `docs/legacy/process_traces/RESUME-2026-07-26.md` §7 "Working model", which
   therefore now records a superseded instruction — see §6, anomaly A-9).
 - **Sol remains the unlimited execution workhorse** — enforced
   `WRITE_SCOPE` implementation, runnable probes, audited envelopes.
@@ -217,7 +217,7 @@ in this repo.
 | Severity adjudication and split-verdict synthesis | **lead-bench** | L-027, L-034, L-040; the split-verdict rule ("synthesize from both evidence chains, never majority-vote") is doctrine from `~/.claude/skills/adversarial-review/SKILL.md` §C-028 | **strong** |
 | **Adjudicating a PRE-ASSEMBLED question** (the facts are gathered; what is wanted is judgment) | **Fable** | L-039: 21k tokens, **zero tool uses**, 108 s, overturned the lead's own self-diagnosis of the lead's own failure, produced a better rule set than the lead had drafted, found failure modes the lead missed, and declined its own promotion | **provisional but strong for a single datum** — and it isolates the variable: with zero retrieval, the entire yield is judgment. Distinct from "gather then judge", which remains **untested** for Fable |
 | Refusing to weaken a gate to make a run succeed | **lead-bench only** | L-040 catches (3) and (4): full restart over resume because resuming would mint a second pre-calibration that `latest_calibration()` would silently select; refusal to raise `--max-failures` when that would have "fixed" failures by accepting corrupted members | **strong — and structurally undelegatable.** A delegated layer asked to make a run succeed has no standing to decide the run should not |
-| Merge decision | **lead** under D-072 (full gate shape), with Ed naming the merge when the harness declines agent self-merge | `docs/process_traces/RESUME-2026-07-26.md` §6 (D-072); C-032/bridge (Ed named PR #65 after the harness declined); C-036 (3 self-merges under Ed's in-session delegation) | **strong** |
+| Merge decision | **lead** under D-072 (full gate shape), with Ed naming the merge when the harness declines agent self-merge | `docs/legacy/process_traces/RESUME-2026-07-26.md` §6 (D-072); C-032/bridge (Ed named PR #65 after the harness declined); C-036 (3 self-merges under Ed's in-session delegation) | **strong** |
 | Multi-stream orchestration by subagent directors | **retired** — lead-driven pipelines are the default | C-010 ("lead-driven pipelines validated, zero stalls, no subagent directors"); C-006 interventions I-1/I-2 | **strong (negative result)** |
 | Redundant same-lens refutation by Opus | **retired at C-006, re-scoped at C-045** | L-001 (0 unique catches) vs L-031; the C-045 amendment states plainly that C-006 measured Opus as a *redundant* lens, not a *distinct* one | **provisional** — the reconciliation is an argument, not a measurement |
 | Visual / image analysis | **Sol (Codex)** by Ed's standing doctrine (C-012, 2026-07-08) | `~/.claude/skills/codex-delegation/SKILL.md` §Specialties "Visual/image analysis is a Codex specialty" | **untested in this ledger** — doctrine recorded, no attributed catch ledger |
@@ -392,7 +392,7 @@ informal evidence, not on the evidence standard the project wrote for
 itself. Do not record it as doctrine-promoted until the sealed A/B in
 §5 Q1 has actually been run.
 
-**A-9 — `docs/process_traces/RESUME-2026-07-26.md` §7 records a
+**A-9 — `docs/legacy/process_traces/RESUME-2026-07-26.md` §7 records a
 superseded instruction, and two Fable claims the repo does not
 corroborate.** §7 states Ed's 2026-07-25 standing instruction to consult
 Fable "on any major problem or decision… not only as a final check" — the

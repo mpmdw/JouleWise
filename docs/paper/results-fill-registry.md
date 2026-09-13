@@ -129,7 +129,7 @@ Every row cites one or more of these defining sources:
   and `docs/process_traces/2026-09-04-peer-audit/43-magistrate-synthesis-gate-17.md`,
   Q-17-1: the ratified pinned desk-script enclosure and its appendix DERIVE row.
 - `PLAN` —
-  `docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`, which names
+  `docs/legacy/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`, which names
   alpha and beta as four-cell floor producers and gamma as the prospective
   contrast producer. Its decode-only gamma description is superseded by
   D-122.

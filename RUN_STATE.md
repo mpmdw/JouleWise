@@ -4,7 +4,7 @@ This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;
 policy lives in `docs/decision_log.md`. The three dated restart docs
-`docs/process_traces/RESUME-2026-07-26.md`, `RESUME-2026-07-27.md`, and
+`docs/legacy/process_traces/RESUME-2026-07-26.md`, `RESUME-2026-07-27.md`, and
 `RESUME-2026-07-28.md` are now point-in-time session records only — each
 carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
