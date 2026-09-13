@@ -191,7 +191,7 @@ Implemented the requested trim in [ci.yml](/Users/edr/code/JouleWise-wt-ci-trim/
 
 1. **T1:** Added ungated `fences` with full checkout and Python 3.11. It owns F2–F5, including explicit `tests.test_docs_freshness`. Removed the corresponding commands from `test`; retained per-interpreter compileall and the full shard selection.
 2. **T2:** Added Git-only `changes` detection and gated all three heavy job families. Only `docs/**` and top-level `*.md` classify as docs. Empty, failed, missing-base, zero-SHA, and unsupported-event cases run everything. Checkout/detector step failures also default the job output to `true`.
-   
+
    PR fetching explicitly updates `origin/<base>` before the merge-base diff. NUL-delimited paths preserve unusual filenames; `--no-renames` ensures moving code into `docs/` still counts the deleted code path. Successful classifications log every path and the decision.
 3. **T3:** Deleted both `pr-fast` matrix executions and their header. No executable dependency on that job was found.
 4. **T4:** Guarded apt installation with `/bin/zsh` executability and retained the final `test -x /bin/zsh`. The comment explains why `/usr/bin/zsh` alone is insufficient.
