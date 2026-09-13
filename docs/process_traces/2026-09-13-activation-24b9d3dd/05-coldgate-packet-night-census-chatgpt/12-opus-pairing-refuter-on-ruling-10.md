@@ -5,10 +5,9 @@ file edited. Tests ran in a throwaway copy under `/tmp/cg-refuter` (removed).
 
 ## VERDICT: AMEND
 
-The ruled option (i) is **correct and I affirm it**, and the regression test
-**passes at HEAD and fails under both narrowings** (§2). Three amendments are
-required before the text is installed, plus one correction to the ruling's
-reason paragraph.
+Option (i) is **correct and I affirm it**; the regression test **passes at HEAD
+and fails under both narrowings** (§2). Three amendments before the text is
+installed, plus one correction to the reason paragraph.
 
 **A1 — NIGHT_HANDBACK replacement is ungrammatical as written.** Target
 sentence, `docs/process/NIGHT_HANDBACK.md:48-50`: "Precondition that only the
@@ -58,33 +57,30 @@ The coded census that the t0 gate and a pack night's arm both run
 ruled behaviour, and the pattern is not narrowed to exclude them.
 ```
 
-**A4 — correction to the reason paragraph (no installed text).** "the arm-time
-probe uses the same literal and already refuses on the app (Exhibit B), so a
-by-name class would only relabel a refusal that already happens" is true only
-for `TRANSACTION_PACK` nights. See §5/§6.
+**A4 — reason paragraph only (no installed text).** "the arm-time probe … 
+already refuses on the app …, so a by-name class would only relabel a refusal
+that already happens" holds only for `TRANSACTION_PACK` nights (§5).
 
 ## 1. Factual claims checked
 
 All verified at `27957b60` unless marked live.
 
-- `AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "codex|claude|t3")` —
-  `joulewise/night_gate.py:42`. Correct.
-- `agent_census` refuses on any non-empty census output —
-  `night_gate.py:498-524`; clean only on `exit_code == 1 and
-  stdout.strip() == ""` (`:515-516`). Correct.
+- `AGENT_CENSUS_ARGV = ("/usr/bin/pgrep", "-lf", "codex|claude|t3")` at
+  `joulewise/night_gate.py:42`; `agent_census` (`:498-524`) refuses on any
+  non-empty output, clean only on `exit_code == 1` with empty stdout
+  (`:515-516`). Correct.
 - Helpers `result` (`tests/test_night_gate.py:23`) and `FakeProbeSource`
   (`:61`, `probes()` at `:124`) match the proposed test's use; the neighbour
   test is at `:355` in class `NightGateTests` (`:286`). Correct.
 - Runbook §0.6 heading `derivation_night_runbook.md:582`; "`[QUIET-MAC]` nights
   are agent-free." at `:584` — but it opens a paragraph continuing on the same
-  line, so "inserted after" it is ambiguous; A2/A3 go in as a new paragraph
-  after that paragraph (ends `:588`).
+  line, so "inserted after" is ambiguous; A2/A3 go in after that paragraph
+  (ends `:588`).
 - NIGHT_HANDBACK sentence at `:46-50`, quoted correctly — though it is the live
   successor plan's own notice, not the reusable "template" the ruling calls it.
 - `t0_rehearsal.py:52` `_AGENT_TOKEN_RE = (?:^|[/\s])(codex|claude|t3)(?:[/\s]|$)`,
-  `re.I`, used at `:906`. The ruling's claim that it matches the app-server
-  argv and `Codex (Service)` is correct (executed: both `True`). See §6 for
-  what it misses.
+  `re.I`, used at `:906`; the ruling's claim that it matches the app-server argv
+  and `Codex (Service)` is correct (executed: both `True`). §6 for the miss.
 - `tests/test_night_gate.py:296` pins the t0 literal
   (`test_production_argv_constants_match_the_t0_author_literals`; the ruling
   cites `:298`, the assert body). `tests/test_arm_readiness_evidence_t0.py:2509`
@@ -94,16 +90,15 @@ All verified at `27957b60` unless marked live.
 ## 2. The proposed test, run exactly as written
 
 Dropped verbatim into a `/tmp` copy of the tracked file beside the neighbour
-test; `joulewise/` copied too for the narrowing simulations. Interpreter
-`/Users/edr/code/JouleWise/.venv/bin/python3`. At HEAD:
+test; `joulewise/` copied too for the narrowings. At HEAD:
 
 ```
 test_a_desktop_app_bundled_agent_server_refuses_the_census ... ok
 Ran 1 test in 0.000s / OK
 ```
 
-Whole module with the test added: `Ran 59 tests in 0.110s / OK` — the reason-code
-coverage test at `:1041` is unaffected.
+Whole module with it added: `Ran 59 tests in 0.110s / OK` (the reason-code
+coverage test at `:1041` is unaffected).
 
 Narrowing (a), literal → `"codex mcp-server|codex exec|claude|t3"`:
 
@@ -124,13 +119,13 @@ FAILED (errors=1)
 
 Defect-shaped against both narrowing routes. Confirmed.
 
-## 3. Writing standard on the three ruled sentences
+## 3. Writing standard on the ruled sentences
 
-Failures found, all cured by A1-A3: (a) the NIGHT_HANDBACK text does not read
-as English once substituted (A1); (b) "agent runtime" is a term of art used
-undefined, and "both match the census" is false for the processes an operator
-would look for in Activity Monitor (A2); (c) "agent probe" is undefined at its
-insertion site and the site is the wrong paragraph (A3). No checkout-dependent
+All cured by A1-A3: (a) the NIGHT_HANDBACK text does not read
+as English once substituted (A1); (b) "agent runtime" is used undefined, and
+"both match the census" is false for the processes an operator would look for
+in Activity Monitor (A2); (c) "agent probe" is undefined at its insertion site,
+which is also the wrong paragraph (A3). No checkout-dependent
 claim was found: all three land in tracked files, and the `27957b60` line
 numbers the ruling cites never enter the installed text.
 
@@ -162,25 +157,25 @@ applied unconditionally to all four probes including `browser` (`:1725`,
 `required_row_ids` of all three plan profiles ALPHA/BETA/GAMMA
 (`configs/arm_readiness/d117_row_registry_v2.json`, verified by parse).
 
-The live browser probe returned rc=0 with, among others,
-`995 …/SafariBookmarksSyncAgent`, `1457/24791/25700 …SafariPlatformSupport…Helper`,
-`1794 …com.apple.Safari.SafeBrowsing.Service`, `3644 …/SafariLaunchAgent` — all
-system XPC services, present with no Safari window open.
+The live browser probe returned rc=0 with `995 …/SafariBookmarksSyncAgent`,
+`1457/24791/25700 …SafariPlatformSupport…Helper`, `1794 …Safari.SafeBrowsing.
+Service`, `3644 …/SafariLaunchAgent` and more — system XPC services, present
+with no Safari window open.
 
 So: **yes, today, for `TRANSACTION_PACK` plans only.**
 `author_arm_readiness_evidence_t0` is reached from `scripts/run_night.py:1509`
 inside the `is_pack = plan.receipt_class == "TRANSACTION_PACK"` branch
-(`:1498-1511`), and from the desk entry point
-`scripts/author_arm_evidence_t0.py:43` whenever run. `DIAGNOSTIC_NO_PACK` (the
-09-15 successor's class) and `REHEARSAL_STUB` never reach it at t0. Register
-the lane: the first pack night refuses on Apple's own Safari daemons unless the
-browser class is made ancestry- or bundle-aware.
+(`:1498-1511`), and from desk entry point `scripts/author_arm_evidence_t0.py:43`
+whenever run. `DIAGNOSTIC_NO_PACK` (the 09-15 successor's class) and
+`REHEARSAL_STUB` never reach it at t0. Register the lane: the first pack night
+refuses on Apple's own Safari daemons unless the browser class is made
+ancestry- or bundle-aware.
 
 ## 6. What else the ruling gets wrong
 
-- **Q2 under-reads the divergence it checked.** The three matchers already
-  disagree on live processes, not only in theory. `codex-run-v3` (one seat was
-  in the ruling's own live pgrep output) matches `pgrep -lf codex|claude|t3`
+- **Q2 under-reads the divergence it checked.** The matchers already disagree
+  on live processes. `codex-run-v3` (a seat was in the ruling's own live
+  output) matches `pgrep -lf codex|claude|t3`
   but **not** `_AGENT_TOKEN_RE` (executed: `False` — `codex-` fails the
   `[/\s]|$` boundary); conversely `/Applications/Claude.app/Contents/MacOS/Claude`
   matches the regex (case-insensitive) but not case-sensitive pgrep. I still
@@ -197,8 +192,7 @@ browser class is made ancestry- or bundle-aware.
 
 ## Executed probes
 
-Live `pgrep -lf "codex|claude|t3"` and the `Safari|Google Chrome|Chromium|
-Firefox|browser automation` probe; `ps -axo pid,ppid,command` for 25633/29809/
-29816; `git show 27957b60:<path>` + `sed`/`grep` for every line number above;
-JSON parse of both row registries; the §2 unittest runs under `/tmp/cg-refuter`
-with `PYTHONPATH=/tmp/cg-refuter`.
+Live `pgrep -lf "codex|claude|t3"` and the browser probe; `ps -axo
+pid,ppid,command` for 25633/29809/29816; `git show 27957b60:<path>` +
+`sed`/`grep` for every line number above; JSON parse of both row registries;
+the §2 unittest runs under `/tmp/cg-refuter`.
