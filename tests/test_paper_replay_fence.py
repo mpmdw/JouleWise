@@ -132,6 +132,19 @@ class DraftLiteralExtractionTests(unittest.TestCase):
         self.assertTrue(FENCE.check_draft_internal_identities(literals))
 
 
+    def test_frozen_v1_draft_still_extracts(self) -> None:
+        """The frozen v1 prose keeps the older subtraction anchor; both forms must extract."""
+        v1_text = (ROOT / "docs" / "paper" / "draft-v1.md").read_text(encoding="utf-8")
+        v1_literals = FENCE.extract_draft_literals(v1_text)
+        self.assertEqual(v1_literals, self.literals)
+        # The current draft keeps the corrected provenance wording (cold gate 23, SF-2);
+        # only the frozen v1 prose may still carry the older anchor.
+        self.assertIn(
+            "the retained largest pulse residual is not this subtraction result", self.text
+        )
+        self.assertNotIn("the retained largest pulse residual is not this subtraction result", v1_text)
+
+
 class FenceInvocationTests(unittest.TestCase):
     """The committed script's own exit contract."""
 

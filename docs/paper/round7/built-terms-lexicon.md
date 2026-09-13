@@ -12,16 +12,16 @@ silently discard it.
 | term | first-use home | build or gloss |
 |---|---|---|
 | Apple M3 Max / 128 GB unified memory | §1 | Names the single measured machine and its memory capacity. |
-| powermetrics | §1 | macOS `powermetrics` is the power sampler used here. |
+| powermetrics | Abstract | The Abstract names macOS `powermetrics` as the power sampler used here. |
 | MLX | §1 | Apple's on-device inference framework used to run the models. |
 | cell / power-measurement boundary | §1 | A cell groups runs sharing one phase, workload, model, hardware, software, and boundary defining the measured power. |
-| resolution bound / detection floor / cell floor | §1 | The resolution bound is the largest allowed false phase-energy difference before safeguards; “detection floor” is the advisor's term for that bound, and “cell floor” is the artifact term for the final gate value after the Section 4 safeguards. |
-| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) | §1 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; shared movement instead uses \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
+| cell floor | §3 | The final gate value for assigned-energy differences in a cell after the publication safeguards of protocol Section P.3; the former three-name distinction is retired. |
+| \(U_{\mathrm{point}}\) / \(U_{\mathrm{corner}}\) / point-only value / moved-edge limit / independent-edge ratio | §3 | An independent component bound at recorded edges versus that component after all allowed lower-or-upper choices are evaluated jointly and the largest result is retained; the moved-edge limit divided by the point-only value is the independent-edge ratio; shared movement instead uses \(U_{\mathrm{cmp,shared}}/U_{\mathrm{cmp,point}}\). |
 | member / A/B/B/A block | §1 | One run; four such runs ordered A, B, B, A. |
-| timing-error sign / shared sign / local sign | §1 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
+| energy-allowance sign / shared sign / local sign | §3 | Direction in which allowed error moves energy; one shared choice spans all blocks and one local choice is made per block. |
 | reasoning disabled | §1 | Qwen3's optional chain-of-thought output is switched off. |
-| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
-| mint | §2 | The analysis run that issues the paper's fixed results. |
+| declared machine state / instrument-validation manifest / reservation plan / calibration ledger / calibration-acceptance file | §2 (reservation plan) / A.4 (the rest) | Recorded hardware and operating conditions; the capture's artifact-and-fingerprint list; the reserved-slot file; its pinned session record; and the file containing the fixed bracket rule. |
+| mint | A.4 | The analysis run that issues the paper's fixed results. |
 | frozen | §2 | Fixed and fingerprinted before collection. |
 | signal, fit, range, trace-coverage, and completeness checks | §2 | Signal rises above rest; the fit beats a no-pulse model; shifts stay in range; both trace margins exist; and required pulses, fingerprints, and binding fields are present. |
 | shared search-work limits | §2 | Caps on the number of search rectangles and the elapsed search time for one capture. |
@@ -43,7 +43,7 @@ silently discard it.
 | small-sample multiplier | §4 | A factor that widens a result to allow for limited repetition. |
 | energy terms | §4 | The four claim-bearing terms: gross request, idle-subtracted request, gross prompt-processing, and gross token-generation energy. |
 | interpolation edge / deterministic-bound kinds | §4 | A phase-window start or end between samples gets straight-line power; both edges move through their neighboring-sample gaps, and that joint movement is listed beside idle-power drift, clock-anchor movement, and whole-window drift. |
-| measured contrast / custody / Figure 3 | §4 | The figure input is a point estimate plus composed interval; custody means fingerprints still match recorded bytes; the refusal lane, two sequential gates, yes/no arrows, and four outcomes are named. |
+| measured contrast / custody / Figure P1 | protocol P.3 / §7 | The figure input is a point estimate plus composed interval; custody means fingerprints still match recorded bytes; the refusal lane, two sequential gates, yes/no arrows, and four outcomes are named. |
 
 ## Draft-v1 generated base
 
