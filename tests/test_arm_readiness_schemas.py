@@ -1701,8 +1701,11 @@ class ProductionCustodyResolverTests(unittest.TestCase):
             # Fifth retained deployment, appended 2026-09-12 for the equivalence
             # night d079-epoch-25g83-derivation-n1-20260913 (handback commit H).
             "JouleWise-measurement-20260913-derivation": "/Users/edr/JouleWise-measurement-20260913-derivation",
+            # Sixth retained deployment, appended 2026-09-13 for the successor
+            # equivalence night d079-epoch-25g83-derivation-n1-20260915 (handback commit H).
+            "JouleWise-measurement-20260915-derivation": "/Users/edr/JouleWise-measurement-20260915-derivation",
         }
-        self.assertEqual(5, len(inventory))
+        self.assertEqual(6, len(inventory))
         self.assertEqual(expected, {item["deployment_id"]: item["measurement_root"] for item in inventory})
         roots = readiness.production_custody_roots(home=Path("/synthetic-home"), inventory=inventory)
         self.assertEqual({"deployment_measurement_root:" + key: Path(value) for key, value in expected.items()},
