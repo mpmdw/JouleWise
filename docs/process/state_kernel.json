@@ -3503,6 +3503,36 @@
       "status_note": "D-174 scope freeze",
       "stop_card": null
     },
+    "NIGHT-CENSUS-CHATGPT-APP-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md F2: night census pgrep -lf over the codex, claude and t3 names matched the ChatGPT desktop app's 'Codex (Service)' helper (codex-sandbox in its argv) at t0 2026-09-13 02:56",
+          "docs/process_traces/2026-09-12-activation-b58fb582/02-equivalence-night-arm-record.md step 4: the arm-time census classifies pgrep hits by ancestry (own vs foreign) but the t0 census in joulewise/night_gate.py does not"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/NIGHT-CENSUS-CHATGPT-APP-01/acceptance",
+          "label": "NIGHT-CENSUS-CHATGPT-APP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A written ruling (cold gate or Ed) decides whether the t0 agent census keeps refusing on the ChatGPT desktop app's Codex helper (operator quits the app before every plan span; runbook 0.6 and the notice template say so) or the pattern is narrowed to agent sessions and MCP servers with a defect-shaped regression that still refuses claude/codex/t3 agent processes; either way the decision is installed in code or runbook text, not left to the desk."
+      },
+      "authority": {
+        "label": "2026-09-13 activation c5048879 harvest record F2 (magistrate registration; rule change needs a ruling)",
+        "path": "docs/process_traces/2026-09-13-activation-c5048879/01-equivalence-night-20260913-harvest-record.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Ruling-first: the night gate's t0 agent census (pgrep -lf over the codex, claude and t3 names) matches the ChatGPT desktop app's own Codex helper process, so the app must be quit for every armed night or the pattern must be narrowed under a ruling; decide, then install the decision (code + regression, or runbook/notice text).",
+      "id": "NIGHT-CENSUS-CHATGPT-APP-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 192,
+      "status": "queued",
+      "status_note": "2026-09-13: registered from activation c5048879 after the equivalence night refused at t0 (agent present: Ed's interactive session AND the ChatGPT app helper). Blocked on a ruling; not started. Until ruled, every notice tells Ed to quit the ChatGPT app before the plan span.",
+      "stop_card": null
+    },
     "NIGHT-HANDBACK-GLOSS-01": {
       "acceptance": {
         "evidence": [
@@ -7910,5 +7940,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-12"
+  "updated": "2026-09-13"
 }
