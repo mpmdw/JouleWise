@@ -518,11 +518,13 @@ class PaperFirstUseLedgerTests(unittest.TestCase):
             re.sub(r"\s*\(.*?\)\s*$", "", item).strip().casefold()
             for item in re.split(r",\s*(?:and\s+)?", header_match.group(1).replace("\n", " "))
         }
+        glossed_in_class = sorted(item for item in listed if "(" in item)
+        self.assertEqual(glossed_in_class, [], "the audience class must list bare expressions, never glosses")
         outside = sorted(
             row.term
             for row in self.rows
             if row.status == "audience-vocabulary"
-            and not any(alt.casefold() in listed for alt in _alternatives(row.term))
+            and not all(alt.casefold() in listed for alt in _alternatives(row.term))
         )
         self.assertEqual(outside, [], f"audience-vocabulary claimed outside the header's class: {outside}")
         failures = [row.term for row in self.rows if row.status == "FAILS"]

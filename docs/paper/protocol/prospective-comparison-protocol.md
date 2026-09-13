@@ -270,7 +270,7 @@ references. Then \(A_k\) is the larger of that independent bound
 and the observed excursion. Thus reference means 10.0, 10.6, and 10.2 J have
 an excursion of \(10.6-10.0=0.6\) J; with an issued 0.4-J repeatability bound,
 \(A_k=\max(0.6,0.4)=0.6\) J. This empirical allowance samples the registered
-reference epochs; it is not a deterministic bound on arbitrary unobserved
+reference epochs; it is not a deterministic bound (a non-random maximum displacement) on arbitrary unobserved
 excursions between them. It is a joule quantity and is distinct from the
 timing allowance already embedded in each energy interval. The published
 components and cell floor are
